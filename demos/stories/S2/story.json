@@ -1,0 +1,435 @@
+{
+  "story": {
+    "id": "S2",
+    "ground": {
+      "project": "story-s2",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "tutorial",
+      "title": "Create a new project from scratch"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Projects pillar",
+        "say": "The Projects pillar lists every project forge manages. The tool this story is about is not here — it does not exist yet, on disk or anywhere else. That is the starting state: no repo, no contract, nothing to point a Flow at.",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Press \"Start a greenfield project\"",
+        "say": "One page hosts both doors into forge: register a repo that already exists, or scaffold a new one. Three starters ship with forge, and the operator picks the one shaped like the thing they are about to build.",
+        "do": [
+          {
+            "press": "create-project-cta"
+          }
+        ],
+        "expect": {
+          "route": "/projects/new",
+          "data": {
+            "page": "projects",
+            "project-id": "new",
+            "page-ready": "true",
+            "section": "project-create",
+            "app-type-count": "3"
+          }
+        }
+      },
+      {
+        "act": "Name it, say what it is for, pick the \"typescript-cli\" starter, and press \"Create project\"",
+        "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+        "do": [
+          {
+            "fill": "create-name",
+            "with": "story-S2"
+          },
+          {
+            "fill": "create-north-star",
+            "with": "A command-line tool that reports how long each stage of a build took, so a slow pipeline reads at a glance."
+          },
+          {
+            "fill": "create-app-type",
+            "with": "typescript-cli"
+          },
+          {
+            "press": "create-project"
+          }
+        ],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Check the contract came out green, before pointing a Flow at it",
+        "say": "This is the promise a starter exists to keep. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow.",
+        "do": [],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "preflight-status": "ok",
+            "flow-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Look at what forge says is still unresolved",
+        "say": "The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.",
+        "do": [],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "section": "contract-resolution",
+            "resolution-failing-count": "0"
+          }
+        }
+      },
+      {
+        "act": "Review the contract the starter filled in, element by element",
+        "say": "This is the act that makes creating a project different from onboarding one. Onboarding fills a contract in, question by question, with an Agent. Creation hands the operator one that is already filled — contract, instructions, secrets, demo, roadmap — and asks them to read it. Five elements, every one already answered by the starter.",
+        "do": [],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "section": "contract-checklist",
+            "checklist-row-count": "5"
+          }
+        }
+      },
+      {
+        "act": "Read the secrets element — the one a starter cannot guess from a template",
+        "say": "Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.",
+        "do": [],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "checklist-row": "secrets",
+            "checklist-status": "present"
+          }
+        }
+      },
+      {
+        "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
+        "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
+        "do": [],
+        "expect": {
+          "route": "/projects/story-s2",
+          "data": {
+            "page": "projects",
+            "project-id": "story-s2",
+            "step-count": "3"
+          }
+        }
+      },
+      {
+        "act": "Press \"Architect →\"",
+        "say": "With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.",
+        "do": [
+          {
+            "press": "start-work-architect"
+          }
+        ],
+        "expect": {
+          "route": "/architect/new",
+          "data": {
+            "page": "architect-new",
+            "page-ready": "true",
+            "section": "new-idea",
+            "roster-state": "ok",
+            "new-idea-ready": "false"
+          }
+        }
+      },
+      {
+        "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
+        "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and opens it.",
+        "do": [
+          {
+            "fill": "idea",
+            "with": "Add a --json output mode so the stage timings can be consumed by CI, with a documented schema and a test that pins it."
+          },
+          {
+            "fill": "cost-ceiling-usd",
+            "with": "25"
+          },
+          {
+            "press": "start-architect"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/architect/<architectSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "architect",
+            "session-phase": "working"
+          }
+        }
+      },
+      {
+        "act": "While it works, check Monitor",
+        "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
+        "do": [],
+        "expect": {
+          "route": "/monitor",
+          "data": {
+            "page": "monitor",
+            "page-ready": "true",
+            "session-kind": "architect"
+          }
+        }
+      },
+      {
+        "act": "Open the session again and answer the Architect's questions about the project",
+        "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
+        "do": [
+          {
+            "press": "open-session"
+          },
+          {
+            "fill": "session-answer",
+            "with": "The gate command is `npm test`. The timings come from the build tool's own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive."
+          },
+          {
+            "press": "submit-answers"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/architect/<architectSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "architect",
+            "session-phase": "awaiting-verdict"
+          }
+        }
+      },
+      {
+        "act": "Open the plan and stand at the gate",
+        "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
+        "do": [
+          {
+            "press": "open-plan"
+          }
+        ],
+        "expect": {
+          "route": "/artifact",
+          "data": {
+            "section": "architect-plan",
+            "architect-phase": "awaiting-verdict",
+            "gate-armed": "true",
+            "plan-mode": "gate"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages. The tool this story is about is not here — it does not exist yet, on disk or anywhere else. That is the starting state: no repo, no contract, nothing to point a Flow at.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/01-open-studio-on-the-projects-pillar.png"
+    },
+    {
+      "act": "Press \"Start a greenfield project\"",
+      "say": "One page hosts both doors into forge: register a repo that already exists, or scaffold a new one. Three starters ship with forge, and the operator picks the one shaped like the thing they are about to build.",
+      "status": "red",
+      "failures": [
+        "data-section: expected \"project-create\", got \"project-onboard\"",
+        "data-app-type-count: expected \"3\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-onboard"
+      },
+      "frame": "frames/02-press-start-a-greenfield-project.png"
+    },
+    {
+      "act": "Name it, say what it is for, pick the \"typescript-cli\" starter, and press \"Create project\"",
+      "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "page-ready": "true"
+      },
+      "frame": "frames/03-name-it-say-what-it-is-for-pick-the-type.png"
+    },
+    {
+      "act": "Check the contract came out green, before pointing a Flow at it",
+      "say": "This is the promise a starter exists to keep. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow.",
+      "status": "red",
+      "failures": [
+        "data-flow-ready: expected \"true\", got \"false\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "preflight-status": "ok",
+        "flow-ready": "false"
+      },
+      "frame": "frames/04-check-the-contract-came-out-green-before.png"
+    },
+    {
+      "act": "Look at what forge says is still unresolved",
+      "say": "The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.",
+      "status": "red",
+      "failures": [
+        "data-resolution-failing-count: expected \"0\", got \"4\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "section": "contract-resolution",
+        "resolution-failing-count": "4"
+      },
+      "frame": "frames/05-look-at-what-forge-says-is-still-unresol.png"
+    },
+    {
+      "act": "Review the contract the starter filled in, element by element",
+      "say": "This is the act that makes creating a project different from onboarding one. Onboarding fills a contract in, question by question, with an Agent. Creation hands the operator one that is already filled — contract, instructions, secrets, demo, roadmap — and asks them to read it. Five elements, every one already answered by the starter.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "section": "contract-checklist",
+        "checklist-row-count": "5"
+      },
+      "frame": "frames/06-review-the-contract-the-starter-filled-i.png"
+    },
+    {
+      "act": "Read the secrets element — the one a starter cannot guess from a template",
+      "say": "Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.",
+      "status": "red",
+      "failures": [
+        "data-checklist-row: expected \"secrets\", got \"contract\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "checklist-row": "contract",
+        "checklist-status": "present"
+      },
+      "frame": "frames/07-read-the-secrets-element-the-one-a-start.png"
+    },
+    {
+      "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
+      "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
+      "status": "red",
+      "failures": [
+        "data-step-count: expected \"3\", got \"2\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-s2",
+        "step-count": "2"
+      },
+      "frame": "frames/08-adjust-the-demo-the-starter-wrote-this-c.png"
+    },
+    {
+      "act": "Press \"Architect →\"",
+      "say": "With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.",
+      "status": "red",
+      "failures": [
+        "data-roster-state: expected \"ok\", got \"loading\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "loading",
+        "new-idea-ready": "false"
+      },
+      "frame": "frames/09-press-architect.png"
+    },
+    {
+      "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
+      "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and opens it.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/10-describe-the-first-piece-of-work-cap-wha.png"
+    },
+    {
+      "act": "While it works, check Monitor",
+      "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
+      "status": "red",
+      "failures": [
+        "data-session-kind: expected \"architect\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/11-while-it-works-check-monitor.png"
+    },
+    {
+      "act": "Open the session again and answer the Architect's questions about the project",
+      "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/12-open-the-session-again-and-answer-the-ar.png"
+    },
+    {
+      "act": "Open the plan and stand at the gate",
+      "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "fetch-status": "ok"
+      },
+      "frame": "frames/13-open-the-plan-and-stand-at-the-gate.png"
+    }
+  ]
+}
