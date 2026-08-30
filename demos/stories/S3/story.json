@@ -1,0 +1,388 @@
+{
+  "story": {
+    "id": "S3",
+    "ground": {
+      "project": "terraform-provider-betterado",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Reset a project contract"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Projects pillar",
+        "say": "The Projects pillar lists every project forge manages. The one this story is about has been here longest, and the pillar says it is healthy — which is true of the repo and no longer true of the contract forge builds against it.",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true",
+            "card-id": "terraform-provider-betterado",
+            "health": "healthy"
+          }
+        }
+      },
+      {
+        "act": "Open the project",
+        "say": "The project page is where the contract lives: what forge tests with, what it demos with, what it releases with, and which skills its agents may reach for.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Count the skills this project binds",
+        "say": "Nine skills — an API explorer, a resource scaffolder, a docs generator, an acceptance-test author. They are the reason this project can be built unattended at all: they are the moves that are specific to an Azure DevOps provider and to nothing else forge manages.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "accepts": "skill",
+            "count": "9"
+          }
+        }
+      },
+      {
+        "act": "Read the first of them",
+        "say": "It does not resolve. Nor do the other eight. The skills are on disk — they sit where this project was told to put them when it was onboarded, and the contract every project written since puts them somewhere else. Nothing is broken enough to fail a gate, which is exactly why it has gone unnoticed: the project is drifting away from forge, one convention at a time.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "kind": "skill",
+            "skill-id": "ado-api-explorer",
+            "resolved": "missing",
+            "skill-source": "missing"
+          }
+        }
+      },
+      {
+        "act": "Press \"Rebuild contract\", and read the drift report it produces before applying it",
+        "say": "Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Applying it closes the gaps, so nothing is left for a human or an agent to resolve by hand.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "section": "contract-resolution",
+            "resolution-failing-count": "0",
+            "resolution-agent-count": "0"
+          }
+        }
+      },
+      {
+        "act": "Check the nine skills resolve now",
+        "say": "The rebuild moved the skills to where the current contract expects them and rewrote the wiring that points at them. The bindings the project has carried all along now resolve, and the agents that run against this project can reach the moves that are specific to it.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "kind": "skill",
+            "skill-id": "ado-api-explorer",
+            "resolved": "ok",
+            "skill-source": "project"
+          }
+        }
+      },
+      {
+        "act": "Check the secrets the rebuild had no right to touch",
+        "say": "This is the first of the three things a rebuild must never regenerate. The contract names the environment variables the live acceptance tier needs — never a value — and a template cannot know that this project talks to Azure DevOps with a personal access token. The element still names it, so the acceptance gate still knows what it needs.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "detail-line": "AZDO_PERSONAL_ACCESS_TOKEN"
+          }
+        }
+      },
+      {
+        "act": "Check the instructions still point at the project’s own file",
+        "say": "The second. This project keeps its conventions in AGENTS.md and forge binds to that file read-only; a rebuild that swapped it for the template’s own choice would silently retarget every agent that reads it. The source is unchanged, so the instructions the operator has been curating for months are still the ones in force.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "contract-conventions-source": "AGENTS.md"
+          }
+        }
+      },
+      {
+        "act": "Check the north star survived",
+        "say": "The third. \"Feature complete ADO provider that has data and resources defined for all resources available in the ADO API\" is the sentence every planner reads before it decides what to build next. It is the one thing in the contract that is a judgement rather than a mechanism, and a rebuild that regenerated it would quietly change what forge is building.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "contract-northstar-state": "present"
+          }
+        }
+      },
+      {
+        "act": "Confirm preflight is MET and the project is still ready for a Flow",
+        "say": "This is the check that says the reset was worth doing rather than merely survivable. Five readiness elements met, preflight MET, and the project still ready to have a Flow pointed at it — the same bar a project created today has to clear, now cleared by one that predates it.",
+        "do": [],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "preflight-status": "ok",
+            "flow-ready": "true",
+            "ready-count": "5"
+          }
+        }
+      },
+      {
+        "act": "Run the onboarding agent to re-derive the parts a template cannot write, briefed with the contract’s own north star and gate",
+        "say": "A template can regenerate the mechanisms forge owns. It cannot write an API explorer for Azure DevOps, so the skills the rebuild rewired still have to be re-derived against what this provider actually does. That is an Agent’s job, and it is briefed with what the contract already says rather than with anything new — the rebuild preserved both, so the operator is handing back the project’s own words.",
+        "do": [
+          {
+            "press": "toggle-onboard-brief"
+          },
+          {
+            "fill": "northStar",
+            "with": "Feature complete ADO provider that has data and resources defined for all resources available in the ADO API"
+          },
+          {
+            "fill": "gateCommand",
+            "with": "go test -tags all -count=1 ./azuredevops/internal/service/servicehook/..."
+          },
+          {
+            "press": "run-onboarding-agent"
+          }
+        ],
+        "expect": {
+          "route": "/projects/terraform-provider-betterado",
+          "data": {
+            "page": "projects",
+            "project-id": "terraform-provider-betterado",
+            "section": "onboard-with-agent",
+            "onboard-run-status": "running",
+            "onboard-session-id": "<onboardSessionId>",
+            "onboard-attaching": "false"
+          }
+        }
+      },
+      {
+        "act": "Follow \"View onboarding session\" and watch it work",
+        "say": "The session opens on the shared session surface, showing the same five-element contract buildout the project page shows — so the operator watches the Agent finish the job in the vocabulary the gate will judge. That is where S3 ends: a project that predates the contract now built to it, with the three things only the operator could have written still intact.",
+        "do": [
+          {
+            "press": "view-onboarding-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/onboarding/<onboardSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "onboarding",
+            "buildout-row-count": "5"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages. The one this story is about has been here longest, and the pillar says it is healthy — which is true of the repo and no longer true of the contract forge builds against it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "card-id": "terraform-provider-betterado",
+        "health": "healthy"
+      },
+      "frame": "frames/01-open-studio-on-the-projects-pillar.png"
+    },
+    {
+      "act": "Open the project",
+      "say": "The project page is where the contract lives: what forge tests with, what it demos with, what it releases with, and which skills its agents may reach for.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "page-ready": "true"
+      },
+      "frame": "frames/02-open-the-project.png"
+    },
+    {
+      "act": "Count the skills this project binds",
+      "say": "Nine skills — an API explorer, a resource scaffolder, a docs generator, an acceptance-test author. They are the reason this project can be built unattended at all: they are the moves that are specific to an Azure DevOps provider and to nothing else forge manages.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "accepts": "skill",
+        "count": "9"
+      },
+      "frame": "frames/03-count-the-skills-this-project-binds.png"
+    },
+    {
+      "act": "Read the first of them",
+      "say": "It does not resolve. Nor do the other eight. The skills are on disk — they sit where this project was told to put them when it was onboarded, and the contract every project written since puts them somewhere else. Nothing is broken enough to fail a gate, which is exactly why it has gone unnoticed: the project is drifting away from forge, one convention at a time.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "kind": "skill",
+        "skill-id": "ado-api-explorer",
+        "resolved": "missing",
+        "skill-source": "missing"
+      },
+      "frame": "frames/04-read-the-first-of-them.png"
+    },
+    {
+      "act": "Press \"Rebuild contract\", and read the drift report it produces before applying it",
+      "say": "Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Applying it closes the gaps, so nothing is left for a human or an agent to resolve by hand.",
+      "status": "red",
+      "failures": [
+        "data-resolution-failing-count: expected \"0\", got \"1\"",
+        "data-resolution-agent-count: expected \"0\", got \"1\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "section": "contract-resolution",
+        "resolution-failing-count": "1",
+        "resolution-agent-count": "1"
+      },
+      "frame": "frames/05-press-rebuild-contract-and-read-the-drif.png"
+    },
+    {
+      "act": "Check the nine skills resolve now",
+      "say": "The rebuild moved the skills to where the current contract expects them and rewrote the wiring that points at them. The bindings the project has carried all along now resolve, and the agents that run against this project can reach the moves that are specific to it.",
+      "status": "red",
+      "failures": [
+        "data-resolved: expected \"ok\", got \"missing\"",
+        "data-skill-source: expected \"project\", got \"missing\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "kind": "skill",
+        "skill-id": "ado-api-explorer",
+        "resolved": "missing",
+        "skill-source": "missing"
+      },
+      "frame": "frames/06-check-the-nine-skills-resolve-now.png"
+    },
+    {
+      "act": "Check the secrets the rebuild had no right to touch",
+      "say": "This is the first of the three things a rebuild must never regenerate. The contract names the environment variables the live acceptance tier needs — never a value — and a template cannot know that this project talks to Azure DevOps with a personal access token. The element still names it, so the acceptance gate still knows what it needs.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "detail-line": "AZDO_PERSONAL_ACCESS_TOKEN"
+      },
+      "frame": "frames/07-check-the-secrets-the-rebuild-had-no-rig.png"
+    },
+    {
+      "act": "Check the instructions still point at the project’s own file",
+      "say": "The second. This project keeps its conventions in AGENTS.md and forge binds to that file read-only; a rebuild that swapped it for the template’s own choice would silently retarget every agent that reads it. The source is unchanged, so the instructions the operator has been curating for months are still the ones in force.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "contract-conventions-source": "AGENTS.md"
+      },
+      "frame": "frames/08-check-the-instructions-still-point-at-th.png"
+    },
+    {
+      "act": "Check the north star survived",
+      "say": "The third. \"Feature complete ADO provider that has data and resources defined for all resources available in the ADO API\" is the sentence every planner reads before it decides what to build next. It is the one thing in the contract that is a judgement rather than a mechanism, and a rebuild that regenerated it would quietly change what forge is building.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "contract-northstar-state": "present"
+      },
+      "frame": "frames/09-check-the-north-star-survived.png"
+    },
+    {
+      "act": "Confirm preflight is MET and the project is still ready for a Flow",
+      "say": "This is the check that says the reset was worth doing rather than merely survivable. Five readiness elements met, preflight MET, and the project still ready to have a Flow pointed at it — the same bar a project created today has to clear, now cleared by one that predates it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "preflight-status": "ok",
+        "flow-ready": "true",
+        "ready-count": "5"
+      },
+      "frame": "frames/10-confirm-preflight-is-met-and-the-project.png"
+    },
+    {
+      "act": "Run the onboarding agent to re-derive the parts a template cannot write, briefed with the contract’s own north star and gate",
+      "say": "A template can regenerate the mechanisms forge owns. It cannot write an API explorer for Azure DevOps, so the skills the rebuild rewired still have to be re-derived against what this provider actually does. That is an Agent’s job, and it is briefed with what the contract already says rather than with anything new — the rebuild preserved both, so the operator is handing back the project’s own words.",
+      "status": "red",
+      "failures": [
+        "data-onboard-run-status: expected \"running\", got \"idle\"",
+        "data-onboard-session-id: expected a value to bind as <onboardSessionId>, got \"\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "terraform-provider-betterado",
+        "section": "onboard-with-agent",
+        "onboard-run-status": "idle",
+        "onboard-session-id": "",
+        "onboard-attaching": "false"
+      },
+      "frame": "frames/11-run-the-onboarding-agent-to-re-derive-th.png"
+    },
+    {
+      "act": "Follow \"View onboarding session\" and watch it work",
+      "say": "The session opens on the shared session surface, showing the same five-element contract buildout the project page shows — so the operator watches the Agent finish the job in the vocabulary the gate will judge. That is where S3 ends: a project that predates the contract now built to it, with the three things only the operator could have written still intact.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/onboarding/<onboardSessionId>\" needs <onboardSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/12-follow-view-onboarding-session-and-watch.png"
+    }
+  ]
+}
