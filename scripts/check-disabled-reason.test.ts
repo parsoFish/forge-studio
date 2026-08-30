@@ -40,7 +40,7 @@ test('the checker actually inspects a real population, not an empty set', () => 
 });
 
 test('it FAILS on a disabled primary CTA with no reason (the defect it exists for)', () => {
-  const victim = join(ROOT, 'forge-ui/components/__ratchet_probe__.tsx');
+  const victim = join(ROOT, 'apps/studio/components/__ratchet_probe__.tsx');
   writeFileSync(victim, [
     "'use client';",
     'export function Probe({ busy }: { busy: boolean }) {',
@@ -62,7 +62,7 @@ test('it FAILS on a disabled primary CTA with no reason (the defect it exists fo
 });
 
 test('it PASSES the same CTA once the reason is spread from the ONE derivation', () => {
-  const victim = join(ROOT, 'forge-ui/components/__ratchet_probe__.tsx');
+  const victim = join(ROOT, 'apps/studio/components/__ratchet_probe__.tsx');
   writeFileSync(victim, [
     "'use client';",
     "import { disabledAttrs } from '@/lib/disabled-reason';",

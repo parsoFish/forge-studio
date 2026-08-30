@@ -854,7 +854,7 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
 // <sessionId>` under `<forgeRoot>/_logs/` — the SAME convention every real
 // consumer of an interactive session's live log already derives
 // independently:
-//   - forge-ui/app/sessions/[kind]/[sessionId]/page.tsx:158,
+//   - apps/studio/app/sessions/[kind]/[sessionId]/page.tsx:158,
 //     `cycleId = \`_${kind}-${sessionId}\``, handed to useCycleEvents;
 //   - cli/ui-bridge.ts's spawnAgentTurn (~L2044-2062) writes a turn's
 //     stderr.log into `_logs/_${logPrefix}-${sessionId}/`

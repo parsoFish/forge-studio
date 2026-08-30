@@ -9,7 +9,7 @@
  * deliberately (see that file's own header — option (b), judging content
  * instead of presence, is rejected for this lane). The ORIGINAL forge-6gv.19
  * bead named only `disallowed-tools` as the unconditional write to fix; the
- * ruling (see `forge-ui/lib/agent-authoring-view.ts`'s `BLANK_STATE`
+ * ruling (see `apps/studio/lib/agent-authoring-view.ts`'s `BLANK_STATE`
  * comment) corrected that — `allowed-tools` at `:62` is EQUALLY
  * unconditional and equally trips the presence test on its own. This pin
  * exists so a future edit that starts conditionally omitting just ONE of

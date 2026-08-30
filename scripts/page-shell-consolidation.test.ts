@@ -7,7 +7,7 @@
  * the routes render through the single component. A shell that exists ALONGSIDE
  * the old copies is additive surface, not the refactor. So this test proves the
  * delta by ABSENCE: the exact duplicated shell-header markup must appear ZERO
- * times across `forge-ui/app/**\/page.tsx`, and exactly once in the shared
+ * times across `apps/studio/app/**\/page.tsx`, and exactly once in the shared
  * component that now owns it.
  *
  * Kills: a StudioPage/PageHeader added while the 9 hand-rolled header copies
@@ -23,8 +23,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP_DIR = join(ROOT, 'forge-ui', 'app');
-const SHARED_COMPONENT = join(ROOT, 'forge-ui', 'components', 'StudioPage.tsx');
+const APP_DIR = join(ROOT, 'apps', 'studio', 'app');
+const SHARED_COMPONENT = join(ROOT, 'apps', 'studio', 'components', 'StudioPage.tsx');
 
 // The exact duplicated shell-header markup (the 24/700 display-font page title)
 // that was hand-copied into 9 page.tsx files at the start of R6-03-F3.
@@ -63,7 +63,7 @@ test('the shelf-shell wrap is GONE from every app page', () => {
 });
 
 test('the shared shell component exists and owns the header markup exactly once', () => {
-  assert.ok(existsSync(SHARED_COMPONENT), 'forge-ui/components/StudioPage.tsx must exist (the one shell)');
+  assert.ok(existsSync(SHARED_COMPONENT), 'apps/studio/components/StudioPage.tsx must exist (the one shell)');
   const src = readFileSync(SHARED_COMPONENT, 'utf8');
   const count = src.split(HEADER_SIGNATURE).length - 1;
   assert.equal(count, 1, `the shared shell must own the header markup exactly once (found ${count})`);

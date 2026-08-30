@@ -35,7 +35,7 @@ import { discoverProjects, normalizeProjectId } from '../orchestrator/studio/reg
 import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { deriveContractStages } from './contract-stages.ts';
-import { buildProjectSavePayload } from '../forge-ui/lib/project-save-payload.ts';
+import { buildProjectSavePayload } from '../apps/studio/lib/project-save-payload.ts';
 import { unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 

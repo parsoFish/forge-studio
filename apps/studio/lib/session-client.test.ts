@@ -1120,7 +1120,7 @@ test('R4-19-F2 AT-122: parseSessionArtifact: cleanup-plan "label" missing or non
 // state:'open' assertion for the wrong reason.
 // ---------------------------------------------------------------------------
 
-const REAL_CAPTURE_DIR = resolve(__dirname, '../../scripts/journeys/fixtures/r4-19-f2-live-capture');
+const REAL_CAPTURE_DIR = resolve(__dirname, '../../../scripts/journeys/fixtures/r4-19-f2-live-capture');
 const REAL_CLEANUP_PLAN_MD = readFileSync(resolve(REAL_CAPTURE_DIR, 'cleanup-plan.md'), 'utf8');
 const REAL_STATUS_JSON = JSON.parse(readFileSync(resolve(REAL_CAPTURE_DIR, 'status.json'), 'utf8')) as {
   findings: Array<{ kind: string; file: string }>;

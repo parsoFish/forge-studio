@@ -9,7 +9,7 @@
  * brain-maintenance, creation-agent, project-brain-builder) sets
  * `library: false` (they're dispatched by the bridge directly, never
  * composed into a flow) so NONE of them ever appear in that roster. The
- * session-kickoff page (forge-ui/app/sessions/[kind]/new/page.tsx) derived
+ * session-kickoff page (apps/studio/app/sessions/[kind]/new/page.tsx) derived
  * its model-tier picker's `allowedTiers` from the roster lookup, so the
  * picker always rendered the read-only 'fixed' chip for those five kinds —
  * even after B5 widened their SKILL.mds to `strategy: range`.

@@ -1000,10 +1000,10 @@ function validatePhaseTable(
   }
 }
 
-const FORGE_UI_APP_DIRNAME = join('forge-ui', 'app');
+const FORGE_UI_APP_DIRNAME = join('apps', 'studio', 'app');
 
 /** A `legacyRoutes` entry ("/architect/[sessionId]/interview") maps 1:1 onto a
- *  Next.js App Router directory ("forge-ui/app/architect/[sessionId]/interview")
+ *  Next.js App Router directory ("apps/studio/app/architect/[sessionId]/interview")
  *  — route path segments ARE the directory names, including literal
  *  `[sessionId]` dynamic-segment folders. An entry with no non-empty segments
  *  (blank or "/") never resolves.
@@ -1089,7 +1089,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
 
     // legacyRoutes: an empty LIST is legal (a future kind may have no
     // predecessor route) — but every entry PRESENT must be non-blank and
-    // resolve to a real forge-ui/app/ route directory (previously parsed,
+    // resolve to a real apps/studio/app/ route directory (previously parsed,
     // typed, and echoed by tests but never actually checked here).
     for (const route of d.legacyRoutes) {
       if (!legacyRouteResolves(forgeRoot, route)) {
@@ -1097,7 +1097,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           err(
             obj,
             CHECK_LEGACY_ROUTE_NOT_FOUND,
-            `Session kind "${d.id}" declares legacyRoutes entry "${route}" which does not resolve to a real forge-ui/app/ route directory`,
+            `Session kind "${d.id}" declares legacyRoutes entry "${route}" which does not resolve to a real apps/studio/app/ route directory`,
           ),
         );
       }

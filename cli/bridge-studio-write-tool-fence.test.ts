@@ -7,7 +7,7 @@
  *
  * The full chain exercised:
  *
- *   forge-ui/lib/agent-authoring-view.ts's REAL `BLANK_STATE` (imported, not
+ *   apps/studio/lib/agent-authoring-view.ts's REAL `BLANK_STATE` (imported, not
  *   hand-copied)
  *     -> REAL `buildAgentPutBody`
  *     -> PUT /api/studio/agents/:slug (cli/bridge-studio-writes.ts)
@@ -22,7 +22,7 @@
  *         passes the fence. Proven red at branch base by BLANK_STATE's
  *         pre-fix `disallowedTools: []` (see the W8-B4 session report for
  *         the quoted failing output; also reproduced here by the
- *         restore-and-reprove dance on `forge-ui/lib/agent-authoring-
+ *         restore-and-reprove dance on `apps/studio/lib/agent-authoring-
  *         view.ts` — not committed).
  *
  * Pin 2 — the fence still catches a REAL violation: an agent that declares
@@ -45,7 +45,7 @@ import { join } from 'node:path';
 
 import { startBridge } from './ui-bridge.ts';
 import { lintSkillToolFence } from './studio-lint-tool-fence.ts';
-import { BLANK_STATE, buildAgentPutBody, type AgentBuilderState } from '../forge-ui/lib/agent-authoring-view.ts';
+import { BLANK_STATE, buildAgentPutBody, type AgentBuilderState } from '../apps/studio/lib/agent-authoring-view.ts';
 
 const CHECK = 'skill-tool-fence/task-agent-not-disallowed';
 

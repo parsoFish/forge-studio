@@ -125,7 +125,7 @@ function deepValueEqual(a: unknown, b: unknown): boolean {
  *
  * D2 (registry.test.ts "materials vs byte-fidelity") is the `materials`
  * instance of this class — the real UI save path
- * (forge-ui/app/agents/[id]/page.tsx) always sends `materials: state.materials`
+ * (apps/studio/app/agents/[id]/page.tsx) always sends `materials: state.materials`
  * defaulting to `[]`, so saving any of the 16 roster agents that has never
  * declared materials hit exactly this. `composition.*`'s five vocabulary
  * arrays are the same shape (a real `SKILL.md` written before `hooks:`

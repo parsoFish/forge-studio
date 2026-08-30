@@ -7,7 +7,7 @@
  * redirect covering the window between Library vacating `/` (R6-03-F3) and
  * Home reclaiming it (R6-07): "Home fills `/` in R6-07" was recorded in this
  * file's own comment from the start. R6-07 is that moment — `/` becomes the
- * Home dashboard route directly (forge-ui/app/page.tsx), so that redirect was
+ * Home dashboard route directly (apps/studio/app/page.tsx), so that redirect was
  * DELIBERATELY RETIRED, not merely superseded, and MOVED_ROUTES went empty.
  *
  * W6-IA-8 is the first time forge grows genuinely moved (not reclaimed)
@@ -72,7 +72,7 @@ const MOVED_ROUTES: ReadonlyArray<{ from: string; to: string; permanent: boolean
 ];
 
 test('next.config redirects() (if present) resolves to an array', async () => {
-  const mod = await import('../forge-ui/next.config.mjs');
+  const mod = await import('../apps/studio/next.config.mjs');
   const config = (mod as { default: unknown }).default as { redirects?: () => Promise<unknown> };
   if (typeof config.redirects !== 'function') return; // no redirects() at all is fine post-R6-07
   const rules = await config.redirects();
@@ -80,7 +80,7 @@ test('next.config redirects() (if present) resolves to an array', async () => {
 });
 
 test('every currently-moved route has a wire redirect old-path -> new-path', async () => {
-  const mod = await import('../forge-ui/next.config.mjs');
+  const mod = await import('../apps/studio/next.config.mjs');
   const config = (mod as { default: unknown }).default as { redirects?: () => Promise<Array<Record<string, unknown>>> };
   const rules = typeof config.redirects === 'function' ? await config.redirects() : [];
 
@@ -99,7 +99,7 @@ test('every currently-moved route has a wire redirect old-path -> new-path', asy
 });
 
 test('W6: /architect/new stays a LIVE page — no redirect source may match it (architect never migrates, ADR-043 §4)', async () => {
-  const mod = await import('../forge-ui/next.config.mjs');
+  const mod = await import('../apps/studio/next.config.mjs');
   const cfg = (mod.default ?? mod) as { redirects?: () => Promise<Array<{ source: string }>> };
   const redirects = typeof cfg.redirects === 'function' ? await cfg.redirects() : [];
   for (const r of redirects) {
@@ -118,7 +118,7 @@ test('W6: /architect/new stays a LIVE page — no redirect source may match it (
 test('every MOVED_ROUTES shim page is actually deleted (no orphaned client-shim left behind)', async () => {
   const { existsSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');
-  const uiRoot = fileURLToPath(new URL('../forge-ui/app', import.meta.url));
+  const uiRoot = fileURLToPath(new URL('../apps/studio/app', import.meta.url));
 
   // Wire-redirected source paths, mapped to the shim page file policy deleted
   // for each. `:param` segments become the literal `[param]` Next.js dynamic
@@ -151,7 +151,7 @@ test('no stale `/` -> `/library` redirect remains (R6-07: `/` is now the Home su
   // GONE once R6-07 lands app/page.tsx — a surviving rule would shadow Home
   // at the wire (redirects run before any page renders) even though the page
   // file exists, exactly the "declared route, unreachable in practice" trap.
-  const mod = await import('../forge-ui/next.config.mjs');
+  const mod = await import('../apps/studio/next.config.mjs');
   const config = (mod as { default: unknown }).default as { redirects?: () => Promise<Array<Record<string, unknown>>> };
   const rules = typeof config.redirects === 'function' ? await config.redirects() : [];
 

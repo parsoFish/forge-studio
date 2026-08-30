@@ -756,7 +756,7 @@ export const INIT_ID_RE = /^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+
  * recovered by stripping the `<timestamp>_` prefix when the tail matches the
  * manifest id convention. Anything unrecoverable is returned verbatim — the
  * downstream 400 is unchanged. Pure; mirrors the client's
- * `effectiveInitiativeId` (forge-ui/lib/initiative-id.ts) as defence in depth.
+ * `effectiveInitiativeId` (apps/studio/lib/initiative-id.ts) as defence in depth.
  */
 export function recoverInitiativeId(runId: string): string {
   if (INIT_ID_RE.test(runId)) return runId;

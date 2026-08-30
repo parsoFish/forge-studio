@@ -3,7 +3,7 @@
  * reads, and its derivation module is pure (R6-07; relocated onto the
  * extracted data hook by W6-IA-4).
  *
- * `/` becomes the Home surface (forge-ui/app/page.tsx), aggregating flows /
+ * `/` becomes the Home surface (apps/studio/app/page.tsx), aggregating flows /
  * agents / projects / kbs with live status derived from the run-model. The
  * risk this AT closes: a Home implementation that takes a shortcut around
  * the existing fetch/subscribe surface — spinning its own poll loop, calling
@@ -13,7 +13,7 @@
  *
  * W6-IA-4 EXTRACTED the byte-duplicated loadAll/refreshRuns/subscribe()
  * shape Home and the old Library landing page both hand-carried (sweep
- * finding C1#5) into ONE shared hook, `forge-ui/lib/use-studio-home-data.ts`
+ * finding C1#5) into ONE shared hook, `apps/studio/lib/use-studio-home-data.ts`
  * — Home is now its only caller, and the rebuilt Library page's five
  * shelves read entirely different sources. This file's checks move onto
  * that hook (the new home of the fetch/subscribe wiring) instead of
@@ -42,9 +42,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HOME_PAGE = join(ROOT, 'forge-ui', 'app', 'page.tsx');
-const HOME_DATA_HOOK = join(ROOT, 'forge-ui', 'lib', 'use-studio-home-data.ts');
-const HOME_VIEW = join(ROOT, 'forge-ui', 'lib', 'home-view.ts');
+const HOME_PAGE = join(ROOT, 'apps', 'studio', 'app', 'page.tsx');
+const HOME_DATA_HOOK = join(ROOT, 'apps', 'studio', 'lib', 'use-studio-home-data.ts');
+const HOME_VIEW = join(ROOT, 'apps', 'studio', 'lib', 'home-view.ts');
 
 // The closed set of data-fetch identifiers the extracted hook is allowed to
 // call — no new one — so "new /api endpoint" and "bespoke fetch" are
@@ -74,25 +74,25 @@ function readOrFail(path: string, label: string): string {
   return readFileSync(path, 'utf8');
 }
 
-test('forge-ui/app/page.tsx exists (Home fills `/`)', () => {
-  readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+test('apps/studio/app/page.tsx exists (Home fills `/`)', () => {
+  readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
 });
 
-test('forge-ui/lib/use-studio-home-data.ts exists (the extracted, shared data-loading hook — W6-IA-4)', () => {
-  readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+test('apps/studio/lib/use-studio-home-data.ts exists (the extracted, shared data-loading hook — W6-IA-4)', () => {
+  readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
 });
 
-test('forge-ui/lib/home-view.ts exists (the pure derivation module)', () => {
-  readOrFail(HOME_VIEW, 'forge-ui/lib/home-view.ts');
+test('apps/studio/lib/home-view.ts exists (the pure derivation module)', () => {
+  readOrFail(HOME_VIEW, 'apps/studio/lib/home-view.ts');
 });
 
 test('app/page.tsx sources its data via useStudioHomeData(), not a bespoke client import of its own', () => {
-  const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+  const src = readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
   assert.ok(src.includes('useStudioHomeData'), 'Home must source its six cross-object reads through the extracted hook');
 });
 
 test('lib/use-studio-home-data.ts imports data reads only from ./studio-client and ./bridge-client', () => {
-  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const src = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   const importsStudioClient = /from ['"]\.\/studio-client['"]/.test(src);
   const importsBridgeClient = /from ['"]\.\/bridge-client['"]/.test(src);
   assert.ok(
@@ -102,7 +102,7 @@ test('lib/use-studio-home-data.ts imports data reads only from ./studio-client a
 });
 
 test("the hook's fetch identifiers are exactly the pre-existing closed set (no new endpoint invented for Home)", () => {
-  const hookSrc = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const hookSrc = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   const usedIds = ALLOWED_FETCH_IDENTIFIERS.filter((id) => new RegExp(`\\b${id}\\b`).test(hookSrc));
   assert.ok(usedIds.length > 0, 'the hook must call at least one of the existing fetch* reads to show live status');
   // No per-item fetch helper name (fetchKb, etc.) — the N-fan-out shape this
@@ -111,47 +111,47 @@ test("the hook's fetch identifiers are exactly the pre-existing closed set (no n
 });
 
 test('the hook does not run its own setInterval poll loop', () => {
-  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const src = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   assert.ok(!src.includes('setInterval('), 'the hook must not spin its own polling loop — live refresh comes from subscribe() (SSE)');
 });
 
 test('the hook does not open its own WebSocket transport', () => {
-  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const src = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   assert.ok(!src.includes('new WebSocket('), 'the hook must not open a bespoke WebSocket — subscribe() is the one live-refresh transport');
 });
 
 test('the hook does not make a raw fetch() call (must go through bridge-client/studio-client wrappers)', () => {
-  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const src = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   assert.ok(!/\bfetch\(/.test(src), 'the hook must not call raw fetch() — all reads must be through the existing typed wrappers');
 });
 
 test('the hook does not reference a new /api/ literal (no bespoke aggregate endpoint)', () => {
-  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const src = readOrFail(HOME_DATA_HOOK, 'apps/studio/lib/use-studio-home-data.ts');
   assert.ok(!src.includes("'/api/"), "the hook must not hardcode a new '/api/...' endpoint — compose the existing fetch* reads instead");
 });
 
 test('app/page.tsx does not run its own setInterval poll loop', () => {
-  const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+  const src = readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
   assert.ok(!src.includes('setInterval('), 'Home must not spin its own polling loop — live refresh comes from subscribe() (SSE)');
 });
 
 test('app/page.tsx does not open its own WebSocket transport', () => {
-  const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+  const src = readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
   assert.ok(!src.includes('new WebSocket('), 'Home must not open a bespoke WebSocket — subscribe() is the one live-refresh transport');
 });
 
 test('app/page.tsx does not make a raw fetch() call (must go through bridge-client/studio-client wrappers)', () => {
-  const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+  const src = readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
   assert.ok(!/\bfetch\(/.test(src), 'Home must not call raw fetch() — all reads must be through the existing typed wrappers');
 });
 
 test('app/page.tsx does not reference a new /api/ literal (no bespoke aggregate endpoint)', () => {
-  const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
+  const src = readOrFail(HOME_PAGE, 'apps/studio/app/page.tsx');
   assert.ok(!src.includes("'/api/"), "Home must not hardcode a new '/api/...' endpoint — compose the existing fetch* reads instead");
 });
 
-test('forge-ui/lib/home-view.ts is a pure derivation module: no fetch, no /api/, no await, no subscribe', () => {
-  const src = readOrFail(HOME_VIEW, 'forge-ui/lib/home-view.ts');
+test('apps/studio/lib/home-view.ts is a pure derivation module: no fetch, no /api/, no await, no subscribe', () => {
+  const src = readOrFail(HOME_VIEW, 'apps/studio/lib/home-view.ts');
   assert.ok(!/\bfetch\(/.test(src), 'home-view.ts must not fetch — it derives from data passed in, callers do the fetching');
   assert.ok(!src.includes("/api/"), 'home-view.ts must not reference an API path — it is pure derivation, not a data-access layer');
   assert.ok(!/\bawait\b/.test(src), 'home-view.ts must not await anything — a derivation with async I/O is not pure');
@@ -170,16 +170,16 @@ test('forge-ui/lib/home-view.ts is a pure derivation module: no fetch, no /api/,
 // read, and to the pure monitor derivation.
 // ---------------------------------------------------------------------------
 
-const MONITOR_PAGE = join(ROOT, 'forge-ui', 'app', 'monitor', 'page.tsx');
-const MONITOR_VIEW = join(ROOT, 'forge-ui', 'lib', 'monitor-view.ts');
-const EVERYTHING_LEDGER_HOOK = join(ROOT, 'forge-ui', 'lib', 'use-everything-ledger.ts');
+const MONITOR_PAGE = join(ROOT, 'apps', 'studio', 'app', 'monitor', 'page.tsx');
+const MONITOR_VIEW = join(ROOT, 'apps', 'studio', 'lib', 'monitor-view.ts');
+const EVERYTHING_LEDGER_HOOK = join(ROOT, 'apps', 'studio', 'lib', 'use-everything-ledger.ts');
 
-test('forge-ui/app/monitor/page.tsx exists (the Monitor pillar surface)', () => {
-  readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+test('apps/studio/app/monitor/page.tsx exists (the Monitor pillar surface)', () => {
+  readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
 });
 
 test('app/monitor/page.tsx sources its data via the SHARED hooks, not a bespoke client of its own', () => {
-  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  const src = readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
   assert.ok(src.includes('useStudioHomeData'), 'Monitor must source its cross-object reads through the shared hook');
   assert.ok(
     src.includes('useEverythingLedger'),
@@ -188,35 +188,35 @@ test('app/monitor/page.tsx sources its data via the SHARED hooks, not a bespoke 
 });
 
 test('app/monitor/page.tsx does not run its own setInterval poll loop', () => {
-  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  const src = readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
   assert.ok(!src.includes('setInterval('), 'Monitor must not spin its own polling loop — live refresh comes from subscribe() (SSE)');
 });
 
 test('app/monitor/page.tsx does not open its own WebSocket transport', () => {
-  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  const src = readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
   assert.ok(!src.includes('new WebSocket('), 'Monitor must not open a bespoke WebSocket — subscribe() is the one live-refresh transport');
 });
 
 test('app/monitor/page.tsx does not make a raw fetch() call', () => {
-  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  const src = readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
   assert.ok(!/\bfetch\(/.test(src), 'Monitor must not call raw fetch() — all reads must be through the existing typed wrappers');
 });
 
 test('app/monitor/page.tsx does not reference a new /api/ literal (no bespoke aggregate endpoint)', () => {
-  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  const src = readOrFail(MONITOR_PAGE, 'apps/studio/app/monitor/page.tsx');
   assert.ok(!src.includes("'/api/"), "Monitor must not hardcode a new '/api/...' endpoint — compose the existing reads instead");
 });
 
 test('lib/use-everything-ledger.ts adds no transport of its own (no interval, no socket, no raw fetch, no /api/ literal)', () => {
-  const src = readOrFail(EVERYTHING_LEDGER_HOOK, 'forge-ui/lib/use-everything-ledger.ts');
+  const src = readOrFail(EVERYTHING_LEDGER_HOOK, 'apps/studio/lib/use-everything-ledger.ts');
   assert.ok(!src.includes('setInterval('), 'the lifted ledger hook must not spin a polling loop');
   assert.ok(!src.includes('new WebSocket('), 'the lifted ledger hook must not open a bespoke WebSocket');
   assert.ok(!/\bfetch\(/.test(src), 'the lifted ledger hook must not call raw fetch() — it composes the existing typed reads');
   assert.ok(!src.includes("'/api/"), "the lifted ledger hook must not hardcode an '/api/...' path — the literal lives inside the read wrapper");
 });
 
-test('forge-ui/lib/monitor-view.ts is a pure derivation module: no fetch, no /api/, no await, no subscribe', () => {
-  const src = readOrFail(MONITOR_VIEW, 'forge-ui/lib/monitor-view.ts');
+test('apps/studio/lib/monitor-view.ts is a pure derivation module: no fetch, no /api/, no await, no subscribe', () => {
+  const src = readOrFail(MONITOR_VIEW, 'apps/studio/lib/monitor-view.ts');
   assert.ok(!/\bfetch\(/.test(src), 'monitor-view.ts must not fetch — it derives from data passed in, callers do the fetching');
   assert.ok(!src.includes('/api/'), 'monitor-view.ts must not reference an API path — it is pure derivation, not a data-access layer');
   assert.ok(!/\bawait\b/.test(src), 'monitor-view.ts must not await anything — a derivation with async I/O is not pure');

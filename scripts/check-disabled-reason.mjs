@@ -15,8 +15,8 @@
  * surfaced everywhere and enforced nowhere — and only a constructive gate
  * closes it.
  *
- * SCOPE, stated honestly. It checks `<button>` elements in `forge-ui/app` and
- * `forge-ui/components` whose opening tag carries a DYNAMIC `disabled={…}`
+ * SCOPE, stated honestly. It checks `<button>` elements in `apps/studio/app` and
+ * `apps/studio/components` whose opening tag carries a DYNAMIC `disabled={…}`
  * (a runtime state the operator can hit) AND reads as a primary CTA
  * (`btn-primary`, or the `primaryBtn`/`launchButtonStyle` style objects). It
  * does NOT check secondary/ghost buttons, `<a>` elements, statically disabled
@@ -25,7 +25,7 @@
  * `title` and `data-disabled-reason` together, so they cannot drift.
  *
  * FIX A FAILURE by spreading `{...disabledAttrs(cond ? 'why' : null)}`
- * (forge-ui/lib/disabled-reason.ts) in place of the bare `disabled={cond}`,
+ * (apps/studio/lib/disabled-reason.ts) in place of the bare `disabled={cond}`,
  * or by adding an ALLOWLIST row below for an audited residual.
  *
  * RUN: node scripts/check-disabled-reason.mjs [--json]
@@ -35,7 +35,7 @@ import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const UI = join(ROOT, 'forge-ui');
+const UI = join(ROOT, 'apps', 'studio');
 
 /**
  * Audited residuals: file + the button's `data-action` (NOT a line number —
@@ -103,7 +103,7 @@ if (process.argv.includes('--json')) {
 Each must be either:
   1. Spread from the ONE derivation:
        {...disabledAttrs(cond ? 'why the operator cannot do this yet' : null)}
-     (forge-ui/lib/disabled-reason.ts — drives disabled + title + data-disabled-reason together).
+     (apps/studio/lib/disabled-reason.ts — drives disabled + title + data-disabled-reason together).
   2. Or added to the ALLOWLIST in scripts/check-disabled-reason.mjs (file + data-action + reason).`);
   process.exit(1);
 } else {

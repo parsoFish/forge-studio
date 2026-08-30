@@ -612,7 +612,7 @@ test('installActionForItem: a system-provided connection not present has nothing
 // ---------------------------------------------------------------------------
 
 const REGISTRY_DOC = yaml.load(
-  readFileSync(resolve(__dirname, '..', '..', 'studio', 'community', 'registry.yaml'), 'utf8'),
+  readFileSync(resolve(__dirname, '..', '..', '..', 'studio', 'community', 'registry.yaml'), 'utf8'),
 ) as { meta?: { lastRefresh?: string | null }; sources?: Record<string, { fetchedAt?: string | null; fetchedBy?: string }> };
 
 test('registry-derived freshness: the registry-level line is a pure function of the REAL registry file\'s own meta.lastRefresh', () => {

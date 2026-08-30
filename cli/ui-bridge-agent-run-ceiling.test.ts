@@ -81,7 +81,7 @@
  *   - Part D is pinned against the EXISTING `GET /api/studio/agents` route
  *     (cli/bridge-studio.ts) — the only bridge route that already both serves
  *     agent data to the run-kickoff UI (`fetchStudioAgents()`,
- *     forge-ui/lib/studio-client.ts) AND already imports
+ *     apps/studio/lib/studio-client.ts) AND already imports
  *     `loadConfig`/`defaultConfigPath` for sibling routes in that same file.
  *     RATIFIED CONSTRAINT: `defaultCostCeilingUsd` must be served as a
  *     TOP-LEVEL SIBLING of `agents` (`{ agents: [...], defaultCostCeilingUsd }`),

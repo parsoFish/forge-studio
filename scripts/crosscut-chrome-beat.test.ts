@@ -23,7 +23,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const UI = join(ROOT, 'forge-ui');
+const UI = join(ROOT, 'apps', 'studio');
 const HOME_BEAT = readFileSync(join(ROOT, 'scripts/journeys/home.mjs'), 'utf8');
 
 /** The beat's own ROUTES table, read out of the source it runs from. */

@@ -28,7 +28,7 @@
  * community-index.ts) carries `description?`/`probeState?` as narrow/optional
  * facts; the wire item below is a STRICTER, always-present projection built
  * for the client's refuse-don't-coerce parser
- * (forge-ui/lib/community-client.ts):
+ * (apps/studio/lib/community-client.ts):
  *
  *   - `desc` is ALWAYS a string — a source record with no description
  *     renders the honest sentinel "No description published." (same idiom

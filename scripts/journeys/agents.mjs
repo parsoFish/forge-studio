@@ -1174,7 +1174,7 @@ export const journey = defineJourney({
               // ── R6-06: the three-path history ledger ──────────────────────
               // NOT YET IMPLEMENTED as of this beat's authoring — R6-06 is
               // still in its acceptance-test phase (cli/ui-bridge-agent-
-              // history.test.ts, forge-ui/lib/agent-ledger.test.ts). This
+              // history.test.ts, apps/studio/lib/agent-ledger.test.ts). This
               // section is a legitimate RED against the current build,
               // exactly like every other R6-06 test in this initiative — it
               // will start passing once the feature ships. Expected VALUES

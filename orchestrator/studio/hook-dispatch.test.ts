@@ -29,7 +29,7 @@
  *  - the matcher tests kill "pass forge's declared matcher straight to the
  *    SDK's `HookCallbackMatcher.matcher`". Those two syntaxes are NOT the
  *    same: forge's UI placeholder is literally `Bash(gh pr create)`
- *    (`forge-ui/app/hooks/new/page.tsx:109`) and the OOTB
+ *    (`apps/studio/app/hooks/new/page.tsx:109`) and the OOTB
  *    `pre-pr-security-review` ships exactly that, while the SDK's field is a
  *    tool-NAME pattern. Handing it over verbatim yields a hook that is
  *    registered, displayed as bound, and never fires — the same defect in a

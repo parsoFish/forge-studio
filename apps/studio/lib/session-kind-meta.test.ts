@@ -37,7 +37,7 @@ import {
   sessionKindAgent,
 } from './session-kind-meta.ts';
 
-const YAML_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'studio', 'session-kinds.yaml');
+const YAML_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'studio', 'session-kinds.yaml');
 
 /** Minimal line scanner over the flat `- id:` / `agent:` / `title:` shape of
  *  studio/session-kinds.yaml — deliberately NOT a full YAML parse: the three

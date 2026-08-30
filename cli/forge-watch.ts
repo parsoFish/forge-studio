@@ -82,12 +82,12 @@ export function isValidPort(raw: string | undefined): raw is string {
 // `.next/` output is fresh enough to skip a `next build` before `next start`.
 // ---------------------------------------------------------------------------
 
-/** Source roots (relative to `forge-ui/`) scanned for the freshness check —
+/** Source roots (relative to `apps/studio/`) scanned for the freshness check —
  *  everything a `next build` output actually depends on. `public/` is a next
  *  build input too (static assets copied into the output) — review finding
  *  #3, its omission was a completeness bug against this comment's own claim. */
 const BUILD_FRESHNESS_SOURCE_DIRS = ['app', 'components', 'lib', 'public'];
-/** Individual source files (relative to `forge-ui/`) included alongside the
+/** Individual source files (relative to `apps/studio/`) included alongside the
  *  directories above — config/manifest changes also invalidate a build.
  *  `tsconfig.json` added per review finding #3 (compiler options feed the
  *  build; a `strict`/`paths`/target change must trigger a rebuild too). */
@@ -432,7 +432,7 @@ export type WatchOptions = {
 export async function runWatch(opts: WatchOptions): Promise<void> {
   const { forgeRoot } = opts;
   const label = opts.logLabel ?? '[forge studio]';
-  const uiDir = resolve(forgeRoot, 'forge-ui');
+  const uiDir = resolve(forgeRoot, 'apps', 'studio');
   const bridgePort = opts.bridgePort ?? DEFAULT_BRIDGE_PORT;
   const uiPort = opts.uiPort ?? DEFAULT_UI_PORT;
   const uiUrl = `http://localhost:${uiPort}`;
@@ -520,7 +520,7 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
 
   if (!opts.bridgeOnly) {
     if (!existsSync(resolve(uiDir, 'package.json'))) {
-      console.log(`${label} forge-ui workspace not present yet (forge-ui/package.json missing).`);
+      console.log(`${label} forge-ui workspace not present yet (apps/studio/package.json missing).`);
       console.log(`${label} running bridge-only — install the workspace then re-run.`);
     } else {
       takeoverPort(uiPort, 'ui', label);

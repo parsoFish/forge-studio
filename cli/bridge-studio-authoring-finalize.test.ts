@@ -580,7 +580,7 @@ for (const { label, staging } of MALFORMED_HOOK_DRAFTS) {
 // METADATA (here, the draft-only `category` routing field) is read from the
 // LANDED, DRAFTED `template.md`, parsed server-side, never from body fields.
 // A template is ONE markdown file with gray-matter frontmatter (D1,
-// orchestrator/studio/template-library.ts; forge-ui/app/templates/new/page.tsx's
+// orchestrator/studio/template-library.ts; apps/studio/app/templates/new/page.tsx's
 // own seedContent precedent) staged at the ONE canonical name `template.md`.
 // ===========================================================================
 

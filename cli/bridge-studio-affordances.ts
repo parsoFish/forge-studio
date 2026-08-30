@@ -154,7 +154,7 @@ import { dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // UnhandledAffordanceBody — mirrors forge-ui's `UnhandledArtifactBody`
-// (`forge-ui/components/studio/session/SessionArtifactPane.tsx`): an
+// (`apps/studio/components/studio/session/SessionArtifactPane.tsx`): an
 // explicit, VISIBLE failure state for a value this route recognises as
 // STRUCTURALLY valid (a real, currently-available affordance) but has no
 // renderer/handler wired for — never a silent 200, never routed into a
@@ -216,7 +216,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  (authoring / kb-cleanup — no `*-list-changed` message exists in the
    *  bridge's WS vocabulary) honestly no-ops; those surfaces refresh on the
    *  session shell's own 3s poll (SHELL_POLL_MS,
-   *  forge-ui/app/sessions/[kind]/[sessionId]/page.tsx). */
+   *  apps/studio/app/sessions/[kind]/[sessionId]/page.tsx). */
   broadcastKindChanged: (kind: string) => void;
 };
 
@@ -881,7 +881,7 @@ async function handleKbCleanupVerdict(
  *       inside), and
  *   (b) `cli/authoring-package-shape-parity.test.ts` can cross-check it,
  *       byte-for-byte, against forge-ui's own hand-mirrored copy
- *       (`forge-ui/lib/authoring-package-shape.ts` — forge-ui never
+ *       (`apps/studio/lib/authoring-package-shape.ts` — forge-ui never
  *       imports cli/ at runtime, so that file is a second, independent
  *       definition, not an import of this one; the parity test is what
  *       keeps a hand-copy honest instead of silent). */

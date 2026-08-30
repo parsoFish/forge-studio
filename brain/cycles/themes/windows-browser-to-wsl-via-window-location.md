@@ -66,5 +66,5 @@ Also available on `data-bridge-url` on the root `<main>` (see [[dom-as-metrics-f
 ## See also
 
 - [[fixed-port-takeover-for-pinned-browser-tabs]]
-- [`forge-ui/lib/bridge-client.ts:resolveBridgeUrl`](../../../forge-ui/lib/bridge-client.ts)
-- [`forge-ui/app/api/forge-config/route.ts`](../../../forge-ui/app/api/forge-config/route.ts)
+- [`apps/studio/lib/bridge-client.ts:resolveBridgeUrl`](../../../apps/studio/lib/bridge-client.ts)
+- [`apps/studio/app/api/forge-config/route.ts`](../../../apps/studio/app/api/forge-config/route.ts)

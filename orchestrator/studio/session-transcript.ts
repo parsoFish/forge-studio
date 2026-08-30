@@ -596,7 +596,7 @@ export type RoadmapDraftRow = {
   //
   // Resolving an edge against this session's OWN draft row set (which
   // dependency ids are "real" vs. dangling) is deliberately NOT this
-  // layer's job — it is the VIEW layer's (forge-ui/lib/dependency-dag.ts's
+  // layer's job — it is the VIEW layer's (apps/studio/lib/dependency-dag.ts's
   // `dependencyDagView`). An edge pointing at an initiative outside the
   // draft set (e.g. one that already merged before this architect session
   // started) is real information the operator needs to see, not noise to

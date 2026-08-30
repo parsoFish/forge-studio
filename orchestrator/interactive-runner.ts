@@ -250,7 +250,7 @@ export async function runInteractiveTurn(
   // The event-log DIRECTORY is `_<descriptor.id>-<sessionId>` — the convention
   // every consumer of an interactive session's live log already derives
   // independently, and which the spine must therefore match rather than invent:
-  //   - `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` builds
+  //   - `apps/studio/app/sessions/[kind]/[sessionId]/page.tsx` builds
   //     `` `_${kind}-${sessionId}` `` and hands it to `useCycleEvents`;
   //   - `cli/ui-bridge.ts`'s `spawnAgentTurn` writes THIS SAME TURN's
   //     `stderr.log` into `` `_logs/_${logPrefix}-${sessionId}` ``, where

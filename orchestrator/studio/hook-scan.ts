@@ -436,7 +436,7 @@ function scanObfuscation(body: string): HookScanFinding[] {
  * shapes the pattern list misses (`/dev/tcp/`, `python3 -c`, `ssh`, `dig`).
  * "No egress finding" is therefore not evidence of no egress path, so a lone
  * critical capability grant scored `findings` — which `approveHook` accepts
- * with no override and no reason, and which `forge-ui/app/hooks/[id]` renders
+ * with no override and no reason, and which `apps/studio/app/hooks/[id]` renders
  * with the same one-click Approve as `clean`. The reviewer approved a hook
  * declaring `permissions.env: ["GH_TOKEN"]` through that ordinary path and its
  * child printed the operator's real token. A gate whose second half is

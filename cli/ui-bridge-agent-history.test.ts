@@ -882,7 +882,7 @@ test('D5: after every traversal probe above, the route is still healthy for a no
 // ROUND 8 (history) — SHIPPED-BLIND DEFECT the round-trip capture below
 // would have caught. 4074 node tests + 715 vitest tests + 825/826 journey
 // checks were green while this route's real 200 response was rejected by
-// the real client resolver on EVERY request: `forge-ui/lib/agent-ledger.ts`'s
+// the real client resolver on EVERY request: `apps/studio/lib/agent-ledger.ts`'s
 // `isValidLedgerRow` required `when`/`what`/`narrativeKinds` on every row;
 // this route emitted none of them — only the pre-existing
 // `{id,linkKind,href,status,costUsd}` five. The 43 tests in
@@ -915,14 +915,14 @@ test('D5: after every traversal probe above, the route is still healthy for a no
 // ("a row shaped like the defect must still fail validation"), not a mirror
 // of today's wire shape, so they never needed to change when this file's
 // captures below did. Per this round's task instructions,
-// `forge-ui/lib/agent-ledger.test.ts` is untouched (verified unmodified —
+// `apps/studio/lib/agent-ledger.test.ts` is untouched (verified unmodified —
 // see `git status` at the end of this round). This file still cannot import
-// the client resolver directly: `forge-ui/lib/*.ts` uses extensionless
+// the client resolver directly: `apps/studio/lib/*.ts` uses extensionless
 // relative imports (`from './bridge-client'`, no `.ts`), which Node's ESM
 // loader — even under `--experimental-strip-types` — refuses to resolve
 // outside forge-ui's own bundler-mode toolchain (verified directly in round
 // 8: `node --experimental-strip-types` against a one-line script importing
-// `forge-ui/lib/agent-ledger.ts` throws `ERR_MODULE_NOT_FOUND` on its own
+// `apps/studio/lib/agent-ledger.ts` throws `ERR_MODULE_NOT_FOUND` on its own
 // `./bridge-client` import) — unchanged this round, so the cross-file split
 // stands.
 // ═══════════════════════════════════════════════════════════════════════

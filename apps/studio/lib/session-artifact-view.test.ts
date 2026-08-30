@@ -1136,7 +1136,7 @@ const CLEANUP_PLAN_DISAGREEING_COUNT: CleanupPlanArtifact = {
 // parser -- this test file has no business importing session-transcript.ts's
 // parser (mirrors this whole file's established "never cross the
 // orchestrator/forge-ui boundary" rule).
-const REAL_CAPTURE_DIR = resolve(__dirname, '../../scripts/journeys/fixtures/r4-19-f2-live-capture');
+const REAL_CAPTURE_DIR = resolve(__dirname, '../../../scripts/journeys/fixtures/r4-19-f2-live-capture');
 const REAL_CLEANUP_PLAN_MD = readFileSync(resolve(REAL_CAPTURE_DIR, 'cleanup-plan.md'), 'utf8');
 
 const REAL_CLEANUP_PLAN_ARTIFACT: CleanupPlanArtifact = {

@@ -56,7 +56,7 @@ const SCRIPT = join(ROOT, 'scripts/studio-host-lock.sh');
 const packageName = (dir: string): string =>
   JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).name as string;
 const OUR_ROOT_NAME = packageName(ROOT);
-const OUR_UI_NAME = packageName(join(ROOT, 'forge-ui'));
+const OUR_UI_NAME = packageName(join(ROOT, 'apps', 'studio'));
 
 /** `next` overwrites its argv with this title in startServer(), for `next dev`
  *  and `next start` alike — verified against node_modules/next and against the
@@ -73,11 +73,11 @@ const IDLE = 'setTimeout(() => {}, 10 * 60 * 1000);\n';
 /** Lay down the marker files that make a directory recognisably a forge checkout. */
 function forgeCheckout(dir: string, names: { root?: string; ui?: string } = {}): string {
   mkdirSync(join(dir, 'orchestrator'), { recursive: true });
-  mkdirSync(join(dir, 'forge-ui'), { recursive: true });
+  mkdirSync(join(dir, 'apps', 'studio'), { recursive: true });
   mkdirSync(join(dir, 'bin'), { recursive: true });
   writeFileSync(join(dir, 'orchestrator/cli.ts'), '// fixture\n');
   writeFileSync(join(dir, 'bin/forge.mjs'), IDLE);
-  writeFileSync(join(dir, 'forge-ui/package.json'), JSON.stringify({ name: names.ui ?? OUR_UI_NAME }));
+  writeFileSync(join(dir, 'apps/studio/package.json'), JSON.stringify({ name: names.ui ?? OUR_UI_NAME }));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: names.root ?? OUR_ROOT_NAME }, null, 2));
   return dir;
 }
@@ -131,15 +131,15 @@ test('the live Studio in a sibling checkout is forge — the reported failure', 
   // Reported direction: the script runs from the LANE, the next-server lives in
   // the primary checkout. This is what printed "REFUSING to signal ... not a
   // forge process: next-server" while the bridge had already been stopped.
-  assert.equal(classify(join(PRIMARY, 'forge-ui'), [UI_ARGV0], LANE), `forge ${PRIMARY}`);
+  assert.equal(classify(join(PRIMARY, 'apps', 'studio'), [UI_ARGV0], LANE), `forge ${PRIMARY}`);
 });
 
 test('a next-server in a sibling worktree is forge, seen from the primary checkout', () => {
-  assert.equal(classify(join(LANE, 'forge-ui'), [UI_ARGV0]), `forge ${LANE}`);
+  assert.equal(classify(join(LANE, 'apps', 'studio'), [UI_ARGV0]), `forge ${LANE}`);
 });
 
 test("this checkout's own next-server is still forge, at the UI dir or the root", () => {
-  assert.equal(classify(join(ROOT, 'forge-ui'), [UI_ARGV0]), `forge ${ROOT}`);
+  assert.equal(classify(join(ROOT, 'apps', 'studio'), [UI_ARGV0]), `forge ${ROOT}`);
   assert.equal(classify(ROOT, [UI_ARGV0]), `forge ${ROOT}`);
 });
 
@@ -208,16 +208,16 @@ test('the UI is identified by its own argv[0], not by a string in a command line
   assert.equal(verdict(classify(ROOT, ['docker', 'run', '-p', '4124:4124', 'next-server:latest'])), 'FOREIGN');
   assert.equal(verdict(classify(ROOT, ['npm', 'run', 'start', '--workspace', 'forge-ui'])), 'FOREIGN');
   // and the real thing still is forge
-  assert.equal(verdict(classify(join(ROOT, 'forge-ui'), [UI_ARGV0])), 'forge');
+  assert.equal(verdict(classify(join(ROOT, 'apps', 'studio'), [UI_ARGV0])), 'forge');
 });
 
 test('an unrelated next-server is REFUSED', () => {
   const stranger = join(FIXTURES, 'someone-elses-app');
-  mkdirSync(join(stranger, 'forge-ui'), { recursive: true });
+  mkdirSync(join(stranger, 'apps', 'studio'), { recursive: true });
   writeFileSync(join(stranger, 'package.json'), JSON.stringify({ name: 'someone-elses-app' }));
   assert.equal(verdict(classify(stranger, [UI_ARGV0])), 'FOREIGN');
   // even when it happens to have a directory named forge-ui
-  assert.equal(verdict(classify(join(stranger, 'forge-ui'), [UI_ARGV0])), 'FOREIGN');
+  assert.equal(verdict(classify(join(stranger, 'apps', 'studio'), [UI_ARGV0])), 'FOREIGN');
   // and even when it claims forge's package name without forge's files
   const impostor = join(FIXTURES, 'impostor');
   mkdirSync(impostor, { recursive: true });
@@ -238,7 +238,7 @@ test('each of the four checkout markers is load-bearing on its own', () => {
   const badRootName = forgeCheckout(join(FIXTURES, 'renamed-fork'), { root: 'someone-elses-fork' });
   const badUiName = forgeCheckout(join(FIXTURES, 'other-ui'), { ui: 'someone-elses-ui' });
   for (const dir of [noCli, noBin, badRootName, badUiName]) {
-    assert.equal(verdict(classify(join(dir, 'forge-ui'), [UI_ARGV0])), 'FOREIGN', dir);
+    assert.equal(verdict(classify(join(dir, 'apps', 'studio'), [UI_ARGV0])), 'FOREIGN', dir);
     assert.equal(verdict(classify(dir, ['node', join(dir, 'bin/forge.mjs'), 'studio'])), 'FOREIGN', dir);
   }
 });
@@ -248,19 +248,19 @@ test('an unreadable package.json refuses, even when OURS is unreadable too', () 
   // the failure mode of this script is report, do not signal.
   const brokenLane = forgeCheckout(join(FIXTURES, 'broken-lane'));
   writeFileSync(join(brokenLane, 'package.json'), '{ not json');
-  writeFileSync(join(brokenLane, 'forge-ui/package.json'), '{ not json');
+  writeFileSync(join(brokenLane, 'apps/studio/package.json'), '{ not json');
   mkdirSync(join(brokenLane, 'scripts'), { recursive: true });
   copyFileSync(SCRIPT, join(brokenLane, 'scripts/studio-host-lock.sh'));
   const brokenTarget = forgeCheckout(join(FIXTURES, 'broken-target'));
   writeFileSync(join(brokenTarget, 'package.json'), '{ not json');
-  writeFileSync(join(brokenTarget, 'forge-ui/package.json'), '{ not json');
-  assert.equal(verdict(classify(join(brokenTarget, 'forge-ui'), [UI_ARGV0], brokenLane)), 'FOREIGN');
+  writeFileSync(join(brokenTarget, 'apps/studio/package.json'), '{ not json');
+  assert.equal(verdict(classify(join(brokenTarget, 'apps', 'studio'), [UI_ARGV0], brokenLane)), 'FOREIGN');
   // a well-formed checkout is still refused by a script whose own names are unreadable
-  assert.equal(verdict(classify(join(PRIMARY, 'forge-ui'), [UI_ARGV0], brokenLane)), 'FOREIGN');
+  assert.equal(verdict(classify(join(PRIMARY, 'apps', 'studio'), [UI_ARGV0], brokenLane)), 'FOREIGN');
 });
 
 test('a next-server in a non-UI subdirectory of a forge checkout is REFUSED', () => {
-  // only the checkout root and its forge-ui/ workspace are Studio's own cwds
+  // only the checkout root and its apps/studio/ workspace are Studio's own cwds
   assert.equal(verdict(classify(join(ROOT, 'scripts'), [UI_ARGV0])), 'FOREIGN');
   assert.equal(verdict(classify(join(ROOT, 'orchestrator'), [UI_ARGV0])), 'FOREIGN');
   // a managed project nested inside the checkout, with its own forge-ui, is
@@ -276,18 +276,18 @@ test('a checkout that is itself named forge-ui is still identified', () => {
   // walks one level too far and loses the whole checkout
   const oddly = forgeCheckout(join(FIXTURES, 'clones/forge-ui'));
   assert.equal(classify(oddly, [UI_ARGV0]), `forge ${oddly}`);
-  assert.equal(classify(join(oddly, 'forge-ui'), [UI_ARGV0]), `forge ${oddly}`);
+  assert.equal(classify(join(oddly, 'apps', 'studio'), [UI_ARGV0]), `forge ${oddly}`);
 });
 
 test('a checkout whose path contains a space is identified, argv and all', () => {
   const spaced = forgeCheckout(join(FIXTURES, 'my forge/checkout'));
-  assert.equal(classify(join(spaced, 'forge-ui'), [UI_ARGV0]), `forge ${spaced}`);
+  assert.equal(classify(join(spaced, 'apps', 'studio'), [UI_ARGV0]), `forge ${spaced}`);
   assert.equal(classify(spaced, ['node', join(spaced, 'bin/forge.mjs'), 'studio']), `forge ${spaced}`);
 });
 
 test('a non-forge command line is REFUSED wherever it runs', () => {
-  assert.equal(verdict(classify(join(ROOT, 'forge-ui'), ['python3', '-m', 'http.server', '4124'])), 'FOREIGN');
-  assert.equal(verdict(classify(join(ROOT, 'forge-ui'), [''])), 'FOREIGN');
+  assert.equal(verdict(classify(join(ROOT, 'apps', 'studio'), ['python3', '-m', 'http.server', '4124'])), 'FOREIGN');
+  assert.equal(verdict(classify(join(ROOT, 'apps', 'studio'), [''])), 'FOREIGN');
 });
 
 test('a missing or unreadable cwd is REFUSED, never assumed', () => {
@@ -363,7 +363,7 @@ const bridgeDecoy = (checkout: string, entry = join(checkout, 'bin/forge.mjs')):
   decoy([entry, 'studio'], checkout);
 /** A decoy UI: `next`'s own process title, in a checkout's forge-ui. */
 const uiDecoy = (checkout: string): number =>
-  decoy([join(checkout, 'bin/forge.mjs')], join(checkout, 'forge-ui'), UI_ARGV0);
+  decoy([join(checkout, 'bin/forge.mjs')], join(checkout, 'apps', 'studio'), UI_ARGV0);
 /** A decoy that is nobody's Studio. */
 const strangerDecoy = (): number => decoy([STRANGER_PROGRAM], tmpdir());
 

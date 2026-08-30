@@ -33,7 +33,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '..');
  * SPAWN_AGENT_SPECS key that spawns turns for it. Every kind maps to
  * itself EXCEPT 'demo': its session-kind id is 'demo' (R4-16 — the bridge
  * derives the on-disk session dir as `<project>/_demo/<sid>`, and
- * forge-ui/ensureSessionTail both key the WS cycle-id on that same 'demo'
+ * apps/studio/ensureSessionTail both key the WS cycle-id on that same 'demo'
  * string) while the SPAWN_AGENT_SPECS row that spawns its turns is keyed
  * 'demo-builder' (the CLI verb `demo-builder run`, preserved byte-for-byte
  * from before the R2-01-F3b spawn-helper collapse). This map makes that ONE

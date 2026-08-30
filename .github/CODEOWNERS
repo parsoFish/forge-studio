@@ -11,7 +11,7 @@
 /orchestrator/   @parsoFish
 /cli/            @parsoFish
 /loops/          @parsoFish
-/forge-ui/       @parsoFish
+/apps/studio/    @parsoFish
 /bin/            @parsoFish
 /scripts/        @parsoFish
 

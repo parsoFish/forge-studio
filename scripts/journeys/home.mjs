@@ -3,7 +3,7 @@
  *
  * "What needs me at a glance" — the operator's landing surface. Entry-point
  * rule: the clip STARTS at `/` (Home is where the operator lands, not a
- * mid-flow screen). Reads the shipped `forge-ui/app/page.tsx` — Home is a
+ * mid-flow screen). Reads the shipped `apps/studio/app/page.tsx` — Home is a
  * PURE composition of six existing surfaces (fetchStudioAgents/Flows/
  * Projects/Kbs + fetchRuns + fetchProjectAttention) through the pure
  * `lib/home-view.ts` derivation (buildConstellation/buildHomeAttention) —

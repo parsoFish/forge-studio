@@ -379,7 +379,7 @@ function findRun(forgeRoot: string, id: string): Run | null {
  * `architect_session_id` is a STORED pointer on a queue manifest, minted when
  * the architect finished and never re-checked afterwards. Wave 8 started
  * rendering it as a link (`a[data-action="open-architect-session"]`,
- * forge-ui/components/studio/FlowRunDetail.tsx), which is how seven dead
+ * apps/studio/components/studio/FlowRunDetail.tsx), which is how seven dead
  * `/sessions/architect/<ts>` addresses became first-party 404s in the
  * walkthrough crawl. The route fix makes almost all of them readable again;
  * this closes the remainder — a pointer at a session that exists NOWHERE is
@@ -642,7 +642,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       // W7-FIX-A4: the STORED `kb` outranks the derived binding in BOTH
       // directions — a string is an explicit rebind, an explicit `null` is an
       // explicit UNBIND (the operator cleared the binding in KbBind; see
-      // `forge-ui/lib/project-save-payload.ts`). Honouring only the string
+      // `apps/studio/lib/project-save-payload.ts`). Honouring only the string
       // made the unbind un-stickable: the PUT wrote `kb: null` and the very
       // next roster read handed the derived binding straight back. An ABSENT
       // key (and only an absent key) leaves the derivation live.
@@ -849,7 +849,7 @@ export async function handleStudioRoutes(
       // additive mode on this SAME route, never a new URL. It returns the
       // node's own raw EventLogEntry records (event_type preserved) instead
       // of the classifyEvent-derived {kind,text,at,detail} shape, so the
-      // client's shared deriveLogLine (forge-ui/lib/run-log-line.ts) has the
+      // client's shared deriveLogLine (apps/studio/lib/run-log-line.ts) has the
       // fields it needs. D2: PhaseDrawer never passes this, and the
       // classified path below is untouched when raw=1 is absent.
       const rawMode = qs.get('raw') === '1';

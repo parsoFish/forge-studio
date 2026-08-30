@@ -27,7 +27,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_BRIDGE_PORT as CONTRACT_PORT } from '@forge/contracts';
 import { DEFAULT_BRIDGE_PORT as UI_PORT } from './bridge-port.ts';
 
-const FORGE_WATCH_PATH = resolve(__dirname, '../../cli/forge-watch.ts');
+const FORGE_WATCH_PATH = resolve(__dirname, '../../../cli/forge-watch.ts');
 const UI_BRIDGE_PORT_PATH = resolve(__dirname, './bridge-port.ts');
 
 test('forge-ui serves the contracts constant itself, not a copy of its value', () => {

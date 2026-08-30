@@ -118,7 +118,7 @@ test('A-M7/A-M8: no component paints #fff on a --accent or --faint fill', () => 
       const to = src.indexOf('}', m.index! + m[0].length);
       const block = src.slice(from, to === -1 ? src.length : to);
       if (/color:\s*'#fff'|color:\s*'#ffffff'/i.test(block)) {
-        offenders.push(`${file.split('/forge-ui/')[1]}:${src.slice(0, m.index!).split('\n').length} (--${m[1]} fill)`);
+        offenders.push(`${file.split('/apps/studio/')[1]}:${src.slice(0, m.index!).split('\n').length} (--${m[1]} fill)`);
       }
     }
   }
@@ -131,7 +131,7 @@ test('crosscut-24: the pre-AA --faint literal survives nowhere as a fallback', (
   // property fails to resolve reintroduces exactly the violation.
   const offenders: string[] = [];
   for (const file of tsxFiles(resolve(__dirname, '../app')).concat(tsxFiles(resolve(__dirname, '../components')))) {
-    if (/#5b6779/i.test(readFileSync(file, 'utf8'))) offenders.push(file.split('/forge-ui/')[1]);
+    if (/#5b6779/i.test(readFileSync(file, 'utf8'))) offenders.push(file.split('/apps/studio/')[1]);
   }
   expect(offenders, `the pre-AA --faint literal is still hardcoded in: ${offenders.join(', ')}`).toEqual([]);
 });

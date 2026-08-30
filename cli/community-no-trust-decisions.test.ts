@@ -48,10 +48,10 @@ const COMMUNITY_SURFACE_FILES = [
   'cli/bridge-studio-community.ts',
   'orchestrator/studio/community-index.ts',
   'orchestrator/studio/community-install.ts',
-  'forge-ui/lib/community-client.ts',
-  'forge-ui/lib/community-view.ts',
-  'forge-ui/app/community/page.tsx',
-  'forge-ui/app/community/[kind]/[id]/page.tsx',
+  'apps/studio/lib/community-client.ts',
+  'apps/studio/lib/community-view.ts',
+  'apps/studio/app/community/page.tsx',
+  'apps/studio/app/community/[kind]/[id]/page.tsx',
 ];
 
 function assertNoTrustMutatingReference(relPath: string): void {

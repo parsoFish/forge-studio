@@ -33,16 +33,16 @@
  * A3 (this file, AT-49..52): `legacyRoutes` was parsed, typed, and echoed
  * back, but never actually checked — declared-data-fails-open. New contract:
  * `validateSessionKinds` errors when a `legacyRoutes` entry is empty/blank OR
- * does not correspond to a real route directory under `forge-ui/app/` (route
+ * does not correspond to a real route directory under `apps/studio/app/` (route
  * path segments map 1:1 onto Next.js App Router directory names, including
  * literal `[sessionId]` dynamic-segment folders — e.g.
- * `/architect/[sessionId]/interview` → `forge-ui/app/architect/[sessionId]/interview`,
+ * `/architect/[sessionId]/interview` → `apps/studio/app/architect/[sessionId]/interview`,
  * verified to exist on disk for AT-52).
  *
  * AT-amendment-3, A1 (this file, AT-61..67): the amendment-2 fix for A3
  * added `legacyRouteResolves(forgeRoot, route)`, which does
- * `existsSync(join(forgeRoot, 'forge-ui', 'app', ...segments))` with NO
- * check that the resolved path stays under `forge-ui/app/` — `path.join`
+ * `existsSync(join(forgeRoot, 'apps', 'studio', 'app', ...segments))` with NO
+ * check that the resolved path stays under `apps/studio/app/` — `path.join`
  * normalizes `..` segments before `existsSync` ever runs. A route entry
  * containing enough `..` escapes to ANY real directory (including, via
  * enough `..` segments to clamp past the filesystem root, arbitrary
@@ -275,14 +275,14 @@ function byId(descs: readonly SessionKindDescriptor[], id: string): SessionKindD
   return d!;
 }
 
-/** Creates a REAL `forge-ui/app/<...segments>/` directory under `root` for a
+/** Creates a REAL `apps/studio/app/<...segments>/` directory under `root` for a
  *  legacyRoutes entry like `/fixture-kind/[sessionId]` — route path segments
  *  map 1:1 onto Next.js App Router directory names, including a literal
  *  `[sessionId]` dynamic-segment folder (verified against the real repo:
- *  `forge-ui/app/architect/[sessionId]/interview/page.tsx` exists on disk). */
+ *  `apps/studio/app/architect/[sessionId]/interview/page.tsx` exists on disk). */
 function writeForgeUiRoute(root: string, routePath: string): void {
   const segments = routePath.replace(/^\//, '').split('/').filter((s) => s.length > 0);
-  mkdirSync(join(root, 'forge-ui', 'app', ...segments), { recursive: true });
+  mkdirSync(join(root, 'apps', 'studio', 'app', ...segments), { recursive: true });
 }
 
 // ===========================================================================
@@ -768,12 +768,12 @@ describe('R4-21 — the "authoring" session kind (creation-agent, file-package)'
 // A3 — legacyRoutes is no longer declared-data-fails-open (AT-49..52)
 // ===========================================================================
 
-describe('validateSessionKinds — legacyRoutes must resolve to a real forge-ui/app/ route (AT-amendment-2, A3)', () => {
-  it('AT-49: a legacyRoutes entry that does not correspond to a real forge-ui/app/ directory → error naming ONLY the bogus entry, not the sibling that DOES resolve', () => {
+describe('validateSessionKinds — legacyRoutes must resolve to a real apps/studio/app/ route (AT-amendment-2, A3)', () => {
+  it('AT-49: a legacyRoutes entry that does not correspond to a real apps/studio/app/ directory → error naming ONLY the bogus entry, not the sibling that DOES resolve', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeForgeUiRoute(root, '/fixture-kind/[sessionId]'); // this one is real
-    // '/totally-bogus-route/[sessionId]' has NO matching forge-ui/app/ dir.
+    // '/totally-bogus-route/[sessionId]' has NO matching apps/studio/app/ dir.
     writeSessionKindsYaml(root, [
       baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', '/totally-bogus-route/[sessionId]'] }),
     ]);
@@ -804,18 +804,18 @@ describe('validateSessionKinds — legacyRoutes must resolve to a real forge-ui/
     assert.deepEqual(findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found'), [], 'an empty legacyRoutes list must never itself be an error');
   });
 
-  it('AT-52: the real repo — all three shipped descriptors\' legacyRoutes resolve to real forge-ui/app/ directories (verified independently of the validator too)', () => {
+  it('AT-52: the real repo — all three shipped descriptors\' legacyRoutes resolve to real apps/studio/app/ directories (verified independently of the validator too)', () => {
     const findings = validateSessionKinds(REPO_ROOT);
     const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
     assert.deepEqual(routeFindings, [], `expected 0 legacy-route-not-found findings in the real repo, got: ${JSON.stringify(routeFindings)}`);
 
     // Independent verification (not just trusting the validator under test):
-    // every shipped legacyRoutes entry really does exist as a forge-ui/app/ dir.
+    // every shipped legacyRoutes entry really does exist as a apps/studio/app/ dir.
     const descs = loadSessionKinds(REPO_ROOT);
     for (const d of descs) {
       for (const route of d.legacyRoutes) {
         const segments = route.replace(/^\//, '').split('/').filter((s) => s.length > 0);
-        const dirPath = join(REPO_ROOT, 'forge-ui', 'app', ...segments);
+        const dirPath = join(REPO_ROOT, 'apps', 'studio', 'app', ...segments);
         assert.ok(existsSync(dirPath), `expected "${dirPath}" (from legacyRoutes entry "${route}" on session kind "${d.id}") to exist`);
       }
     }
@@ -876,7 +876,7 @@ describe('validateSessionKinds — YAML structural coverage (AT-amendment-2, A4)
 
 // ===========================================================================
 // AT-amendment-3, A1 (AT-61..67) — legacyRouteResolves has NO containment
-// check. `existsSync(join(forgeRoot, 'forge-ui', 'app', ...segments))` is
+// check. `existsSync(join(forgeRoot, 'apps', 'studio', 'app', ...segments))` is
 // evaluated on the path.join()-NORMALIZED result — `..` segments collapse
 // BEFORE existsSync runs, so a route entry can point anywhere `existsSync`
 // can see. Every scenario below was run against the actual, unfixed
@@ -885,12 +885,12 @@ describe('validateSessionKinds — YAML structural coverage (AT-amendment-2, A4)
 // ===========================================================================
 
 describe('validateSessionKinds — legacyRouteResolves has NO containment check (AT-amendment-3, A1)', () => {
-  it('AT-61: a legacyRoutes entry escaping upward to a REAL directory OUTSIDE forge-ui/app → error (empirically verified: currently returns true, i.e. wrongly "resolves" — LIVE bypass)', () => {
+  it('AT-61: a legacyRoutes entry escaping upward to a REAL directory OUTSIDE apps/studio/app → error (empirically verified: currently returns true, i.e. wrongly "resolves" — LIVE bypass)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeForgeUiRoute(root, '/fixture-kind/[sessionId]'); // negative control: the real, legitimate sibling
     mkdirSync(join(root, 'escaped-outside-target'), { recursive: true }); // the escape target REALLY exists
-    const evilRoute = '../../escaped-outside-target'; // forge-ui/app/../.. => root; + escaped-outside-target
+    const evilRoute = '../../escaped-outside-target'; // apps/studio/app/../.. => root; + escaped-outside-target
     writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', evilRoute] })]);
 
     const findings = validateSessionKinds(root);
@@ -908,7 +908,7 @@ describe('validateSessionKinds — legacyRouteResolves has NO containment check 
     // this route actually resolves to is real, so the AT can't pass for the
     // wrong reason (a route that resolves to nothing would be correctly
     // rejected even by the buggy code).
-    const target = join(root, 'forge-ui', 'app', '..', '..', '..');
+    const target = join(root, 'apps', 'studio', 'app', '..', '..', '..');
     assert.ok(existsSync(target), `precondition failed: "${target}" (what "../../.." resolves to) must exist for this AT to mean anything`);
     writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', evilRoute] })]);
 
@@ -985,7 +985,7 @@ describe('validateSessionKinds — legacyRouteResolves has NO containment check 
     // Sanity precondition: confirm this route really does round-trip to the
     // legitimate target (so the AT is pinning "must reject despite being
     // numerically legitimate", not accidentally pinning a missing-dir case).
-    const target = join(root, 'forge-ui', 'app', '..', 'app', 'fixture-kind', '[sessionId]');
+    const target = join(root, 'apps', 'studio', 'app', '..', 'app', 'fixture-kind', '[sessionId]');
     assert.ok(existsSync(target), `precondition failed: "${target}" must exist (it's the same real dir as the legitimate route)`);
     writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', roundTripRoute] })]);
 
@@ -1035,7 +1035,7 @@ function wellFormedTurnSpec(): Record<string, unknown> {
 /** A descriptor fixture carrying `turnSpec`, otherwise identical to
  *  baseDescriptor() — legacyRoutes forced to [] so the unrelated
  *  legacy-route-not-found check never pollutes the turnspec-specific
- *  assertions below (a fresh tmp root has no forge-ui/app/ dir at all). */
+ *  assertions below (a fresh tmp root has no apps/studio/app/ dir at all). */
 function turnSpecDescriptor(turnSpec: Record<string, unknown>): FixtureDescriptor & { turnSpec: Record<string, unknown> } {
   return { ...baseDescriptor({ legacyRoutes: [] }), turnSpec };
 }
@@ -1761,7 +1761,7 @@ function wellFormedPanel(): Record<string, unknown> {
 
 /** A descriptor fixture carrying `panel`, otherwise identical to
  *  baseDescriptor() — legacyRoutes forced to [] for the same reason
- *  turnSpecDescriptor does (a fresh tmp root has no forge-ui/app/ dir). */
+ *  turnSpecDescriptor does (a fresh tmp root has no apps/studio/app/ dir). */
 function panelDescriptor(panel: Record<string, unknown>): FixtureDescriptor & { panel: Record<string, unknown> } {
   return { ...baseDescriptor({ legacyRoutes: [] }), panel };
 }

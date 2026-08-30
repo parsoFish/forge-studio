@@ -22,7 +22,7 @@ import { spawnStudioReady } from './lib/boot-studio.mjs';
 // Every Studio route a user can reach. Each must render a [data-page].
 const ROUTES = [
   // `/` served the interim `/library` redirect from R6-03-F3 until R6-07
-  // landed the real Home dashboard (forge-ui/app/page.tsx) — the redirect is
+  // landed the real Home dashboard (apps/studio/app/page.tsx) — the redirect is
   // now deliberately retired (scripts/redirect-preservation.test.ts pins its
   // absence). The crawler still just asserts a real [data-page] renders here.
   { path: '/', name: 'home dashboard (R6-07)' },
@@ -121,7 +121,7 @@ const ROUTES = [
  * is precisely the fail-open class this crawler exists to catch.
  */
 function canonicalNavHrefs() {
-  const src = readFileSync(new URL('../forge-ui/components/StudioNav.tsx', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../apps/studio/components/StudioNav.tsx', import.meta.url), 'utf8');
   const block = src.match(/export const NAV_ITEMS: NavItem\[\] = \[([\s\S]*?)\n\];/);
   if (!block) throw new Error('[deadpaths] could not locate NAV_ITEMS in StudioNav.tsx — the nav checks would pass vacuously; fix the parse, do not skip the gate');
   const hrefs = Array.from(block[1].matchAll(/href:\s*'([^']+)'/g)).map((m) => m[1]);

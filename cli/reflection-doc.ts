@@ -27,7 +27,7 @@
  * which calls writeReflectionDoc() after the agent exits.
  */
 
-/** Mirror of forge-ui/components/studio/artifact/ReflectionRenderer.tsx types. */
+/** Mirror of apps/studio/components/studio/artifact/ReflectionRenderer.tsx types. */
 export type ReflectionLesson = {
   text: string;
   /** KB node slug — the theme the lesson links to (→ /knowledge?id=<target>). */

@@ -174,5 +174,5 @@ test('SkillsBind has exactly ONE consumer in forge-ui — so the wiring pin abov
     .concat(readdirSyncDeep(new URL('../components/', import.meta.url).pathname))
     .filter((f) => /\.tsx?$/.test(f) && !f.endsWith('SkillsBind.tsx'))
     .filter((f) => readFileSync(f, 'utf8').includes('<SkillsBind'));
-  expect(consumers.map((f) => f.split('/forge-ui/')[1])).toEqual(['app/projects/[id]/page.tsx']);
+  expect(consumers.map((f) => f.split('/apps/studio/')[1])).toEqual(['app/projects/[id]/page.tsx']);
 });

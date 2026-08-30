@@ -15,7 +15,7 @@
  *       `tool_use`, `log`(reasoning), `error`, `agent_heartbeat`, `end` comes
  *       back as `{kind:"info"|"tool"|"reasoning"|"stderr"|"cost"|"info", ...}`
  *       — the response carries NO `event_type` field anywhere in the body.
- *   (b) `forge-ui/lib/run-log-line.ts`'s `deriveLogLine(event: EventLogEntry)`
+ *   (b) `apps/studio/lib/run-log-line.ts`'s `deriveLogLine(event: EventLogEntry)`
  *       — the SHARED think|tool|out mapper F5 must reuse (this initiative's
  *       own substrate note: "F5 renderer... Extension point is the INPUT,
  *       not the component") — reads `event.event_type` directly (`kindFor`)
@@ -26,7 +26,7 @@
  *       (`cli/ui-bridge.ts:1139`), returns UNCLASSIFIED `JSON.parse`'d
  *       records (`lines: parsed.slice(-RUN_LOG_LINES_MAX)`, ui-bridge.ts
  *       :1181) — but for the WHOLE standalone-agent run it backs, never
- *       filtered to one flow node. `grep -rn "phases/.*log" cli/ forge-ui/`
+ *       filtered to one flow node. `grep -rn "phases/.*log" cli/ apps/studio/`
  *       finds exactly the ONE route in (a).
  *
  * CONCLUSION: this file pins a NEW `raw=1` mode on the EXISTING route —
