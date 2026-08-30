@@ -1,0 +1,450 @@
+{
+  "story": {
+    "id": "S6",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Create a new knowledge base"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Knowledge pillar",
+        "say": "Knowledge is where everything forge has learned lives, as graphs it can read back. The knowledge base this story is about is not here yet — the Flow it belongs to has been running without one.",
+        "do": [],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "fetch-status": "ok"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New KB\"",
+        "say": "One form, and the only two things that matter on it are what this knowledge base is called and what it is bound to. A knowledge base with no binding is a folder.",
+        "do": [
+          {
+            "press": "new-kb"
+          }
+        ],
+        "expect": {
+          "route": "/knowledge/new",
+          "data": {
+            "page": "knowledge-new",
+            "page-ready": "true",
+            "section": "kb-new"
+          }
+        }
+      },
+      {
+        "act": "Name it, bind it to the forge-develop flow, scope it to the review-band, and create it",
+        "say": "Binding is the act. A band scope says WHICH readers on that Flow this knowledge is for — review-band means the reviewer, not the planner and not the developer — so the knowledge lands in front of the agent it was written for and nowhere else. Forge writes the graph with one index node and nothing in it.",
+        "do": [
+          {
+            "fill": "kb-name",
+            "with": "story S6"
+          },
+          {
+            "fill": "kb-binding-kind",
+            "with": "flow"
+          },
+          {
+            "fill": "kb-binding-ref",
+            "with": "forge-develop"
+          },
+          {
+            "fill": "kb-binding-band",
+            "with": "review-band"
+          },
+          {
+            "fill": "kb-desc",
+            "with": "What adversarial review keeps finding on this codebase, so the next reviewer starts from the last one’s conclusions instead of rediscovering them."
+          },
+          {
+            "press": "create-kb"
+          }
+        ],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "kb-id": "story-s6",
+            "node-count": "1"
+          }
+        }
+      },
+      {
+        "act": "Follow the seeding session forge started for it",
+        "say": "Creating a knowledge base starts an agent that fills it. Forge does not leave the operator with an empty graph and a shrug — it offers the session it already started, and the operator goes and watches it.",
+        "do": [
+          {
+            "press": "open-seed-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/project-brain/<seedSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "project-brain",
+            "session-phase": "briefing"
+          }
+        }
+      },
+      {
+        "act": "Brief the seeding agent on what this knowledge base is for, and let it read",
+        "say": "A band-scoped knowledge base has no project repo to read — it reads the Flow’s own archived cycles, and synthesises what review kept finding. The operator’s brief is the only thing that tells it which of those findings are worth keeping.",
+        "do": [],
+        "expect": {
+          "route": "/sessions/project-brain/<seedSessionId>",
+          "data": {
+            "page": "session",
+            "session-kind": "project-brain",
+            "session-phase": "analyzing"
+          }
+        }
+      },
+      {
+        "act": "Read the themes it drafted and approve them into the knowledge base",
+        "say": "Nothing an agent drafts enters the brain without a human saying yes. This is the gate: the operator reads what it wrote, and only then does it become knowledge the next run will act on.",
+        "do": [
+          {
+            "press": "verdict-approve"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/project-brain/<seedSessionId>",
+          "data": {
+            "page": "session",
+            "session-kind": "project-brain",
+            "session-phase": "committing"
+          }
+        }
+      },
+      {
+        "act": "Back on the knowledge base, find a real theme in the graph",
+        "say": "Seeded means there is something in it. One theme with a name the operator can read is the difference between a knowledge base and an empty promise.",
+        "do": [],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "theme-node": "<seedTheme>",
+            "theme-active": "false"
+          }
+        }
+      },
+      {
+        "act": "Go to the Projects pillar to find the project on the other end of that binding",
+        "say": "A knowledge base is bound to a Flow, and a Flow runs against projects. To prove the binding does anything, the operator has to go to one of them.",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Open mdtoc",
+        "say": "mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.",
+        "do": [],
+        "expect": {
+          "route": "/projects/mdtoc",
+          "data": {
+            "page": "projects",
+            "project-id": "mdtoc",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Press \"Architect →\" to plan a piece of work on it",
+        "say": "A knowledge base earns its keep at planning time. So the operator starts a real planner run against the project on the other end of that binding, and gives it a piece of work to think about.",
+        "do": [
+          {
+            "press": "start-work-architect"
+          }
+        ],
+        "expect": {
+          "route": "/architect/new",
+          "data": {
+            "page": "architect-new",
+            "page-ready": "true",
+            "section": "new-idea",
+            "roster-state": "ok"
+          }
+        }
+      },
+      {
+        "act": "Describe the work, cap what this run may spend, and press \"Start architect\"",
+        "say": "The planner is a real agent and a real agent costs money, so the operator caps this run before starting it. What happens next is the thing S6 exists to prove.",
+        "do": [
+          {
+            "fill": "idea",
+            "with": "Tighten the heading-anchor rules so a generated table of contents survives duplicate headings, with a test that pins the collision rule."
+          },
+          {
+            "fill": "cost-ceiling-usd",
+            "with": "5"
+          },
+          {
+            "press": "start-architect"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/architect/<architectSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "architect",
+            "session-phase": "working"
+          }
+        }
+      },
+      {
+        "act": "Go back to the knowledge base and see that the planner actually read it — the brain-index event, naming this KB and what it took",
+        "say": "This is the beat the whole product rests on. Forge’s claim is that it compounds — that what one run learned changes what the next one plans — and the only honest evidence for that is the planner’s own read, on the record, naming this knowledge base. Until that is on the page, compounding is something forge asserts about itself rather than something the operator can check.",
+        "do": [],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "kb-id": "story-s6"
+          }
+        }
+      },
+      {
+        "act": "Open the knowledge base’s Health tab and drain it to green",
+        "say": "A seeded knowledge base is not a healthy one. The drain runs every lint finding to a fixed point — frontmatter, index sync, dead links, orphans — and it is the operator pressing one button rather than the operator editing markdown.",
+        "do": [
+          {
+            "press": "drain-to-green"
+          }
+        ],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "drain-state": "running",
+            "drain-run-id": "<drainRunId>"
+          }
+        }
+      },
+      {
+        "act": "Read the diff the drain proposes, file by file, before accepting it",
+        "say": "This is where S6 ends: a rendered diff, per file, of what an agent changed inside the operator’s knowledge — not a claim that it cleared N findings. The drain reports what it PROPOSED and what a post-fix lint says actually cleared, and those are different facts on purpose.",
+        "do": [],
+        "expect": {
+          "route": "/knowledge",
+          "data": {
+            "page": "knowledge",
+            "page-ready": "true",
+            "drain-proposal-file": "<drainedFile>",
+            "drain-proposal-disposition": "applied"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Knowledge pillar",
+      "say": "Knowledge is where everything forge has learned lives, as graphs it can read back. The knowledge base this story is about is not here yet — the Flow it belongs to has been running without one.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/01-open-studio-on-the-knowledge-pillar.png"
+    },
+    {
+      "act": "Press \"+ New KB\"",
+      "say": "One form, and the only two things that matter on it are what this knowledge base is called and what it is bound to. A knowledge base with no binding is a folder.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "knowledge-new",
+        "page-ready": "true",
+        "section": "kb-new"
+      },
+      "frame": "frames/02-press-new-kb.png"
+    },
+    {
+      "act": "Name it, bind it to the forge-develop flow, scope it to the review-band, and create it",
+      "say": "Binding is the act. A band scope says WHICH readers on that Flow this knowledge is for — review-band means the reviewer, not the planner and not the developer — so the knowledge lands in front of the agent it was written for and nowhere else. Forge writes the graph with one index node and nothing in it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "kb-id": "story-s6",
+        "node-count": "1"
+      },
+      "frame": "frames/03-name-it-bind-it-to-the-forge-develop-flo.png"
+    },
+    {
+      "act": "Follow the seeding session forge started for it",
+      "say": "Creating a knowledge base starts an agent that fills it. Forge does not leave the operator with an empty graph and a shrug — it offers the session it already started, and the operator goes and watches it.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/project-brain/<seedSessionId>\" needs <seedSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/04-follow-the-seeding-session-forge-started.png"
+    },
+    {
+      "act": "Brief the seeding agent on what this knowledge base is for, and let it read",
+      "say": "A band-scoped knowledge base has no project repo to read — it reads the Flow’s own archived cycles, and synthesises what review kept finding. The operator’s brief is the only thing that tells it which of those findings are worth keeping.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/project-brain/<seedSessionId>\" needs <seedSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/05-brief-the-seeding-agent-on-what-this-kno.png"
+    },
+    {
+      "act": "Read the themes it drafted and approve them into the knowledge base",
+      "say": "Nothing an agent drafts enters the brain without a human saying yes. This is the gate: the operator reads what it wrote, and only then does it become knowledge the next run will act on.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/project-brain/<seedSessionId>\" needs <seedSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/06-read-the-themes-it-drafted-and-approve-t.png"
+    },
+    {
+      "act": "Back on the knowledge base, find a real theme in the graph",
+      "say": "Seeded means there is something in it. One theme with a name the operator can read is the difference between a knowledge base and an empty promise.",
+      "status": "red",
+      "failures": [
+        "data-theme-node: expected \"<seedTheme>\", absent from the page",
+        "data-theme-active: expected \"false\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/07-back-on-the-knowledge-base-find-a-real-t.png"
+    },
+    {
+      "act": "Go to the Projects pillar to find the project on the other end of that binding",
+      "say": "A knowledge base is bound to a Flow, and a Flow runs against projects. To prove the binding does anything, the operator has to go to one of them.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/08-go-to-the-projects-pillar-to-find-the-pr.png"
+    },
+    {
+      "act": "Open mdtoc",
+      "say": "mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "mdtoc",
+        "page-ready": "true"
+      },
+      "frame": "frames/09-open-mdtoc.png"
+    },
+    {
+      "act": "Press \"Architect →\" to plan a piece of work on it",
+      "say": "A knowledge base earns its keep at planning time. So the operator starts a real planner run against the project on the other end of that binding, and gives it a piece of work to think about.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "architect-new",
+        "page-ready": "true",
+        "section": "new-idea",
+        "roster-state": "ok"
+      },
+      "frame": "frames/10-press-architect-to-plan-a-piece-of-work-.png"
+    },
+    {
+      "act": "Describe the work, cap what this run may spend, and press \"Start architect\"",
+      "say": "The planner is a real agent and a real agent costs money, so the operator caps this run before starting it. What happens next is the thing S6 exists to prove.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/11-describe-the-work-cap-what-this-run-may-.png"
+    },
+    {
+      "act": "Go back to the knowledge base and see that the planner actually read it — the brain-index event, naming this KB and what it took",
+      "say": "This is the beat the whole product rests on. Forge’s claim is that it compounds — that what one run learned changes what the next one plans — and the only honest evidence for that is the planner’s own read, on the record, naming this knowledge base. Until that is on the page, compounding is something forge asserts about itself rather than something the operator can check.",
+      "status": "red",
+      "failures": [
+        "data-kb-id: expected \"story-s6\", got \"cycles\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "kb-id": "cycles"
+      },
+      "frame": "frames/12-go-back-to-the-knowledge-base-and-see-th.png"
+    },
+    {
+      "act": "Open the knowledge base’s Health tab and drain it to green",
+      "say": "A seeded knowledge base is not a healthy one. The drain runs every lint finding to a fixed point — frontmatter, index sync, dead links, orphans — and it is the operator pressing one button rather than the operator editing markdown.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"drain-to-green\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"drain-to-green\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/13-open-the-knowledge-base-s-health-tab-and.png"
+    },
+    {
+      "act": "Read the diff the drain proposes, file by file, before accepting it",
+      "say": "This is where S6 ends: a rendered diff, per file, of what an agent changed inside the operator’s knowledge — not a claim that it cleared N findings. The drain reports what it PROPOSED and what a post-fix lint says actually cleared, and those are different facts on purpose.",
+      "status": "red",
+      "failures": [
+        "data-drain-proposal-file: expected \"<drainedFile>\", absent from the page",
+        "data-drain-proposal-disposition: expected \"applied\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "knowledge",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/14-read-the-diff-the-drain-proposes-file-by.png"
+    }
+  ]
+}
