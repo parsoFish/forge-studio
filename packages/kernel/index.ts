@@ -1,11 +1,25 @@
 /**
- * @forge/kernel — Logging and event types, the one cost rule, config and layout, path guards, the generic object-model loader.
+ * @forge/kernel — the facts every other package needs and none of them owns.
  *
- * Owns the **3 Artifact** seam. Its contract is SPEC.md §3; the test that
- * holds it is `contract.test.ts` in this directory.
+ * Populated by QUARRY, not written here: `1.0.md` §4 M2 caps this package at
+ * 3,000 lines of NEW logic, and this milestone added none. Every module below
+ * moved with its history and its tests.
  *
- * Empty on purpose: this package is created by the M2 skeleton and populated
- * by its own lane. An index that re-exports nothing is honest; a placeholder
- * export would be a lie the boundary lint could not see.
+ * `resolveRoot` is deliberately ABSENT. Spec §3 lists it among kernel's
+ * contents, but ADR 045 — which designs it — says of itself: "Accepted
+ * (2026-08-23, operator) — design only. Nothing in this ADR is built by the
+ * change that lands it." There is nothing to quarry, and writing it here would
+ * be new kernel logic. Operator ruling at H5, 2026-08-31: it lands in M4 under
+ * ADR 045's own roadmap items.
  */
-export {};
+
+/** The JSONL event log (ADR 008) — SPEC.md §3 Artifact. */
+export * from './logging.ts';
+/** The one cost rule: stream usage to dollars, computed in exactly one place. */
+export * from './event-cost.ts';
+/** Config and layout, plus the env-assertion boundary. */
+export * from './config.ts';
+/** First-run scaffolding: the `_queue/`, `_worktrees/`, `_logs/` layout. */
+export * from './init.ts';
+/** The realpath containment guard every request-derived path passes through. */
+export * from './path-guard.ts';

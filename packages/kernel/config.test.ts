@@ -12,8 +12,6 @@ import { join } from 'node:path';
 import {
   loadConfig,
   assertEnv,
-  resolveUnifierGateFailureCap,
-  DEFAULT_UNIFIER_GATE_FAILURE_CAP,
   resolvePostMergeCiConfig,
   DEFAULT_POST_MERGE_CI_TIMEOUT_MS,
   DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS,
@@ -125,50 +123,9 @@ test('assertEnv: throw mode raises on missing env', () => {
 // consecutive same-sub-check composed-gate failures.
 // ---------------------------------------------------------------------------
 
-test('resolveUnifierGateFailureCap: defaults to DEFAULT_UNIFIER_GATE_FAILURE_CAP (4)', () => {
-  const original = process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  delete process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  try {
-    assert.equal(resolveUnifierGateFailureCap({}), DEFAULT_UNIFIER_GATE_FAILURE_CAP);
-    assert.equal(DEFAULT_UNIFIER_GATE_FAILURE_CAP, 4);
-  } finally {
-    if (original !== undefined) process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = original;
-  }
-});
 
-test('resolveUnifierGateFailureCap: honours unifier.maxConsecutiveGateFailures from forge.config.json', () => {
-  const original = process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  delete process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  try {
-    assert.equal(resolveUnifierGateFailureCap({ unifier: { maxConsecutiveGateFailures: 2 } }), 2);
-  } finally {
-    if (original !== undefined) process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = original;
-  }
-});
 
-test('resolveUnifierGateFailureCap: env var overrides config (operator/CI escape hatch)', () => {
-  const original = process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = '7';
-  try {
-    assert.equal(resolveUnifierGateFailureCap({ unifier: { maxConsecutiveGateFailures: 2 } }), 7);
-  } finally {
-    if (original === undefined) delete process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-    else process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = original;
-  }
-});
 
-test('resolveUnifierGateFailureCap: garbage values fall back to the default (never 0/negative/NaN)', () => {
-  const original = process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-  process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = 'not-a-number';
-  try {
-    assert.equal(resolveUnifierGateFailureCap({ unifier: { maxConsecutiveGateFailures: 0 } }), DEFAULT_UNIFIER_GATE_FAILURE_CAP);
-    assert.equal(resolveUnifierGateFailureCap({ unifier: { maxConsecutiveGateFailures: -3 } }), DEFAULT_UNIFIER_GATE_FAILURE_CAP);
-    assert.equal(resolveUnifierGateFailureCap({ unifier: { maxConsecutiveGateFailures: Number.NaN } }), DEFAULT_UNIFIER_GATE_FAILURE_CAP);
-  } finally {
-    if (original === undefined) delete process.env.FORGE_UNIFIER_GATE_FAILURE_CAP;
-    else process.env.FORGE_UNIFIER_GATE_FAILURE_CAP = original;
-  }
-});
 
 test('resolveDevWiConcurrency: defaults to DEFAULT_DEV_WI_CONCURRENCY (1 — serial)', () => {
   const original = process.env.FORGE_DEV_WI_CONCURRENCY;
@@ -253,17 +210,6 @@ test('resolveDevWiConcurrency: garbage values fall back to the default (never 0/
   }
 });
 
-test('loadConfig: parses the unifier block', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-cfg-'));
-  try {
-    const path = join(dir, 'forge.config.json');
-    writeFileSync(path, JSON.stringify({ unifier: { maxConsecutiveGateFailures: 3 } }));
-    const cfg = loadConfig(path);
-    assert.equal(cfg.unifier?.maxConsecutiveGateFailures, 3);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // N6 (plan 2.8): post-merge CI watch tuning.

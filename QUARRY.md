@@ -73,6 +73,7 @@ operator-ratified new cap — never a silent raise.
 | `cli/bridge-studio.ts` | `apps/forge` | 1,750 | generic CSRF/origin/JSON plumbing interleaved with flows and library GET routes |
 | `cli/dry-bridge.ts` | `kernel` | 453 | one static table classifying routes owned by flows, agents and library alike |
 | `cli/studio-lint.ts` | `kernel` | 805 | validates agent, flow, catalog and community definitions in a single pass |
+| `cli/studio-provenance.ts` | `kernel` | 54 | a 54-line pure mapping whose ONLY test is a 642-line bridge integration test that imports `ui-bridge.ts`; the test cannot follow it into a package without dragging the bridge across the boundary, and a kernel module with no package-level test is the shape this campaign exists to stop. Needs its pure-mapping test extracted from the integration test first |
 | `cli/ui-bridge.ts` | `apps/forge` | 6,602 | the 6,602-line host: agent spawn, session index and authoring routes in one file |
 | `orchestrator/band-agent-run.ts` | `agents` | 242 | generic band dispatch that hardcodes two `orchestrator/phases/` imports — the port must exist first |
 | `orchestrator/flow-runner.ts` | `flows` | 1,608 | imports ten phases directly; M2-B replaces them with the `PhaseExecutor` port |
@@ -158,8 +159,8 @@ operator-ratified new cap — never a silent raise.
 | cli/skill-staging.ts | library | verbatim | 136 |
 | cli/studio-lint-tool-fence.ts | library | verbatim | 149 |
 | cli/studio-lint.ts | kernel | rewritten | 805 |
-| cli/studio-path-guard.ts | kernel | verbatim | 607 |
-| cli/studio-provenance.ts | kernel | verbatim | 54 |
+| cli/studio-path-guard.ts | kernel | deleted | 8 |
+| cli/studio-provenance.ts | kernel | rewritten | 54 |
 | cli/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | cli/ui-bridge.ts | apps/forge | rewritten | 6602 |
 | loops/_adapters/aider/index.ts | agents | verbatim | 485 |
@@ -172,6 +173,7 @@ operator-ratified new cap — never a silent raise.
 | loops/ralph/claude-agent.ts | agents | verbatim | 553 |
 | loops/ralph/runner.ts | agents | verbatim | 435 |
 | loops/ralph/stop-conditions.ts | agents | verbatim | 685 |
+| orchestrator/_pkg/kernel.ts | kernel | deleted | 9 |
 | orchestrator/_pkg/contracts.ts | contracts | deleted | 12 |
 | orchestrator/agent-bands.ts | agents | verbatim | 86 |
 | orchestrator/agent-dispatch.ts | agents | verbatim | 365 |
@@ -184,7 +186,7 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/claim-validator.ts | flows | verbatim | 233 |
 | orchestrator/cli.ts | apps/forge | pruned | 998 |
 | orchestrator/completeness-critic-runner.ts | sessions | verbatim | 286 |
-| orchestrator/config.ts | kernel | verbatim | 483 |
+| orchestrator/config.ts | kernel | deleted | 8 |
 | orchestrator/constraint-author.ts | projects | verbatim | 99 |
 | orchestrator/constraint-blocks.ts | projects | verbatim | 257 |
 | orchestrator/cron-triggers.ts | flows | verbatim | 242 |
@@ -200,7 +202,7 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/enqueue-develop-run.ts | flows | verbatim | 77 |
 | orchestrator/enqueue-flow-run.ts | flows | verbatim | 366 |
 | orchestrator/enqueue-plan-run.ts | flows | verbatim | 236 |
-| orchestrator/event-cost.ts | kernel | verbatim | 63 |
+| orchestrator/event-cost.ts | kernel | deleted | 8 |
 | orchestrator/failure-classifier.ts | agents | verbatim | 517 |
 | orchestrator/finalize-merged.ts | flows | verbatim | 412 |
 | orchestrator/fix-work-items.ts | flows | verbatim | 388 |
@@ -211,7 +213,7 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/flow-trigger.ts | flows | verbatim | 214 |
 | orchestrator/gate-fix-loop.ts | flows | verbatim | 163 |
 | orchestrator/gate-recipes.ts | projects | verbatim | 146 |
-| orchestrator/init.ts | kernel | pruned | 144 |
+| orchestrator/init.ts | kernel | deleted | 8 |
 | orchestrator/initiative-id.ts | flows | verbatim | 210 |
 | orchestrator/instruction-seed-match.ts | library | verbatim | 152 |
 | orchestrator/instructions-runner.ts | sessions | verbatim | 630 |
@@ -221,7 +223,7 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/kb-backend.ts | knowledge | verbatim | 142 |
 | orchestrator/kb-graph.ts | knowledge | verbatim | 683 |
 | orchestrator/kb-health.ts | knowledge | verbatim | 274 |
-| orchestrator/logging.ts | kernel | verbatim | 169 |
+| orchestrator/logging.ts | kernel | deleted | 8 |
 | orchestrator/manifest.ts | flows | verbatim | 744 |
 | orchestrator/mint-triggered-initiative.ts | flows | verbatim | 233 |
 | orchestrator/model-range.ts | agents | verbatim | 115 |

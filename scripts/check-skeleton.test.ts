@@ -120,6 +120,18 @@ test('the allow-graph is enforced, and it is enforced by the lint', () => {
   for (const p of PACKAGES) assert.ok(src.includes(`${p}:`), `check-boundaries does not rank ${p}`);
 });
 
+test('the root suite runs the packages\' tests — a package tsc sees but node --test does not is worse than untested', () => {
+  // Measured hole, caught the day the kernel moved: `npm test` fell 6434 -> 6360,
+  // exactly the 74 tests that left orchestrator/ for packages/kernel/. The root
+  // glob is what CI runs, so those tests would have executed NOWHERE while the
+  // per-package script still reported them green. A package `test` script proves
+  // isolation; it does not prove the tests run on every PR.
+  const root = json(join(ROOT, 'package.json')) as { scripts?: Record<string, string> };
+  const script = root.scripts?.test ?? '';
+  assert.ok(script.includes('packages/*/*.test.ts'), 'root `npm test` must glob packages/*/*.test.ts');
+  assert.ok(script.includes('apps/*/*.test.ts'), 'root `npm test` must glob apps/*/*.test.ts');
+});
+
 /**
  * GAP PIN, with its expiry condition stated.
  *
