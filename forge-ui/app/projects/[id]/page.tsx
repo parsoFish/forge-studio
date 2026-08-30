@@ -735,23 +735,11 @@ function ContractPanelMount(props: {
 }
 
 // ---------------------------------------------------------------------------
-// NewProjectSurface — `/projects/new`. ONE `main[data-page]` over BOTH doors.
-//
-// forge-8vfn.5.7, and the defect underneath it. The create door used to render
-// as a SIBLING of the page root that `ProjectOnboardForm` owned, so
-// `[data-section="project-create"]` and `[data-app-type-count]` sat OUTSIDE the
-// root every reader of this contract anchors to (`readObserved`,
-// scripts/stories/beats.mjs, reads `main[data-page]` and its descendants) — the
-// panel was declared in the contract and unreadable where the contract lives.
-// And the root wrote `data-page-ready="true"` as a LITERAL while the curated
-// app-type fetch was still in flight, so a reader that waited on the sentinel
-// was handed a page whose create panel had no counts yet
-// (`scripts/journeys/stand-up-create.mjs` carried a bespoke `waitForFunction`
-// around exactly that, for months, instead of naming it).
-//
-// Both are closed the same way: the route OWNS its first fetch, and
-// `data-page-ready` / `data-app-type-count` are DERIVED from that one state, so
-// there is no second field left to disagree with it.
+// NewProjectSurface — `/projects/new`. ONE `main[data-page]` over BOTH doors,
+// owning the route's first fetch so `data-page-ready` and `data-app-type-count`
+// derive from one state. The create door used to render OUTSIDE the root the
+// onboard door owned, and that root wrote `data-page-ready="true"` as a literal
+// (forge-8vfn.5.7 + the defect underneath it — see the contract doc).
 // ---------------------------------------------------------------------------
 
 function NewProjectSurface(): JSX.Element {

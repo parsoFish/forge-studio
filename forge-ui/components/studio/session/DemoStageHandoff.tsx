@@ -7,18 +7,10 @@ import { SessionMinted } from '@/components/studio/session/SessionMinted';
 
 /**
  * "Select the demo stage and hand it to the demo builder" — the act S1 beat 7
- * describes, given a control on the surface the operator is standing on.
- *
- * `forge-8vfn.5.6`, second half: the onboarding session's stage detail declared
- * `data-stage-detail-state|stage|status` and NO `data-action` at all, so the
- * demo stage could be READ from the session and never acted on;
- * `[data-action="launch-demo-builder"]` existed only on the project page
- * (`DemoTimeline`), two navigations away. This is the same act, dispatched the
- * same way (`startDemoBuilder`), on the surface that names the stage.
- *
- * It publishes the minted id rather than navigating inside the click
- * (`forge-8vfn.5.5`), so the session it starts is bindable by the beat that
- * started it.
+ * describes, on the surface the operator is standing on. The stage detail
+ * declared no `data-action` at all, so the demo stage could be read from the
+ * session and never acted on (`forge-8vfn.5.6`). Same dispatch as the project
+ * page's, publishing the id it mints (`forge-8vfn.5.5`).
  */
 export function DemoStageHandoff({ project }: { project: string }): JSX.Element {
   const [sessionId, setSessionId] = useState<string | null>(null);

@@ -6,14 +6,9 @@ import { fetchStudioProjects, fetchAgentCapability, type AgentCapability } from 
 import type { FetchState } from '@/lib/route-readiness';
 
 /**
- * The architect kickoff form's roster read, owned OUTSIDE the form.
- *
- * `NewIdeaBox` used to fetch this itself, which left the routes that host it
- * unable to say whether their own first fetch had settled — so both wrote
- * `ready={true}` as a literal and `data-page-ready` disagreed with the
- * `data-roster-state` rendered one element below it (`forge-8vfn.5.7`).
- * Hoisting the read to the host makes the host the owner of the ONE state both
- * attributes derive from; there is no copy left to go stale.
+ * The architect kickoff form's roster read, owned OUTSIDE the form so the
+ * HOST route can derive its own `data-page-ready` from the same state the form
+ * renders as `data-roster-state` (`forge-8vfn.5.7`). One owner, no copy.
  */
 export type ProjectRoster = {
   readonly projects: readonly { id: string; name: string }[];

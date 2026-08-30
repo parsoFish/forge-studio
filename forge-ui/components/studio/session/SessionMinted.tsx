@@ -1,21 +1,11 @@
 'use client';
 
 /**
- * The id a surface just MINTED, rendered before the navigation that consumes it.
- *
- * `forge-8vfn.5.5`. Studio minted architect and demo session ids inside the
- * same click that `router.push`ed at them, so the id was never a `data-*`
- * value anything could observe: no story could bind `/sessions/demo/<id>` or
- * `/sessions/architect/<id>`, which blocked S1, S2, S4, S5, S6, S7 and S9.
- * Onboarding was the one surface that got it right — it renders
- * `data-onboard-session-id` and offers
- * `[data-action="view-onboarding-session"]` as a separate act — and this is
- * that convention, extracted so the remaining kinds adopt it in two lines
- * rather than re-deriving it.
- *
- * The id is rendered from the mint result and nothing else holds a copy of it,
- * so the link can never point at a session that was never created: no id, no
- * element.
+ * The id a surface just MINTED, rendered before the navigation that consumes
+ * it — onboarding's `data-onboard-session-id` convention, extracted so the
+ * other kinds adopt it in two lines (`forge-8vfn.5.5`; the contract doc carries
+ * the rule). No id, no element: the link cannot point at a session that was
+ * never created.
  */
 export function SessionMinted({
   kind,

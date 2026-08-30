@@ -1,16 +1,7 @@
 /**
- * `data-page-ready`, derived — never declared beside the fetch and hoped to agree.
- *
- * `docs/forge-ui-dom-and-harness.md`: every route root carries
- * `data-page-ready` "once its first fetch settles". `/library` already reads
- * that correctly — it "gates on all five having settled, success or error".
- *
- * Two routes shipped a LITERAL `true` instead (`/projects/new` over its curated
- * app-type fetch, `/architect/new` and `/sessions/architect/new` over the agent
- * roster), so the sentinel said ready while `data-roster-state` on the very
- * next element said `loading` — `forge-8vfn.5.7`, the `declared-data-fails-open`
- * class reaching the DOM. The cure is structural: there is ONE deriver, its
- * input is the fetch state itself, and no field stores a second opinion.
+ * `data-page-ready`, derived — never declared beside the fetch and hoped to
+ * agree. `forge-8vfn.5.7`; the rule and the two routes that broke it are in
+ * `docs/forge-ui-dom-and-harness.md`'s DOM-as-metrics section.
  */
 
 /** The lifecycle of one fetch a route waits on. `error` is a SETTLED state. */

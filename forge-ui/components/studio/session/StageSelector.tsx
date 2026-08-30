@@ -14,13 +14,10 @@
  *          role="tab" aria-selected data-active?  per declared stage,
  *          in the session's own declared order.
  *
- * forge-8vfn.5.6: every button used to declare the SAME `data-action`, and
- * `scripts/stories/beats.mjs`'s press verb resolves `[data-action=…]` and takes
- * `.first()` — so a beat could press "a stage" but never "the secrets stage",
- * and S1 beat 6 stood with no step rather than open whichever stage rendered
- * first and pretend it was secrets. The action now carries the instance, which
- * is Studio's own convention everywhere else (`browse-<name>`, `new-skill`).
- * `data-stage` stays: it is what the DOM contract reads.
+ * forge-8vfn.5.6: every button used to declare the SAME `data-action`, and a
+ * reader takes `.first()` — so nothing could press "the secrets stage". The
+ * action now carries the instance (`browse-<name>`'s convention); `data-stage`
+ * stays, it is what the contract reads.
  */
 
 export type StageSelectorProps = {
