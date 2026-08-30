@@ -23,7 +23,7 @@ import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
 import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from './project-config.ts';
-import { decideFinalCiGate, execCommandVector } from './cycle.ts';
+import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
 import { resolveGateTimeoutMs } from '../loops/ralph/stop-conditions.ts';
 
 // ---------------------------------------------------------------------------

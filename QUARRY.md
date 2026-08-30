@@ -22,7 +22,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 220 |
+| `verbatim` | moves unchanged | 221 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 5 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 14 |
 | `deleted` | not carried forward | 8 |
@@ -42,7 +42,7 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 22 | 7,841 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
 | `sessions` | 20 | 13,078 | **13,500** | seeded from the quarried total, rounded up to the next 500. |
-| `flows` | 62 | 22,199 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
+| `flows` | 63 | 22,233 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
 | `factory` | 35 | 12,044 | **12,500** | seeded from the quarried total, rounded up to the next 500. This package is deletable; its cap is a ceiling on the EXAMPLE, not on the platform. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
@@ -191,10 +191,11 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/constraint-author.ts | projects | verbatim | 99 |
 | orchestrator/constraint-blocks.ts | projects | verbatim | 257 |
 | orchestrator/cron-triggers.ts | flows | verbatim | 242 |
+| orchestrator/ci-gate.ts | flows | verbatim | 148 |
 | orchestrator/cycle-context.ts | flows | verbatim | 332 |
-| orchestrator/cycle-helpers.ts | flows | verbatim | 694 |
+| orchestrator/cycle-helpers.ts | flows | verbatim | 695 |
 | orchestrator/cycle-report.ts | flows | verbatim | 29 |
-| orchestrator/cycle.ts | flows | verbatim | 617 |
+| orchestrator/cycle.ts | flows | verbatim | 485 |
 | orchestrator/daemon.ts | flows | verbatim | 248 |
 | orchestrator/demo-builder-runner.ts | sessions | verbatim | 814 |
 | orchestrator/demo-fix-loop.ts | flows | verbatim | 218 |
@@ -212,7 +213,7 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/flow-run-requests.ts | flows | verbatim | 397 |
 | orchestrator/flow-node-context.ts | flows | verbatim | 51 |
 | orchestrator/flow-node-kind.ts | flows | verbatim | 66 |
-| orchestrator/flow-runner.ts | flows | rewritten | 615 |
+| orchestrator/flow-runner.ts | flows | rewritten | 632 |
 | orchestrator/flow-trigger.ts | flows | verbatim | 214 |
 | orchestrator/gate-fix-loop.ts | flows | verbatim | 163 |
 | orchestrator/gate-recipes.ts | projects | verbatim | 146 |

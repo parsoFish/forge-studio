@@ -14,15 +14,19 @@ import { join, resolve } from 'node:path';
 
 import {
   assertNonEmptyDelivery,
-  decideFinalCiGate,
-  execCommandVector,
   recordBrainGateResult,
   resolveCostCeilingOverride,
-  resolveCiTimeoutMs,
   runCycle,
   snapshotCycleArtefacts,
-  type CiCommandRunner,
 } from './cycle.ts';
+// M2-B: the CI delivery gate's decision core moved BELOW cycle.ts and
+// cycle-helpers.ts so the two stop importing each other.
+import {
+  decideFinalCiGate,
+  execCommandVector,
+  resolveCiTimeoutMs,
+  type CiCommandRunner,
+} from './ci-gate.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import { serializeManifest, DERIVED_CEILING_MARGIN_USD, type InitiativeManifest } from './manifest.ts';
 
