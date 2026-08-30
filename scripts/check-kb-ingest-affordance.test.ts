@@ -50,7 +50,7 @@ import { checkNoIngestAffordance as checkNoIngestAffordanceReal } from './check-
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Directories walked for forge-ui UI-action affordances.
-const UI_SCAN_DIRS = ['forge-ui/app', 'forge-ui/components', 'forge-ui/lib'];
+const UI_SCAN_DIRS = ['apps/studio/app', 'apps/studio/components', 'apps/studio/lib'];
 // Directories walked for bridge KB-route dispatch code.
 const BRIDGE_SCAN_DIRS = ['cli'];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
@@ -88,7 +88,7 @@ function walk(dirAbs: string, exts: string[], skip: (p: string) => boolean): str
 /**
  * W7-D1: a file the walk enumerated can vanish before it is read — a SIBLING
  * ratchet test (`scripts/check-disabled-reason.test.ts`) plants and deletes a
- * real probe file inside `forge-ui/components/` to prove its own gate bites,
+ * real probe file inside `apps/studio/components/` to prove its own gate bites,
  * and `node --test` runs the two files concurrently. A file that no longer
  * exists is not a violation; it is a file that no longer exists.
  */
@@ -167,11 +167,11 @@ function checkNoIngestAffordance(root: string): string[] {
 
 function makeCleanFixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'kb-ingest-ratchet-'));
-  mkdirSync(join(root, 'forge-ui/app/knowledge'), { recursive: true });
+  mkdirSync(join(root, 'apps/studio/app/knowledge'), { recursive: true });
   mkdirSync(join(root, 'cli'), { recursive: true });
   mkdirSync(join(root, 'orchestrator/studio'), { recursive: true });
   writeFileSync(
-    join(root, 'forge-ui/app/knowledge/page.tsx'),
+    join(root, 'apps/studio/app/knowledge/page.tsx'),
     [
       "export function KbMaintenance() {",
       "  return (",
@@ -209,7 +209,7 @@ test('mutation-proof (1/3): a fake UI data-action="kb-ingest-now" IS flagged', (
 
     // Mutate: inject a fake ingest UI action into a temp COPY (never the real repo).
     writeFileSync(
-      join(root, 'forge-ui/app/knowledge/page.tsx'),
+      join(root, 'apps/studio/app/knowledge/page.tsx'),
       [
         "export function KbMaintenance() {",
         "  return (",
@@ -306,7 +306,7 @@ test('precondition: the allowed-files allowlist is not vacuous — the real desc
   assert.ok(text.includes('reflector-ingest'), 'fixture-precondition: real kb-descriptor.ts must still name the reflector-ingest builtin');
 });
 
-test('RATCHET (green-at-birth): the real repo has no forge-ui/bridge KB ingest affordance today', () => {
+test('RATCHET (green-at-birth): the real repo has no apps/studio/bridge KB ingest affordance today', () => {
   const violations = checkNoIngestAffordance(FORGE_ROOT);
   assert.deepEqual(violations, [], `found forbidden ingest affordance(s):\n${violations.join('\n')}`);
 });
@@ -315,7 +315,7 @@ test('RATCHET (green-at-birth): the real repo has no forge-ui/bridge KB ingest a
 // Group 3 — R4-19-F2: extend the ratchet to a FOURTH shape — a runtime
 // agent's SKILL.md composing `brain-ingest` via `composition.skills`. The
 // three existing rules never look at .md files at all (rules 1/2 scan
-// forge-ui/cli .ts(x); rule 3 scans every .ts(x) file in the repo for a bare
+// apps/studio/cli .ts(x); rule 3 scans every .ts(x) file in the repo for a bare
 // string) — so a SKILL.md that composes brain-ingest sails through today
 // undetected. This is the specific shape the brain-maintenance agent
 // (R4-19-F2) must never carry: "the agent must NOT compose brain-ingest and

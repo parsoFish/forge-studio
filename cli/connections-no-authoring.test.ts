@@ -4,7 +4,7 @@
  * — T2-mandated (round 2, item 6). `cli/bridge-studio-connections.test.ts`'s
  * bridge-refusal tests prove the ROUTE never accepts a mutating request;
  * that is necessary but not sufficient — nothing stopped a future PR from
- * adding a `forge-ui/app/connections/new/page.tsx` that POSTs somewhere
+ * adding a `apps/studio/app/connections/new/page.tsx` that POSTs somewhere
  * else entirely, or a client helper nobody ever wired to a route. These
  * checks are the only enforcement of this AC that survives someone adding a
  * page/function later without also adding a route for it.
@@ -20,7 +20,7 @@
  *      the failure local even when the entire module is missing, which a
  *      static namespace import at file scope cannot do for a module that
  *      does not exist at all).
- *   3. `forge-ui/lib/connection-client.ts` exports no write-verb-named
+ *   3. `apps/studio/lib/connection-client.ts` exports no write-verb-named
  *      function either — same technique.
  *
  * "Write verb" = create/update/delete/save/write/edit/author (case
@@ -51,12 +51,12 @@ function assertNoWriteExports(moduleExports: Record<string, unknown>, moduleLabe
 // 1. No authoring page exists on disk — true today, must stay true forever.
 // ---------------------------------------------------------------------------
 
-test('no forge-ui/app/connections/new/ authoring page exists on disk', () => {
-  assert.equal(existsSync(resolve(REPO_ROOT, 'forge-ui', 'app', 'connections', 'new')), false);
+test('no apps/studio/app/connections/new/ authoring page exists on disk', () => {
+  assert.equal(existsSync(resolve(REPO_ROOT, 'apps', 'studio', 'app', 'connections', 'new')), false);
 });
 
-test('no forge-ui/app/connections/[id]/edit/ authoring page exists on disk', () => {
-  assert.equal(existsSync(resolve(REPO_ROOT, 'forge-ui', 'app', 'connections', '[id]', 'edit')), false);
+test('no apps/studio/app/connections/[id]/edit/ authoring page exists on disk', () => {
+  assert.equal(existsSync(resolve(REPO_ROOT, 'apps', 'studio', 'app', 'connections', '[id]', 'edit')), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -70,11 +70,11 @@ test('cli/bridge-studio-connections.ts exports no write handler (dynamic import 
 });
 
 // ---------------------------------------------------------------------------
-// 3. forge-ui/lib/connection-client.ts's own export surface — same
+// 3. apps/studio/lib/connection-client.ts's own export surface — same
 //    technique, one directory over.
 // ---------------------------------------------------------------------------
 
-test('forge-ui/lib/connection-client.ts exports no create/update/delete/save/write function (dynamic import — RED via module-not-found until WI-4 lands)', async () => {
-  const mod = (await import('../forge-ui/lib/connection-client.ts')) as unknown as Record<string, unknown>;
-  assertNoWriteExports(mod, 'forge-ui/lib/connection-client.ts');
+test('apps/studio/lib/connection-client.ts exports no create/update/delete/save/write function (dynamic import — RED via module-not-found until WI-4 lands)', async () => {
+  const mod = (await import('../apps/studio/lib/connection-client.ts')) as unknown as Record<string, unknown>;
+  assertNoWriteExports(mod, 'apps/studio/lib/connection-client.ts');
 });

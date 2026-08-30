@@ -525,7 +525,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // 'demo-builder''s SPAWN_AGENT_SPECS KEY differs from its `logPrefix`
   // ('demo'), but that `logPrefix` is exactly the 'demo' session-kind id).
   // This is also the literal convention forge-ui's session-shell page
-  // derives independently (`forge-ui/app/sessions/[kind]/[sessionId]/
+  // derives independently (`apps/studio/app/sessions/[kind]/[sessionId]/
   // page.tsx`: `` const cycleId = `_${kind}-${sessionId}` ``) — one naming
   // rule, three call sites, no second hand-kept mapping anywhere.
   //
@@ -894,8 +894,8 @@ function sanitizeHeaderFilename(filename: string): string {
  *  `img-src data:` + `font-src data:` are exactly what the surveyed files
  *  use (inlined CSS, base64 screenshots) — nothing wider is opened.
  *  `content-type` stays `text/html` for `.html` (never `text/plain`):
- *  `forge-ui/app/artifact/page.tsx`, `forge-ui/components/PlanGate.tsx` and
- *  `forge-ui/components/studio/artifact/ArchitectPlanGate.tsx` all render
+ *  `apps/studio/app/artifact/page.tsx`, `apps/studio/components/PlanGate.tsx` and
+ *  `apps/studio/components/studio/artifact/ArchitectPlanGate.tsx` all render
  *  these files in a `sandbox=""` iframe and expect the browser to actually
  *  RENDER the markup — `text/plain` would show raw source, a user-visible
  *  regression. `content-disposition: inline` (never `attachment`) for the
@@ -964,7 +964,7 @@ async function withReviewCommentLock(
  * PRE-EXISTING fields (kept byte-identical — every node test written
  * against Task 1's original acceptance battery, `cli/ui-bridge-agent-
  * history.test.ts`, still reads them directly and must keep passing). The
- * defect this round fixes is that the CLIENT (`forge-ui/lib/agent-ledger.ts`)
+ * defect this round fixes is that the CLIENT (`apps/studio/lib/agent-ledger.ts`)
  * never received the raw per-path FACTS it needs to derive `when`/`what`/
  * `narrative` itself — so each variant now ALSO carries exactly what its own
  * client-side entry type (`AgentFlowNodeRunEntry`/`AgentStandaloneRunEntry`/
@@ -4290,7 +4290,7 @@ async function handleArchitect(
       // mtime is a weaker proxy that fails OPEN. Caught by the flows-run
       // stall cameo, whose fixture writes status.json NOW with an
       // `updated_at` 200s old and deletes the heartbeat — precisely the
-      // divergence. `isSessionStale` (forge-ui/lib/architect-hex.ts) reads
+      // divergence. `isSessionStale` (apps/studio/lib/architect-hex.ts) reads
       // this field against STALE_THRESHOLD_MS (120s), matched by
       // STALL_CEILING_MS_BY_KIND.architect.
       const rowLifecycle = architectDescriptor

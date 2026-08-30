@@ -22,7 +22,7 @@ import yaml from 'js-yaml';
 
 const UI_ROOT = resolve(__dirname, '..');
 const PAGE_SOURCE = readFileSync(resolve(UI_ROOT, 'app/sessions/[kind]/[sessionId]/page.tsx'), 'utf8');
-const SESSION_KINDS = yaml.load(readFileSync(resolve(UI_ROOT, '..', 'studio', 'session-kinds.yaml'), 'utf8')) as Array<{
+const SESSION_KINDS = yaml.load(readFileSync(resolve(UI_ROOT, '..', '..', 'studio', 'session-kinds.yaml'), 'utf8')) as Array<{
   id: string;
   turnSpec?: unknown;
 }>;

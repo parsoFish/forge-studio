@@ -576,7 +576,7 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local s
 // comment, but never actually exercised here — /api/plan-verdict, the sibling
 // alias route, has coverage above; this route did not). GateBar's fix maps
 // verdict:'send-back' to an explicit kind:'revise' client-side (see
-// forge-ui/lib/gate-verdict-body.ts) — these three tests pin the route's
+// apps/studio/lib/gate-verdict-body.ts) — these three tests pin the route's
 // actual behaviour for both the direct-match ('revise') and GateBar's own
 // wire shape ('send-back' + kind:'revise'), plus the negative case that
 // proves the client-side kind mapping is load-bearing, not decorative.
@@ -607,7 +607,7 @@ test('POST /api/runs/:id/gates/plan verdict:"send-back" + kind:"revise" (GateBar
   const sid7 = '2026-05-29T18-00-00';
   const dir7 = seedVerdictSession(sid7);
 
-  // This is EXACTLY the body forge-ui/lib/gate-verdict-body.ts's
+  // This is EXACTLY the body apps/studio/lib/gate-verdict-body.ts's
   // buildGateVerdictBody produces for a plan-gate send-back — GateBar's
   // `notes` textarea state re-keyed to `rationale` on the wire.
   const res = await postGatesPlan(sid7, {

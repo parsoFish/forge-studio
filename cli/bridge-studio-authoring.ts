@@ -528,7 +528,7 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
 // never from parallel request-body fields.
 //
 // A template is ONE markdown file with gray-matter frontmatter
-// (forge-ui/app/templates/new/page.tsx's own seedContent — the manual
+// (apps/studio/app/templates/new/page.tsx's own seedContent — the manual
 // builder's precedent; orchestrator/studio/template-library.ts D1) — never a
 // multi-file package, unlike skill/hook. The creation-agent session drafts it
 // at the ONE canonical staging filename `staging/template.md`
@@ -541,7 +541,7 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
 // derived from which directory a definition lives in, never sniffed from
 // content. But the interactive session has no separate structured "category"
 // channel the way the manual /templates/new builder's own UI select does
-// (forge-ui/app/templates/new/page.tsx) — so the drafted file carries
+// (apps/studio/app/templates/new/page.tsx) — so the drafted file carries
 // `category` as a DRAFT-ONLY routing hint in its frontmatter, read HERE to
 // pick the target directory, validated by the SAME `writableCategoryOrReason`
 // the POST /api/studio/templates route uses (never a second, drifting copy

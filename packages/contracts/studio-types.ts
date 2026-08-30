@@ -585,7 +585,7 @@ export type CommunityRegistrySource = {
   // comparison that decides whether a verified source is reported `refreshed`
   // or `unchanged` — and by nothing else. `toCommunitySkill`
   // (orchestrator/studio/registry.ts) does not project them, so they reach
-  // neither `CommunityItem`, nor `forge-ui/lib/community-client.ts`, nor any
+  // neither `CommunityItem`, nor `apps/studio/lib/community-client.ts`, nor any
   // page. A repo that flipped to archived, retitled its topics, or shipped a
   // new version IS a genuinely changed source and must not read `unchanged`;
   // that consumer is what earns each of them a place in the persisted schema,

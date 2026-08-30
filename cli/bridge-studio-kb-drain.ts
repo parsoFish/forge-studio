@@ -19,7 +19,7 @@
  * fresh-lint → scope to kb → drain the AUTO tier to a fixed point
  * (`applyAutoFixesUntilStable`) → sequentially dispatch ONE `runBrainFixTurn`
  * per AGENT-tier residual (same per-finding prompt shape
- * `LintResolutionPanel.tsx`'s `fixAllAgent` already dispatches, forge-ui/
+ * `LintResolutionPanel.tsx`'s `fixAllAgent` already dispatches, apps/studio/
  * components/studio/knowledge/LintResolutionPanel.tsx:83-93) → fresh-lint
  * again → decide:
  *
@@ -1030,7 +1030,7 @@ export async function runKbDrain(
 
     /** W7-B2 (knowledge-01): renderable per-transition progress events onto
      *  the drain's OWN cycle log — the ActivityLog drawer tails these
-     *  (`metadata.kind: 'progress'`, forge-ui/lib/activity-log-view.ts). */
+     *  (`metadata.kind: 'progress'`, apps/studio/lib/activity-log-view.ts). */
     const emitProgress = (message: string, metadata: Record<string, unknown> = {}): void => {
       logger.emit({
         initiative_id: cycleId,

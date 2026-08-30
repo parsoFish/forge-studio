@@ -215,7 +215,7 @@ export function computeKbLintChecks(
  *                              number of times and land anywhere under forgeRoot.
  *                              The real corpus today (verified by grep,
  *                              2026-08-15) reaches PRINCIPLES.md, ARCHITECTURE.md,
- *                              cli/, docs/, forge-ui/, orchestrator/, scripts/,
+ *                              cli/, docs/, apps/studio/, orchestrator/, scripts/,
  *                              .github/ — a curated allowlist would already be
  *                              incomplete against it and would silently rot the
  *                              next time a theme cites a new top-level path. This
@@ -260,7 +260,7 @@ export function computeKbLintChecks(
 /** Directory names skipped ANYWHERE in the tree, dir or file (this worktree's
  *  own `.git` is a file, not a directory) — vendor/VCS internals no check
  *  reads and that can be arbitrarily large (an npm-workspace `node_modules`
- *  under `forge-ui/`, for one). */
+ *  under `apps/studio/`, for one). */
 const FINGERPRINT_SKIP_ANYWHERE = new Set(['node_modules', '.git', '.next']);
 
 /** Top-level directories (relative to forgeRoot) skipped entirely: gitignored

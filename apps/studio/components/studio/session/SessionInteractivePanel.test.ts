@@ -30,9 +30,9 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // affordance like every other fixture in this file — but the `authoring`
 // counterpart test still exercises this real loader/deriver pair against the
 // live registry, so the import stays live.
-import { loadSessionKinds, deriveSessionAffordances } from '../../../../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds, deriveSessionAffordances } from '../../../../../orchestrator/studio/session-kinds.ts';
 
-const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..', '..');
 
 function render(props: {
   kind: string;

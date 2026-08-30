@@ -9,7 +9,7 @@
  * never be honoured, and the hook silently does not fire.
  *
  * That is `declared-data-fails-open` again: a field an operator can type into
- * the authoring form (`forge-ui/app/hooks/new/page.tsx:108`) which changes
+ * the authoring form (`apps/studio/app/hooks/new/page.tsx:108`) which changes
  * nothing and is reported nowhere. This repo's own standing lesson — recorded
  * verbatim in `hook-library.ts:329`'s header after the same class appeared a
  * third time — is that **defense-in-depth lint must mirror the dispatch it

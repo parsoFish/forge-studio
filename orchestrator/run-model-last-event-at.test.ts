@@ -8,7 +8,7 @@
  * implementer adds it.
  *
  * WHY THIS FIELD EXISTS (amendment to the original WI-1 pin,
- * forge-ui/lib/phase-log-refresh.test.ts): that file's first version
+ * apps/studio/lib/phase-log-refresh.test.ts): that file's first version
  * attributed a `tailEvents` entry to a node via `event.phase === nodeId` —
  * a naive client-side re-derivation of attribution that the codebase's
  * OWN authoritative resolver, `eventToNodeId` (this file's own

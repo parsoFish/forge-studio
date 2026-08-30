@@ -119,7 +119,7 @@
  *     hands it a request id under one of those four names, by plain parameter.
  *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
  *     for) or give it the HTTP-plumbing signal. A module OUTSIDE `cli/` and
- *     `orchestrator/` (`loops/`, `forge-ui/`, `scripts/`) is not scanned by
+ *     `orchestrator/` (`loops/`, `apps/studio/`, `scripts/`) is not scanned by
  *     EITHER tier.
  *   - TIER 1's ENTRY half is still name-shaped one level up: `listEntryModules`
  *     treats `cli/ui-bridge.ts` + `cli/bridge-*.ts` as the HTTP entry points, so

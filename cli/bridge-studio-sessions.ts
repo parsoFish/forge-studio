@@ -154,7 +154,7 @@ const MAX_PROJECT_ID_LENGTH = MAX_EXACT_ID_LENGTH;
 const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
 
 /** W6-B2 — this route is the generic "session-detail GET" EVERY session kind
- *  goes through (`forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` calls
+ *  goes through (`apps/studio/app/sessions/[kind]/[sessionId]/page.tsx` calls
  *  `fetchSessionShell` for architect/instructions/project-brain/demo/
  *  onboarding/authoring/kb-cleanup alike), and for authoring + kb-cleanup it
  *  is the ONLY read route they have — neither has a per-kind list route like
@@ -207,9 +207,9 @@ export function invalidSessionIdReason(id: string): string | null {
 // used to import this are gone (W8-B5b), but the constant stays exported:
 // `invalidProjectReason`'s carve-out below still recognizes it so sessions
 // that finished under this anchor before retirement remain reachable, and
-// forge-ui's session-shell "back to project" link (forge-ui/lib/session-
+// forge-ui's session-shell "back to project" link (apps/studio/lib/session-
 // shell-view.ts) still maps it to `/community` via a parity test against
-// this SSOT (forge-ui/lib/session-shell-view.test.ts).
+// this SSOT (apps/studio/lib/session-shell-view.test.ts).
 export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
@@ -224,9 +224,9 @@ export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 // validate-or-reject contract) has a single source rather than re-deriving
 // the same leading-"." fact. forge-ui never imports cli/ at runtime (see
 // this repo's SSOT-parity-test convention, e.g.
-// forge-ui/lib/trigger-kind-parity.test.ts) — its own `isPseudoProjectAnchor`
-// (forge-ui/lib/session-shell-view.ts) is a small, independently-declared
-// mirror, kept honest by a parity test (forge-ui/lib/session-shell-view.test.ts).
+// apps/studio/lib/trigger-kind-parity.test.ts) — its own `isPseudoProjectAnchor`
+// (apps/studio/lib/session-shell-view.ts) is a small, independently-declared
+// mirror, kept honest by a parity test (apps/studio/lib/session-shell-view.test.ts).
 export function isPseudoProjectAnchor(project: string): boolean {
   return project.startsWith('.');
 }
@@ -641,7 +641,7 @@ const QUESTIONS_FILENAME = 'questions.json';
  *  a bad option, showing the operator FEWER choices than the agent asked
  *  for with no signal — a silent partial in a module whose stated
  *  discipline is fail-closed. This now matches the CLIENT's own rule
- *  (`parsePendingQuestionsMeta`, forge-ui/lib/session-client.ts) exactly,
+ *  (`parsePendingQuestionsMeta`, apps/studio/lib/session-client.ts) exactly,
  *  so the stricter side is no longer unreachable behind a pre-sanitising
  *  server. */
 export function parsePendingQuestions(raw: string): PendingQuestion[] | null {
@@ -1046,7 +1046,7 @@ export async function handleStudioSessionsRoutes(
         //
         // What ships instead is the FACT, derived by the same reads that built
         // `turns`: which of the scanned candidate sources actually exist here.
-        // The consumer (forge-ui/lib/session-shell-view.ts's
+        // The consumer (apps/studio/lib/session-shell-view.ts's
         // `deriveSessionPanes`) decides whether a transcript pane belongs from
         // `turns` + the live affordances — there is no longer any field for a
         // writer to leave a stale per-kind copy in. ALWAYS present, mirroring

@@ -1606,7 +1606,7 @@ test('W6-B8: GET /api/studio/sessions/instructions/<id> — terminal:false at "d
 // ===========================================================================
 // W6-B9 reviewer fix — isPseudoProjectAnchor: the general leading-"." check
 // backing the generic session-shell page's "back to project" link decision
-// (forge-ui/lib/session-shell-view.ts mirrors this exact predicate — kept
+// (apps/studio/lib/session-shell-view.ts mirrors this exact predicate — kept
 // honest by that file's own parity test).
 // ===========================================================================
 

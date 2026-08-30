@@ -599,7 +599,7 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
 // orchestrator/manifest.ts:73, but dropped on the floor by
 // `deriveRoadmapDraft` today). Absent key ⇒ []. This layer never filters
 // against the draft's own row set, never sorts, never de-duplicates — that
-// is `dependencyDagView`'s (forge-ui/lib/dependency-dag.ts) job, a layer up.
+// is `dependencyDagView`'s (apps/studio/lib/dependency-dag.ts) job, a layer up.
 // ===========================================================================
 
 describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)', () => {

@@ -545,7 +545,7 @@ describe('serializeAgentDefinition(def, originalRaw) — golden files', () => {
 // ---------------------------------------------------------------------------
 // serializeAgentDefinition(def, originalRaw) — materials vs D5 byte-fidelity
 // interaction (R2-09 defect). The agent builder UI
-// (forge-ui/app/agents/[id]/page.tsx) initializes `materials: []` and always
+// (apps/studio/app/agents/[id]/page.tsx) initializes `materials: []` and always
 // sends it on save, so every agent with no declared materials (all 16 roster
 // agents) round-trips through the PUT with an explicit `materials: []`
 // against an on-disk file that has NO `materials:` key at all. D2 (registry
@@ -683,7 +683,7 @@ describe('serializeAgentDefinition(def, originalRaw) — materials vs byte-fidel
 // report) before writing these tests:
 //
 // - runtime.range: LIVE and reachable today, MORE severe than materials.
-//   forge-ui/app/agents/[id]/page.tsx defaults `runtime.range` to `[]`
+//   apps/studio/app/agents/[id]/page.tsx defaults `runtime.range` to `[]`
 //   (DEFAULT_RUNTIME / parseAgent) and always sends it in buildPutBody;
 //   cli/bridge-studio-writes.ts's PUT merge takes the client's array
 //   unconditionally whenever it IS an array

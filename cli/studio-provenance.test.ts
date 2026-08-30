@@ -2,12 +2,12 @@
  * Acceptance tests for server-side per-type provenance (bead forge-3oq,
  * exit row 14).
  *
- * Today `forge-ui/components/ProvenanceBadge.tsx` derives its badge from a
+ * Today `apps/studio/components/ProvenanceBadge.tsx` derives its badge from a
  * CLIENT-SIDE `provenanceOfFlowOrigin(flow.origin)`, and Flow is the only
  * Studio object type carrying a real per-object origin signal. This file
  * pins the fix: a server-side, per-type `provenance` field on the four
  * object types the Library page renders (flow/agent/project/kb —
- * forge-ui/app/library/page.tsx), honest per type, with the n/a-invariant —
+ * apps/studio/app/library/page.tsx), honest per type, with the n/a-invariant —
  * a type the server cannot attest reports the literal string `'unknown'`,
  * NEVER a guessed badge.
  *
@@ -222,7 +222,7 @@ test('AT-1 flow: GET /api/studio/flows reports provenance derived from the REAL 
   assert.equal(status, 200, JSON.stringify(json));
   const ootb = findById(json['flows'], OOTB_FLOW_ID);
   const operator = findById(json['flows'], OPERATOR_FLOW_ID);
-  // origin stays on the wire unchanged (additive-only) — forge-ui/app/library/page.tsx:112
+  // origin stays on the wire unchanged (additive-only) — apps/studio/app/library/page.tsx:112
   // still reads flow.origin === 'studio' for the first-run onramp.
   assert.equal(ootb['origin'], 'seed');
   assert.equal(operator['origin'], 'studio');

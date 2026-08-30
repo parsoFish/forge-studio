@@ -13,8 +13,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "forge-ui"
+    "apps/*"
   ],
   "scripts": {
     "build": "tsc && npm run build --workspace=forge-ui",
@@ -34,7 +33,7 @@
     "verify:cycle": "node scripts/verify-cycle.mjs",
     "perf:snapshot": "node scripts/perf-snapshot.mjs",
     "test:ui": "npm run test --workspace=forge-ui",
-    "test:ui:typecheck": "tsc -p forge-ui/tsconfig.tests.json"
+    "test:ui:typecheck": "tsc -p apps/studio/tsconfig.tests.json"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",

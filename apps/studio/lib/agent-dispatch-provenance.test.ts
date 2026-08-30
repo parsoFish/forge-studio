@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { dispatchProvenanceNote } from '@/lib/agent-dispatch-provenance';
 
-const SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
+const SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'skills');
 
 /** slug → SKILL-frontmatter `phase:` for every skills/<slug>/SKILL.md that
  *  declares one (frontmatter only — first `---` block). */

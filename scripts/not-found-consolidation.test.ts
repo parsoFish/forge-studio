@@ -1,10 +1,10 @@
 /**
  * W7-A4 — every `[id]`-style route's unknown-id branch renders the ONE
- * shared `NotFound` (forge-ui/components/NotFound.tsx), and the app has a
+ * shared `NotFound` (apps/studio/components/NotFound.tsx), and the app has a
  * Studio-chrome `not-found.tsx` for unmatched paths (crosscut-27, crosscut-07).
  *
  * Source-level wiring pin, in the style of ./page-shell-consolidation.test.ts:
- * the render contract itself is pinned in forge-ui/lib/not-found-render.test.ts;
+ * the render contract itself is pinned in apps/studio/lib/not-found-render.test.ts;
  * THIS test proves each route family actually uses it (a page can only reach
  * `data-page="not-found"` through the shared component) and that the legacy
  * hand-rolled treatments the walkthrough catalogued are gone — a page that
@@ -20,8 +20,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const APP = join(ROOT, 'forge-ui', 'app');
-const SHARED = join(ROOT, 'forge-ui', 'components', 'NotFound.tsx');
+const APP = join(ROOT, 'apps', 'studio', 'app');
+const SHARED = join(ROOT, 'apps', 'studio', 'components', 'NotFound.tsx');
 
 /** Every route whose unknown-id branch must be the shared NotFound. */
 const ID_PAGES = [
@@ -55,7 +55,7 @@ const LEGACY_MARKERS: Array<[string, RegExp]> = [
 ];
 
 test('the shared NotFound component exists and owns the data-page="not-found" root', () => {
-  assert.ok(existsSync(SHARED), 'forge-ui/components/NotFound.tsx must exist');
+  assert.ok(existsSync(SHARED), 'apps/studio/components/NotFound.tsx must exist');
   const src = readFileSync(SHARED, 'utf8');
   assert.match(src, /data-page="not-found"/);
   assert.match(src, /data-not-found-kind/);
@@ -94,7 +94,7 @@ test('no page outside NotFound.tsx mints its own data-page="not-found" root', ()
 
 test('app/not-found.tsx exists and renders the shared NotFound (unmatched paths keep Studio chrome)', () => {
   const p = join(APP, 'not-found.tsx');
-  assert.ok(existsSync(p), 'forge-ui/app/not-found.tsx must exist');
+  assert.ok(existsSync(p), 'apps/studio/app/not-found.tsx must exist');
   const src = readFileSync(p, 'utf8');
   assert.match(src, /from '@\/components\/NotFound'/);
   assert.match(src, /<NotFound\b/);

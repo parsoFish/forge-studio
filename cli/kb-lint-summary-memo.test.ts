@@ -278,8 +278,8 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
       writeFileSync(join(forgeRoot, '_wave6', 'sweep', 'report.md'), '# campaign scratch\n');
       mkdirSync(join(forgeRoot, '_dry-bridge'), { recursive: true });
       writeFileSync(join(forgeRoot, '_dry-bridge', 'events.jsonl'), '{}\n');
-      mkdirSync(join(forgeRoot, 'forge-ui', '.next', 'server'), { recursive: true });
-      writeFileSync(join(forgeRoot, 'forge-ui', '.next', 'server', 'chunk.js'), '//');
+      mkdirSync(join(forgeRoot, 'apps', 'studio', '.next', 'server'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'apps', 'studio', '.next', 'server', 'chunk.js'), '//');
       const after = statWalkFingerprint(forgeRoot);
       assert.deepEqual(after, before, 'harness/campaign/build dirs must never be walked — no check reads them and they dwarf the repo');
       // and the git-tracked demos/ dir STAYS walked (a theme may cite it)

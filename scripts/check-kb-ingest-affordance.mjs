@@ -59,7 +59,10 @@ import matter from 'gray-matter';
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Directories walked for forge-ui UI-action affordances.
-const UI_SCAN_DIRS = ['forge-ui/app', 'forge-ui/components', 'forge-ui/lib'];
+// M2: repointed with the `git mv forge-ui -> apps/studio`. Keyed to the old
+// path this lint scanned three directories that no longer existed and still
+// reported PASS — the same silent-disarm the containment ratchets hit.
+const UI_SCAN_DIRS = ['apps/studio/app', 'apps/studio/components', 'apps/studio/lib'];
 // Directories walked for bridge KB-route dispatch code.
 const BRIDGE_SCAN_DIRS = ['cli'];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
@@ -106,7 +109,7 @@ function walk(dirAbs, exts, skip) {
 /**
  * W7-D1: a file the walk enumerated can vanish before it is read — a SIBLING
  * ratchet test (`scripts/check-disabled-reason.test.ts`) plants and deletes a
- * real probe file inside `forge-ui/components/` to prove its own gate bites,
+ * real probe file inside `apps/studio/components/` to prove its own gate bites,
  * and `node --test` runs the two files concurrently. A file that no longer
  * exists is not a violation; it is a file that no longer exists.
  */

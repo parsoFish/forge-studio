@@ -41,7 +41,9 @@ UI_PORT=4124
 
 # forge's own layout, named once. A candidate checkout must carry all of it,
 # and the bridge's argv must name one of the two entrypoints.
-UI_DIR_NAME=forge-ui
+# Relative to the checkout root. TWO segments since the M2 move; the walk
+# below strips the whole suffix rather than one basename because of it.
+UI_DIR_REL=apps/studio
 CLI_ENTRY=orchestrator/cli.ts
 BIN_ENTRY=bin/forge.mjs
 STUDIO_SUBCOMMAND=studio
@@ -167,10 +169,14 @@ ui_checkout() {
   dir="$(readlink -f "$cwd" 2>/dev/null || true)"
   [ -n "$dir" ] && [ -d "$dir" ] || return 1
   # The cwd itself first: a checkout may itself be named forge-ui, and
-  # stripping the basename before trying it walks one level too far.
+  # stripping the suffix before trying it walks too far up.
   if is_forge_checkout "$dir"; then printf '%s' "$dir"; return 0; fi
-  [ "$(basename "$dir")" = "$UI_DIR_NAME" ] || return 1
-  dir="$(dirname "$dir")"
+  # Strip the WHOLE relative UI path, not one basename: since the M2 move the UI
+  # dir is `apps/studio`, and dropping one level would stop at `apps/`.
+  case "$dir" in
+    */"$UI_DIR_REL") dir="${dir%/$UI_DIR_REL}" ;;
+    *) return 1 ;;
+  esac
   if is_forge_checkout "$dir"; then printf '%s' "$dir"; return 0; fi
   return 1
 }
@@ -202,7 +208,7 @@ is_forge_checkout() {
   [ -f "$dir/$CLI_ENTRY" ] || return 1
   [ -f "$dir/$BIN_ENTRY" ] || return 1
   names_match "$(package_name "$FORGE_ROOT")" "$(package_name "$dir")" || return 1
-  names_match "$(package_name "$FORGE_ROOT/$UI_DIR_NAME")" "$(package_name "$dir/$UI_DIR_NAME")" || return 1
+  names_match "$(package_name "$FORGE_ROOT/$UI_DIR_REL")" "$(package_name "$dir/$UI_DIR_REL")" || return 1
 }
 
 # Two package names match only if BOTH were actually read. An unreadable or

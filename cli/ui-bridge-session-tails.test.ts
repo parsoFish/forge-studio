@@ -21,7 +21,7 @@
  * (forge-ui actually subscribing/rendering) is out of scope here — batch B7
  * per the task brief; forge-ui's `useCycleEvents` hook already derives the
  * identical `_${kind}-${sessionId}` cycleId
- * (forge-ui/app/sessions/[kind]/[sessionId]/page.tsx) so it needs no change
+ * (apps/studio/app/sessions/[kind]/[sessionId]/page.tsx) so it needs no change
  * to consume what this fix now streams.
  */
 

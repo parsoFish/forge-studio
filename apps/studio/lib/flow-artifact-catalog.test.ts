@@ -26,7 +26,7 @@ import { ARTIFACTS, type ArtifactDef } from './flow-artifact-catalog.ts';
 // Walk up from this test file (forge-ui/lib/) to the repo root (two levels:
 // forge-ui/lib -> forge-ui -> repo root), then into studio/artifact-templates/.
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(HERE, '..', '..');
+const REPO_ROOT = join(HERE, '..', '..', '..');
 const TEMPLATES_DIR = join(REPO_ROOT, 'studio', 'artifact-templates');
 
 function onDiskTemplateIds(): string[] {

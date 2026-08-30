@@ -6,8 +6,8 @@
  *
  * This rule is hand-copied on BOTH sides of the cli/orchestrator <->
  * forge-ui boundary (forge-ui never imports cli/ at runtime — see
- * forge-ui/lib/session-lifecycle-client.ts's own header: "a hand-mirrored
- * copy, never an import"; forge-ui/lib/session-client.ts's header names the
+ * apps/studio/lib/session-lifecycle-client.ts's own header: "a hand-mirrored
+ * copy, never an import"; apps/studio/lib/session-client.ts's header names the
  * same "no-cross-boundary-import convention"). The W8-B4/WI-3 defect this
  * file exists to prevent from ever recurring: `kind:'template'` was taught
  * to the server's DEDICATED finalize route
@@ -18,13 +18,13 @@
  * 409'd forever. A hand-copy with no cross-check is exactly how that
  * happened; this test is the cross-check.
  *
- * A plain, framework-free TS module under forge-ui/lib/ (no JSX, no
+ * A plain, framework-free TS module under apps/studio/lib/ (no JSX, no
  * 'use client', no Next-only API) IS importable directly by a `node
  * --experimental-strip-types --test` file under cli/ — see
  * cli/id-rule.test.ts's own precedent (`import { buildProjectSavePayload }
- * from '../forge-ui/lib/project-save-payload.ts'`). This test uses that
+ * from '../apps/studio/lib/project-save-payload.ts'`). This test uses that
  * SAME precedent to import the REAL client-side array
- * (forge-ui/lib/authoring-package-shape.ts) alongside the REAL server-side
+ * (apps/studio/lib/authoring-package-shape.ts) alongside the REAL server-side
  * array (cli/bridge-studio-affordances.ts's exported
  * `AUTHORING_PACKAGE_SHAPES`) and asserts they are IDENTICAL — so a shape
  * added to one side and forgotten on the other is a RED test, not a silent
@@ -40,13 +40,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AUTHORING_PACKAGE_SHAPES as SERVER_SHAPES } from './bridge-studio-affordances.ts';
-import { AUTHORING_PACKAGE_SHAPES as CLIENT_SHAPES } from '../forge-ui/lib/authoring-package-shape.ts';
+import { AUTHORING_PACKAGE_SHAPES as CLIENT_SHAPES } from '../apps/studio/lib/authoring-package-shape.ts';
 
 test('the server-side and client-side authoring-package-shape arrays are byte-for-byte identical', () => {
   assert.deepEqual(
     CLIENT_SHAPES,
     SERVER_SHAPES,
-    `forge-ui/lib/authoring-package-shape.ts's AUTHORING_PACKAGE_SHAPES has drifted from ` +
+    `apps/studio/lib/authoring-package-shape.ts's AUTHORING_PACKAGE_SHAPES has drifted from ` +
       `cli/bridge-studio-affordances.ts's own copy — a shape was added/changed on one side ` +
       `and not the other:\n  server: ${JSON.stringify(SERVER_SHAPES)}\n  client: ${JSON.stringify(CLIENT_SHAPES)}`,
   );

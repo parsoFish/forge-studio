@@ -27,7 +27,12 @@ const PACKAGES = [
   'agents', 'sessions', 'flows', 'factory',
 ];
 
-/** `apps/studio` is deliberately absent — see the gap-pin at the bottom. */
+/**
+ * The LIBRARY-shaped apps. `apps/studio` is deliberately not here: it is a Next
+ * application, not a package with a single entry barrel, so the uniform
+ * assertions below (one `exports` entry, an `index.ts`) would be wrong for it
+ * rather than merely unmet. It gets its own test at the bottom.
+ */
 const APPS = ['forge'];
 
 function json(path: string): Record<string, unknown> {
@@ -62,24 +67,12 @@ test('every unit runs its own tests — a package whose tests only run from the 
   }
 });
 
-test('root workspaces covers the two globs, plus forge-ui until it moves', () => {
-  // ADR 046's end state is exactly `["packages/*", "apps/*"]`. `forge-ui` is
-  // still at the repo root until the `git mv`, and it must stay a workspace
-  // until then or `npm run test:ui` — which is `--workspace=forge-ui` — stops
-  // resolving. The third entry is transitional and expires with the move; the
-  // gap-pin at the bottom of this file is the one place that expiry is stated.
+test('root workspaces is exactly the two globs — the transitional forge-ui entry is gone', () => {
+  // It carried `forge-ui` while the directory sat at the repo root, because
+  // `npm run test:ui` resolves `--workspace=forge-ui`. After the move `apps/*`
+  // covers it, and the package keeps its name, so the scripts still resolve.
   const root = json(join(ROOT, 'package.json')) as { workspaces?: string[] };
-  const ws = root.workspaces ?? [];
-  assert.ok(ws.includes('packages/*'), 'workspaces must cover packages/');
-  assert.ok(ws.includes('apps/*'), 'workspaces must cover apps/');
-  const studioMoved = existsSync(join(ROOT, 'apps/studio/package.json'));
-  assert.deepEqual(
-    ws,
-    studioMoved ? ['packages/*', 'apps/*'] : ['packages/*', 'apps/*', 'forge-ui'],
-    studioMoved
-      ? 'the move has landed — forge-ui must be gone from workspaces, apps/* covers it now'
-      : 'until the move, forge-ui stays a workspace or npm run test:ui cannot resolve it',
-  );
+  assert.deepEqual(root.workspaces, ['packages/*', 'apps/*']);
 });
 
 test('every unit typechecks standalone — its tsconfig extends the root and includes only its own files', () => {
@@ -132,23 +125,24 @@ test('the root suite runs the packages\' tests — a package tsc sees but node -
   assert.ok(script.includes('apps/*/*.test.ts'), 'root `npm test` must glob apps/*/*.test.ts');
 });
 
-/**
- * GAP PIN, with its expiry condition stated.
- *
- * `apps/studio` is the eleventh unit ADR 046 names, and it is deliberately NOT
- * created here: it can only come into being as `git mv forge-ui apps/studio`,
- * whose entire claim is zero code change. That claim is checkable only when the
- * diff contains nothing but renames, so the move is its own PR.
- *
- * EXPIRY: when `apps/studio/package.json` exists, delete this test and add
- * `studio` to APPS above. Until then this assertion documents the hole rather
- * than leaving the suite silently one unit short.
- */
-test('apps/studio is not here yet, and this test says why', () => {
-  assert.equal(
-    existsSync(join(ROOT, 'apps/studio/package.json')),
-    false,
-    'apps/studio exists: the git mv has landed — delete this test and add `studio` to APPS',
-  );
-  assert.ok(existsSync(join(ROOT, 'forge-ui/package.json')), 'forge-ui is still the studio app until the move');
+test('apps/studio is the moved forge-ui — present, a workspace, and still named forge-ui', () => {
+  // The move's whole claim is ZERO code change, so the package keeps its name.
+  // That is not an oversight: `npm run test:ui` and `build:ui` resolve
+  // `--workspace=forge-ui` by package NAME, so they keep working untouched, and
+  // renaming would touch every one of those references plus CI. The rename is
+  // deliberate follow-up work, not part of a move.
+  const pkg = json(join(ROOT, 'apps/studio/package.json')) as { name?: string };
+  assert.equal(pkg.name, 'forge-ui');
+  // The OLD path, deliberately spelled in pieces so a path sweep cannot
+  // rewrite it into the new one and silently invert this assertion — which
+  // is exactly what happened once while landing the move.
+  assert.equal(existsSync(join(ROOT, ['forge', 'ui'].join('-'))), false, 'the old path must be gone, not copied');
+});
+
+test('the studio app reaches the platform through contracts alone', () => {
+  // ADR 046 rule 2. Enforced for real by scripts/check-boundaries.mjs, which
+  // ratchets; this asserts the rule still NAMES the moved path, so the lint
+  // cannot go quiet the way the containment ratchets did when the kernel moved.
+  const src = readFileSync(join(ROOT, 'scripts/check-boundaries.mjs'), 'utf8');
+  assert.ok(src.includes('apps\\/studio'), 'the studio rule must name apps/studio');
 });

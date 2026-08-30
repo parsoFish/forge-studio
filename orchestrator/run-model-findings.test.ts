@@ -1,12 +1,12 @@
 /**
  * Acceptance tests for R6-05's additive `RunPhaseMeta.findings` field —
  * `orchestrator/run-model.ts`'s `RunPhaseMeta` type (mirrored client-side in
- * `forge-ui/lib/studio-client.ts`) does NOT declare `findings` yet, and
+ * `apps/studio/lib/studio-client.ts`) does NOT declare `findings` yet, and
  * `orchestrator/run-model-derive.ts`'s `buildNodeMeta`/`deriveNodeMeta` do
  * not populate one. Every assertion below is a legitimate RED against the
  * CURRENT, unmodified derivation.
  *
- * WHY THIS FIELD EXISTS: R6-05's flow-monitor ledger (`forge-ui/lib/
+ * WHY THIS FIELD EXISTS: R6-05's flow-monitor ledger (`apps/studio/lib/
  * history-ledger.ts` + `flow-ledger.ts`, this initiative's other tasks)
  * needs a real, non-fabricated review-findings count to compose its
  * outcome-narrative segment — D3 forbids free-typed prose, so the narrative

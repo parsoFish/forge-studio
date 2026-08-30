@@ -9,11 +9,11 @@ dist/
 # locally but shouldn't churn the tree.
 scripts/.tmp-*
 
-# forge-ui (Next.js workspace) build artefacts
-forge-ui/.next/
-forge-ui/out/
-forge-ui/tsconfig.tsbuildinfo
-forge-ui/next-env.d.ts
+# apps/studio (the Next.js workspace, formerly forge-ui) build artefacts
+apps/studio/.next/
+apps/studio/out/
+apps/studio/tsconfig.tsbuildinfo
+apps/studio/next-env.d.ts
 # demos/ PNG frame galleries + index.html + the short building/generating CLIPS
 # (demos/e2e/clips/*.webm, each <400K — the autoplay-loop "GIFs") are version-tracked.
 # The big full-run VIDEOS are NOT — regenerable + too large for git (a verify

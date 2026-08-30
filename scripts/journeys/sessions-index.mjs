@@ -177,7 +177,7 @@ export const journey = defineJourney({
           // generic kickoff kind — the onboard-project FLOW was retired in
           // favour of the session. W8-B5b WI-3 retired community-refresh, so
           // the ONE shared list is seven entries, pinned at 7 in
-          // `forge-ui/lib/session-kind-meta.test.ts`. The identities matter
+          // `apps/studio/lib/session-kind-meta.test.ts`. The identities matter
           // more than the count: a list that silently swaps one kind for
           // another keeps the same length.
           check((kickoff?.entries ?? []).length === 7, `SESSIONS-IDX.2 (W7-B1/C1): all seven kickoff entries render (got ${(kickoff?.entries ?? []).length})`);

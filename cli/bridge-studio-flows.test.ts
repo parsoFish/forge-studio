@@ -814,7 +814,7 @@ test('GET /api/studio/flows list still works alongside the single-flow route', a
 // ACCEPTANCE TEST (T3, R1-06 WI-2 group A) — GET /api/studio/flows rows must
 // carry a `bands: string[]` field derived from EACH flow's real band
 // vocabulary (cli/flow-band-vocab.ts's `listFlowBandIds`, landed R1-06 WI-1),
-// so `/knowledge/new`'s per-flow band picker (forge-ui/app/knowledge/new/
+// so `/knowledge/new`'s per-flow band picker (apps/studio/app/knowledge/new/
 // page.tsx) has something real to source its options from over the wire.
 //
 // RED today: `loadAllFlows` (cli/bridge-studio.ts ~:361) builds each row from

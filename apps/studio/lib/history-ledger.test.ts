@@ -865,7 +865,7 @@ test('W7-B1 review round 1 — yaml parity pin: EVERY `step: terminal` phase in 
   const { readFileSync } = await import('node:fs');
   const { join, dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
-  const yamlPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'studio', 'session-kinds.yaml');
+  const yamlPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'studio', 'session-kinds.yaml');
   const src = readFileSync(yamlPath, 'utf8');
   const terminalPhases = new Set<string>(['cancelled']);
   for (const m of src.matchAll(/-\s*\{\s*phase:\s*([A-Za-z0-9-]+)\s*,\s*step:\s*terminal\b/g)) {

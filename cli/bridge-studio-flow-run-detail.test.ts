@@ -5,7 +5,7 @@
  *
  * WHY THIS EXISTS: the flow run-detail page (route `/flows/[id]/run/[runId]`)
  * derives its `found` prop from this 404 — see
- * `forge-ui/lib/flow-run-detail-render.test.ts`'s "a run that never existed
+ * `apps/studio/lib/flow-run-detail-render.test.ts`'s "a run that never existed
  * renders an honest not-found" test, which feeds `found`/`run` in as PROPS.
  * That render test structurally CANNOT catch a server that starts fabricating
  * runs for unknown ids — it never talks to the bridge, so a regression at the

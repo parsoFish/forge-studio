@@ -25,7 +25,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const UI = join(ROOT, 'forge-ui');
+const UI = join(ROOT, 'apps', 'studio');
 const GLOBALS = join(UI, 'app', 'globals.css');
 
 const EXTERNAL_FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'use.typekit', 'fontawesome.com'];
@@ -54,7 +54,7 @@ test('no forge-ui source references an external font host', () => {
 
 test('a real font file is bundled inside forge-ui', () => {
   const fonts = walk(UI, (p) => p.endsWith('.woff2') || p.endsWith('.woff'));
-  assert.ok(fonts.length > 0, 'at least one self-hosted font file (.woff2) must ship under forge-ui/');
+  assert.ok(fonts.length > 0, 'at least one self-hosted font file (.woff2) must ship under apps/studio/');
   // A real font, not an empty stub.
   for (const f of fonts) {
     assert.ok(statSync(f).size > 1000, `bundled font ${f.slice(ROOT.length + 1)} looks empty/stubbed`);
@@ -62,7 +62,7 @@ test('a real font file is bundled inside forge-ui', () => {
 });
 
 test('an @font-face binds the display face to a same-origin file', () => {
-  assert.ok(existsSync(GLOBALS), 'forge-ui/app/globals.css must exist');
+  assert.ok(existsSync(GLOBALS), 'apps/studio/app/globals.css must exist');
   const css = readFileSync(GLOBALS, 'utf8');
   assert.match(css, /@font-face/, 'globals.css must declare @font-face for the self-hosted face');
   // The @font-face src points at a same-origin path (starts with / or ./), never an external URL.

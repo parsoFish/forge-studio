@@ -90,7 +90,7 @@ export type SessionLifecycleInputs = {
  *  messages flow) keeps a healthy turn well inside this. */
 export const DEFAULT_STALL_CEILING_MS = 180_000;
 /** Per-kind overrides. architect matches the UI's own long-standing
- *  `STALE_THRESHOLD_MS` (forge-ui/lib/architect-hex.ts) so the bespoke
+ *  `STALE_THRESHOLD_MS` (apps/studio/lib/architect-hex.ts) so the bespoke
  *  architect panel and the generic lifecycle never disagree about a stall. */
 export const STALL_CEILING_MS_BY_KIND: Readonly<Record<string, number>> = Object.freeze({
   architect: 120_000,

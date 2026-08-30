@@ -66,7 +66,7 @@ export type RunPhaseMeta = {
    * NOT filtered to PROGRESS_EVENT_TYPES. A node narrating exclusively via
    * `log`/`error` events (7 of 11 EventType members are excluded from
    * lastProgressAt) still advances this field, so the Studio phase drawer's
-   * log-refresh signal (forge-ui/lib/phase-log-refresh.ts) has something to
+   * log-refresh signal (apps/studio/lib/phase-log-refresh.ts) has something to
    * key off even when no tool/file/test/iteration progress has occurred.
    * Computed in run-model-derive.ts's computeLastEventAt, reusing the same
    * per-node event bucket (built via eventToNodeId) as lastProgressAt.

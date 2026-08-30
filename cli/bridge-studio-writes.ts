@@ -942,7 +942,7 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   // An explicit `null` carries no information, so it is accepted-and-dropped
   // rather than refused. That is ordinary input tolerance, NOT a back-compat
   // path: forge's own client does not send these keys at all any more
-  // (forge-ui/app/community/new/page.tsx's `toInput`, changed alongside this),
+  // (apps/studio/app/community/new/page.tsx's `toInput`, changed alongside this),
   // so nothing in this repo depends on the tolerance. It survives only so a
   // scripted or third-party caller that spells "I have no star count" as an
   // explicit null is not punished for it.

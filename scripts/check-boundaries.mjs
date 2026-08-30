@@ -60,8 +60,8 @@ export const PACKAGE_RANK = Object.freeze({
 const LEGACY = /^(orchestrator|cli|loops)\//;
 /** The one greppable shim per package through which legacy may reach a package. */
 const LEGACY_SHIM = /^orchestrator\/_pkg\//;
-/** `forge-ui/` is the tree that becomes `apps/studio`; both spellings bind. */
-const STUDIO = /^(apps\/studio|forge-ui)\//;
+/** The studio app. `forge-ui/` was its path until the M2 move. */
+const STUDIO = /^apps\/studio\//;
 const PACKAGE = /^packages\/([^/]+)\//;
 
 /**
@@ -107,7 +107,7 @@ const SCOPE = ['orchestrator', 'cli', 'loops', 'skills', 'forge-ui', 'packages',
  * The mapping is one line of config, so the lint applies it itself.
  */
 const PATH_ALIASES = [
-  { prefix: '@/', from: /^(forge-ui|apps\/studio)\//, base: (m) => `${m[1]}/` },
+  { prefix: '@/', from: /^(apps\/studio)\//, base: (m) => `${m[1]}/` },
 ];
 
 /** A workspace package specifier: `@forge/kernel` -> `packages/kernel/`. */

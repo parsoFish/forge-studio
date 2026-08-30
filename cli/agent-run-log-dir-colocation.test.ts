@@ -5,7 +5,7 @@
  * per-turn stderr sink (`cli/ui-bridge.ts`'s `spawnAgentTurn`, driven by its
  * private `SPAWN_AGENT_SPECS` table) — the two writers that MUST agree on
  * ONE directory per turn, or a turn's events and its stderr split across two
- * directories and the live UI panel (`forge-ui/app/sessions/[kind]/
+ * directories and the live UI panel (`apps/studio/app/sessions/[kind]/
  * [sessionId]/page.tsx:158`, `cycleId = \`_${kind}-${sessionId}\``) ends up
  * subscribed to neither.
  *
@@ -162,7 +162,7 @@ test(
         `  orchestrator/interactive-runner.ts's cycleId (spine event-log dir): ${JSON.stringify(spineDir)}\n` +
         `  cli/ui-bridge.ts's spawnAgentTurn logDir (stderr.log dir):          ${JSON.stringify(bridgeDir)}\n` +
         'A single authoring turn writes its events and its stderr into TWO DIFFERENT directories, and the live UI ' +
-        'panel (forge-ui/app/sessions/[kind]/[sessionId]/page.tsx, cycleId = `_${kind}-${sessionId}`) subscribes to ' +
+        'panel (apps/studio/app/sessions/[kind]/[sessionId]/page.tsx, cycleId = `_${kind}-${sessionId}`) subscribes to ' +
         "neither. FIX: orchestrator/interactive-runner.ts:213's cycleId must be `_${descriptor.id}-${ctx.sessionId}` " +
         '(matching the convention every consumer already derives), not ' +
         '`_interactive-${descriptor.id}-${ctx.sessionId}`.',

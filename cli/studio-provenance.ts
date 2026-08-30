@@ -1,7 +1,7 @@
 /**
  * Server-side per-type provenance (bead forge-3oq, exit row 14).
  *
- * `forge-ui/components/ProvenanceBadge.tsx` used to derive its badge from a
+ * `apps/studio/components/ProvenanceBadge.tsx` used to derive its badge from a
  * CLIENT-SIDE inference over `flow.origin`, and Flow was the only Studio
  * object type carrying a real per-object origin signal — a "universal" badge
  * for agent/project/kb would have been fabricated. This module is the ONE
@@ -11,7 +11,7 @@
  *
  * The n/a-invariant: a type (or object) the server cannot attest reports the
  * literal string 'unknown' — NEVER a guessed 'ootb'/'operator' badge. This
- * mirrors the antipattern `forge-ui/lib/skill-library-view.ts` already
+ * mirrors the antipattern `apps/studio/lib/skill-library-view.ts` already
  * refuses for skills (inventing a badge from a field that doesn't carry the
  * distinction is exactly the "declared data enforced nowhere" failure mode).
  */

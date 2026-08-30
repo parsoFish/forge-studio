@@ -1814,7 +1814,7 @@ export const journey = defineJourney({
               check((await runRow.count()) > 0, `monitor: run rail row [data-run-id="${CYCLE_ID2}"] present (the reachability starting point)`);
 
               // GROUNDED PROBE, NOT AN INVENTED SELECTOR: `git grep` across
-              // forge-ui/components + forge-ui/app for any href/onClick reaching a
+              // apps/studio/components + apps/studio/app for any href/onClick reaching a
               // standalone .../run/[runId] page finds NOTHING — not even for the
               // ALREADY-SHIPPED analogous surface, app/agents/[id]/run/[runId]/page.tsx
               // (R6-04): that page's own journey beat (agents.mjs) reaches it via
@@ -1848,7 +1848,7 @@ export const journey = defineJourney({
               }
 
               // From here on, whichever way we arrived — the destination page's OWN
-              // contract, pinned by forge-ui/lib/flow-run-detail-render.test.ts's
+              // contract, pinned by apps/studio/lib/flow-run-detail-render.test.ts's
               // RESERVED data-* vocabulary (R6-01 WI-2 round 1): [data-page="flow-run"]
               // [data-run-id][data-run-found][data-run-status][data-flow-id] on <main>,
               // [data-section="run-timeline"] containing [data-timeline-row="true"]
@@ -1926,7 +1926,7 @@ export const journey = defineJourney({
               // deriveLogLine's TOOL_TYPES/THINK_TYPES sets, so every derived line
               // is kind="out" — this beat proves reachability + real content, not
               // the tool/think classification split (already exhaustively pinned
-              // at the unit level, forge-ui/lib/flow-node-log.test.ts +
+              // at the unit level, apps/studio/lib/flow-node-log.test.ts +
               // flow-run-node-log-render.test.ts). `end` ignores `message`
               // entirely (deriveLogLine's own textFor), so only the LAST end event
               // (cost-bearing) renders the "$0.4800" text — the two earlier

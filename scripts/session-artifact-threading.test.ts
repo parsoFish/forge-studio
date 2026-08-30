@@ -29,7 +29,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PAGE = join(ROOT, 'forge-ui', 'app', 'sessions', '[kind]', '[sessionId]', 'page.tsx');
+const PAGE = join(ROOT, 'apps', 'studio', 'app', 'sessions', '[kind]', '[sessionId]', 'page.tsx');
 
 function paneCallSite(src: string): string {
   const i = src.indexOf('<SessionArtifactPane');

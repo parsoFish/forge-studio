@@ -52,8 +52,8 @@ import { fileURLToPath } from 'node:url';
 // the repo root (two levels), mirroring the convention in
 // forge-ui/lib/flow-artifact-catalog.test.ts.
 const HERE = dirname(fileURLToPath(import.meta.url)); // .../forge-ui/lib
-const FORGE_UI_ROOT = join(HERE, '..'); // .../forge-ui
-const REPO_ROOT = join(HERE, '..', '..'); // repo root
+const FORGE_UI_ROOT = join(HERE, '..'); // .../apps/studio
+const REPO_ROOT = join(HERE, '..', '..', '..'); // repo root
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const SERPENTINE_FILE = join(FORGE_UI_ROOT, 'components', 'studio', 'SerpentineTimeline.tsx');

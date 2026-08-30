@@ -209,6 +209,6 @@ test('ProjectCard is rendered by exactly one component — so "derives its own h
     .flatMap(walk)
     .filter((f) => /\.tsx?$/.test(f) && !f.endsWith('LibraryCard.tsx'))
     .filter((f) => /<ProjectCard\b/.test(readFileSync(f, 'utf8')))
-    .map((f) => f.split('/forge-ui/')[1]);
+    .map((f) => f.split('/apps/studio/')[1]);
   expect(consumers).toEqual(['components/studio/ProjectsIndex.tsx']);
 });

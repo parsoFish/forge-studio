@@ -8,10 +8,10 @@
  *
  * Responsibility boundaries:
  *   - Phase status derivation  (this module is its ONLY home; the
- *     forge-ui/lib/phases.ts it was ported from had no consumers left and
+ *     apps/studio/lib/phases.ts it was ported from had no consumers left and
  *     was deleted in the W7-C3 review)
  *   - Per-node metadata derivation
- *   - Work item status derivation (ported from forge-ui/lib/wi-status.ts)
+ *   - Work item status derivation (ported from apps/studio/lib/wi-status.ts)
  *   - Artifact detection
  *   - Gate node identity + note extraction
  *   - Failure info extraction
@@ -465,7 +465,7 @@ export function findFindings(
 }
 
 // ---------------------------------------------------------------------------
-// Work item derivation — ported from forge-ui/lib/wi-status.ts
+// Work item derivation — ported from apps/studio/lib/wi-status.ts
 // ---------------------------------------------------------------------------
 
 export function deriveWorkItems(

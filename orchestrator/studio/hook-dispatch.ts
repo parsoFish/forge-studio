@@ -43,7 +43,7 @@
  * `HookCallbackMatcher.matcher` is a tool-NAME pattern. Forge's declared
  * `matcher` is the Claude Code permission-rule shape — the authoring form's
  * own placeholder is `Bash(gh pr create)`
- * (`forge-ui/app/hooks/new/page.tsx:109`) and the OOTB
+ * (`apps/studio/app/hooks/new/page.tsx:109`) and the OOTB
  * `pre-pr-security-review` ships exactly that string. Handing it to the SDK
  * verbatim would produce a hook that is bound, displayed as carried, and can
  * never match — the same defect this module exists to close, in a new field.
