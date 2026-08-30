@@ -37,13 +37,32 @@ function killAll() {
   for (const s of sessions) tmux('kill-session', '-t', s);
   sessions.clear();
 }
+/**
+ * The inherited environment with every `LANES_*` variable stripped.
+ *
+ * `lanes.sh` reads nine of them, and this file sets six — so `LANES_T1`,
+ * `LANES_MODEL` and `LANES_PERMISSION_MODE` used to arrive from whatever shell
+ * ran the suite. That is not hypothetical: `lanes.sh` exports `LANES_T1` into
+ * every lane it launches, so inside a lane the suite inherited it, `lanes.sh`
+ * short-circuited its ancestry walk on it, and the launch test read the real
+ * T1's session name instead of the mocked roster's — a false red in every lane
+ * and green everywhere else, including CI.
+ *
+ * Stripping the whole prefix rather than the one variable is deliberate: the
+ * next `LANES_*` knob would reopen the same hole, and a test that reads the
+ * environment it happens to run in is not testing `lanes.sh`.
+ */
+function envWithoutLanesVars(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('LANES_')));
+}
+
 /** Run lanes.sh. Never throws — the exit status IS the subject of these tests. */
 function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 30000) {
   const r = spawnSync('bash', [LANES, ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
     env: {
-      ...process.env,
+      ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
       LANES_CONFIRM_TIMEOUT_S: '6',
       LANES_ROSTER_CMD: rosterCmd,
