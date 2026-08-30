@@ -47,7 +47,7 @@ die() { echo "lanes.sh: $*" >&2; exit 2; }
 sess() { printf '%s%s' "$PREFIX" "$1"; }
 
 # --- the roster: what Claude Code itself says is running ----------------------------------
-roster() { claude agents --json 2>/dev/null || echo '[]'; }
+roster() { ${LANES_ROSTER_CMD:-claude agents --json} 2>/dev/null || echo '[]'; }   # LANES_ROSTER_CMD: the test seam
 # roster_row <session-name> → "status state waitingFor pid sessionId", empty if not running
 roster_row() {
   roster | python3 -c '
