@@ -84,6 +84,26 @@ export function beatVerdict(beat, observed) {
   });
 }
 
+/**
+ * The verdict for a beat that never reached its page — a `do` step that could
+ * not act, no real-nav path, a control that was not actionable. All three
+ * leave the browser on the PREVIOUS page, which is read so the failure can
+ * name where it was stuck.
+ *
+ * It exports NO bindings. A `<name>` harvested from the wrong page would hand
+ * a later beat a route segment that page happened to supply, and that beat
+ * could go GREEN on it — the fail-open shape, reached through the new verb.
+ */
+export function stuckVerdict(beat, observed, failure) {
+  return Object.freeze({
+    ...beatVerdict(beat, observed),
+    status: 'red',
+    failures: Object.freeze([failure]),
+    bindings: Object.freeze({}),
+    data: observed.data,
+  });
+}
+
 /** Does an observed value answer one expectation? A `<name>` takes any non-empty value. */
 const answers = (got, want) => (PLACEHOLDER.test(want) ? got !== '' : got === want);
 
@@ -195,13 +215,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
   // links, so a story stopped dead at the first form.
   const stepError = await performSteps(page, steps);
   if (stepError !== null) {
-    const observed = await readObserved(page, beat);
-    return Object.freeze({
-      ...beatVerdict(beat, observed),
-      status: 'red',
-      failures: Object.freeze([stepError]),
-      data: observed.data,
-    });
+    return stuckVerdict(beat, await readObserved(page, beat), stepError);
   }
 
   // A press that saves asynchronously mints its route, or the link to it, a
@@ -230,16 +244,13 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
 
     if (clickable === null) {
       const observed = await readObserved(page, beat);
-      return Object.freeze({
-        ...beatVerdict(beat, observed),
-        status: 'red',
-        failures: Object.freeze([
-          `no real-nav path to "${target}" from "${observed.route}": no [data-nav] pillar and no ` +
-            'link points at it. The runner does not fall back to page.goto — an unreachable route ' +
-            'must not pass as a beat.',
-        ]),
-        data: observed.data,
-      });
+      return stuckVerdict(
+        beat,
+        observed,
+        `no real-nav path to "${target}" from "${observed.route}": no [data-nav] pillar and no ` +
+          'link points at it. The runner does not fall back to page.goto — an unreachable route ' +
+          'must not pass as a beat.',
+      );
     }
     // Wait for the NEW route, not merely for "a ready page". The page we
     // clicked FROM is already `data-page-ready="true"`, so waiting on that
@@ -270,15 +281,12 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
 
     if (clickError !== null) {
       const observed = await readObserved(page, beat);
-      return Object.freeze({
-        ...beatVerdict(beat, observed),
-        status: 'red',
-        failures: Object.freeze([
-          `could not click through to "${target}" from "${observed.route}": ${clickError}. ` +
-            'The control exists but was not actionable — obscured, disabled or detached.',
-        ]),
-        data: observed.data,
-      });
+      return stuckVerdict(
+        beat,
+        observed,
+        `could not click through to "${target}" from "${observed.route}": ${clickError}. ` +
+          'The control exists but was not actionable — obscured, disabled or detached.',
+      );
     }
   }
 

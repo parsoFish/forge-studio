@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beatVerdict, resolveBeatRoute } from './beats.mjs';
+import { beatVerdict, resolveBeatRoute, stuckVerdict } from './beats.mjs';
 
 const beat = {
   act: 'Click through to the Projects pillar',
@@ -281,4 +281,23 @@ test('resolveBeatRoute leaves a route with no placeholder untouched', () => {
   const r = resolveBeatRoute(beat, {});
   assert.equal(r.route, '/projects');
   assert.equal(r.unbound, null);
+});
+
+test('a beat that never reached its page exports NO bindings', () => {
+  // A beat can be red for three reasons that all leave the browser on the
+  // PREVIOUS page: a `do` step that could not act, no real-nav path, and a
+  // control that was not actionable. All three read that previous page to
+  // report it honestly — and must not export a `<name>` binding harvested
+  // there, or a later beat navigates to a segment the wrong page supplied and
+  // can go GREEN on it. That is the fail-open this module exists to prevent,
+  // reached through the new verb.
+  const v = stuckVerdict(bindBeat, { route: '/projects/new', data: { 'onboard-session-id': 'stale-id' }, nested: [] }, 'could not press it');
+  assert.equal(v.status, 'red');
+  assert.deepEqual(v.failures, ['could not press it']);
+  assert.deepEqual(v.bindings, {});
+});
+
+test('stuckVerdict still reports the page it was stuck on, for the operator reading the run', () => {
+  const v = stuckVerdict(bindBeat, { route: '/projects/new', data: { page: 'projects' }, nested: [] }, 'no real-nav path');
+  assert.equal(v.data.page, 'projects');
 });
