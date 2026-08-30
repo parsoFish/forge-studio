@@ -1,118 +1,93 @@
 #!/usr/bin/env bash
-# lanes.sh — T1 lane launcher / relay for tiered-orchestration campaigns.
+# lanes.sh — T1 lane launcher for tiered-orchestration campaigns.
 #
-# A lane is one fresh `claude` session running inside a detached tmux session
-# named forge-<lane>, started in the main checkout with a rendered kickoff
-# prompt. T1 launches, peeks, relays into and retires lanes from its own shell;
-# the operator attaches (`tmux attach -t forge-<lane>`, detach with C-b d) to
-# interact with the lane directly. Lanes are real sessions, so they can spawn
-# their own T3 subagents (in-process subagents cannot nest) and keep their own
-# context, model tier and /session-report.
+# A lane is one fresh `claude` session inside a detached tmux session named forge-<lane>,
+# started in the main checkout with a rendered kickoff prompt. The session is NAMED
+# (`claude -n forge-<lane>`), so T1 and the lane talk through Claude Code's own
+# cross-session messaging — never through the pane:
+#   T1 → lane   SendMessage(to: "forge-<lane>", notify_when_idle: true)    rulings, nudges
+#   lane → T1   SendMessage(to: "<T1 session name>")                        PARK / STOP / OUTCOME
+# An unattended lane cannot AskUserQuestion: lane-settings.json blocks the tool with a hook that
+# points the lane back at T1, so the operator answers everything in T1's one session.
+# The operator may still attach (`tmux attach -t forge-<lane>`, detach C-b d).
 #
 # Usage (help = run with no args):
 #   lanes.sh render <kickoffs.md> <heading-regex> <out-file> [PARAM=VALUE ...]
-#       Extract the first ```text block under the heading matching <heading-regex>
-#       into <out-file>; fill each PARAM (its "PARAMETER — set before pasting" line
-#       and every "$PARAM" reference).
-#   lanes.sh launch <campaign-dir> <lane> <prompt-file> [--model M] [--permission-mode P] [--cwd DIR] [--open]
-#       Start tmux session forge-<lane> in DIR (default /home/parso/forge), pipe the
-#       pane to <campaign-dir>/heartbeat/<lane>.tmux.log (liveness signal for the
-#       watcher), run `claude --model M --permission-mode P "<prompt>"`, add <lane>
-#       to <campaign-dir>/heartbeat/ACTIVE. --open also opens a Windows Terminal
-#       tab attached to the session (WSL). Refuses if the session already exists.
-#   lanes.sh peek <lane> [N]         Last N pane lines (default 40).
-#   lanes.sh send <lane> <text>      Type <text> + Enter into the lane (the relay
-#                                    for park-point rulings: "approved: H2 run 1").
-#   lanes.sh open <lane> [DIR]       Windows Terminal tab attached to the session.
-#   lanes.sh list [campaign-dir]     forge-* sessions, ACTIVE set, STALL flags.
-#   lanes.sh kill <campaign-dir> <lane>   End the session; drop <lane> from ACTIVE.
-#   lanes.sh events <campaign-dir> [ledger]  Forever: one line per actionable event — new ledger
-#                                    OUTCOME/park/NOT MET lines, STALL flags, a lane session gone,
-#                                    a lane whose claude exited to the shell, a lane idle at its prompt
-#                                    with a stale heartbeat (LANE_IDLE — the relay hole). Feed it to a Monitor.
-#
-# Env overrides: LANES_MODEL (opus), LANES_PERMISSION_MODE (auto),
-#                LANES_CWD (/home/parso/forge), LANES_CLAUDE_BIN (resolved `claude`).
+#       Extract the first ```text block under the heading matching <heading-regex> into
+#       <out-file>; fill each PARAM ("PARAMETER — set before pasting" line + every "$PARAM").
+#   lanes.sh launch <campaign-dir> <lane> <prompt-file> [--model M] [--permission-mode P]
+#                   [--cwd DIR] [--t1 NAME] [--attended] [--open]
+#       Start tmux forge-<lane> in DIR (default /home/parso/forge), pane piped to
+#       <campaign-dir>/heartbeat/<lane>.tmux.log, run the named claude session with the lane
+#       protocol appended to its system prompt (lane-protocol.md) and the AskUserQuestion block
+#       (lane-settings.json; --attended omits it for a session the operator sits in). T1's name
+#       is found from this shell's own claude ancestor (or --t1 / LANES_T1). Confirmed by the
+#       lane appearing in `claude agents --json`; adds <lane> to heartbeat/ACTIVE; records its
+#       session id in heartbeat/<lane>.session (claude --resume <id> reopens it after retirement).
+#       The tmux session ends when the claude session ends. --open pops a Windows Terminal tab.
+#   lanes.sh list [campaign-dir]     sessions (claude agents --json), tmux forge-*, ACTIVE, STALL flags.
+#   lanes.sh peek <lane> [N]         Last N pane lines (default 40) — diagnosis, not state.
+#   lanes.sh open <lane> [DIR]       Windows Terminal tab attached to the session (WSL).
+#   lanes.sh kill <campaign-dir> <lane>   Retire: end tmux, drop from ACTIVE, clear its stall
+#                                    stamps, remove ~/forge-<lane> if clean (kept if dirty), prune.
+#   lanes.sh reap <campaign-dir>     Retire every forge-* tmux session whose claude has exited;
+#                                    name the live ones that are not in ACTIVE; prune worktrees.
+#   lanes.sh events <campaign-dir>   Forever, one line per event, for a persistent Monitor:
+#                                    STALL flag · LANE_GONE · LANE_EXITED · LANE_BLOCKED (dialog) ·
+#                                    LANE_IDLE (idle + heartbeat > 10 min: the relay hole).
+# Env: LANES_MODEL (opus) · LANES_PERMISSION_MODE (auto) · LANES_CWD (/home/parso/forge) ·
+#      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60).
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="${LANES_SESSION_PREFIX:-forge-}"
+REPO="${LANES_CWD:-/home/parso/forge}"
+
 die() { echo "lanes.sh: $*" >&2; exit 2; }
-sess() { printf '%s%s' "${LANES_SESSION_PREFIX:-forge-}" "$1"; }
+sess() { printf '%s%s' "$PREFIX" "$1"; }
 
-# --- relay confirmation -------------------------------------------------------
-# CONFIRM A RELAY BY ITS EFFECT, NEVER BY THE PAYLOAD'S PRESENCE.
-# Measured 2026-08-29 (_1.0/ledger.md, three instances in one afternoon): `send`
-# printed "sent to forge-m1-d" and `launch` printed "launched forge-m1-a" over a
-# payload that was STAGED and never submitted -- `â¯ [Pasted text #1 +1 lines]`,
-# $0.00 session, 0 context -- because nothing looked. Reproduced deterministically
-# against a real Claude TUI: tmux delivers every byte, but a terminator landing in
-# the SAME read chunk as the payload is taken as pasted CONTENT rather than a
-# keypress. So the payload and its terminator are written separately, the gap
-# between them is a condition (the payload is on the input line) and not a sleep,
-# and the input line is then watched until the payload LEAVES it.
-CONFIRM_TIMEOUT_S="${LANES_CONFIRM_TIMEOUT_S:-45}"   # how long an effect may take to appear
-SETTLE_S="${LANES_SETTLE_S:-8}"                      # how long the payload may take to reach the input line
-GLYPH=$'\xe2\x9d\xaf'                                 # the lane TUI's input-line marker
-
-input_line() { # <session> — the last input line the pane is showing, if any
-  tmux capture-pane -p -t "$1" 2>/dev/null | { grep "^[[:space:]]*$GLYPH" || true; } | tail -1
+# --- the roster: what Claude Code itself says is running ----------------------------------
+roster() { claude agents --json 2>/dev/null || echo '[]'; }
+# roster_row <session-name> → "status state waitingFor pid sessionId", empty if not running
+roster_row() {
+  roster | python3 -c '
+import json, sys
+for a in json.load(sys.stdin):
+    if a.get("name") == sys.argv[1]:
+        print(a.get("status", ""), a.get("state", "-"), a.get("waitingFor", "-"), a.get("pid", ""), a.get("sessionId", "")); break' "$1"
 }
-# 0 = the input line is holding something, 1 = present and empty, 2 = no input line
-input_state() { # <session>
-  local l
-  l="$(input_line "$1")"
-  [ -n "$l" ] || return 2
-  l="${l#*"$GLYPH"}"
-  # The TUI pads an EMPTY input line with U+00A0, which `tr -d '[:space:]'` does not
-  # strip -- measured from a live pane, where an empty line captures as $'\u276f\u00a0'.
-  # Missing this read every empty line as occupied: `launch` reported NOT CONFIRMED over
-  # a lane that had actually worked, and `send` refused every relay.
-  [ -n "$(printf '%s' "$l" | sed 's/\xc2\xa0/ /g' | tr -d '[:space:]')" ]
-}
-await_state() { # <session> <wanted 0|1> <deadline-epoch>
-  local s="$1" want="$2" deadline="$3" rc
-  while :; do
-    input_state "$s" && rc=0 || rc=$?
-    [ "$rc" = "$want" ] && return 0
-    [ "$(date +%s)" -ge "$deadline" ] && return 1
-    sleep 0.3
+# The T1 session is the claude process this shell is running under (a Bash tool call).
+t1_name() {
+  if [ -n "${LANES_T1:-}" ]; then printf '%s' "$LANES_T1"; return 0; fi
+  local pid=$$ chain=""
+  while [ "$pid" -gt 1 ]; do
+    chain="$chain $pid"
+    pid="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $2}')"; [ -n "$pid" ] || pid=1
   done
+  roster | python3 -c '
+import json, sys
+chain = set(sys.argv[1].split())
+for a in json.load(sys.stdin):
+    if str(a.get("pid")) in chain:
+        print(a.get("name", "")); break' "$chain"
 }
-# Drive the terminator until the input line drains. Silent on success; dies naming
-# the lane when the effect cannot be confirmed. NEVER reports success it did not see.
-#   require_pending=1 (send): the payload we just wrote must appear on the input line
-#     first -- otherwise "empty" only means the pane has not caught up, and treating
-#     that as submitted would be the very fail-open this function exists to close.
-#   require_pending=0 (launch): the prompt arrives as argv, so a lane that already
-#     submitted it shows an empty line and is working; one still holding it is driven.
-confirm_submitted() { # <session> <lane> <what> <require_pending>
-  local s="$1" lane="$2" what="$3" need="$4" attempt=0 rc
-  if ! await_state "$s" 0 "$(( $(date +%s) + SETTLE_S ))"; then
-    input_state "$s" && rc=0 || rc=$?
-    [ "$need" = 0 ] && [ "$rc" = 1 ] && return 0
-    [ "$rc" = 2 ] && die "$what NOT CONFIRMED for $lane: $s never showed an input line within ${SETTLE_S}s, so submission cannot be confirmed. Attach with 'tmux attach -t $s'."
-    die "$what NOT CONFIRMED for $lane: the payload never reached $s's input line within ${SETTLE_S}s. Attach with 'tmux attach -t $s'."
-  fi
-  while [ "$attempt" -lt 2 ]; do
-    tmux send-keys -t "$s" Enter
-    await_state "$s" 1 "$(( $(date +%s) + CONFIRM_TIMEOUT_S ))" && return 0
-    attempt=$((attempt + 1))
-  done
-  die "$what NOT CONFIRMED for $lane: the payload is still on $s's input line, unsubmitted after ${CONFIRM_TIMEOUT_S}s and 2 terminators. Attach with 'tmux attach -t $s' and submit it by hand."
-}
+pane_cmd() { tmux display -p -t "$1" '#{pane_current_command}' 2>/dev/null || true; }
 
-active_add() { # <campaign-dir> <lane>
+# --- ACTIVE: the stall watcher's input. Written by launch/kill only; lanes never touch it. ---
+active_add() {
   local f="$1/heartbeat/ACTIVE" cur
   mkdir -p "$1/heartbeat"; [ -f "$f" ] || : > "$f"
   cur="$(tr ',' ' ' < "$f" | tr -s ' \n' ' ' | sed 's/\bNONE\b//g; s/^ *//; s/ *$//')" || cur=""
   case " $cur " in *" $2 "*) ;; *) cur="${cur:+$cur }$2" ;; esac
   printf '%s\n' "${cur:-NONE}" > "$f"
 }
-active_drop() { # <campaign-dir> <lane>
+active_drop() {
   local f="$1/heartbeat/ACTIVE" cur
   [ -f "$f" ] || return 0
   cur="$(tr ',' ' ' < "$f" | tr -s ' \n' ' ' | sed "s/\b$2\b//g; s/\bNONE\b//g" | tr -s ' ' | sed 's/^ *//; s/ *$//')" || cur=""
   printf '%s\n' "${cur:-NONE}" > "$f"
 }
+active_lanes() { tr ',' ' ' < "$1/heartbeat/ACTIVE" 2>/dev/null | tr -s ' \n' ' ' | sed 's/\bNONE\b//g'; }
 
 cmd_render() {
   local src="$1" re="$2" out="$3"; shift 3
@@ -134,12 +109,14 @@ cmd_render() {
 
 cmd_launch() {
   local camp="$1" lane="$2" prompt="$3"; shift 3
-  local model="${LANES_MODEL:-opus}" pm="${LANES_PERMISSION_MODE:-auto}" cwd="${LANES_CWD:-/home/parso/forge}" open=0
+  local model="${LANES_MODEL:-opus}" pm="${LANES_PERMISSION_MODE:-auto}" cwd="$REPO" t1="" attended=0 open=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --model) model="$2"; shift 2 ;;
       --permission-mode) pm="$2"; shift 2 ;;
       --cwd) cwd="$2"; shift 2 ;;
+      --t1) t1="$2"; shift 2 ;;
+      --attended) attended=1; shift ;;
       --open) open=1; shift ;;
       *) die "unknown flag $1" ;;
     esac
@@ -149,17 +126,33 @@ cmd_launch() {
   [ -s "$prompt" ] || die "prompt file missing or empty: $prompt"
   [ -d "$cwd" ] || die "no cwd: $cwd"
   tmux has-session -t "$s" 2>/dev/null && die "session $s already exists (lanes.sh peek $lane / kill)"
+  [ -z "$(roster_row "$s")" ] || die "a claude session named $s is already running (claude agents --json)"
+  [ -n "$t1" ] || t1="$(t1_name)"
+  [ -n "$t1" ] || die "cannot tell which session is T1: run this from T1's own shell, or pass --t1 <name> (your name is on the first line of ListAgents)"
   local bin="${LANES_CLAUDE_BIN:-$(command -v claude || true)}"
   [ -n "$bin" ] || die "claude not on PATH (set LANES_CLAUDE_BIN)"
-  mkdir -p "$camp/heartbeat"
+  local sid; sid="$(uuidgen)"
+  mkdir -p "$camp/heartbeat" "$camp/prompts"
+  local proto="$camp/prompts/$lane.protocol.md"
+  sed -e "s|\$CAMPAIGN|$camp|g; s|\$LANE|$lane|g; s|\$T1|$t1|g" "$HERE/../lane-protocol.md" > "$proto"
+  local settings=""
+  [ "$attended" = 1 ] || settings="--settings '$HERE/../lane-settings.json'"
   tmux new-session -d -s "$s" -c "$cwd" -x 200 -y 50
   tmux pipe-pane -o -t "$s" "cat >> '$camp/heartbeat/$lane.tmux.log'"
-  tmux send-keys -t "$s" "$bin --model $model --permission-mode $pm \"\$(cat '$prompt')\"" Enter
-  confirm_submitted "$s" "$lane" "launch" 0
+  # LANES_* reach the hook; `; exit` ends the tmux session when the claude session ends.
+  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
+  # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
+  local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    row="$(roster_row "$s")"; [ -n "$row" ] && break; sleep 2
+  done
+  [ -n "$row" ] || die "launch NOT CONFIRMED for $lane: no session named $s in 'claude agents --json' after ${LANES_CONFIRM_TIMEOUT_S:-60}s. Attach with 'tmux attach -t $s'."
+  case "$row" in *blocked*) die "launch NOT CONFIRMED for $lane: $s is up but blocked on a dialog ($row). Attach with 'tmux attach -t $s'." ;; esac
   active_add "$camp" "$lane"
-  echo "launched $s and confirmed working  model=$model permission-mode=$pm cwd=$cwd"
-  echo "attach:  tmux attach -t $s   (detach: C-b d)"
-  echo "peek:    $0 peek $lane"
+  printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"
+  echo "launched $s  [$row]  model=$model permission-mode=$pm cwd=$cwd t1=$t1 attended=$attended"
+  echo "talk:    SendMessage(to: \"$s\", notify_when_idle: true)"
+  echo "attach:  tmux attach -t $s   (detach: C-b d)     later: claude --resume $sid"
   echo "log:     $camp/heartbeat/$lane.tmux.log"
   [ "$open" = 1 ] && cmd_open "$lane" "$cwd"
   return 0
@@ -167,27 +160,8 @@ cmd_launch() {
 
 cmd_peek() { tmux capture-pane -p -t "$(sess "$1")" -S "-${2:-40}"; }
 
-cmd_send() {
-  local lane="$1" s; s="$(sess "$1")"; shift
-  tmux has-session -t "$s" 2>/dev/null || die "no session $s"
-  # Refuse a pane whose input line is already occupied. Measured 2026-08-29: an
-  # operator's own draft sat unsubmitted in m1-d's pane when T1 arrived to relay a
-  # ruling. Pasting onto it would submit two people's text as one message, and the
-  # drain would look exactly like success.
-  if input_state "$s"; then
-    die "refusing to relay to $lane: $s's input line already holds an unsent draft ($(input_line "$s")). Attach with 'tmux attach -t $s' and submit or clear it (C-u) first."
-  fi
-  # An explicit bracketed paste declares where the payload ends, so the consumer
-  # does not have to guess from timing; the terminator is a separate write.
-  printf '%s' "$*" | tmux load-buffer -b lanes-relay -
-  tmux paste-buffer -p -b lanes-relay -t "$s"
-  tmux delete-buffer -b lanes-relay 2>/dev/null || true
-  confirm_submitted "$s" "$lane" "send" 1
-  echo "sent to $s and confirmed submitted: $*"
-}
-
 cmd_open() {
-  local s; s="$(sess "$1")" cwd="${2:-${LANES_CWD:-/home/parso/forge}}"
+  local s; s="$(sess "$1")" cwd="${2:-$REPO}"
   local wt; wt="$(command -v wt.exe || ls /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps/wt.exe 2>/dev/null | head -1 || true)"
   if [ -z "$wt" ]; then echo "no wt.exe — attach by hand: tmux attach -t $s"; return 0; fi
   nohup "$wt" -w 0 new-tab --title "$s" wsl.exe -d "${WSL_DISTRO_NAME:-Ubuntu}" --cd "$cwd" -- tmux attach -t "$s" >/dev/null 2>&1 &
@@ -196,8 +170,13 @@ cmd_open() {
 
 cmd_list() {
   local camp="${1:-}"
-  echo "== tmux forge-* sessions =="
-  tmux ls -F '#{session_name} created=#{t:session_created} attached=#{session_attached} windows=#{session_windows}' 2>/dev/null | grep '^forge-' || echo "(none)"
+  echo "== claude sessions on this host (claude agents --json) =="
+  roster | python3 -c '
+import json, sys
+for a in json.load(sys.stdin):
+    print("%-28s %-12s %-8s %-8s %s" % (a.get("name", "?"), a.get("kind", ""), a.get("status", ""), a.get("state", ""), a.get("waitingFor", "")))'
+  echo "== tmux $PREFIX* =="
+  tmux ls -F '#{session_name} pane=#{pane_current_command} attached=#{session_attached} created=#{t:session_created}' 2>/dev/null | grep "^$PREFIX" || echo "(none)"
   if [ -n "$camp" ]; then
     echo "== ACTIVE == $(cat "$camp/heartbeat/ACTIVE" 2>/dev/null || echo '(no file)')"
     echo "== STALL flags =="; ls "$camp"/heartbeat/STALL-* 2>/dev/null || echo "(none)"
@@ -206,45 +185,68 @@ cmd_list() {
 
 cmd_kill() {
   local camp="$1" lane="$2" s; s="$(sess "$lane")"
-  tmux kill-session -t "$s" 2>/dev/null && echo "killed $s" || echo "no session $s"
+  tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s" || echo "no tmux session $s"
   active_drop "$camp" "$lane"
-  echo "ACTIVE = $(cat "$camp/heartbeat/ACTIVE")"
+  rm -f "$camp/heartbeat/.armed-$lane" "$camp/heartbeat/STALL-$lane"
+  local wt="${LANES_WORKTREE_ROOT:-$HOME}/forge-$lane"
+  if [ -d "$wt" ]; then
+    if [ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
+      git -C "$REPO" worktree remove "$wt" && echo "removed clean worktree $wt (its branch is untouched)"
+    else
+      echo "KEPT worktree $wt: $(git -C "$wt" status --porcelain | wc -l) uncommitted path(s) — commit or discard by hand, then git -C $REPO worktree remove $wt"
+    fi
+  fi
+  git -C "$REPO" worktree prune
+  echo "ACTIVE = $(cat "$camp/heartbeat/ACTIVE" 2>/dev/null || echo NONE)"
 }
 
-cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable event, forever (Monitor input)
-  local camp="$1" ledger="${2:-$1/ledger.md}" n0 n1 lane b f last pane hb age seen_stall="" seen_gone="" seen_shell="" seen_idle=""
-  n0="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
-  while true; do
-    n1="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
-    [ "$n1" -lt "$n0" ] && n0=0
-    if [ "$n1" -gt "$n0" ]; then
-      sed -n "$((n0 + 1)),${n1}p" "$ledger" | { grep -E --line-buffered 'OUTCOME|PARK|NOT MET|STOP|\bH[1-9]\b|contract-ready|merged|MERGED' || true; } | cut -c1-300 | sed 's/^/LEDGER: /'
-      n0="$n1"
+cmd_reap() {
+  local camp="$1" s lane active
+  active=" $(active_lanes "$camp") "
+  for s in $(tmux ls -F '#{session_name}' 2>/dev/null | grep "^$PREFIX" || true); do
+    lane="${s#"$PREFIX"}"
+    if [ "$(pane_cmd "$s")" != claude ]; then
+      echo "reap $s: its claude has exited (pane runs '$(pane_cmd "$s")')"; cmd_kill "$camp" "$lane"
+    elif [[ "$active" != *" $lane "* ]]; then
+      echo "live but not in ACTIVE: $s — a finished lane? lanes.sh kill $camp $lane. T1's or the operator's own session? leave it"
     fi
-    for f in "$camp"/heartbeat/STALL-*; do
+  done
+  git -C "$REPO" worktree prune
+  echo "ACTIVE = $(cat "$camp/heartbeat/ACTIVE" 2>/dev/null || echo NONE)"
+}
+
+# once <seen-var> <key> <line>: print <line> the first time <key> is seen; `unsee` forgets it
+once() { local -n _seen="$1"; case " $_seen " in *" $2 "*) ;; *) echo "$3"; _seen="$_seen $2" ;; esac; }
+unsee() { local -n _seen="$1"; _seen="$(printf '%s' "$_seen" | sed "s/\b$2\b//")"; }
+
+cmd_events() {
+  local camp="$1" hb="$1/heartbeat" lane s row st cmd age f b
+  # shellcheck disable=SC2034  # written through the namerefs in once/unsee
+  local seen_stall="" seen_gone="" seen_exit="" seen_block="" seen_idle=""
+  while true; do
+    for f in "$hb"/STALL-*; do
       [ -f "$f" ] || continue; b="$(basename "$f")"
-      case " $seen_stall " in *" $b "*) ;; *) echo "STALL: $(head -1 "$f")"; seen_stall="$seen_stall $b" ;; esac
+      once seen_stall "$b" "STALL: $(head -1 "$f") — run the 3-signal check (heartbeat · live subprocess · port) before any reclaim"
     done
-    for lane in $(tr ',' ' ' < "$camp/heartbeat/ACTIVE" 2>/dev/null); do
-      [ "$lane" = NONE ] && continue
-      if ! tmux has-session -t "forge-$lane" 2>/dev/null; then
-        case " $seen_gone " in *" $lane "*) ;; *) echo "LANE_ENDED: forge-$lane session gone (still in ACTIVE)"; seen_gone="$seen_gone $lane" ;; esac
-        continue
+    for lane in $(active_lanes "$camp"); do
+      s="$(sess "$lane")"
+      if ! tmux has-session -t "$s" 2>/dev/null; then
+        once seen_gone "$lane" "LANE_GONE: $s tmux session gone but still in ACTIVE — re-derive its exit rows from git/gh, then lanes.sh kill $camp $lane"; continue
       fi
-      pane="$(tmux capture-pane -p -t "forge-$lane" -S -40 2>/dev/null | { grep -v '^[[:space:]]*$' || true; })"
-      last="$(printf '%s\n' "$pane" | tail -1)"
-      if printf '%s' "$last" | grep -qE '^[^ ]+@[^ ]+:.*\$ ?$'; then
-        case " $seen_shell " in *" $lane "*) ;; *) echo "LANE_SHELL: forge-$lane claude exited — pane is at a shell prompt"; seen_shell="$seen_shell $lane" ;; esac
-        continue
+      cmd="$(pane_cmd "$s")"
+      if [ "$cmd" != claude ]; then
+        once seen_exit "$lane" "LANE_EXITED: $s claude has exited (pane runs '$cmd') — re-derive its exit rows, then lanes.sh kill $camp $lane"; continue
       fi
-      # Idle = the TUI shows a finished turn ("· done H:MM AM/PM") and the lane's heartbeat is > 10 min old.
-      # This is the relay hole: a lane that launched a detached job and ended its turn never wakes by itself.
-      hb="$camp/heartbeat/$lane.log"; age=999999
-      [ -f "$hb" ] && age=$(( $(date +%s) - $(stat -c %Y "$hb") ))
-      if printf '%s\n' "$pane" | tail -8 | grep -qE '· done [0-9]{1,2}:[0-9]{2} ?[AP]M' && [ "$age" -gt 600 ]; then
-        case " $seen_idle " in *" $lane "*) ;; *) echo "LANE_IDLE: forge-$lane turn finished ($(printf '%s\n' "$pane" | grep -oE '· done [0-9:]+ ?[AP]M' | tail -1)), heartbeat $((age / 60)) min old — parked on a detached job? relay with lanes.sh send"; seen_idle="$seen_idle $lane" ;; esac
+      row="$(roster_row "$s")"; st="${row%% *}"
+      case "$row" in
+        *blocked*) once seen_block "$lane" "LANE_BLOCKED: $s is waiting on a dialog [$row] — a permission prompt or a trust dialog; tmux attach -t $s to answer it" ;;
+        *) unsee seen_block "$lane" ;;
+      esac
+      age=999999; [ -f "$hb/$lane.log" ] && age=$(( $(date +%s) - $(stat -c %Y "$hb/$lane.log") ))
+      if [ "$st" = idle ] && [ "$age" -gt 600 ]; then
+        once seen_idle "$lane" "LANE_IDLE: $s finished its turn, heartbeat $((age / 60)) min old — parked on a detached job or on you? SendMessage(to: \"$s\") to wake it"
       else
-        seen_idle="$(printf '%s' "$seen_idle" | sed "s/\b$lane\b//")"
+        unsee seen_idle "$lane"
       fi
     done
     sleep 30
@@ -254,11 +256,11 @@ cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable even
 case "${1:-}" in
   render) shift; cmd_render "$@" ;;
   launch) shift; cmd_launch "$@" ;;
-  peek)   shift; cmd_peek "$@" ;;
-  send)   shift; cmd_send "$@" ;;
-  open)   shift; cmd_open "$@" ;;
   list)   shift; cmd_list "$@" ;;
+  peek)   shift; cmd_peek "$@" ;;
+  open)   shift; cmd_open "$@" ;;
   kill)   shift; cmd_kill "$@" ;;
+  reap)   shift; cmd_reap "$@" ;;
   events) shift; cmd_events "$@" ;;
-  *) sed -n '2,35p' "$0"; exit 1 ;;
+  *) sed -n '2,42p' "$0"; exit 1 ;;
 esac

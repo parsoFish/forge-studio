@@ -109,12 +109,15 @@ secrets.env
 # .claude/commands/ holds the operator-facing slash-command SOURCE (the three
 # human-interaction moments; Phase 7 / US-3.1) and IS committed.
 # .claude/skills/journey-sync/ is the UI-journey maintenance contract (the demo
-# harness sync rules) and IS committed — other .claude/skills stay local.
+# harness sync rules) and IS committed; .claude/skills/tiered-orchestration/ is the
+# campaign mechanism (lanes.sh, the lane protocol + hook, the stall watcher) and IS
+# committed — other .claude/skills stay local.
 .claude/*
 !.claude/commands/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/journey-sync/
+!.claude/skills/tiered-orchestration/
 *.swp
 *.swo
 *~
