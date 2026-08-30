@@ -104,3 +104,35 @@ test('a story id that could escape its namespace is rejected', () => {
   assert.throws(() => fixturePathsFor('../..', '/r'), /story id/);
   assert.throws(() => fixturePathsFor('a/b', '/r'), /story id/);
 });
+
+// ── M1-F: a story that onboards a project owns that project as a fixture.
+//
+// §3.1: "fixtures are named by the story that owns them and swept by the
+// story's last beat (crash-safe leading sweep retained)". The proof story
+// presses "Onboard project →", which scaffolds a real directory under
+// `projects/`, and a second run must not inherit it.
+
+test('a story owns the project fixture named story-<id>, and the sweep reaches it', () => {
+  const paths = fixturePathsFor('proof', '/root');
+  assert.ok(paths.includes('/root/projects/story-proof'), paths.join(' | '));
+});
+
+test('onboarding also scaffolds a Brain 3 profile, and the sweep reaches that too', () => {
+  // Measured, not assumed: the first proof run left `brain/projects/story-proof`
+  // behind because only `projects/story-proof` was swept. A fixture is every
+  // path the product creates for it, not the one the story names.
+  const paths = fixturePathsFor('proof', '/root');
+  assert.ok(paths.includes('/root/brain/projects/story-proof'), paths.join(' | '));
+});
+
+test('the sweep can never reach a REAL project, whatever a story is called', () => {
+  // Kills `projects/<storyId>`: a story named after its own ground — `gitpulse`,
+  // `gitweave` — would delete the repo it was written to prove things about,
+  // silently, before the first beat ran. `story-` is a reserved prefix no real
+  // project carries.
+  for (const id of ['gitweave', 'gitpulse', 'mdtoc']) {
+    const paths = fixturePathsFor(id, '/root');
+    assert.ok(!paths.includes(`/root/projects/${id}`));
+    assert.ok(!paths.includes(`/root/brain/projects/${id}`));
+  }
+});
