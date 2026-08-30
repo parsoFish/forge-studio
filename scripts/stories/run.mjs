@@ -177,9 +177,13 @@ async function runStory(story, uiUrl) {
   const page = await context.newPage();
 
   const beats = [];
+  // What earlier beats bound, for the routes later beats build from it. Rebuilt
+  // per beat rather than mutated — a beat's verdict states what IT learned.
+  let bindings = {};
   try {
     for (const [i, beat] of story.beats.entries()) {
-      const verdict = await driveBeat(page, beat, i, uiUrl);
+      const verdict = await driveBeat(page, beat, i, uiUrl, bindings);
+      bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
       beats.push({ ...verdict, frame });
