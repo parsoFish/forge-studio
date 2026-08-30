@@ -1,6 +1,6 @@
 # ADR 042 — Scope of the `orchestrator/` surface cap, and export-for-testability
 
-- **Status:** accepted (batch-C ratification, operator-ruled 2026-08-08)
+- **Status:** superseded by [ADR 046](./046-package-layout-and-boundary-lint.md) — the `orchestrator/` surface cap is replaced by per-package LOC caps, the 800-line file cap and one-owner-per-file; rulings 2 and 3 below survive unchanged as standing rules for every package, ruling 1 does not (accepted 2026-08-08, batch-C ratification, operator-ruled)
 - **Amends:** [CLAUDE.md](../../CLAUDE.md) "Ask first" — the bullet *"Anything that increases the surface area of `orchestrator/`"* is scoped by the three boundaries below.
 - **Relates to:** [ADR 041](./041-trigger-kind-registry.md) (R2-08 shipped several of the ratified items); the wave-5 batch-C ratification dossier (`_wave5/ratification-dossier.md`) and record (`_wave5/ratification-record.md`) — the item-by-item evidence and disposition.
 
