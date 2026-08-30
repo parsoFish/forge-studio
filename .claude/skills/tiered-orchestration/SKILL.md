@@ -11,7 +11,7 @@ One orchestrator (T1) runs a campaign through lanes it launches as real Claude s
 
 | Tier | Model | Owns | Never does |
 |---|---|---|---|
-| **T1 — campaign orchestrator** | light | sequencing, briefs, rulings, exit gates, lane launch and retirement, the ledger | implements · reads a pane to learn state · holds initiative detail |
+| **T1 — campaign orchestrator** | light | sequencing, briefs, rulings, exit gates, lane launch and retirement, the campaign lines of the ledger (launches, rulings, exit tables) | implements · reads a pane to learn state · holds initiative detail |
 | **T2 — one per lane/initiative** | strong | decompose → pin tests → spawn T3 → run every gate itself → PR → merge → ledger | trusts a worker's pass/fail · carries another lane's state · asks a human in its own window |
 | **T3 — workers** | mid | tests, implementation, adversarial review — fresh context, spec-only briefs | reads the campaign · reports to anyone but its spawner |
 
@@ -33,8 +33,8 @@ Successor test: a fresh T1 with no chat history resumes from these files alone. 
 
 | | T1 does | what happens |
 |---|---|---|
-| **launch** | `lanes.sh render …` then `lanes.sh launch <campaign> <lane> <prompt> [--open] [--attended]` | names the session; appends [`lane-protocol.md`](lane-protocol.md) to its system prompt; blocks `AskUserQuestion` with [`lane-settings.json`](lane-settings.json) unless `--attended`; confirms by the session appearing in `claude agents --json`; adds it to `ACTIVE` |
-| **route** | `SendMessage(to: "forge-<lane>", notify_when_idle: true)` for every ruling or nudge | the lane sends `PARK` / `STOP` / `OUTCOME` messages to T1's session name and ends its turn; a T3 cannot ask at all, so its question bubbles the same way; the operator is asked only by T1, with `AskUserQuestion`, in T1's session |
+| **launch** | `lanes.sh render …` then `lanes.sh launch <campaign> <lane> <prompt> [--open] [--attended]` (an attended session is normally also `--open`) | names the session; appends [`lane-protocol.md`](lane-protocol.md) to its system prompt; blocks `AskUserQuestion` with [`lane-settings.json`](lane-settings.json) unless `--attended`; confirms by the session appearing in `claude agents --json`; adds it to `ACTIVE` |
+| **route** | record the ruling in the ledger, then `SendMessage(to: "forge-<lane>", notify_when_idle: true)` | the lane sends `PARK` / `STOP` / `OUTCOME` messages to T1's session name and ends its turn; a T3 cannot ask at all, so its question bubbles the same way; the operator is asked only by T1, with `AskUserQuestion`, in T1's session |
 | **watch** | one persistent `Monitor` on `lanes.sh events <campaign>`; cron `*/5 * * * * watch-heartbeats.sh <campaign>/heartbeat` | events: `STALL` · `LANE_GONE` · `LANE_EXITED` · `LANE_BLOCKED` (a dialog only a terminal can answer) · `LANE_IDLE` (turn finished, heartbeat > 10 min — the relay hole). `notify_when_idle` is free to add, but its notice may land only in the operator's transcript (0 of 3 reached T1 on 2026-08-30) — the Monitor is the wake T1 relies on |
 | **retire** | `lanes.sh kill <campaign> <lane>` after re-deriving its exit rows; `lanes.sh reap <campaign>` for stragglers | ends the tmux session, drops `ACTIVE` and stall stamps, removes a clean worktree (keeps a dirty one), prunes |
 
@@ -50,7 +50,7 @@ A lane's messages arrive in T1's context on their own; T1 never polls. `lanes.sh
 | `ACTIVE` is written by `lanes.sh launch/kill` only; T1 is never in it | `lane-protocol.md` §2; per-lane arm stamps in the watcher |
 | Liveness = heartbeat log + declared job logs, never the pane; ceiling 30 min; watcher out of process | `watch-heartbeats.sh` under cron |
 | Every detached job gets a background waiter so its completion wakes the lane | `lane-protocol.md` §2 |
-| A worktree is removed only when clean; a branch only when `git merge-base --is-ancestor` says merged | `lanes.sh kill`; the lane's close-out |
+| A worktree is removed only when clean (`lanes.sh kill`); a branch is deleted only when `git merge-base --is-ancestor` says merged (the lane's close-out — `kill` never touches branches) | `lanes.sh kill`; the lane |
 | T2 runs the gates itself, in a clean worktree from the pin; file-scoped red→green, full suite once at the gate | `immutable-gates` |
 | Waiving a gate run needs a recorded `git diff` proof | the ledger |
 | Reclaim a lock only on three signals: heartbeat recency + a live lane-owned subprocess + the port binding | T1's judgement — a holder PID alone was wrong both ways |
@@ -60,7 +60,7 @@ A lane's messages arrive in T1's context on their own; T1 never polls. `lanes.sh
 
 ## Park protocol
 
-Pre-authorise the known park points at kickoff (ADR amendments, judgement content, new dependencies, spend ceilings). A park is: the artifact → a bead → `SendMessage` to T1 with first line `PARK <lane>: <question, artifact path, default if unanswered>` → end the turn. An unforeseen ask parks the same way while non-dependent work continues. Batch rulings: one operator sitting per lane beat every relay round-trip measured.
+Pre-authorise the known park points at kickoff (ADR amendments, judgement content, new dependencies, spend ceilings). A park is: the artifact → a bead → `SendMessage` to T1 with first line `PARK <lane>: <question, artifact path, default if unanswered>` → end the turn. The default is what the lane will do if it runs out of non-dependent work before a ruling arrives: a pre-authorised park may proceed on its default, anything else waits. An unforeseen ask parks the same way while non-dependent work continues. Batch rulings: one operator sitting per lane beat every relay round-trip measured.
 
 ## Red flags — STOP
 
