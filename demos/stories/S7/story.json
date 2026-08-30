@@ -1,0 +1,512 @@
+{
+  "story": {
+    "id": "S7",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Create library components"
+    },
+    "beats": [
+      {
+        "act": "Open the Library",
+        "say": "The Library is the parts bin: skills, hooks, connections, templates, and what the community has published. It is not a dashboard — every shelf on it is something an agent composes.",
+        "do": [],
+        "expect": {
+          "route": "/library",
+          "data": {
+            "page": "library",
+            "page-ready": "true",
+            "section": "skills"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New skill\"",
+        "say": "A skill is a reusable instruction packet — the unit an agent composes to know how to do something. This page offers two ways to make one, and the operator is about to take the one that does not involve typing markdown.",
+        "do": [
+          {
+            "press": "new-skill"
+          }
+        ],
+        "expect": {
+          "route": "/skills/new",
+          "data": {
+            "page": "skill-builder",
+            "page-ready": "true",
+            "section": "skill-new"
+          }
+        }
+      },
+      {
+        "act": "Describe the skill to the creation agent instead of writing the package by hand",
+        "say": "This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it. Same library, same scan, same approval — different amount of typing.",
+        "do": [
+          {
+            "fill": "authoring-launcher-project",
+            "with": "mdtoc"
+          },
+          {
+            "fill": "authoring-launcher-prompt",
+            "with": "A skill that checks every relative link in a markdown file resolves to a real path in the repo, and reports the ones that do not with their line numbers."
+          },
+          {
+            "press": "start-authoring"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/authoring/<authoringSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "authoring",
+            "session-phase": "working"
+          }
+        }
+      },
+      {
+        "act": "Read what it drafted, give the package its directory name, and approve it",
+        "say": "The agent drafts; the operator names and approves. Nothing an agent wrote enters the library on the agent’s own say-so, and the id the operator types is the directory it lands in.",
+        "do": [
+          {
+            "fill": "session-package-id",
+            "with": "story-s7-skill"
+          },
+          {
+            "press": "verdict-approve"
+          }
+        ],
+        "expect": {
+          "route": "/skills/story-s7-skill",
+          "data": {
+            "page": "skill-detail",
+            "skill-id": "story-s7-skill",
+            "page-ready": "true",
+            "skill-trust": "ready"
+          }
+        }
+      },
+      {
+        "act": "Go back to the Library",
+        "say": "The Library is where the operator returns between kinds. Each shelf is a different sort of part, and the next one is the only sort that is executable code.",
+        "do": [],
+        "expect": {
+          "route": "/library",
+          "data": {
+            "page": "library",
+            "page-ready": "true",
+            "section": "hooks"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New hook\"",
+        "say": "A hook is the other kind of part: not instructions but a script, run on an agent’s lifecycle event. It is the only thing in the library that is executable code, which is why it is the only thing with a security gate in front of it.",
+        "do": [
+          {
+            "press": "new-hook"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/new",
+          "data": {
+            "page": "hook-builder",
+            "page-ready": "true",
+            "section": "hook-new"
+          }
+        }
+      },
+      {
+        "act": "Write the hook by hand: what it runs on, what it matches, what it does, and what it may touch",
+        "say": "The permissions fields are the operator declaring, up front, what this script is allowed to reach. They are also what the scanner checks the script against — a behaviour the manifest declares is still counted, because the declaration is written by whoever wrote the script.",
+        "do": [
+          {
+            "fill": "hook-name",
+            "with": "story S7 hook"
+          },
+          {
+            "fill": "hook-description",
+            "with": "Note that a session ended, so the ledger has something to show."
+          },
+          {
+            "fill": "hook-on",
+            "with": "SessionEnd"
+          },
+          {
+            "fill": "hook-matcher",
+            "with": "*"
+          },
+          {
+            "fill": "hook-script-body",
+            "with": "#!/usr/bin/env bash\nset -euo pipefail\necho \"story-s7: session ended\" >&2\n"
+          },
+          {
+            "fill": "hook-permissions-env",
+            "with": ""
+          },
+          {
+            "fill": "hook-permissions-read",
+            "with": ""
+          },
+          {
+            "fill": "hook-permissions-network",
+            "with": ""
+          },
+          {
+            "press": "create-hook"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "page-ready": "true",
+            "hook-event": "SessionEnd"
+          }
+        }
+      },
+      {
+        "act": "Read the security scan before trusting it",
+        "say": "This is the gate that exists because a hook runs with the operator’s own credentials. The scan is static, it is shown before the approval and not after, and a declared behaviour is downgraded but still counted — never hidden.",
+        "do": [],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "scan-verdict": "clean",
+            "finding-count": "0",
+            "critical-count": "0"
+          }
+        }
+      },
+      {
+        "act": "Check what is actually in the package — every file, and the fingerprint over all of them",
+        "say": "Approving bytes you were never shown is not approving. The page lists every file in the package with its own hash and the fingerprint over the set, so a sibling script the entry point quietly sources cannot ride along unseen.",
+        "do": [],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "package-hash": "<hookPackageHash>",
+            "package-file-count": "2"
+          }
+        }
+      },
+      {
+        "act": "Approve the hook",
+        "say": "Trust and verdict are two different axes, and this is the trust one. Approved and runnable is the state that lets an agent carry it; until the operator pressed this, the hook was a file on disk that nothing would ever execute.",
+        "do": [
+          {
+            "press": "approve-hook"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "hook-trust": "approved",
+            "hook-runnable": "true"
+          }
+        }
+      },
+      {
+        "act": "Go back to the Library once more",
+        "say": "Third kind, same parts bin.",
+        "do": [],
+        "expect": {
+          "route": "/library",
+          "data": {
+            "page": "library",
+            "page-ready": "true",
+            "section": "templates"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New template\" and write the template the hook’s output is filed into",
+        "say": "A template is one markdown definition file — the shape an artifact comes out in. It is the least dramatic thing in the library and the one that decides whether two runs produce comparable output.",
+        "do": [
+          {
+            "press": "new-template"
+          },
+          {
+            "fill": "template-category",
+            "with": "studio/artifact-templates"
+          },
+          {
+            "fill": "template-id",
+            "with": "story-s7-template"
+          },
+          {
+            "press": "create-template"
+          }
+        ],
+        "expect": {
+          "route": "/templates/story-s7-template",
+          "data": {
+            "page": "template-detail",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Draft the project’s own working instructions, so the parts have a house style to follow",
+        "say": "Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.",
+        "do": [
+          {
+            "fill": "kickoff-project",
+            "with": "mdtoc"
+          },
+          {
+            "press": "start-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/instructions/<instructionsSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "instructions"
+          }
+        }
+      },
+      {
+        "act": "Open an agent from the Agents pillar and bind the hook to it",
+        "say": "A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.",
+        "do": [],
+        "expect": {
+          "route": "/agents/brain-ingest",
+          "data": {
+            "page": "agents",
+            "agent-id": "brain-ingest",
+            "accepts": "hook",
+            "count": "1"
+          }
+        }
+      },
+      {
+        "act": "Run the agent, and watch the hook fire on the session ending",
+        "say": "This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.",
+        "do": [
+          {
+            "press": "run-agent"
+          }
+        ],
+        "expect": {
+          "route": "/agents/brain-ingest",
+          "data": {
+            "page": "agents",
+            "agent-id": "brain-ingest",
+            "run-status": "running",
+            "run-id": "<hookRunId>"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open the Library",
+      "say": "The Library is the parts bin: skills, hooks, connections, templates, and what the community has published. It is not a dashboard — every shelf on it is something an agent composes.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "skills"
+      },
+      "frame": "frames/01-open-the-library.png"
+    },
+    {
+      "act": "Press \"+ New skill\"",
+      "say": "A skill is a reusable instruction packet — the unit an agent composes to know how to do something. This page offers two ways to make one, and the operator is about to take the one that does not involve typing markdown.",
+      "status": "red",
+      "failures": [
+        "could not click through to \"/skills/new\" from \"/skills/new\": locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/skills/new\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a class=\"btn btn-sm\" href=\"/skills/new\" data-action=\"new-skill\">+ New skill</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n. The control exists but was not actionable — obscured, disabled or detached."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "skill-builder",
+        "page-ready": "true"
+      },
+      "frame": "frames/02-press-new-skill.png"
+    },
+    {
+      "act": "Describe the skill to the creation agent instead of writing the package by hand",
+      "say": "This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it. Same library, same scan, same approval — different amount of typing.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/authoring/<authoringSessionId>\" needs <authoringSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/03-describe-the-skill-to-the-creation-agent.png"
+    },
+    {
+      "act": "Read what it drafted, give the package its directory name, and approve it",
+      "say": "The agent drafts; the operator names and approves. Nothing an agent wrote enters the library on the agent’s own say-so, and the id the operator types is the directory it lands in.",
+      "status": "red",
+      "failures": [
+        "could not fill [data-field=\"session-package-id\"] with \"story-s7-skill\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-package-id\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "skill-builder",
+        "page-ready": "true"
+      },
+      "frame": "frames/04-read-what-it-drafted-give-the-package-it.png"
+    },
+    {
+      "act": "Go back to the Library",
+      "say": "The Library is where the operator returns between kinds. Each shelf is a different sort of part, and the next one is the only sort that is executable code.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "hooks"
+      },
+      "frame": "frames/05-go-back-to-the-library.png"
+    },
+    {
+      "act": "Press \"+ New hook\"",
+      "say": "A hook is the other kind of part: not instructions but a script, run on an agent’s lifecycle event. It is the only thing in the library that is executable code, which is why it is the only thing with a security gate in front of it.",
+      "status": "red",
+      "failures": [
+        "could not click through to \"/hooks/new\" from \"/hooks/new\": locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/hooks/new\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/hooks/new\" class=\"btn btn-sm\" data-action=\"new-hook\">+ New hook</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is not stable\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n. The control exists but was not actionable — obscured, disabled or detached."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-builder",
+        "page-ready": "true"
+      },
+      "frame": "frames/06-press-new-hook.png"
+    },
+    {
+      "act": "Write the hook by hand: what it runs on, what it matches, what it does, and what it may touch",
+      "say": "The permissions fields are the operator declaring, up front, what this script is allowed to reach. They are also what the scanner checks the script against — a behaviour the manifest declares is still counted, because the declaration is written by whoever wrote the script.",
+      "status": "red",
+      "failures": [
+        "could not fill [data-field=\"hook-permissions-network\"] with \"\": locator.fill: Error: Input of type \"checkbox\" cannot be filled\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"hook-permissions-network\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <input type=\"checkbox\" data-field=\"hook-permissions-network\"/>\u001b[22m\n\u001b[2m    - fill(\"\")\u001b[22m\n\u001b[2m  - attempting fill action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and editable\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-builder",
+        "page-ready": "true"
+      },
+      "frame": "frames/07-write-the-hook-by-hand-what-it-runs-on-w.png"
+    },
+    {
+      "act": "Read the security scan before trusting it",
+      "say": "This is the gate that exists because a hook runs with the operator’s own credentials. The scan is static, it is shown before the approval and not after, and a declared behaviour is downgraded but still counted — never hidden.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/hooks/story-s7-hook\" from \"/hooks/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-builder"
+      },
+      "frame": "frames/08-read-the-security-scan-before-trusting-i.png"
+    },
+    {
+      "act": "Check what is actually in the package — every file, and the fingerprint over all of them",
+      "say": "Approving bytes you were never shown is not approving. The page lists every file in the package with its own hash and the fingerprint over the set, so a sibling script the entry point quietly sources cannot ride along unseen.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/hooks/story-s7-hook\" from \"/hooks/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-builder"
+      },
+      "frame": "frames/09-check-what-is-actually-in-the-package-ev.png"
+    },
+    {
+      "act": "Approve the hook",
+      "say": "Trust and verdict are two different axes, and this is the trust one. Approved and runnable is the state that lets an agent carry it; until the operator pressed this, the hook was a file on disk that nothing would ever execute.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"approve-hook\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"approve-hook\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-builder"
+      },
+      "frame": "frames/10-approve-the-hook.png"
+    },
+    {
+      "act": "Go back to the Library once more",
+      "say": "Third kind, same parts bin.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "templates"
+      },
+      "frame": "frames/11-go-back-to-the-library-once-more.png"
+    },
+    {
+      "act": "Press \"+ New template\" and write the template the hook’s output is filed into",
+      "say": "A template is one markdown definition file — the shape an artifact comes out in. It is the least dramatic thing in the library and the one that decides whether two runs produce comparable output.",
+      "status": "red",
+      "failures": [
+        "could not fill [data-field=\"template-category\"] with \"studio/artifact-templates\": locator.selectOption: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"template-category\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <select id=\"tpl-category\" data-field=\"template-category\">…</select>\u001b[22m\n\u001b[2m  - attempting select option action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m      - did not find some options\u001b[22m\n\u001b[2m    - retrying select option action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m      - did not find some options\u001b[22m\n\u001b[2m    - retrying select option action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    10 × waiting for element to be visible and enabled\u001b[22m\n\u001b[2m       - did not find some options\u001b[22m\n\u001b[2m     - retrying select option action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "template-builder",
+        "page-ready": "true"
+      },
+      "frame": "frames/12-press-new-template-and-write-the-templat.png"
+    },
+    {
+      "act": "Draft the project’s own working instructions, so the parts have a house style to follow",
+      "say": "Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/instructions/<instructionsSessionId>\" needs <instructionsSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/13-draft-the-project-s-own-working-instruct.png"
+    },
+    {
+      "act": "Open an agent from the Agents pillar and bind the hook to it",
+      "say": "A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/agents/brain-ingest\" from \"/templates/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "template-builder"
+      },
+      "frame": "frames/14-open-an-agent-from-the-agents-pillar-and.png"
+    },
+    {
+      "act": "Run the agent, and watch the hook fire on the session ending",
+      "say": "This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"run-agent\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"run-agent\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "template-builder"
+      },
+      "frame": "frames/15-run-the-agent-and-watch-the-hook-fire-on.png"
+    }
+  ]
+}

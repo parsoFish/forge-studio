@@ -1,0 +1,367 @@
+{
+  "story": {
+    "id": "S5",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Create a new agent"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Agents pillar",
+        "say": "The Agents pillar lists every agent forge can dispatch. They are the workers a Flow puts at its stations, and the operator is about to add one that does not exist yet.",
+        "do": [],
+        "expect": {
+          "route": "/agents",
+          "data": {
+            "page": "agents-index",
+            "page-ready": "true",
+            "fetch-status": "ok",
+            "section": "agent-roster"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New agent\"",
+        "say": "A new agent starts from a starter — a ready-made shape the operator edits — or from nothing at all. The empty `agent-id` is the page saying, honestly, that nothing has been minted yet.",
+        "do": [
+          {
+            "press": "new-agent"
+          }
+        ],
+        "expect": {
+          "route": "/agents/new",
+          "data": {
+            "page": "agents",
+            "agent-id": "",
+            "page-ready": "true",
+            "section": "starter-picker"
+          }
+        }
+      },
+      {
+        "act": "Start from the Blank agent starter, name it \"story S5\", and say what it exists to do",
+        "say": "Every agent needs one sentence that says why it exists, because that sentence is what a planner reads when it decides which agent to put at a station. This one is: “Read a project’s own docs and its live pages, and report every place the docs describe a page that no longer exists.”",
+        "do": [],
+        "expect": {
+          "route": "/agents/new",
+          "data": {
+            "page": "agents",
+            "agent-id": "",
+            "check": "purpose",
+            "ok": "true"
+          }
+        }
+      },
+      {
+        "act": "Open Advanced and compose the two skills this agent needs",
+        "say": "Composing is the whole idea: an agent is not written, it is assembled out of skills the library already holds. This one takes brain-query and webapp-testing — one to look up what the project already knows, one to drive its pages.",
+        "do": [
+          {
+            "press": "toggle-advanced"
+          }
+        ],
+        "expect": {
+          "route": "/agents/new",
+          "data": {
+            "page": "agents",
+            "accepts": "skill",
+            "count": "2"
+          }
+        }
+      },
+      {
+        "act": "Set the tool fence: this agent may invoke git and Node, and nothing else",
+        "say": "The fence is the point of the Advanced drawer. An agent reaches exactly the tools it is given and no others, so the operator states the list rather than discovering it from a transcript later.",
+        "do": [],
+        "expect": {
+          "route": "/agents/new",
+          "data": {
+            "page": "agents",
+            "accepts": "tool",
+            "count": "2"
+          }
+        }
+      },
+      {
+        "act": "Leave the MCP zone empty — the fence is a closed list, not a starting point",
+        "say": "This agent talks to a repo and a browser. It has no reason to hold a memory graph or a database connection, so it gets neither. A fence that only ever grows is not a fence.",
+        "do": [],
+        "expect": {
+          "route": "/agents/new",
+          "data": {
+            "page": "agents",
+            "accepts": "mcp",
+            "count": "0"
+          }
+        }
+      },
+      {
+        "act": "Save the agent",
+        "say": "Saving mints the agent and lands the operator on its own page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+        "do": [
+          {
+            "press": "save-agent"
+          }
+        ],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Check the agent is ready — all six readiness checks pass",
+        "say": "Readiness is forge refusing to pretend. Six checks, each of which can genuinely fail, and an agent that misses one is an agent that will disappoint a station at three in the morning.",
+        "do": [],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "ready-count": "6"
+          }
+        }
+      },
+      {
+        "act": "Cap what this run may spend at $2",
+        "say": "A real agent costs real money, so the operator sets the cap before starting the run rather than discovering the bill afterwards — and the button says the figure back to them.",
+        "do": [],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "run-ceiling": "2"
+          }
+        }
+      },
+      {
+        "act": "Run the agent standalone against mdtoc",
+        "say": "Standalone is an agent off the graph: no Flow, no station, just this agent against this project because the operator asked. It is how you find out whether the thing you assembled actually works before you wire it into a pipeline.",
+        "do": [
+          {
+            "press": "run-agent"
+          }
+        ],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "run-status": "running",
+            "run-id": "<runId>"
+          }
+        }
+      },
+      {
+        "act": "Watch the run land in the agent’s own history",
+        "say": "Every dispatch this agent has ever had is on its own page. One run, one row — the operator never has to go looking through a global log to find out what their own agent has been doing.",
+        "do": [],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "ledger-count": "1"
+          }
+        }
+      },
+      {
+        "act": "Read the row: what it cost, where it ran, and how it ended",
+        "say": "This is where S5 ends, and the word that matters is honest. The row says the run was a standalone dispatch, that it finished, and what it actually cost — not a zero standing in for a figure nobody recorded. An agent whose page lies about its spend is an agent the operator cannot budget for.",
+        "do": [],
+        "expect": {
+          "route": "/agents/story-s5",
+          "data": {
+            "page": "agents",
+            "agent-id": "story-s5",
+            "ledger-link-kind": "standalone",
+            "ledger-cost-usd": "<runCost>",
+            "run-status": "done"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Agents pillar",
+      "say": "The Agents pillar lists every agent forge can dispatch. They are the workers a Flow puts at its stations, and the operator is about to add one that does not exist yet.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "agents-index",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "agent-roster"
+      },
+      "frame": "frames/01-open-studio-on-the-agents-pillar.png"
+    },
+    {
+      "act": "Press \"+ New agent\"",
+      "say": "A new agent starts from a starter — a ready-made shape the operator edits — or from nothing at all. The empty `agent-id` is the page saying, honestly, that nothing has been minted yet.",
+      "status": "red",
+      "failures": [
+        "could not click through to \"/agents/new\" from \"/agents/new\": locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/agents/new\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/agents/new\" class=\"btn btn-primary\" data-action=\"new-agent\">+ New agent</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n. The control exists but was not actionable — obscured, disabled or detached."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": "",
+        "page-ready": "true"
+      },
+      "frame": "frames/02-press-new-agent.png"
+    },
+    {
+      "act": "Start from the Blank agent starter, name it \"story S5\", and say what it exists to do",
+      "say": "Every agent needs one sentence that says why it exists, because that sentence is what a planner reads when it decides which agent to put at a station. This one is: “Read a project’s own docs and its live pages, and report every place the docs describe a page that no longer exists.”",
+      "status": "red",
+      "failures": [
+        "data-ok: expected \"true\", got \"false\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": "",
+        "check": "purpose",
+        "ok": "false"
+      },
+      "frame": "frames/03-start-from-the-blank-agent-starter-name-.png"
+    },
+    {
+      "act": "Open Advanced and compose the two skills this agent needs",
+      "say": "Composing is the whole idea: an agent is not written, it is assembled out of skills the library already holds. This one takes brain-query and webapp-testing — one to look up what the project already knows, one to drive its pages.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"toggle-advanced\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"toggle-advanced\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents"
+      },
+      "frame": "frames/04-open-advanced-and-compose-the-two-skills.png"
+    },
+    {
+      "act": "Set the tool fence: this agent may invoke git and Node, and nothing else",
+      "say": "The fence is the point of the Advanced drawer. An agent reaches exactly the tools it is given and no others, so the operator states the list rather than discovering it from a transcript later.",
+      "status": "red",
+      "failures": [
+        "data-accepts: expected \"tool\", absent from the page",
+        "data-count: expected \"2\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents"
+      },
+      "frame": "frames/05-set-the-tool-fence-this-agent-may-invoke.png"
+    },
+    {
+      "act": "Leave the MCP zone empty — the fence is a closed list, not a starting point",
+      "say": "This agent talks to a repo and a browser. It has no reason to hold a memory graph or a database connection, so it gets neither. A fence that only ever grows is not a fence.",
+      "status": "red",
+      "failures": [
+        "data-accepts: expected \"mcp\", absent from the page",
+        "data-count: expected \"0\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents"
+      },
+      "frame": "frames/06-leave-the-mcp-zone-empty-the-fence-is-a-.png"
+    },
+    {
+      "act": "Save the agent",
+      "say": "Saving mints the agent and lands the operator on its own page. Nothing linked here a moment ago — the route exists because the button was pressed.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"save-agent\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"save-agent\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": "",
+        "page-ready": "true"
+      },
+      "frame": "frames/07-save-the-agent.png"
+    },
+    {
+      "act": "Check the agent is ready — all six readiness checks pass",
+      "say": "Readiness is forge refusing to pretend. Six checks, each of which can genuinely fail, and an agent that misses one is an agent that will disappoint a station at three in the morning.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/agents/story-s5\" from \"/agents/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": ""
+      },
+      "frame": "frames/08-check-the-agent-is-ready-all-six-readine.png"
+    },
+    {
+      "act": "Cap what this run may spend at $2",
+      "say": "A real agent costs real money, so the operator sets the cap before starting the run rather than discovering the bill afterwards — and the button says the figure back to them.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/agents/story-s5\" from \"/agents/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": ""
+      },
+      "frame": "frames/09-cap-what-this-run-may-spend-at-2.png"
+    },
+    {
+      "act": "Run the agent standalone against mdtoc",
+      "say": "Standalone is an agent off the graph: no Flow, no station, just this agent against this project because the operator asked. It is how you find out whether the thing you assembled actually works before you wire it into a pipeline.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"run-agent\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"run-agent\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <button disabled data-run-ceiling=\"\" class=\"btn btn-primary\" data-action=\"run-agent\" title=\"Save the agent (no unsaved changes) to run it\" data-disabled-reason=\"Save the agent (no unsaved changes) to run it\">Run agent (no cost cap)</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    10 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": ""
+      },
+      "frame": "frames/10-run-the-agent-standalone-against-mdtoc.png"
+    },
+    {
+      "act": "Watch the run land in the agent’s own history",
+      "say": "Every dispatch this agent has ever had is on its own page. One run, one row — the operator never has to go looking through a global log to find out what their own agent has been doing.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/agents/story-s5\" from \"/agents/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": ""
+      },
+      "frame": "frames/11-watch-the-run-land-in-the-agent-s-own-hi.png"
+    },
+    {
+      "act": "Read the row: what it cost, where it ran, and how it ended",
+      "say": "This is where S5 ends, and the word that matters is honest. The row says the run was a standalone dispatch, that it finished, and what it actually cost — not a zero standing in for a figure nobody recorded. An agent whose page lies about its spend is an agent the operator cannot budget for.",
+      "status": "red",
+      "failures": [
+        "no real-nav path to \"/agents/story-s5\" from \"/agents/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "agent-id": ""
+      },
+      "frame": "frames/12-read-the-row-what-it-cost-where-it-ran-a.png"
+    }
+  ]
+}
