@@ -81,6 +81,12 @@ export function beatVerdict(beat, observed) {
     status: failures.length === 0 ? 'green' : 'red',
     failures: Object.freeze(failures),
     bindings: Object.freeze(bindings),
+    // What the beat was JUDGED against, root and nested alike. The how-to
+    // fragment renders this as its "what you should see" list, so reporting
+    // only the page root would let a beat assert `data-card-id="gitweave"`
+    // while the generated documentation never mentions it — the tests, demos
+    // and docs drifting apart inside the one script §3 built to stop that.
+    data: Object.freeze({ ...observed.data, ...seen }),
   });
 }
 
@@ -210,8 +216,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
   }
 
   // What the operator DOES, on the page they are standing on — the previous
-  // beat's page — before this beat's state is judged. Every nine operator
-  // flows are form-driven, and until this existed the runner could only follow
+  // beat's page — before this beat's state is judged. All nine operator flows
+  // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
   const stepError = await performSteps(page, steps);
   if (stepError !== null) {
@@ -296,8 +302,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
       /* not ready — the verdict below reports that honestly rather than throwing */
     });
 
-  const observed = await readObserved(page, beat);
-  return Object.freeze({ ...beatVerdict(beat, observed), data: observed.data });
+  return beatVerdict(beat, await readObserved(page, beat));
 }
 
 /**

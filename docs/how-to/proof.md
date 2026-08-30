@@ -19,6 +19,8 @@ The Projects pillar lists every project forge manages. Each card carries the pro
 - `data-page` is `projects-index`
 - `data-page-ready` is `true`
 - `data-fetch-status` is `ok`
+- `data-card-type` is `project`
+- `data-card-id` is `gitweave`
 
 </details>
 
@@ -60,6 +62,7 @@ Onboarding asks for the few things a Factory needs before it can build a repo: w
 - `data-page` is `projects`
 - `data-project-id` is `new`
 - `data-page-ready` is `true`
+- `data-section` is `project-onboard`
 
 </details>
 

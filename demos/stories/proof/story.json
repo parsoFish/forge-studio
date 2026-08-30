@@ -113,7 +113,9 @@
       "data": {
         "page": "projects-index",
         "page-ready": "true",
-        "fetch-status": "ok"
+        "fetch-status": "ok",
+        "card-type": "project",
+        "card-id": "gitweave"
       },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     },
@@ -151,7 +153,8 @@
       "data": {
         "page": "projects",
         "project-id": "new",
-        "page-ready": "true"
+        "page-ready": "true",
+        "section": "project-onboard"
       },
       "frame": "frames/04-click-onboard-a-project.png"
     },

@@ -301,3 +301,15 @@ test('stuckVerdict still reports the page it was stuck on, for the operator read
   const v = stuckVerdict(bindBeat, { route: '/projects/new', data: { page: 'projects' }, nested: [] }, 'no real-nav path');
   assert.equal(v.data.page, 'projects');
 });
+
+test('the verdict carries the NESTED values it judged, so the generated doc documents them', () => {
+  // The how-to fragment renders `verdict.data` as its "what you should see"
+  // list. Reading only the page root there means a beat can assert
+  // `data-card-id="gitweave"` and the generated documentation never mentions
+  // it — the tests, demos and docs drifting apart inside the one script §3
+  // built to stop exactly that.
+  const v = beatVerdict(cardBeat, liveProjectsIndex);
+  assert.equal(v.data['card-id'], 'gitweave');
+  assert.equal(v.data.health, 'attention');
+  assert.equal(v.data.page, 'projects-index');
+});
