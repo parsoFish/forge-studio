@@ -22,7 +22,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 221 |
+| `verbatim` | moves unchanged | 222 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 5 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 14 |
 | `deleted` | not carried forward | 8 |
@@ -42,7 +42,7 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 22 | 7,841 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
 | `sessions` | 20 | 13,078 | **13,500** | seeded from the quarried total, rounded up to the next 500. |
-| `flows` | 63 | 22,233 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
+| `flows` | 64 | 22,260 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
 | `factory` | 35 | 12,044 | **12,500** | seeded from the quarried total, rounded up to the next 500. This package is deletable; its cap is a ceiling on the EXAMPLE, not on the platform. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
@@ -271,7 +271,8 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/review-comments.ts | factory | verbatim | 229 |
 | orchestrator/run-agent.ts | agents | verbatim | 665 |
 | orchestrator/run-model-derive.ts | flows | verbatim | 988 |
-| orchestrator/run-model.ts | flows | verbatim | 981 |
+| orchestrator/run-model.ts | flows | verbatim | 818 |
+| orchestrator/run-view-types.ts | flows | verbatim | 190 |
 | orchestrator/scheduler-dispatch.ts | flows | verbatim | 252 |
 | orchestrator/scheduler.ts | flows | verbatim | 1031 |
 | orchestrator/skill-path.ts | agents | verbatim | 373 |
