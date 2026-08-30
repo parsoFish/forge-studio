@@ -38,9 +38,9 @@ const render = (component: unknown, props: Record<string, unknown> = {}): string
 
 test('5.4: the brief inputs declare data-field, the vocabulary every other filled input on this page uses', () => {
   const html = render(OnboardWithAgent, { projectId: 'story-s2' });
-  expect(html).toContain('data-field="onboard-north-star"');
-  expect(html).toContain('data-field="onboard-gate-command"');
-  expect(html).toContain('data-field="onboard-constraints"');
+  expect(html).toContain('data-field="northStar"');
+  expect(html).toContain('data-field="gateCommand"');
+  expect(html).toContain('data-field="constraints"');
 });
 
 test('5.4: the disclosure that HOLDS the brief can be opened — the convention toggle-onboard-advanced already sets', () => {

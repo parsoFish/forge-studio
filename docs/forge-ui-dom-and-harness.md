@@ -2736,11 +2736,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   whose `<summary>` declares `[data-action="toggle-onboard-brief"]` (M1-G,
   `forge-8vfn.5.4` — the panel could not even be OPENED by automation, unlike
   `toggle-onboard-advanced` two panels away), holding three optional
-  `[data-field="onboard-north-star"|"onboard-gate-command"|"onboard-constraints"]`
-  fields posted as the `/start` route's `inputs` map. They spoke a private
-  `data-onboard-input` vocabulary no reader of this contract resolves; they now
-  speak `data-field`, PREFIXED because this panel renders on the project editor
-  beside the editor's own `[data-field="north-star"]` (prompt.md is no longer
+  `[data-field="northStar"|"gateCommand"|"constraints"]` fields posted as the
+  `/start` route's `inputs` map. They spoke a private `data-onboard-input`
+  vocabulary no reader of this contract resolves; they now speak `data-field`,
+  keeping the product's own declared VALUES. They do not collide with the
+  editor's `[data-field="north-star"]` rendered beside them — the strings
+  differ, and a reader resolves the exact value (prompt.md is no longer
   "(no inputs provided)"); the poll ceiling covers a routine run
   (`ONBOARDING_POLL_MAX_ATTEMPTS` = 300 ≈ 10 min at the shared 2s cadence —
   a real successful run took 222s while the old 90-attempt ceiling gave up

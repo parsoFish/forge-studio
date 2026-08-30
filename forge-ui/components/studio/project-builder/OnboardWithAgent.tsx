@@ -177,7 +177,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
           <input
             className="input"
-            data-field="onboard-north-star"
+            data-field="northStar"
             placeholder="North star — what this project is for"
             value={northStar}
             onChange={(e) => setNorthStar(e.target.value)}
@@ -185,7 +185,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
           />
           <input
             className="input"
-            data-field="onboard-gate-command"
+            data-field="gateCommand"
             placeholder="Quality gate command (e.g. npm test)"
             value={gateCommand}
             onChange={(e) => setGateCommand(e.target.value)}
@@ -193,7 +193,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
           />
           <input
             className="input"
-            data-field="onboard-constraints"
+            data-field="constraints"
             placeholder="Constraints / what done means"
             value={constraints}
             onChange={(e) => setConstraints(e.target.value)}

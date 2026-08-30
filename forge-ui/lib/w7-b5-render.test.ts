@@ -317,11 +317,13 @@ test('projects-31: the onboarding panel renders the optional brief inputs (north
   expect(html).toContain('data-section="onboard-brief"');
   // M1-G / forge-8vfn.5.4: `data-onboard-input` was a private vocabulary no
   // reader of this contract resolved; the brief now speaks `data-field`, the
-  // one every other filled input in Studio uses. Prefixed, because this panel
-  // renders on the project editor beside the editor's OWN north-star field.
-  expect(html).toContain('data-field="onboard-north-star"');
-  expect(html).toContain('data-field="onboard-gate-command"');
-  expect(html).toContain('data-field="onboard-constraints"');
+  // one every other filled input in Studio uses — keeping the product's own
+  // declared VALUES, which is what the pinned S1 beat 4 names. They do not
+  // collide with the editor's `[data-field="north-star"]` beside them: the
+  // strings differ, and a reader resolves the exact value.
+  expect(html).toContain('data-field="northStar"');
+  expect(html).toContain('data-field="gateCommand"');
+  expect(html).toContain('data-field="constraints"');
   // The pre-existing journey contract survives.
   expect(html).toContain('data-action="run-onboarding-agent"');
   expect(html).toContain('data-onboard-run-status="idle"');
