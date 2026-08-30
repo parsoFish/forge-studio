@@ -141,4 +141,8 @@ function main(argv) {
   return 1;
 }
 
-process.exitCode = main(process.argv.slice(2));
+// Run only when executed directly — helpers here are imported by tests and by
+// tooling, and an import must not run the check.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = main(process.argv.slice(2));
+}

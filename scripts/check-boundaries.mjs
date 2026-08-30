@@ -163,4 +163,8 @@ async function main(argv) {
   return 1;
 }
 
-process.exitCode = await main(process.argv.slice(2));
+// Run only when executed directly — the test imports `classify` and must not
+// trigger a full cruise on import.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exitCode = await main(process.argv.slice(2));
+}

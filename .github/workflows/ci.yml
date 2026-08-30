@@ -76,6 +76,20 @@ jobs:
       - name: Disabled-CTA reason ratchet
         run: node scripts/check-disabled-reason.mjs
 
+      # ADR 046 — the three structural ratchets. Each enforces a constraint
+      # docs/roadmaps/1.0.md §0 already stated as prose and nothing checked:
+      # the allow-graph, the 800-line file cap, and one owner per production
+      # file. All three baseline today's tree and may only shrink; none has a
+      # --write-baseline, so tightening is a deliberate, reviewable edit.
+      - name: Allow-graph boundary ratchet (ADR 046)
+        run: node scripts/check-boundaries.mjs
+
+      - name: File-size cap ratchet (800 lines, 1.0.md §0)
+        run: node scripts/check-file-size.mjs
+
+      - name: One owner per production file (QUARRY.md)
+        run: node scripts/check-owner.mjs
+
   # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
   # (production build; dry-bridge + no-spawn seams — nothing can spawn an
   # agent, touch a git remote or start the daemon), crawls every reachable
