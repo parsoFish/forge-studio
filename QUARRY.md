@@ -55,7 +55,7 @@ operator-ratified new cap — never a silent raise.
    `orchestrator/studio/types.ts` is the only file in the tree that is purely types
    with no runtime behaviour. It moves `verbatim` and is then pruned to what
    `apps/studio` actually imports.
-3. **Six files are `rewritten` and therefore do NOT move at M3.** Each straddles two or
+3. **Eleven files are `rewritten` and therefore do NOT move at M3.** Each straddles two or
    more packages, and rewriting one here would be a behaviour change smuggled into a
    move. They are listed together below so the M4 lanes inherit them explicitly.
 
