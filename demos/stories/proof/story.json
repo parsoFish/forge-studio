@@ -154,6 +154,7 @@
         "page": "projects",
         "project-id": "new",
         "page-ready": "true",
+        "fetch-status": "ok",
         "section": "project-onboard"
       },
       "frame": "frames/04-click-onboard-a-project.png"
