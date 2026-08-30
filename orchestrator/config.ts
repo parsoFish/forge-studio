@@ -458,14 +458,15 @@ export function resolveTriggeredRunBudgets(
  * cap — an absent `costCeilingUsd` simply means no operator ceiling is in
  * force; this constant is UI/config guidance only).
  */
-export const DEFAULT_KICKOFF_COST_CEILING_USD = 10;
+export { DEFAULT_KICKOFF_COST_CEILING_USD } from './_pkg/contracts.ts';
+import { DEFAULT_KICKOFF_COST_CEILING_USD } from './_pkg/contracts.ts';
 
 /**
  * R6-04 (WI-2): the sane absolute maximum an operator kickoff ceiling may not
  * exceed, enforced at the `POST /api/agents/:slug/run` route boundary. A
  * would-be ceiling above this is refused with a 400 before any dispatch.
  */
-export const MAX_KICKOFF_COST_CEILING_USD = 500;
+export { MAX_KICKOFF_COST_CEILING_USD } from './_pkg/contracts.ts';
 
 /**
  * Resolve the default per-kickoff cost ceiling served to the kickoff UI

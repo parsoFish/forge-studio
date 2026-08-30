@@ -102,7 +102,7 @@ import type { ContractStageRow } from './session-client';
 // via the real client path is one `orchestrator/studio/validate-triggers.ts`
 // actually accepts, not just a shape this test file asserts by eye.
 import { checkFlowTriggers } from '../../orchestrator/studio/validate-triggers.ts';
-import type { AgentDefinition, FlowDefinition } from '../../orchestrator/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 // AT-F1-1 fetch harness — matches lib/agent-ledger.test.ts verbatim.
 // `fetchContractStages` calls `resolveBridgeUrl()` (./bridge-client) then

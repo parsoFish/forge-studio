@@ -60,7 +60,7 @@ import type { Flow, FlowTrigger } from '@/lib/studio-client';
 // The real, on-disk SSOT — same mechanism as ./trigger-kind-parity.test.ts's
 // pin-1 test, reused here so pin 2 checks against the true registry rather
 // than a second hand-copied literal list that could itself drift.
-import { SHIPPED_TRIGGER_KIND_IDS as SSOT_SHIPPED_IDS } from '../../orchestrator/flow-trigger.ts';
+import { SHIPPED_TRIGGER_KIND_IDS as SSOT_SHIPPED_IDS } from '@forge/contracts';
 
 type Props = {
   flowId: string;

@@ -88,6 +88,7 @@ operator-ratified new cap — never a silent raise.
 | `orchestrator/cli.ts` | `apps/forge` | `pruned` | 998 | every subcommand body goes to the package that owns it; only the router stays |
 | `orchestrator/flow-artifacts.ts` | `flows` | `pruned` | 437 | the develop-flow-specific artifact schemas go to `factory` |
 | `orchestrator/init.ts` | `kernel` | `pruned` | 144 | the `forge init` command shell goes to `apps/forge`; the layout constants stay |
+| `orchestrator/_pkg/contracts.ts` | `contracts` | `deleted` | 12 | the one greppable shim through which legacy reaches `@forge/contracts` (§0); deleted at cutover, and `grep -rl "_pkg/contracts"` is the exact list of legacy files still depending on the package |
 | `orchestrator/phases/demo-fanin-honesty.ts` | `factory` | `deleted` | 183 | dead: its only production caller was the retired unifier gate; knip and grep agree nothing reaches it |
 | `orchestrator/phases/developer-loop.ts` | `factory` | `pruned` | 1,941 | the per-work-item queue and recovery bookkeeping goes to `flows` (spec §3.1: "queue/recovery → flows") |
 
@@ -171,6 +172,7 @@ operator-ratified new cap — never a silent raise.
 | loops/ralph/claude-agent.ts | agents | verbatim | 553 |
 | loops/ralph/runner.ts | agents | verbatim | 435 |
 | loops/ralph/stop-conditions.ts | agents | verbatim | 685 |
+| orchestrator/_pkg/contracts.ts | contracts | deleted | 12 |
 | orchestrator/agent-bands.ts | agents | verbatim | 86 |
 | orchestrator/agent-dispatch.ts | agents | verbatim | 365 |
 | orchestrator/agents-md-compose.ts | projects | verbatim | 109 |

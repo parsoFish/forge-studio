@@ -21,7 +21,8 @@ export type AcceptanceCriterion = {
   then: string;
 };
 
-export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';
+export type { WorkItemStatus } from './_pkg/contracts.ts';
+import type { WorkItemStatus } from './_pkg/contracts.ts';
 
 export type WorkItem = {
   work_item_id: string;            // WI-<n>
@@ -129,7 +130,8 @@ const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
  * `orchestrator/flow-trigger.ts`'s `SHIPPED_TRIGGER_KIND_IDS` /
  * `forge-ui/lib/trigger-kind-parity.test.ts`.
  */
-export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
+export { WORK_ITEM_STATUSES } from './_pkg/contracts.ts';
+import { WORK_ITEM_STATUSES } from './_pkg/contracts.ts';
 
 export function parseWorkItem(content: string): WorkItem {
   const parsed = matter(content);

@@ -49,22 +49,9 @@ import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-reque
  * - `webhook` — external (signature-verified receipt on the bridge; fire = stage).
  * - `feed` — reserved (external content feeds).
  */
-export const TRIGGER_KINDS = [
-  { id: 'flow-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
-  { id: 'agent-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
-  { id: 'merged', origin: 'ootb', status: 'shipped', fires: 'lifecycle' },
-  { id: 'pr-merged', origin: 'ootb', status: 'shipped', fires: 'external' },
-  { id: 'issue-raised', origin: 'ootb', status: 'shipped', fires: 'external' },
-  { id: 'manual', origin: 'platform', status: 'reserved', fires: 'operator' },
-  { id: 'cron', origin: 'platform', status: 'shipped', fires: 'temporal' },
-  { id: 'webhook', origin: 'platform', status: 'shipped', fires: 'external' },
-  { id: 'feed', origin: 'platform', status: 'reserved', fires: 'external' },
-] as const;
-export type TriggerKindId = (typeof TRIGGER_KINDS)[number]['id'];
-export const TRIGGER_KIND_IDS: readonly TriggerKindId[] = TRIGGER_KINDS.map((k) => k.id);
-export const SHIPPED_TRIGGER_KIND_IDS: readonly TriggerKindId[] = TRIGGER_KINDS.filter(
-  (k) => k.status === 'shipped',
-).map((k) => k.id);
+export { TRIGGER_KINDS, TRIGGER_KIND_IDS, SHIPPED_TRIGGER_KIND_IDS } from './_pkg/contracts.ts';
+export type { TriggerKindId } from './_pkg/contracts.ts';
+
 
 /**
  * The lifecycle events `fireFlowTriggers` routes (the two kinds fired from

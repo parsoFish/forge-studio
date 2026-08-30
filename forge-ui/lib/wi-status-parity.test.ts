@@ -24,7 +24,7 @@
 import { test, expect } from 'vitest';
 
 // The real, on-disk SSOT — imported directly, not re-typed/re-declared here.
-import { WORK_ITEM_STATUSES as SSOT_STATUSES } from '../../orchestrator/work-item.ts';
+import { WORK_ITEM_STATUSES as SSOT_STATUSES } from '@forge/contracts';
 // The forge-ui hand-kept mirror under test.
 import { WI_STATUSES as MIRROR_STATUSES } from './bridge-client.ts';
 

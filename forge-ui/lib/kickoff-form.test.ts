@@ -20,7 +20,7 @@
 import { test, expect } from 'vitest';
 
 import { MAX_KICKOFF_COST_CEILING_USD, kickoffCeilingInvalidReason, reconcileProjectPrefill, reconcileSelectPrefill } from './kickoff-form';
-import { MAX_KICKOFF_COST_CEILING_USD as SSOT_MAX } from '../../orchestrator/config.ts';
+import { MAX_KICKOFF_COST_CEILING_USD as SSOT_MAX } from '@forge/contracts';
 
 test('parity: the mirrored ceiling cap equals orchestrator/config.ts\'s MAX_KICKOFF_COST_CEILING_USD (SSOT)', () => {
   expect(MAX_KICKOFF_COST_CEILING_USD).toBe(SSOT_MAX);
