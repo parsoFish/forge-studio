@@ -43,7 +43,7 @@ Re-runs `lsof -tiTCP:<port> -sTCP:LISTEN`, SIGTERMs any matches,
 escalates to SIGKILL after 1.5s, waits for the kernel to release the
 socket (up to 3s total), then binds. Operator's pinned browser tab
 sees its WebSocket close, reconnects via the existing exponential-
-backoff loop in [`bridge-client.ts`](../../../forge-ui/lib/bridge-client.ts).
+backoff loop in [`bridge-client.ts`](../../../apps/studio/lib/bridge-client.ts).
 
 ## Why takeover-by-default is safe (for this tool)
 
