@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NewIdeaBox } from '@/components/NewIdeaBox';
+import { routeReady } from '@/lib/route-readiness';
+import { useProjectRoster } from '@/lib/use-project-roster';
 
 /**
  * Native Studio "new idea / start a run" entry (M7-4, ADR-031). W7-B6: the
@@ -16,7 +17,10 @@ import { NewIdeaBox } from '@/components/NewIdeaBox';
  * (/sessions/architect/<sid>).
  */
 export default function ArchitectNewPage(): JSX.Element {
-  const router = useRouter();
+  // forge-8vfn.5.7: this route's FIRST fetch is the kickoff form's roster, so
+  // `data-page-ready` is derived from it instead of being declared `true`
+  // beside a `data-roster-state="loading"` that contradicted it.
+  const roster = useProjectRoster();
   // P4: a project can pre-scope this entry (?project=<id>) when the operator
   // clicks "Give this project work" from the project tab. NewIdeaBox itself
   // validates the id against the roster (crosscut-21: an unknown ?project=
@@ -27,20 +31,14 @@ export default function ArchitectNewPage(): JSX.Element {
   }, []);
 
   return (
-    <StudioArchitectShell dataPage="architect-new" ready={true} title="New idea → architect">
+    <StudioArchitectShell dataPage="architect-new" ready={routeReady(roster.state)} title="New idea → architect">
       <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: '0 0 20px' }}>
         Describe the idea like you would to a colleague. Forge reads the project
         and the brain, asks only what it can&apos;t resolve itself, then drafts a
         plan for your approval before any code is written.
       </p>
       <div style={{ maxWidth: 560 }}>
-        <NewIdeaBox
-          key={initialProject}
-          initialProject={initialProject}
-          onStarted={(sessionId) =>
-            router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)
-          }
-        />
+        <NewIdeaBox key={initialProject} roster={roster} initialProject={initialProject} />
       </div>
     </StudioArchitectShell>
   );

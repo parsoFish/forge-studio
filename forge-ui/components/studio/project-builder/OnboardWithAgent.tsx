@@ -169,11 +169,15 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
           /start route's `inputs` map, so prompt.md is no longer
           "(no inputs provided)". All optional. */}
       <details data-section="onboard-brief" style={{ marginBottom: 8 }}>
-        <summary style={{ cursor: 'pointer', fontSize: 12 }}>Brief the agent (optional)</summary>
+        {/* forge-8vfn.5.4: the disclosure is an ACT — the operator opens the
+            brief before filling it — so it declares one, the same way
+            `toggle-onboard-advanced` does two panels away. Without it the
+            brief could not even be opened by anything but a human. */}
+        <summary data-action="toggle-onboard-brief" style={{ cursor: 'pointer', fontSize: 12 }}>Brief the agent (optional)</summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
           <input
             className="input"
-            data-onboard-input="northStar"
+            data-field="onboard-north-star"
             placeholder="North star — what this project is for"
             value={northStar}
             onChange={(e) => setNorthStar(e.target.value)}
@@ -181,7 +185,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
           />
           <input
             className="input"
-            data-onboard-input="gateCommand"
+            data-field="onboard-gate-command"
             placeholder="Quality gate command (e.g. npm test)"
             value={gateCommand}
             onChange={(e) => setGateCommand(e.target.value)}
@@ -189,7 +193,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
           />
           <input
             className="input"
-            data-onboard-input="constraints"
+            data-field="onboard-constraints"
             placeholder="Constraints / what done means"
             value={constraints}
             onChange={(e) => setConstraints(e.target.value)}

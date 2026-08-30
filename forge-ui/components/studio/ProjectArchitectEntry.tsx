@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
+import { useProjectRoster } from '@/lib/use-project-roster';
 import { fetchArchitectSessions, type ArchitectPhase, type ArchitectSessionSummary } from '@/lib/bridge-client';
 
 /**
@@ -37,6 +38,7 @@ type ResumeProbeState = 'pending' | 'settled';
 
 export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX.Element {
   const router = useRouter();
+  const roster = useProjectRoster();
   const [open, setOpen] = useState(false);
   const [activeSession, setActiveSession] = useState<ArchitectSessionSummary | null>(null);
   const [resumeProbe, setResumeProbe] = useState<ResumeProbeState>('pending');
@@ -100,7 +102,7 @@ export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX
       )}
       {open && (
         <div style={{ maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <NewIdeaBox key={projectId} initialProject={projectId} onStarted={goToSession} />
+          <NewIdeaBox key={projectId} roster={roster} initialProject={projectId} />
           <button
             data-action="cancel-plan-with-architect"
             onClick={() => setOpen(false)}

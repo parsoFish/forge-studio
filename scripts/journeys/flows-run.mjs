@@ -60,16 +60,25 @@ export const journey = defineJourney({
               await page.locator('[data-action="start-architect"]').hover();
               await sleep(ACT);
               await page.locator('[data-action="start-architect"]').click();
-              // R2-10 PR2: /architect/new pushes straight to the shared session
-              // shell (/sessions/architect/<sid>) — it never touches the retired
-              // /architect/<sid>/interview route at all (that path is now a
-              // redirect stub for stale inbound links only, never hit by a real
-              // click here).
+              // M1-G / forge-8vfn.5.5: starting a run PUBLISHES the id it mints
+              // (`data-architect-session-id`) and offers
+              // `[data-action="view-architect-session"]` — the same convention
+              // onboarding already used. It used to `router.push` from inside
+              // the minting click, so the id existed only in the handler's
+              // closure and nothing (no story beat, not this journey) could
+              // observe it before the navigation consumed it. The shared session
+              // shell (/sessions/architect/<sid>) is still where it lands; the
+              // retired /architect/<sid>/interview route is never touched.
+              await page.waitForSelector('[data-action="view-architect-session"]', { timeout: 15000 });
+              sid = await page.evaluate(() =>
+                document.querySelector('[data-section="new-idea"]')?.getAttribute('data-architect-session-id') ?? '');
+              check(!!sid, '[data-action="start-architect"] renders the session id it minted, before navigating');
+              await page.locator('[data-action="view-architect-session"]').click();
               await page.waitForURL(/\/sessions\/architect\/[^/]+/, { timeout: 15000 });
               sid = decodeURIComponent(page.url().split('/sessions/architect/')[1].split('/')[0]);
               ctx.seeded.createdSid = sid; // read by the runner's finally-block cleanup
               console.log(`[e2e] architect session: ${sid}`);
-              check(!!sid, '[data-action="start-architect"] navigates to /sessions/architect/<sid>');
+              check(!!sid, '[data-action="view-architect-session"] opens /sessions/architect/<sid>');
 
         },
       },

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
+import { useProjectRoster } from '@/lib/use-project-roster';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { RepointGate } from '@/components/studio/RepointGate';
 import { startFlowRun } from '@/lib/bridge-client';
@@ -89,15 +90,11 @@ const launchButtonStyle: React.CSSProperties = {
 // ---- idea ----------------------------------------------------------------
 
 function IdeaKickoff({ project }: { project?: string }): JSX.Element {
-  const router = useRouter();
+  const roster = useProjectRoster();
   return (
     <div data-section="flow-kickoff" data-kickoff-kind="idea" style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}>
       <div style={{ maxWidth: 560 }}>
-        <NewIdeaBox
-          key={project ?? ''}
-          initialProject={project ?? ''}
-          onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
-        />
+        <NewIdeaBox key={project ?? ''} roster={roster} initialProject={project ?? ''} />
       </div>
     </div>
   );

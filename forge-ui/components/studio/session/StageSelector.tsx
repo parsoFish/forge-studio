@@ -10,9 +10,17 @@
  *
  * DOM contract (docs/forge-ui-dom-and-harness.md → session shell):
  *   <nav data-component="stage-selector" role="tablist" aria-label="Session stages">
- *     one <button data-action="select-stage" data-stage=<id>
+ *     one <button data-action="select-stage-<id>" data-stage=<id>
  *          role="tab" aria-selected data-active?  per declared stage,
  *          in the session's own declared order.
+ *
+ * forge-8vfn.5.6: every button used to declare the SAME `data-action`, and
+ * `scripts/stories/beats.mjs`'s press verb resolves `[data-action=…]` and takes
+ * `.first()` — so a beat could press "a stage" but never "the secrets stage",
+ * and S1 beat 6 stood with no step rather than open whichever stage rendered
+ * first and pretend it was secrets. The action now carries the instance, which
+ * is Studio's own convention everywhere else (`browse-<name>`, `new-skill`).
+ * `data-stage` stays: it is what the DOM contract reads.
  */
 
 export type StageSelectorProps = {
@@ -38,7 +46,7 @@ export function StageSelector({ stages, selectedStage, onSelect }: StageSelector
             role="tab"
             aria-selected={active}
             className={`seg-btn${active ? ' active' : ''}`}
-            data-action="select-stage"
+            data-action={`select-stage-${stage}`}
             data-stage={stage}
             {...(active ? { 'data-active': 'true' } : {})}
             onClick={() => onSelect(stage)}

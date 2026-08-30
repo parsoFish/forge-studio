@@ -295,7 +295,10 @@ test('sessions-kinds-34: one tab per declared stage, in declared order, selected
     onSelect: () => {},
   });
   expect(html).toContain('data-component="stage-selector"');
-  expect(html.split('data-action="select-stage"').length - 1).toBe(5);
+  // M1-G / forge-8vfn.5.6: the action carries the stage. It used to be the
+  // same string on all five buttons, which made `.first()` the only stage a
+  // story could ever press.
+  expect(html.split('data-action="select-stage-').length - 1).toBe(5);
   const secrets = windowAround(html, 'data-stage="secrets"');
   expect(secrets).toContain('aria-selected="true"');
   expect(secrets).toContain('data-active="true"');
@@ -312,9 +315,13 @@ test('sessions-kinds-34: one tab per declared stage, in declared order, selected
 test('projects-31: the onboarding panel renders the optional brief inputs (northStar / gateCommand / constraints)', () => {
   const html = render(OnboardWithAgent, { projectId: 'gitpulse' });
   expect(html).toContain('data-section="onboard-brief"');
-  expect(html).toContain('data-onboard-input="northStar"');
-  expect(html).toContain('data-onboard-input="gateCommand"');
-  expect(html).toContain('data-onboard-input="constraints"');
+  // M1-G / forge-8vfn.5.4: `data-onboard-input` was a private vocabulary no
+  // reader of this contract resolved; the brief now speaks `data-field`, the
+  // one every other filled input in Studio uses. Prefixed, because this panel
+  // renders on the project editor beside the editor's OWN north-star field.
+  expect(html).toContain('data-field="onboard-north-star"');
+  expect(html).toContain('data-field="onboard-gate-command"');
+  expect(html).toContain('data-field="onboard-constraints"');
   // The pre-existing journey contract survives.
   expect(html).toContain('data-action="run-onboarding-agent"');
   expect(html).toContain('data-onboard-run-status="idle"');

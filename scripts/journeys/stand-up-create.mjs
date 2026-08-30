@@ -312,15 +312,17 @@ export const journey = defineJourney({
               console.log('\n[R4-03] Create a greenfield project from a template');
               cleanOnboardedProject(TEMPLATE_SLUG);
               await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
-              await page.waitForSelector('[data-section="project-create"]', { timeout: 15000 }).catch(() => {});
+              // M1-G / forge-8vfn.5.7: the route's own sentinel is enough. This
+              // beat used to carry a bespoke waitForFunction on
+              // data-app-type-count because /projects/new declared
+              // data-page-ready="true" while the curated app-type fetch was
+              // still in flight — the workaround routed around the defect for
+              // months instead of naming it, which is why no gate ever caught
+              // it. data-page-ready is now DERIVED from that fetch, so the
+              // ordinary wait every other beat uses is the correct one.
+              await page.waitForSelector('main[data-page="projects"][data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
               const createPresent = await page.evaluate(() => document.querySelector('[data-section="project-create"]') !== null);
               check(createPresent, 'R4-03: /projects/new offers a greenfield create-from-template form ([data-section="project-create"])');
-              // Wait for the async app-types fetch to land before reading the count
-              // / selecting — otherwise the assertions race the fetch.
-              await page.waitForFunction(
-                () => parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10) >= 2,
-                null, { timeout: 15000 },
-              ).catch(() => {});
               const appTypeCount = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10));
               check(appTypeCount >= 2, `R4-03: the create form offers ≥2 curated app-type templates (got ${appTypeCount})`);

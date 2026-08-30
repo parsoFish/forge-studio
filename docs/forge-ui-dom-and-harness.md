@@ -19,6 +19,37 @@ every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
 
+**`data-page-ready` is DERIVED, never declared (M1-G, `forge-8vfn.5.7`).** One
+deriver, `routeReady(...states)` in `forge-ui/lib/route-readiness.ts`: true once
+every fetch the route waits on has SETTLED — success *or* honest failure, the
+same rule `/library` already read correctly. A route that writes a literal
+`true` beside a fetch state that disagrees with it is the
+`declared-data-fails-open` class in the DOM, and it shipped twice:
+`/projects/new` (over the curated app-type fetch) and `/architect/new` +
+`/sessions/architect/new` (over the agent roster, under a visible
+`data-roster-state="loading"`). `scripts/journeys/stand-up-create.mjs` carried a
+bespoke `waitForFunction` around the first of those for months rather than
+naming it — the workaround was the evidence. Where a route's first fetch is
+owned by a child component, the fetch is HOISTED to the route
+(`lib/use-project-roster.ts`) so one state feeds both the root's sentinel and
+the child's own attribute; a route must not learn its readiness from a copy.
+
+**A minted id is rendered BEFORE the navigation that consumes it (M1-G,
+`forge-8vfn.5.5`).** A surface that starts a session publishes the id on its own
+root (`data-onboard-session-id`, `data-architect-session-id`,
+`data-session-id`) and offers the way in as a separate act
+(`[data-action="view-onboarding-session"|"view-architect-session"|
+"view-demo-session"]` — the shared `components/studio/session/SessionMinted.tsx`).
+`router.push`ing from inside the click that mints the id leaves it observable to
+nothing, so no automation can bind `/sessions/<kind>/<id>`.
+
+**An action repeated per instance carries the instance in its own name (M1-G,
+`forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
+`browse-<name>` and `new-skill` before it. A reader resolves `[data-action=…]`
+and takes `.first()`, so a bare `select-stage` on five buttons can only ever
+address the first one. A qualifying second attribute (`data-stage`) stays — it
+is what this contract reads — but it cannot be the only distinguisher.
+
 - **Global nav — `StudioNav` (`[data-component="studio-nav"]`,
   `components/StudioNav.tsx`, W6-IA-5; Monitor added W8-B1).** The
   seven-pillar top nav rendered on every page. Data contract (`NAV_ITEMS`)
@@ -2664,14 +2695,22 @@ inventory rather than one shared page-level contract:
   (`cli/run-list-cache.ts`'s `cachedListRuns`), so the roadmap's completedAt
   column costs nothing beyond what that route already pays: no second
   events.jsonl parser.
-  A brand-new project renders
-  `ProjectOnboardForm` instead:
+  A brand-new project renders `NewProjectSurface` instead — **ONE
+  `main[data-page="projects"][data-project-id="new"][data-page-ready]
+  [data-fetch-status]` root over BOTH doors (M1-G, `forge-8vfn.5.7`).** The
+  create door used to render as a SIBLING of the root the onboard door owned, so
+  `[data-section="project-create"]` and `[data-app-type-count]` sat OUTSIDE the
+  page root every reader of this contract anchors to — declared here and
+  unreadable where the contract lives. The root now owns the curated app-type
+  fetch, and `data-page-ready` + `data-app-type-count` are both derived from
+  that one state. Inside it, the onboard door:
   `[data-section="project-onboard"]`, collapsible
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
   Alongside it, the R4-03 greenfield **create-from-template** form:
-  `[data-section="project-create"][data-app-type-count]` with
+  `[data-section="project-create"][data-app-type-count]` (the count is the
+  root's fetched roster, so it is present exactly when the page says ready) with
   `[data-field="create-name"]` / `[data-field="create-north-star"]` /
   `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
   `[data-action="create-project"]` button — scaffolds a contract-green project
@@ -2694,8 +2733,14 @@ inventory rather than one shared page-level contract:
   reused verbatim for onboarding (D1: one session-kind descriptor,
   `onboarding`, for both onboarding AND creation). **⚑ W7-B5
   (projects-29/31/36):** the panel gains `details[data-section="onboard-brief"]`
-  with three optional `[data-onboard-input="northStar"|"gateCommand"|"constraints"]`
-  fields posted as the `/start` route's `inputs` map (prompt.md is no longer
+  whose `<summary>` declares `[data-action="toggle-onboard-brief"]` (M1-G,
+  `forge-8vfn.5.4` — the panel could not even be OPENED by automation, unlike
+  `toggle-onboard-advanced` two panels away), holding three optional
+  `[data-field="onboard-north-star"|"onboard-gate-command"|"onboard-constraints"]`
+  fields posted as the `/start` route's `inputs` map. They spoke a private
+  `data-onboard-input` vocabulary no reader of this contract resolves; they now
+  speak `data-field`, PREFIXED because this panel renders on the project editor
+  beside the editor's own `[data-field="north-star"]` (prompt.md is no longer
   "(no inputs provided)"); the poll ceiling covers a routine run
   (`ONBOARDING_POLL_MAX_ATTEMPTS` = 300 ≈ 10 min at the shared 2s cadence —
   a real successful run took 222s while the old 90-attempt ceiling gave up
@@ -2726,6 +2771,15 @@ inventory rather than one shared page-level contract:
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
   API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
+  **The editor's inputs declare `data-field` (M1-G, `forge-8vfn.5.9`).** The
+  page rendered fifteen inputs and not one carried a declared handle — only its
+  buttons did — so nothing could review-and-change a contract element, the act
+  S2 exists to prove. Now: `[data-field="project-name"]` (the title input),
+  `[data-field="north-star"]` (`NorthStar`), `[data-field="instructions"]`
+  (`Instructions`), `[data-field="skills-search"]` (`SkillsBind`),
+  `[data-field="demo-step-<n>"]` one per demo step, 1-based in render order
+  (`DemoTimeline`), and `[data-field="clause-decision-<clauseId>"]` on each
+  USER-tier clause box (`ContractResolutionPanel`).
   The editor aside also carries two PERMANENT read-only surfaces (R4-12), on
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
@@ -2872,8 +2926,10 @@ inventory rather than one shared page-level contract:
   "true"` — an attribute that used to advertise a control that was never
   rendered, leaving 4 of onboarding's 5 stages unreachable),
   `nav[data-component="stage-selector"][role="tablist"]` renders one
-  `button[data-action="select-stage"][data-stage=<id>][role="tab"]
-  [aria-selected]` per declared stage in declared order (the active one also
+  `button[data-action="select-stage-<id>"][data-stage=<id>][role="tab"]
+  [aria-selected]` per declared stage in declared order (M1-G,
+  `forge-8vfn.5.6`: the action used to be the same string on every button, so
+  `.first()` was the only stage anything could press) (the active one also
   carries `data-active="true"`), wired to the pure `selectStage`
   (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
   the transcript pane AND the artifact pane together; a shell refetch keeps
@@ -3139,14 +3195,19 @@ inventory rather than one shared page-level contract:
   one-shot dispatch host.
   **`/architect/new` stays** as the native "start a run" entry that replaced
   the retired `/dashboard` launcher —
-  `[data-page="architect-new"][data-page-ready]` wrapping
+  `[data-page="architect-new"][data-page-ready]`, DERIVED from the agent-roster
+  read the route now owns (`useProjectRoster`, M1-G / `forge-8vfn.5.7`: it used
+  to be a literal `true` sitting above a `data-roster-state="loading"`, and
+  `/sessions/architect/new` had the identical literal) — wrapping
   `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
   `/sessions/architect/<sid>`. **W7-B6 (projects-14/-15, sessions-kinds-03/
   -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
   architect kickoff form, rendered by BOTH `/architect/new` and
   `/sessions/architect/new` (the two entries converge — no more bounce link).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
-  [data-roster-state="loading"|"ok"|"error"]`; the project field
+  [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
+  `data-architect-session-id` is empty until Start mints one and then carries it
+  beside `[data-action="view-architect-session"]` (M1-G, `forge-8vfn.5.5`); the project field
   (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
   `name (id)`) — an unknown `?project=` prefill surfaces
   `[data-unknown-project="<id>"]` and is never submitted
@@ -3762,11 +3823,19 @@ inventory rather than one shared page-level contract:
   `[data-affordance-kind="question-form"|"verdict"]`,
   `[data-action="submit-answers"|"verdict-approve"|"verdict-reject"]`,
   `[data-field="session-generation-pick"]`) LEFT, `SessionArtifactPane`'s
-  generation-gallery RIGHT — see below. Three entrypoints route here, all via
-  `router.push`: `DemoTimeline`'s `[data-action="launch-demo-builder"]`
-  (project page), `ContractResolutionPanel`'s DEMO-clause
-  `[data-action="resolve-clause-agent"]` (mirrors its own `instructions`
-  branch exactly), and the roadmap's `[data-link="demo-builder"]`
+  generation-gallery RIGHT — see below. Four entrypoints route here. The three
+  that MINT a session publish the id and offer
+  `[data-action="view-demo-session"]` rather than navigating from inside the
+  minting click (M1-G, `forge-8vfn.5.5`): `DemoTimeline`'s
+  `[data-action="launch-demo-builder"]` (project page),
+  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent"]`,
+  and — new with M1-G, `forge-8vfn.5.6` — the onboarding session's own demo
+  stage detail, whose `[data-action="launch-demo-builder"]`
+  (`components/studio/session/DemoStageHandoff.tsx`) is the act S1 beat 7
+  describes; it renders ONLY on the `demo` stage and ONLY when the shell knows
+  the project, never a control that would dispatch at an unknown one. The fourth
+  navigates to a session that already exists: the roadmap's
+  `[data-link="demo-builder"]`
   (`InitiativeDetail`, via `RoadmapCanvas`'s `onOpenDemo`) — which now routes
   HONESTLY (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`: resume the
   project's in-flight session, else `/sessions/demo/new?project=<p>&

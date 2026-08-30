@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { DemoStep } from '@/lib/studio-client';
+import { SessionMinted } from '@/components/studio/session/SessionMinted';
 import { startDemoBuilder, listDemoElements, type DemoElementSummary } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -28,20 +29,18 @@ export function DemoTimeline({
   steps,
   hasLockedDemo,
   onChange,
-  onSessionStarted,
 }: {
   project: string;
   steps: DemoStep[];
   hasLockedDemo: boolean;
   onChange: (s: DemoStep[]) => void;
-  /** W6-B10 (R1-03-F2 reversed): a demo session started (whole-demo launch or
-   *  a per-element iterate) — the page navigates to the dedicated session
-   *  screen (`/sessions/demo/<sid>`), the one session screen every kind
-   *  shares, rather than showing it inline. */
-  onSessionStarted: (sessionId: string) => void;
 }) {
   const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  // W6-B10 kept the dedicated session screen; forge-8vfn.5.5 makes the id it
+  // mints observable — the page used to `router.push` at it from inside the
+  // click, so no story could bind /sessions/demo/<id>.
+  const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   // The forge demo-element library (the per-step element options), loaded on mount.
@@ -74,7 +73,7 @@ export function DemoTimeline({
         setLaunchError(res.error ?? 'failed to start the demo agent');
         return;
       }
-      onSessionStarted(res.sessionId);
+      setDemoSessionId(res.sessionId);
     } finally {
       setLaunching(false);
     }
@@ -95,7 +94,7 @@ export function DemoTimeline({
         setLaunchError(res.error ?? 'failed to start the demo agent');
         return;
       }
-      onSessionStarted(res.sessionId);
+      setDemoSessionId(res.sessionId);
     } finally {
       setIterating(null);
     }
@@ -204,6 +203,7 @@ export function DemoTimeline({
             {launching ? 'Starting…' : hasLockedDemo ? '✦ Update the demo with the agent' : '✦ Build the demo with the agent'}
           </button>
           {launchError && <div style={{ fontSize: 11.5, color: 'var(--red, #f85149)', marginBottom: 14 }}>{launchError}</div>}
+          <SessionMinted kind="demo" sessionId={demoSessionId} project={project} />
 
           <div style={{ fontSize: 12, color: 'var(--amber)', fontStyle: 'italic', padding: '7px 12px', background: 'rgba(251,191,36,.06)', border: '1px solid rgba(251,191,36,.2)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
             ⚠ Demos show the ACTUAL resource — a passing-test table is not a demo.
@@ -318,6 +318,7 @@ export function DemoTimeline({
                   {/* Config (composed: element configHint as placeholder) / freetext (legacy) */}
                   <textarea
                     className="input"
+                    data-field={`demo-step-${i + 1}`}
                     rows={2}
                     value={step.text}
                     onChange={(e) => updateStep(i, { text: e.target.value })}
