@@ -14,6 +14,7 @@
       {
         "act": "Open Studio on Home",
         "say": "Studio opens on Home — the operator pulse across every project, flow, agent and KB.",
+        "do": [],
         "expect": {
           "route": "/",
           "data": {
@@ -25,6 +26,7 @@
       {
         "act": "Click through to the Projects pillar",
         "say": "The Projects pillar lists every project forge manages, with its health and activity.",
+        "do": [],
         "expect": {
           "route": "/projects",
           "data": {
@@ -41,6 +43,7 @@
       "say": "Studio opens on Home — the operator pulse across every project, flow, agent and KB.",
       "status": "green",
       "failures": [],
+      "bindings": {},
       "data": {
         "page": "home",
         "page-ready": "true",
@@ -53,6 +56,7 @@
       "say": "The Projects pillar lists every project forge manages, with its health and activity.",
       "status": "green",
       "failures": [],
+      "bindings": {},
       "data": {
         "page": "projects-index",
         "page-ready": "true",
