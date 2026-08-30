@@ -27,6 +27,13 @@
  * baseline. They shrink to zero when the six parity tests repoint to
  * `@forge/contracts`.
  *
+ * WHAT IS OUT OF SCOPE, AND WHY. `scripts/` and `tests/` are not cruised.
+ * §0's allow-graph names `orchestrator/`, `cli/`, `loops/`, `packages/` and
+ * `apps/` and nothing else: `scripts/` is repo tooling, not product, so it is
+ * neither a package nor one of the three legacy trees, and no §0 rule can
+ * apply to it. It IS subject to the 800-line cap, which is a property of a
+ * file rather than of the graph.
+ *
  * RUN: node scripts/check-boundaries.mjs [--json] [--baseline <path>]
  */
 import { readFileSync, existsSync } from 'node:fs';
