@@ -395,7 +395,7 @@ export async function probeBridgeIdentity(
  * Why these specific numbers: outside common dev-server defaults (3000,
  * 5173, 8080) to avoid colliding with the operator's other projects.
  */
-const DEFAULT_BRIDGE_PORT = 4123;
+import { DEFAULT_BRIDGE_PORT } from '../orchestrator/_pkg/contracts.ts';
 const DEFAULT_UI_PORT = 4124;
 
 export type WatchOptions = {

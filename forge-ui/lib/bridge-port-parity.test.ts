@@ -1,34 +1,56 @@
 /**
- * bridge-port-parity.test.ts — W6-P4: pins that `lib/bridge-port.ts`'s
- * `DEFAULT_BRIDGE_PORT` (the build-time literal `app/layout.tsx` inlines,
- * and `lib/bridge-client.ts`'s `resolveBridgeUrl` falls back to) stays in
- * lockstep with `cli/forge-watch.ts`'s OWN `DEFAULT_BRIDGE_PORT` — the
- * actual default the bridge process binds to (CLAUDE.md's fixed-port
- * convention: bridge 4123).
+ * The bridge port has ONE definition, and this test proves it structurally.
  *
- * A SOURCE-TEXT pin, not a live import: `cli/forge-watch.ts` is a CLI entry
- * file (transitively pulls in `./ui-bridge.ts`, which starts real
- * processes/servers) — unlike a pure logic module such as
- * `orchestrator/work-item.ts` (safely imported directly by
- * `./wi-status-parity.test.ts`), importing it here would risk executing
- * real startup side effects just to read one constant. Reading the literal
- * out of the source text is the same technique
- * `./knowledge-page-tabs.test.ts` and its siblings already use for
- * page.tsx, applied cross-workspace instead of cross-file.
+ * HISTORY, because the change matters more than the test. This file used to be
+ * a SOURCE-TEXT pin: it read `cli/forge-watch.ts` as a string and matched a
+ * `const DEFAULT_BRIDGE_PORT = 4123;` declaration against forge-ui's own
+ * literal, because — in that file's words — "the two live in different npm
+ * workspaces and can't share a single TS import cleanly". It detected drift
+ * after the fact and could not prevent it.
  *
- * RUN: cd forge-ui && npx vitest run lib/bridge-port-parity.test.ts
+ * `@forge/contracts` removes the constraint that forced the text pin: both
+ * sides now import one constant, so the two CANNOT drift. The test changes
+ * shape accordingly — from "do the two literals still agree?" to "is there
+ * still only one literal?" — which is a strictly stronger question.
+ *
+ * It is deliberately NOT deleted. The failure mode it guarded is now
+ * structural rather than arithmetic, but it is still reachable: anyone can
+ * reintroduce a local literal in either file and the values would agree on the
+ * day they did it. That is what the last two assertions catch.
+ *
+ * RUN: npx vitest run lib/bridge-port-parity.test.ts   (from forge-ui/)
  */
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { DEFAULT_BRIDGE_PORT } from './bridge-port.ts';
+
+import { DEFAULT_BRIDGE_PORT as CONTRACT_PORT } from '@forge/contracts';
+import { DEFAULT_BRIDGE_PORT as UI_PORT } from './bridge-port.ts';
 
 const FORGE_WATCH_PATH = resolve(__dirname, '../../cli/forge-watch.ts');
+const UI_BRIDGE_PORT_PATH = resolve(__dirname, './bridge-port.ts');
 
-test('lib/bridge-port.ts DEFAULT_BRIDGE_PORT matches cli/forge-watch.ts DEFAULT_BRIDGE_PORT — the two must never drift', () => {
+test('forge-ui serves the contracts constant itself, not a copy of its value', () => {
+  expect(UI_PORT).toBe(CONTRACT_PORT);
+  expect(CONTRACT_PORT).toBe(4123);
+});
+
+test('cli/forge-watch.ts holds no local port literal — it imports the contract', () => {
   const source = readFileSync(FORGE_WATCH_PATH, 'utf8');
-  const match = source.match(/const DEFAULT_BRIDGE_PORT\s*=\s*(\d+)\s*;/);
-  expect(match, 'cli/forge-watch.ts DEFAULT_BRIDGE_PORT declaration not found — parity check cannot run').not.toBeNull();
-  const cliDefault = Number(match![1]);
-  expect(DEFAULT_BRIDGE_PORT).toBe(cliDefault);
+  expect(
+    /const\s+DEFAULT_BRIDGE_PORT\s*=/.test(source),
+    'cli/forge-watch.ts re-declared DEFAULT_BRIDGE_PORT locally — the two can drift again; import it from @forge/contracts',
+  ).toBe(false);
+  expect(
+    /DEFAULT_BRIDGE_PORT\s*}\s*from\s*'\.\.\/orchestrator\/_pkg\/contracts\.ts'/.test(source),
+    'cli/forge-watch.ts must reach the contract through the orchestrator/_pkg shim (1.0.md §0)',
+  ).toBe(true);
+});
+
+test('forge-ui/lib/bridge-port.ts holds no local port literal either', () => {
+  const source = readFileSync(UI_BRIDGE_PORT_PATH, 'utf8');
+  expect(
+    /const\s+DEFAULT_BRIDGE_PORT\s*=/.test(source),
+    'forge-ui re-declared DEFAULT_BRIDGE_PORT locally — re-export it from @forge/contracts instead',
+  ).toBe(false);
 });

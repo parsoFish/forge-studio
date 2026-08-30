@@ -32,7 +32,7 @@
 import { test, expect } from 'vitest';
 
 // The real, on-disk SSOT — imported directly, not re-typed/re-declared here.
-import { SHIPPED_TRIGGER_KIND_IDS as SSOT_SHIPPED_IDS } from '../../orchestrator/flow-trigger.ts';
+import { SHIPPED_TRIGGER_KIND_IDS as SSOT_SHIPPED_IDS } from '@forge/contracts';
 // The forge-ui hand-kept mirror under test.
 import { SHIPPED_TRIGGER_KINDS as MIRROR_SHIPPED_IDS } from './studio-client.ts';
 

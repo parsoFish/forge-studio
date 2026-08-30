@@ -1,6 +1,7 @@
 # ADR 046 — Package layout, the allow-graph boundary lint, and per-package caps
 
-- **Status:** proposed — awaiting operator ratification (`docs/roadmaps/1.0.md` §5, H5)
+- **Status:** accepted (operator, 2026-08-31, at gate H5 — `docs/roadmaps/1.0.md` §5)
+- **Amended:** 2026-08-31, same sitting — §1's tsconfig project-reference clause, in favour of the blueprint spec's [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) "no build step" decision. The amendment and its evidence are in §1 below.
 - **Supersedes:** [ADR 042](./042-surface-cap-scope-and-testability.md) — the `orchestrator/` surface cap and its three boundary rulings are replaced by per-package caps. ADR 042's *context* (why a cap exists) stands; its *object* does not, because `orchestrator/` ceases to exist as a unit at M3.
 - **Relates to:** [ADR 027](./027-studio-object-model.md) (definitions as data), [ADR 028](./028-flow-engine.md) (the flow engine that becomes `@forge/flows`), [ADR 043](./043-generic-interactive-surface.md) (the spine that becomes `@forge/sessions`), [ADR 045](./045-operator-workspace-and-promotion.md) (`_local/` resolution, which lands in `@forge/kernel`).
 - **Implements:** `docs/roadmaps/1.0.md` §0 (the allow-graph and the 800-line file cap) and §4 M2.
@@ -34,8 +35,38 @@ land against.
 ### 1. Nine packages and two apps
 
 The repository becomes one npm workspace root with `workspaces: ["packages/*",
-"apps/*"]`. Each package declares `exports: {".": "./index.ts"}` and its own
-`test` script, and is wired into the root `tsconfig` as a project reference.
+"apps/*"]`. Each package declares `exports: {".": "./index.ts"}`, its own `test`
+script, and its own `tsconfig.json` extending the root.
+
+> **Amendment, 2026-08-31 (operator ruling at H5).** This clause originally read
+> "and is wired into the root `tsconfig` as a project reference". It cannot be
+> honoured. TypeScript refuses a project reference to any project that disables
+> emit —
+>
+> ```
+> error TS6310: Referenced project '/tmp/tsprobe/pkg' may not disable emit.
+> ```
+>
+> — and the root `tsconfig.json` is `noEmit`, because the blueprint spec
+> [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) decides
+> "**no build step** (Node 22 strip-types resolves workspace packages through
+> symlinks)". Real references would force every package to emit `.d.ts`/`.js`
+> into a dist tree and turn `npm run build` into `tsc -b` — the build step §3
+> ruled out. **The spec wins.** In its place:
+>
+> - each package has its own `tsconfig.json` extending the root, so it
+>   typechecks standalone and its own `test` script means something;
+> - the root `include` covers `packages/**/*.ts` and `apps/forge/**/*.ts`, so
+>   `npm run build` — still plain `tsc --noEmit` — typechecks every package;
+> - the allow-graph, which the references were there to encode, stays enforced
+>   by `scripts/check-boundaries.mjs`. That is **strictly stronger** than tsc's
+>   reference graph: it works at import level, it covers `orchestrator/ cli/
+>   loops/` which are not packages at all, it resolves the `@/` alias and
+>   `@forge/<pkg>` specifier shapes, and it ratchets.
+>
+> Confirmed empirically when the skeleton landed: `npm install` linked all ten
+> units as symlinks under `node_modules/@forge/`, and both `tsc --noEmit` and
+> the Next production build resolve across them with no build step.
 
 | package | owns |
 |---|---|

@@ -1,0 +1,13 @@
+{
+  "name": "@forge/kernel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Logging and event types, the one cost rule, config and layout, path guards, the generic object-model loader.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

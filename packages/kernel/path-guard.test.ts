@@ -169,7 +169,7 @@ import {
   guardedWriteFile,
   guardedReadDir,
   isSafeSubPath,
-} from './studio-path-guard.ts';
+} from './path-guard.ts';
 
 test('sanity: test process is non-root (uid 1000) — mode 000 genuinely denies access, not bypassed', () => {
   const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;

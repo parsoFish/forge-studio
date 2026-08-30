@@ -27,8 +27,10 @@ import type { AgentDefinition } from './studio/types.ts';
  * agent spawn (ADR-036: the orchestrator runs gates, the agent never
  * self-certifies).
  */
-export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight'] as const;
-export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
+export { BAND_GUARD_IDS } from './_pkg/contracts.ts';
+export type { BandGuardId } from './_pkg/contracts.ts';
+import { BAND_GUARD_IDS } from './_pkg/contracts.ts';
+import type { BandGuardId } from './_pkg/contracts.ts';
 
 /**
  * The toggle-style guard ids (ADR-027 R3-03 amendment) — platform behaviours

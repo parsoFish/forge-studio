@@ -22,7 +22,9 @@
     "orchestrator/**/*.ts",
     "cli/**/*.ts",
     "loops/**/*.ts",
-    "skills/**/*.ts"
+    "skills/**/*.ts",
+    "packages/**/*.ts",
+    "apps/forge/**/*.ts"
   ],
   "exclude": [
     "node_modules",

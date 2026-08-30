@@ -396,8 +396,8 @@ function allSourceModules(root) {
       else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.d.ts')) out.push(next);
     }
   };
-  walk('cli');
-  walk('orchestrator');
+  // M2: packages/ + apps/ joined — the kernel move took the guard out of cli/.
+  for (const root of ['cli', 'orchestrator', 'packages', 'apps']) walk(root);
   return out.sort();
 }
 
