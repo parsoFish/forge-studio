@@ -260,17 +260,16 @@
     {
       "act": "Press \"Start a greenfield project\"",
       "say": "One page hosts both doors into forge: register a repo that already exists, or scaffold a new one. Three starters ship with forge, and the operator picks the one shaped like the thing they are about to build.",
-      "status": "red",
-      "failures": [
-        "data-section: expected \"project-create\", got \"project-onboard\"",
-        "data-app-type-count: expected \"3\", absent from the page"
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "new",
         "page-ready": "true",
-        "section": "project-onboard"
+        "fetch-status": "ok",
+        "section": "project-create",
+        "app-type-count": "3"
       },
       "frame": "frames/02-press-start-a-greenfield-project.png"
     },
@@ -367,16 +366,14 @@
     {
       "act": "Press \"Architect →\"",
       "say": "With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.",
-      "status": "red",
-      "failures": [
-        "data-roster-state: expected \"ok\", got \"loading\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "architect-new",
         "page-ready": "true",
         "section": "new-idea",
-        "roster-state": "loading",
+        "roster-state": "ok",
         "new-idea-ready": "false"
       },
       "frame": "frames/09-press-architect.png"
@@ -397,13 +394,14 @@
       "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
       "status": "red",
       "failures": [
-        "data-session-kind: expected \"architect\", absent from the page"
+        "data-session-kind: expected \"architect\", got \"kb-cleanup\""
       ],
       "bindings": {},
       "data": {
         "page": "monitor",
         "page-ready": "true",
-        "fetch-status": "ok"
+        "fetch-status": "ok",
+        "session-kind": "kb-cleanup"
       },
       "frame": "frames/11-while-it-works-check-monitor.png"
     },

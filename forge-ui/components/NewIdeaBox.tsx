@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { startArchitect } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchAgentCapability, type AgentCapability } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { kickoffCeilingInvalidReason, reconcileProjectPrefill } from '@/lib/kickoff-form';
+import { SessionMinted } from '@/components/studio/session/SessionMinted';
+import type { ProjectRoster } from '@/lib/use-project-roster';
 
 /**
  * ADR 020 — the operator's entry point into the in-UI architect. This is the
@@ -31,50 +32,39 @@ import { kickoffCeilingInvalidReason, reconcileProjectPrefill } from '@/lib/kick
  *   - styles ride the shared Studio tokens, not hardcoded GitHub hexes.
  */
 export function NewIdeaBox({
-  onStarted,
+  roster,
   initialProject = '',
 }: {
-  onStarted?: (sessionId: string) => void;
+  /** Owned by the HOST route, so the route can derive its own `data-page-ready`
+   *  from the same state this form renders as `data-roster-state`
+   *  (`forge-8vfn.5.7`). */
+  roster: ProjectRoster;
   initialProject?: string;
 }) {
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [rosterState, setRosterState] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [capability, setCapability] = useState<AgentCapability | null>(null);
-  const [project, setProject] = useState('');
-  const [unknownInitial, setUnknownInitial] = useState<string | null>(null);
+  const [projectPicked, setProjectPicked] = useState<string | null>(null);
   const [idea, setIdea] = useState('');
   const [modelTier, setModelTier] = useState('');
   const [ceilingRaw, setCeilingRaw] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // forge-8vfn.5.5: the id this form MINTS, rendered before the navigation
+  // that consumes it — the `data-onboard-session-id` convention, which was the
+  // one place in Studio where a session id was observable in time.
+  const [startedSessionId, setStartedSessionId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      fetchStudioProjects(),
-      fetchAgentCapability('architect').catch(() => null),
-    ])
-      .then(([roster, cap]) => {
-        if (cancelled) return;
-        const list = roster.map((p) => ({ id: p.id, name: p.name ?? p.id })).sort((a, b) => a.id.localeCompare(b.id));
-        setProjects(list);
-        setCapability(cap);
-        setRosterState('ok');
-        // crosscut-21: honour a ?project= prefill ONLY when it names a real
-        // roster id — a stale bookmark surfaces a notice, never a submit.
-        // (Shared rule: lib/kickoff-form.ts, also used by the generic
-        // kickoff page — review F2.)
-        const reconciled = reconcileProjectPrefill(initialProject, list.map((p) => p.id));
-        if (reconciled.project) setProject(reconciled.project);
-        setUnknownInitial(reconciled.unknownPrefill);
-      })
-      .catch(() => {
-        if (!cancelled) setRosterState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [initialProject]);
+  // crosscut-21: honour a ?project= prefill ONLY when it names a real roster
+  // id; a stale bookmark surfaces a notice, never a submit. DERIVED from the
+  // roster rather than copied into state by an effect, so the notice cannot
+  // outlive the roster it was computed from. (Shared rule:
+  // lib/kickoff-form.ts, also used by the generic kickoff page — review F2.)
+  const reconciled = useMemo(
+    () => reconcileProjectPrefill(initialProject, roster.projects.map((p) => p.id)),
+    [initialProject, roster.projects],
+  );
+  const project = projectPicked ?? reconciled.project;
+  const unknownInitial = reconciled.unknownPrefill;
+  const { capability, state: rosterState } = roster;
+  const projects = roster.projects;
 
   const isRangeTier = allowedTiersFromCapability(capability).length > 0;
   const ceilingUsd = ceilingRaw.trim() === '' ? undefined : Number(ceilingRaw);
@@ -107,7 +97,7 @@ export function NewIdeaBox({
       });
       if (!res.ok) { setError(res.error ?? 'failed to start'); return; }
       setIdea('');
-      if (res.sessionId) onStarted?.(res.sessionId);
+      if (res.sessionId) setStartedSessionId(res.sessionId);
     } finally {
       setSubmitting(false);
     }
@@ -118,6 +108,7 @@ export function NewIdeaBox({
       data-section="new-idea"
       data-new-idea-ready={canSubmit ? 'true' : 'false'}
       data-roster-state={rosterState}
+      data-architect-session-id={startedSessionId ?? ''}
       style={{
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius)',
@@ -134,7 +125,7 @@ export function NewIdeaBox({
       <select
         id="new-idea-project"
         value={project}
-        onChange={(e) => setProject(e.target.value)}
+        onChange={(e) => setProjectPicked(e.target.value)}
         data-field="project"
         style={inputStyle}
       >
@@ -193,6 +184,7 @@ export function NewIdeaBox({
           </span>
         )}
       </div>
+      <SessionMinted kind="architect" sessionId={startedSessionId} />
     </div>
   );
 }

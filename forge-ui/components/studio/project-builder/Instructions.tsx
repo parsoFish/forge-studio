@@ -146,6 +146,7 @@ export function Instructions({
           ) : (
             <textarea
               className="input instructions-textarea"
+              data-field="instructions"
               style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, minHeight: 100, resize: 'vertical' }}
               value={value}
               onChange={(e) => onChange(e.target.value)}

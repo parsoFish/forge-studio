@@ -17,6 +17,7 @@ export function NorthStar({ value, onChange }: { value: string; onChange: (v: st
         </div>
         <div style={{ padding: '16px 20px 14px', position: 'relative' }}>
           <textarea
+            data-field="north-star"
             rows={2}
             value={value}
             onChange={(e) => onChange(e.target.value)}

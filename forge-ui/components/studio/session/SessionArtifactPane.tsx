@@ -185,7 +185,7 @@ export function SessionArtifactPane({
             onFinalize={onFinalizeGeneration}
           />
         ) : view.kind === 'contract-buildout' ? (
-          <ContractBuildout view={view} activeStage={activeStage} />
+          <ContractBuildout view={view} activeStage={activeStage} project={project} />
         ) : view.kind === 'file-package' ? (
           <FilePackageBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'file-package' }>} />
         ) : view.kind === 'cleanup-plan' ? (

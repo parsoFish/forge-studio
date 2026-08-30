@@ -249,6 +249,7 @@
         "page": "projects",
         "project-id": "new",
         "page-ready": "true",
+        "fetch-status": "ok",
         "section": "project-onboard"
       },
       "frame": "frames/02-click-onboard-a-project.png"
@@ -264,7 +265,8 @@
       "data": {
         "page": "projects",
         "project-id": "new",
-        "page-ready": "true"
+        "page-ready": "true",
+        "fetch-status": "ok"
       },
       "frame": "frames/03-fill-in-the-name-the-quality-gate-and-th.png"
     },
@@ -276,7 +278,9 @@
         "could not fill [data-field=\"northStar\"] with \"A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"northStar\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
-      "data": {},
+      "data": {
+        "fetch-status": "ok"
+      },
       "frame": "frames/04-open-brief-the-agent-give-it-the-north-s.png"
     },
     {
@@ -322,7 +326,8 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "new"
+        "project-id": "new",
+        "fetch-status": "ok"
       },
       "frame": "frames/08-return-to-the-project-apply-the-auto-fix.png"
     },
@@ -345,7 +350,9 @@
         "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
-      "data": {},
+      "data": {
+        "fetch-status": "ok"
+      },
       "frame": "frames/10-read-the-plan-and-press-approve.png"
     }
   ]

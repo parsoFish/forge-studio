@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { preflightFixAuto, preflightFixAgent, type PreflightClause } from '@/lib/studio-client';
 import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
+import { SessionMinted } from '@/components/studio/session/SessionMinted';
 import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND_HINT } from '@/lib/contract-resolution-view';
 import { pollPreflightFix, pollDisplayState, type PolledPreflightFixStatus } from '@/lib/agent-dispatch';
 
@@ -76,6 +77,9 @@ export function ContractResolutionPanel({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  // forge-8vfn.5.5: the demo session a DEMO-tier clause mints, rendered here
+  // instead of being consumed by a `router.push` inside the same click.
+  const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [runStatus, setRunStatus] = useState<Record<string, PolledPreflightFixStatus>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -139,8 +143,11 @@ export function ContractResolutionPanel({
       // W6-B10 (R1-03-F2 reversed): navigates straight to the dedicated
       // session screen, exactly like the 'instructions' branch above —
       // there is no inline panel to hand a started session off to anymore.
+      // forge-8vfn.5.5: publish the id, then let the operator (or a story
+      // beat) follow it — navigating inside the minting click made the id
+      // unobservable to everything, so no story could bind /sessions/demo/<id>.
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
-      if (s.ok && s.sessionId) router.push(`/sessions/demo/${encodeURIComponent(s.sessionId)}?project=${encodeURIComponent(projectId)}`);
+      if (s.ok && s.sessionId) setDemoSessionId(s.sessionId);
     } else if (r.route === 'brain-fix') {
       // Defense in depth: the button itself is disabled whenever
       // boundKbId is null (isAgentRouteBlocked, below) so this branch
@@ -250,6 +257,7 @@ export function ContractResolutionPanel({
                 <ClauseRow c={c} status={status} />
                 <textarea
                   data-component="clause-decision-input"
+                  data-field={`clause-decision-${c.id}`}
                   data-decision-clause-id={c.id}
                   value={notes[c.id] ?? ''}
                   onChange={(e) => setNotes((m) => ({ ...m, [c.id]: e.target.value }))}
@@ -284,6 +292,7 @@ export function ContractResolutionPanel({
           })}
         </div>
       )}
+      <SessionMinted kind="demo" sessionId={demoSessionId} project={projectId} />
     </div>
   );
 }

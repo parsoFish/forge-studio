@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+
+import { routeReady, type FetchState } from '@/lib/route-readiness';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -305,14 +307,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     // loadKey (page Retry) AND panelKey (panel Retry / panels-only recovery) re-run the panel reads
   }, [isNew, projectKnown, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey]);
 
-  // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
-  // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
-  // shares) — this page no longer owns an inline panel or an active-session
-  // id; a demo session starting here just navigates there.
-  const handleDemoSessionStarted = useCallback((sid: string): void => {
-    router.push(`/sessions/demo/${encodeURIComponent(sid)}?project=${encodeURIComponent(id)}`);
-  }, [id, router]);
-
   // The roadmap's "demo builder →" entrypoint (InitiativeDetail's
   // [data-link="demo-builder"], W6-B10 — used to be a fake `setTab('editor')`
   // that no longer lands anywhere real now the demo builder left the editor
@@ -405,14 +399,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   useDocumentTitle(isNew ? 'Onboard a project' : (name || id), 'Projects');
 
   // New-project surface: onboard an existing repo (R4-B8) OR create a greenfield
-  // one from a framework template (R4-03).
+  // one from a framework template (R4-03) — ONE page root over both doors.
   if (isNew) {
-    return (
-      <>
-        <ProjectOnboardForm />
-        <CreateFromTemplate />
-      </>
-    );
+    return <NewProjectSurface />;
   }
 
   // W6-SW-3 (sweep C2#3): loadData leaves `project` null when the URL `id`
@@ -484,6 +473,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             boxShadow: '0 0 12px rgba(92,200,255,.4)', flexShrink: 0,
           }} />
           <input
+            data-field="project-name"
             value={name}
             onChange={(e) => { setName(e.target.value); markDirty(); }}
             style={{
@@ -563,7 +553,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
               steps={demoSteps}
               hasLockedDemo={project?.hasLockedDemo ?? false}
               onChange={(s) => { setDemoSteps(s); markDirty(); }}
-              onSessionStarted={handleDemoSessionStarted}
             />
             {/* W8-C3 (projects-06): the picker gets the project's OWN skills
                 (.forge/skills/<id>, derived per read by the bridge) alongside
@@ -746,26 +735,62 @@ function ContractPanelMount(props: {
 }
 
 // ---------------------------------------------------------------------------
+// NewProjectSurface — `/projects/new`. ONE `main[data-page]` over BOTH doors,
+// owning the route's first fetch so `data-page-ready` and `data-app-type-count`
+// derive from one state. The create door used to render OUTSIDE the root the
+// onboard door owned, and that root wrote `data-page-ready="true"` as a literal
+// (forge-8vfn.5.7 + the defect underneath it — see the contract doc).
+// ---------------------------------------------------------------------------
+
+function NewProjectSurface(): JSX.Element {
+  const [appTypes, setAppTypes] = useState<string[]>([]);
+  const [startersState, setStartersState] = useState<FetchState>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProjectStarters()
+      .then((types) => {
+        if (!cancelled) { setAppTypes(types); setStartersState('ok'); }
+      })
+      .catch(() => {
+        if (!cancelled) setStartersState('error');
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <main
+      id={MAIN_CONTENT_ID}
+      data-page="projects"
+      data-project-id="new"
+      data-page-ready={routeReady(startersState) ? 'true' : 'false'}
+      data-fetch-status={startersState}
+      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    >
+      <StudioNav />
+      <ProjectOnboardForm />
+      <CreateFromTemplate appTypes={appTypes} />
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CreateFromTemplate (R4-03) — the greenfield creation interview: name, north
 // star, and a curated app-type template → scaffolds a contract-green project
 // ready for the first architect run (POST /api/studio/projects/create).
 // ---------------------------------------------------------------------------
 
-function CreateFromTemplate() {
+function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [northStar, setNorthStar] = useState('');
-  const [appType, setAppType] = useState('');
-  const [appTypes, setAppTypes] = useState<string[]>([]);
+  const [appTypePicked, setAppTypePicked] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void fetchProjectStarters().then((types) => {
-      setAppTypes(types);
-      if (types[0]) setAppType(types[0]);
-    });
-  }, []);
+  // The default selection is DERIVED from the roster the root fetched, not
+  // copied into state by an effect that could run before it arrives.
+  const appType = appTypePicked ?? appTypes[0] ?? '';
 
   const canSubmit = name.trim().length > 0 && northStar.trim().length > 0 && appType.length > 0;
 
@@ -796,7 +821,7 @@ function CreateFromTemplate() {
         <label style={labelStyle} htmlFor="create-northstar">North star</label>
         <input id="create-northstar" data-field="create-north-star" style={inputStyle} value={northStar} placeholder="One sentence: what it's for" onChange={(e) => setNorthStar(e.target.value)} />
         <label style={labelStyle} htmlFor="create-apptype">App type</label>
-        <select id="create-apptype" data-field="create-app-type" style={inputStyle} value={appType} onChange={(e) => setAppType(e.target.value)}>
+        <select id="create-apptype" data-field="create-app-type" style={inputStyle} value={appType} onChange={(e) => setAppTypePicked(e.target.value)}>
           {appTypes.length === 0 && <option value="">(no templates found)</option>}
           {appTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
@@ -878,15 +903,7 @@ function ProjectOnboardForm() {
   const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', boxSizing: 'border-box' };
 
   return (
-    <main
-      id={MAIN_CONTENT_ID}
-      data-page="projects"
-      data-project-id="new"
-      data-page-ready="true"
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
-    >
-      <StudioNav />
-      <div data-section="project-onboard" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
+    <div data-section="project-onboard" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
         <PageHeader
           title="Onboard a project"
           lede={
@@ -994,8 +1011,7 @@ function ProjectOnboardForm() {
             </div>
           )}
         </div>
-      </div>
-    </main>
+    </div>
   );
 }
 

@@ -59,6 +59,7 @@ export function SkillsBind({
             <div style={{ width: 220, flexShrink: 0 }}>
               <input
                 className="input"
+                data-field="skills-search"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

@@ -1,5 +1,6 @@
 'use client';
 
+import { DemoStageHandoff } from '@/components/studio/session/DemoStageHandoff';
 import type { ContractBuildoutView } from '@/lib/session-artifact-view';
 import type { ContractStageRow } from '@/lib/session-client';
 
@@ -45,16 +46,21 @@ function stageLabel(stage: string): string {
 export function ContractBuildout({
   view,
   activeStage,
+  project,
 }: {
   view: ContractBuildoutView;
   activeStage?: string;
+  /** The session's project. Absent for a session the shell could not attribute
+   *  to one — the demo handoff then renders NOTHING rather than a control that
+   *  would dispatch an agent at an unknown project. */
+  project?: string;
 }): JSX.Element {
   const rowCount = view.mode === 'checklist' ? view.checklist.length : view.row ? 1 : 0;
   const resolvedActiveStage = activeStage ?? (view.mode === 'checklist' ? 'contract' : (view.row?.stage ?? ''));
 
   return (
     <div data-component="contract-buildout" data-buildout-mode={view.mode} data-buildout-active-stage={resolvedActiveStage} data-buildout-row-count={rowCount}>
-      {view.mode === 'checklist' ? <ContractChecklist rows={view.checklist} /> : <ContractStageDetail row={view.row} />}
+      {view.mode === 'checklist' ? <ContractChecklist rows={view.checklist} /> : <ContractStageDetail row={view.row} project={project} />}
     </div>
   );
 }
@@ -78,7 +84,7 @@ function ContractChecklist({ rows }: { rows: ContractStageRow[] }): JSX.Element 
   );
 }
 
-function ContractStageDetail({ row }: { row: ContractStageRow | null }): JSX.Element {
+function ContractStageDetail({ row, project }: { row: ContractStageRow | null; project?: string }): JSX.Element {
   if (row === null) {
     return (
       <div data-stage-detail-state="no-row" style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic', padding: '6px 0' }}>
@@ -105,6 +111,11 @@ function ContractStageDetail({ row }: { row: ContractStageRow | null }): JSX.Ele
         source: <span style={{ fontFamily: 'var(--font-mono)' }}>{row.source}</span>
       </div>
       {row.bytes !== null && <div style={{ fontSize: 12, color: 'var(--faint)' }}>{row.bytes} bytes</div>}
+      {/* forge-8vfn.5.6: the demo stage is the one stage whose detail names an
+          act rather than a fact — the operator reads what the scaffold produced
+          and hands the gap to the agent that fills it. Every other stage's
+          detail stays a pure read, so the control is never decoration. */}
+      {row.stage === 'demo' && project ? <DemoStageHandoff project={project} /> : null}
       {row.detail.length > 0 && (
         <ul data-section="stage-detail-list" style={{ margin: 0, padding: '0 0 0 18px', fontSize: 12.5, color: 'var(--text)' }}>
           {row.detail.map((line) => (

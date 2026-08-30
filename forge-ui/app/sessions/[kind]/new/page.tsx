@@ -7,6 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NotFound } from '@/components/NotFound';
 import { NewIdeaBox } from '@/components/NewIdeaBox';
+import { routeReady } from '@/lib/route-readiness';
+import { useProjectRoster } from '@/lib/use-project-roster';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, startOnboardingSession, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
@@ -116,6 +118,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // run the bridge actually knows — arbitrary query text was echoed back as
   // if it were a real object. null = nothing to validate / not resolved.
   const [initiativeKnown, setInitiativeKnown] = useState<boolean | null>(null);
+
+  // forge-8vfn.5.7: the architect branch below renders NewIdeaBox, whose
+  // roster read IS this route's first fetch in that branch — so its
+  // `data-page-ready` derives from the same state, never a literal `true`.
+  const architectRoster = useProjectRoster();
 
   const spec = kickoffSpecFor(kind);
 
@@ -335,7 +342,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // one form (`NewIdeaBox` — roster select + tier + ceiling); this page no
     // longer bounces the operator through a link to /architect/new.
     return (
-      <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
+      <StudioArchitectShell dataPage="session-kickoff" ready={routeReady(architectRoster.state)} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
         {/* W8-B3 (sessions-kinds-R07) — architect was the only one of the eight
             kickoffs with no way back: the other seven get `data-action=
             "kickoff-back"` from KickoffContextCard, but this branch returns
@@ -354,11 +361,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           <Link href="/architect/new" style={{ color: 'var(--dim)' }}>/architect/new</Link>.
         </p>
         <div style={{ maxWidth: 560 }}>
-          <NewIdeaBox
-            key={prefillProject}
-            initialProject={prefillProject}
-            onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
-          />
+          <NewIdeaBox key={prefillProject} roster={architectRoster} initialProject={prefillProject} />
         </div>
       </StudioArchitectShell>
     );
