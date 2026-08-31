@@ -55,7 +55,7 @@ import { createLogger } from '@forge/kernel';
 
 const HERE = import.meta.dirname;
 const ARCHITECT_RUNNER_TS = join(HERE, 'architect-runner.ts');
-const ARCHITECT_SKILL_MD = join(HERE, '..', 'skills', 'architect', 'SKILL.md');
+const ARCHITECT_SKILL_MD = join(HERE, '..', '..', 'skills', 'architect', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
 // Shared test harness — mirrors architect-runner.test.ts's setupSession/logger

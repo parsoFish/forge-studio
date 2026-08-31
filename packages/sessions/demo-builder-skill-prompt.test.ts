@@ -71,7 +71,7 @@ import { listDemoElements } from '../../orchestrator/studio/registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const RUNNER_TS_PATH = join(FORGE_ROOT, 'orchestrator', 'demo-builder-runner.ts');
 const SKILL_MD_PATH = join(FORGE_ROOT, 'skills', 'demo-builder', 'SKILL.md');
 

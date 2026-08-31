@@ -46,6 +46,7 @@ import { runCreate } from './cli.ts';
 const REAL_TYPESCRIPT_CLI_TEMPLATE = resolve(
   import.meta.dirname,
   '..',
+  '..',
   'studio',
   'starters',
   'projects',

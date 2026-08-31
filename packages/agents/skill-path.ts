@@ -103,7 +103,7 @@ export function assertSkillSlug(name: string, noun: string = 'skill'): void {
 }
 
 /** The forge repo root — the parent of `orchestrator/`. */
-export const FORGE_ROOT = resolve(import.meta.dirname, '..');
+export const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /** The `skills/` directory under a given root (default: the real repo root).
  *  The one place the literal `skills` directory name is constructed. */

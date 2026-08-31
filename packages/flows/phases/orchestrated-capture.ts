@@ -27,7 +27,7 @@ import { join, resolve } from 'node:path';
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 /** Default wall-clock bound for an orchestrated capture run (15 min — it
  * builds/serves two worktrees and may drive a browser). */

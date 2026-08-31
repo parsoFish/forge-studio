@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { loadSessionKinds } from './studio/session-kinds.ts';
 import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../cli/ui-bridge.ts';
 
-const REPO_ROOT = resolve(import.meta.dirname, '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /**
  * Explicit correspondence between a session-kind YAML id and the

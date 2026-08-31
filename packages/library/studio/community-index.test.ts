@@ -88,7 +88,7 @@ import {
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
-const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 const createdDirs: string[] = [];
 

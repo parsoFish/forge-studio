@@ -30,7 +30,7 @@ import {
   type TemplateLibraryEntry,
 } from './template-library.ts';
 
-const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

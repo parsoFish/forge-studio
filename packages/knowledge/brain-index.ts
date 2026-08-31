@@ -336,7 +336,7 @@ if (isCli) {
   const argv = process.argv.slice(2);
   const write = argv.includes('--write');
   const cwdIdx = argv.indexOf('--cwd');
-  const cwd = cwdIdx >= 0 ? resolve(argv[cwdIdx + 1]) : resolve(import.meta.dirname, '..');
+  const cwd = cwdIdx >= 0 ? resolve(argv[cwdIdx + 1]) : resolve(import.meta.dirname, '..', '..');
 
   // If `--scope <project>` is given (legacy loadBrainIndex behaviour), use the
   // prompt-prefix loader.

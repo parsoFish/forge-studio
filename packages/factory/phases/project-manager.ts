@@ -146,7 +146,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     rmSync(stalePmScratch, { recursive: true, force: true });
   }
 
-  const forgeRoot = resolve(import.meta.dirname, '..', '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const systemPrompt = buildPmSystemPrompt(forgeRoot);
   // 2026-05-25 (claude-harness cycle 8 audit): read the project-shape
   // context off-disk and inject it into the prompt. PM was hallucinating

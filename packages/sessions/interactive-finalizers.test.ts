@@ -93,7 +93,7 @@ import type { SessionKindDescriptor } from './studio/session-kinds.ts';
  *  `process.cwd()`-relative path. Only P3 (below) reads a real, checked-in
  *  repo file (`skills/creation-agent/SKILL.md`); every other test in this
  *  file stays a pure isolated-tmpdir fixture, unaffected. */
-const REPO_ROOT = resolve(import.meta.dirname, '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 
 // ---------------------------------------------------------------------------
 // Scratch fs helpers — every test builds its own isolated tree under a fresh

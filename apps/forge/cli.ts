@@ -42,7 +42,7 @@ const cmd = args[0];
 // `projects/<name>/` would look for `_queue/` under the project repo and
 // silently miss the real one. The forge root is the parent of `orchestrator/`
 // where this file sits.
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 // Capture the caller's CWD BEFORE chdir to FORGE_ROOT. `forge demo render` (run by
 // the developer-unifier agent from its worktree) resolves a relative demo dir against
 // this, not the forge install root.

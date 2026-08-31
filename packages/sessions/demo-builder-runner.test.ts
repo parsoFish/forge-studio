@@ -23,7 +23,7 @@ import {
 import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /** A queryFn simulating the agent writing BOTH the reusable demo-design skill and
  *  the sample DEMO.html into its cwd (the project repo). */

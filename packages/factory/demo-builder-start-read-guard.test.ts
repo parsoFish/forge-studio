@@ -61,7 +61,7 @@ import { startBridge } from '../../cli/ui-bridge.ts';
 // Part 1 — source-ordering pin (RED at base).
 // ===========================================================================
 
-const SRC = readFileSync(join(import.meta.dirname, 'ui-bridge.ts'), 'utf8');
+const SRC = readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'ui-bridge.ts'), 'utf8');
 
 /** Extract the POST /api/demo-builder/start handler block: from its route
  *  match to the next handler (POST /api/demo-builder/brief). */

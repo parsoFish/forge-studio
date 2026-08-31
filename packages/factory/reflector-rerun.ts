@@ -40,7 +40,7 @@ function readReflectMode(cycleId: string, logsRoot: string): ReflectMode | undef
   }
 }
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 export type RerunInput = {
   cycleId: string;

@@ -37,7 +37,7 @@ import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult, Finding } from '@forge/knowledge/brain-lint.ts';
 
 // The forge root the reflector code resolves to (orchestrator/phases/ ⇒ ..)
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 type Harness = {
   cycleId: string;

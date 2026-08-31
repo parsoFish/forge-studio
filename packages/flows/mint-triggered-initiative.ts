@@ -112,7 +112,7 @@ export function mintTriggeredInitiative(
   opts: { queueRoot?: string; forgeRoot?: string; logsRoot?: string } = {},
 ): MintTriggeredResult {
   try {
-    const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..');
+    const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..', '..');
     const flowId = req.target.ref;
     // W8-F5 (bead forge-6gv.23): `flowId` is a PATH SEGMENT on the very next
     // line, and from there the value flows into projectRepoPath and artDir.

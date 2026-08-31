@@ -45,7 +45,7 @@ import {
   DECOMPOSITION_STATE_FILENAME,
 } from './phases/pm-binding.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 // ---------------------------------------------------------------------------
 // 1a. renderPmUserPrompt — injected manifest + brain context blocks

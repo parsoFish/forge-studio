@@ -55,7 +55,7 @@ import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'reflector.json');
 
 // Fixed (see file header) — distinct + greppable, never a real cycle id.

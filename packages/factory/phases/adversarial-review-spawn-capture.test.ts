@@ -66,7 +66,7 @@ import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');
 
 const INIT_ID = 'INIT-2026-01-01-spawn-capture';

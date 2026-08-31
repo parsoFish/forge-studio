@@ -61,13 +61,13 @@ import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
+const ROOT = join(__dirname, '..', '..');
 
 /** The one file allowed to hold a value import of the SDK's `query`. */
-const WRAPPER_RELATIVE_PATH = 'orchestrator/pinned-sdk-query.ts';
+const WRAPPER_RELATIVE_PATH = 'packages/agents/pinned-sdk-query.ts';
 
 /** Directories scanned for the SDK-reference invariant. */
-const SCANNED_DIRS = ['orchestrator', 'loops', 'cli'];
+const SCANNED_DIRS = ['orchestrator', 'loops', 'cli', 'packages', 'apps/forge'];
 
 /**
  * The SDK module specifier, assembled so this file's own source never

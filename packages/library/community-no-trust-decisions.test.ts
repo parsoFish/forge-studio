@@ -39,15 +39,15 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const REPO_ROOT = resolve(import.meta.dirname, '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const FORBIDDEN_NAMES = ['approveSkillDraft', 'approveHook', 'overrideHookBlock', 'writeHookApprovalLedgerEntry', 'repinSkillPackage'];
 const FORBIDDEN_RE = new RegExp(`\\b(${FORBIDDEN_NAMES.join('|')})\\b`, 'g');
 
 const COMMUNITY_SURFACE_FILES = [
-  'cli/bridge-studio-community.ts',
-  'orchestrator/studio/community-index.ts',
-  'orchestrator/studio/community-install.ts',
+  'packages/library/bridge-studio-community.ts',
+  'packages/library/studio/community-index.ts',
+  'packages/library/studio/community-install.ts',
   'apps/studio/lib/community-client.ts',
   'apps/studio/lib/community-view.ts',
   'apps/studio/app/community/page.tsx',
@@ -82,7 +82,7 @@ for (const relPath of COMMUNITY_SURFACE_FILES) {
 // ---------------------------------------------------------------------------
 
 test('sanity: the forbidden-reference technique actually detects a real reference (against orchestrator/studio/skill-library.ts, which legitimately defines approveSkillDraft)', () => {
-  const text = readFileSync(resolve(REPO_ROOT, 'orchestrator/studio/skill-library.ts'), 'utf8');
+  const text = readFileSync(resolve(REPO_ROOT, 'packages/library/studio/skill-library.ts'), 'utf8');
   const hits = [...text.matchAll(FORBIDDEN_RE)].map((m) => m[0]);
   assert.ok(hits.includes('approveSkillDraft'), 'the regex must be capable of matching a real occurrence — proves the check is not vacuously toothless');
 });

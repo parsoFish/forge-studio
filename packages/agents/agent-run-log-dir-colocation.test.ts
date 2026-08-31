@@ -51,7 +51,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const INTERACTIVE_RUNNER_PATH = join(REPO_ROOT, 'orchestrator', 'interactive-runner.ts');
 const UI_BRIDGE_PATH = join(REPO_ROOT, 'cli', 'ui-bridge.ts');
 

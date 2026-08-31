@@ -193,7 +193,7 @@ describe('lintHookDefinitions surfaces it (kills: a rule that is implemented, un
     // pre-pr-security-review declares `matcher: "Bash(gh pr create)"` on
     // PreToolUse, which is exactly the shape the rule permits. If this ever
     // goes red, a shipped hook has become undispatchable — that is the finding.
-    const findings = lintHookDefinitions(join(import.meta.dirname, '..', '..'));
+    const findings = lintHookDefinitions(join(import.meta.dirname, '..', '..', '..'));
     assert.deepEqual(
       findings.filter((f) => f.check === 'hook-library/trigger'),
       [],

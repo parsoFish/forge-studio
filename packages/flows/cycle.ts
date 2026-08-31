@@ -336,7 +336,7 @@ export async function snapshotCycleArtefacts(
   input: CycleInput,
   cycleId: string,
 ): Promise<void> {
-  const forgeRoot = resolve(import.meta.dirname, '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
   if (!existsSync(cycleLogDir)) mkdirSync(cycleLogDir, { recursive: true });
 

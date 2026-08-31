@@ -117,7 +117,7 @@ export type FlowRunQueueOpts = { queueRoot?: string };
 export function flowRunsDir(queueRoot?: string): string {
   const root = queueRoot
     ? resolve(queueRoot)
-    : resolve(dirname(fileURLToPath(import.meta.url)), '..', '_queue');
+    : resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '_queue');
   return join(root, 'flow-runs');
 }
 

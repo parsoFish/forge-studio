@@ -125,7 +125,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 // Destroy-verb detection is intentionally left NAME-LITERAL, not alias-
 // resolved: every real destroy-verb call site in the tree today imports
@@ -332,7 +332,7 @@ function scanFile(absPath: string): FileScan {
 }
 
 function scanTree(): FileScan[] {
-  const files = [...listTsFiles(join(REPO_ROOT, 'cli')), ...listTsFiles(join(REPO_ROOT, 'orchestrator'))];
+  const files = [...listTsFiles(join(REPO_ROOT, 'cli')), ...listTsFiles(join(REPO_ROOT, 'orchestrator')), ...listTsFiles(join(REPO_ROOT, 'packages')), ...listTsFiles(join(REPO_ROOT, 'apps', 'forge'))];
   return files.map(scanFile);
 }
 
@@ -360,7 +360,7 @@ function scanTree(): FileScan[] {
  * unrelated call sites. Verified by hand.
  */
 const HOOK_CENSUS_ALLOWLIST: Record<string, string> = {
-  'cli/bridge-studio-authoring.ts':
+  'packages/library/bridge-studio-authoring.ts':
     'FINALIZE route cleanup of `_interactive-library/<id>/` staging (rmSync at :673) — not the installed ' +
     'studio/hooks/<id> package. hooksDir(...) is used elsewhere in this file only by the CREATE-only ' +
     'finalizeHookFromLanded (409-on-exists, never deletes).',
@@ -370,7 +370,7 @@ test('ENUMERATION (library-34 class): every hook-package-destroying module is th
   const scans = scanTree();
   const hookDestroyFiles = scans.filter((s) => s.hasDestroyVerb && s.hasHookGuard);
   const files = hookDestroyFiles.map((s) => s.file).sort();
-  const expected = ['cli/bridge-studio-hooks.ts', ...Object.keys(HOOK_CENSUS_ALLOWLIST)].sort();
+  const expected = ['packages/library/bridge-studio-hooks.ts', ...Object.keys(HOOK_CENSUS_ALLOWLIST)].sort();
   assert.deepEqual(
     files,
     expected,
@@ -400,7 +400,7 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
   // W8-B4 FIX-2: cli/bridge-studio-writes.ts's agent-DELETE route joins the
   // census — it was ALWAYS a real skill-destroying site (skillsDir imported
   // as toSkillsDir); the old literal-spelling regex just never saw it.
-  const expected = ['cli/bridge-studio-skills.ts', 'cli/bridge-studio-writes.ts'].sort();
+  const expected = ['packages/library/bridge-studio-skills.ts', 'cli/bridge-studio-writes.ts'].sort();
   assert.deepEqual(
     files,
     expected,

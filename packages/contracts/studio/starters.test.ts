@@ -16,7 +16,7 @@ import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents
 import { validateAgent, validateFlow } from '../../../orchestrator/studio/validate.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');
 const AGENT_SLUGS = ['plan', 'dev', 'review'] as const;
 

@@ -124,7 +124,7 @@ test('resolveCurrentManifestPath: genuinely absent from every queue state — re
 // event log to a scratch `logsRoot` so nothing touches the real repo's
 // `_logs/`.
 // ---------------------------------------------------------------------------
-const REAL_FORGE_ROOT = resolve(import.meta.dirname, '..');
+const REAL_FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 test('runReflector (real function, no agent invoked): a manifest genuinely gone from every queue state still records cycle.reflection-lost LOUDLY, never silently', async () => {
   const fakeId = `INIT-2026-08-28-t3-genuinely-absent-${Date.now()}-${Math.random().toString(36).slice(2)}`;

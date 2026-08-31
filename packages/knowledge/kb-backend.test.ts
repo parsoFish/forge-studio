@@ -19,7 +19,7 @@ import { buildKbGraph } from './kb-graph.ts';
 import { loadKbDescriptor, resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FORGE_ROOT = resolve(__dirname, '..');
+const FORGE_ROOT = resolve(__dirname, '..', '..');
 
 // ---------------------------------------------------------------------------
 // Contract §1: getKbBackend resolves a backend bound to the kbId

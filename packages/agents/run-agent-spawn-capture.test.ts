@@ -66,7 +66,7 @@ import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'generic-one-shot.json');
 
 const AGENT_SLUG = 'project-scoped-review';

@@ -121,7 +121,7 @@ function _spawnArchitectTurn(forgeRoot: string, project: string, sessionId: stri
     const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'architect', 'run', sessionId, '--project', project],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', 'architect', 'run', sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
     closeSync(stderrFd);

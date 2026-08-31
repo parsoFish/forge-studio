@@ -18,7 +18,7 @@ import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FORGE_ROOT = resolve(__dirname, '..');
+const FORGE_ROOT = resolve(__dirname, '..', '..');
 
 // ---------------------------------------------------------------------------
 // buildKbGraph — cycles kb (Brain 2: themes + _raw)

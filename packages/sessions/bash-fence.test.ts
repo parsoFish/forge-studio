@@ -48,7 +48,7 @@ import { runInteractiveTurn } from './interactive-runner.ts';
 import { loadSessionKinds, validateSessionKinds, BASH_FENCE_MODES } from './studio/session-kinds.ts';
 import { createLogger } from '@forge/kernel';
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL = 'claude-sonnet-4-6';
 
 function fixture(): { sessionDir: string; staging: string; outside: string } {

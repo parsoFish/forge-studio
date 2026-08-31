@@ -492,9 +492,9 @@ function collapseWhitespace(text: string): string {
 }
 
 test('AT-9: the moved instruction prose has LEFT instructions-runner.ts and now lives in SKILL.md (private loadSkillPrompt is gone)', () => {
-  const runnerSrc = readFileSync(join(import.meta.dirname, 'instructions-runner.ts'), 'utf8');
+  const runnerSrc = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'instructions-runner.ts'), 'utf8');
   const skillMd = readFileSync(
-    join(import.meta.dirname, '..', 'skills', 'instructions-creator', 'SKILL.md'),
+    join(import.meta.dirname, '..', '..', 'skills', 'instructions-creator', 'SKILL.md'),
     'utf8',
   );
   const collapsedRunner = collapseWhitespace(runnerSrc);
@@ -519,7 +519,7 @@ test('AT-9: the moved instruction prose has LEFT instructions-runner.ts and now 
 });
 
 test('AT-10: no fail-open default-prompt literal remains in instructions-runner.ts', () => {
-  const runnerSrc = readFileSync(join(import.meta.dirname, 'instructions-runner.ts'), 'utf8');
+  const runnerSrc = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'instructions-runner.ts'), 'utf8');
   assert.ok(
     !runnerSrc.includes('You are the forge instructions-creator agent.'),
     'the fail-open fallback literal must be deleted — loadSkillTurnPrompt fails loud instead',
@@ -789,7 +789,7 @@ const FROZEN_SENTENCES_BASE_C45E3892: FrozenSentence[] = [
 
 test("R2-AT-2: every distinct pre-refactor instruction sentence (SKILL.md + both instructions-runner.ts prompt arrays, base c45e3892) is still reachable in today's SKILL.md", () => {
   const skillMd = readFileSync(
-    join(import.meta.dirname, '..', 'skills', 'instructions-creator', 'SKILL.md'),
+    join(import.meta.dirname, '..', '..', 'skills', 'instructions-creator', 'SKILL.md'),
     'utf8',
   );
   const collapsedSkillMd = collapseWhitespace(skillMd);

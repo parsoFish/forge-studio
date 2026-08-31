@@ -1649,7 +1649,7 @@ function formatFindings(findings: Finding[], cwd: string): string {
 
 function parseArgs(argv: string[]): RunBrainLintOptions {
   const opts: RunBrainLintOptions = {
-    cwd: resolve(import.meta.dirname, '..'),
+    cwd: resolve(import.meta.dirname, '..', '..'),
     scope: 'full',
   };
   for (let i = 0; i < argv.length; i++) {

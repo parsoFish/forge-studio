@@ -50,7 +50,7 @@ import {
 } from './bridge-studio-lifecycle.ts';
 import { CANCELLED_PHASE } from '../../cli/bridge-studio.ts';
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // ---------------------------------------------------------------------------
 // The operator's real stderr text (verbatim from _logs/_kb-cleanup-2026-08-18T12-36-59-1b8305ab/stderr.log)

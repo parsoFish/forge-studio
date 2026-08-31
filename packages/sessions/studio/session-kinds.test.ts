@@ -197,7 +197,7 @@ import { runStudioLint } from '../../../cli/studio-lint.ts';
 // kindDir, not a hand-copied guess of it.
 import { SLUG_RE } from '@forge/agents/skill-path.ts';
 
-const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

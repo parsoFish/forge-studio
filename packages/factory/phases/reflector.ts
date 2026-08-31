@@ -151,7 +151,7 @@ export async function runReflector(
   });
   const startedAtMs = Date.now();
 
-  const forgeRoot = resolve(import.meta.dirname, '..', '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const cycleId = logger.cycleId;
   const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
 

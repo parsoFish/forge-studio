@@ -132,7 +132,7 @@ let forgeRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PROJECT = 'demoproj';
 
 before(async () => {

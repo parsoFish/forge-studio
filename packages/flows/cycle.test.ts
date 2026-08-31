@@ -441,7 +441,7 @@ function cycleManifestFixture(extra: Partial<InitiativeManifest> = {}): Initiati
 
 test('P4: runCycle emits architect end event with real cost_usd + duration_ms from manifest fields', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-p4-'));
-  const forgeRoot = resolve(import.meta.dirname, '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const cycleId = `TEST-p4-arch-${process.pid}-${Date.now()}`;
   try {
     // Write a manifest that carries real architect telemetry.
@@ -488,7 +488,7 @@ test('P4: runCycle emits architect end event with real cost_usd + duration_ms fr
 
 test('P4: runCycle emits architect end event without cost/duration for legacy manifest (no telemetry fields)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-p4-legacy-'));
-  const forgeRoot = resolve(import.meta.dirname, '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const cycleId = `TEST-p4-legacy-${process.pid}-${Date.now()}`;
   try {
     const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
@@ -540,7 +540,7 @@ test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _lo
   writeFileSync(join(projectRepo, '_architect', 'sid1', 'manifests', `${initiativeId}.md`), '# manifest');
   writeFileSync(join(projectRepo, '_architect', 'sid1', 'PLAN.html'), '<html>plan</html>');
 
-  const forgeRoot = resolve(import.meta.dirname, '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..');
   const artifacts = join(forgeRoot, '_logs', cycleId, 'artifacts');
   try {
     await snapshotCycleArtefacts(

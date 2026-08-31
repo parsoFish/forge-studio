@@ -50,7 +50,7 @@ import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
 import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from './kb-lint-summary.ts';
 import type { KbLintSummary } from './kb-lint-summary.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

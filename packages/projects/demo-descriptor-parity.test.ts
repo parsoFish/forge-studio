@@ -23,7 +23,7 @@ import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-bind
 import { listDemoElements } from '../../orchestrator/studio/registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately
  * NOT in the library's alphabetical order so order-preservation is actually asserted. */

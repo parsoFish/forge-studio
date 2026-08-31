@@ -24,7 +24,7 @@ import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FORGE_ROOT = resolve(__dirname, '..', '..');
+const FORGE_ROOT = resolve(__dirname, '..', '..', '..');
 
 /** Write a minimal studio SKILL.md into a tmp dir and return its absolute path. */
 function writeTmpSkill(dir: string, frontmatter: string): string {

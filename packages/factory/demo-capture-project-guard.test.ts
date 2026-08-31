@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const WORKTREE_ROOT = resolve(import.meta.dirname, '..');
+const WORKTREE_ROOT = resolve(import.meta.dirname, '..', '..');
 // The launcher this repo ships (package.json `bin`) — the same entry every
 // `forge <subcommand>` goes through. Confirmed to exist before use.
 const LAUNCHER = join(WORKTREE_ROOT, 'bin', 'forge.mjs');

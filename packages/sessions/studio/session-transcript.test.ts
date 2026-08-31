@@ -123,7 +123,7 @@ after(() => {
 // scripts/journeys/fixtures/r4-19-f2-live-capture/.
 // ---------------------------------------------------------------------------
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const LIVE_CAPTURE_DIR = join(REPO_ROOT, 'scripts', 'journeys', 'fixtures', 'r4-19-f2-live-capture');
 
 /** The real 2681-byte agent-authored plan (as captured — see module header

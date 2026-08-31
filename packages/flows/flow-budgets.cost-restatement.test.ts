@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CostTracker } from './flow-budgets.ts';
 
-const FIXTURE = join(import.meta.dirname, 'test-fixtures', 'betterado-2026-08-18-cost-events.jsonl');
+const FIXTURE = join(import.meta.dirname, '..', '..', 'orchestrator', 'test-fixtures', 'betterado-2026-08-18-cost-events.jsonl');
 const events = readFileSync(FIXTURE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
 /** Collects emitted events; returns the same shape EventLogger.emit does. */

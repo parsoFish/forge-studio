@@ -71,7 +71,7 @@ import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
 /** Roots scanned for spawn sites. `cli/` imports `isSafeRunId` from run-agent
  *  but never the pinned query as a value, so it holds no spawn site. */
-const SCAN_ROOTS = ['orchestrator', 'loops'];
+const SCAN_ROOTS = ['orchestrator', 'loops', 'packages', 'apps/forge'];
 
 /**
  * Files that import the pinned SDK query as a VALUE yet legitimately do not
@@ -79,11 +79,11 @@ const SCAN_ROOTS = ['orchestrator', 'loops'];
  * structural fact — never "it seemed fine".
  */
 const HOOK_DISPATCH_EXEMPT: Record<string, string> = {
-  'orchestrator/phases/project-manager.ts':
+  'packages/factory/phases/project-manager.ts':
     'imports pinnedStreamQuery only to DEFAULT options.queryFn; its actual spawn goes through runAgent(def, …) (:248), which builds the bag from the same derived spec.',
-  'loops/_adapters/claude/index.ts':
+  'packages/agents/_adapters/claude/index.ts':
     'the adapter registry shim. `query` is the raw stream boundary a direct-stream phase injects (that phase wires its own bag), and `createAgent` delegates to createClaudeAgent, which forwards opts.hooks.',
-  'loops/_adapters/registry.ts':
+  'packages/agents/_adapters/registry.ts':
     'the registry TABLE itself: it value-imports the four adapter objects only to key them by sdk id (`getAdapter`/`resolveSdkId`) and never builds, holds or passes an options bag — every caller that obtains an adapter here is itself enumerated by ADAPTER_CALL and must wire its own. Newly enumerated by W8-F5\'s ADAPTER_VALUE_IMPORT rule, which exists to catch a CONSUMER importing an adapter object directly.',
 };
 
@@ -298,13 +298,13 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
       `expected the scan to find the known spawn-capable files; found ${files.length}: ${files.join(', ')}`,
     );
     for (const known of [
-      'orchestrator/run-agent.ts',
-      'orchestrator/architect-runner.ts',
-      'orchestrator/brain-fix-runner.ts',
-      'orchestrator/preflight-fix-runner.ts',
-      'orchestrator/phases/release-finalize.ts',
-      'orchestrator/phases/developer-loop.ts',
-      'loops/ralph/claude-agent.ts',
+      'packages/agents/run-agent.ts',
+      'packages/sessions/architect-runner.ts',
+      'packages/sessions/brain-fix-runner.ts',
+      'packages/sessions/preflight-fix-runner.ts',
+      'packages/factory/phases/release-finalize.ts',
+      'packages/factory/phases/developer-loop.ts',
+      'packages/agents/ralph/claude-agent.ts',
     ]) {
       assert.ok(files.includes(known), `the scan must see ${known}`);
     }
@@ -326,14 +326,14 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
     // spawn without ever touching the seam this scan keys on. Assert the
     // premise rather than assume it.
     assert.ok(
-      readFileSync(join(FORGE_ROOT, 'orchestrator/pinned-sdk-query.enforce.test.ts'), 'utf8').includes('WRAPPER_RELATIVE_PATH'),
+      readFileSync(join(FORGE_ROOT, 'packages/agents/pinned-sdk-query.enforce.test.ts'), 'utf8').includes('WRAPPER_RELATIVE_PATH'),
       'the structural lock this ratchet depends on must still exist',
     );
     const direct: string[] = [];
     for (const root of SCAN_ROOTS) {
       for (const file of listTsFiles(join(FORGE_ROOT, root))) {
         const rel = relative(FORGE_ROOT, file);
-        if (rel === 'orchestrator/pinned-sdk-query.ts') continue;
+        if (rel === 'packages/agents/pinned-sdk-query.ts') continue;
         if (/import\s*\{[^}]*\bquery\b[^}]*\}\s*from\s*'@anthropic-ai\/claude-agent-sdk'/.test(readFileSync(file, 'utf8'))) {
           direct.push(rel);
         }
@@ -343,7 +343,7 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
   });
 
   it('the two interactive-session spawn shapes both forward the bag (they are the sites nine agents reach the SDK through)', () => {
-    const src = readFileSync(join(FORGE_ROOT, 'orchestrator/interactive-session.ts'), 'utf8');
+    const src = readFileSync(join(FORGE_ROOT, 'packages/sessions/interactive-session.ts'), 'utf8');
     const forwards = src.match(/\.\.\.\(args\.hooks !== undefined \? \{ hooks: args\.hooks \} : \{\}\)/g) ?? [];
     assert.equal(forwards.length, 2, 'runStructuredTurn AND runAgentTurn must each spread the hooks bag into their options');
   });

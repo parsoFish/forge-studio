@@ -1191,7 +1191,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 // so this suite never touches the real repo's `_interactive-library/`.
 // ===========================================================================
 
-const REPO_ROOT = resolve(import.meta.dirname, '..');
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 
 type RealAuthoringFixture = {
   root: string;

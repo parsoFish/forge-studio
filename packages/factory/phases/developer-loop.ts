@@ -319,7 +319,7 @@ export async function runDeveloperLoop(
     assertGreenBaseline(input, logger, start.event_id);
   }
 
-  const forgeRoot = resolve(import.meta.dirname, '..', '..');
+  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const systemPrompt = buildDevSystemPrompt(forgeRoot);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 

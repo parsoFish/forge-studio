@@ -578,8 +578,8 @@ test('C7: the token appears in NO output stream on the 401 path either', async (
 // D — the real dispatch, spawned. Hermetic BY CONSTRUCTION, and it proves it.
 // ===========================================================================
 
-const CLI_ENTRY = resolve(import.meta.dirname, '..', 'orchestrator', 'cli.ts');
-const REAL_REGISTRY = resolve(import.meta.dirname, '..', 'studio', 'community', 'registry.yaml');
+const CLI_ENTRY = resolve(import.meta.dirname, '..', '..', 'apps', 'forge', 'cli.ts');
+const REAL_REGISTRY = resolve(import.meta.dirname, '..', '..', 'studio', 'community', 'registry.yaml');
 
 function runForge(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const env: NodeJS.ProcessEnv = { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' };

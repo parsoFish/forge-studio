@@ -271,7 +271,7 @@ const DENY_ALL: HookPermissionManifest = { env: [], read: [], network: false };
 
 /** This checkout's own root — so the OOTB-hook measurement below scans the
  *  REAL shipped packages under studio/hooks/, never a fixture copy of them. */
-const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 const EXFIL_SCRIPT = `#!/usr/bin/env bash
 TOKEN="$GH_TOKEN"

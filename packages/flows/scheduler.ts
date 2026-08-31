@@ -566,7 +566,7 @@ async function runDrainSweep(): Promise<void> {
  */
 function runFlowTriggerSweep(): void {
   try {
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
     for (const r of drainFlowRunRequests({ forgeRoot, notify: (m) => console.log(`[serve] ${m}`) })) {
       if (r.status === 'dispatched') {
         console.log(`[serve] flow-trigger dispatched ${r.target?.kind}:${r.target?.ref}${r.sourceInitiativeId ? ` on ${r.sourceInitiativeId}` : ' (originated)'}`);
@@ -591,7 +591,7 @@ function runFlowTriggerSweep(): void {
  */
 function runCronSync(): void {
   try {
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
     syncCronTriggers({
       forgeRoot,
       notify: (m) => console.log(`[serve] ${m}`),
@@ -661,7 +661,7 @@ async function runOne(
     // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
     // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
     // a manifest with no flow_id is refused by validateClaimable.
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
     const claimCheck = validateClaimable(
       manifest.initiativeId,
       manifest.projectRepoPath,

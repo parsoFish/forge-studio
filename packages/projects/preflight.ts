@@ -107,7 +107,7 @@ export function runPreflight(
 ): PreflightReport {
   const dir = resolve(projectDir);
   const projectName = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
-  const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..');
+  const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..', '..');
 
   // R1-03-F1: load the typed config ONCE for the testProcess-sourced clauses
   // (C1/C1b/C7). A load failure (e.g. an un-migrated flat-key config) is

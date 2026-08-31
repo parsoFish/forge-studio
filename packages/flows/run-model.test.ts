@@ -1011,7 +1011,7 @@ test('aggregateRun: retries counted from gate.fail events in dev phase', () => {
 
 test('buildNodeMapping: derived from real studio/flows + skills equals expected table', () => {
   // FORGE_ROOT is the repo root; orchestrator/ is one level below __dirname
-  const FORGE_ROOT = join(__dirname, '..');
+  const FORGE_ROOT = join(__dirname, '..', '..');
 
   const mapping = buildNodeMapping(FORGE_ROOT);
 

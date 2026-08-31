@@ -48,7 +48,7 @@ import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FIXTURE_PATH = resolve(import.meta.dirname, 'test-fixtures', 'spawn-capture', 'pm.json');
+const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture', 'pm.json');
 
 const INITIATIVE_ID = 'INIT-2026-01-01-spawn-capture';
 

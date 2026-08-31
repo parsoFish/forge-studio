@@ -508,7 +508,7 @@ test('checkCategoryScope: real brain has 0 scope-guard errors', async () => {
   // If it fails, that is a genuine brain data inconsistency (not a test bug).
   const { resolve: nodeResolve } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
-  const dir = nodeResolve(fileURLToPath(import.meta.url), '..', '..');
+  const dir = nodeResolve(fileURLToPath(import.meta.url), '..', '..', '..');
   const findings = checkCategoryScope(dir);
   const errors = findings.filter((f) => f.category === 'error');
   assert.equal(

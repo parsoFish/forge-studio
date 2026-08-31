@@ -130,7 +130,7 @@ function spawnBrainFix(
   mkdirSync(logDir, { recursive: true });
   const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
   const argv = [
-    '--experimental-strip-types', 'orchestrator/cli.ts', 'brain', 'fix',
+    '--experimental-strip-types', 'apps/forge/cli.ts', 'brain', 'fix',
     '--kb', p.kbId, '--file', p.file, '--check', p.check, '--kind', p.kind,
     '--run-id', p.runId, '--message', p.message,
   ];
