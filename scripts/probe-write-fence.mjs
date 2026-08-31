@@ -28,8 +28,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { runAgentTurn } = await import(join(REPO_ROOT, 'orchestrator', 'interactive-session.ts'));
-const { pinnedSdkQuery } = await import(join(REPO_ROOT, 'orchestrator', 'pinned-sdk-query.ts'));
+const { runAgentTurn } = await import(join(REPO_ROOT, 'packages', 'sessions', 'interactive-session.ts'));
+const { pinnedSdkQuery } = await import(join(REPO_ROOT, 'packages', 'agents', 'pinned-sdk-query.ts'));
 
 const model = process.env.FORGE_FENCE_PROBE_MODEL ?? 'claude-haiku-4-5-20251001';
 const root = mkdtempSync(join(tmpdir(), 'fence-probe-'));
