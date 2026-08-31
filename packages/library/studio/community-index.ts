@@ -52,7 +52,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import { assertSkillSlug, skillPath } from '../skill-path.ts';
+import { assertSkillSlug, skillPath } from '@forge/agents/skill-path.ts';
 import { skillTrustState, extractProvenance } from './skill-library.ts';
 import type { PackageFile, SkillTrust } from './skill-library.ts';
 import { hookYamlPath } from './hook-library.ts';
@@ -61,11 +61,11 @@ import { listConnections } from './connection-library.ts';
 import type { ConnectionDefinition } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
-import { communityRegistryPath, communitySkillsFromRegistry } from './registry.ts';
-import { reqString, loadYaml } from './yaml-fields.ts';
-import { guardedFile, guardedReadFile } from '../../cli/studio-path-guard.ts';
-import type { CommunitySkill } from './types.ts';
-import type { Finding } from './validate.ts';
+import { communityRegistryPath, communitySkillsFromRegistry } from '../../../orchestrator/studio/registry.ts';
+import { reqString, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
+import { guardedFile, guardedReadFile } from '@forge/kernel';
+import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { Finding } from '../../../orchestrator/studio/validate.ts';
 
 // ---------------------------------------------------------------------------
 // Constants / types

@@ -51,7 +51,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runInstructionsTurn, instructionsSessionDir } from './instructions-runner.ts';
-import { runProjectBrainTurn, projectBrainSessionDir } from './project-brain-builder-runner.ts';
+import { runProjectBrainTurn, projectBrainSessionDir } from '../../orchestrator/project-brain-builder-runner.ts';
 import { runDemoBuilderTurn, demoSessionDir } from './demo-builder-runner.ts';
 import type { QueryFn } from './interactive-session.ts';
 

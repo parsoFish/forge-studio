@@ -63,9 +63,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listFlowRunRequests } from './flow-run-requests.ts';
-import { dispatchAgentRun } from './agent-dispatch.ts';
-import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { FlowTrigger } from './studio/types.ts';
+import { dispatchAgentRun } from '@forge/agents/agent-dispatch.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
 
 const ROOT = process.cwd();
 

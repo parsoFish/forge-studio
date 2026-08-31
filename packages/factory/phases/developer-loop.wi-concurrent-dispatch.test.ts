@@ -38,18 +38,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { add } from '../worktree.ts';
-import { createWiWorktree, removeWiWorktree } from '../wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeQueue } from '../wi-merge-back.ts';
+import { add } from '@forge/flows/worktree.ts';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
+import { createMergeQueue, mergeAndPublish, type MergeQueue } from '@forge/flows/wi-merge-back.ts';
 import {
   prerequisiteBlockage,
   settleWiOutcome,
   type WiOutcome,
 } from './developer-loop.ts';
-import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '../work-item.ts';
-import { run as runRalph, type AgentInvocation } from '../../loops/ralph/runner.ts';
-import { runConcurrentDispatch } from '../wi-dispatch-scheduler.ts';
-import { resolveDevWiConcurrency } from '../config.ts';
+import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
+import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
+import { runConcurrentDispatch } from '@forge/flows/wi-dispatch-scheduler.ts';
+import { resolveDevWiConcurrency } from '@forge/kernel';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });

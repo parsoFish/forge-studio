@@ -52,12 +52,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
-import { isDryBridge } from './dry-bridge.ts';
-import { assertSkillSlug } from '../orchestrator/skill-path.ts';
-import { connectionById, listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
-import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from '../orchestrator/studio/connection-probe.ts';
-import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { isDryBridge } from '../../cli/dry-bridge.ts';
+import { assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
+import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
+import { installArgvFor, installConnection } from './studio/connection-install.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
  *  only — every AT that exercises this route pins FORGE_ARCHITECT_NO_SPAWN=1

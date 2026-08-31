@@ -33,11 +33,11 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { discoverProjects, normalizeProjectId } from '../orchestrator/studio/registry.ts';
 import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
-import { invalidProjectReason } from './bridge-studio-sessions.ts';
-import { deriveContractStages } from './contract-stages.ts';
+import { invalidProjectReason } from '@forge/sessions/bridge-studio-sessions.ts';
+import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 import { buildProjectSavePayload } from '../apps/studio/lib/project-save-payload.ts';
-import { unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
-import { loadKbDescriptors } from './bridge-studio-kbs.ts';
+import { unroutableKbReason, type UnroutableKb } from '@forge/knowledge/kb-sites.ts';
+import { loadKbDescriptors } from '@forge/knowledge/bridge-studio-kbs.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;

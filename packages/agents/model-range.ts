@@ -11,7 +11,7 @@
  */
 
 import { MODEL_BY_TIER, type ModelTier } from './phase-agent.ts';
-import type { Catalog, CatalogModel } from './studio/types.ts';
+import type { Catalog, CatalogModel } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Internal helpers

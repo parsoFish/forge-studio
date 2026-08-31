@@ -14,9 +14,9 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { EventLogger } from './logging.ts';
-import { createLogger } from './logging.ts';
-import { classifyCycleFailure } from './failure-classifier.ts';
+import type { EventLogger } from '@forge/kernel';
+import { createLogger } from '@forge/kernel';
+import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, readManifestFlowId, readManifestCostCeiling, persistManifestCycleId, parseManifest } from './manifest.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
@@ -64,10 +64,10 @@ export {
 } from './cycle-helpers.ts';
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
-import { runFlow, flowPathForId } from './flow-runner.ts';
-import { createPhaseExecutor } from './phases/executor-table.ts';
-import { createProjectGate, defaultRunClosure } from './phases/executor-deps.ts';
-import { loadFlowDefinition } from './studio/registry.ts';
+import { runFlow, flowPathForId } from '../../orchestrator/flow-runner.ts';
+import { createPhaseExecutor } from '../../orchestrator/phases/executor-table.ts';
+import { createProjectGate, defaultRunClosure } from '../../orchestrator/phases/executor-deps.ts';
+import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict
@@ -440,7 +440,7 @@ function emitFailureClassification(
   cycleId: string,
 ): void {
   try {
-    const events: import('./logging.ts').EventLogEntry[] = [];
+    const events: import('@forge/kernel').EventLogEntry[] = [];
     const raw = readFileSync(logger.logFilePath, 'utf8');
     for (const line of raw.split('\n')) {
       if (!line.trim()) continue;

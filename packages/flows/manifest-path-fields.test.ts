@@ -43,7 +43,7 @@ import {
   isContainedProjectRepoPath,
   isSafeCycleId,
   isSafeProjectName,
-} from '../cli/manifest-path-guard.ts';
+} from './manifest-path-guard.ts';
 import {
   writeManifest,
   type InitiativeManifest,

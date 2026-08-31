@@ -16,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 
 import { getKbBackend, FilesystemKbBackend, type KbBackend } from './kb-backend.ts';
 import { buildKbGraph } from './kb-graph.ts';
-import { loadKbDescriptor, resolveKbProcesses } from './studio/registry.ts';
+import { loadKbDescriptor, resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORGE_ROOT = resolve(__dirname, '..');

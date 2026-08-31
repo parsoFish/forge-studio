@@ -238,7 +238,7 @@ test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
 // ---------------------------------------------------------------------------
 
 import { execFileSync } from 'node:child_process';
-import { serializeWorkItem, type WorkItem } from '../orchestrator/work-item.ts';
+import { serializeWorkItem, type WorkItem } from './work-item.ts';
 
 const N7_INIT = 'INIT-2026-05-24-rq-test';
 

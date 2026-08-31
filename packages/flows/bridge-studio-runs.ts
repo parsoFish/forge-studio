@@ -21,29 +21,29 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
-import { parseManifest, persistManifestSendBack, persistManifestSpecs, serializeManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, persistManifestSendBack, persistManifestSpecs, serializeManifest } from './manifest.ts';
 import {
   compileFixWorkItems,
   writeReviewCapExhaustedMarker,
   hasReviewCapExhaustedMarker,
   FixLoopCapError,
   FixConcernInvalidError,
-} from '../orchestrator/fix-work-items.ts';
-import { loadConfig, resolveReviewLoopCaps } from '../orchestrator/config.ts';
-import { notify } from '../orchestrator/notify.ts';
+} from './fix-work-items.ts';
+import { loadConfig, resolveReviewLoopCaps } from '@forge/kernel';
+import { notify } from './notify.ts';
 /** Default per-WI iteration budget for compiled review-fix work items (was the
  *  unifier's default cap before R4-01-F4 retired that module). */
 const REVIEW_FIX_DEFAULT_ITERATIONS = 15;
-import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
-import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
-import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
-import { getPaths } from '../orchestrator/queue.ts';
-import { loadProjectConfig } from '../orchestrator/project-config.ts';
-import { PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
+import { writeVerdictJson } from './flow-artifacts.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import type { ArchitectStatus } from '@forge/sessions/architect-runner.ts';
+import { getPaths } from './queue.ts';
+import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
-import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from '../../cli/dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -52,7 +52,7 @@ import {
   readJson,
   pathOnly,
   type StudioContext,
-} from './bridge-studio.ts';
+} from '../../cli/bridge-studio.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by POST routes

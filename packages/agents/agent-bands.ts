@@ -15,7 +15,7 @@
  * known band ids without pulling in the flow engine.
  */
 
-import type { AgentDefinition } from './studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
  * The band-selecting guard ids. Every id here also has a display row in
@@ -27,10 +27,10 @@ import type { AgentDefinition } from './studio/types.ts';
  * agent spawn (ADR-036: the orchestrator runs gates, the agent never
  * self-certifies).
  */
-export { BAND_GUARD_IDS } from './_pkg/contracts.ts';
-export type { BandGuardId } from './_pkg/contracts.ts';
-import { BAND_GUARD_IDS } from './_pkg/contracts.ts';
-import type { BandGuardId } from './_pkg/contracts.ts';
+export { BAND_GUARD_IDS } from '@forge/contracts';
+export type { BandGuardId } from '@forge/contracts';
+import { BAND_GUARD_IDS } from '@forge/contracts';
+import type { BandGuardId } from '@forge/contracts';
 
 /**
  * The toggle-style guard ids (ADR-027 R3-03 amendment) — platform behaviours

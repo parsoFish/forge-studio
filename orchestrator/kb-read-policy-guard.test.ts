@@ -14,8 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { loadKbDescriptor, resolveKbProcesses } from './studio/registry.ts';
-import type { KbDescriptor, KbReaderRole } from './studio/types.ts';
-import { kbReadPolicyViolation } from '../cli/kb-read-policy.ts';
+import type { KbDescriptor, KbReaderRole } from '@forge/contracts/studio/types.ts';
+import { kbReadPolicyViolation } from '@forge/knowledge/kb-read-policy.ts';
 import { runStudioLint } from '../cli/studio-lint.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

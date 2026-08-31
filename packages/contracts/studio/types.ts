@@ -7,4 +7,4 @@
  * path's re-export so the 58 modules that import it do not all change in a
  * move PR; it goes when those callers are ported to their own packages.
  */
-export * from '../_pkg/contracts.ts';
+export * from '@forge/contracts';

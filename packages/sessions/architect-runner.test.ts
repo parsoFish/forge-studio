@@ -32,8 +32,8 @@ import {
   type ArchitectStatus,
   type QueryFn,
 } from './architect-runner.ts';
-import { createLogger } from './logging.ts';
-import { parseManifest } from './manifest.ts';
+import { createLogger } from '@forge/kernel';
+import { parseManifest } from '@forge/flows/manifest.ts';
 import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
 
 // ---------------------------------------------------------------------------

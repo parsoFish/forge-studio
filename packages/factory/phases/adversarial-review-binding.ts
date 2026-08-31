@@ -19,8 +19,8 @@
 
 import { readFileSync } from 'node:fs';
 
-import { skillPath } from '../skill-path.ts';
-import type { AcEvaluation } from '../../cli/demo-model.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import type { AcEvaluation } from '../demo-model.ts';
 
 const AGENT_SKILL_PATH = skillPath('adversarial-review');
 

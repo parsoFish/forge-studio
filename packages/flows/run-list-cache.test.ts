@@ -22,7 +22,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { listRuns } from '../orchestrator/run-model.ts';
+import { listRuns } from './run-model.ts';
 import {
   cachedListRuns,
   _resetRunListCacheForTest,

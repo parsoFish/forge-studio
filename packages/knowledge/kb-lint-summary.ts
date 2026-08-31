@@ -18,7 +18,7 @@
 import { existsSync, realpathSync, readdirSync, statSync, type Dirent } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
-import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
+import { resolveKbBrainDir } from './brain-paths.ts';
 import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, isForgeBrainDir, type Finding, type RunBrainLintResult } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------

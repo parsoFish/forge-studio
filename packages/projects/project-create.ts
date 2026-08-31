@@ -19,9 +19,9 @@ import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
-import { seedProjectBrain, checkProjectBrainSeedContainment } from './project-brain-seed.ts';
-import { runPreflight, type ClauseResult } from '../cli/preflight.ts';
-import { skillsDir, isReservedId } from './skill-path.ts';
+import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
+import { runPreflight, type ClauseResult } from './preflight.ts';
+import { skillsDir, isReservedId } from '@forge/agents/skill-path.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the

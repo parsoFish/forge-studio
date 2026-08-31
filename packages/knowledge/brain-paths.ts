@@ -25,7 +25,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 /** Brain 2 (cycles) — forge-level cycle-derived themes. */
 export function cyclesThemesDir(forgeRoot: string): string {

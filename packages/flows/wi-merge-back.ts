@@ -58,7 +58,7 @@
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 import { pushInitiativeBranch, stripForgeScratchFromBranch, type PushResult } from './pr.ts';
 import { writeWorkItemStatus } from './work-item.ts';
 

@@ -19,7 +19,7 @@ import {
   type InstructionsStatus,
 } from './instructions-runner.ts';
 import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
+import { createLogger } from '@forge/kernel';
 
 function makeQueryFn(spec: { interview?: unknown; draft?: unknown }): QueryFn {
   return ({ prompt }) => {

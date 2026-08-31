@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '../../orchestrator/config.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }

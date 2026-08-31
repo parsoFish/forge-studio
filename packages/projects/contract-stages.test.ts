@@ -51,7 +51,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
-import { projectBrainDir } from '../orchestrator/brain-paths.ts';
+import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..');
 const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] as const;

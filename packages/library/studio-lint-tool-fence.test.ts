@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStudioLint } from './studio-lint.ts';
+import { runStudioLint } from '../../cli/studio-lint.ts';
 
 const CHECK = 'skill-tool-fence/task-agent-not-disallowed';
 

@@ -31,9 +31,9 @@ import { getPaths, moveTo, writeHeartbeat } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { runCycle } from './cycle.ts';
 import { latestCycleId } from './finalize-merged.ts';
-import { createLogger } from './logging.ts';
-import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from '../cli/manifest-path-guard.ts';
-import { resolveReviewLoopCaps } from './config.ts';
+import { createLogger } from '@forge/kernel';
+import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
+import { resolveReviewLoopCaps } from '@forge/kernel';
 import {
   fixWorkItemCount,
   hasFailedFixWorkItem,

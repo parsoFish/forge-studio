@@ -12,7 +12,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { assertManifestPathFields } from '../cli/manifest-path-guard.ts';
+import { assertManifestPathFields } from './manifest-path-guard.ts';
 
 // R4-11-F1: `merged` mirrors the QueueState directory of the same name (a
 // transient pass-through promoted to `done/` in the same sweep) — distinct

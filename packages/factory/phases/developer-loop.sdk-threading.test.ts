@@ -20,8 +20,8 @@ import { dirname, join, resolve } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
-import { deriveAgentSpec } from '../studio/derive.ts';
-import { resolveSdkId } from '../../loops/_adapters/registry.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORGE_ROOT = resolve(__dirname, '..', '..');

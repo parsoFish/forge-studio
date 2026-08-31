@@ -50,7 +50,7 @@ import { dirname } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
-import { communityRegistryPath } from '../orchestrator/studio/registry.ts';
+import { communityRegistryPath } from '../../orchestrator/studio/registry.ts';
 
 /**
  * Retry budget for a contended registry lock: 5 retries from 50ms with

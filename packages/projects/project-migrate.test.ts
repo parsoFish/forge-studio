@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { migrateProjectConfig } from './project-migrate.ts';
-import { loadProjectConfig } from '../orchestrator/project-config.ts';
+import { loadProjectConfig } from './project-config.ts';
 
 function plantProject(config: Record<string, unknown>): string {
   const root = mkdtempSync(join(tmpdir(), 'pmigrate-'));

@@ -32,7 +32,7 @@ import {
   clearPendingRefusalLog,
   type ClaimValidationResult,
 } from './claim-validator.ts';
-import { readOnDiskFlowVersion, checkFlowVersionSeam } from './flow-runner.ts';
+import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../orchestrator/flow-runner.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -405,9 +405,9 @@ test('checkFlowVersionSeam: no log when version unchanged', () => {
 
     const logs: string[] = [];
     const stubLogger = {
-      emit(partial: { message?: string }): import('./logging.ts').EventLogEntry {
+      emit(partial: { message?: string }): import('@forge/kernel').EventLogEntry {
         if (partial.message) logs.push(partial.message);
-        return {} as import('./logging.ts').EventLogEntry;
+        return {} as import('@forge/kernel').EventLogEntry;
       },
     };
 
@@ -430,9 +430,9 @@ test('checkFlowVersionSeam: logs warning when version changed', () => {
 
     const logs: string[] = [];
     const stubLogger = {
-      emit(partial: { message?: string }): import('./logging.ts').EventLogEntry {
+      emit(partial: { message?: string }): import('@forge/kernel').EventLogEntry {
         if (partial.message) logs.push(partial.message);
-        return {} as import('./logging.ts').EventLogEntry;
+        return {} as import('@forge/kernel').EventLogEntry;
       },
     };
 
@@ -450,9 +450,9 @@ test('checkFlowVersionSeam: logs warning when version changed', () => {
 test('checkFlowVersionSeam: no log when flow.path is missing (test stubs)', () => {
   const logs: string[] = [];
   const stubLogger = {
-    emit(partial: { message?: string }): import('./logging.ts').EventLogEntry {
+    emit(partial: { message?: string }): import('@forge/kernel').EventLogEntry {
       if (partial.message) logs.push(partial.message);
-      return {} as import('./logging.ts').EventLogEntry;
+      return {} as import('@forge/kernel').EventLogEntry;
     },
   };
 

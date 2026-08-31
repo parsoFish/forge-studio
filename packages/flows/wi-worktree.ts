@@ -48,7 +48,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 
 import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
 import { linkProjectDeps } from './scheduler.ts';
-import { createLogger } from './logging.ts';
+import { createLogger } from '@forge/kernel';
 
 export type WiWorktreeHandle = {
   path: string;

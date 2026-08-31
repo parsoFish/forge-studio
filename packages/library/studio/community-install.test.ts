@@ -57,7 +57,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './community-source-url.ts';
 
-import { skillPath } from '../skill-path.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
 import { hookRunState, isHookRunnable, readHookApprovalLedger, approveHook } from './hook-scan.ts';
 import { vendoredPackageDir } from './community-index.ts';

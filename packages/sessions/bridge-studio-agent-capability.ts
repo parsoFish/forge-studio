@@ -43,18 +43,18 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { isUnfilteredStudioAgent, loadAgentDefinition } from '../orchestrator/studio/registry.ts';
-import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
-import { skillsDir } from '../orchestrator/skill-path.ts';
+import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
+import { isUnfilteredStudioAgent, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+import { skillsDir } from '@forge/agents/skill-path.ts';
 import {
   sendJson,
   allowedOrigin,
   sanitizeError,
   pathOnly,
   type StudioContext,
-} from './bridge-studio.ts';
+} from '../../cli/bridge-studio.ts';
 
 const AGENT_CAPABILITY_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/capability$/;
 

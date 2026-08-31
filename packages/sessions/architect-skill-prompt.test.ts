@@ -51,7 +51,7 @@ import {
   type ArchitectStatus,
   type QueryFn,
 } from './architect-runner.ts';
-import { createLogger } from './logging.ts';
+import { createLogger } from '@forge/kernel';
 
 const HERE = import.meta.dirname;
 const ARCHITECT_RUNNER_TS = join(HERE, 'architect-runner.ts');

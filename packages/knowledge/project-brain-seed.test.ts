@@ -7,8 +7,8 @@ import yaml from 'js-yaml';
 
 import { seedProjectBrain } from './project-brain-seed.ts';
 import { projectBrainDir, projectThemesDir, resolveKbBrainDir } from './brain-paths.ts';
-import { loadProjectConstraintBlocks } from './constraint-blocks.ts';
-import { runBrainLint } from '../cli/brain-lint.ts';
+import { loadProjectConstraintBlocks } from '@forge/projects/constraint-blocks.ts';
+import { runBrainLint } from './brain-lint.ts';
 
 function makeForgeRoot(): string {
   return mkdtempSync(join(tmpdir(), 'project-brain-seed-test-'));

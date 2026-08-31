@@ -28,8 +28,8 @@ import {
 } from './bridge-studio-kb-drain.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
 import { noKbEdits } from './kb-drain-edit-soundness.ts';
-import type { RunBrainFixInput, RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
-import { startBridge } from './ui-bridge.ts';
+import type { RunBrainFixInput, RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Part A fixtures/helpers

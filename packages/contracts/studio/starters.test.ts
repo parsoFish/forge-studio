@@ -12,9 +12,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import type { AgentDefinition } from './types.ts';
-import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from './registry.ts';
-import { validateAgent, validateFlow } from './validate.ts';
-import { agentCapabilityDescriptor } from './derive.ts';
+import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from '../../../orchestrator/studio/registry.ts';
+import { validateAgent, validateFlow } from '../../../orchestrator/studio/validate.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');

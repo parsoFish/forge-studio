@@ -42,7 +42,7 @@ import { join, relative, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
 // The module under test. This import throws at load time (module not found)
 // until cli/kb-lint-summary.ts exists — the intended "module missing" RED

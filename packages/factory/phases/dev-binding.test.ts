@@ -16,7 +16,7 @@ import {
   buildDevSystemPrompt,
   renderDevUserPrompt,
 } from './dev-binding.ts';
-import { modelForSpec } from '../phase-agent.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
 
 // ---------------------------------------------------------------------------
 // devAgentSpec shape

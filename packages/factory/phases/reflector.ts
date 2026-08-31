@@ -25,14 +25,14 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { parseRetroMd } from '../../cli/reflection-doc.ts';
+import { parseRetroMd } from '../reflection-doc.ts';
 
-import type { EventLogger, EventLogEntry } from '../logging.ts';
-import { parseManifest } from '../manifest.ts';
-import { runAgent } from '../run-agent.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
-import { loadAgentDefinition } from '../studio/registry.ts';
-import { skillPath } from '../skill-path.ts';
+import type { EventLogger, EventLogEntry } from '@forge/kernel';
+import { parseManifest } from '@forge/flows/manifest.ts';
+import { runAgent } from '@forge/agents/run-agent.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
 import {
   buildReflectorSystemPrompt,
   renderReflectorUserPrompt,
@@ -48,20 +48,20 @@ import {
   type ReflectMode,
   type ReflectionStatus,
   type ReflectorPhaseResult,
-} from '../cycle-context.ts';
-import { classifyCrash } from '../failure-classifier.ts';
-import { runBrainLint, type RunBrainLintResult } from '../../cli/brain-lint.ts';
+} from '@forge/flows/cycle-context.ts';
+import { classifyCrash } from '@forge/agents/failure-classifier.ts';
+import { runBrainLint, type RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
 import {
   assignRetention,
   collectCitedBy,
   patchArchiveFrontmatter,
   type ThemeMeta,
   type RetentionTag,
-} from '../../cli/cycle-retention.ts';
-import { writeCycleRecap } from '../../cli/cycle-recap.ts';
-import { cyclesThemesDir, projectThemesDir } from '../brain-paths.ts';
-import { runPostReflectionKbHealth } from '../kb-health.ts';
-import { getPaths, type QueuePaths } from '../queue.ts';
+} from '@forge/knowledge/cycle-retention.ts';
+import { writeCycleRecap } from '../cycle-recap.ts';
+import { cyclesThemesDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
+import { runPostReflectionKbHealth } from '@forge/knowledge/kb-health.ts';
+import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
 
 // The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
 // ~$0.74, the cap gives 2x headroom) are DECLARED DATA now: `budgets.maxTurns`

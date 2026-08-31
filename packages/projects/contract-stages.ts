@@ -54,18 +54,18 @@
 import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
-import { SESSION_STAGES } from '../orchestrator/studio/session-kinds.ts';
+import { SESSION_STAGES } from '@forge/sessions/studio/session-kinds.ts';
 import {
   safeReadFileInSession,
   type ContractStage,
   type ContractStageRow,
   type ContractStageStatus,
-} from '../orchestrator/studio/session-transcript.ts';
-import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from '../orchestrator/project-config.ts';
-import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/skill-path.ts';
-import { guardedFile } from './studio-path-guard.ts';
+} from '@forge/sessions/studio/session-transcript.ts';
+import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
+import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '@forge/agents/skill-path.ts';
+import { guardedFile } from '@forge/kernel';
 
-export type { ContractStageRow, ContractStageStatus } from '../orchestrator/studio/session-transcript.ts';
+export type { ContractStageRow, ContractStageStatus } from '@forge/sessions/studio/session-transcript.ts';
 
 /** The D2 five-stage vocabulary, drawn from `SESSION_STAGES` (never a
  *  parallel vocabulary) — 'brain' excluded (project-brain owns it). */

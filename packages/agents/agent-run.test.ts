@@ -101,8 +101,8 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { writeSessionStatus, readSessionStatus } from '../orchestrator/interactive-session.ts';
+import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { writeSessionStatus, readSessionStatus } from '@forge/sessions/interactive-session.ts';
 
 const ROOT = process.cwd();
 

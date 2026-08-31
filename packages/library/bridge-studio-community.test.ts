@@ -93,14 +93,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-import { communitySourceKey } from '../orchestrator/studio/community-source-url.ts';
+import { communitySourceKey } from './studio/community-source-url.ts';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
-import { skillPath } from '../orchestrator/skill-path.ts';
-import { listSkillLibrary, skillTrustState } from '../orchestrator/studio/skill-library.ts';
-import { hookYamlPath } from '../orchestrator/studio/hook-library.ts';
-import { isHookRunnable, hookRunState, readHookApprovalLedger, scanHookPackage } from '../orchestrator/studio/hook-scan.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import { listSkillLibrary, skillTrustState } from './studio/skill-library.ts';
+import { hookYamlPath } from './studio/hook-library.ts';
+import { isHookRunnable, hookRunState, readHookApprovalLedger, scanHookPackage } from './studio/hook-scan.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

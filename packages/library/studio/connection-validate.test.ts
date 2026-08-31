@@ -63,9 +63,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Catalog } from './types.ts';
+import type { Catalog } from '@forge/contracts/studio/types.ts';
 import { validateConnections } from './connection-validate.ts';
-import { runStudioLint } from '../../cli/studio-lint.ts';
+import { runStudioLint } from '../../../cli/studio-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (a small local makeCatalog — the shared one in

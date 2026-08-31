@@ -7,7 +7,7 @@ import {
   FIX_PROPOSALS_FILENAME,
   type DemoAgentUserPromptInput,
 } from './demo-agent-binding.ts';
-import type { DemoElementDefinition, DemoStep } from '../studio/types.ts';
+import type { DemoElementDefinition, DemoStep } from '@forge/contracts/studio/types.ts';
 
 function el(id: string, phase: DemoElementDefinition['phase'], body = `generator body for ${id}`): DemoElementDefinition {
   return { id, name: id.toUpperCase(), phase, description: `${id} desc`, configHint: '', body, path: `/x/${id}.md` };

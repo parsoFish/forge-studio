@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { runCommunityRefresh } from './community-refresh-run.ts';
 import {
   COMMUNITY_REGISTRY_LOCK_STALE_MS,
@@ -46,7 +46,7 @@ import {
   communityRegistryLockTarget,
   lockCommunityRegistry,
 } from './community-registry-lock.ts';
-import type { FetchLike } from '../orchestrator/studio/community-refresh-api.ts';
+import type { FetchLike } from './studio/community-refresh-api.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 const FAKE_TOKEN = 'ghp_LOCKTESTTOKENneverRendered000000000000';

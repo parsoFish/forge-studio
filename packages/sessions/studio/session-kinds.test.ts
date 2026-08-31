@@ -174,7 +174,7 @@ import {
 // mirror image of cli/agent-run.ts's own `import { loadSessionKinds } from
 // '../orchestrator/studio/session-kinds.ts'` at its top) — no cycle: this
 // TEST file is never itself imported by production code.
-import { AGENT_RUNNERS } from '../../cli/agent-run.ts';
+import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
 // The real Finding type (level/object/check/message) `validateSessionKinds`
 // actually returns — imported directly rather than hand-narrowed/cast so the
 // AT-R422-* assertions below typecheck against the SAME shape production
@@ -182,20 +182,20 @@ import { AGENT_RUNNERS } from '../../cli/agent-run.ts';
 // too structurally distant from `{ level: string }` / `{ message: string }`
 // for `as` to convert between them; the fix is a correct type, not a
 // broader cast).
-import type { Finding } from './validate.ts';
+import type { Finding } from '../../../orchestrator/studio/validate.ts';
 // Real production call path (Ruling 36): `runStudioLint` is what `forge
 // studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
 // orchestrator/cli.ts), and CI invokes exactly that command
 // (.github/workflows/ci.yml: `node --experimental-strip-types
 // orchestrator/cli.ts studio lint`). This import is STATIC (not dynamic)
 // because runStudioLint already exists and works today — no RED risk here.
-import { runStudioLint } from '../../cli/studio-lint.ts';
+import { runStudioLint } from '../../../cli/studio-lint.ts';
 // SLUG_RE is the SAME regex CHECK_SLUG already applies one screen up in
 // validateSessionKinds (`d.id` — the sibling field to `turnSpec.kindDir`).
 // Imported directly (not re-derived) so AT-R422-12's sanity precondition
 // tests the REAL regex the implementer might be tempted to reuse for
 // kindDir, not a hand-copied guess of it.
-import { SLUG_RE } from '../skill-path.ts';
+import { SLUG_RE } from '@forge/agents/skill-path.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 

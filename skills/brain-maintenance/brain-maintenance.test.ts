@@ -40,10 +40,10 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import matter from 'gray-matter';
 
-import { deriveAgentSpec } from '../../orchestrator/studio/derive.ts';
-import { FORGE_ROOT, skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '../../orchestrator/skill-path.ts';
-import { MODEL_BY_TIER } from '../../orchestrator/phase-agent.ts';
-import { classifyFinding, CHECK_NAMES, type Finding } from '../../cli/brain-lint.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { FORGE_ROOT, skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { MODEL_BY_TIER } from '@forge/agents/phase-agent.ts';
+import { classifyFinding, CHECK_NAMES, type Finding } from '@forge/knowledge/brain-lint.ts';
 
 const AGENT_SLUG = 'brain-maintenance';
 

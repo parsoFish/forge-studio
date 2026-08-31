@@ -8,8 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { EventLogEntry, EventLogger } from './logging.ts';
-import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
+import type { ToolUseLiveDetail } from './ralph/claude-agent.ts';
 import { createToolEventSampler, makeToolEventSink } from './tool-event-emit.ts';
 
 /** In-memory logger that captures emitted entries instead of writing to disk. */

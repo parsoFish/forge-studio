@@ -39,9 +39,9 @@
 import { join, resolve } from 'node:path';
 import { Cron } from 'croner';
 
-import { listFlowIds, loadFlowDefinition, normalizeProjectId } from './studio/registry.ts';
+import { listFlowIds, loadFlowDefinition, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
-import type { TriggerTarget } from './studio/types.ts';
+import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 
 /**
  * Module-level default armed register — one Node process, one live set of

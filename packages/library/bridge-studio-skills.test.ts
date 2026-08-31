@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 
 // ---------------------------------------------------------------------------

@@ -10,9 +10,9 @@
 import { Cron } from 'croner';
 
 import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
-import { resolveBandGuard } from '../agent-bands.ts';
-import { TRIGGER_MODES } from './types.ts';
-import type { AgentDefinition, FlowDefinition } from './types.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { TRIGGER_MODES } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 
 export type TriggerFinding = {
   level: 'error';

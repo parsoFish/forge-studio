@@ -25,8 +25,8 @@
 
 import { readFileSync } from 'node:fs';
 
-import { skillPath } from '../skill-path.ts';
-import type { DemoElementDefinition, DemoStep } from '../studio/types.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import type { DemoElementDefinition, DemoStep } from '@forge/contracts/studio/types.ts';
 
 const AGENT_SKILL_PATH = skillPath('demo-agent');
 const DEMO_CONTRACT_SKILL_PATH = skillPath('demo');

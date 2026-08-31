@@ -7,10 +7,10 @@
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedStreamQuery, type StreamQueryFn } from '../pinned-sdk-query.ts';
+import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
-import type { EventLogger } from '../logging.ts';
-import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
+import type { EventLogger } from '@forge/kernel';
+import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '@forge/flows/manifest.ts';
 import {
   PM_BRAIN_ACCESS,
   PM_ALWAYS_RELEVANT_THEMES,
@@ -27,16 +27,16 @@ import {
   validateWorkItemSet,
   type CouplingPair,
   type WorkItem,
-} from '../work-item.ts';
-import { loadProjectConfig, type ProjectConfig } from '../project-config.ts';
+} from '@forge/flows/work-item.ts';
+import { loadProjectConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
 import { releaseDraftAcs } from '../release-process.ts';
-import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
-import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
-import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
-import { runAgent } from '../run-agent.ts';
-import { loadAgentDefinition } from '../studio/registry.ts';
-import { skillPath } from '../skill-path.ts';
-import { compileWorkItemSpecs } from './wi-spec-compile.ts';
+import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-context.ts';
+import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
+import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects/gate-recipes.ts';
+import { runAgent } from '@forge/agents/run-agent.ts';
+import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 
 /**

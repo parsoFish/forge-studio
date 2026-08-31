@@ -87,7 +87,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, chmodSync, rmSync } from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AgentDefinition } from './types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 import {
   deriveProbeState,

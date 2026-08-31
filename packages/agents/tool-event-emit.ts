@@ -19,13 +19,13 @@
  * own stream loop.
  */
 
-import type { EventLogger, Phase } from './logging.ts';
+import type { EventLogger, Phase } from '@forge/kernel';
 import {
   fileChangeForTool,
   summarizeToolInput,
   type HeartbeatInfo,
   type ToolUseLiveDetail,
-} from '../loops/ralph/claude-agent.ts';
+} from './ralph/claude-agent.ts';
 
 /** Read-only, high-volume tools that get sampled rather than emitted 1:1. */
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob']);

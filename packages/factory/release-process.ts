@@ -15,7 +15,7 @@
  * returns an empty list when handed `undefined`.
  */
 
-import type { ReleaseConfig, ReleaseStep } from './studio/types.ts';
+import type { ReleaseConfig, ReleaseStep } from '@forge/contracts/studio/types.ts';
 
 /** Default changelog path used in AC prose when the project does not declare one. */
 const DEFAULT_CHANGELOG_PATH = 'CHANGELOG.md';

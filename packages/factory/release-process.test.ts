@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { releaseDraftAcs, releaseFinalizeSteps, hasReleaseProcess } from './release-process.ts';
-import type { ReleaseConfig } from './studio/types.ts';
+import type { ReleaseConfig } from '@forge/contracts/studio/types.ts';
 
 const FULL: ReleaseConfig = {
   changelogPath: 'docs/CHANGELOG.md',

@@ -28,7 +28,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, basename, sep } from 'node:path';
 
-import { cyclesRawDir } from '../orchestrator/brain-paths.ts';
+import { cyclesRawDir } from './brain-paths.ts';
 import { applyAutoFixes } from './brain-fix-auto.ts';
 import { parseThemeFile, type ParsedThemeFile } from './theme-frontmatter.ts';
 

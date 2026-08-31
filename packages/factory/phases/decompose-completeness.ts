@@ -43,7 +43,7 @@
  *     trivially covered rather than flagged.
  */
 
-import type { WorkItem } from '../work-item.ts';
+import type { WorkItem } from '@forge/flows/work-item.ts';
 
 export type DecomposeCompletenessResult = {
   /** Count of GWT/EARS-shaped scope units found in the initiative body. */

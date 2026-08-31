@@ -21,7 +21,7 @@ import {
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
 import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
+import { createLogger } from '@forge/kernel';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 

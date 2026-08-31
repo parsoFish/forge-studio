@@ -6,8 +6,8 @@ import { join } from 'node:path';
 
 import type { InitiativeManifest } from '../manifest.ts';
 import { detectHiddenCoupling, type WorkItem } from '../work-item.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
-import type { ConstraintBlock } from '../constraint-blocks.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { ConstraintBlock } from '@forge/projects/constraint-blocks.ts';
 import {
   MAX_WI_CREATE_PATHS,
   compileHiddenCoupling,

@@ -10,21 +10,21 @@
 
 import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
-import type { EventLogger } from '../logging.ts';
-import { parseManifest } from '../manifest.ts';
-import { FORGE_ROOT } from '../skill-path.ts';
-import { runPreflight } from '../../cli/preflight.ts';
-import type { ProjectGate } from '../_pkg/kernel.ts';
-import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '../cycle-context.ts';
-import { WedgeDetector, WedgeKillError } from '../flow-budgets.ts';
-import { runProjectManager as realRunProjectManager } from './project-manager.ts';
-import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from './developer-loop.ts';
-import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './demo-agent.ts';
-import { runAdversarialReview, type AdversarialReviewResult } from './adversarial-review.ts';
-import { runClosure, promoteMergedToDone } from './closure.ts';
-import { runReflector } from './reflector.ts';
-import { rebasePreservedBranchOntoMain } from '../pr.ts';
-import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateResult } from '../cycle-helpers.ts';
+import type { EventLogger } from '@forge/kernel';
+import { parseManifest } from '@forge/flows/manifest.ts';
+import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
+import { runPreflight } from '@forge/projects/preflight.ts';
+import type { ProjectGate } from '@forge/kernel';
+import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
+import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';
+import { runProjectManager as realRunProjectManager } from '@forge/factory/phases/project-manager.ts';
+import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
+import { runDemoAgentPipeline, type DemoAgentPipelineResult } from '@forge/factory/phases/demo-agent.ts';
+import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
+import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
+import { runReflector } from '@forge/factory/phases/reflector.ts';
+import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
+import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 
 
 /**

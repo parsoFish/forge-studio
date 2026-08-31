@@ -32,7 +32,7 @@
 import { mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { guardedWriteFile } from './studio-path-guard.ts';
+import { guardedWriteFile } from '@forge/kernel';
 
 
 // ---------------------------------------------------------------------------

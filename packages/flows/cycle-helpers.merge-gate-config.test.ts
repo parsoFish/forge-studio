@@ -22,12 +22,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runMergeBoundaryGate } from './cycle-helpers.ts';
-import { flowPathForId } from './flow-runner.ts';
-import { runFlowT, type TestDeps, type FlowRunnerDeps } from './test-fixtures/flow-runner-port.ts';
-import { loadFlowDefinition } from './studio/registry.ts';
+import { flowPathForId } from '../../orchestrator/flow-runner.ts';
+import { runFlowT, type TestDeps, type FlowRunnerDeps } from '../../orchestrator/test-fixtures/flow-runner-port.ts';
+import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import { readWorkItemsFromDir } from './work-item.ts';
 import type { CycleInput } from './cycle-context.ts';
-import type { EventLogger } from './logging.ts';
+import type { EventLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Test 1 — verbatim from the lane plan (docs: `_1.0/plans/M0-A.md`, Task 2,

@@ -33,9 +33,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
-import { createLogger, type EventLogEntry } from './logging.ts';
-import type { CycleInput } from './cycle-context.ts';
-import { classifyCycleFailure } from './failure-classifier.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 import {
   renderPmUserPrompt,
   parseDecompositionState,

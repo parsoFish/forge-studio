@@ -30,11 +30,11 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { assertSkillSlug, skillPath } from '../skill-path.ts';
+import { assertSkillSlug, skillPath } from '@forge/agents/skill-path.ts';
 import { hooksDir } from './hook-library.ts';
-import { guardedFile } from '../../cli/studio-path-guard.ts';
+import { guardedFile } from '@forge/kernel';
 import { listConnections } from './connection-library.ts';
-import { communitySkillsFromRegistry } from './registry.ts';
+import { communitySkillsFromRegistry } from '../../../orchestrator/studio/registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
 import type { CommunityKind } from './community-index.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';

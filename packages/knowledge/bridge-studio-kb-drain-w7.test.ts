@@ -27,7 +27,7 @@ import { deriveKbActiveJob } from './kb-job-state.ts';
 import { noKbEdits } from './kb-drain-edit-soundness.ts';
 import { runBrainLint } from './brain-lint.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures (mirrors cli/bridge-studio-kb-drain.test.ts Part A)

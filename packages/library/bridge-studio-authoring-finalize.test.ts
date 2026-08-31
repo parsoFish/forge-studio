@@ -113,15 +113,15 @@ import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 // Does not exist in the NEW shape yet — the current cli/bridge-studio-authoring.ts
 // still implements the phase-1 {kind,id,entries,upstream} contract (round 1
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
 // happy paths — see the T3 report for the exact captured failure per test).
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
-import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from '../orchestrator/studio/hook-library.ts';
-import { listTemplateLibrary } from '../orchestrator/studio/template-library.ts';
+import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from './studio/hook-library.ts';
+import { listTemplateLibrary } from './studio/template-library.ts';
 import { SCAFFOLD_READONLY } from './bridge-studio-templates.ts';
 
 // ---------------------------------------------------------------------------

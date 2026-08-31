@@ -54,8 +54,8 @@ import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { splitFrontmatter, diffKbSnapshot, snapshotKbFiles, type KbEditChange } from './kb-drain-structural.ts';
 import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { parseThemeRaw } from './theme-frontmatter.ts';
-import { resolveGuardedPath, guardedWriteFile } from './studio-path-guard.ts';
-import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
+import { resolveGuardedPath, guardedWriteFile } from '@forge/kernel';
+import { resolveKbBrainDir } from './brain-paths.ts';
 
 /**
  * What makes a structurally-shaped edit unsound.

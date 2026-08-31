@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCrash, classifyCycleFailure } from './failure-classifier.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // classifyCrash — environment/transient signatures → retry allowed

@@ -43,7 +43,7 @@ import {
   parseCommunityUpstream,
   type CommunityUpstream,
 } from './community-source-url.ts';
-import type { CommunityRegistry, CommunityRegistrySource } from './types.ts';
+import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 
 /** The env var carrying the GitHub credential. Named once, here, so the CLI's
  *  operator-facing error and this module's own error text cannot drift. */

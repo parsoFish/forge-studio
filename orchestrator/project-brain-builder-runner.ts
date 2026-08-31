@@ -13,8 +13,8 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 
 import {
   runAgentTurn,
@@ -24,17 +24,17 @@ import {
   makeHeartbeatWriter,
   makeThinkingSink,
   type QueryFn,
-} from './interactive-session.ts';
-import { createLogger, type EventLogger } from './logging.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile, guardedReadDir } from '../cli/studio-path-guard.ts';
-import { makeToolEventSink } from './tool-event-emit.ts';
-import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
+} from '@forge/sessions/interactive-session.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile, guardedReadDir } from '@forge/kernel';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
-import { regenerateBrainIndex } from '../cli/brain-index.ts';
-import { skillPathRelative, loadSkillTurnPrompt } from './skill-path.ts';
-import { cyclesRawDir } from './brain-paths.ts';
-import type { KbBinding } from './studio/types.ts';
+import { regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
+import type { KbBinding } from '@forge/contracts/studio/types.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
 export const PROJECT_BRAIN_MODEL = modelForSpec(projectBrainAgentSpec);

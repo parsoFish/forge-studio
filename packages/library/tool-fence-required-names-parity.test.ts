@@ -34,7 +34,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { TOOL_FENCE_REQUIRED_NAMES as LINT_NAMES } from './studio-lint-tool-fence.ts';
-import { TOOL_FENCE_REQUIRED_NAMES as CLIENT_NAMES } from '../apps/studio/lib/tool-fence-required-names.ts';
+import { TOOL_FENCE_REQUIRED_NAMES as CLIENT_NAMES } from '../../apps/studio/lib/tool-fence-required-names.ts';
 
 test('the lint-side and client-side TOOL_FENCE_REQUIRED_NAMES arrays are byte-for-byte identical', () => {
   assert.deepEqual(

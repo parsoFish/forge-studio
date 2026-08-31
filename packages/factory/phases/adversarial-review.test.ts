@@ -17,10 +17,10 @@ import {
   assertAdversarialReviewDeclaration,
   type AdversarialReviewResult,
 } from './adversarial-review.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
-import { serializeWorkItem, type WorkItem } from '../work-item.ts';
-import { reviewFindingsJsonPath, validateReviewFindings } from '../flow-artifacts.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows/flow-artifacts.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
 const INIT_ID = 'INIT-2026-07-24-rev';
 const CYCLE_ID = 'CY-rev-1';

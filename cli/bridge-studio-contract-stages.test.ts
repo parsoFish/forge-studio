@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioRoutes } from './bridge-studio.ts';
 import type { StudioRunsContext } from './bridge-studio.ts';
-import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
+import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '@forge/projects/contract-stages.ts';
 
 let forgeRoot: string;
 let url: string;

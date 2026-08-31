@@ -7,12 +7,12 @@
  * phase (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station).
  */
 
-import type { EventLogger } from './logging.ts';
+import type { EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
-import type { FlowNode, AgentBudgets, AgentDefinition } from './studio/types.ts';
+import type { FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { WedgeDetector } from './flow-budgets.ts';
 import type { NodeKind } from './flow-node-kind.ts';
-import type { ProjectGate } from './_pkg/kernel.ts';
+import type { ProjectGate } from '@forge/kernel';
 
 /** Mutable cross-node outcome state, threaded through every executor. */
 export type NodeRunState = {

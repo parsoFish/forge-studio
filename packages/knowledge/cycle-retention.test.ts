@@ -29,7 +29,7 @@ import {
   patchArchiveFrontmatter,
   type ThemeMeta,
 } from './cycle-retention.ts';
-import type { EventLogEntry } from '../orchestrator/logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 
 function makeEvent(partial: Partial<EventLogEntry>): EventLogEntry {
   return {

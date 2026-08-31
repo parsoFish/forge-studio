@@ -10,11 +10,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '../studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 
-import type { EventLogger } from '../logging.ts';
-import { classifyCrash } from '../failure-classifier.ts';
+import type { EventLogger } from '@forge/kernel';
+import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import {
   DEV_ALLOWED_TOOLS,
   DEV_DISALLOWED_TOOLS,
@@ -33,26 +33,26 @@ import {
   validateWorkItemSet,
   writeWorkItemStatus,
   type WorkItem,
-} from '../work-item.ts';
-import { type QueryFn, type ClaudeAgentOptions } from '../../loops/ralph/claude-agent.ts';
-import { getAdapter, resolveSdkId } from '../../loops/_adapters/registry.ts';
-import type { AgentInvocation } from '../../loops/_adapters/types.ts';
-import { makeToolEventSink } from '../tool-event-emit.ts';
-import { run as runRalph, type LoopResult } from '../../loops/ralph/runner.ts';
-import { matchesRateLimitSignature } from '../failure-classifier.ts';
-import { createWiWorktree, removeWiWorktree } from '../wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '../wi-merge-back.ts';
-import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '../pr.ts';
+} from '@forge/flows/work-item.ts';
+import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
+import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
+import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
+import { matchesRateLimitSignature } from '@forge/agents/failure-classifier.ts';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
+import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows/wi-merge-back.ts';
+import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows/pr.ts';
 import {
   resolveDevWiConcurrency,
   ralphGitIdentity,
   UNIFIER_GIT_IDENTITY,
   type GitIdentity,
-} from '../config.ts';
-import { runConcurrentDispatch, type DispatchOutcome } from '../wi-dispatch-scheduler.ts';
-import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '../project-config.ts';
-import type { CycleInput } from '../cycle-context.ts';
+} from '@forge/kernel';
+import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
+import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
 
 /**
  * Wipe the Ralph scratch files (PROMPT.md / AGENT.md / fix_plan.md) so the

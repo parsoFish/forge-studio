@@ -20,7 +20,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 // R6-08 4on (F3 hardening) — CHECK_NAMES is the real, single-source-of-truth
 // export (cli/brain-lint.ts); the hand-duplicated `FULL_SCOPE_CHECK_NAMES`

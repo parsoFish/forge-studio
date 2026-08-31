@@ -30,10 +30,10 @@
 import { statSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename } from 'node:path';
 
-import { LEGACY_SESSION_AWAITS_PHASES, LEGACY_SESSION_WORKING_PHASES } from './bridge-studio.ts';
-import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
+import { LEGACY_SESSION_AWAITS_PHASES, LEGACY_SESSION_WORKING_PHASES } from '../../cli/bridge-studio.ts';
+import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
 import { sessionLogDirName } from './session-readability.ts';
-import type { SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
 // ---------------------------------------------------------------------------
 // Vocabulary + types

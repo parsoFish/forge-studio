@@ -56,7 +56,7 @@ import { tmpdir } from 'node:os';
 
 import { sessionLogDirName } from './session-readability.ts';
 import { resolveReadableSession, sessionIsReadable, invalidProjectReason } from './bridge-studio-sessions.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds } from './studio/session-kinds.ts';
 
 /** The REAL repo root — AT-F6-RR-18 runs its ratchet against the shipped
  *  `studio/session-kinds.yaml`, never a fixture copy, so ADDING a colliding

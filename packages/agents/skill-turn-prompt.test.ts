@@ -69,9 +69,9 @@ import {
   runInstructionsTurn,
   instructionsSessionDir,
   type InstructionsStatus,
-} from './instructions-runner.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
+} from '@forge/sessions/instructions-runner.ts';
+import { writeSessionStatus, type QueryFn } from '@forge/sessions/interactive-session.ts';
+import { createLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

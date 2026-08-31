@@ -27,11 +27,11 @@
  * never to a thrown read route.
  */
 
-import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
-import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
-import { skillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
-import type { SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { skillsDir } from '@forge/agents/skill-path.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
 export function fixedTierForSessionKind(forgeRoot: string, descriptor: SessionKindDescriptor): string | null {
   // The agent slug comes from the session-kind registry (authored, validated

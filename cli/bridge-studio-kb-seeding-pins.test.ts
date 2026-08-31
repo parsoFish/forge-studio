@@ -38,8 +38,8 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { loadKbDescriptors } from './bridge-studio-kbs.ts';
-import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
+import { loadKbDescriptors } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { runProjectBrainTurn, type ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 
 // ---------------------------------------------------------------------------

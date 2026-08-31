@@ -12,10 +12,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyCycleFailure, matchesRateLimitSignature } from './failure-classifier.ts';
-import { CostCeilingError } from './flow-budgets.ts';
-import { decideAutoRetry } from './scheduler-dispatch.ts';
-import { getPaths } from './queue.ts';
-import type { EventLogEntry } from './logging.ts';
+import { CostCeilingError } from '@forge/flows/flow-budgets.ts';
+import { decideAutoRetry } from '@forge/flows/scheduler-dispatch.ts';
+import { getPaths } from '@forge/flows/queue.ts';
+import type { EventLogEntry } from '@forge/kernel';
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {
   return {

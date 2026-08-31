@@ -60,11 +60,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runAgent } from './run-agent.ts';
-import { listAgentDefinitions } from './studio/registry.ts';
+import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
 import { skillsDir } from './skill-path.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition } from './studio/types.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from './test-fixtures/spawn-capture/normalize.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'generic-one-shot.json');

@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runReleaseFinalize, type RunReleaseFinalizeInput } from './release-finalize.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 
 type Harness = {
   cycleId: string;

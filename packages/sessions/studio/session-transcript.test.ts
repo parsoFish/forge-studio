@@ -95,7 +95,7 @@ import { fileURLToPath } from 'node:url';
 import { deriveSessionTranscript, deriveSessionArtifact } from './session-transcript.ts';
 import type { CleanupPlanAction } from './session-transcript.ts';
 import type { SessionKindDescriptor } from './session-kinds.ts';
-import { serializeManifest, type InitiativeManifest } from '../manifest.ts';
+import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -13,10 +13,10 @@ import type {
   FlowTrigger,
   KbDescriptor,
   ProjectDefinition,
-} from './types.ts';
+} from '@forge/contracts/studio/types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
-import { TRIGGER_KIND_IDS } from '../flow-trigger.ts';
-import { MATERIAL_KINDS } from './materials.ts';
+import { TRIGGER_KIND_IDS } from '@forge/flows/flow-trigger.ts';
+import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -30,7 +30,7 @@ import {
   validateProject,
   validateDiscoveredProjects,
 } from './validate.ts';
-import type { InstructionSeed } from './types.ts';
+import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

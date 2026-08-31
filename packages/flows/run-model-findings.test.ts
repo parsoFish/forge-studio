@@ -75,7 +75,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildNodeMeta, deriveNodeMeta } from './run-model-derive.ts';
-import type { EventLogEntry, Phase } from './logging.ts';
+import type { EventLogEntry, Phase } from '@forge/kernel';
 import type { RunPhaseMeta } from './run-model.ts';
 
 // ---------------------------------------------------------------------------

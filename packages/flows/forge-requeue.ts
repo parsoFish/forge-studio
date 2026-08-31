@@ -34,10 +34,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getPaths } from '../orchestrator/queue.ts';
-import { resolveInitiativeId } from '../orchestrator/initiative-id.ts';
-import { parseManifest, serializeManifest } from '../orchestrator/manifest.ts';
-import { inferRequeueResume, type RequeueResumeDecision } from '../orchestrator/requeue-resume.ts';
+import { getPaths } from './queue.ts';
+import { resolveInitiativeId } from './initiative-id.ts';
+import { parseManifest, serializeManifest } from './manifest.ts';
+import { inferRequeueResume, type RequeueResumeDecision } from './requeue-resume.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 
 export type RequeueOptions = {

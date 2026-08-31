@@ -22,10 +22,10 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve, sep } from 'node:path';
 import yaml from 'js-yaml';
 
-import { classifyClause } from './preflight-resolve.ts';
-import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
-import { ensureStudioBranch, commitStudioChange, withStudioWrite, saveProjectRepo } from '../orchestrator/project-repo-tx.ts';
-import type { ClauseResult } from './preflight.ts';
+import { classifyClause } from '@forge/projects/preflight-resolve.ts';
+import { applyPreflightAutoFixes } from '@forge/projects/preflight-fix-auto.ts';
+import { ensureStudioBranch, commitStudioChange, withStudioWrite, saveProjectRepo } from '@forge/projects/project-repo-tx.ts';
+import type { ClauseResult } from '@forge/projects/preflight.ts';
 
 import {
   listAgentDefinitions,
@@ -39,32 +39,32 @@ import {
   listFlowIds,
   isStudioAgent,
 } from '../orchestrator/studio/registry.ts';
-import { listSkillLibrary } from '../orchestrator/studio/skill-library.ts';
-import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
+import { listSkillLibrary } from '@forge/library/studio/skill-library.ts';
+import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import {
   communityRegistryPath,
   loadCommunityRegistry,
   serializeCommunityRegistry,
   COMMUNITY_REGISTRY_SCHEMA_VERSION,
 } from '../orchestrator/studio/registry.ts';
-import type { CommunityRegistryItem, CommunityRegistrySource } from '../orchestrator/studio/types.ts';
-import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
-import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from './studio-path-guard.ts';
-import { removeInstallLedgerEntry } from '../orchestrator/studio/skill-install-ledger.ts';
-import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
-import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
+import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
+import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import { skillsDir as toSkillsDir, assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from '@forge/kernel';
+import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
+import { CommunityRegistryLockError, lockCommunityRegistry } from '@forge/library/community-registry-lock.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
-import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
-import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
-import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
-import { seedProjectBrain, checkProjectBrainSeedContainment } from '../orchestrator/project-brain-seed.ts';
-import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
-import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
+import { MAX_MATERIALS_LENGTH } from '@forge/agents/studio/materials.ts';
+import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '@forge/projects/project-config.ts';
+import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
+import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
+import { scaffoldGreenfieldProject } from '@forge/projects/project-create.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from '@forge/projects/preflight.ts';
+import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
-import { cachedListRuns } from './run-list-cache.ts';
+import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -76,7 +76,7 @@ import {
 // W7-B3 review F8: ONE decode-and-slug-validate helper for community-item URL
 // ids — the community routes' own, not a local re-implementation (its
 // malformed-%-encoding branch answers a distinct, friendlier 400).
-import { decodeIdOrRespond } from './bridge-studio-community.ts';
+import { decodeIdOrRespond } from '@forge/library/bridge-studio-community.ts';
 
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3)

@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 
 import {
   runStructuredTurn,
@@ -42,24 +42,24 @@ import {
   type InterviewQuestion,
   type InterviewAnswer,
 } from './interactive-session.ts';
-import { createLogger, type EventLogger } from './logging.ts';
-import { sdkHooksForAgent, type SdkHooksOption } from './studio/hook-dispatch.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
-import { withStudioWrite } from './project-repo-tx.ts';
-import { makeToolEventSink } from './tool-event-emit.ts';
-import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { readAgentInstructionsFile } from './project-config.ts';
-import { skillPathRelative, loadSkillTurnPrompt } from './skill-path.ts';
-import { listInstructionSeeds } from './studio/registry.ts';
-import type { InstructionSeed } from './studio/types.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import { sdkHooksForAgent, type SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { listInstructionSeeds } from '../../orchestrator/studio/registry.ts';
+import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 import {
   detectProjectTags,
   matchInstructionSeeds,
   renderSeedPromptSection,
   composedSeedsFooter,
   stripComposedSeedsFooter,
-} from './instruction-seed-match.ts';
+} from '@forge/library/instruction-seed-match.ts';
 
 export { type InterviewQuestion } from './interactive-session.ts';
 

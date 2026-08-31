@@ -61,10 +61,10 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
 import { runAdversarialReview } from './adversarial-review.ts';
-import { createLogger } from '../logging.ts';
-import { serializeWorkItem, type WorkItem } from '../work-item.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../test-fixtures/spawn-capture/normalize.ts';
+import { createLogger } from '@forge/kernel';
+import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');

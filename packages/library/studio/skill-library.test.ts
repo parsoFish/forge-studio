@@ -28,9 +28,9 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './community-source-url.ts';
 
-import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
-import { isStudioAgent, listPlainSkills, listAgentDefinitions } from './registry.ts';
-import type { AgentDefinition } from './types.ts';
+import { skillDir, skillPath, skillsDir } from '@forge/agents/skill-path.ts';
+import { isStudioAgent, listPlainSkills, listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 
 import {
@@ -1464,7 +1464,7 @@ describe('ledger integrity — duplicate/non-slug entry ids must fail loud', () 
 
 describe('assertSkillSlug — length cap', () => {
   it('AT-84: an over-long but charset-valid id → installSkillPackage throws an actionable (non-ENAMETOOLONG) message naming the length limit; nothing written; the cap is an exported named constant', async () => {
-    const skillPathModule = (await import('../skill-path.ts')) as Record<string, unknown>;
+    const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
     const cap = skillPathModule['MAX_SKILL_ID_LENGTH'];
     assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in orchestrator/skill-path.ts for the id length cap');
 
@@ -1570,8 +1570,8 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
 
 describe('SLUG_RE relocation regression guard', () => {
   it('AT-89: SLUG_RE re-exported identically from orchestrator/skill-path.ts and orchestrator/studio/validate.ts', async () => {
-    const skillPathModule = (await import('../skill-path.ts')) as Record<string, unknown>;
-    const validateModule = (await import('./validate.ts')) as Record<string, unknown>;
+    const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
+    const validateModule = (await import('../../../orchestrator/studio/validate.ts')) as Record<string, unknown>;
 
     const fromSkillPath = skillPathModule['SLUG_RE'] as RegExp | undefined;
     const fromValidate = validateModule['SLUG_RE'] as RegExp;

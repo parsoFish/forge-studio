@@ -12,7 +12,7 @@
  */
 
 import type { ConnectionKind } from './connection-library.ts';
-import type { AgentDefinition } from './types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { ProbeResult, ProbeState } from './connection-probe.ts';
 
 export interface UnreadyConnection {

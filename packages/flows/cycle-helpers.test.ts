@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { commitDevLoopBoundary, openPrInline } from './cycle-helpers.ts';
-import { createLogger, type EventLogEntry } from './logging.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
 
 const INIT = 'INIT-2026-07-01-new-api-pipelinesapproval';

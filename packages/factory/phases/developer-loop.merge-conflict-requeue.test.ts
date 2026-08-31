@@ -29,9 +29,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { add } from '../worktree.ts';
-import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '../wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeConflictDetail, type MergeQueue } from '../wi-merge-back.ts';
+import { add } from '@forge/flows/worktree.ts';
+import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '@forge/flows/wi-worktree.ts';
+import { createMergeQueue, mergeAndPublish, type MergeConflictDetail, type MergeQueue } from '@forge/flows/wi-merge-back.ts';
 import {
   assertOutcomesSettled,
   GATE_FAILURE_FEEDBACK_HEADING,
@@ -44,11 +44,11 @@ import {
   writeMergeConflictFeedback,
   type WiOutcome,
 } from './developer-loop.ts';
-import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '../work-item.ts';
-import { run as runRalph, type AgentInvocation } from '../../loops/ralph/runner.ts';
-import { makeQualityGateFromCmd } from '../../loops/ralph/stop-conditions.ts';
-import { runConcurrentDispatch, type DispatchOutcome } from '../wi-dispatch-scheduler.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
+import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
+import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
+import { makeQualityGateFromCmd } from '@forge/agents/ralph/stop-conditions.ts';
+import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 
 const MAX_RETRIES = 1;
 

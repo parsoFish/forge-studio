@@ -23,12 +23,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { getPaths } from '../orchestrator/queue.ts';
-import { parseManifest, validateManifest, writeManifest } from '../orchestrator/manifest.ts';
+import { getPaths } from './queue.ts';
+import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from './bridge-studio.ts';
+import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../cli/bridge-studio.ts';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
-import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
 import {
   validateManifestPathFields,
   isContainedWorktreePath,

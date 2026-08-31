@@ -50,10 +50,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runReflector } from './reflector.ts';
-import { createLogger } from '../logging.ts';
-import type { CycleInput } from '../cycle-context.ts';
-import type { RunBrainLintResult } from '../../cli/brain-lint.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../test-fixtures/spawn-capture/normalize.ts';
+import { createLogger } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'reflector.json');

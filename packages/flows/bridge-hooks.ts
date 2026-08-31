@@ -25,10 +25,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, pathOnly } from './bridge-studio.ts';
-import { listFlowIds, loadFlowDefinition } from '../orchestrator/studio/registry.ts';
-import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '../orchestrator/studio/types.ts';
-import { verifyWebhookSignature } from '../orchestrator/webhook-verify.ts';
+import { sendJson, allowedOrigin, pathOnly } from '../../cli/bridge-studio.ts';
+import { listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts/studio/types.ts';
+import { verifyWebhookSignature } from './webhook-verify.ts';
 import {
   extractPushPayload,
   extractReleasePayload,
@@ -36,9 +36,9 @@ import {
   extractIssuePayload,
   TriggerPayloadInvalidError,
   type TriggerPayload,
-} from '../orchestrator/trigger-payload.ts';
-import { stageFlowRunRequest } from '../orchestrator/flow-run-requests.ts';
-import { resolveProjectIdForRepo } from '../orchestrator/project-config.ts';
+} from './trigger-payload.ts';
+import { stageFlowRunRequest } from './flow-run-requests.ts';
+import { resolveProjectIdForRepo } from '@forge/projects/project-config.ts';
 
 export type HookRoutesContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 

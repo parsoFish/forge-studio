@@ -19,10 +19,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
-import { createLogger, type EventLogEntry } from './logging.ts';
+import { runProjectManager, type PmQueryFn } from '@forge/factory/phases/project-manager.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
-import { classifyCycleFailure } from './failure-classifier.ts';
+import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-05-20-pm-decomp-test

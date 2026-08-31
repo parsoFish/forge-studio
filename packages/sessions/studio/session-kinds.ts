@@ -44,10 +44,10 @@ import { basename, join, sep } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 
-import { reqString, reqObject, stringArray, optString } from './yaml-fields.ts';
-import { listSkillMdDirs, skillsDir, SLUG_RE } from '../skill-path.ts';
+import { reqString, reqObject, stringArray, optString } from '@forge/kernel/studio/yaml-fields.ts';
+import { listSkillMdDirs, skillsDir, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { FINALIZERS } from '../interactive-finalizers.ts';
-import type { Finding } from './validate.ts';
+import type { Finding } from '../../../orchestrator/studio/validate.ts';
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (frozen — rows-as-data, mirrors TRIGGER_KINDS)

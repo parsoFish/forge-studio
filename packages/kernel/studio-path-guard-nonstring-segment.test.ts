@@ -41,7 +41,7 @@ import { mkdtempSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir, guardedWriteFile } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir, guardedWriteFile } from './path-guard.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

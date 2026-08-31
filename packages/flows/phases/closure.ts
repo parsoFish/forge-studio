@@ -55,7 +55,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-import type { EventLogger } from '../logging.ts';
+import type { EventLogger } from '@forge/kernel';
 import { moveTo as moveQueueItem, promoteMergedToDone as promoteMergedQueueItem } from '../queue.ts';
 import {
   alignLocalToRemote,
@@ -63,7 +63,7 @@ import {
   watchPostMergeCi,
   type PostMergeCiOutcome,
 } from '../pr.ts';
-import { resolvePostMergeCiConfig } from '../config.ts';
+import { resolvePostMergeCiConfig } from '@forge/kernel';
 import type { ClosureResult, CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
 /**

@@ -84,14 +84,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { basename, dirname, join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-import { isSafeRunId } from '../orchestrator/run-agent.ts';
-import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { createLogger } from '../orchestrator/logging.ts';
-import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
-import { KB_ID_RE } from '../orchestrator/studio/validate.ts';
-import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import { loadConfig, defaultConfigPath, resolveProjectsDir } from '../orchestrator/config.ts';
-import { loadKbDescriptor } from '../orchestrator/studio/kb-descriptor.ts';
+import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { resolveKbBrainDir } from './brain-paths.ts';
+import { createLogger } from '@forge/kernel';
+import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
+import { KB_ID_RE } from '../../orchestrator/studio/validate.ts';
+import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { loadConfig, defaultConfigPath, resolveProjectsDir } from '@forge/kernel';
+import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import {
   applyAutoFixesUntilStable,
   resolutionCounts,
@@ -106,9 +106,9 @@ import {
   type KbEditGateResult, type KbEditUnsoundness,
 } from './kb-drain-edit-soundness.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
-import { guardedWriteFile } from './studio-path-guard.ts';
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
-import { isDryBridge } from './dry-bridge.ts';
+import { guardedWriteFile } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { isDryBridge } from '../../cli/dry-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Tunables

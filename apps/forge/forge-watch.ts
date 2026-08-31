@@ -28,7 +28,7 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { existsSync, writeFileSync, renameSync, readdirSync, statSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 /** The deterministic ready signal forge studio emits on stdout once both the
  *  bridge and the UI have answered a health probe. Consumers grep for this
@@ -395,7 +395,7 @@ export async function probeBridgeIdentity(
  * Why these specific numbers: outside common dev-server defaults (3000,
  * 5173, 8080) to avoid colliding with the operator's other projects.
  */
-import { DEFAULT_BRIDGE_PORT } from '../orchestrator/_pkg/contracts.ts';
+import { DEFAULT_BRIDGE_PORT } from '@forge/contracts';
 const DEFAULT_UI_PORT = 4124;
 
 export type WatchOptions = {

@@ -14,19 +14,19 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 
 import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink, writeRootFenceOptions } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
-import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
-import { withIdleDeadline } from './stream-deadline.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { runBrainLint, lintThemeFiles, classify } from '../cli/brain-lint.ts';
-import { guardAgentKbEdits, snapshotBrainTree, type KbEditGateResult } from '../cli/kb-drain-edit-soundness.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { createLogger } from '@forge/kernel';
+import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
+import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge/brain-lint.ts';
+import { guardAgentKbEdits, snapshotBrainTree, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
+import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/brain-fix/SKILL.md

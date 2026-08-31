@@ -25,7 +25,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
 import { startBridge } from './ui-bridge.ts';
-import { writePidFile, clearPidFile, daemonPaths, isPaused, setPaused, pausedFlagPath, markStopping } from '../orchestrator/daemon.ts';
+import { writePidFile, clearPidFile, daemonPaths, isPaused, setPaused, pausedFlagPath, markStopping } from '@forge/flows/daemon.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 

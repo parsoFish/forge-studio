@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-import { startBridge, type SessionIndexRow } from './ui-bridge.ts';
+import { startBridge, type SessionIndexRow } from '../../cli/ui-bridge.ts';
 import {
   deriveSessionLifecycle,
   extractErrorMessage,
@@ -48,7 +48,7 @@ import {
   DEFAULT_STALL_CEILING_MS,
   type SessionLifecycleInputs,
 } from './bridge-studio-lifecycle.ts';
-import { CANCELLED_PHASE } from './bridge-studio.ts';
+import { CANCELLED_PHASE } from '../../cli/bridge-studio.ts';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 

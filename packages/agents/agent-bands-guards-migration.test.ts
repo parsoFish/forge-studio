@@ -39,7 +39,7 @@ import assert from 'node:assert/strict';
 // RENAMED import (Job B) — does not exist on today's agent-bands.ts. This
 // import is the file's RED signal; see header.
 import { resolveBandGuard } from './agent-bands.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /** A def in the real post-migration shape: `composition.guards` present,
  * `composition.hooks` absent entirely (no back-compat key). */

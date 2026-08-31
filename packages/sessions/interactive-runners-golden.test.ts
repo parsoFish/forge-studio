@@ -109,10 +109,10 @@ import {
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
-import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from './project-brain-builder-runner.ts';
+import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from './test-fixtures/spawn-capture/normalize.ts';
+import { createLogger } from '@forge/kernel';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
 const FIXTURES_DIR = resolve(import.meta.dirname, 'test-fixtures', 'spawn-capture');
 const FIXTURE_ARCHITECT = join(FIXTURES_DIR, 'interactive-architect.json');

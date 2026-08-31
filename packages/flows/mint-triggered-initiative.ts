@@ -14,10 +14,10 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from './config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from '@forge/kernel';
 import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
-import { loadFlowDefinition } from './studio/registry.ts';
+import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 import { FLOW_ID_RE } from './enqueue-flow-run.ts';
 

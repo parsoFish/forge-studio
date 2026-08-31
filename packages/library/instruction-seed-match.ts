@@ -14,7 +14,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { InstructionSeed } from './studio/types.ts';
+import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 /** Every forge-managed project matches the contract seed. */
 const FORGE_MANAGED_TAG = 'forge-managed';

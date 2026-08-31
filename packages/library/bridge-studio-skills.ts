@@ -37,12 +37,12 @@ import {
   readJson,
   pathOnly,
   type StudioContext,
-} from './bridge-studio.ts';
-import { skillPath, skillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+} from '../../cli/bridge-studio.ts';
+import { skillPath, skillsDir } from '@forge/agents/skill-path.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 import { stageSkillPackage } from './skill-staging.ts';
-import { SLUG_RE, isReservedId } from '../orchestrator/studio/validate.ts';
-import { isStudioAgent } from '../orchestrator/studio/registry.ts';
+import { SLUG_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
+import { isStudioAgent } from '../../orchestrator/studio/registry.ts';
 import {
   listSkillLibrary,
   readSkillPackage,
@@ -52,8 +52,8 @@ import {
   approveSkillDraft,
   repinSkillPackage,
   type SkillLibraryEntry,
-} from '../orchestrator/studio/skill-library.ts';
-import { removeInstallLedgerEntry } from '../orchestrator/studio/skill-install-ledger.ts';
+} from './studio/skill-library.ts';
+import { removeInstallLedgerEntry } from './studio/skill-install-ledger.ts';
 
 // SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept
 // at or below the transport's MAX_BODY_BYTES (~1 MiB, cli/bridge-studio.ts) so

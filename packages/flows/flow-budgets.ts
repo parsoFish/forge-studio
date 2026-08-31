@@ -13,8 +13,8 @@
  * Clocks are injectable for testability (RateLimitGate receives `now()`).
  */
 
-import type { EventLogEntry, EventLogger } from './logging.ts';
-import { isAuthoritativeCostEvent } from './event-cost.ts';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
+import { isAuthoritativeCostEvent } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Custom errors

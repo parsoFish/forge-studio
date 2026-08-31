@@ -22,8 +22,8 @@ import { execSync } from 'node:child_process';
 import matter from 'gray-matter';
 
 import { resolveKbBrainDir } from './brain-paths.ts';
-import { collectThemeSlugTargets } from '../cli/brain-lint.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { collectThemeSlugTargets } from './brain-lint.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Public types

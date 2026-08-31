@@ -73,7 +73,7 @@ import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import { loadAgentDefinition } from './registry.ts';
-import { skillsDir, listSkillMdDirs } from '../skill-path.ts';
+import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 

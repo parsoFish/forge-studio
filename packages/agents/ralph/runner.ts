@@ -14,7 +14,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEV_WORK_ITEM_ID_PATTERN } from '../../orchestrator/work-item.ts';
+import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import {
   autoCommitWorktreeIfDirty,
   branchHasAllCreates,

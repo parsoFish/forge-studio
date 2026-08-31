@@ -64,9 +64,9 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
-import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
-import { assertSkillSlug } from '../orchestrator/skill-path.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { assertSkillSlug } from '@forge/agents/skill-path.ts';
 import {
   hubCountsFrom,
   listCommunityHubs,
@@ -77,28 +77,28 @@ import {
   COMMUNITY_KINDS,
   type CommunityKind,
   type CommunityItem,
-} from '../orchestrator/studio/community-index.ts';
-import { routeCommunityInstall, installCommunityHookPackage } from '../orchestrator/studio/community-install.ts';
-import { installSkillPackage, type PackageFile } from '../orchestrator/studio/skill-library.ts';
-import { scanHookFiles, type HookScanReport } from '../orchestrator/studio/hook-scan.ts';
-import type { HookPackageFile } from '../orchestrator/studio/hook-package.ts';
+} from './studio/community-index.ts';
+import { routeCommunityInstall, installCommunityHookPackage } from './studio/community-install.ts';
+import { installSkillPackage, type PackageFile } from './studio/skill-library.ts';
+import { scanHookFiles, type HookScanReport } from './studio/hook-scan.ts';
+import type { HookPackageFile } from './studio/hook-package.ts';
 import {
   HOOK_LIFECYCLE_EVENTS,
   hookTriggerError,
   type HookLifecycleEvent,
   type HookPermissionManifest,
-} from '../orchestrator/studio/hook-library.ts';
-import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
-import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
-import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
-import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../orchestrator/studio/registry.ts';
-import { reqString, stringArray, optBool, optString, oneOf } from '../orchestrator/studio/yaml-fields.ts';
+} from './studio/hook-library.ts';
+import { listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
+import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from './studio/connection-probe.ts';
+import { installArgvFor, installConnection } from './studio/connection-install.ts';
+import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../../orchestrator/studio/registry.ts';
+import { reqString, stringArray, optBool, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
 import {
   communityRefreshRemedy,
   runCommunityRefresh,
   type CommunityRefreshRunReason,
 } from './community-refresh-run.ts';
-import type { CommunitySkill } from '../orchestrator/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
  *  only — every AT that exercises this route pins FORGE_ARCHITECT_NO_SPAWN=1

@@ -28,9 +28,9 @@ import {
   resolveDispatchableAgent,
   buildStandaloneRunPrompt,
 } from './agent-dispatch.ts';
-import { listAgentDefinitions, loadAgentDefinition } from './studio/registry.ts';
+import { listAgentDefinitions, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
 const ROOT = process.cwd();

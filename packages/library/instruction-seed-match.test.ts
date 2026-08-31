@@ -16,7 +16,7 @@ import {
   composedSeedsFooter,
   stripComposedSeedsFooter,
 } from './instruction-seed-match.ts';
-import type { InstructionSeed } from './studio/types.ts';
+import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 function seed(over: Partial<InstructionSeed>): InstructionSeed {
   return {

@@ -51,7 +51,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { loadKbDescriptor, serializeKbDescriptor } from '../orchestrator/studio/kb-descriptor.ts';
+import { loadKbDescriptor, serializeKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (mirrors cli/bridge-studio.test.ts / cli/bridge-studio-kbs.test.ts)

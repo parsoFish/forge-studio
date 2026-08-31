@@ -21,9 +21,9 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-view-types.ts';
-import { phasesWithIterationEvents, sumAuthoritativeCostUsd } from './event-cost.ts';
+import { phasesWithIterationEvents, sumAuthoritativeCostUsd } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Constants (used by derivation helpers only)

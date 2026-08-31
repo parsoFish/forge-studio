@@ -15,9 +15,9 @@
  */
 import { join, resolve } from 'node:path';
 
-import { loadFlowDefinition, loadAgentDefinition } from '../orchestrator/studio/registry.ts';
-import { resolveBandGuard } from '../orchestrator/agent-bands.ts';
-import { skillPath } from '../orchestrator/skill-path.ts';
+import { loadFlowDefinition, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
 
 /**
  * Returns the distinct band ids the flow's own nodes actually declare.

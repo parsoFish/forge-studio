@@ -24,20 +24,20 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { guardedReadFile, resolveGuardedPath } from './studio-path-guard.ts';
-import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
-import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
-import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
-import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-runner.ts';
-import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
-import { isSafeRunId } from '../orchestrator/run-agent.ts';
-import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
-import { skillsDir } from '../orchestrator/skill-path.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { createLogger } from '../orchestrator/logging.ts';
-import { runInteractiveTurn } from '../orchestrator/interactive-runner.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
+import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { runArchitectTurn } from '@forge/sessions/architect-runner.ts';
+import { runInstructionsTurn } from '@forge/sessions/instructions-runner.ts';
+import { runDemoBuilderTurn } from '@forge/sessions/demo-builder-runner.ts';
+import type { runProjectBrainTurn } from '../../orchestrator/project-brain-builder-runner.ts';
+import { dispatchAgentRun } from './agent-dispatch.ts';
+import { isSafeRunId } from './run-agent.ts';
+import { isStandaloneBandAgent, runBandAgentStandalone } from '../../orchestrator/band-agent-run.ts';
+import { skillsDir } from './skill-path.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { createLogger } from '@forge/kernel';
+import { runInteractiveTurn } from '@forge/sessions/interactive-runner.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
@@ -143,7 +143,7 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
     combinedArgCheck: true,
     kindDir: '_project-brain',
     loadRunTurn: async () => {
-      const { runProjectBrainTurn: run } = await import('../orchestrator/project-brain-builder-runner.ts');
+      const { runProjectBrainTurn: run } = await import('../../orchestrator/project-brain-builder-runner.ts');
       return run as unknown as AgentTurnFn;
     },
     printResult: (raw) => {

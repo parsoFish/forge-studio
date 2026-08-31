@@ -18,7 +18,7 @@
  */
 
 import { createClaudeAgent } from '../../ralph/claude-agent.ts';
-import { pinnedSdkQuery as sdkQuery } from '../../../orchestrator/pinned-sdk-query.ts';
+import { pinnedSdkQuery as sdkQuery } from '../../pinned-sdk-query.ts';
 import type { RuntimeAdapter, AdapterAgentOptions, QueryFn } from '../types.ts';
 
 export const claudeAdapter: RuntimeAdapter = {

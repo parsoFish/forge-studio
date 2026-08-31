@@ -26,11 +26,11 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { runPreflight } from '../cli/preflight.ts';
-import { loadFlowDefinition, listAgentDefinitions } from './studio/registry.ts';
-import { validateFlow } from './studio/validate.ts';
-import { skillsDir as toSkillsDir } from './skill-path.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import { runPreflight } from '@forge/projects/preflight.ts';
+import { loadFlowDefinition, listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
+import { validateFlow } from '../../orchestrator/studio/validate.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Public types

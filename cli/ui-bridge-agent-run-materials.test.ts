@@ -55,7 +55,7 @@ import { startBridge } from './ui-bridge.ts';
 import { DRY_BRIDGE_LOG_BUCKET } from './dry-bridge.ts';
 import {
   MAX_MATERIALS_COUNT, MAX_MATERIAL_BYTES, MAX_MATERIALS_TOTAL_BYTES,
-} from '../orchestrator/studio/materials.ts';
+} from '@forge/agents/studio/materials.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 

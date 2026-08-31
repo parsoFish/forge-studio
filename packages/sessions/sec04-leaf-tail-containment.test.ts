@@ -43,10 +43,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../orchestrator/instructions-runner.ts';
-import { writeSessionStatus, type QueryFn } from '../orchestrator/interactive-session.ts';
-import { createLogger } from '../orchestrator/logging.ts';
-import { deriveContractStages } from './contract-stages.ts';
+import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from './instructions-runner.ts';
+import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+import { createLogger } from '@forge/kernel';
+import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 
 // Belt-and-braces: no interactive turn in this pin should ever reach a live SDK.
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';

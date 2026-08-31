@@ -29,7 +29,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 import {
   existsSync,

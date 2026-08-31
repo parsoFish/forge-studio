@@ -37,7 +37,7 @@ import { mkdirSync, mkdtempSync, existsSync, rmSync, writeFileSync } from 'node:
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 /** Builds manifest markdown frontmatter; every string value goes through
  *  `JSON.stringify` (a valid YAML double-quoted scalar) so an attacker-

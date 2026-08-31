@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runClosure, promoteMergedToDone } from './closure.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
 // Captured ONCE at module load — the stable cwd to restore to after each

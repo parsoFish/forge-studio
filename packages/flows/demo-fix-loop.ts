@@ -27,7 +27,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
-import { loadConfig, resolveReviewLoopCaps } from './config.ts';
+import { loadConfig, resolveReviewLoopCaps } from '@forge/kernel';
 import { notify } from './notify.ts';
 import { validateDemoFixSpec, type DemoFixProposal, type DemoFixSpecRecord } from './flow-artifacts.ts';
 import {

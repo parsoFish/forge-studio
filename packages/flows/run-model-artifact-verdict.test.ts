@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveArtifacts, findPrUrl } from './run-model-derive.ts';
-import type { EventLogEntry, Phase } from './logging.ts';
+import type { EventLogEntry, Phase } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // deriveArtifacts — verdict presence

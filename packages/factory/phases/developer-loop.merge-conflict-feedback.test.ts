@@ -31,8 +31,8 @@ import {
   writeGateFeedback,
   writeMergeConflictFeedback,
 } from './developer-loop.ts';
-import type { MergeConflictDetail } from '../wi-merge-back.ts';
-import type { GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
+import type { MergeConflictDetail } from '@forge/flows/wi-merge-back.ts';
+import type { GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
 
 function setupWorktree(): { path: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'forge-merge-conflict-feedback-'));

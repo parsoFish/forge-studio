@@ -42,8 +42,8 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 
 import {
   runAgentTurn,
@@ -55,16 +55,16 @@ import {
   makeThinkingSink,
   type QueryFn,
 } from './interactive-session.ts';
-import { createLogger, type EventLogger } from './logging.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '../cli/studio-path-guard.ts';
-import { makeToolEventSink } from './tool-event-emit.ts';
-import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
-import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { loadProjectConfig } from './project-config.ts';
-import { listDemoElements } from './studio/registry.ts';
-import type { DemoStep, DemoElementDefinition } from './studio/types.ts';
-import { skillPathRelative, loadSkillTurnPrompt, SLUG_RE } from './skill-path.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import type { DemoStep, DemoElementDefinition } from '@forge/contracts/studio/types.ts';
+import { skillPathRelative, loadSkillTurnPrompt, SLUG_RE } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)

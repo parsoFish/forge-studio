@@ -56,16 +56,16 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 
-import { parseManifest } from '../orchestrator/manifest.ts';
-import type { QueueState } from '../orchestrator/queue.ts';
+import { parseManifest } from './manifest.ts';
+import type { QueueState } from './queue.ts';
 import {
   aggregateRun,
   buildNodeMapping,
   buildFlowNodeSets,
   buildAgentSlugToNodeId,
   makeDegradedRun,
-} from '../orchestrator/run-model.ts';
-import type { Run } from '../orchestrator/run-model.ts';
+} from './run-model.ts';
+import type { Run } from './run-model.ts';
 
 // ---------------------------------------------------------------------------
 // Queue-state enumeration

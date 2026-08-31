@@ -63,7 +63,7 @@
  *                                     external⇒command|command-presence).
  */
 
-import type { Catalog, CatalogConnectionEntry } from './types.ts';
+import type { Catalog, CatalogConnectionEntry } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Public API types

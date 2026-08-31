@@ -20,7 +20,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../orchestrator/demo-paths.ts';
+import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows/demo-paths.ts';
 
 import type {
   HarnessMetricRow,

@@ -39,7 +39,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { resolveGuardedPath, guardedFile } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile } from '@forge/kernel';
 
 export class SkillStagingError extends Error {}
 

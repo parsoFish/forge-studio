@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregate } from './metrics.ts';
-import type { EventLogEntry, Phase } from '../orchestrator/logging.ts';
+import type { EventLogEntry, Phase } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // helpers

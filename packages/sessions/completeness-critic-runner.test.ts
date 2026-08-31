@@ -28,7 +28,7 @@ import {
   type QueryFn,
   type RunCompletenessCriticInput,
 } from './completeness-critic-runner.ts';
-import type { EventLogEntry, EventLogger } from './logging.ts';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 /** In-memory logger stub — the critic threads it to hook dispatch and never
  *  emits through it itself, so nothing needs to reach disk. */

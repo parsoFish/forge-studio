@@ -45,11 +45,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, CANCELLED_PHASE, type StudioContext } from './bridge-studio.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, CANCELLED_PHASE, type StudioContext } from '../../cli/bridge-studio.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
 import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './bridge-studio-sessions.ts';
 import { killTrackedTurn } from './bridge-studio-lifecycle.ts';
 

@@ -19,7 +19,7 @@
  * what it will move.
  */
 
-import type { TriggerKindId } from './_pkg/contracts.ts';
+import type { TriggerKindId } from '@forge/contracts';
 
 export type RunStatus = 'planned' | 'active' | 'gated' | 'complete' | 'failed';
 export type RunPhaseStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';

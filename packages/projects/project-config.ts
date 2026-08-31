@@ -17,8 +17,8 @@
  */
 
 import { join, resolve } from 'node:path';
-import { guardedReadFile } from '../cli/studio-path-guard.ts';
-import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
+import { guardedReadFile } from '@forge/kernel';
+import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from '@forge/contracts/studio/types.ts';
 import type {
   BuildProcess,
   DemoStep,
@@ -27,14 +27,14 @@ import type {
   ReleaseStep,
   ReleaseStepKind,
   ReleaseStepPhase,
-} from './studio/types.ts';
-import { REPO_RE } from './trigger-payload.ts';
-import { discoverProjects } from './studio/registry.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from './config.ts';
+} from '@forge/contracts/studio/types.ts';
+import { REPO_RE } from '@forge/flows/trigger-payload.ts';
+import { discoverProjects } from '../../orchestrator/studio/registry.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
-export type { DemoStep, DemoStepKind } from './studio/types.ts';
-export { DEMO_STEP_KINDS } from './studio/types.ts';
-export type { ReleaseStep, ReleaseConfig, BuildProcess } from './studio/types.ts';
+export type { DemoStep, DemoStepKind } from '@forge/contracts/studio/types.ts';
+export { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
+export type { ReleaseStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 

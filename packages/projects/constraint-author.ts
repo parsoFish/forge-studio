@@ -19,7 +19,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { projectBrainDir } from './brain-paths.ts';
+import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { parseConstraintBlocks } from './constraint-blocks.ts';
 
 /** Heading that delimits the section this authorer owns — replaced wholesale on

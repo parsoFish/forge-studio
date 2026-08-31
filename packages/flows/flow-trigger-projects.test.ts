@@ -50,14 +50,14 @@ import {
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 
-import { loadFlowDefinition } from './studio/registry.ts';
+import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import {
   stageFlowRunRequest,
   drainFlowRunRequests,
   listFlowRunRequests,
   type FlowRunRequest,
 } from './flow-run-requests.ts';
-import type { FlowTrigger } from './studio/types.ts';
+import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -61,8 +61,8 @@ import { tmpdir } from 'node:os';
 
 import { runAgent } from './run-agent.ts';
 import { FORGE_ROOT } from './studio/derive.ts';
-import { loadAgentDefinition } from './studio/registry.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
 // ---------------------------------------------------------------------------

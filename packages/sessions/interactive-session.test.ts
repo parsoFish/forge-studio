@@ -29,7 +29,7 @@ import {
   type QueryFn,
   type WriteRootCanUseTool,
 } from './interactive-session.ts';
-import type { EventLogEntry, EventLogger } from './logging.ts';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 const MODEL = 'claude-sonnet-4-6';
 const TOOLS = ['Read', 'Grep'] as const;

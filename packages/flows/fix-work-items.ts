@@ -17,7 +17,7 @@
 
 import { join } from 'node:path';
 
-import { guardedFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
+import { guardedFile, guardedWriteFile } from '@forge/kernel';
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import {
   devWorkItemIdStem,

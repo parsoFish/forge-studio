@@ -17,22 +17,22 @@
 
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { serve } from './scheduler.ts';
-import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
-import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
-import { runStudioLint } from '../cli/studio-lint.ts';
-import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
-import { runContractComplianceLoop, formatComplianceReport } from '../cli/contract-compliance-loop.ts';
-import { composeAgentsMd } from './agents-md-compose.ts';
-import { authorConstraintBlocks } from './constraint-author.ts';
-import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from './project-create.ts';
-import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from './config.ts';
-import { runInit, ensureLayout, type InitReport } from './init.ts';
-import { worktreeDemoDir } from './demo-paths.ts';
-import { cmdAgent, cmdAgentRun } from '../cli/agent-run.ts';
-import { cmdProjectMigrate } from '../cli/project-migrate.ts';
-import { cmdCommunity } from '../cli/community-refresh-cmd.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { serve } from '@forge/flows/scheduler.ts';
+import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
+import { runStudioLint } from '../../cli/studio-lint.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
+import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
+import { composeAgentsMd } from '@forge/projects/agents-md-compose.ts';
+import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
+import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
+import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { runInit, ensureLayout, type InitReport } from '@forge/kernel';
+import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
+import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
+import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
+import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -278,7 +278,7 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
     return;
   }
   const runId = flag('run-id') ?? `manual-${kind}`;
-  const { runBrainFixTurn } = await import('./brain-fix-runner.ts');
+  const { runBrainFixTurn } = await import('@forge/sessions/brain-fix-runner.ts');
   const r = await runBrainFixTurn({
     runId,
     kbId: kb,
@@ -416,7 +416,7 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
     console.warn(`${logLabel} preflight layout check skipped: ${(err as Error).message}`);
   }
 
-  const { runWatch, isValidPort } = await import('../cli/forge-watch.ts');
+  const { runWatch, isValidPort } = await import('./forge-watch.ts');
   const parsePortFlag = (raw: string | undefined, flag: string): number => {
     if (!isValidPort(raw)) {
       console.error(`forge studio: ${flag} requires a valid port number (1-65535)`);
@@ -768,7 +768,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const dirFlag = flagValue(rest, '--dir');
     const demoDir = dirFlag ?? worktreeDemoDir(INVOCATION_CWD, initiativeId);
     const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
-    const { renderDemoBundle } = await import('../cli/demo-model.ts');
+    const { renderDemoBundle } = await import('@forge/factory/demo-model.ts');
     // worktree root lets the bundle back-fill any live evidence the acceptance
     // test persisted under <worktree>/.forge/live-evidence/.
     const res = renderDemoBundle(demoDir, worktreeRoot);
@@ -821,9 +821,9 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const baseRef = flagValue(rest, '--base') ?? 'main';
     const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
     try {
-      const { captureCheckpoints } = await import('../cli/demo.ts');
-      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = await import('../cli/demo-model.ts');
-      const { CAPTURE_NONCE_ENV } = await import('./phases/orchestrated-capture.ts');
+      const { captureCheckpoints } = await import('@forge/factory/demo.ts');
+      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = await import('@forge/factory/demo-model.ts');
+      const { CAPTURE_NONCE_ENV } = await import('@forge/flows/phases/orchestrated-capture.ts');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;
@@ -901,7 +901,7 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
   }
   const projectDir = resolvePreflightProjectDir(project);
   const runId = flag('run-id') ?? `manual-${clause}`;
-  const { runPreflightFixTurn } = await import('./preflight-fix-runner.ts');
+  const { runPreflightFixTurn } = await import('@forge/sessions/preflight-fix-runner.ts');
   const r = await runPreflightFixTurn({
     runId,
     projectDir,

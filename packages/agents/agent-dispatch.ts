@@ -20,14 +20,14 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listFlowIds, loadFlowDefinition, normalizeProjectId } from './studio/registry.ts';
+import { listAgentDefinitions, listFlowIds, loadFlowDefinition, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
-import { createLogger } from './logging.ts';
-import { fireAgentCompleteTriggers } from './flow-trigger.ts';
+import { createLogger } from '@forge/kernel';
+import { fireAgentCompleteTriggers } from '@forge/flows/flow-trigger.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition, FlowDefinition } from './studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 
 /** One reference to an already-staged kickoff material — a relative path
  *  (e.g. `materials/photo.png`) plus its derived kind. NEVER carries bytes:

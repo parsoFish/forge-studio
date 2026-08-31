@@ -38,13 +38,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { join, dirname, basename, sep } from 'node:path';
 
-import { guardedFile } from '../cli/studio-path-guard.ts';
-import { withIdleDeadline } from './stream-deadline.ts';
-import type { SdkHooksOption } from './studio/hook-dispatch.ts';
+import { guardedFile } from '@forge/kernel';
+import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
+import type { SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
 import { inspectBashCommand } from './bash-fence.ts';
-import { extractLiveToolDetails } from './tool-event-emit.ts';
-import type { EventLogger, Phase } from './logging.ts';
-import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
+import { extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
+import type { EventLogger, Phase } from '@forge/kernel';
+import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 
 /** Heartbeat cadence — the runner touches its `.heartbeat` file at most this
  *  often during an SDK stream, so the UI staleness checker has a liveness pulse

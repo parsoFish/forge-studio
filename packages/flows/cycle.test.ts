@@ -27,7 +27,7 @@ import {
   resolveCiTimeoutMs,
   type CiCommandRunner,
 } from './ci-gate.ts';
-import { createLogger, type EventLogEntry } from './logging.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeManifest, DERIVED_CEILING_MARGIN_USD, type InitiativeManifest } from './manifest.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {

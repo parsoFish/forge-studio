@@ -37,21 +37,21 @@
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import type { EventLogger } from './logging.ts';
-import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
-import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from './studio/types.ts';
-import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
+import type { EventLogger } from '@forge/kernel';
+import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
+import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { CostTracker, WedgeDetector, RateLimitGate } from '@forge/flows/flow-budgets.ts';
 import { listArtifactTemplates, listAgentDefinitions, normalizeProjectId } from './studio/registry.ts';
-import { resolveBandGuard } from './agent-bands.ts';
-import { FORGE_ROOT, skillsDir } from './skill-path.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { FORGE_ROOT, skillsDir } from '@forge/agents/skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
-import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
-import { fireFlowTriggers } from './flow-trigger.ts';
-import { stageFlowRunRequest } from './flow-run-requests.ts';
+import { assertInboundArtifacts, type ArtifactContract } from '@forge/flows/flow-artifacts.ts';
+import { fireFlowTriggers } from '@forge/flows/flow-trigger.ts';
+import { stageFlowRunRequest } from '@forge/flows/flow-run-requests.ts';
 
-import type { PhaseExecutor, ProjectGate } from './_pkg/kernel.ts';
-import type { NodeExecContext, NodeRunState } from './flow-node-context.ts';
-import { resolveNodeKind } from './flow-node-kind.ts';
+import type { PhaseExecutor, ProjectGate } from '@forge/kernel';
+import type { NodeExecContext, NodeRunState } from '@forge/flows/flow-node-context.ts';
+import { resolveNodeKind } from '@forge/flows/flow-node-kind.ts';
 
 /**
  * `resolveNodeKind` moved to its own module in M2-B so the executor table can

@@ -31,7 +31,7 @@
 
 import type { ServerResponse } from 'node:http';
 
-import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
 import { sendJson } from './bridge-studio.ts';
 
 /** The env var that activates dry-bridge mode. Single source of truth — no

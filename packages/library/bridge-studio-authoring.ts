@@ -165,9 +165,9 @@ import {
   readJson,
   pathOnly,
   type StudioContext,
-} from './bridge-studio.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
-import { installSkillPackage, SkillIdOccupiedError, MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from '../orchestrator/studio/skill-library.ts';
+} from '../../cli/bridge-studio.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
+import { installSkillPackage, SkillIdOccupiedError, MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from './studio/skill-library.ts';
 import {
   hookDir,
   hooksDir,
@@ -176,13 +176,13 @@ import {
   FORBIDDEN_HOOK_BINDING_KEYS,
   type HookLifecycleEvent,
   type HookPermissionManifest,
-} from '../orchestrator/studio/hook-library.ts';
-import { reqString, optString, oneOf } from '../orchestrator/studio/yaml-fields.ts';
-import { resolveProjectsDir, loadConfig, defaultConfigPath } from '../orchestrator/config.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { isReservedId } from '../orchestrator/skill-path.ts';
-import { listTemplateLibrary } from '../orchestrator/studio/template-library.ts';
+} from './studio/hook-library.ts';
+import { reqString, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { isReservedId } from '@forge/agents/skill-path.ts';
+import { listTemplateLibrary } from './studio/template-library.ts';
 import {
   writableCategoryOrReason,
   WRITABLE_CATEGORY_DIRS,
@@ -194,12 +194,12 @@ import {
 // error class in here does NOT regress the deliberate dynamic-import-of-the-
 // RUNNER decision a few lines below (that import stays dynamic because
 // `interactive-runner.ts`, not this module, is what drags the SDK in).
-import { InteractiveFinalizerError } from '../orchestrator/interactive-finalizers.ts';
+import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizers.ts';
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
 // DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
 // project-brain-builder-runner dynamic-import precedent).
-import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '../orchestrator/interactive-runner.ts';
+import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '@forge/sessions/interactive-runner.ts';
 
 const FINALIZE_URL = '/api/studio/authoring/finalize';
 
@@ -790,7 +790,7 @@ export async function runFinalize(
         sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
         return;
       }
-      const { runInteractiveTurn } = await import('../orchestrator/interactive-runner.ts');
+      const { runInteractiveTurn } = await import('@forge/sessions/interactive-runner.ts');
       const turnResult: RunInteractiveTurnResult = await runInteractiveTurn(descriptor, {
         sessionId,
         projectRoot,

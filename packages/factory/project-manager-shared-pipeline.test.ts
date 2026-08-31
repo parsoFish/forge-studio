@@ -33,12 +33,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
-import { createLogger } from './logging.ts';
-import type { CycleInput } from './cycle-context.ts';
-import { parseManifest, serializeManifest, type InitiativeManifest } from './manifest.ts';
-import { promoteManifests } from './promote-manifests.ts';
-import { enqueuePlanRun, PLAN_FLOW_ID } from './enqueue-plan-run.ts';
-import { getPaths } from './queue.ts';
+import { createLogger } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { parseManifest, serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { enqueuePlanRun, PLAN_FLOW_ID } from '@forge/flows/enqueue-plan-run.ts';
+import { getPaths } from '@forge/flows/queue.ts';
 
 const INITIATIVE_ID = 'INIT-2026-07-18-shared-pipeline';
 

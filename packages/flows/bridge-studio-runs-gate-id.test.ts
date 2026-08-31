@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { recoverInitiativeId } from './bridge-studio-runs.ts';
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Pure recovery rule

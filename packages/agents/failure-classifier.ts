@@ -8,7 +8,7 @@
  * failure than to auto-retry into the same hole.
  */
 
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 
 export type FailureKind = 'transient' | 'terminal';
 

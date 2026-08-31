@@ -20,7 +20,7 @@ import {
   type ArtifactContract,
   type ArtifactGuardInput,
 } from './flow-artifacts.ts';
-import type { FlowDefinition } from './studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'flow-artifacts-'));

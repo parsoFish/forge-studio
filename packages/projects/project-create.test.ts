@@ -22,7 +22,7 @@ import {
   hasUnsubstitutedTokens,
   type CreationManifest,
 } from './project-create.ts';
-import { discoverProjects } from './studio/registry.ts';
+import { discoverProjects } from '../../orchestrator/studio/registry.ts';
 // SEC-05 / forge-4on additions (below) also need to write corrupt template
 // fixtures — added as a second node:fs import so the existing import line (and
 // every existing test) stays byte-for-byte untouched.

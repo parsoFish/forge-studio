@@ -25,7 +25,7 @@
  */
 
 import { communityRefreshRemedy, runCommunityRefresh, type CommunityRefreshRunResult } from './community-refresh-run.ts';
-import type { CommunityRefreshOutcome } from '../orchestrator/studio/community-refresh-api.ts';
+import type { CommunityRefreshOutcome } from './studio/community-refresh-api.ts';
 
 const USAGE = [
   'usage: forge community refresh [--dry-run]',

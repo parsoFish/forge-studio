@@ -24,7 +24,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
-import { loadConfig, resolveReviewLoopCaps } from './config.ts';
+import { loadConfig, resolveReviewLoopCaps } from '@forge/kernel';
 import { notify } from './notify.ts';
 import {
   compileFixWorkItems,

@@ -89,12 +89,12 @@ import { join } from 'node:path';
 import { aggregateRun, listRuns } from './run-model.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
-import { normalizeProjectId } from './studio/registry.ts';
+import { normalizeProjectId } from '../../orchestrator/studio/registry.ts';
 import {
   buildCronFlowRunRequest,
   buildWebhookFlowRunRequest,
   buildAgentCompleteFlowRunRequest,
-} from './test-fixtures/flow-run-request.ts';
+} from '../../orchestrator/test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------

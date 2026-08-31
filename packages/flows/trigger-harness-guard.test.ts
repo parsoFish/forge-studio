@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 import { stageFlowRunRequest, drainFlowRunRequests } from './flow-run-requests.ts';
 // @ts-expect-error — plain .mjs harness helper, no type declarations.
-import { assertNoLiveDaemon } from '../scripts/lib/journey-daemon-guard.mjs';
+import { assertNoLiveDaemon } from '../../scripts/lib/journey-daemon-guard.mjs';
 
 const FLOW_YAML = [
   'id: tick',

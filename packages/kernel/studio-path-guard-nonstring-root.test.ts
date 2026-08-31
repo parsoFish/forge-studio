@@ -25,7 +25,7 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { resolveGuardedPath, guardedFile } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile } from './path-guard.ts';
 
 function withRoot(fn: (root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), 'guard-nonstring-root-'));

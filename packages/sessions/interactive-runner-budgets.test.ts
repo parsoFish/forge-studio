@@ -41,9 +41,9 @@ import { join } from 'node:path';
 import { runInteractiveTurn } from './interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
-import { loadAgentDefinition } from './studio/registry.ts';
-import { skillPath } from './skill-path.ts';
+import { createLogger } from '@forge/kernel';
+import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
 
 /** Two rows, both real-parsed through `loadSessionKinds`. The agents are real;
  *  only the kind ids and directories are fixture-local, so this file pins the

@@ -44,9 +44,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
-import { createLogger } from './logging.ts';
-import type { CycleInput } from './cycle-context.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from './test-fixtures/spawn-capture/normalize.ts';
+import { createLogger } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
 const FIXTURE_PATH = resolve(import.meta.dirname, 'test-fixtures', 'spawn-capture', 'pm.json');
 

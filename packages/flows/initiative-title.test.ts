@@ -35,7 +35,7 @@ import { join } from 'node:path';
 
 import { initiativeTitle, parseManifest, serializeManifest } from './manifest.ts';
 import { aggregateRun } from './run-model.ts';
-import { buildManifest, type ArchitectStatus, type DraftInitiative } from './architect-runner.ts';
+import { buildManifest, type ArchitectStatus, type DraftInitiative } from '@forge/sessions/architect-runner.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 

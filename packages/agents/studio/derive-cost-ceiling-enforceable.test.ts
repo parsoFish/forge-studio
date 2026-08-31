@@ -37,8 +37,8 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
 import { agentCapabilityDescriptor, executionPathForSurface, FORGE_ROOT } from './derive.ts';
-import { listAgentDefinitions } from './registry.ts';
-import type { AgentDefinition } from './types.ts';
+import { listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /** Minimal AgentDefinition fixture; override only what a given test cares
  *  about. Mirrors derive.test.ts's own `baseAgentDefFixture` (independently

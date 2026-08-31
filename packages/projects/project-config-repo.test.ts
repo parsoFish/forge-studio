@@ -25,7 +25,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { loadProjectConfig } from './project-config.ts';
-import { REPO_RE } from './trigger-payload.ts';
+import { REPO_RE } from '@forge/flows/trigger-payload.ts';
 
 function newTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'forge-project-config-repo-test-'));

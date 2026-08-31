@@ -27,16 +27,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 
-import { runPreflight } from './preflight.ts';
-import { classifyClause } from './preflight-resolve.ts';
-import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
-import { buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
-import { cachedListRuns } from './run-list-cache.ts';
-import { eventToNodeId } from '../orchestrator/run-model-derive.ts';
-import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
-import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
-import type { Run } from '../orchestrator/run-model.ts';
-import type { EventLogEntry } from '../orchestrator/logging.ts';
+import { runPreflight } from '@forge/projects/preflight.ts';
+import { classifyClause } from '@forge/projects/preflight-resolve.ts';
+import { hasPendingStudioChanges, STUDIO_BRANCH } from '@forge/projects/project-repo-tx.ts';
+import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
+import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
+import { eventToNodeId } from '@forge/flows/run-model-derive.ts';
+import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
+import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
+import type { Run } from '@forge/flows/run-model.ts';
+import type { EventLogEntry } from '@forge/kernel';
 import {
   listAgentDefinitions,
   listStarterAgents,
@@ -50,29 +50,29 @@ import {
   listDemoElements,
   listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
-import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
-import { listFlowBandIds } from './flow-band-vocab.ts';
-import { listProjectStarters } from '../orchestrator/project-create.ts';
-import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from './studio-path-guard.ts';
-import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
-import type { FlowDefinition } from '../orchestrator/studio/types.ts';
+import { listHookLibrary } from '@forge/library/studio/hook-library.ts';
+import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { listProjectStarters } from '@forge/projects/project-create.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
-import { projectKbBindings } from './kb-sites.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '../orchestrator/config.ts';
-import { deriveContractStages } from './contract-stages.ts';
-import { isSdkAvailable } from '../loops/_adapters/registry.ts';
-import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
+import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '@forge/kernel';
+import { deriveContractStages } from '@forge/projects/contract-stages.ts';
+import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
+import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
 import {
   AGENT_INSTRUCTION_FILES,
   validateProjectConfig,
   readQualityGateSidecar,
   injectSidecarIntoTestProcess,
-} from '../orchestrator/project-config.ts';
-import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '../orchestrator/work-item.ts';
-import type { WorkItem } from '../orchestrator/work-item.ts';
-import type { QueueState } from '../orchestrator/queue.ts';
-import { getPaths } from '../orchestrator/queue.ts';
+} from '@forge/projects/project-config.ts';
+import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
+import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { QueueState } from '@forge/flows/queue.ts';
+import { getPaths } from '@forge/flows/queue.ts';
 import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE, type Provenance } from './studio-provenance.ts';
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,7 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
  *  (`orchestrator/interactive-session.ts`), which enforces the sticky-cancel
  *  rule (`cancelledPhaseWins`) for every writer; re-exported here so the
  *  bridge modules keep their one import. */
-export { CANCELLED_PHASE } from '../orchestrator/interactive-session.ts';
+export { CANCELLED_PHASE } from '@forge/sessions/interactive-session.ts';
 
 /** W7-A2 — operator-gate phases for the two kinds that carry NEITHER a
  *  `turnSpec` nor a `panel` table (architect — permanently bespoke per

@@ -15,7 +15,7 @@ import {
   CostCeilingError,
   WedgeKillError,
 } from './flow-budgets.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Helpers

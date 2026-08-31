@@ -92,10 +92,10 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { loadAgentDefinition, loadCatalog } from './registry.ts';
-import { resolveBandGuard, PLATFORM_GUARD_IDS } from '../agent-bands.ts';
-import type { AgentDefinition } from './types.ts';
-import type { Finding } from './validate.ts';
+import { loadAgentDefinition, loadCatalog } from '../../../orchestrator/studio/registry.ts';
+import { resolveBandGuard, PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { Finding } from '../../../orchestrator/studio/validate.ts';
 
 import {
   HOOK_LIFECYCLE_EVENTS,

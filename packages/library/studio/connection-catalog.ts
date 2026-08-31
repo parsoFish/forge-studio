@@ -19,14 +19,14 @@
  * loader in registry.ts).
  */
 
-import { reqString, optString, oneOf } from './yaml-fields.ts';
+import { reqString, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
 import type {
   CatalogCapability,
   CatalogConfigVar,
   CatalogConnectionEntry,
   CatalogInstallMethod,
   CatalogProbeSpec,
-} from './types.ts';
+} from '@forge/contracts/studio/types.ts';
 
 /**
  * Parse a `tools:`/`mcps:` `install:` block (R3-04 D13) — a CLOSED

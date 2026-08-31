@@ -24,7 +24,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import type { EventLogger } from '../logging.ts';
+import type { EventLogger } from '@forge/kernel';
 import type { InitiativeManifest } from '../manifest.ts';
 import {
   detectHiddenCoupling,
@@ -39,7 +39,7 @@ import {
   selectorMatches,
   type ConstraintBlock,
   type ConstraintMatchContext,
-} from '../constraint-blocks.ts';
+} from '@forge/projects/constraint-blocks.ts';
 import { ralphSpecLintWorkItems } from './ralph-spec-lint.ts';
 
 /** ADR 037: sizing bound on a WI's `creates:` list — the evidence base is the

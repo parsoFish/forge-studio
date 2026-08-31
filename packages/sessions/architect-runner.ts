@@ -46,10 +46,10 @@ import {
 } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 
 import { runStructuredTurn, makeReasoningSink, makeThinkingSink, type QueryFn } from './interactive-session.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 export type { QueryFn };
 
 import {
@@ -60,28 +60,28 @@ import {
   type ProposedInitiative,
   type CouncilTranscript,
   type InterviewRound,
-} from '../cli/architect-plan.ts';
-import { loadBrainIndex } from '../cli/brain-index.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
+} from '@forge/factory/architect-plan.ts';
+import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import {
   serializeManifest,
   parseManifest,
   mintAndPersistManifestCycleId,
   type InitiativeManifest,
-} from './manifest.ts';
-import { promoteManifests } from './promote-manifests.ts';
-import { createLogger, type EventLogger } from './logging.ts';
-import { makeToolEventSink } from './tool-event-emit.ts';
-import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
-import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
+} from '@forge/flows/manifest.ts';
+import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import {
   runCompletenessCritic,
   truncateWithMarker,
   CRITIC_MAX_MANIFEST_BODY_CHARS,
   type CompletenessCriticFinding,
 } from './completeness-critic-runner.ts';
-import { skillPath, skillPathRelative, loadSkillTurnPrompt, splitSkillTurnSections } from './skill-path.ts';
+import { skillPath, skillPathRelative, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)

@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { assertDevLoopCloseSync } from './developer-loop.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
 
 function sh(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'pipe' });

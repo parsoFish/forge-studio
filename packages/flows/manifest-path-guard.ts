@@ -81,8 +81,8 @@
  */
 
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath } from './studio-path-guard.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type ManifestPathFields = {
   initiative_id: string;

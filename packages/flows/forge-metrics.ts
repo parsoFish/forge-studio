@@ -24,11 +24,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
-import type { EventLogEntry } from '../orchestrator/logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 import { summariseCycle, type CycleMetrics } from './metrics.ts';
-import { parseManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
-import { parseWorkItem, type WorkItem } from '../orchestrator/work-item.ts';
-import { cycleArchivePath, cycleArchiveRelPath } from '../orchestrator/brain-paths.ts';
+import { parseManifest, type InitiativeManifest } from './manifest.ts';
+import { parseWorkItem, type WorkItem } from './work-item.ts';
+import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge/brain-paths.ts';
 
 export type CycleReportInput = {
   cycleId: string;

@@ -47,7 +47,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template `spawnAgentTurn`
  *  (cli/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`

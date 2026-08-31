@@ -35,7 +35,7 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
+import { projectBrainDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
 
 export type ConstraintTerm = {
   namespace: 'wi' | 'manifest';

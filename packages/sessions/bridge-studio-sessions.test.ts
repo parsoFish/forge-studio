@@ -85,11 +85,11 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { handleStudioSessionsRoutes, isPseudoProjectAnchor, type SessionsRouteContext } from './bridge-studio-sessions.ts';
-import { serializeManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
-import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
+import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { guardedWriteSessionStatus } from './interactive-session.ts';
+import type { ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

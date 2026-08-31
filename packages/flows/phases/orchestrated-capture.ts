@@ -25,7 +25,7 @@ import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '../config.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 

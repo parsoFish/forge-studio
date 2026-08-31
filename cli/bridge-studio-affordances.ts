@@ -133,8 +133,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, type StudioContext } from './bridge-studio.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import {
   loadSessionKinds,
   deriveSessionAffordances,
@@ -143,13 +143,13 @@ import {
   type SessionKindDescriptor,
   type SessionAffordance,
   type SessionAffordanceKind,
-} from '../orchestrator/studio/session-kinds.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import { isSafeRunId } from '../orchestrator/run-agent.ts';
-import { SLUG_RE } from '../orchestrator/skill-path.ts';
-import { invalidProjectReason, parsePendingQuestions } from './bridge-studio-sessions.ts';
-import { approveKbCleanup } from './bridge-studio-kbs.ts';
-import { runFinalize } from './bridge-studio-authoring.ts';
+} from '@forge/sessions/studio/session-kinds.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { SLUG_RE } from '@forge/agents/skill-path.ts';
+import { invalidProjectReason, parsePendingQuestions } from '@forge/sessions/bridge-studio-sessions.ts';
+import { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { runFinalize } from '@forge/library/bridge-studio-authoring.ts';
 import { dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 
 // ---------------------------------------------------------------------------

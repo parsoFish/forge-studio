@@ -23,10 +23,10 @@ import {
   matchInstructionSeeds,
   composedSeedsFooter,
   stripComposedSeedsFooter,
-} from './instruction-seed-match.ts';
-import { listInstructionSeeds } from './studio/registry.ts';
+} from '@forge/library/instruction-seed-match.ts';
+import { listInstructionSeeds } from '../../orchestrator/studio/registry.ts';
 import { loadProjectConfig } from './project-config.ts';
-import type { InstructionSeed } from './studio/types.ts';
+import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 export type ComposeAgentsMdResult = {
   /** Absolute path to the AGENTS.md/CLAUDE.md considered. */

@@ -15,7 +15,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { buildCycleReport, type CycleReportInput } from '../cli/forge-metrics.ts';
+import { buildCycleReport, type CycleReportInput } from './forge-metrics.ts';
 
 export { buildCycleReport, type CycleReportInput };
 

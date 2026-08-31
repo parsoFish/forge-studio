@@ -36,22 +36,22 @@ import {
   validateDemoModel,
   type AcEvaluation,
   type DemoModel,
-} from '../../cli/demo-model.ts';
+} from '../demo-model.ts';
 import {
   validateDemoFixSpec,
   writeDemoFixSpecJson,
   type DemoFixProposal,
   type DemoFixSpecRecord,
-} from '../flow-artifacts.ts';
-import { worktreeDemoDir, worktreeDemoRelDir, DEMO_JSON_BASENAME } from '../demo-paths.ts';
-import type { EventLogger } from '../logging.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
-import { loadProjectConfig } from '../project-config.ts';
-import { runAgent } from '../run-agent.ts';
-import { skillPath } from '../skill-path.ts';
-import { listDemoElements, loadAgentDefinition } from '../studio/registry.ts';
-import { FORGE_ROOT } from '../studio/derive.ts';
-import { readWorkItemsFromDir } from '../work-item.ts';
+} from '@forge/flows/flow-artifacts.ts';
+import { worktreeDemoDir, worktreeDemoRelDir, DEMO_JSON_BASENAME } from '@forge/flows/demo-paths.ts';
+import type { EventLogger } from '@forge/kernel';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { runAgent } from '@forge/agents/run-agent.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import { listDemoElements, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
+import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
 import {
   buildDemoAgentSystemPrompt,
   renderDemoAgentUserPrompt,
@@ -67,8 +67,8 @@ import {
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
   commitOrchestratedCaptureArtifacts,
-} from './orchestrated-capture.ts';
-import { takeScopeSnapshot, scopeViolations } from './agent-scope-guard.ts';
+} from '@forge/flows/phases/orchestrated-capture.ts';
+import { takeScopeSnapshot, scopeViolations } from '@forge/agents/phases/agent-scope-guard.ts';
 
 const DEMO_AGENT_SLUG = 'demo-agent';
 

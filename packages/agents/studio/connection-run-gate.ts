@@ -20,10 +20,10 @@
  * zero-probe-children fast path, not just an empty result after probing.
  */
 
-import { connectionsReadinessFor, type UnreadyConnection } from './connection-readiness.ts';
-import { connectionById } from './connection-library.ts';
-import { probeConnection as probeConnectionReal, type ProbeResult } from './connection-probe.ts';
-import type { AgentDefinition } from './types.ts';
+import { connectionsReadinessFor, type UnreadyConnection } from '@forge/library/studio/connection-readiness.ts';
+import { connectionById } from '@forge/library/studio/connection-library.ts';
+import { probeConnection as probeConnectionReal, type ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
  * The real production prober: resolves `id` against `forgeRoot`'s curated

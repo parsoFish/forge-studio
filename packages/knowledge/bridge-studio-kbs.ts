@@ -22,29 +22,29 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, append
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from '@forge/kernel';
 // gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
 // cli/brain-fix-auto.ts, which import it the same way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
-import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
-import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
-import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
+import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
+import { provenanceOfOrigin, type Provenance } from '../../cli/studio-provenance.ts';
+import { resolveKbBrainDir } from './brain-paths.ts';
+import { KB_ID_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
-import { getKbBackend } from '../orchestrator/kb-backend.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
-import { listFlowBandIds } from './flow-band-vocab.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
-import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
-import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
+import { getKbBackend } from './kb-backend.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '@forge/contracts/studio/types.ts';
+import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import type { ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
+import { runBrainFixTurn } from '@forge/sessions/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { resolutionCounts, applyAutoFixesUntilStable, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
-import { listCycles } from './metrics.ts';
+import { listCycles } from '@forge/flows/metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
-import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
 import {
@@ -64,7 +64,7 @@ import {
   pathOnly,
   SAFE_ID_RE,
   type StudioContext,
-} from './bridge-studio.ts';
+} from '../../cli/bridge-studio.ts';
 
 // ---------------------------------------------------------------------------
 // KBs with layer counts
@@ -843,7 +843,7 @@ type KbHealth = {
 function buildKbHealth(
   forgeRoot: string,
   kbId: string,
-  graph: import('../orchestrator/kb-graph.ts').KbGraph,
+  graph: import('./kb-graph.ts').KbGraph,
   _counts: { index: number; themes: number; raw: number },
 ): KbHealth {
   const { nodes, edges } = graph;

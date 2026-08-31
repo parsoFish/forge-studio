@@ -74,14 +74,14 @@ import {
   type CommunityRefreshFailure,
   type CommunityRefreshOutcome,
   type FetchLike,
-} from '../orchestrator/studio/community-refresh-api.ts';
+} from './studio/community-refresh-api.ts';
 import {
   communityRegistryPath,
   loadCommunityRegistry,
   serializeCommunityRegistry,
-} from '../orchestrator/studio/registry.ts';
-import { communitySourceKey } from '../orchestrator/studio/community-source-url.ts';
-import type { CommunityRegistry, CommunityRegistrySource } from '../orchestrator/studio/types.ts';
+} from '../../orchestrator/studio/registry.ts';
+import { communitySourceKey } from './studio/community-source-url.ts';
+import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 
 /** Per-status tallies, computed once here so the CLI's printed tally and the

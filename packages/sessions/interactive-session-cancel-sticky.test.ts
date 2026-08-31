@@ -42,10 +42,10 @@ import {
   CANCELLED_PHASE,
   type QueryFn,
 } from './interactive-session.ts';
-import { CANCELLED_PHASE as BRIDGE_CANCELLED_PHASE } from '../cli/bridge-studio.ts';
+import { CANCELLED_PHASE as BRIDGE_CANCELLED_PHASE } from '../../cli/bridge-studio.ts';
 import { runInteractiveTurn } from './interactive-runner.ts';
 import { loadSessionKinds } from './studio/session-kinds.ts';
-import { createLogger } from './logging.ts';
+import { createLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // 3. ONE constant

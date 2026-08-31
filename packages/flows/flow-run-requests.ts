@@ -38,7 +38,7 @@ import { enqueueFlowRun, FLOW_ID_RE } from './enqueue-flow-run.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
 import { parseManifest } from './manifest.ts';
-import type { TriggerTarget } from './studio/types.ts';
+import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 import type { TriggerPayload } from './trigger-payload.ts';
 
 export type FlowRunRequestOrigin = 'trigger' | 'cron' | 'webhook' | 'agent-complete';

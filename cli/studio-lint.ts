@@ -49,10 +49,10 @@ import {
   listStarterAgents,
   discoverProjects,
 } from '../orchestrator/studio/registry.ts';
-import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
-import { lintHookComposition, lintHookDefinitions } from '../orchestrator/studio/hook-library.ts';
-import { lintCommunityIndex } from '../orchestrator/studio/community-index.ts';
-import { validateSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { lintTemplateLibrary } from '@forge/library/studio/template-library.ts';
+import { lintHookComposition, lintHookDefinitions } from '@forge/library/studio/hook-library.ts';
+import { lintCommunityIndex } from '@forge/library/studio/community-index.ts';
+import { validateSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import {
   validateAgent,
   validateArtifactRef,
@@ -66,15 +66,15 @@ import {
   validateLibraryFlag,
   type Finding,
 } from '../orchestrator/studio/validate.ts';
-import { validateConnections } from '../orchestrator/studio/connection-validate.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
-import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
-import { listFlowBandIds } from './flow-band-vocab.ts';
-import { kbReadPolicyViolation } from './kb-read-policy.ts';
-import { unroutableKbReason } from './kb-sites.ts';
-import { lintSkillToolFence, lintStarterAgentToolFence } from './studio-lint-tool-fence.ts';
+import { validateConnections } from '@forge/library/studio/connection-validate.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { listSkillMdDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-library.ts';
+import type { AgentDefinition, KbDescriptor } from '@forge/contracts/studio/types.ts';
+import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { kbReadPolicyViolation } from '@forge/knowledge/kb-read-policy.ts';
+import { unroutableKbReason } from '@forge/knowledge/kb-sites.ts';
+import { lintSkillToolFence, lintStarterAgentToolFence } from '@forge/library/studio-lint-tool-fence.ts';
 
 // ---------------------------------------------------------------------------
 // Public API

@@ -14,10 +14,10 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { runDemoAgentPipeline, assertDemoAgentDeclaration, normalizeCriterion, uncoveredCriteria, type DemoAgentPipelineResult } from './demo-agent.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
-import { serializeWorkItem, type WorkItem } from '../work-item.ts';
-import { validateDemoFixSpec, demoFixSpecJsonPath } from '../flow-artifacts.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import { validateDemoFixSpec, demoFixSpecJsonPath } from '@forge/flows/flow-artifacts.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
 const INIT_ID = 'INIT-2026-07-24-demo';
 

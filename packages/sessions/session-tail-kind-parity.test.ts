@@ -23,8 +23,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from './ui-bridge.ts';
+import { loadSessionKinds } from './studio/session-kinds.ts';
+import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../cli/ui-bridge.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..');
 

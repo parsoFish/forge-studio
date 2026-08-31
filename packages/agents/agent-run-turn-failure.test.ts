@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun } from './agent-run.ts';
-import { writeSessionStatus, readSessionStatus } from '../orchestrator/interactive-session.ts';
+import { writeSessionStatus, readSessionStatus } from '@forge/sessions/interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // chdir helper — cmdAgentRun's legacy road resolves `--project` cwd-relative

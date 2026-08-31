@@ -14,9 +14,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { emitDeliverySummary } from './developer-loop.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
-import type { CycleInput } from '../cycle-context.ts';
-import { parseManifest, serializeManifest } from '../manifest.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { parseManifest, serializeManifest } from '@forge/flows/manifest.ts';
 
 function deliveryHarness(): {
   input: CycleInput;

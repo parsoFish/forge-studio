@@ -70,8 +70,8 @@ import { tmpdir } from 'node:os';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { parseManifest, type InitiativeManifest } from './manifest.ts';
 import { stageFlowRunRequest, drainFlowRunRequests } from './flow-run-requests.ts';
-import { isContainedProjectRepoPath } from '../cli/manifest-path-guard.ts';
-import { startBridge } from '../cli/ui-bridge.ts';
+import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

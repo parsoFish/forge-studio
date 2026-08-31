@@ -47,16 +47,16 @@ import { dirname, join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
-import { createLogger, type EventLogger } from './logging.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
-import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
-import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
-import type { QueryFn } from '../loops/_adapters/types.ts';
+import type { AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
+import type { QueryFn } from './_adapters/types.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
-import type { ProbeResult } from './studio/connection-probe.ts';
+import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
 
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`

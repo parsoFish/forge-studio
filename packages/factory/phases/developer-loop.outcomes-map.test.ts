@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assertOutcomesSettled, settleWiOutcome, type WiOutcome } from './developer-loop.ts';
-import type { WorkItem } from '../work-item.ts';
+import type { WorkItem } from '@forge/flows/work-item.ts';
 
 function wi(id: string): WorkItem {
   return {

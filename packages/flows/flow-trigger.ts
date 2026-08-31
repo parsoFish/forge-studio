@@ -21,7 +21,7 @@
  * "enqueue a fresh run" and the "run inline with cycle context" cases, and unit
  * tests assert firing without touching the queue or spawning an agent.
  */
-import type { FlowDefinition, FlowTrigger } from './studio/types.ts';
+import type { FlowDefinition, FlowTrigger } from '@forge/contracts/studio/types.ts';
 import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-requests.ts';
 
 /**
@@ -49,8 +49,8 @@ import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-reque
  * - `webhook` — external (signature-verified receipt on the bridge; fire = stage).
  * - `feed` — reserved (external content feeds).
  */
-export { TRIGGER_KINDS, TRIGGER_KIND_IDS, SHIPPED_TRIGGER_KIND_IDS } from './_pkg/contracts.ts';
-export type { TriggerKindId } from './_pkg/contracts.ts';
+export { TRIGGER_KINDS, TRIGGER_KIND_IDS, SHIPPED_TRIGGER_KIND_IDS } from '@forge/contracts';
+export type { TriggerKindId } from '@forge/contracts';
 
 
 /**

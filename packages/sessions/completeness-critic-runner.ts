@@ -31,14 +31,14 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
-import type { EventLogger } from './logging.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
-import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
+import type { EventLogger } from '@forge/kernel';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 
 export type { QueryFn };
 

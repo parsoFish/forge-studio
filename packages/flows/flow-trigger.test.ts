@@ -8,7 +8,7 @@ import {
   TRIGGER_KINDS,
   type FlowTriggerEvent,
 } from './flow-trigger.ts';
-import type { FlowTrigger } from './studio/types.ts';
+import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
 
 function flow(triggers: FlowTrigger[]): { id: string; triggers: FlowTrigger[] } {
   return { id: 'forge-develop', triggers };

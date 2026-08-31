@@ -37,8 +37,8 @@
  * caught exactly like one that would resolve there by default.
  */
 
-import { resolveKbProcesses } from '../orchestrator/studio/registry.ts';
-import type { KbDescriptor } from '../orchestrator/studio/types.ts';
+import { resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
+import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
 
 /** The one ratified band → reader-role exception (ADR-010 amendment). */
 export const RATIFIED_BAND_READER = { band: 'review-band', role: 'reviewer' } as const;

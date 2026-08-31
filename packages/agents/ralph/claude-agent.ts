@@ -13,11 +13,11 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { pinnedSdkQuery as sdkQuery } from '../../orchestrator/pinned-sdk-query.ts';
-import type { SdkHooksOption } from '../../orchestrator/studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
+import type { SdkHooksOption } from '../studio/hook-dispatch.ts';
 
-import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
-import { gitIdentityEnvOverlay, type GitIdentity } from '../../orchestrator/config.ts';
+import { withIdleDeadline } from '../stream-deadline.ts';
+import { gitIdentityEnvOverlay, type GitIdentity } from '@forge/kernel';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
 
 export type { GitIdentity };

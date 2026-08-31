@@ -27,7 +27,7 @@ import { mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 export class MaterialsStagingError extends Error {}
 

@@ -509,7 +509,7 @@ test('decideAutoRetry: prior transient retry + new transient classification → 
 // ---- F-27: failure classifier (transient | terminal) ----
 
 test('classifyCycleFailure: trivial-pass ralph.end → transient', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'developer-loop', skill: 'developer-ralph', event_type: 'end', input_refs: [], output_refs: [], message: 'ralph.end', metadata: { work_item_id: 'WI-1', status: 'failed', stop_reason: 'quality-gates-pass', iterations: 0 } },
   ];
@@ -521,7 +521,7 @@ test('classifyCycleFailure: trivial-pass ralph.end → transient', async () => {
 });
 
 test('classifyCycleFailure: gate-missing-script → terminal', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'developer-loop', skill: 'developer-ralph', event_type: 'error', input_refs: [], output_refs: [], message: 'gate.fail', metadata: { gate_stderr_tail: 'npm error: missing script: test:visual:fast' } },
   ];
@@ -533,7 +533,7 @@ test('classifyCycleFailure: gate-missing-script → terminal', async () => {
 });
 
 test('classifyCycleFailure: empty events → terminal (unrecognised)', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cls = classifyCycleFailure([] as any);
   assert.equal(cls.kind, 'terminal');
@@ -548,7 +548,7 @@ test('classifyCycleFailure: empty events → terminal (unrecognised)', async () 
 // MAX_AUTO_RETRIES and three byte-identical ~$2.40 runs. The contract is now
 // terminal / zero retries (ADR 015 + ADR 037 2026-08-23 amendments).
 test('classifyCycleFailure: pm per_item_error_count > 0 → terminal (deterministic, no auto-retry)', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'project-manager', skill: 'project-manager', event_type: 'error', input_refs: [], output_refs: [], message: 'pm.end', metadata: { work_item_count: 3, per_item_error_count: 1, hidden_coupling_violations: [] } },
     { event_id: 'e2', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'orchestrator', skill: 'cycle', event_type: 'error', input_refs: [], output_refs: [], message: 'project-manager phase failed: 1 per-item validation errors' },
@@ -562,7 +562,7 @@ test('classifyCycleFailure: pm per_item_error_count > 0 → terminal (determinis
 });
 
 test('classifyCycleFailure: pm capped AND degenerate → terminal (no auto-retry)', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'project-manager', skill: 'project-manager', event_type: 'error', input_refs: [], output_refs: [], message: 'pm.end', metadata: { result_subtype: 'error_max_turns', per_item_error_count: 1, hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }] } },
   ];
@@ -576,7 +576,7 @@ test('classifyCycleFailure: pm capped AND degenerate → terminal (no auto-retry
 // NOT generic reviewer-failed. Distinguished so the failure report points
 // at the actual upstream cause (dev-loop WIs that didn't write their files).
 test('classifyCycleFailure: reviewer.pr-open-failed → terminal "unifier did not author the PR"', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'orchestrator', skill: 'cycle', event_type: 'error', input_refs: [], output_refs: [], message: 'reviewer.pr-open-failed: unifier did not author a PR — DEMO.md or pr-description.md missing.' },
   ];
@@ -629,7 +629,7 @@ test('annotateManifest: replaces folded >- scalar without leaving continuation l
 // ---------------------------------------------------------------------------
 
 test('decideAutoRetry: a real PM hidden-coupling failure classifies terminal (w8-A1 Change 3) → zero auto-retries', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const { dir, paths } = setupQueue();
   try {
     writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm', 0);
@@ -692,7 +692,7 @@ test('decideAutoRetry: a real PM hidden-coupling failure classifies terminal (w8
 });
 
 test('dispatchTerminalStatus: a real PM per-item-validation failure never retries — manifest lands in failed/, never back in pending/ (w8-A1 Change 3, the money test)', async () => {
-  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { classifyCycleFailure } = await import('@forge/agents/failure-classifier.ts');
   const { dir, paths } = setupQueue();
   try {
     writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm2', 0);

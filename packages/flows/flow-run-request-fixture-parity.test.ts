@@ -37,7 +37,7 @@ import type { Cron } from 'croner';
 import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
 import { flowRunsDir } from './flow-run-requests.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
-import { buildCronFlowRunRequest } from './test-fixtures/flow-run-request.ts';
+import { buildCronFlowRunRequest } from '../../orchestrator/test-fixtures/flow-run-request.ts';
 
 function setup(): string {
   return mkdtempSync(join(tmpdir(), 'flow-run-fixture-parity-'));

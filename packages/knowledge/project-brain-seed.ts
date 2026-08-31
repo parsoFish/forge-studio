@@ -34,8 +34,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
-import { resolveGuardedPath, PathGuardContainmentError } from '../cli/studio-path-guard.ts';
+import { loadKbDescriptor, serializeKbDescriptor } from '../../orchestrator/studio/registry.ts';
+import { resolveGuardedPath, PathGuardContainmentError } from '@forge/kernel';
 
 export type ProjectBrainSeedFile = {
   /** forge-root-relative path, forward-slash separated. */

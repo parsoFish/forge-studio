@@ -51,8 +51,8 @@ import { basename, join } from 'node:path';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
-import { listSkillDirs, listSkillMdDirs } from '../orchestrator/skill-path.ts';
-import type { Finding } from '../orchestrator/studio/validate.ts';
+import { listSkillDirs, listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import type { Finding } from '../../orchestrator/studio/validate.ts';
 
 // forge-6gv.19 (W8-B4) — exported so `apps/studio/lib/tool-fence-required-
 // names.ts` (the Agent Builder's from-blank compose, `BLANK_STATE`) and

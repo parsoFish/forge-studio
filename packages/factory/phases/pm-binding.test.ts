@@ -23,7 +23,7 @@ import {
   renderPmUserPrompt,
   renderProjectContextBlock,
 } from './pm-binding.ts';
-import { modelForSpec } from '../phase-agent.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
 
 // ---------------------------------------------------------------------------
 // 1. pmAgentSpec shape

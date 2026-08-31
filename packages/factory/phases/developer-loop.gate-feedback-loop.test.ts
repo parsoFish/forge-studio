@@ -24,10 +24,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createWiWorktree, removeWiWorktree } from '../wi-worktree.ts';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
 import { writeGateFeedback } from './developer-loop.ts';
-import { makeQualityGateFromCmd, type GateRunInfo } from '../../loops/ralph/stop-conditions.ts';
-import { run as runRalph, type AgentInvocation } from '../../loops/ralph/runner.ts';
+import { makeQualityGateFromCmd, type GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
+import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
 
 const DISTINCTIVE_FAILURE = 'DISTINCTIVE_GATE_FAIL_7f3ac2: fixed.marker missing — fix required';
 

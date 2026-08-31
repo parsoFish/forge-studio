@@ -13,7 +13,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { EventLogger } from './logging.ts';
+import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from './manifest.ts';
 
 /**
@@ -128,7 +128,7 @@ export type CycleInput = {
    * to render live progress to stdout in `forge serve` interactive mode.
    * Threaded straight through to `createLogger`'s `tee`.
    */
-  eventTee?: (entry: import('./logging.ts').EventLogEntry) => void;
+  eventTee?: (entry: import('@forge/kernel').EventLogEntry) => void;
   /**
    * M0-A Task 1: injected by `flow-runner.ts::runFlow` from its `CostTracker`
    * (`stopReasonBeforeNextWorkItem`). Consulted by the dev-loop's dispatch
@@ -267,7 +267,7 @@ export type ReviewerOutcome = 'pr-open' | 'ready-for-review';
  * the `PhaseExecutor` port (SPEC.md §2), which lives in kernel and may not
  * import this module.
  */
-import type { CycleOutcome } from './_pkg/contracts.ts';
+import type { CycleOutcome } from '@forge/contracts';
 export type { CycleOutcome };
 
 /**

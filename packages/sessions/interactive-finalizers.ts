@@ -124,7 +124,7 @@ import {
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an

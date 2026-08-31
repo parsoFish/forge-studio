@@ -29,7 +29,7 @@
 import { existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { FlowDefinition } from './studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import type { AcceptanceCriterion } from './work-item.ts';
 import { worktreeDemoRelDir } from './demo-paths.ts';
 

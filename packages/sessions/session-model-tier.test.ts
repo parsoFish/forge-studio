@@ -21,8 +21,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { fixedTierForSessionKind } from './session-model-tier.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
+import { loadSessionKinds } from './studio/session-kinds.ts';
+import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
 
 const FORGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const KINDS = loadSessionKinds(FORGE_ROOT);

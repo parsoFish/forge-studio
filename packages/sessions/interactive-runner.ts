@@ -87,7 +87,7 @@
 import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 
 import {
   runAgentTurn,
@@ -101,14 +101,14 @@ import {
   type QueryFn,
   type BashFenceMode,
 } from './interactive-session.ts';
-import { createLogger, type EventLogger, type Phase } from './logging.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
-import { makeToolEventSink } from './tool-event-emit.ts';
-import { resolveSessionModel, type ModelTier } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { loadAgentDefinition } from './studio/registry.ts';
-import { skillPath, skillPathRelative, SLUG_RE } from './skill-path.ts';
+import { createLogger, type EventLogger, type Phase } from '@forge/kernel';
+import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 

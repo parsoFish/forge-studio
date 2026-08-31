@@ -66,10 +66,10 @@ import {
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
-import { listDemoElements } from './studio/registry.ts';
-import type { DemoStep } from './studio/types.ts';
-import { splitSkillTurnSections } from './skill-path.ts';
+import { createLogger } from '@forge/kernel';
+import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import type { DemoStep } from '@forge/contracts/studio/types.ts';
+import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const RUNNER_TS_PATH = join(FORGE_ROOT, 'orchestrator', 'demo-builder-runner.ts');

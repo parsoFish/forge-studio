@@ -75,6 +75,6 @@ test('cli/bridge-studio-connections.ts exports no write handler (dynamic import 
 // ---------------------------------------------------------------------------
 
 test('apps/studio/lib/connection-client.ts exports no create/update/delete/save/write function (dynamic import — RED via module-not-found until WI-4 lands)', async () => {
-  const mod = (await import('../apps/studio/lib/connection-client.ts')) as unknown as Record<string, unknown>;
+  const mod = (await import('../../apps/studio/lib/connection-client.ts')) as unknown as Record<string, unknown>;
   assertNoWriteExports(mod, 'apps/studio/lib/connection-client.ts');
 });

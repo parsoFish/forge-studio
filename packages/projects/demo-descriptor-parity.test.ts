@@ -17,11 +17,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-import { checkDemo } from '../cli/preflight.ts';
-import { demoTaskLines, type DemoBuilderStatus } from './demo-builder-runner.ts';
-import { renderDemoAgentUserPrompt } from './phases/demo-agent-binding.ts';
-import { listDemoElements } from './studio/registry.ts';
-import type { DemoStep } from './studio/types.ts';
+import { checkDemo } from './preflight.ts';
+import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/demo-builder-runner.ts';
+import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
+import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import type { DemoStep } from '@forge/contracts/studio/types.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 

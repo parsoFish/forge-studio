@@ -27,12 +27,12 @@ import { resolveNodeKind } from './flow-runner.ts';
 import { runFlowT, type TestDeps } from './test-fixtures/flow-runner-port.ts';
 import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from './studio/registry.ts';
 import { validateFlow, validateAgent } from './studio/validate.ts';
-import { skillsDir } from './skill-path.ts';
-import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from './agent-bands.ts';
-import { runPreflight } from '../cli/preflight.ts';
-import type { CycleInput } from './cycle-context.ts';
-import type { EventLogger } from './logging.ts';
-import type { FlowNode } from './studio/types.ts';
+import { skillsDir } from '@forge/agents/skill-path.ts';
+import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { runPreflight } from '@forge/projects/preflight.ts';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { EventLogger } from '@forge/kernel';
+import type { FlowNode } from '@forge/contracts/studio/types.ts';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_PATH = resolve(REPO_ROOT, 'studio', 'catalog.yaml');

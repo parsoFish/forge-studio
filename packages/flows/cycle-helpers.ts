@@ -17,14 +17,14 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
-import type { EventLogger } from './logging.ts';
+import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import type { EventLogger } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
 import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
-import { loadProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
-import { resolveGateTimeoutMs } from '../loops/ralph/stop-conditions.ts';
+import { resolveGateTimeoutMs } from '@forge/agents/ralph/stop-conditions.ts';
 
 // ---------------------------------------------------------------------------
 // openPrInline

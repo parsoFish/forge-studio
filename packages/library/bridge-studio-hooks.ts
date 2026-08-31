@@ -66,7 +66,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
 import {
@@ -76,8 +76,8 @@ import {
   readJson,
   pathOnly,
   type StudioContext,
-} from './bridge-studio.ts';
-import { assertSkillSlug, isReservedId } from '../orchestrator/skill-path.ts';
+} from '../../cli/bridge-studio.ts';
+import { assertSkillSlug, isReservedId } from '@forge/agents/skill-path.ts';
 import {
   hookDir,
   hooksDir,
@@ -89,7 +89,7 @@ import {
   type HookLifecycleEvent,
   type HookPermissionManifest,
   hookTriggerError,
-} from '../orchestrator/studio/hook-library.ts';
+} from './studio/hook-library.ts';
 import {
   scanHookPackage,
   hookRunState,
@@ -100,14 +100,14 @@ import {
   revokeHookApprovalIfPresent,
   type HookApprovalLedgerEntry,
   type HookRunState,
-} from '../orchestrator/studio/hook-scan.ts';
+} from './studio/hook-scan.ts';
 // PIN E (2026-08-28 hostile review): the whole-package read/hash primitives
 // the detail route's `files`/`packageHash` are now built from — the SAME
 // primitives the approval ledger's `packageHash` pin is computed from (see
 // hook-package.ts's own header), so what this route lists and what the
 // ledger pins are structurally the same file set, never two independently
 // maintained views that can drift.
-import { readHookPackage, hashHookPackage, hashHookScript } from '../orchestrator/studio/hook-package.ts';
+import { readHookPackage, hashHookPackage, hashHookScript } from './studio/hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // trust derivation (D-3) — the bridge's own composition, not a core export:

@@ -32,9 +32,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runReflector } from './reflector.ts';
-import { createLogger, type EventLogEntry } from '../logging.ts';
-import type { CycleInput } from '../cycle-context.ts';
-import type { RunBrainLintResult, Finding } from '../../cli/brain-lint.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { RunBrainLintResult, Finding } from '@forge/knowledge/brain-lint.ts';
 
 // The forge root the reflector code resolves to (orchestrator/phases/ ⇒ ..)
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');

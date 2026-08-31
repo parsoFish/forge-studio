@@ -37,7 +37,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildAnalyzePlan, type ProjectBrainStatus } from './project-brain-builder-runner.ts';
-import { cyclesRawDir } from './brain-paths.ts';
+import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
 
 const FORGE_ROOT = '/fake/forge-root';
 const STAGING = '/fake/forge-root/projects/demoproj/_project-brain/2026-08-10T00-00-00/themes';

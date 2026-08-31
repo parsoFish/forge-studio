@@ -12,9 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
-import { loadAgentDefinition, loadCatalog } from './registry.ts';
+import { loadAgentDefinition, loadCatalog } from '../../../orchestrator/studio/registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
-import type { AgentDefinition } from './types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
  * The forge install root (this file lives at orchestrator/studio/). Used as

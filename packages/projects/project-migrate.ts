@@ -33,8 +33,8 @@ import {
   validateProjectConfig,
   readQualityGateSidecar,
   injectSidecarIntoTestProcess,
-} from '../orchestrator/project-config.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+} from './project-config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 /** The flat→typed key mapping (mirror of the validator's own error text). */
 const FLAT_KEYS = ['quality_gate_cmd', 'ci_gate', 'ci_fix_cmd', 'ci_gate_unset_env', 'acceptance_gate'] as const;

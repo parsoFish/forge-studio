@@ -26,29 +26,29 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { coerceDemoModel, validateDemoModel, type AcEvaluation, type DemoModel } from '../../cli/demo-model.ts';
-import { projectBrainDir } from '../brain-paths.ts';
-import { worktreeDemoJsonPath } from '../demo-paths.ts';
+import { coerceDemoModel, validateDemoModel, type AcEvaluation, type DemoModel } from '../demo-model.ts';
+import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { worktreeDemoJsonPath } from '@forge/flows/demo-paths.ts';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
   type ReviewFinding,
   type ReviewFindingsRecord,
-} from '../flow-artifacts.ts';
-import type { EventLogger } from '../logging.ts';
-import type { StreamQueryFn } from '../pinned-sdk-query.ts';
-import { runAgent } from '../run-agent.ts';
-import { skillPath } from '../skill-path.ts';
-import { loadAgentDefinition } from '../studio/registry.ts';
-import { FORGE_ROOT } from '../studio/derive.ts';
-import { readWorkItemsFromDir } from '../work-item.ts';
+} from '@forge/flows/flow-artifacts.ts';
+import type { EventLogger } from '@forge/kernel';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { runAgent } from '@forge/agents/run-agent.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
+import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
 import {
   buildAdversarialReviewSystemPrompt,
   renderAdversarialReviewUserPrompt,
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
-import { takeScopeSnapshot, scopeViolations } from './agent-scope-guard.ts';
+import { takeScopeSnapshot, scopeViolations } from '@forge/agents/phases/agent-scope-guard.ts';
 
 const AGENT_SLUG = 'adversarial-review';
 const BASE_REF = 'main';

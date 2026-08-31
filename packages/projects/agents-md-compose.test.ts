@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { composeAgentsMd, buildAgentsMdBody } from './agents-md-compose.ts';
-import { runPreflight } from '../cli/preflight.ts';
+import { runPreflight } from './preflight.ts';
 
 const FORGE_ROOT = process.cwd();
 

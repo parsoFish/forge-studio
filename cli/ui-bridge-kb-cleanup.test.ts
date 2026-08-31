@@ -43,7 +43,7 @@ import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
 
 import { startBridge } from './ui-bridge.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 

@@ -26,15 +26,15 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 
-import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
+import { detectProjectLanguage, type ProjectLanguage } from './gate-recipes.ts';
 import {
   loadProjectConfig,
   type ProjectConfig,
-} from '../orchestrator/project-config.ts';
-import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
+} from './project-config.ts';
+import { projectBrainDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
 
-export type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '../orchestrator/_pkg/kernel.ts';
-import type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '../orchestrator/_pkg/kernel.ts';
+export type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
+import type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
 
 // --- documented heuristics (single source of truth) ---
 

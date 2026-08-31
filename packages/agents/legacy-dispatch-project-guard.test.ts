@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 

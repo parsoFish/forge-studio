@@ -106,10 +106,10 @@ import { runInteractiveTurn } from './interactive-runner.ts';
 
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { writeSessionStatus, readSessionStatus, type QueryFn } from './interactive-session.ts';
-import { createLogger } from './logging.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPathRelative, SLUG_RE } from './skill-path.ts';
+import { createLogger } from '@forge/kernel';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture yaml — three rows, all real-parsed through loadSessionKinds.

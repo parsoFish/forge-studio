@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../cli/ui-bridge.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 
 async function makeIsolatedBridge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {

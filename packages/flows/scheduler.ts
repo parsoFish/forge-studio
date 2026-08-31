@@ -28,16 +28,16 @@ import {
 import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
-import { flowPathForId } from './flow-runner.ts';
+import { flowPathForId } from '../../orchestrator/flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
-import { loadConfig } from './config.ts';
+import { loadConfig } from '@forge/kernel';
 import {
   dispatchTerminalStatus,
   decideAutoRetry,

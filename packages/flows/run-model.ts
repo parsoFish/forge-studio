@@ -28,11 +28,11 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseManifest, initiativeTitle } from './manifest.ts';
 import type { InitiativeManifest } from './manifest.ts';
-import type { EventLogEntry } from './logging.ts';
+import type { EventLogEntry } from '@forge/kernel';
 import type { QueueState } from './queue.ts';
-import { loadFlowDefinition, listAgentDefinitions, normalizeProjectId } from './studio/registry.ts';
+import { loadFlowDefinition, listAgentDefinitions, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
 import type { TriggerKindId } from './flow-trigger.ts';
-import { skillsDir as toSkillsDir } from './skill-path.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import {
   deriveNodeStatuses,
   deriveNodeMeta,
@@ -46,7 +46,7 @@ import {
   findReflectionLoss,
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
-import { sumAuthoritativeCostUsd } from './event-cost.ts';
+import { sumAuthoritativeCostUsd } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Exported types (binding API per M1 design §1)

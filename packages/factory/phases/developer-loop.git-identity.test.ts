@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveGitIdentity } from './developer-loop.ts';
-import { ralphGitIdentity, UNIFIER_GIT_IDENTITY } from '../config.ts';
+import { ralphGitIdentity, UNIFIER_GIT_IDENTITY } from '@forge/kernel';
 
 test('resolveGitIdentity: developer-loop phase with a workItemId → per-WI forge-ralph identity', () => {
   const identity = resolveGitIdentity({ phase: 'developer-loop', workItemId: 'WI-3' });

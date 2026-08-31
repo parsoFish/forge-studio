@@ -29,13 +29,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { lintThemeFiles, classify, type Finding } from '../cli/brain-lint.ts';
-import { applyAutoFixes } from '../cli/brain-fix-auto.ts';
-import { regenerateBrainIndex } from '../cli/brain-index.ts';
+import { lintThemeFiles, classify, type Finding } from './brain-lint.ts';
+import { applyAutoFixes } from './brain-fix-auto.ts';
+import { regenerateBrainIndex } from './brain-index.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
-import type { KbDescriptor, KbProcessImpl } from './studio/types.ts';
-import type { EventLogger } from './logging.ts';
+import type { KbDescriptor, KbProcessImpl } from '@forge/contracts/studio/types.ts';
+import type { EventLogger } from '@forge/kernel';
 
 type StepStatus = 'done' | 'skipped' | 'failed';
 type LintStatus = 'clean' | 'flagged' | 'skipped' | 'failed';
