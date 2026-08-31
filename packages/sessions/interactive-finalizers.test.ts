@@ -974,8 +974,8 @@ test(
 // never left uncommitted.
 // ===========================================================================
 
-const TRANSCRIPT_SOURCE_PATH = join(REPO_ROOT, 'orchestrator', 'studio', 'session-transcript.ts');
-const FINALIZERS_SOURCE_PATH = join(REPO_ROOT, 'orchestrator', 'interactive-finalizers.ts');
+const TRANSCRIPT_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'studio', 'session-transcript.ts');
+const FINALIZERS_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-finalizers.ts');
 
 /** Extracts session-transcript.ts's `PACKAGE_DIRNAME` module-private constant
  *  declaration from its real, checked-in source text. Anchored on the exact

@@ -1720,7 +1720,7 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
     // imported object's own keys) — catches a "kb-cleanup" entry added under
     // a shape the plain object-key check above might not observe (e.g. a
     // computed-key assignment appended after the object literal).
-    const src = readFileSync(join(REPO_ROOT, 'cli', 'agent-run.ts'), 'utf8');
+    const src = readFileSync(join(REPO_ROOT, 'packages', 'agents', 'agent-run.ts'), 'utf8');
     assert.doesNotMatch(
       src,
       /['"]kb-cleanup['"]\s*:/,

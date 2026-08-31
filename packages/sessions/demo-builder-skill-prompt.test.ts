@@ -6,7 +6,7 @@
  * `splitSkillTurnSections` loader contract landing in `orchestrator/skill-path.ts`
  * via WI-1). WI-2 moves the generate-step's INSTRUCTION PROSE (the three
  * branch bodies — per-element / composed / legacy — plus the update-mode
- * guidance) out of `orchestrator/demo-builder-runner.ts` and into the skill.
+ * guidance) out of `packages/sessions/demo-builder-runner.ts` and into the skill.
  * The runner keeps injecting only DATA: project name/repo path, operator
  * guidance/feedback, the ordered element-step list, the element generator
  * bodies, and the forge base stylesheet.
@@ -72,7 +72,7 @@ import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
-const RUNNER_TS_PATH = join(FORGE_ROOT, 'orchestrator', 'demo-builder-runner.ts');
+const RUNNER_TS_PATH = join(FORGE_ROOT, 'packages', 'sessions', 'demo-builder-runner.ts');
 const SKILL_MD_PATH = join(FORGE_ROOT, 'skills', 'demo-builder', 'SKILL.md');
 
 /** Normalise whitespace on both sides before comparing — the moved sentences
@@ -175,31 +175,31 @@ function makeElementWritingQueryFn(elementId: string, capture?: (prompt: string)
 // since the assertions THEMSELVES are the live re-check on every run.
 const MOVED_SENTENCES: Array<{ label: string; text: string }> = [
   {
-    // orchestrator/demo-builder-runner.ts:709 (demoTaskLines, `target` branch).
+    // packages/sessions/demo-builder-runner.ts:709 (demoTaskLines, `target` branch).
     // Verified present in the .ts today; absent from SKILL.md today.
     label: 'element branch — "Author/refine the project-side element-skill at"',
     text: 'Author/refine the project-side element-skill at',
   },
   {
-    // orchestrator/demo-builder-runner.ts:724 (demoTaskLines, composed branch).
+    // packages/sessions/demo-builder-runner.ts:724 (demoTaskLines, composed branch).
     // Verified present in the .ts today; absent from SKILL.md today.
     label: 'composed branch — "the composer that reads those fragments IN THIS ORDER"',
     text: 'the composer that reads those fragments IN THIS ORDER',
   },
   {
-    // orchestrator/demo-builder-runner.ts:736 (demoTaskLines, legacy branch).
+    // packages/sessions/demo-builder-runner.ts:736 (demoTaskLines, legacy branch).
     // Verified present in the .ts today; absent from SKILL.md today.
     label: "legacy branch — \"the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES\"",
     text: "the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES",
   },
   {
-    // orchestrator/demo-builder-runner.ts:309 (runGenerateStep, mode==='update' block).
+    // packages/sessions/demo-builder-runner.ts:309 (runGenerateStep, mode==='update' block).
     // Verified present in the .ts today; absent from SKILL.md today.
     label: 'update-mode — "UPDATE MODE: a locked demo already exists"',
     text: 'UPDATE MODE: a locked demo already exists',
   },
   {
-    // orchestrator/demo-builder-runner.ts:724 (demoTaskLines, composed branch,
+    // packages/sessions/demo-builder-runner.ts:724 (demoTaskLines, composed branch,
     // same paragraph as the composer sentence above — a distinct sentence).
     // Verified present in the .ts today; absent from SKILL.md today.
     label: 'composed branch grounding — "Ground every fragment in a real before/after … REAL output, never fabricated."',
@@ -215,7 +215,7 @@ test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 bra
     const needle = norm(text);
     assert.ok(
       !tsNorm.includes(needle),
-      `${label}: must be ABSENT from orchestrator/demo-builder-runner.ts (the prose must move to SKILL.md) — it is still there`,
+      `${label}: must be ABSENT from packages/sessions/demo-builder-runner.ts (the prose must move to SKILL.md) — it is still there`,
     );
     assert.ok(
       skillNorm.includes(needle),
@@ -567,7 +567,7 @@ const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
     text: 'This is also the file `forge preflight` DEMO-SKILL checks.',
   },
   {
-    // KNOWN DROPPED — verified absent from both orchestrator/demo-builder-runner.ts
+    // KNOWN DROPPED — verified absent from both packages/sessions/demo-builder-runner.ts
     // and skills/demo-builder/SKILL.md today (see AT-1's file header + the grep
     // run recorded in this file's session report: 0 hits either side).
     label: 'KNOWN-DROPPED — deliverable #2, "find a real recent change" sourcing instruction',
@@ -587,26 +587,26 @@ const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
     source: 'c45e3892:skills/demo-builder/SKILL.md ("## Contract")',
     text: 'Keep the sample tight and readable; lead with a one-line essence of the change.',
   },
-  // -- orchestrator/demo-builder-runner.ts's demoTaskLines() branch prose
+  // -- packages/sessions/demo-builder-runner.ts's demoTaskLines() branch prose
   //    (moved into the three turn sections, re-anchored). --
   {
     label: 'element branch — perfect-this-element-first / do-not-build-others discipline',
-    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, target branch)',
+    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, target branch)',
     text: 'so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.',
   },
   {
     label: 'composed branch — composer assembly instruction',
-    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, composed branch)',
+    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, composed branch)',
     text: 'the composer that reads those fragments IN THIS ORDER and assembles them into',
   },
   {
     label: 'legacy branch — deliverable #2 restated (the part that DID survive)',
-    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, legacy branch)',
+    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, legacy branch)',
     text: 'a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated). This sample is what the operator reviews to judge the skill.',
   },
   {
     label: "runGenerateStep — UPDATE MODE guidance (mode==='update' block)",
-    source: "c45e3892:orchestrator/demo-builder-runner.ts (runGenerateStep, mode==='update' block)",
+    source: "c45e3892:packages/sessions/demo-builder-runner.ts (runGenerateStep, mode==='update' block)",
     text: 'UPDATE MODE: a locked demo already exists',
   },
 ];

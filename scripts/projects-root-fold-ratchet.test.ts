@@ -69,7 +69,7 @@ test('1: flags an untrusted identifier folded into a string projects root', () =
 });
 
 test('2: flags a member-expression folded into a string projects root', () => {
-  const findings = scanProjectsRootFold("const p = resolve('projects', m.project);\n", 'orchestrator/scheduler.ts');
+  const findings = scanProjectsRootFold("const p = resolve('projects', m.project);\n", 'packages/flows/scheduler.ts');
   assert.equal(findings.length, 1);
   assert.equal(findings[0].folded, 'm.project');
 });
@@ -100,7 +100,7 @@ test('6: flags a fold onto an identifier projects-root (projectsRoot form)', () 
 // =============================================================================
 
 test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () => {
-  const realPath = join(REPO_ROOT, 'cli/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
 
   // Baseline scan of the real source. NOTE (informational, not asserted): before
@@ -108,7 +108,7 @@ test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () 
   // fold is routed through the guard. We deliberately do NOT gate on this count —
   // the scanner may still surface unrelated syntactic folds in the file (see the
   // implementer note in the report), so the durable proof is the mutation below.
-  const realFindings = scanProjectsRootFold(realText, 'cli/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
   assert.ok(Array.isArray(realFindings), 'the scanner returns a findings array on real source');
 
   // Inject a fresh fold and PROVE the mutation applied before reading any verdict.
@@ -116,7 +116,7 @@ test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () 
   const mutatedText = `${realText}\n${MUT_LINE}\n`;
   assert.ok(mutatedText.includes(MUT_LINE), 'precondition: the fold mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'cli/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the injected fold adds a finding the scanner did not have before',
@@ -140,8 +140,8 @@ test('8: the fold allowlist carries the audited residual rows, folded-token-keye
   }
   const has = (file: string, folded: string) =>
     PROJECTS_ROOT_FOLD_ALLOWLIST.some((r) => r.file === file && r.folded === folded);
-  assert.ok(has('orchestrator/cli.ts', 'target'), 'the dual-mode name-or-path residual is audited');
-  assert.ok(has('orchestrator/scheduler.ts', 'm.project'), 'the guarded-downstream residual is audited');
+  assert.ok(has('apps/forge/cli.ts', 'target'), 'the dual-mode name-or-path residual is audited');
+  assert.ok(has('packages/flows/scheduler.ts', 'm.project'), 'the guarded-downstream residual is audited');
 });
 
 // =============================================================================
@@ -152,22 +152,22 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
   withFixture(
     {
       // The audited-trusted dual-mode residual (allowlisted by file+folded).
-      'orchestrator/cli.ts': "const asManaged = resolve('projects', target);\n",
+      'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
       // A fresh, un-audited fold — must fail the build.
-      'cli/agent-run.ts': "const p = resolve('projects', evilArg);\n",
+      'packages/agents/agent-run.ts': "const p = resolve('projects', evilArg);\n",
       // Remaining fold-scope modules present but benign, so the scan sees a
       // complete module set rather than skipping absent files.
-      'orchestrator/agent-dispatch.ts': "export const noop = true;\n",
-      'orchestrator/scheduler.ts': "export const noop = true;\n",
+      'packages/agents/agent-dispatch.ts': "export const noop = true;\n",
+      'packages/flows/scheduler.ts': "export const noop = true;\n",
     },
     (root) => {
       // Fixture precondition: assert the two folds are on disk before the verdict.
       assert.ok(
-        readFileSync(join(root, 'cli/agent-run.ts'), 'utf8').includes("resolve('projects', evilArg)"),
+        readFileSync(join(root, 'packages/agents/agent-run.ts'), 'utf8').includes("resolve('projects', evilArg)"),
         'precondition: the un-allowlisted fold is present in the fixture',
       );
       assert.ok(
-        readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
         'precondition: the audited residual fold is present in the fixture',
       );
 
@@ -176,12 +176,12 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
       // { findings: kept, ... }; main() exits 1 on findings.length).
       assert.ok(res.findings.length >= 1, 'the un-allowlisted fold makes the build fail (non-empty kept findings)');
       assert.ok(
-        res.findings.some((f) => f.file === 'cli/agent-run.ts' && f.folded === 'evilArg'),
-        'the failing finding is the cli/agent-run.ts evilArg fold',
+        res.findings.some((f) => f.file === 'packages/agents/agent-run.ts' && f.folded === 'evilArg'),
+        'the failing finding is the packages/agents/agent-run.ts evilArg fold',
       );
       assert.ok(
         !res.findings.some((f) => f.folded === 'target'),
-        'the allowlisted orchestrator/cli.ts+target fold is suppressed, not among the build failures',
+        'the allowlisted apps/forge/cli.ts+target fold is suppressed, not among the build failures',
       );
     },
   );
@@ -190,14 +190,14 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
 test('10: runLint PASSES when the only fold is an audited residual', () => {
   withFixture(
     {
-      'orchestrator/cli.ts': "const asManaged = resolve('projects', target);\n",
-      'cli/agent-run.ts': "export const noop = true;\n",
-      'orchestrator/agent-dispatch.ts': "export const noop = true;\n",
-      'orchestrator/scheduler.ts': "export const noop = true;\n",
+      'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
+      'packages/agents/agent-run.ts': "export const noop = true;\n",
+      'packages/agents/agent-dispatch.ts': "export const noop = true;\n",
+      'packages/flows/scheduler.ts': "export const noop = true;\n",
     },
     (root) => {
       assert.ok(
-        readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
         'precondition: the audited residual fold is present in the fixture',
       );
       const res = runLint({ root });

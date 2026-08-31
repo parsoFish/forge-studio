@@ -390,8 +390,8 @@ function extractFunctionBody(src: string, fnName: string, fileLabel: string): st
 }
 
 describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => {
-  const KB_LINT_SUMMARY_FILE = join(ROOT, 'cli', 'kb-lint-summary.ts');
-  const BRIDGE_KBS_FILE = join(ROOT, 'cli', 'bridge-studio-kbs.ts');
+  const KB_LINT_SUMMARY_FILE = join(ROOT, 'packages', 'knowledge', 'kb-lint-summary.ts');
+  const BRIDGE_KBS_FILE = join(ROOT, 'packages', 'knowledge', 'bridge-studio-kbs.ts');
 
   test('AT-4a: cli/kb-lint-summary.ts contains exactly TWO literal runBrainLint( call sites — one inside runBrainLintFullMemoized, one inside runBrainLintFullFresh — never inside computeKbLintChecks or attachKbLintSummaries', () => {
     assert.ok(

@@ -122,7 +122,7 @@ test('the root suite runs the packages\' tests — a package tsc sees but node -
   const root = json(join(ROOT, 'package.json')) as { scripts?: Record<string, string> };
   const script = root.scripts?.test ?? '';
   assert.ok(script.includes('packages/*/*.test.ts'), 'root `npm test` must glob packages/*/*.test.ts');
-  assert.ok(script.includes('apps/*/*.test.ts'), 'root `npm test` must glob apps/*/*.test.ts');
+  assert.ok(script.includes('apps/forge/*.test.ts'), 'root `npm test` must glob apps/forge/*.test.ts');
 });
 
 test('apps/studio is the moved forge-ui — present, a workspace, and still named forge-ui', () => {

@@ -137,7 +137,7 @@ async function startWatch() {
   // (the attach path is read-only and never emits the ready signal).
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open', '--force-takeover'],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open', '--force-takeover'],
       { cwd: FORGE_ROOT,
         // R5-01-F1: FORGE_DRY_BRIDGE=1 alongside NO_SPAWN — the harness's bridge
         // child must never spawn/merge/daemon-control for real (2026-07-16

@@ -16,7 +16,7 @@ import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 // is the same `forge brain lint` the CLI runs, called in-process to assert
 // the real write leaves the whole brain 9/9 clean.
 import { runProjectBrainTurn } from '../../orchestrator/project-brain-builder-runner.ts';
-import { runBrainLint } from '../../cli/brain-lint.ts';
+import { runBrainLint } from '@forge/knowledge/brain-lint.ts';
 
 // module-scope cross-beat state for this journey (was hoisted in main())
 let GUIDANCE_TEXT, kbPageReady;             // knowledge-graph → knowledge-pin-guidance

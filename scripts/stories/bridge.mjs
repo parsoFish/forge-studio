@@ -70,7 +70,7 @@ export function bootOwnBridge(root) {
   return new Promise((resolve, reject) => {
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],
       { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
     );
     let buf = '';

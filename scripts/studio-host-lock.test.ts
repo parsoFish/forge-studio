@@ -10,7 +10,7 @@
  * on a still-held port looking like a harness bug. The same location-bound
  * assumption made the bridge itself unrecognisable whenever Studio was
  * launched through an `npm link` / `npx` shim, whose argv names
- * `node_modules/.bin/forge` rather than `orchestrator/cli.ts`.
+ * `node_modules/.bin/forge` rather than `apps/forge/cli.ts`.
  *
  * The properties under test:
  *
@@ -72,10 +72,10 @@ const IDLE = 'setTimeout(() => {}, 10 * 60 * 1000);\n';
 
 /** Lay down the marker files that make a directory recognisably a forge checkout. */
 function forgeCheckout(dir: string, names: { root?: string; ui?: string } = {}): string {
-  mkdirSync(join(dir, 'orchestrator'), { recursive: true });
+  mkdirSync(join(dir, 'apps', 'forge'), { recursive: true });
   mkdirSync(join(dir, 'apps', 'studio'), { recursive: true });
   mkdirSync(join(dir, 'bin'), { recursive: true });
-  writeFileSync(join(dir, 'orchestrator/cli.ts'), '// fixture\n');
+  writeFileSync(join(dir, 'apps/forge/cli.ts'), '// fixture\n');
   writeFileSync(join(dir, 'bin/forge.mjs'), IDLE);
   writeFileSync(join(dir, 'apps/studio/package.json'), JSON.stringify({ name: names.ui ?? OUR_UI_NAME }));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: names.root ?? OUR_ROOT_NAME }, null, 2));
@@ -146,7 +146,7 @@ test("this checkout's own next-server is still forge, at the UI dir or the root"
 test('the bridge is forge however it was launched, in any checkout', () => {
   // relative argv, resolved against the process's own cwd — the live shape
   assert.equal(
-    classify(PRIMARY, ['/usr/bin/node', '--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'], LANE),
+    classify(PRIMARY, ['/usr/bin/node', '--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'], LANE),
     `forge ${PRIMARY}`,
   );
   // absolute argv
@@ -186,16 +186,16 @@ test('a bridge-shaped command line with no forge checkout behind it is REFUSED',
   assert.equal(verdict(classify(PRIMARY, ['node', join(PRIMARY, 'bin/forge.mjs'), 'serve'])), 'FOREIGN');
   // an editor holding forge's files open, with `studio` in the argv but not as
   // the subcommand
-  assert.equal(verdict(classify(PRIMARY, ['vim', join(PRIMARY, 'orchestrator/cli.ts'), 'studio.md'])), 'FOREIGN');
+  assert.equal(verdict(classify(PRIMARY, ['vim', join(PRIMARY, 'apps/forge/cli.ts'), 'studio.md'])), 'FOREIGN');
   // "studio" alone proves nothing
   assert.equal(verdict(classify(PRIMARY, ['some-other-cli', 'studio'])), 'FOREIGN');
 });
 
 test('a relative bridge argv is resolved against the PROCESS cwd, never ours', () => {
   // The same argv the live bridge runs, but from a cwd that is not a forge
-  // checkout: `orchestrator/cli.ts` resolves to nothing there, and the script
+  // checkout: `apps/forge/cli.ts` resolves to nothing there, and the script
   // must not fall back on its own directory to find one.
-  assert.equal(verdict(classify(tmpdir(), ['node', '--experimental-strip-types', 'orchestrator/cli.ts', 'studio'])), 'FOREIGN');
+  assert.equal(verdict(classify(tmpdir(), ['node', '--experimental-strip-types', 'apps/forge/cli.ts', 'studio'])), 'FOREIGN');
 });
 
 test('the UI is identified by its own argv[0], not by a string in a command line', () => {
@@ -233,7 +233,7 @@ test('each of the four checkout markers is load-bearing on its own', () => {
     mutate(dir);
     return dir;
   };
-  const noCli = spoil('no-cli', (d) => rmSync(join(d, 'orchestrator/cli.ts')));
+  const noCli = spoil('no-cli', (d) => rmSync(join(d, 'apps/forge/cli.ts')));
   const noBin = spoil('no-bin', (d) => rmSync(join(d, 'bin/forge.mjs')));
   const badRootName = forgeCheckout(join(FIXTURES, 'renamed-fork'), { root: 'someone-elses-fork' });
   const badUiName = forgeCheckout(join(FIXTURES, 'other-ui'), { ui: 'someone-elses-ui' });

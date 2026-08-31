@@ -101,7 +101,7 @@ import type { ContractStageRow } from './session-client';
 // SHIPPED_TRIGGER_KIND_IDS): proves a pr-merged/issue-raised trigger built
 // via the real client path is one `orchestrator/studio/validate-triggers.ts`
 // actually accepts, not just a shape this test file asserts by eye.
-import { checkFlowTriggers } from '../../../orchestrator/studio/validate-triggers.ts';
+import { checkFlowTriggers } from '../../../packages/flows/studio/validate-triggers.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 // AT-F1-1 fetch harness — matches lib/agent-ledger.test.ts verbatim.

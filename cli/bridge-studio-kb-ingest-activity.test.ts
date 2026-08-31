@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { startBridge } from './ui-bridge.ts';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BRIDGE_KBS_PATH = join(FORGE_ROOT, 'cli', 'bridge-studio-kbs.ts');
+const BRIDGE_KBS_PATH = join(FORGE_ROOT, 'packages', 'knowledge', 'bridge-studio-kbs.ts');
 
 // A scratch project KB — never a real project brain, seeded ONLY for these
 // ingest-activity RED pins.

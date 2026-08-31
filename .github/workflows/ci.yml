@@ -47,10 +47,10 @@ jobs:
         run: npm run test:ui:typecheck
 
       - name: Studio lint
-        run: node --experimental-strip-types orchestrator/cli.ts studio lint
+        run: node --experimental-strip-types apps/forge/cli.ts studio lint
 
       - name: Brain lint
-        run: node --experimental-strip-types orchestrator/cli.ts brain lint
+        run: node --experimental-strip-types apps/forge/cli.ts brain lint
 
       - name: Markdown lint
         run: npm run lint

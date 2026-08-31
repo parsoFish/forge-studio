@@ -456,9 +456,9 @@ test('C2: clean FOR THE RIGHT REASON — the scanner is live and residuals are a
 test('C3: the real handling-module set is present and includes the charter modules + the bridge-studio glob', () => {
   const mods = targetModules();
   for (const m of [
-    'cli/ui-bridge.ts', 'cli/metrics.ts', 'cli/contract-stages.ts', 'cli/agent-run.ts', 'cli/architect-plan.ts',
-    'orchestrator/interactive-session.ts', 'orchestrator/architect-runner.ts', 'orchestrator/instructions-runner.ts',
-    'orchestrator/project-brain-builder-runner.ts', 'orchestrator/demo-builder-runner.ts',
+    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
+    'packages/sessions/interactive-session.ts', 'packages/sessions/architect-runner.ts', 'packages/sessions/instructions-runner.ts',
+    'orchestrator/project-brain-builder-runner.ts', 'packages/sessions/demo-builder-runner.ts',
   ]) {
     assert.ok(mods.includes(m), `charter module ${m} must be in scope`);
   }
@@ -467,7 +467,7 @@ test('C3: the real handling-module set is present and includes the charter modul
   // SEC-04 blind-spot #b: the delegated config-loader helper is now in scope so
   // its interprocedural leaf-append (loadProjectConfig -> join(projectRoot,
   // ".forge/project.json")) is visible to the ratchet.
-  assert.ok(mods.includes('orchestrator/project-config.ts'), 'the config-loader helper must be in scope');
+  assert.ok(mods.includes('packages/projects/project-config.ts'), 'the config-loader helper must be in scope');
 });
 
 test('C4: every real allowlist row is well-formed (file, line, a reason, and an audited sink)', () => {
@@ -925,16 +925,16 @@ test('G5: the derived scope is a SUPERSET of the charter list and of every cli/b
   // coverage loss reads as "no findings", the same green a clean tree gives.
   const mods = targetModules();
   for (const m of [
-    'cli/ui-bridge.ts', 'cli/metrics.ts', 'cli/contract-stages.ts', 'cli/agent-run.ts', 'cli/architect-plan.ts',
-    'orchestrator/interactive-session.ts', 'orchestrator/interactive-finalizers.ts', 'orchestrator/interactive-runner.ts',
-    'orchestrator/architect-runner.ts', 'orchestrator/instructions-runner.ts',
-    'orchestrator/project-brain-builder-runner.ts', 'orchestrator/demo-builder-runner.ts',
-    'orchestrator/project-config.ts', 'orchestrator/studio/skill-library.ts',
-    'orchestrator/studio/community-install.ts', 'orchestrator/studio/community-index.ts',
+    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
+    'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
+    'packages/sessions/architect-runner.ts', 'packages/sessions/instructions-runner.ts',
+    'orchestrator/project-brain-builder-runner.ts', 'packages/sessions/demo-builder-runner.ts',
+    'packages/projects/project-config.ts', 'packages/library/studio/skill-library.ts',
+    'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',
   ]) {
     assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
   }
-  assert.ok(mods.filter((m) => m.startsWith('cli/bridge-studio')).length >= 10, 'every bridge-studio route module stays in scope');
+  assert.ok(mods.filter((m) => m.split('/').pop().startsWith('bridge-studio')).length >= 10, 'every bridge-studio route module stays in scope');
   assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
 });
 
@@ -942,8 +942,8 @@ test('G6 (RED): cli/bridge-recovery.ts — a REAL bridge route module with renam
   // The lint shipped for two waves with an entire live bridge route file
   // outside it, because its basename is `bridge-recovery`, not `bridge-studio`.
   const mods = targetModules();
-  assert.ok(mods.includes('cli/bridge-recovery.ts'), 'the recovery routes must be dataflow-linted');
-  assert.ok(mods.includes('cli/bridge-hooks.ts'), 'the hooks routes must be dataflow-linted');
+  assert.ok(mods.includes('packages/flows/bridge-recovery.ts'), 'the recovery routes must be dataflow-linted');
+  assert.ok(mods.includes('packages/flows/bridge-hooks.ts'), 'the hooks routes must be dataflow-linted');
 });
 
 test('G7: the sweep is LIVE and disjoint from the declared surface (false-negative discipline, C2 for the second tier)', () => {

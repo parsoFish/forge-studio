@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_PROJECT, buildOutcomeChecks } from './lib/verify-outcomes.mjs';
-import { sumAuthoritativeCostUsd } from '../orchestrator/event-cost.ts';
+import { sumAuthoritativeCostUsd } from '@forge/kernel';
 
 // `classifyReflectorProgress` / `sumAuthoritativeCostFromLines` are NEW
 // exports the implementer will add (M0-A round 2, defects B + C) — they do
