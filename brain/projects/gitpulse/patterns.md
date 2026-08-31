@@ -17,6 +17,7 @@
 - [`git-truth-and-pure-aggregation`](./themes/git-truth-and-pure-aggregation.md) — >-
 - [`2026-08-28-no-merges-flag-delivery`](./themes/2026-08-28-no-merges-flag-delivery.md) — Global --no-merges flag added via parentCount at the git-truth seam; filterMergeCommits() applied once in cli.ts before any aggregation; 3-WI TDD chain, all 1-iter, all 20 test fixture files updated for required Commit field.
 - [`2026-08-31-author-filter-flag-delivery`](./themes/2026-08-31-author-filter-flag-delivery.md) — Repeatable --author <glob> flag via src/author-filter.ts; OR-semantics, name+email, case-insensitive, *-only wildcard; 3-WI TDD chain all 1-iter; authorEmail breaking-change sweep updated 27 fixture factories.
+- [`2026-08-31-tag-range-filter-delivery`](./themes/2026-08-31-tag-range-filter-delivery.md) — --since-tag / --until-tag release-window filter delivered via src/tag-range.ts; annotated+lightweight tag dereference; all four CLI paths wired; text/JSON/CSV renderers carry range annotation; 3-WI TDD chain all 1-iter; resolveEffectiveBounds dead code post-merge (RF-1).
 
 ## Format
 

@@ -14,7 +14,7 @@ keywords:
   - repeated-actions
   - recurrence
   - seven-cycles
-related_themes: [2026-08-28-gitignored-scratch-sixth-cycle]
+related_themes: [2026-08-28-gitignored-scratch-sixth-cycle, 2026-08-31-gitignored-scratch-eighth-cycle]
 created_at: 2026-08-31T02:15:00.000Z
 updated_at: 2026-08-31T02:15:00.000Z
 recurrence: gitignored-scratch-files
@@ -66,3 +66,4 @@ All 3 WIs (WI-1, WI-2, WI-3) — `ralph.uncommitted-work-swept` ×3. WI count tr
 ## See also
 
 - [[2026-08-28-gitignored-scratch-sixth-cycle]] — prior (sixth) cycle of this recurrence
+- [[2026-08-31-gitignored-scratch-eighth-cycle]] — next (eighth) cycle of this recurrence
