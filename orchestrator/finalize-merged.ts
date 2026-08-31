@@ -41,7 +41,7 @@ import { skillPath } from './skill-path.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import { classifyCrash } from './failure-classifier.ts';
-import type { ClosureResult } from './phases/closure.ts';
+import type { ClosureResult } from './cycle-context.ts';
 import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
 import type { AgentDefinition, FlowTrigger, TriggerTarget } from './studio/types.ts';
 

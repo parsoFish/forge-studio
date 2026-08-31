@@ -22,7 +22,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runMergeBoundaryGate } from './cycle-helpers.ts';
-import { runFlow, flowPathForId, type FlowRunnerDeps } from './flow-runner.ts';
+import { flowPathForId } from './flow-runner.ts';
+import { runFlowT, type TestDeps, type FlowRunnerDeps } from './test-fixtures/flow-runner-port.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import { readWorkItemsFromDir } from './work-item.ts';
 import type { CycleInput } from './cycle-context.ts';
@@ -219,7 +220,7 @@ function makeCallTracker() {
 }
 
 /** Complete FlowRunnerDeps set where every fn is a call-tracking spy. */
-function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
+function makeMockDeps(tracker: { calls: string[] }): TestDeps {
   return {
     runProjectManager: async (_input, _logger) => {
       tracker.calls.push('runProjectManager');
@@ -339,7 +340,7 @@ test('a config-red gate parks needs-operator and compiles NO gate-fix work item'
     });
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     // 1. Parked needs-operator: the marker exists and carries the reason.
     assert.ok(

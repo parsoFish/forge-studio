@@ -108,9 +108,18 @@ the gap between the stated consequence and the implementation:
 - **Dispatch is a registry.** `DEFAULT_NODE_EXECUTORS: Record<NodeKind,
   NodeExecutor>` is looked up by kind — the `switch` is gone. The per-node loop
   builds a `NodeExecContext` and calls `executors[kind] ?? execUnknown`.
-- **The seam is injectable.** `FlowRunArgs.nodeExecutors` merges over the
-  defaults, so a flow or test registers/overrides node behaviour without
-  touching the runner.
+- **The seam is injectable.** `createPhaseExecutor({ overrides })`
+  (`orchestrator/phases/executor-table.ts`) merges over the defaults, so a flow
+  or test registers/overrides node behaviour without touching the runner.
+  **Amended 2026-08-31 (M2-B — operator ruling, `docs/roadmaps/1.0.md` §4 M2
+  Lane B; governed by [`SPEC.md`](../../SPEC.md) §2 Station).** It was
+  `FlowRunArgs.nodeExecutors` until the runner stopped holding the executor
+  table. SPEC.md §2 requires that "the runner holds the port, not the phases":
+  `runFlow` receives a `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }`, so
+  merging into a table it does not own is no longer possible. The capability is
+  unchanged; only where it is registered moved. Band executors register through
+  `registerBand`, closed over the ratified `BAND_GUARD_IDS`, so an unknown band
+  id is rejected naming the offending value and the allowed set.
 
 Cross-node outcome state is threaded through a single `NodeRunState` object
 instead of loop-scoped `let`s. Behaviour is unchanged — 43 existing

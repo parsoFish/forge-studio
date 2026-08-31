@@ -74,7 +74,7 @@ flowchart TB
         direction LR
         RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>loops/_adapters/registry.ts"]
         KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>orchestrator/kb-backend.ts"]
-        FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via nodeExecutors"]
+        FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via createPhaseExecutor({overrides})"]
     end
 
     subgraph CAP["Composable capabilities — skills · CLIs · MCP"]
@@ -298,7 +298,9 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 ### Flow engine + node-executor registry (ADR 028)
 
-`orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `orchestrator/studio/registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind and calls `executors[kind]`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
+`orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `orchestrator/studio/registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind onto the node context and calls the injected `PhaseExecutor` (`kernel`), which looks the kind up in `DEFAULT_NODE_EXECUTORS`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
+
+**Amended 2026-08-31 (M2-B, `docs/roadmaps/1.0.md` §4 M2 Lane B, [SPEC.md](./SPEC.md) §2 Station):** the runner holds the port, not the phases. `runFlow` receives a `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }` and a `ProjectGate { runPreflight }` ([SPEC.md](./SPEC.md) §6) and imports neither implementation — its ten phase imports and its preflight import are gone. The executors themselves, the injectable phase set and the band registrations live in `orchestrator/phases/executor-table.ts` and `executor-deps.ts`, which move to `@forge/factory` at the package cutover. Bands register through `registerBand`, closed over the ratified `BAND_GUARD_IDS`, instead of a hardcoded record.
 
 **Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `orchestrator/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
 
@@ -326,7 +328,7 @@ engine** is registry-driven (any node type is a data-table entry).
 
 The closure is `orchestrator/subsumption-proof.test.ts`: asserts the runtime adapter seam resolves a second implementation.
 
-Cycle helpers extracted to `orchestrator/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`.
+Cycle helpers extracted to `orchestrator/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`. That extraction left a three-module cycle behind it — `cycle → flow-runner → cycle-helpers → cycle` — which M2-B closed: the runner no longer imports `cycle-helpers.ts` at all (the phases reach it through the port's deps), and the CI-gate decision core the helpers reached back into `cycle.ts` for now sits below both, in `orchestrator/ci-gate.ts`.
 
 ## What forge is *not*
 

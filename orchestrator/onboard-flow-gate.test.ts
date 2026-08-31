@@ -23,7 +23,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runFlow, resolveNodeKind, type FlowRunnerDeps } from './flow-runner.ts';
+import { resolveNodeKind } from './flow-runner.ts';
+import { runFlowT, type TestDeps } from './test-fixtures/flow-runner-port.ts';
 import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from './studio/registry.ts';
 import { validateFlow, validateAgent } from './studio/validate.ts';
 import { skillsDir } from './skill-path.ts';
@@ -82,7 +83,7 @@ function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
  * touches the real (git/gh-calling) closure implementation in this hermetic
  * test file.
  */
-function makeInertDeps(tracker: { calls: string[] }): FlowRunnerDeps {
+function makeInertDeps(tracker: { calls: string[] }): TestDeps {
   return {
     runProjectManager: async () => {
       tracker.calls.push('runProjectManager');
@@ -432,7 +433,7 @@ test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven e
     const input = makeInput({ projectRepoPath: fixtureDir, worktreePath: decoy.fixtureDir });
     const logger = makeLogger();
 
-    const result = await withDryBridge(() => runFlow({ flow, input, logger, deps }));
+    const result = await withDryBridge(() => runFlowT({ flow, input, logger, deps }));
 
     const events = logger.events;
 
@@ -542,7 +543,7 @@ test("AT-4 companion (GREEN) contract-check gate: a real preflight-PASSING fixtu
     const input = makeInput({ projectRepoPath: fixtureDir });
     const logger = makeLogger();
 
-    await withDryBridge(() => runFlow({ flow, input, logger, deps }));
+    await withDryBridge(() => runFlowT({ flow, input, logger, deps }));
 
     const events = logger.events;
 

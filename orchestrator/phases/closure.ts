@@ -64,14 +64,7 @@ import {
   type PostMergeCiOutcome,
 } from '../pr.ts';
 import { resolvePostMergeCiConfig } from '../config.ts';
-import type { CycleInput, CycleOutcome, ReviewerOutcome } from '../cycle-context.ts';
-
-export type ClosureResult = {
-  /** Final cycle outcome after folding in the operator-merge confirmation. */
-  outcome: CycleOutcome;
-  /** True iff `gh pr view` reported MERGED (the ONLY merge signal). */
-  merged: boolean;
-};
+import type { ClosureResult, CycleInput, ReviewerOutcome } from '../cycle-context.ts';
 
 /**
  * Resolve the worktree's current initiative branch name (best-effort).

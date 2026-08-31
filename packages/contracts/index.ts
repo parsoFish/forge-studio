@@ -90,3 +90,19 @@ export const MAX_KICKOFF_COST_CEILING_USD = 500;
  * shared constant replaces a text pin with a real import.
  */
 export const DEFAULT_BRIDGE_PORT = 4123;
+
+// ---------------------------------------------------------------------------
+// Cycle outcome — SSOT for `orchestrator/cycle-context.ts`
+// ---------------------------------------------------------------------------
+
+/**
+ * Final cycle outcome after the closure step folds in the operator-merge
+ * confirmation. `merged` is reachable ONLY there (never from the reviewer)
+ * and ONLY when `gh pr view --json state` == MERGED. `failed` is not a member:
+ * a failure throws.
+ *
+ * It lives here because it is the return type of the `PhaseExecutor` port
+ * (SPEC.md §2 Station), and kernel — which declares that port — may import
+ * contracts and nothing else.
+ */
+export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';

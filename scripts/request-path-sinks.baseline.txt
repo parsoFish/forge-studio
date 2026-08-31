@@ -190,6 +190,7 @@ orchestrator/brain-fix-runner.ts readFileSync 1
 orchestrator/brain-fix-runner.ts writeFileSync 1
 orchestrator/brain-paths.ts existsSync 1
 orchestrator/brain-paths.ts readFileSync 1
+orchestrator/ci-gate.ts execFileSync 1
 orchestrator/claim-validator.ts existsSync 2
 orchestrator/completeness-critic-runner.ts existsSync 1
 orchestrator/completeness-critic-runner.ts readFileSync 2
@@ -208,7 +209,6 @@ orchestrator/cycle-helpers.ts unlinkSync 1
 orchestrator/cycle-helpers.ts writeFileSync 1
 orchestrator/cycle-report.ts writeFileSync 1
 orchestrator/cycle.ts cpSync 4
-orchestrator/cycle.ts execFileSync 1
 orchestrator/cycle.ts existsSync 8
 orchestrator/cycle.ts mkdirSync 3
 orchestrator/cycle.ts readFileSync 2
@@ -262,8 +262,7 @@ orchestrator/flow-run-requests.ts readFileSync 2
 orchestrator/flow-run-requests.ts readdirSync 2
 orchestrator/flow-run-requests.ts rmSync 5
 orchestrator/flow-run-requests.ts writeFileSync 1
-orchestrator/flow-runner.ts existsSync 1
-orchestrator/flow-runner.ts readFileSync 5
+orchestrator/flow-runner.ts readFileSync 1
 orchestrator/gate-fix-loop.ts existsSync 1
 orchestrator/gate-fix-loop.ts readFileSync 3
 orchestrator/gate-recipes.ts existsSync 1
@@ -336,6 +335,9 @@ orchestrator/phases/developer-loop.ts mkdirSync 2
 orchestrator/phases/developer-loop.ts readFileSync 1
 orchestrator/phases/developer-loop.ts unlinkSync 2
 orchestrator/phases/developer-loop.ts writeFileSync 2
+orchestrator/phases/executor-deps.ts readFileSync 1
+orchestrator/phases/executor-table.ts existsSync 1
+orchestrator/phases/executor-table.ts readFileSync 3
 orchestrator/phases/orchestrated-capture.ts execFileSync 2
 orchestrator/phases/orchestrated-capture.ts existsSync 2
 orchestrator/phases/orchestrated-capture.ts readFileSync 3

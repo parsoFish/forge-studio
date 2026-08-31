@@ -262,11 +262,25 @@ export type CycleResult = {
 export type ReviewerOutcome = 'pr-open' | 'ready-for-review';
 
 /**
- * Final cycle outcome after the closure step folds in the operator-merge
- * confirmation. `merged` is reachable ONLY here (never from the reviewer)
- * and ONLY when `gh pr view --json state` == MERGED.
+ * Final cycle outcome — DEFINED in `@forge/contracts`, re-exported here so the
+ * phase runners and the spine keep one import site. It is the return type of
+ * the `PhaseExecutor` port (SPEC.md §2), which lives in kernel and may not
+ * import this module.
  */
-export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';
+import type { CycleOutcome } from './_pkg/contracts.ts';
+export type { CycleOutcome };
+
+/**
+ * What the closure step returns. It lives here, not in `phases/closure.ts`,
+ * because the flow runner's per-node state carries it and the runner must not
+ * import a phase (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station).
+ */
+export type ClosureResult = {
+  /** Final cycle outcome after folding in the operator-merge confirmation. */
+  outcome: CycleOutcome;
+  /** True iff `gh pr view` reported MERGED (the ONLY merge signal). */
+  merged: boolean;
+};
 
 /**
  * Brain-first runtime gate. CLAUDE.md and every SKILL.md require each phase's
