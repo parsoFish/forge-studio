@@ -16,7 +16,7 @@ keywords:
   - fixture-sweep
   - or-semantics
   - case-insensitive
-related_themes: [2026-08-28-no-merges-flag-delivery, 2026-07-11-exclude-path-filter-single-seam, git-truth-and-pure-aggregation, 2026-08-31-author-filter-compare-coverage-gap]
+related_themes: [2026-08-28-no-merges-flag-delivery, 2026-07-11-exclude-path-filter-single-seam, git-truth-and-pure-aggregation, 2026-08-31-author-filter-compare-coverage-gap, 2026-08-31-tag-range-filter-delivery]
 created_at: 2026-08-31T02:15:00.000Z
 updated_at: 2026-08-31T02:15:00.000Z
 ---
@@ -63,3 +63,4 @@ updated_at: 2026-08-31T02:15:00.000Z
 - [[2026-07-11-exclude-path-filter-single-seam]] — filter-at-seam discipline + text annotation + JSON field conventions
 - [[git-truth-and-pure-aggregation]] — the seam this filter extends
 - [[2026-08-31-author-filter-compare-coverage-gap]] — coverage gap found post-merge: compare branch skips the filter
+- [[2026-08-31-tag-range-filter-delivery]] — structural twin: 3-WI TDD chain, filter at seam, no Commit field change

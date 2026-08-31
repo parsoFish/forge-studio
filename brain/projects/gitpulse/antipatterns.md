@@ -18,6 +18,8 @@
 - [`2026-08-28-gitignored-scratch-sixth-cycle`](./themes/2026-08-28-gitignored-scratch-sixth-cycle.md) — ralph writes fix_plan.md and AGENT.md after WI-1 and WI-2 in the no-merges-flag cycle — 6th consecutive gitpulse cycle; AGENT.md worktree template still not updated.
 - [`2026-08-31-gitignored-scratch-seventh-cycle`](./themes/2026-08-31-gitignored-scratch-seventh-cycle.md) — ralph.uncommitted-work-swept fired for all 3 WIs in the author-filter cycle; seventh consecutive gitpulse cycle; AGENT.md worktree template still unpatched.
 - [`2026-08-31-author-filter-compare-coverage-gap`](./themes/2026-08-31-author-filter-compare-coverage-gap.md) — --author silently ignored under --compare; filterAuthorCommits() not called in the compare branch; none of the 7 acceptance assertions tested --compare --author composition; adversarial review caught it post-merge.
+- [`2026-08-31-gitignored-scratch-eighth-cycle`](./themes/2026-08-31-gitignored-scratch-eighth-cycle.md) — ralph.uncommitted-work-swept ×2 (WI-1, WI-2) in the tag-range-filter cycle; eighth consecutive gitpulse cycle; projects/gitpulse/AGENT.md worktree template still unpatched.
+- [`2026-08-31-tag-range-dead-code-ac4-wire`](./themes/2026-08-31-tag-range-dead-code-ac4-wire.md) — resolveEffectiveBounds exported and unit-tested in src/tag-range.ts but never imported by src/cli.ts; AC4 narrower-bound annotation is dead code; no per-WI gate detected the absent import; adversarial review caught it (RF-1 major).
 
 ## Format
 

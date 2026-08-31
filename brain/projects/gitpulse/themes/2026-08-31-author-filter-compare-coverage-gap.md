@@ -15,7 +15,7 @@ keywords:
   - filterAuthorCommits
   - subcommand-coverage
   - adversarial-review
-related_themes: [2026-08-31-author-filter-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output]
+related_themes: [2026-08-31-author-filter-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output, 2026-08-31-tag-range-dead-code-ac4-wire]
 created_at: 2026-08-31T02:15:00.000Z
 updated_at: 2026-08-31T02:15:00.000Z
 ---
@@ -62,3 +62,4 @@ When a new filter/flag is added that applies "to all subcommands," the manifest'
 
 - [[2026-08-31-author-filter-flag-delivery]] — the delivery pattern this gap belongs to
 - [[2026-06-21-acceptance-gate-covers-only-headline-output]] — prior cycle's theme on acceptance gate covering only the headline happy-path; same class of gap
+- [[2026-08-31-tag-range-dead-code-ac4-wire]] — analogous gap: function unit-tested in isolation but not imported by cli.ts; same incomplete-coverage class
