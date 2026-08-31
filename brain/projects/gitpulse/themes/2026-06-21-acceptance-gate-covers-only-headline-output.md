@@ -12,7 +12,7 @@ keywords:
   - ownership
   - hotspot
   - format
-related_themes: [2026-06-21-json-output-flag-delivery, 2026-07-11-csv-output-flag-delivery]
+related_themes: [2026-06-21-json-output-flag-delivery, 2026-07-11-csv-output-flag-delivery, 2026-08-31-author-filter-compare-coverage-gap]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
 ---
@@ -62,3 +62,4 @@ drop/miscount is caught.
 
 - [[2026-06-21-json-output-flag-delivery]] — the `--json` delivery extended this same read-back acceptance gate
 - [[2026-07-11-csv-output-flag-delivery]] — the `--csv` delivery also extended the read-back acceptance gate
+- [[2026-08-31-author-filter-compare-coverage-gap]] — --compare --author gap: acceptance suite missed the compare code path, same class of incomplete-subcommand-coverage
