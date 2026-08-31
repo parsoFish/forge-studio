@@ -690,7 +690,7 @@ function spawnPreflightFix(
   mkdirSync(logDir, { recursive: true });
   const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
   const argv = [
-    '--experimental-strip-types', 'orchestrator/cli.ts', 'preflight', 'fix',
+    '--experimental-strip-types', 'apps/forge/cli.ts', 'preflight', 'fix',
     '--project', p.project, '--clause', p.clause, '--run-id', p.runId,
     '--instruction', p.instruction, '--detail', p.detail,
   ];

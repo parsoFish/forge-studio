@@ -255,19 +255,19 @@ test('AT-9 (containment): a project repo carrying a symlinked "_authoring" point
 
 const ARGV_CAPTURE_FILENAME = 'captured-argv.json';
 
-/** A minimal `orchestrator/cli.ts` stand-in: writes its own argv (everything
+/** A minimal `apps/forge/cli.ts` stand-in: writes its own argv (everything
  *  after the two node flags `spawnAgentTurn` always prepends) to a fixed
  *  file next to itself, then exits. Pure node:fs/node:path — no build step,
  *  no node_modules required, so `cwd: forgeRoot` need not be a real forge
  *  checkout for this ONE test. */
 function writeStubCli(forgeRoot: string): void {
-  mkdirSync(join(forgeRoot, 'orchestrator'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'apps', 'forge'), { recursive: true });
   writeFileSync(
-    join(forgeRoot, 'orchestrator', 'cli.ts'),
+    join(forgeRoot, 'apps', 'forge', 'cli.ts'),
     [
       "import { writeFileSync } from 'node:fs';",
       "import { join } from 'node:path';",
-      `writeFileSync(join(import.meta.dirname, '..', '${ARGV_CAPTURE_FILENAME}'), JSON.stringify(process.argv.slice(2)));`,
+      `writeFileSync(join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}'), JSON.stringify(process.argv.slice(2)));`,
       '',
     ].join('\n'),
   );

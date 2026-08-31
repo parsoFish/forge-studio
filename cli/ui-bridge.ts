@@ -3495,7 +3495,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', ...argvPrefix, sessionId, '--project', project],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', ...argvPrefix, sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
     closeSync(stderrFd);
@@ -3927,7 +3927,7 @@ function spawnAgentDispatch(
     console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
     return;
   }
-  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
+  const args = ['--experimental-strip-types', 'apps/forge/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });

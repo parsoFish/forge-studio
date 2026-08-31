@@ -198,7 +198,7 @@ export function spawnServeDetached(forgeRoot: string): { pid: number; logFile: s
   const { dir, logFile } = daemonPaths(forgeRoot);
   mkdirSync(dir, { recursive: true });
   const logFd = openSync(logFile, 'a');
-  const cliPath = resolve(forgeRoot, 'orchestrator', 'cli.ts');
+  const cliPath = resolve(forgeRoot, 'apps', 'forge', 'cli.ts');
   const child = spawn(
     process.execPath,
     ['--experimental-strip-types', cliPath, 'serve'],
