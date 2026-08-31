@@ -529,7 +529,7 @@ function startServe() {
   log('contract-readiness claim check skipped (routine-tier execution test)');
   return spawn(
     process.execPath,
-    ['--experimental-strip-types', 'orchestrator/cli.ts', 'serve', '--once'],
+    ['--experimental-strip-types', 'apps/forge/cli.ts', 'serve', '--once'],
     {
       cwd: FORGE_ROOT,
       env: forgeSpawnEnv({ FORGE_SKIP_CONTRACT_CHECK: '1' }),

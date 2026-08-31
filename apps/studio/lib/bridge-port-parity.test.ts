@@ -27,7 +27,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_BRIDGE_PORT as CONTRACT_PORT } from '@forge/contracts';
 import { DEFAULT_BRIDGE_PORT as UI_PORT } from './bridge-port.ts';
 
-const FORGE_WATCH_PATH = resolve(__dirname, '../../../cli/forge-watch.ts');
+const FORGE_WATCH_PATH = resolve(__dirname, '../../../apps/forge/forge-watch.ts');
 const UI_BRIDGE_PORT_PATH = resolve(__dirname, './bridge-port.ts');
 
 test('forge-ui serves the contracts constant itself, not a copy of its value', () => {
@@ -35,15 +35,15 @@ test('forge-ui serves the contracts constant itself, not a copy of its value', (
   expect(CONTRACT_PORT).toBe(4123);
 });
 
-test('cli/forge-watch.ts holds no local port literal — it imports the contract', () => {
+test('apps/forge/forge-watch.ts holds no local port literal — it imports the contract', () => {
   const source = readFileSync(FORGE_WATCH_PATH, 'utf8');
   expect(
     /const\s+DEFAULT_BRIDGE_PORT\s*=/.test(source),
-    'cli/forge-watch.ts re-declared DEFAULT_BRIDGE_PORT locally — the two can drift again; import it from @forge/contracts',
+    'apps/forge/forge-watch.ts re-declared DEFAULT_BRIDGE_PORT locally — the two can drift again; import it from @forge/contracts',
   ).toBe(false);
   expect(
-    /DEFAULT_BRIDGE_PORT\s*}\s*from\s*'\.\.\/orchestrator\/_pkg\/contracts\.ts'/.test(source),
-    'cli/forge-watch.ts must reach the contract through the orchestrator/_pkg shim (1.0.md §0)',
+    /DEFAULT_BRIDGE_PORT\s*}\s*from\s*'@forge\/contracts'/.test(source),
+    'apps/forge/forge-watch.ts must reach the contract through @forge/contracts (1.0.md §0; the orchestrator/_pkg shim it used to name was deleted by the M3 move)',
   ).toBe(true);
 });
 

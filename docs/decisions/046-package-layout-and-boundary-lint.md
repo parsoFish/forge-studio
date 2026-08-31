@@ -2,6 +2,7 @@
 
 - **Status:** accepted (operator, 2026-08-31, at gate H5 — `docs/roadmaps/1.0.md` §5)
 - **Amended:** 2026-08-31, same sitting — §1's tsconfig project-reference clause, in favour of the blueprint spec's [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) "no build step" decision. The amendment and its evidence are in §1 below.
+- **Amended:** 2026-08-31 (operator ruling, M3-A) — §1's `exports` clause, to permit an **additive** `"./*": "./*"` subpath alongside the single root entry. The amendment and its evidence are in §1 below.
 - **Supersedes:** [ADR 042](./042-surface-cap-scope-and-testability.md) — the `orchestrator/` surface cap and its three boundary rulings are replaced by per-package caps. ADR 042's *context* (why a cap exists) stands; its *object* does not, because `orchestrator/` ceases to exist as a unit at M3.
 - **Relates to:** [ADR 027](./027-studio-object-model.md) (definitions as data), [ADR 028](./028-flow-engine.md) (the flow engine that becomes `@forge/flows`), [ADR 043](./043-generic-interactive-surface.md) (the spine that becomes `@forge/sessions`), [ADR 045](./045-operator-workspace-and-promotion.md) (`_local/` resolution, which lands in `@forge/kernel`).
 - **Implements:** `docs/roadmaps/1.0.md` §0 (the allow-graph and the 800-line file cap) and §4 M2.
@@ -35,8 +36,35 @@ land against.
 ### 1. Nine packages and two apps
 
 The repository becomes one npm workspace root with `workspaces: ["packages/*",
-"apps/*"]`. Each package declares `exports: {".": "./index.ts"}`, its own `test`
-script, and its own `tsconfig.json` extending the root.
+"apps/*"]`. Each package declares `exports: {".": "./index.ts", "./*": "./*"}`,
+its own `test` script, and its own `tsconfig.json` extending the root.
+
+> **Amendment, 2026-08-31 (operator ruling, M3-A).** This clause originally read
+> `exports: {".": "./index.ts"}` — a single root entry and nothing else. The M3
+> big-bang move made that unworkable. The move relocates 475 files, and the
+> roadmap's own M3 rule is that a cross-package import becomes the **subpath**
+> form `@forge/<pkg>/<rest>.ts`; the move emitted **756** such specifiers. With a
+> root entry alone, not one of them resolves.
+>
+> The alternative — routing all 756 through nine barrel `index.ts` files — was
+> rejected on three grounds. It would force each package to re-export its whole
+> surface, which is a content edit in a move PR that is required to make none. It
+> would create cross-package cycles through the barrels, the precise failure the
+> allow-graph exists to prevent. And it would cost `check-boundaries` its
+> file-level resolution: an edge would resolve to `packages/<pkg>/index.ts` rather
+> than to the module actually imported, collapsing a 551-row violation baseline
+> into per-package noise and making the M4 backlog unreadable.
+>
+> **The subpath export is additive and changes nothing about the boundary.** The
+> single root entry `"."` remains the anchor the allow-graph is drawn against;
+> `"./*": "./*"` only lets a caller name a file inside a package it is already
+> permitted to import. The allow-graph itself is unchanged, and
+> `check-boundaries` still resolves and judges every edge at file granularity.
+>
+> `scripts/check-skeleton.test.ts` asserted the old shape with `deepEqual` on the
+> whole `exports` object; it now asserts that the root entry is exactly
+> `./index.ts` **and** that the subpath entry is present, which is the invariant
+> this amendment actually intends.
 
 > **Amendment, 2026-08-31 (operator ruling at H5).** This clause originally read
 > "and is wired into the root `tsconfig` as a project reference". It cannot be

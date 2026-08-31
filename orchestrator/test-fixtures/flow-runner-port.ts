@@ -19,7 +19,7 @@ import { runFlow, type FlowRunArgs } from '../flow-runner.ts';
 import { createPhaseExecutor, type NodeExecutor } from '../phases/executor-table.ts';
 import { createProjectGate, defaultRunClosure } from '../phases/executor-deps.ts';
 import type { FlowRunnerDeps } from '../phases/executor-deps.ts';
-import type { NodeKind } from '../flow-node-kind.ts';
+import type { NodeKind } from '@forge/flows/flow-node-kind.ts';
 
 export type { NodeExecutor, FlowRunnerDeps };
 export type EnqueueFlowRun = FlowRunArgs['enqueueFlowRun'];

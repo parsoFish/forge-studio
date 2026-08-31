@@ -57,7 +57,7 @@ The project's [`CLAUDE.md`](../../../../projects/trafficGame/CLAUDE.md) carries 
 | UI overlay (CanvasScreen subclass) | `npm test` and `npm run test:visual` — the overlays don't surface in unit tests |
 | Algorithm-heavy (Steiner, graph-colouring, network optimization) | `npm test` and `:visual:fast`; also flagged for decomposition before queueing (see [`algorithm-heavy-items`](algorithm-heavy-items.md)). |
 
-For the per-WI `quality_gate_cmd` field on the initiative manifest ([`orchestrator/manifest.ts`](../../../../orchestrator/manifest.ts)): the safe default is `["npm", "test"]`. WI-level overrides should add `npm run test:visual` for visual-affecting work.
+For the per-WI `quality_gate_cmd` field on the initiative manifest ([`orchestrator/manifest.ts`](../../../../packages/flows/manifest.ts)): the safe default is `["npm", "test"]`. WI-level overrides should add `npm run test:visual` for visual-affecting work.
 
 ## Determinism
 

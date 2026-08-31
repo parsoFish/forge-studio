@@ -1,0 +1,744 @@
+/**
+ * Initiative manifest — typed schema + parse/serialise/validate/write.
+ *
+ * The architect emits manifests; the orchestrator reads them when claiming.
+ * Manifests live as markdown files with YAML frontmatter under
+ * `_queue/{pending,in-flight,...}/<initiative-id>.md`.
+ *
+ * Per ADR 007 (markdown artifacts) and ADR 011 (file-based queue).
+ */
+
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import matter from 'gray-matter';
+
+import { assertManifestPathFields } from './manifest-path-guard.ts';
+
+// R4-11-F1: `merged` mirrors the QueueState directory of the same name (a
+// transient pass-through promoted to `done/` in the same sweep) — distinct
+// from the unrelated `CycleOutcome`/`CycleResult.status` `'merged'` VALUE.
+export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
+
+/**
+ * G6 (closes finding I6): every initiative declares whether forge produced
+ * it autonomously (`architect` — the out-of-cycle architect decomposed a
+ * vision into right-sized initiatives) or the operator hand-directed the
+ * work through the pipeline (`human-directed` — deliberate structural
+ * surgery routed through forge, e.g. the trafficGame
+ * `simplification-{tests,source,arch}` initiatives).
+ *
+ * The two modes have *different* success criteria: autonomous cycles are
+ * judged on convergence-without-intervention; hand-directed cycles on
+ * whether the specified work landed. Recording them identically pollutes
+ * the autonomy signal (brain theme `human-directed-work-as-initiatives`).
+ * Metrics and the reflector separate the cohorts on this field so "did
+ * forge get more autonomous" stays answerable.
+ *
+ * Defaults to `architect` when absent (back-compat for manifests authored
+ * before this field existed — NOT a feature flag, just a schema default).
+ */
+/** `triggered` = born from an external trigger fire (cron/webhook — ADR-041). */
+export type InitiativeOrigin = 'architect' | 'human-directed' | 'triggered';
+
+const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed', 'triggered'];
+const DEFAULT_ORIGIN: InitiativeOrigin = 'architect';
+
+export type InitiativeManifest = {
+  initiative_id: string;       // INIT-<YYYY-MM-DD>-<slug>
+  /**
+   * W6-RV-1 (mock finding I3), additive-optional field per ADR-042's
+   * disclose-not-park rule: an explicit author-supplied title, read
+   * straight off frontmatter. `initiativeTitle()` below is the ONE display
+   * derivation every surface uses (W7-A4 / W7-FIX-A4): this field when
+   * present, else the body's first level-1 `# ` heading, else the
+   * initiative id — never a `##` section heading. Every manifest PRODUCER
+   * writes it (`buildManifest` from `DraftInitiative.title`,
+   * `mintTriggeredInitiative` from the trigger + flow), so it is absent only
+   * on hand-authored manifests or ones written before W7-FIX-A4. Exposed
+   * here (rather than re-parsing frontmatter a second time downstream) so a
+   * polled endpoint like the roadmap builder never parses the same manifest
+   * buffer twice.
+   */
+  title?: string;
+  project: string;
+  project_repo_path: string;
+  created_at: string;          // ISO-8601
+  iteration_budget: number;    // > 0
+  cost_budget_usd: number;     // > 0
+  /**
+   * Optional per-run cycle cost ceiling (USD). When present, overrides the
+   * flow's `costCeilingUsd` for THIS run only (see flow-runner runFlow). Lets a
+   * single initiative carry a higher ceiling than the shared seed flow without
+   * mutating the flow file. Absent = use the flow's ceiling. The
+   * `FORGE_COST_CEILING_USD` env var takes precedence over this when set.
+   */
+  cost_ceiling_usd?: number;   // > 0 when present
+  phase: ManifestPhase;
+  /**
+   * G6: autonomous-vs-hand-directed cohort tag. Defaults to `architect`
+   * when the frontmatter omits it (legacy manifests).
+   */
+  origin: InitiativeOrigin;
+  /**
+   * F-25: initiative-level dependencies. Each entry is another initiative_id
+   * that must be in `_queue/done/` before the scheduler may claim this one.
+   * Empty / absent = no prerequisites. Distinct from `depends_on` on individual
+   * work-items, which orders WIs WITHIN this initiative.
+   */
+  depends_on_initiatives?: string[];
+  /**
+   * F-27: number of times this manifest has been auto-retried by the
+   * scheduler after a recoverable failure. Used as a cap (`MAX_AUTO_RETRIES`)
+   * to prevent infinite retry loops. Annotated by the scheduler on each
+   * recovery; humans can also reset it manually if they amend the manifest
+   * and want to give it another shot.
+   */
+  retry_count?: number;
+  /**
+   * F-27: list of failure modes that have previously caused this manifest
+   * to be auto-retried. If the same mode shows up retry_count + 1 times,
+   * that's strong evidence the issue isn't transient — the next failure
+   * stops in `failed/` regardless of the mode's nominal `recoverable: true`.
+   */
+  previous_failure_modes?: string[];
+  /**
+   * R4-05-F2: work_item_ids produced by the plan agent's decomposition,
+   * written back once decomposition completes. Distinct from a WI's own
+   * depends_on (which orders WIs within the initiative).
+   */
+  specs?: string[];
+  body: string;                // markdown initiative spec
+  /**
+   * Optional per-project quality-gate command. Used by both the dev-loop
+   * (Ralph stop condition) and the reviewer (orchestrator-side gate). When
+   * absent, falls back to `npm test` if `package.json` exists in the
+   * worktree, else `true` (no-op gate). Single source of truth — both phases
+   * use the same command, eliminating drift (F-04 / F-06).
+   *
+   * Examples:
+   *   ['npm', 'test']
+   *   ['pytest', '-q']
+   *   ['cargo', 'test', '--all']
+   *   ['bats', 'tests/']
+   */
+  quality_gate_cmd?: string[];
+  /**
+   * Resume a stalled/redirected cycle from a sub-phase, reusing the preserved
+   * worktree + branch rather than re-running the full cycle from scratch.
+   * Two distinct callers set this field, for two distinct reasons:
+   *   - `'demo'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *     recovery when every WI is already `complete`. Skips architect/PM/per-WI
+   *     dev-loop and resumes at the `demo` node — the post-develop band that is
+   *     the flow's declared `resumable` re-entry point (dev→demo→review) — reusing
+   *     the completed per-WI commits. Set by `forge requeue --resume-from=demo`.
+   *     (Was `'unifier'` before the topology cutover retired that node.)
+   *   - `'develop'` — ADR 040: review send-back re-entry. The PM phase
+   *     rebases onto main and skips (no re-decomposition); the dev loop
+   *     RUNS (prior WIs re-verify cheaply via the iter-0 already-complete
+   *     shortcut, new review-fix WIs build); then the post-develop spine
+   *     re-presents. Set by `persistManifestSendBack` under the verdict
+   *     handler's manifest lock.
+   * Absent ⇒ normal full cycle.
+   */
+  resume_from?: 'demo' | 'develop';
+  /**
+   * ADR 040: send-back round counter. Incremented by the review verdict
+   * handler (`persistManifestSendBack`) each time review feedback compiles
+   * into fix work-items and re-dispatches the develop agent. Absent ⇒ no
+   * send-back has happened yet. Checked against `review.maxSendBackRounds`
+   * (config, default 6) to bound the loop.
+   */
+  review_rounds?: number;
+  /**
+   * cascade-v4 #7: a throwaway / verification cycle (e.g. `verify-cycle.mjs`
+   * frozen-SHA routine runs) should NOT pollute the durable brain. When
+   * `disposable: true`, the reflector skips its theme + cycle-archive writes
+   * (it still runs closure/merge); the durable brain accretes only from real
+   * initiatives. Absent / false ⇒ normal reflection.
+   */
+  disposable?: boolean;
+  // Optional runtime fields written by the scheduler
+  claimed_at?: string;
+  claimed_by?: string;
+  worktree_path?: string;
+  /**
+   * ADR 026: the durable cycle id for this initiative, persisted on the manifest
+   * at FIRST claim (`runCycle` mints it once). Every later re-entry — a crash-
+   * recovery resume, the review→unifier drain, or the merge finalizer — threads
+   * this SAME id so the initiative stays on ONE `_logs/<cycleId>` dir. Reusing
+   * it is what dissolves the three release-folder defects (cost/status lineage
+   * blanks, sibling cycle on send-back, WI hexes disappearing): one cycleId ⇒
+   * one event log ⇒ one cost rollup ⇒ one set of hexes. Absent on legacy
+   * manifests (the finalizer falls back to the latest matching `_logs` dir).
+   */
+  cycle_id?: string;
+  /**
+   * The Studio flow this initiative runs under (ADR-028 / J5). The run-model
+   * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
+   * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
+   * default: every NEW manifest names a flow (architect → forge-architect,
+   * develop → forge-develop; W7-C1 retired the reflect flow wrapper —
+   * reflection is a standalone post-merge agent run), and runCycle
+   * throws on a missing/unknown flow_id (no fallback). Only historical `done/`
+   * manifests may lack it; they are never re-run.
+   */
+  flow_id?: string;
+  /**
+   * P4: architect session id from the in-UI architect runner that produced this
+   * manifest. Stamped during `runFinalizeStep` so the cycle's event log can emit
+   * real architect start/end events (grounding the architect hex in actual data
+   * rather than a synthetic mock). Absent when the manifest was created without
+   * an in-UI architect session (legacy / hand-authored manifests).
+   */
+  architect_session_id?: string;
+  /**
+   * P4: total cost (USD) accrued by the architect session that produced this
+   * manifest, summed from its `_logs/_architect-<sid>/events.jsonl`. When
+   * present, `runCycle` emits a real architect end event with this cost so the
+   * architect hex shows an accurate cost pill instead of a hardcoded mock value.
+   */
+  architect_cost_usd?: number;
+  /**
+   * P4: wall-clock duration (ms) of the architect session, computed as
+   * `last started_at − first started_at` across the session event log. Emitted
+   * alongside `architect_cost_usd` in the cycle's architect end event.
+   */
+  architect_duration_ms?: number;
+  /**
+   * R2-08-F4 (ADR-027 amendment): trigger provenance for a MINTED run
+   * (cron / webhook / agent-complete origination only — chaining and merged
+   * dispatch never mint a manifest, so their provenance is derived instead
+   * from the run's own `*.trigger-firing` event; see run-model.ts). Persisted
+   * ONCE at mint time (`mintTriggeredInitiative`) from the staged
+   * `FlowRunRequest` that minted this run — never authored, never re-derived
+   * from `body` prose. `trigger_kind`/`trigger_source` are always written
+   * together (both absent, or both present); `trigger_scope` is present only
+   * when the firing event resolved to a project — absent means unresolved
+   * (the run model reports that as `scope: null`, never a fabricated
+   * default).
+   */
+  trigger_kind?: string;
+  trigger_source?: string;
+  trigger_scope?: string;
+};
+
+const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * W7-A4 — the ONE initiative-title derivation (findings agents-05, flows-08,
+ * flows-26, projects-10); W7-FIX-A4 (W7A4-01) documented fallback. Used by
+ * the run model (`run.initiative` — rails, HISTORY ledgers, run-detail
+ * heading, Home ledger) and the project roadmap (`RoadmapInitiative.title`),
+ * so one initiative has one name across Studio.
+ *
+ * Order:
+ *   1. the frontmatter `title:` — every producer writes it (`buildManifest`
+ *      from `DraftInitiative.title`, `mintTriggeredInitiative`), so for a
+ *      real initiative this is the answer;
+ *   2. ONLY when no frontmatter title exists (hand-authored / pre-W7-FIX-A4
+ *      manifests): the body's first level-1 `# ` heading — a single-hash
+ *      heading is the document's own name, and fenced code is skipped so a
+ *      `# comment` inside a ```bash block never becomes a title;
+ *   3. else the `initiative_id`.
+ * NEVER a `##`+ section heading — a body's first section heading is a
+ * SECTION label ("Summary", "Goal", "Background", "Acceptance criteria"),
+ * which is exactly how 52 betterado initiatives came to share three names and
+ * every run rail read "Summary".
+ */
+export function initiativeTitle(manifest: Pick<InitiativeManifest, 'initiative_id' | 'title'> & { body?: string }): string {
+  const title = manifest.title?.trim();
+  if (title) return title;
+  const h1 = firstLevelOneHeading(manifest.body);
+  return h1 ?? manifest.initiative_id;
+}
+
+/** First `# <text>` heading outside fenced code blocks, trimmed; null when none. */
+function firstLevelOneHeading(body: string | undefined): string | null {
+  if (!body) return null;
+  let inFence = false;
+  for (const raw of body.split('\n')) {
+    const line = raw.trimEnd();
+    if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    // The optional closing `#` run is markdown syntax ONLY when whitespace
+    // separates it from the text (CommonMark) — a hash glued to the last word
+    // belongs to the NAME (`# Migrate to C#`, `# F# interop`).
+    const m = /^# (.+?)(?:\s+#+)?\s*$/.exec(line);
+    if (m && m[1].trim().length > 0) return m[1].trim();
+  }
+  return null;
+}
+
+export function parseManifest(content: string): InitiativeManifest {
+  const parsed = matter(content);
+  const data = parsed.data as Record<string, unknown>;
+
+  const initiative_id = stringField(data, 'initiative_id', true);
+  const project = stringField(data, 'project', true);
+  const created_at = stringField(data, 'created_at', true);
+  const project_repo_path = stringField(data, 'project_repo_path', false) ?? '';
+  const iteration_budget = numberField(data, 'iteration_budget', true);
+  const cost_budget_usd = numberField(data, 'cost_budget_usd', true);
+  const phase = (stringField(data, 'phase', false) ?? 'pending') as ManifestPhase;
+  // G6: default to `architect` when the frontmatter omits `origin` so
+  // pre-existing manifests round-trip unchanged. An unrecognised value is
+  // preserved verbatim here and rejected by validateManifest (fail-fast at
+  // the boundary rather than silently coercing).
+  const rawOrigin = stringField(data, 'origin', false);
+  const origin = (rawOrigin ? rawOrigin : DEFAULT_ORIGIN) as InitiativeOrigin;
+
+  const manifest: InitiativeManifest = {
+    initiative_id,
+    project,
+    project_repo_path,
+    created_at,
+    iteration_budget,
+    cost_budget_usd,
+    phase,
+    origin,
+    body: parsed.content.replace(/^\n+/, ''),
+  };
+  // W6-RV-1: explicit author-supplied title, trimmed; absent/blank stays absent
+  // rather than storing an empty string (mirrors the frontmatterTitle
+  // trim-and-treat-blank-as-absent convention it replaces downstream).
+  if (typeof data.title === 'string' && data.title.trim().length > 0) {
+    manifest.title = data.title.trim();
+  }
+  if (typeof data.claimed_at === 'string') manifest.claimed_at = data.claimed_at;
+  if (typeof data.claimed_by === 'string') manifest.claimed_by = data.claimed_by;
+  if (typeof data.worktree_path === 'string') manifest.worktree_path = data.worktree_path;
+  if (typeof data.cycle_id === 'string' && data.cycle_id.length > 0) manifest.cycle_id = data.cycle_id;
+  if (typeof data.flow_id === 'string' && data.flow_id.length > 0) manifest.flow_id = data.flow_id;
+  if (typeof data.architect_session_id === 'string' && data.architect_session_id.length > 0) {
+    manifest.architect_session_id = data.architect_session_id;
+  }
+  if (typeof data.architect_cost_usd === 'number' && data.architect_cost_usd >= 0) {
+    manifest.architect_cost_usd = data.architect_cost_usd;
+  }
+  if (typeof data.architect_duration_ms === 'number' && data.architect_duration_ms >= 0) {
+    manifest.architect_duration_ms = data.architect_duration_ms;
+  }
+  if (Array.isArray(data.quality_gate_cmd)) {
+    const cmd = (data.quality_gate_cmd as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (cmd.length > 0) manifest.quality_gate_cmd = cmd;
+  }
+  if (Array.isArray(data.depends_on_initiatives)) {
+    const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (deps.length > 0) manifest.depends_on_initiatives = deps;
+  }
+  if (data.resume_from === 'demo' || data.resume_from === 'develop') {
+    manifest.resume_from = data.resume_from;
+  }
+  if (
+    typeof data.review_rounds === 'number' &&
+    Number.isInteger(data.review_rounds) &&
+    data.review_rounds >= 0
+  ) {
+    manifest.review_rounds = data.review_rounds;
+  }
+  if (data.disposable === true) manifest.disposable = true;
+  if (typeof data.cost_ceiling_usd === 'number' && data.cost_ceiling_usd > 0) {
+    manifest.cost_ceiling_usd = data.cost_ceiling_usd;
+  }
+  if (typeof data.retry_count === 'number') manifest.retry_count = data.retry_count;
+  if (Array.isArray(data.previous_failure_modes)) {
+    const modes = (data.previous_failure_modes as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (modes.length > 0) manifest.previous_failure_modes = modes;
+  }
+  if (Array.isArray(data.specs)) {
+    const specs = (data.specs as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (specs.length > 0) manifest.specs = specs;
+  }
+  if (typeof data.trigger_kind === 'string' && data.trigger_kind.length > 0) {
+    manifest.trigger_kind = data.trigger_kind;
+  }
+  if (typeof data.trigger_source === 'string' && data.trigger_source.length > 0) {
+    manifest.trigger_source = data.trigger_source;
+  }
+  if (typeof data.trigger_scope === 'string' && data.trigger_scope.length > 0) {
+    manifest.trigger_scope = data.trigger_scope;
+  }
+  return manifest;
+}
+
+export function serializeManifest(m: InitiativeManifest): string {
+  const data: Record<string, unknown> = {
+    initiative_id: m.initiative_id,
+    project: m.project,
+    project_repo_path: m.project_repo_path,
+    created_at: m.created_at,
+    iteration_budget: m.iteration_budget,
+    cost_budget_usd: m.cost_budget_usd,
+    phase: m.phase,
+    // G6: always serialise origin (default `architect`) so a round-tripped
+    // legacy manifest gains the explicit tag — the cohort split must be
+    // unambiguous on disk, not inferred at read time forever.
+    origin: m.origin ?? DEFAULT_ORIGIN,
+  };
+  // W6-RV-1: round-trip the explicit title unchanged — every write path
+  // (claim, cycle_id/cost_ceiling/specs stamps, resume-from) spreads the
+  // parsed manifest back through serializeManifest, so omitting this would
+  // silently drop an author-supplied title on the next write.
+  if (m.title) data.title = m.title;
+  if (m.claimed_at) data.claimed_at = m.claimed_at;
+  if (m.claimed_by) data.claimed_by = m.claimed_by;
+  if (m.worktree_path) data.worktree_path = m.worktree_path;
+  if (m.cycle_id) data.cycle_id = m.cycle_id;
+  if (m.flow_id) data.flow_id = m.flow_id;
+  if (m.architect_session_id) data.architect_session_id = m.architect_session_id;
+  if (typeof m.architect_cost_usd === 'number') data.architect_cost_usd = m.architect_cost_usd;
+  if (typeof m.architect_duration_ms === 'number') data.architect_duration_ms = m.architect_duration_ms;
+  if (m.quality_gate_cmd && m.quality_gate_cmd.length > 0) {
+    data.quality_gate_cmd = m.quality_gate_cmd;
+  }
+  if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
+    data.depends_on_initiatives = m.depends_on_initiatives;
+  }
+  if (m.resume_from === 'demo' || m.resume_from === 'develop') {
+    data.resume_from = m.resume_from;
+  }
+  if (typeof m.review_rounds === 'number') {
+    data.review_rounds = m.review_rounds;
+  }
+  if (m.disposable === true) {
+    data.disposable = true;
+  }
+  if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
+    data.cost_ceiling_usd = m.cost_ceiling_usd;
+  }
+  if (typeof m.retry_count === 'number' && m.retry_count > 0) {
+    data.retry_count = m.retry_count;
+  }
+  if (m.previous_failure_modes && m.previous_failure_modes.length > 0) {
+    data.previous_failure_modes = m.previous_failure_modes;
+  }
+  if (m.specs && m.specs.length > 0) {
+    data.specs = m.specs;
+  }
+  if (m.trigger_kind) data.trigger_kind = m.trigger_kind;
+  if (m.trigger_source) data.trigger_source = m.trigger_source;
+  if (m.trigger_scope) data.trigger_scope = m.trigger_scope;
+  return matter.stringify('\n' + m.body.replace(/^\n+/, ''), data);
+}
+
+export function validateManifest(m: InitiativeManifest): string[] {
+  const errors: string[] = [];
+
+  if (!m.initiative_id) {
+    errors.push('initiative_id is required');
+  } else if (!INITIATIVE_ID_PATTERN.test(m.initiative_id)) {
+    errors.push(`initiative_id must match pattern INIT-YYYY-MM-DD-<slug>: got ${m.initiative_id}`);
+  }
+  if (!m.project) errors.push('project is required');
+  if (!m.created_at) errors.push('created_at is required');
+  if (!(m.iteration_budget > 0)) errors.push(`iteration_budget must be > 0: got ${m.iteration_budget}`);
+  if (!(m.cost_budget_usd > 0)) errors.push(`cost_budget_usd must be > 0: got ${m.cost_budget_usd}`);
+  if (m.cost_ceiling_usd !== undefined && !(m.cost_ceiling_usd > 0)) {
+    errors.push(`cost_ceiling_usd must be > 0 when present: got ${m.cost_ceiling_usd}`);
+  }
+  if (m.review_rounds !== undefined && !(Number.isInteger(m.review_rounds) && m.review_rounds >= 0)) {
+    errors.push(`review_rounds must be an integer >= 0 when present: got ${m.review_rounds}`);
+  }
+  if (!INITIATIVE_ORIGINS.includes(m.origin)) {
+    errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
+  }
+  if (m.quality_gate_cmd !== undefined) {
+    if (!Array.isArray(m.quality_gate_cmd) || m.quality_gate_cmd.length === 0) {
+      errors.push('quality_gate_cmd must be a non-empty array of strings when set');
+    } else if (!m.quality_gate_cmd.every((s) => typeof s === 'string' && s.length > 0)) {
+      errors.push('quality_gate_cmd entries must be non-empty strings');
+    }
+  }
+  if (m.specs !== undefined) {
+    if (!Array.isArray(m.specs) || m.specs.length === 0) {
+      errors.push('specs must be a non-empty array of strings when set');
+    } else if (!m.specs.every((s) => typeof s === 'string' && s.length > 0)) {
+      errors.push('specs entries must be non-empty strings');
+    }
+  }
+  if (m.depends_on_initiatives !== undefined) {
+    if (!Array.isArray(m.depends_on_initiatives)) {
+      errors.push('depends_on_initiatives must be an array of initiative_id strings when set');
+    } else {
+      for (const dep of m.depends_on_initiatives) {
+        if (typeof dep !== 'string' || !INITIATIVE_ID_PATTERN.test(dep)) {
+          errors.push(`depends_on_initiatives entry must match INIT-YYYY-MM-DD-<slug>: got ${dep}`);
+        }
+        if (dep === m.initiative_id) {
+          errors.push(`depends_on_initiatives cannot contain self (${dep})`);
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
+export type WriteOptions = {
+  queueRoot?: string;          // defaults to './_queue'
+  /**
+   * R4-17 round-4 (pin 7): the projects root the CALLER already resolved,
+   * passed through to `assertManifestPathFields` verbatim instead of letting
+   * the guard re-read `forge.config.json` from disk. A long-lived caller (the
+   * bridge, which snapshots `ctx.projectsRoot` once at server start) must be
+   * validated against the root it is actually using — see
+   * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by
+   * `promote-manifests` and `mint-triggered-initiative`, which resolve the
+   * root and validate it in the SAME synchronous call and so cache no root to
+   * diverge from; the guard then self-resolves exactly as before.
+   */
+  projectsRoot?: string;
+};
+
+export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): string {
+  const errors = validateManifest(m);
+  if (errors.length > 0) {
+    throw new Error(`invalid manifest:\n  - ${errors.join('\n  - ')}`);
+  }
+  const queueRoot = resolve(opts.queueRoot ?? '_queue');
+  // SEC-02 (forge-d1f): `_queue` always lives at `<forgeRoot>/_queue` (every
+  // caller's queueRoot IS that directory, per the WriteOptions doc above), so
+  // its parent is the one trusted anchor this choke point can derive without
+  // a new parameter. writeManifest is the single write choke point for a
+  // manifest's path-shaped fields (worktree_path / project_repo_path /
+  // cycle_id / project) — see cli/manifest-path-guard.ts's module docstring
+  // for why validation belongs HERE rather than at the dozen downstream read
+  // sites. Throws (fails closed) rather than writing an unsafe manifest.
+  const forgeRoot = dirname(queueRoot);
+  assertManifestPathFields(m, { forgeRoot, projectsRoot: opts.projectsRoot });
+  const pending = join(queueRoot, 'pending');
+  if (!existsSync(pending)) mkdirSync(pending, { recursive: true });
+  const out = join(pending, `${m.initiative_id}.md`);
+  writeFileSync(out, serializeManifest(m));
+  return out;
+}
+
+/**
+ * G6: best-effort origin reader for telemetry. Reads a manifest file and
+ * returns its cohort tag, defaulting to `architect` when the file is
+ * missing/unparseable (dry-runs, test fixtures) or the value is
+ * unrecognised. Never throws — telemetry must not break the cycle.
+ *
+ * This is the single point metrics/reflector use to learn a cycle's
+ * cohort, so the autonomous-vs-hand-directed split is read the same way
+ * everywhere.
+ */
+export function readManifestOrigin(manifestPath: string): InitiativeOrigin {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return INITIATIVE_ORIGINS.includes(m.origin) ? m.origin : DEFAULT_ORIGIN;
+  } catch {
+    return DEFAULT_ORIGIN;
+  }
+}
+
+/**
+ * ADR 026: best-effort read of the manifest's persisted `cycle_id`. Returns
+ * `null` when the file is missing/unparseable (dry-runs, fixtures) or no id has
+ * been persisted yet (legacy manifest). Never throws — lineage threading must
+ * not break a cycle.
+ */
+export function readManifestCycleId(manifestPath: string): string | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return m.cycle_id && m.cycle_id.length > 0 ? m.cycle_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ADR 028 / J5: best-effort read of the manifest's `flow_id` — the Studio flow
+ * the cycle should run. Returns `null` when absent/unparseable. Never throws
+ * (the parse must not crash the caller) — but post-S8/DEC-3 a `null` flow_id is a
+ * terminal error in runCycle (the forge-cycle default was retired; there is no
+ * fallback), so the caller decides, not this reader.
+ */
+export function readManifestFlowId(manifestPath: string): string | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    return m.flow_id && m.flow_id.length > 0 ? m.flow_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Margin added on top of the architect's `cost_budget_usd` when deriving a
+ * per-run ceiling for a manifest that carries no explicit `cost_ceiling_usd`.
+ * The budget estimates the dev-loop spend only; unifier + review + reflect
+ * legs of the same saga bill against the same ceiling, so a flat flow ceiling
+ * (or the bare budget) stops cycles between phases mid-saga.
+ */
+export const DERIVED_CEILING_MARGIN_USD = 40;
+
+/**
+ * Read the per-run cost ceiling (USD) off the manifest frontmatter.
+ * Precedence: explicit `cost_ceiling_usd` ?? `cost_budget_usd` + margin.
+ * Returns null only when neither field yields a positive number (caller
+ * falls back to the flow's own `costCeilingUsd`). Best-effort: a
+ * missing/unparseable manifest yields null.
+ */
+export function readManifestCostCeiling(manifestPath: string): number | null {
+  try {
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
+      return m.cost_ceiling_usd;
+    }
+    if (typeof m.cost_budget_usd === 'number' && m.cost_budget_usd > 0) {
+      return m.cost_budget_usd + DERIVED_CEILING_MARGIN_USD;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * DEC-2 (S6 3-flow split): generate a fresh cycle id for an initiative and
+ * persist it onto the manifest at architect-finalize time so the Develop flow
+ * later picks up the SAME id rather than minting a sibling. This threads the
+ * initiativeId+cycleId lineage across the architect→develop→reflect split so
+ * cost, status, and WI hexes all roll up under one `_logs/<cycleId>` dir.
+ *
+ * Returns the minted cycleId (or the already-present one, idempotent).
+ * Best-effort: never throws.
+ */
+export function mintAndPersistManifestCycleId(manifestPath: string, initiativeId: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const cycleId = `${ts}_${initiativeId}`;
+  persistManifestCycleId(manifestPath, cycleId);
+  // Re-read to return whatever is on disk (may differ if idempotent no-op fired).
+  const onDisk = readManifestCycleId(manifestPath);
+  return onDisk ?? cycleId;
+}
+
+/**
+ * ADR 026: persist `cycle_id` onto the manifest's frontmatter the first time an
+ * initiative is claimed, so every later re-entry reuses the same `_logs` dir.
+ * Idempotent + best-effort: if the manifest already carries a `cycle_id` (or is
+ * missing/unparseable) this is a no-op and never throws. Round-trips through
+ * parse/serialize (the same path `runRequeue` uses to annotate).
+ */
+export function persistManifestCycleId(manifestPath: string, cycleId: string): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (m.cycle_id && m.cycle_id.length > 0) return; // already anchored — never re-stamp
+    writeFileSync(manifestPath, serializeManifest({ ...m, cycle_id: cycleId }));
+  } catch {
+    /* best-effort — a manifest write failure must not fail the cycle */
+  }
+}
+
+/**
+ * forge-shc WI-1: persist an operator-supplied per-run cost ceiling onto the
+ * manifest's frontmatter (`cost_ceiling_usd`) at develop-start time, read
+ * back by `resolveCostCeilingOverride` (orchestrator/cycle.ts) ahead of the
+ * `cost_budget_usd` + `DERIVED_CEILING_MARGIN_USD` derived fallback. Unlike
+ * `persistManifestCycleId` this is NOT one-shot: a later develop/start with a
+ * different ceiling overwrites the prior one (the operator's latest explicit
+ * choice wins). The caller is responsible for validating `costCeilingUsd`
+ * (finite, > 0, <= the route's bound) BEFORE calling — this function never
+ * fabricates or clamps a value, it only writes what it is given.
+ *
+ * shc review finding 2 (MINOR, mutation-not-applied) fix: NEVER THROWS (still
+ * best-effort — a manifest write failure must not fail the enqueue), but now
+ * returns `true`/`false` rather than `void` so the caller can fold the real
+ * outcome into its own result instead of reporting success unconditionally.
+ * A bare `catch {}` that swallows the outcome entirely is exactly the defect
+ * this return value closes.
+ */
+export function persistManifestCostCeiling(manifestPath: string, costCeilingUsd: number): boolean {
+  try {
+    if (!existsSync(manifestPath)) return false;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    writeFileSync(manifestPath, serializeManifest({ ...m, cost_ceiling_usd: costCeilingUsd }));
+    return true;
+  } catch {
+    /* best-effort — a manifest write failure must not fail the enqueue */
+    return false;
+  }
+}
+
+/**
+ * R4-05-F2: persist the initiative→specs back-reference onto the manifest's
+ * frontmatter once the plan agent's decomposition completes — the
+ * work_item_ids it produced. Unlike `persistManifestCycleId` this is NOT
+ * one-shot: a re-decomposition overwrites the list on every call (the
+ * initiative's spec set is whatever the latest pass produced). Best-effort:
+ * if the manifest is missing/unparseable this is a no-op and never throws.
+ */
+export function persistManifestSpecs(manifestPath: string, specs: string[]): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    writeFileSync(manifestPath, serializeManifest({ ...m, specs }));
+  } catch {
+    /* best-effort — a manifest write failure must not fail the cycle */
+  }
+}
+
+/**
+ * ADR 019 (successor develop flow, R4-10-F6): stamp `resume_from: demo` on the
+ * manifest when a cycle has every WI `complete` but the post-develop band has not
+ * yet finished, so that if the daemon CRASHES the recovery sweep can move the
+ * manifest to pending and the scheduler resumes it correctly (reuse the worktree,
+ * skip PM + dev-loop, re-enter at the `demo` node) instead of re-running a full
+ * cycle. Idempotent + best-effort. `forge requeue` (full re-run) clears it.
+ * (Was `persistManifestResumeFromUnifier` / `resume_from: unifier` pre-cutover.)
+ */
+export function persistManifestResumeFromDemo(manifestPath: string): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (m.resume_from === 'demo') return;
+    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'demo' }));
+  } catch {
+    /* best-effort — must not fail the verdict request */
+  }
+}
+
+/**
+ * ADR 040: stamp `resume_from: 'develop'` and increment `review_rounds`
+ * (absent ⇒ 1) in a single read-modify-write, invoked by the review verdict
+ * handler each time review feedback compiles into fix work-items and the
+ * cycle re-dispatches the develop agent. The CALLER holds the manifest's
+ * proper-lockfile lock — same contract as `persistManifestResumeFromDemo`
+ * — this function does no locking of its own.
+ *
+ * Unlike the other `persistManifest*` helpers, this one is deliberately NOT
+ * best-effort: it does not catch/swallow. A failed read or write throws,
+ * because the verdict handler must never report a send-back round it didn't
+ * durably record (silently swallowing here would desync the operator-facing
+ * response from what's actually on disk).
+ *
+ * Always overwrites `resume_from` regardless of its prior value — an
+ * operator-driven send-back supersedes a stale `resume_from: 'demo'`
+ * crash-recovery stamp; the newer, more specific intent wins.
+ */
+export function persistManifestSendBack(manifestPath: string): { round: number } {
+  const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+  const round = (m.review_rounds ?? 0) + 1;
+  writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'develop', review_rounds: round }));
+  return { round };
+}
+
+// ---------- helpers ----------
+
+function stringField(data: Record<string, unknown>, key: string, required: boolean): string {
+  const v = data[key];
+  if (typeof v === 'string') return v;
+  // YAML parses ISO-8601 timestamps as Date — coerce back to ISO string.
+  if (v instanceof Date) return v.toISOString();
+  if (required) throw new Error(`manifest missing required field: ${key}`);
+  return '';
+}
+
+function numberField(data: Record<string, unknown>, key: string, required: boolean): number {
+  const v = data[key];
+  if (typeof v === 'number') return v;
+  if (required) throw new Error(`manifest missing required numeric field: ${key}`);
+  return 0;
+}
+

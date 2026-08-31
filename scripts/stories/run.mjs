@@ -126,7 +126,7 @@ async function main() {
 
     // 5. Bridge identity — never drive a bridge serving another tree.
     const { probeBridgeIdentity } = await import(
-      pathToFileURL(join(ROOT, 'cli', 'forge-watch.ts')).href
+      pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
     );
     const identity = await probeBridgeIdentity(BRIDGE_HEALTH);
     const decision = decideStoryBridge(identity, { ownRoot: ROOT, cwdOf: readProcCwd });

@@ -25,7 +25,7 @@ import {
   dryBridgeAgentTurnMarker,
   DRY_BRIDGE_LOG_BUCKET,
 } from './dry-bridge.ts';
-import { createLogger } from '../orchestrator/logging.ts';
+import { createLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // isDryBridge()

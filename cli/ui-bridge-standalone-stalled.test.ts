@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { DEFAULT_STALL_CEILING_MS } from './bridge-studio-lifecycle.ts';
+import { DEFAULT_STALL_CEILING_MS } from '@forge/sessions/bridge-studio-lifecycle.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 

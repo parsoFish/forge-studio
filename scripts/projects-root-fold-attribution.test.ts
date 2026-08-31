@@ -107,8 +107,8 @@ test('R1: each audited expression matches a real occurrence in the real tree', (
 });
 
 test('R1: a DIFFERENT fold expression reusing an audited token is kept, at its own line', () => {
-  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'orchestrator/cli.ts' && r.folded === 'target');
-  assert.ok(row, 'precondition: the orchestrator/cli.ts + "target" residual is audited');
+  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target');
+  assert.ok(row, 'precondition: the apps/forge/cli.ts + "target" residual is audited');
 
   // Line 4 folds the SAME token through a DIFFERENT expression; line 6 is the
   // audited expression itself.
@@ -122,8 +122,8 @@ test('R1: a DIFFERENT fold expression reusing an audited token is kept, at its o
     '',
   ].join('\n');
 
-  withFixture({ 'orchestrator/cli.ts': text, ...benignScope(['orchestrator/cli.ts']) }, (root) => {
-    const onDisk = readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8').split('\n');
+  withFixture({ 'apps/forge/cli.ts': text, ...benignScope(['apps/forge/cli.ts']) }, (root) => {
+    const onDisk = readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').split('\n');
     assert.match(onDisk[3], /smuggled/, 'precondition: the un-audited expression is on line 4');
     assert.match(onDisk[5], /asManaged/, 'precondition: the audited expression is on line 6');
 
@@ -134,7 +134,7 @@ test('R1: a DIFFERENT fold expression reusing an audited token is kept, at its o
 });
 
 test('R1: SWAP — the audited expression removed and another put in its place is NOT absorbed', () => {
-  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'orchestrator/cli.ts' && r.folded === 'target');
+  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target');
   assert.ok(row, 'precondition: the audited residual exists');
   assert.equal(row!.count, 1, 'precondition: it audits exactly one occurrence');
 
@@ -142,8 +142,8 @@ test('R1: SWAP — the audited expression removed and another put in its place i
   // sits somewhere else entirely. Occurrence count is still within budget — the
   // geometry that a count- or anchor-keyed row passes silently.
   const text = `// fixture\n\nconst elsewhere = join(projectsRoot, target);\n`;
-  withFixture({ 'orchestrator/cli.ts': text, ...benignScope(['orchestrator/cli.ts']) }, (root) => {
-    const onDisk = readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8');
+  withFixture({ 'apps/forge/cli.ts': text, ...benignScope(['apps/forge/cli.ts']) }, (root) => {
+    const onDisk = readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8');
     assert.ok(!onDisk.includes("resolve('projects', target)"), 'precondition: the audited expression is absent');
     assert.ok(onDisk.includes('join(projectsRoot, target)'), 'precondition: the substituted expression is present');
 
@@ -156,20 +156,20 @@ test('R1: SWAP — the audited expression removed and another put in its place i
     // REMOVED is reported, so the operator is told the audit no longer applies.
     const staleFold = res.stale.filter((s) => typeof s.line === 'string' && s.line.startsWith('fold:'));
     assert.ok(
-      staleFold.some((s) => s.file === 'orchestrator/cli.ts'),
+      staleFold.some((s) => s.file === 'apps/forge/cli.ts'),
       `the now-unmatched audited row must be reported as stale; got ${JSON.stringify(staleFold)}`,
     );
   });
 });
 
 test('R1: line drift alone still suppresses (the pin is the expression, not the location)', () => {
-  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'orchestrator/cli.ts' && r.folded === 'target');
+  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target');
   assert.ok(row, 'precondition: the audited residual exists');
 
   const text = `// fixture\n\n\n\nconst asManaged = ${row!.site};\n`;
-  withFixture({ 'orchestrator/cli.ts': text, ...benignScope(['orchestrator/cli.ts']) }, (root) => {
+  withFixture({ 'apps/forge/cli.ts': text, ...benignScope(['apps/forge/cli.ts']) }, (root) => {
     assert.ok(
-      readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8').includes(row!.site),
+      readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes(row!.site),
       'precondition: the audited expression is present, at a different line than in the real tree',
     );
     const folds = runLint({ root }).findings.filter((f) => f.folded !== undefined);
@@ -178,11 +178,11 @@ test('R1: line drift alone still suppresses (the pin is the expression, not the 
 });
 
 test('R1: a SECOND copy of the audited expression exceeds the budget and is kept', () => {
-  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'orchestrator/cli.ts' && r.folded === 'target');
+  const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target');
   assert.ok(row, 'precondition: the audited residual exists');
 
   const text = `// fixture\nconst one = ${row!.site};\nconst two = ${row!.site};\n`;
-  withFixture({ 'orchestrator/cli.ts': text, ...benignScope(['orchestrator/cli.ts']) }, (root) => {
+  withFixture({ 'apps/forge/cli.ts': text, ...benignScope(['apps/forge/cli.ts']) }, (root) => {
     const folds = runLint({ root }).findings.filter((f) => f.folded !== undefined);
     assert.equal(folds.length, 1, 'the budget covers one occurrence; the surplus copy fails the build');
   });

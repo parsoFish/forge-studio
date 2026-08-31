@@ -40,9 +40,9 @@ import { join, resolve } from 'node:path';
 
 import { loadCatalog } from './registry.ts';
 import { validateCatalog } from './validate.ts';
-import { loadYaml } from './yaml-fields.ts';
-import { BAND_GUARD_IDS } from '../agent-bands.ts';
-import type { Catalog } from './types.ts';
+import { loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
+import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import type { Catalog } from '@forge/contracts/studio/types.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const REAL_CATALOG_PATH = resolve(FORGE_ROOT, 'studio', 'catalog.yaml');

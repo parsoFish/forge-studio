@@ -210,7 +210,7 @@ export const journey = defineJourney({
               let j4LintOk = false;
               try {
                 execFileSync(process.execPath,
-                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+                  ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', 'lint'],
                   { cwd: FORGE_ROOT, stdio: 'pipe' });
                 j4LintOk = true;
               } catch (e) {

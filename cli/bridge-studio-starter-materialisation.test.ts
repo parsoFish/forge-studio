@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { deriveAgentSpec } from '../orchestrator/studio/derive.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
 
 const REAL_ROOT = process.cwd();

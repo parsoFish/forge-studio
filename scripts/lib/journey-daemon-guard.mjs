@@ -13,7 +13,7 @@
  * helpers can be imported directly from the orchestrator TypeScript source
  * instead of re-implementing pid-file parsing here.
  */
-import { daemonPaths, readPid, isAlive } from '../../orchestrator/daemon.ts';
+import { daemonPaths, readPid, isAlive } from '@forge/flows/daemon.ts';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 

@@ -1,0 +1,1110 @@
+/**
+ * forge↔project contract preflight (US-4.1 / ADR-017).
+ *
+ * Checks a project directory against the contract clauses derived empirically
+ * from the trafficGame arc (brain theme `forge-project-onboarding-contract`;
+ * retro §3 C1–C6) plus betterado-era additions (C7 conditional, C8 advisory).
+ * A project either passes or forge declines, naming the failing clause.
+ *
+ * Pure: `runPreflight()` does filesystem reads + git inspection and returns a
+ * structured report. No mutation, no network, no SDK. The CLI wrapper
+ * (`orchestrator/cli.ts`) renders + sets exit code + writes the
+ * `preflight.verdict` JSONL event.
+ *
+ * Hard clauses (C1/C2/C4) fail the preflight (non-zero exit). C5/C6/C8 +
+ * DEMO are advisory — surfaced as warnings, not blockers — because (C5)
+ * constraint-doc presence can't prove the harness honours them, (C6) is
+ * structurally satisfied by forge post-Phase-6 (no auto-merge; the operator
+ * merges the PR), (C8) absence of an agent-instruction file is a gap but not a
+ * blocker, and (DEMO) demoProcess step presence can't prove the demo evidence
+ * is correct (hand-verified at onboarding).
+ * DEMO is the project half of the demo contract family; the forge half is
+ * skills/demo/SKILL.md.
+ */
+
+import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { join, resolve } from 'node:path';
+
+import { detectProjectLanguage, type ProjectLanguage } from './gate-recipes.ts';
+import {
+  loadProjectConfig,
+  type ProjectConfig,
+} from './project-config.ts';
+import { projectBrainDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
+
+export type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
+import type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
+
+// --- documented heuristics (single source of truth) ---
+
+// C1: a quality gate is "plausibly fast" if it is a single deterministic
+// command. We cannot run it here (could be minutes / require deps), so the
+// heuristic is structural: the declared command must be ONE command (no
+// shell pipes/&&/; chaining) and must not invoke a known-slow umbrella
+// (e2e/playwright/cypress as the *primary* test command — those are the
+// 18k-LOC-suite smell that broke trafficGame's per-iteration gate).
+const SLOW_GATE_MARKERS = ['playwright', 'cypress', 'e2e', 'integration'];
+
+// C2: forge scratch the project repo MUST NOT track these paths (else every
+// cycle commits orchestration state into the PR — the W4 reviewer-confusion
+// bug). Checked via git-truth: a path violates C2 if it is tracked by git
+// (`git ls-files --error-unmatch` succeeds) OR not ignored by git
+// (`git check-ignore -q` fails), in either case relative to the project dir.
+// NOTE: the scratch dir is `.forge/work-items/` (regenerated per cycle), NOT
+// `.forge/` wholesale — `.forge/project.json` + `.forge/quality_gate_cmd` are
+// tracked CONTRACT CONFIG every conformant project keeps, so flagging `.forge/`
+// here false-failed them.
+export const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+
+// DEMO: loadProjectConfig is imported from orchestrator/project-config.ts
+// (single source of truth — CON-2). The loader also single-sources
+// quality_gate_cmd from the .forge/quality_gate_cmd sidecar.
+
+// C8: the project must have a human-authored agent-instruction file at its
+// root. Research shows ~4pp uplift from human-authored AGENTS.md/CLAUDE.md;
+// auto-generated files hurt. Advisory: absence is a gap, not a hard block.
+const AGENT_INSTRUCTION_CANDIDATES = ['AGENTS.md', 'CLAUDE.md'] as const;
+
+// ARTIFACTS (advisory): build outputs & generated files must be gitignored,
+// else `git add -A` (the dev-loop autocommit safety-net + PR assembly) sweeps
+// them into the PR — the betterado run committed a 35 MB renamed provider
+// binary this way (#4). preflight cannot run a build, so the check is
+// structural: for the detected language, does .gitignore mention ANY of the
+// characteristic build-output patterns? Zero coverage ⇒ warn. Conservative:
+// presence of any one hint clears it (we only flag the "no coverage at all" case).
+export const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = {
+  typescript: ['dist', 'build', '.tsbuildinfo', 'coverage', 'out', '.next', 'lib/'],
+  javascript: ['dist', 'build', 'coverage', 'out', '.next'],
+  go: ['*.exe', '*.test', '*.out', 'bin/', '/bin', 'dist'], // Go binaries vary; any binary-ish ignore counts
+  python: ['__pycache__', '.pyc', 'dist', 'build', '.egg-info', '.coverage', '.pytest_cache'],
+  rust: ['target'],
+  unknown: [],
+};
+
+// W7-FIX-B-PROJ (review F4): the generic, language-agnostic build-output
+// globs the onboarding scaffold writes into a freshly-created repo's
+// .gitignore (`scaffoldContractArtifacts`, cli/bridge-studio-writes.ts). At
+// birth the project dir may be empty, so no language is detectable — this is
+// the deps + common-build-output cover set, kept HERE, beside
+// BUILD_ARTIFACT_HINTS, so the scaffold and the ARTIFACTS advisory (+ its
+// `fixBuildArtifacts` auto-fix) evolve in one file and never drift apart: a
+// scaffolded project must not warn on ARTIFACTS for a shape this list was
+// meant to cover. Each entry is a dir glob; 'dist'/'build'/'out'/'coverage'
+// substring-match the typescript/javascript/python hint rows above
+// (node_modules/ is dependency hygiene, not a build-output hint).
+export const SCAFFOLD_BUILD_OUTPUT_IGNORES: readonly string[] = [
+  'node_modules/',
+  'dist/',
+  'build/',
+  'out/',
+  'coverage/',
+];
+
+export function runPreflight(
+  projectDir: string,
+  opts: PreflightOptions = {},
+): PreflightReport {
+  const dir = resolve(projectDir);
+  const projectName = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
+  const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..', '..');
+
+  // R1-03-F1: load the typed config ONCE for the testProcess-sourced clauses
+  // (C1/C1b/C7). A load failure (e.g. an un-migrated flat-key config) is
+  // surfaced through C1's detail — preflight reports, it never crashes.
+  let cfg: ProjectConfig | null = null;
+  let cfgError: string | null = null;
+  try {
+    cfg = loadProjectConfig(dir);
+  } catch (err) {
+    cfgError = err instanceof Error ? err.message : String(err);
+  }
+
+  const clauses: ClauseResult[] = [
+    checkC1(dir, cfg, cfgError),
+    checkC1b(cfg, cfgError),
+    checkC2(dir),
+    checkC4(dir, projectName, forgeRoot),
+    checkC5(dir),
+    checkC6(dir),
+    checkC7(cfg),
+    checkC8(dir, cfg),
+    checkC10(dir, cfg),
+    checkDemo(dir),
+    checkDemoSkill(dir),
+    checkDemoAlignment(cfg),
+    checkBuild(dir, cfg),
+    checkBuildArtifacts(dir),
+    checkBrainStaleness(dir, projectName, forgeRoot),
+  ];
+
+  const ok = clauses.filter((c) => c.hard).every((c) => c.pass);
+  return { projectDir: dir, projectName, clauses, ok };
+}
+
+// --- C1: fast, trustworthy quality gate (HARD) ---
+
+function checkC1(dir: string, cfg: ProjectConfig | null, cfgError: string | null): ClauseResult {
+  const base = { clause: 'C1' as const, title: 'Fast, trustworthy quality gate', hard: true };
+  if (cfgError !== null) {
+    return {
+      ...base,
+      pass: false,
+      detail: `project config failed to load — ${cfgError}`,
+    };
+  }
+  const declared = readQualityGateCmd(dir, cfg);
+  if (!declared) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        'no deterministic test command — need testProcess.local.cmd in .forge/project.json, ' +
+        'the .forge/quality_gate_cmd sidecar, or a package.json "test" script (none found)',
+    };
+  }
+  const { source, cmd } = declared;
+  const lowered = cmd.toLowerCase();
+  // Heuristic: a single command, no shell chaining.
+  const chained = /(\|\||&&|;|\|)/.test(cmd);
+  const slowMarker = SLOW_GATE_MARKERS.find((m) => lowered.includes(m));
+  if (chained) {
+    return {
+      ...base,
+      pass: false,
+      detail: `${source} chains multiple commands ("${cmd}") — the gate must be ONE deterministic command`,
+    };
+  }
+  if (slowMarker) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `${source} ("${cmd}") looks slow/non-deterministic (contains "${slowMarker}"). ` +
+        'The per-iteration gate must be ~≤10s — split a fast unit suite out as the test command.',
+    };
+  }
+  // w8-a1: a package-manager-shaped gate (npm/yarn/pnpm/npx/bun/bunx …) must
+  // be RESOLVABLE from the project dir itself, with no upward walk. A
+  // syntactically-fine `npm test` in a project dir with no package.json was
+  // false-passing here, then npm's own ancestor-package.json walk resolved
+  // the command against FORGE's ROOT package.json at runtime — the dev-loop
+  // silently ran (and "passed") forge's ~2000-test suite instead of the
+  // project's. This check never executes the command — pure fs + JSON read.
+  if (isPackageManagerShaped(cmd)) {
+    const pkgPath = join(dir, 'package.json');
+    if (!existsSync(pkgPath)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          `${source} ("${cmd}") is npm/yarn/pnpm-shaped, but ${dir} has no package.json. ` +
+          'Without one there, the package manager resolves the command against an ANCESTOR ' +
+          "package.json outside the project dir (e.g. forge's own root) — a false green on the wrong repo. " +
+          `Add a package.json at ${pkgPath}, or declare a gate that does not shell out to a package manager.`,
+      };
+    }
+    let pkgRaw: string;
+    try {
+      pkgRaw = readFileSync(pkgPath, 'utf8');
+    } catch (err) {
+      return {
+        ...base,
+        pass: false,
+        detail: `${pkgPath} exists but could not be read — ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    let pkg: { scripts?: Record<string, unknown> };
+    try {
+      pkg = JSON.parse(pkgRaw) as { scripts?: Record<string, unknown> };
+    } catch (err) {
+      return {
+        ...base,
+        pass: false,
+        detail: `${pkgPath} is not valid JSON, cannot verify the declared gate resolves — ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const scriptName = resolveScriptName(cmd);
+    if (scriptName !== null) {
+      const scripts = pkg && typeof pkg === 'object' && pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+      const script = (scripts as Record<string, unknown>)[scriptName];
+      if (typeof script !== 'string' || script.trim() === '') {
+        return {
+          ...base,
+          pass: false,
+          detail:
+            `${source} ("${cmd}") declares package.json script "${scriptName}", but ${pkgPath}'s ` +
+            `"scripts" has no such entry — the gate would fail (or resolve elsewhere) the moment it actually ran.`,
+        };
+      }
+    }
+  }
+  return { ...base, pass: true, detail: `${source}: "${cmd}" (single command, no slow-suite marker)` };
+}
+
+/** Package-manager binaries whose commands resolve relative to a package.json (npm's/yarn's/pnpm's own upward-walk semantics). */
+const PACKAGE_MANAGER_TOKENS = new Set(['npm', 'yarn', 'pnpm', 'npx', 'bun', 'bunx']);
+
+/** True iff `cmd`'s first token invokes a package manager (case-insensitive). */
+function isPackageManagerShaped(cmd: string): boolean {
+  const first = cmd.trim().split(/\s+/)[0] ?? '';
+  return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
+}
+
+// pm-native verbs that a bare `yarn <token>` / `pnpm <token>` must NOT be
+// mistaken for a project script name — yarn/pnpm proxy any UNRECOGNIZED verb
+// to a package.json script, so this set only needs the manager's own real
+// subcommands (an actual script named e.g. "build" or "start" still resolves
+// as a script, matching real yarn/pnpm behaviour).
+const PM_NATIVE_SUBCOMMANDS = new Set([
+  'run', 'install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'update', 'upgrade', 'up',
+  'exec', 'dlx', 'init', 'publish', 'link', 'unlink', 'list', 'ls', 'outdated', 'audit', 'why',
+  'info', 'view', 'config', 'cache', 'prune', 'pack', 'create', 'dedupe', 'patch', 'patch-commit',
+  'patch-remove', 'deploy', 'rebuild', 'store', 'server', 'root', 'licenses', 'doctor', 'setup',
+  'tag', 'team', 'owner', 'policies', 'import', 'global', 'node', 'env', 'workspace', 'workspaces',
+  'login', 'logout', 'whoami', 'version', 'versions', 'help', '-v', '--version', '-h', '--help',
+]);
+
+/**
+ * Resolves the package.json `scripts` key a declared gate would invoke, or
+ * `null` when the shape can't be mapped to one — callers must then do the
+ * package.json-EXISTENCE check only, never invent a script-name guess.
+ * Mapped shapes: bare `npm test` / `yarn test` / `pnpm test` → "test";
+ * `npm run <name>` / `yarn run <name>` / `pnpm run <name>` → "<name>";
+ * `yarn <name>` / `pnpm <name>` (name not a known pm subcommand) → "<name>".
+ * `npx`/`bunx`/`bun` and anything else → null (not script-backed).
+ */
+function resolveScriptName(cmd: string): string | null {
+  const toks = cmd.trim().split(/\s+/).filter(Boolean);
+  const runner = (toks[0] ?? '').toLowerCase();
+  if (runner !== 'npm' && runner !== 'yarn' && runner !== 'pnpm') return null;
+  const first = (toks[1] ?? '').toLowerCase();
+  if (!first) return null;
+  if (first === 'test') return 'test';
+  if (first === 'run') return toks[2] ?? null;
+  if (runner !== 'npm' && !PM_NATIVE_SUBCOMMANDS.has(first)) return toks[1]!;
+  return null;
+}
+
+// --- C2: scratch hygiene (HARD) ---
+
+/**
+ * Git-truth scratch hygiene check.
+ *
+ * A `.gitignore` text-scan is insufficient: git ignores are no-ops on
+ * already-tracked files, so a project can have the right `.gitignore` entries
+ * yet still commit forge scratch (e.g. betterado's AGENT.md was committed and
+ * C2 false-passed). We test git-truth instead:
+ *
+ * A scratch path is a VIOLATION if EITHER:
+ *   (a) `git ls-files --error-unmatch <path>` exits 0  → file is tracked, OR
+ *   (b) `git check-ignore -q <path>` exits non-zero    → file is not ignored.
+ *
+ * Both commands run with cwd = project dir. If the directory is not a git
+ * repo, we fall back to the `.gitignore` text-scan (best-effort).
+ */
+function checkC2(dir: string): ClauseResult {
+  const base = { clause: 'C2' as const, title: 'Scratch hygiene (forge scratch untracked + ignored)', hard: true };
+
+  // Determine whether this is a git repo at all.
+  const isRepo = spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], {
+    stdio: 'ignore',
+  }).status === 0;
+
+  if (!isRepo) {
+    // No git repo — fall back to .gitignore text-scan (best-effort).
+    const giPath = join(dir, '.gitignore');
+    if (!existsSync(giPath)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          'not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
+      };
+    }
+    const lines = readFileSync(giPath, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'));
+    // A scratch path is covered if .gitignore lists it OR an ancestor dir of it
+    // (e.g. `.forge/` covers `.forge/work-items/`).
+    const isCovered = (p: string): boolean => {
+      const stripped = p.replace(/^\//, '').replace(/\/$/, '');
+      return lines.some((l) => {
+        const ln = l.replace(/^\//, '').replace(/\/$/, '');
+        return ln === stripped || stripped.startsWith(`${ln}/`);
+      });
+    };
+    const missing = SCRATCH_PATHS.filter((p) => !isCovered(p));
+    if (missing.length > 0) {
+      return {
+        ...base,
+        pass: false,
+        detail: `not a git repo; .gitignore does not exclude: ${missing.join(', ')}`,
+      };
+    }
+    return {
+      ...base,
+      pass: true,
+      detail: `not a git repo; .gitignore covers all forge scratch (${SCRATCH_PATHS.join(', ')})`,
+    };
+  }
+
+  // Git-truth check: a scratch path violates C2 if tracked OR not ignored.
+  const violations: string[] = [];
+  for (const p of SCRATCH_PATHS) {
+    // Strip trailing slash for git commands (git ls-files doesn't match dirs with /).
+    const isDir = p.endsWith('/');
+    const pathArg = p.replace(/\/$/, '');
+
+    const isTracked =
+      spawnSync('git', ['-C', dir, 'ls-files', '--error-unmatch', pathArg], {
+        stdio: 'ignore',
+      }).status === 0;
+
+    if (isTracked) {
+      violations.push(`${p} (tracked by git)`);
+      continue;
+    }
+
+    // W7-FIX-B-PROJ: a DIRECTORY scratch path is probed via a sentinel CHILD.
+    // git's dir-only ignore patterns (`.forge/work-items/` — the exact form
+    // `fixScratchHygiene` appends) match only paths git can stat as
+    // directories, so probing the dir itself false-fails while the dir does
+    // not exist yet (every fresh onboard — the dev-loop creates it later,
+    // at which point the pattern DOES ignore it). Any pattern that ignores
+    // the dir also ignores its children, and both pattern forms (with and
+    // without the trailing slash) match the child, so the sentinel judges
+    // the future truth without caring about on-disk state.
+    const ignoreProbes = [isDir ? `${pathArg}/.forge-c2-dir-probe` : pathArg];
+    // W7-FIX-B-PROJ review F1: the sentinel child judges the FUTURE dir
+    // truth, but when the path exists on disk as a NON-directory (a stray
+    // regular file, or a symlink — git treats links as link objects and
+    // dir-only patterns match only real directories), the child probe can
+    // pass while the actual on-disk entry is un-ignored and `git add -A`
+    // would sweep it into the PR. lstat deliberately (not stat): a symlink
+    // whose target is a directory is still a link to git. When the entry
+    // exists as a non-directory, the path ITSELF must also be ignored.
+    if (isDir) {
+      let existsAsNonDir = false;
+      try {
+        existsAsNonDir = !lstatSync(join(dir, pathArg)).isDirectory();
+      } catch {
+        // absent (or unreachable, e.g. an ancestor is a file) — the
+        // sentinel child alone judges the future truth.
+      }
+      if (existsAsNonDir) ignoreProbes.push(pathArg);
+    }
+    const notIgnored = ignoreProbes.some(
+      (probe) =>
+        spawnSync('git', ['-C', dir, 'check-ignore', '-q', probe], {
+          stdio: 'ignore',
+        }).status !== 0,
+    );
+
+    if (notIgnored) {
+      violations.push(
+        ignoreProbes.length > 1
+          ? `${p} (exists as a non-directory that git does not ignore — remove the stray entry, or ignore the exact path)`
+          : `${p} (not ignored by git)`,
+      );
+    }
+  }
+
+  if (violations.length > 0) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `forge scratch violates git-truth hygiene: ${violations.join('; ')}. ` +
+        'Add these to .gitignore AND ensure they are not already tracked ' +
+        '(`git rm --cached <path>` if needed).',
+    };
+  }
+  return {
+    ...base,
+    pass: true,
+    detail: `git-truth: all forge scratch paths (${SCRATCH_PATHS.join(', ')}) are untracked + ignored`,
+  };
+}
+
+// --- C4: machine-consumable architecture context (HARD) ---
+
+function checkC4(dir: string, projectName: string, forgeRoot: string): ClauseResult {
+  const base = { clause: 'C4' as const, title: 'Machine-readable architecture context', hard: true };
+  const roadmap = join(dir, 'roadmap.md');
+  // roadmap.md is the project's own architecture context (stays in the project
+  // repo). Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/profile.md.
+  const brainRel = `brain/projects/${projectName}/profile.md`;
+  const brainProfile = join(projectBrainDir(forgeRoot, projectName), 'profile.md');
+  const hasRoadmap = existsSync(roadmap);
+  const hasBrain = existsSync(brainProfile);
+  if (hasRoadmap && hasBrain) {
+    return { ...base, pass: true, detail: `roadmap.md + central brain sub-wiki present (${brainRel})` };
+  }
+  const missing: string[] = [];
+  if (!hasRoadmap) missing.push('roadmap.md (in project root)');
+  if (!hasBrain) missing.push(`${brainRel} (forge-owned central project brain — Brain 3, ADR 035)`);
+  return {
+    ...base,
+    pass: false,
+    detail: `missing ${missing.join(' and ')} — the architect/PM have no queryable structure and will hallucinate paths`,
+  };
+}
+
+// --- C5: locked-core mandates the harness honours (ADVISORY) ---
+
+function checkC5(dir: string): ClauseResult {
+  const base = { clause: 'C5' as const, title: 'Locked-core constraints declared', hard: false };
+  const candidates = ['CLAUDE.md', 'AGENTS.md', '.forge/constraints.md', 'CONSTRAINTS.md'];
+  const found = candidates.find((c) => existsSync(join(dir, c)));
+  if (found) {
+    return {
+      ...base,
+      pass: true,
+      detail: `${found} present (operator declared constraints; forge honours git-ownership / no-test-tampering per the doc)`,
+    };
+  }
+  return {
+    ...base,
+    pass: false,
+    detail:
+      `no constraints doc (${candidates.join(' / ')}). Advisory: forge cannot honour locked-core ` +
+      'mandates it was never told about — strongly recommend a CLAUDE.md.',
+  };
+}
+
+// --- C6: a satisfiable merge model (ADVISORY — forge-side-satisfied) ---
+
+function checkC6(dir: string): ClauseResult {
+  const base = { clause: 'C6' as const, title: 'Satisfiable merge model', hard: false };
+  // Post-Phase-6 this clause is structurally satisfied by FORGE: the review
+  // phase produces a demo-embedded PR and STOPS; the operator merges in
+  // GitHub (no auto-merge). The only project-side requirement is a GitHub
+  // remote so there is a PR surface to merge.
+  const remote = gitRemoteUrl(dir);
+  if (remote && /github\.com/i.test(remote)) {
+    return {
+      ...base,
+      pass: true,
+      detail: `forge-side-satisfied (Phase-6: no auto-merge, operator merges the PR). Project has a GitHub remote: ${remote}`,
+    };
+  }
+  return {
+    ...base,
+    pass: false,
+    detail:
+      'forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface ' +
+      'for the operator to merge. Add a GitHub `origin` remote. (Advisory.)',
+  };
+}
+
+// --- C8: agent-instruction file (ADVISORY) ---
+
+/**
+ * Advisory: the project must expose a human-authored AGENTS.md or CLAUDE.md
+ * at its root. Research shows ~4pp uplift from human-authored agent-instruction
+ * files; auto-generated files hurt. This clause requires *presence*, never
+ * auto-generation. Advisory (never blocks).
+ *
+ * R1-04-F1 — beyond presence, a COVERAGE check: an instruction file that never
+ * mentions the project's declared quality-gate command is stale/thin (the agent
+ * won't learn the gate it must pass every iteration from a file that omits it).
+ * Machine-greppable: the file text must contain the declared gate command. A
+ * miss routes to the instructions-creator (edit mode) via `preflight-resolve`'s
+ * C8→instructions mapping — the file stays operator-owned (no auto-generation).
+ * Skipped when no gate is declared yet (pre-onboarding) — presence-only then.
+ */
+function checkC8(dir: string, cfg: ProjectConfig | null): ClauseResult {
+  const base = { clause: 'C8' as const, title: 'Agent-instruction file (AGENTS.md or CLAUDE.md)', hard: false };
+  const found = AGENT_INSTRUCTION_CANDIDATES.find((f) => existsSync(join(dir, f)));
+  if (!found) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files ` +
+        `give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint ` +
+        `commands at the top and any locked-core mandates (e.g. "never edit tests to pass").`,
+    };
+  }
+  // Coverage (R1-04-F1): does the present file mention the declared gate command?
+  const gate = readQualityGateCmd(dir, cfg);
+  if (gate) {
+    let content = '';
+    try {
+      content = readFileSync(join(dir, found), 'utf8');
+    } catch {
+      /* unreadable → treat as no coverage evidence below */
+    }
+    if (!mentionsCommand(content, gate.cmd)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          `${found} present but never mentions the declared quality-gate command (${gate.source}: \`${gate.cmd}\`). ` +
+          `Advisory: an instruction file that omits the gate it must pass every iteration is stale/thin. ` +
+          `Add the build/test/lint commands (and any locked-core mandates) — route to the instructions agent to edit it.`,
+      };
+    }
+  }
+  return {
+    ...base,
+    pass: true,
+    detail: gate
+      ? `${found} present and mentions the declared gate (\`${gate.cmd}\`) — commands + locked-core available to the agent`
+      : `${found} present — build/test/lint commands and locked-core mandates available to the agent`,
+  };
+}
+
+/** Generic dispatch words that don't identify a script — a `<runner> run <script>` needs the script to be distinctive. */
+const GENERIC_SUBCOMMANDS = new Set(['run', 'exec', '-c', '--']);
+
+/**
+ * The distinctive coverage needle for a gate command: `runner + subcommand`,
+ * extended to the real target when the subcommand is a generic dispatch word
+ * (`npm run <script>`). So `npm test` → "npm test", `go test …` → "go test",
+ * but `npm run test:unit` → "npm run test:unit" (NOT the bare "npm run" prefix,
+ * which would falsely match an unrelated `npm run build` in the file). `''` for
+ * a single-token command (matched only by the whole-command check).
+ */
+function coverageNeedle(cmd: string): string {
+  const toks = cmd.toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (toks.length < 2) return '';
+  const n = toks.length >= 3 && GENERIC_SUBCOMMANDS.has(toks[1]!) ? 3 : 2;
+  return toks.slice(0, n).join(' ');
+}
+
+/**
+ * True iff `content` mentions `cmd` — machine-greppable coverage. Matches the
+ * whole command (whitespace-normalized, case-insensitive) OR its distinctive
+ * needle (runner + subcommand / script), so a file that documents `npm test`
+ * still covers a declared `npm test --silent` without a bare `npm run` prefix
+ * covering an unrelated script.
+ */
+function mentionsCommand(content: string, cmd: string): boolean {
+  const hay = content.toLowerCase().replace(/\s+/g, ' ');
+  const full = cmd.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!full) return true;
+  if (hay.includes(full)) return true;
+  const needle = coverageNeedle(cmd);
+  return needle !== '' && hay.includes(needle);
+}
+
+// --- C10: documentation parity & release substrate (ADVISORY; opt-in) ---
+
+/**
+ * R1-04-F2 — the preflight side of the already-documented C10 clause
+ * (docs/forge-project-contract.md). `releaseProcess` is typed + consumed by the
+ * release-finalizer, but NOTHING checked at preflight that the substrate each
+ * declared step targets actually exists — so a project could declare a
+ * `changelog` step whose `changelogPath` file is absent and only discover it
+ * when the finalizer runs (log-and-continue, silently). C10 closes that: when
+ * (and only when) `releaseProcess` is declared, assert each declared
+ * path-substrate (`changelogPath`, `versionFile`, `docsDir`) exists, and that a
+ * `changelog`/`version` step has its corresponding path declared. Advisory,
+ * opt-in (inert without `releaseProcess`) — mirrors the doc's C10 semantics.
+ */
+function checkC10(dir: string, cfg: ProjectConfig | null): ClauseResult {
+  const base = { clause: 'C10' as const, title: 'Documentation parity & release substrate', hard: false };
+  const rel = cfg?.releaseProcess;
+  if (!rel || rel.steps.length === 0) {
+    return { ...base, pass: true, detail: 'no releaseProcess declared — release clause inert (opt-in)' };
+  }
+  const problems: string[] = [];
+  const kinds = new Set(rel.steps.map((s) => s.kind));
+  // Declared path-substrate must exist on disk.
+  const pathChecks: [string, string | undefined][] = [
+    ['changelogPath', rel.changelogPath],
+    ['versionFile', rel.versionFile],
+    ['docsDir', rel.docsDir],
+  ];
+  for (const [field, p] of pathChecks) {
+    if (p && !existsSync(join(dir, p))) {
+      problems.push(`${field} "${p}" does not exist`);
+    }
+  }
+  // A changelog / version step needs its path declared so the finalizer knows where to write.
+  if (kinds.has('changelog') && !rel.changelogPath) {
+    problems.push('a `changelog` step is declared but `changelogPath` is not — the finalizer has nowhere to write the entry');
+  }
+  if (kinds.has('version') && !rel.versionFile) {
+    problems.push('a `version` step is declared but `versionFile` is not — the finalizer cannot bump a version file');
+  }
+  if (problems.length > 0) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `releaseProcess declared (${rel.steps.length} step(s)) but its substrate is incomplete: ${problems.join('; ')}. ` +
+        `Advisory: the release-finalizer log-and-continues on a missing target, so the release ships stale. ` +
+        `Add the missing file(s)/path(s) or correct the releaseProcess declaration.`,
+    };
+  }
+  return {
+    ...base,
+    pass: true,
+    detail: `releaseProcess substrate present for ${rel.steps.length} step(s) (${[...kinds].join(', ')})`,
+  };
+}
+
+// --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
+
+/**
+ * Delegates validation to `loadProjectConfig` from orchestrator/project-config.ts
+ * (single source of truth; also single-sources the quality_gate_cmd sidecar). On
+ * a structural violation the throw is caught and downgraded to an advisory WARN —
+ * DEMO is never a hard blocker.
+ */
+// Exported for the R4-07 descriptor-parity test (one fixture, three consumers:
+// preflight DEMO clause, demo-builder composition, demo-agent briefing).
+export function checkDemo(dir: string): ClauseResult {
+  const base = { clause: 'DEMO' as const, title: 'Demo process declared (.forge/project.json demoProcess)', hard: false };
+  const cfgPath = join(dir, '.forge', 'project.json');
+  if (!existsSync(cfgPath)) {
+    return { ...base, pass: false, detail: 'no .forge/project.json — demoProcess undeclared. Advisory.' };
+  }
+  let cfg: NonNullable<ReturnType<typeof loadProjectConfig>>;
+  try {
+    const loaded = loadProjectConfig(dir);
+    if (!loaded) return { ...base, pass: false, detail: '.forge/project.json is not readable. Advisory.' };
+    cfg = loaded;
+  } catch (err) {
+    return { ...base, pass: false, detail: `.forge/project.json failed validation: ${err instanceof Error ? err.message : String(err)}. Advisory.` };
+  }
+  const steps = cfg.demoProcess ?? [];
+  const hasCapture = steps.some((s) => s.kind === 'capture');
+  const hasVerify = steps.some((s) => s.kind === 'verify');
+  if (!hasCapture || !hasVerify) {
+    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Run the demo-design skill to generate demo machinery. Advisory.` };
+  }
+  return { ...base, pass: true, detail: `demoProcess has ${steps.length} step(s) including capture + verify` };
+}
+
+// --- DEMO-SKILL: the GENERATED demo-design machinery exists (ADVISORY, DEC-4) ---
+
+/** The fixed path DEC-4 names for a project's generated demo-design skill, so a
+ *  scorecard can verify it deterministically. */
+const DEMO_SKILL_REL = join('.forge', 'skills', 'demo-design', 'SKILL.md');
+
+/**
+ * DEC-4: every project that declares a demoProcess should also carry a GENERATED
+ * `.forge/skills/demo-design/SKILL.md` (the per-project demo machinery the unifier
+ * follows). checkDemo only validates the demoProcess SHAPE; this verifies the
+ * skill was actually generated. Advisory: not applicable until a demoProcess is
+ * declared (checkDemo owns that case — no double-warn).
+ */
+function checkDemoSkill(dir: string): ClauseResult {
+  const base = {
+    clause: 'DEMO-SKILL' as const,
+    title: `Generated demo-design skill present (${DEMO_SKILL_REL})`,
+    hard: false,
+  };
+  let cfg: ReturnType<typeof loadProjectConfig> | null = null;
+  try {
+    cfg = loadProjectConfig(dir);
+  } catch {
+    cfg = null;
+  }
+  const steps = cfg?.demoProcess ?? [];
+  if (steps.length === 0) {
+    // No demoProcess yet → the demo-design generator is not applicable; checkDemo
+    // already warns about the missing demoProcess.
+    return { ...base, pass: true, detail: 'no demoProcess declared yet — demo-design generator not applicable' };
+  }
+  if (!existsSync(join(dir, DEMO_SKILL_REL))) {
+    const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
+    return {
+      ...base,
+      pass: false,
+      detail: `project "${name}" declares a demoProcess but has no ${DEMO_SKILL_REL} — run the demo-design generator (\`forge run skill demo-design --project ${name}\`) to generate the per-project demo machinery. Advisory.`,
+    };
+  }
+  return { ...base, pass: true, detail: `${DEMO_SKILL_REL} present (generated demo machinery)` };
+}
+
+// --- DEMO-ALIGN: demo-builds-off-testing alignment (ADVISORY, R1-03-F3) ---
+
+/**
+ * The operator diagram's "alignment recommended — demo should largely build
+ * off testing": each demoProcess CAPTURE step SHOULD reference the declared
+ * test process. Heuristic (cheap + honest): a capture step is aligned when
+ * its element kind IS test output (`test-evidence`), or its text mentions a
+ * test-process reference token — a full joined local/ci command string, a
+ * distinctive argv token, or the acceptance `match` substring. ALWAYS
+ * advisory: divergence may be intentional (live REST evidence per the
+ * betterado tier) — flagged, never blocked, and never part of hard readiness.
+ */
+const DEMO_ALIGN_TOKEN_STOPLIST = new Set(['bash', 'npm', 'node', 'make', 'test', 'run', 'npx', 'go']);
+
+export function demoAlignmentTokens(cfg: ProjectConfig): string[] {
+  const tokens = new Set<string>();
+  const cmds = [cfg.testProcess.local.cmd, cfg.testProcess.ci?.cmd ?? []];
+  for (const cmd of cmds) {
+    if (cmd.length === 0) continue;
+    tokens.add(cmd.join(' ').toLowerCase());
+    for (const t of cmd) {
+      const lowered = t.toLowerCase();
+      if (lowered.length >= 4 && !DEMO_ALIGN_TOKEN_STOPLIST.has(lowered) && !lowered.startsWith('-')) {
+        tokens.add(lowered);
+      }
+    }
+  }
+  if (cfg.testProcess.acceptance) tokens.add(cfg.testProcess.acceptance.match.toLowerCase());
+  return [...tokens];
+}
+
+function checkDemoAlignment(cfg: ProjectConfig | null): ClauseResult {
+  const base = {
+    clause: 'DEMO-ALIGN' as const,
+    title: 'Demo builds off the test process (alignment recommended)',
+    hard: false,
+  };
+  const steps = cfg?.demoProcess ?? [];
+  const captures = steps.filter((s) => s.kind === 'capture');
+  if (!cfg || captures.length === 0) {
+    return { ...base, pass: true, detail: 'no capture steps declared — alignment not applicable' };
+  }
+  const tokens = demoAlignmentTokens(cfg);
+  const divergent = captures.filter((s) => {
+    if (s.element === 'test-evidence') return false;
+    const text = s.text.toLowerCase();
+    return !tokens.some((t) => text.includes(t));
+  });
+  if (divergent.length === 0) {
+    return {
+      ...base,
+      pass: true,
+      detail: `all ${captures.length} capture step(s) reference the declared test process`,
+    };
+  }
+  const detail = divergent
+    .map((s) => `capture "${s.text.slice(0, 60)}" does not reference the declared test process`)
+    .join('; ');
+  return {
+    ...base,
+    pass: false,
+    detail: `${detail} — advisory: divergence may be intentional (live evidence); demo should largely build off testing`,
+  };
+}
+
+// --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---
+
+function checkBuildArtifacts(dir: string): ClauseResult {
+  const base = {
+    clause: 'ARTIFACTS' as const,
+    title: 'Build artifacts gitignored (no stray outputs in the PR)',
+    hard: false,
+  };
+  const lang = detectProjectLanguage(dir);
+  const hints = BUILD_ARTIFACT_HINTS[lang];
+  if (lang === 'unknown' || hints.length === 0) {
+    return { ...base, pass: true, detail: 'no language-specific build-output check (unknown project shape)' };
+  }
+  const giPath = join(dir, '.gitignore');
+  if (!existsSync(giPath)) {
+    // C2 already hard-fails on a missing .gitignore; don't double-report.
+    return { ...base, pass: true, detail: 'no .gitignore (already flagged by C2)' };
+  }
+  const gi = readFileSync(giPath, 'utf8').toLowerCase();
+  const covered = hints.some((h) => gi.includes(h.toLowerCase()));
+  if (covered) {
+    return { ...base, pass: true, detail: `.gitignore covers ${lang} build outputs` };
+  }
+  return {
+    ...base,
+    pass: false,
+    detail:
+      `.gitignore has NONE of the characteristic ${lang} build-output patterns (${hints.join(', ')}). ` +
+      `A compiled binary / dist / coverage left un-ignored will be swept into the PR by \`git add -A\` ` +
+      `(betterado committed a 35 MB binary this way). Advisory — add the build-output ignores for this project.`,
+  };
+}
+
+// --- BUILD: the project's build process is declared (ADVISORY, R1-04-F3) ---
+
+/**
+ * R1-04-F3 — the build process, distinct from the test gate (C1/testProcess).
+ * A project can gate on tests while its *build* breaks, so the compile/package
+ * step is a first-class obligation. Opt-in like C10: inert unless a
+ * `buildProcess` is declared. A DECLARED `remote` CI-workflow path that doesn't
+ * exist is the one real fail (a broken pointer). An inferable-but-undeclared
+ * build (a package.json `build` script) is surfaced as a passing INFO note, not
+ * a failure — forge already knows the command, `buildProcess.local` has no
+ * runtime consumer yet (R1-05-F2), and a fail would nag every Node project while
+ * staying silent on the Go project that motivates the clause.
+ *
+ * Build-OUTPUT hygiene (compiled artifacts gitignored) is the companion
+ * ARTIFACTS clause (kept separate so its `.gitignore`-append auto-fix survives);
+ * the contract doc groups BUILD + ARTIFACTS under "build process".
+ */
+function checkBuild(dir: string, cfg: ProjectConfig | null): ClauseResult {
+  const base = { clause: 'BUILD' as const, title: 'Build process declared (local + remote/CI, distinct from test)', hard: false };
+  const bp = cfg?.buildProcess;
+  if (bp && (bp.local || bp.remote)) {
+    if (bp.remote && !existsSync(join(dir, bp.remote))) {
+      return { ...base, pass: false, detail: `buildProcess declared but buildProcess.remote "${bp.remote}" (the CI workflow) does not exist. Advisory — add the workflow or correct the path.` };
+    }
+    const parts = [
+      bp.local ? `local \`${bp.local.join(' ')}\`` : null,
+      bp.remote ? `remote ${bp.remote}` : null,
+    ].filter(Boolean);
+    return { ...base, pass: true, detail: `buildProcess declared (${parts.join(', ')})` };
+  }
+  // Not declared — pass, but note the opportunity when a build is inferable.
+  const inferred = inferredBuildCommand(dir);
+  return {
+    ...base,
+    pass: true,
+    detail: inferred
+      ? `no buildProcess declared (a build is inferable — ${inferred}). Optional: declare buildProcess.local (+ remote CI workflow) so a broken build is a first-class obligation, not conflated with the test gate.`
+      : 'no buildProcess declared and none inferable (pure-script project) — build clause inert',
+  };
+}
+
+/** The inferable build command for the advisory nudge — today just a package.json `build` script. `null` if none. */
+function inferredBuildCommand(dir: string): string | null {
+  const pkgPath = join(dir, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { scripts?: Record<string, string> };
+    const b = pkg.scripts?.build;
+    return b && b.trim() ? 'package.json "build" script' : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- helpers ---
+
+function readQualityGateCmd(dir: string, cfg: ProjectConfig | null): { source: string; cmd: string } | null {
+  // R1-03-F1: the typed contract object is the primary source (the loader
+  // already single-sourced the sidecar into it, so a loaded config always
+  // carries local.cmd). The sidecar/package.json probes below remain for
+  // projects with NO project.json at all (pre-onboarding preflights).
+  if (cfg) {
+    return { source: 'testProcess.local.cmd', cmd: cfg.testProcess.local.cmd.join(' ') };
+  }
+  const pkgPath = join(dir, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { scripts?: Record<string, string> };
+      const t = pkg.scripts?.test;
+      if (t && t.trim() && !/no test specified/i.test(t)) {
+        return { source: 'package.json "test"', cmd: t.trim() };
+      }
+    } catch {
+      /* malformed package.json — fall through to other signals */
+    }
+  }
+  // A project may declare the gate in the forge sidecar without a project.json.
+  const sidecar = join(dir, '.forge', 'quality_gate_cmd');
+  if (existsSync(sidecar)) {
+    const cmd = readFileSync(sidecar, 'utf8').trim();
+    if (cmd) return { source: '.forge/quality_gate_cmd', cmd };
+  }
+  return null;
+}
+
+// --- C1b: CI merge-boundary net (advisory when absent; HARD shape when declared) ---
+
+/**
+ * R1-03-F1: surfaces the `testProcess.ci` delivery net. Absent ⇒ advisory
+ * gap (the merge decision rests on the per-WI gate alone — the brain's
+ * "per-WI gate ≠ project CI" antipattern class); declared ⇒ the shape was
+ * already validated fail-closed by the loader, so a loaded config passes
+ * HARD. A load failure reports advisory here (C1 carries the hard fail).
+ */
+function checkC1b(cfg: ProjectConfig | null, cfgError: string | null): ClauseResult {
+  const title = 'CI merge-boundary net (testProcess.ci)';
+  if (cfgError !== null) {
+    return { clause: 'C1b', title, hard: false, pass: false, detail: `project config failed to load — see C1` };
+  }
+  if (!cfg || !cfg.testProcess.ci) {
+    return {
+      clause: 'C1b',
+      title,
+      hard: false,
+      pass: false,
+      detail:
+        'no testProcess.ci declared — the merge decision rests on the per-WI gate alone; ' +
+        'declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)',
+    };
+  }
+  const ci = cfg.testProcess.ci;
+  return {
+    clause: 'C1b',
+    title,
+    hard: true,
+    pass: true,
+    detail: `testProcess.ci declared ("${ci.cmd.join(' ')}"${ci.unsetEnv ? `; hermetic: unset ${ci.unsetEnv.join(',')}` : ''})`,
+  };
+}
+
+// --- C7: live-acceptance tier (advisory visibility; hard enforcement lives in PM + dev-loop) ---
+
+function checkC7(cfg: ProjectConfig | null): ClauseResult {
+  const title = 'Live-acceptance tier (testProcess.acceptance)';
+  const acc = cfg?.testProcess.acceptance;
+  if (!acc) {
+    return {
+      clause: 'C7',
+      title,
+      hard: false,
+      pass: true,
+      detail:
+        'no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; ' +
+        'hard enforcement lives in the PM phase + dev-loop requires-env guard)',
+    };
+  }
+  const env = acc.requiresEnv ?? [];
+  return {
+    clause: 'C7',
+    title,
+    hard: false,
+    pass: true,
+    detail:
+      `acceptance tier declared (match "${acc.match}", required: ${acc.required}, ` +
+      `${env.length === 0 ? 'creds-free' : `requiresEnv: ${env.join(',')}`}) — enforced by the PM phase + dev-loop`,
+  };
+}
+
+/**
+ * Advisory (never blocks): scan the project's brain themes for cited
+ * `src/…` / `tests/…` source paths that no longer exist in the project
+ * repo. A theme citing deleted/renamed files is the failure mode that
+ * silently thrashed the PM (2026-05-18): the PM reads the brain first,
+ * ingests a model that contradicts the actual tree, and burns its whole
+ * budget unable to reconcile. This surfaces the contradiction BEFORE a
+ * cycle, so the operator can reconcile the theme (the reflection phase
+ * normally does this, but by-hand project changes skip it).
+ *
+ * WARN only — themes legitimately reference history; the operator judges.
+ */
+function checkBrainStaleness(
+  dir: string,
+  projectName: string,
+  forgeRoot: string,
+): ClauseResult {
+  const base = {
+    clause: 'BRAIN' as const,
+    title: 'Brain freshness (themes cite live source paths)',
+    hard: false,
+  };
+  // Brain 3 is forge-owned + CENTRAL (ADR 035): brain/projects/<name>/themes/.
+  const themesDir = projectThemesDir(forgeRoot, projectName);
+  if (!existsSync(themesDir)) {
+    return { ...base, pass: true, detail: 'no project brain themes to check' };
+  }
+  // Match worktree-relative source tokens in markdown links or inline code,
+  // including the `…/projects/<name>/src/…` link form themes use — we only
+  // flag the high-signal `src/` and `tests/` code paths with a file ext.
+  const pathRe = /(?:^|[("`\s/])((?:src|tests)\/[A-Za-z0-9._/-]+\.[A-Za-z0-9]+)/g;
+  const missing = new Map<string, string>(); // citedPath -> first theme file
+  let themeFiles: string[] = [];
+  try {
+    themeFiles = readdirSync(themesDir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return { ...base, pass: true, detail: 'project themes unreadable — skipped' };
+  }
+  for (const f of themeFiles) {
+    let content: string;
+    try {
+      content = readFileSync(join(themesDir, f), 'utf8');
+    } catch {
+      continue;
+    }
+    for (const m of content.matchAll(pathRe)) {
+      const cited = m[1];
+      if (missing.has(cited)) continue;
+      if (!existsSync(join(dir, cited))) missing.set(cited, f);
+    }
+  }
+  if (missing.size === 0) {
+    return {
+      ...base,
+      pass: true,
+      detail: `all src/tests paths cited by ${themeFiles.length} theme(s) exist in the project`,
+    };
+  }
+  const sample = [...missing.entries()]
+    .slice(0, 6)
+    .map(([p, f]) => `${p} (${f})`)
+    .join('; ');
+  return {
+    ...base,
+    pass: false,
+    detail:
+      `${missing.size} brain-cited source path(s) no longer exist — theme(s) may be stale and ` +
+      `will mislead the planner (PM/architect read the brain first). Reconcile against the code ` +
+      `(or run a reflection pass). Sample: ${sample}`,
+  };
+}
+
+function gitRemoteUrl(dir: string): string | null {
+  try {
+    return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Structured event emitted by `orchestrator/cli.ts` cmdPreflight after every
+ * run (CON-5). The CLI owns the write so preflight.ts stays pure (no IO side
+ * effects). Export the type + builder here so the CLI can import them.
+ */
+export type PreflightVerdictEvent = {
+  event_type: 'preflight.verdict';
+  project_dir: string;
+  project_name: string;
+  ok: boolean;
+  failing_clause_ids: ClauseId[];
+  warning_clause_ids: ClauseId[];
+  timestamp: string;
+};
+
+/** Build a `PreflightVerdictEvent` from a completed report. */
+export function buildVerdictEvent(r: PreflightReport): PreflightVerdictEvent {
+  return {
+    event_type: 'preflight.verdict',
+    project_dir: r.projectDir,
+    project_name: r.projectName,
+    ok: r.ok,
+    failing_clause_ids: r.clauses
+      .filter((c) => c.hard && !c.pass)
+      .map((c) => c.clause),
+    warning_clause_ids: r.clauses
+      .filter((c) => !c.hard && !c.pass)
+      .map((c) => c.clause),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/** Render a human-facing per-clause report. Returned, not printed (the CLI prints). */
+export function formatPreflightReport(r: PreflightReport): string {
+  const lines: string[] = [];
+  lines.push(`forge preflight — ${r.projectName}  (${r.projectDir})`);
+  lines.push('');
+  for (const c of r.clauses) {
+    const mark = c.pass ? 'PASS' : c.hard ? 'FAIL' : 'WARN';
+    lines.push(`  ${mark}  ${c.clause} ${c.title}`);
+    lines.push(`        ${c.detail}`);
+  }
+  lines.push('');
+  if (r.ok) {
+    const warns = r.clauses.filter((c) => !c.pass && !c.hard).length;
+    lines.push(
+      warns > 0
+        ? `CONTRACT MET (hard clauses pass; ${warns} advisory warning(s) — review before unattended runs).`
+        : 'CONTRACT MET — forge can progress this project unattended.',
+    );
+  } else {
+    const failed = r.clauses.filter((c) => c.hard && !c.pass).map((c) => c.clause);
+    lines.push(`CONTRACT NOT MET — forge declines. Failing hard clause(s): ${failed.join(', ')}.`);
+  }
+  return lines.join('\n');
+}

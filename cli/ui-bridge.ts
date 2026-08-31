@@ -39,11 +39,11 @@ import { spawn } from 'node:child_process';
 import { join, resolve, sep, basename, dirname } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getPaths, listInFlight } from '../orchestrator/queue.ts';
-import { parseManifest, persistManifestCostCeiling } from '../orchestrator/manifest.ts';
-import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
-import { enqueuePlanRun } from '../orchestrator/enqueue-plan-run.ts';
-import { enqueueFlowRun } from '../orchestrator/enqueue-flow-run.ts';
+import { getPaths, listInFlight } from '@forge/flows/queue.ts';
+import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
+import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
+import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
+import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
 import {
   readReviewComments,
   writeReviewComments,
@@ -55,7 +55,7 @@ import {
   reviewCommentsPath,
   isSafeCycleId,
   REVIEW_COMMENTS_MAX,
-} from '../orchestrator/review-comments.ts';
+} from '@forge/factory/review-comments.ts';
 import lockfile from 'proper-lockfile';
 import {
   handleStudioRoutes,
@@ -75,17 +75,17 @@ import {
   loadKbDescriptors,
   computeAgentCleanupFindings,
   KB_SEEDING_ANCHOR_PREFIX,
-} from './bridge-studio-kbs.ts';
-import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
-import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
-import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
-import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
-import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
-import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, isTerminalPhase, sessionIsReadable, sessionShellHref } from './bridge-studio-sessions.ts';
-import { parseGuardedEventsJsonl } from './session-readability.ts';
+} from '@forge/knowledge/bridge-studio-kbs.ts';
+import { handleStudioKbDrainRoutes } from '@forge/knowledge/bridge-studio-kb-drain.ts';
+import { deriveKbActiveJob, activeJobReason } from '@forge/knowledge/kb-job-state.ts';
+import { handleStudioSkillsRoutes } from '@forge/library/bridge-studio-skills.ts';
+import { handleStudioHooksRoutes } from '@forge/library/bridge-studio-hooks.ts';
+import { handleStudioAuthoringRoutes } from '@forge/library/bridge-studio-authoring.ts';
+import { handleStudioTemplatesRoutes } from '@forge/library/bridge-studio-templates.ts';
+import { handleStudioSessionsRoutes, isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/sessions/bridge-studio-sessions.ts';
+import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
-import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
+import { handleSessionCancelRoute } from '@forge/sessions/bridge-studio-session-cancel.ts';
 import {
   deriveSessionLifecycleFor, sessionLogDirName, sessionHeartbeatMtimeMs, killTrackedRun,
   type SessionLifecycleState, type SessionLifecycle,
@@ -95,52 +95,52 @@ import {
   // crash-message extraction sessions already use — never a second,
   // independently-invented staleness rule.
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage,
-} from './bridge-studio-lifecycle.ts';
-import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
-import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
-import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
-import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
-import { handleRecoveryRoutes } from './bridge-recovery.ts';
-import { handleHookRoutes } from './bridge-hooks.ts';
+} from '@forge/sessions/bridge-studio-lifecycle.ts';
+import { handleStudioInstructionsRoutes } from '@forge/library/bridge-studio-instructions.ts';
+import { handleStudioAgentCapabilityRoute } from '@forge/sessions/bridge-studio-agent-capability.ts';
+import { handleStudioConnectionsRoutes } from '@forge/library/bridge-studio-connections.ts';
+import { handleStudioCommunityRoutes } from '@forge/library/bridge-studio-community.ts';
+import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
+import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
 import {
   handleStudioPostRoutes,
   applyReviewVerdict,
   applyPlanVerdict,
   type StudioPostContext,
   type ReleaseFinalizeHookInput,
-} from './bridge-studio-runs.ts';
-import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
+} from '@forge/flows/bridge-studio-runs.ts';
+import { runReleaseFinalize } from '@forge/factory/phases/release-finalize.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
-import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '../orchestrator/work-item.ts';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '../orchestrator/daemon.ts';
-import { mergePullRequest } from '../orchestrator/pr.ts';
-import type { BridgeIdentity } from './forge-watch.ts';
-import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
-import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
-import { reconcileReflectFeedback, type RerunReflectorFn } from './reflect-reconcile.ts';
+import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
+import { mergePullRequest } from '@forge/flows/pr.ts';
+import type { BridgeIdentity } from '../apps/forge/forge-watch.ts';
+import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { reconcileReflectFeedback, type RerunReflectorFn } from '@forge/factory/reflect-reconcile.ts';
 import {
   listArchitectSessions,
   guardedReadStatus,
   guardedWriteStatus,
   type ArchitectStatus,
   type ArchitectQuestion,
-} from '../orchestrator/architect-runner.ts';
+} from '@forge/sessions/architect-runner.ts';
 import {
   DRAFT_FILENAME,
   type InstructionsStatus,
-} from '../orchestrator/instructions-runner.ts';
+} from '@forge/sessions/instructions-runner.ts';
 import {
   DEMO_HTML_REL_PATH,
   GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
-} from '../orchestrator/demo-builder-runner.ts';
-import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
-import { resolveContainedProjectDir } from './contract-stages.ts';
+} from '@forge/sessions/demo-builder-runner.ts';
+import { safeReadFileInSession } from '@forge/sessions/studio/session-transcript.ts';
+import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
 import {
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
-import { isSafeRunId } from '../orchestrator/run-agent.ts';
-import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
+import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { resolveDispatchableAgent } from '@forge/agents/agent-dispatch.ts';
 import { listAgentDefinitions, loadFlowDefinition, discoverProjects } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
@@ -148,26 +148,26 @@ import {
   MAX_MATERIALS_COUNT,
   MAX_MATERIAL_BYTES,
   MAX_MATERIALS_TOTAL_BYTES,
-} from '../orchestrator/studio/materials.ts';
-import { stageMaterials, MaterialsStagingError } from './materials-staging.ts';
-import type { AgentDefinition } from '../orchestrator/studio/types.ts';
-import { skillsDir, MAX_SKILL_ID_LENGTH, skillPathRelative } from '../orchestrator/skill-path.ts';
-import { deriveAgentSpec } from '../orchestrator/studio/derive.ts';
-import { resolveSessionModel, type ModelTier } from '../orchestrator/phase-agent.ts';
-import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
+} from '@forge/agents/studio/materials.ts';
+import { stageMaterials, MaterialsStagingError } from '@forge/agents/materials-staging.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { skillsDir, MAX_SKILL_ID_LENGTH, skillPathRelative } from '@forge/agents/skill-path.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { unreadyConnectionsFor, formatUnreadyConnections } from '@forge/agents/studio/connection-run-gate.ts';
 import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   type InterviewQuestion,
-} from '../orchestrator/interactive-session.ts';
-import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
-import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
-import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
-import { cachedListRuns } from './run-list-cache.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from './studio-path-guard.ts';
-import { fixedTierForSessionKind } from './session-model-tier.ts';
+} from '@forge/sessions/interactive-session.ts';
+import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
+import { buildAgentSlugToNodeId, type Run } from '@forge/flows/run-model.ts';
+import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from '@forge/kernel';
+import { fixedTierForSessionKind } from '@forge/sessions/session-model-tier.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -308,7 +308,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // real helper; the POST handler + startup reconcile both call this.
   const rerunReflectorFn: RerunReflectorFn =
     opts.rerunReflector ??
-    ((input) => import('../orchestrator/reflector-rerun.ts').then((m) => m.rerunReflector(input)));
+    ((input) => import('@forge/factory/reflector-rerun.ts').then((m) => m.rerunReflector(input)));
   // Recover feedback that landed while the bridge was down (or whose live rerun
   // was lost to a restart): re-run the reflector for any cycle whose RECENT
   // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
@@ -2168,7 +2168,7 @@ async function handleHttp(
       return;
     }
     try {
-      const { summariseCycle } = await import('./metrics.ts');
+      const { summariseCycle } = await import('@forge/flows/metrics.ts');
       const m = summariseCycle(cycleId, ctx.logsRoot);
       sendJson(res, 200, {
         cycleId,
@@ -3495,7 +3495,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', ...argvPrefix, sessionId, '--project', project],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', ...argvPrefix, sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
     closeSync(stderrFd);
@@ -3927,7 +3927,7 @@ function spawnAgentDispatch(
     console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
     return;
   }
-  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
+  const args = ['--experimental-strip-types', 'apps/forge/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });

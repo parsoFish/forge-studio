@@ -28,7 +28,7 @@ import {
   isSdkAvailable,
   registeredSdkIds,
   resolveSdkId,
-} from '../../loops/_adapters/registry.ts';
+} from '@forge/agents/_adapters/registry.ts';
 
 const ROOT = process.cwd();
 

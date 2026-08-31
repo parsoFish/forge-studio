@@ -107,29 +107,40 @@ import { fileURLToPath } from 'node:url';
 import { BRIDGE_ROUTE_CLASSIFICATION, type RouteClassification } from './dry-bridge.ts';
 
 const CLI_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(CLI_DIR, '..');
 const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 
-// The dispatch-file set is DERIVED from the cli/ directory, not hand-listed:
-// ui-bridge.ts plus every bridge-*.ts, tests excluded. Over-scanning a
-// non-dispatch file that happens to match is harmless (zero candidates) or
-// visibly red (unclassified candidates) — never silent. The containment test
-// below pins the currently-known dispatch files as a floor so an accidental
-// narrowing of this filter also goes red.
+// The dispatch-file set is DERIVED from the directories that hold dispatch
+// files, not hand-listed: ui-bridge.ts plus every bridge-*.ts, tests excluded.
+// M3-A moved most bridge-*.ts dispatch files out of cli/ into their owning
+// packages (flows, knowledge, library, sessions) — the scan-root list is the
+// UNION of the old root and those new roots, so discovery is restored, not
+// narrowed. Over-scanning a non-dispatch file that happens to match is
+// harmless (zero candidates) or visibly red (unclassified candidates) — never
+// silent. The containment test below pins the currently-known dispatch files
+// as a floor so an accidental narrowing of this filter also goes red.
+const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/sessions'];
+
 function discoverDispatchFiles(): readonly string[] {
-  return readdirSync(CLI_DIR)
-    .filter((f) => !f.endsWith('.test.ts'))
-    .filter((f) => f === 'ui-bridge.ts' || (f.startsWith('bridge-') && f.endsWith('.ts')))
-    .sort();
+  const out: string[] = [];
+  for (const dir of DISPATCH_SCAN_DIRS) {
+    const abs = join(REPO_ROOT, dir);
+    for (const f of readdirSync(abs)) {
+      if (f.endsWith('.test.ts')) continue;
+      if (f === 'ui-bridge.ts' || (f.startsWith('bridge-') && f.endsWith('.ts'))) out.push(`${dir}/${f}`);
+    }
+  }
+  return out.sort();
 }
 
 // Floor, not ceiling: discovery must always include at least these.
 const KNOWN_DISPATCH_FILES = [
-  'bridge-recovery.ts',
-  'bridge-studio-kbs.ts',
-  'bridge-studio-runs.ts',
-  'bridge-studio-writes.ts',
-  'bridge-studio.ts',
-  'ui-bridge.ts',
+  'packages/flows/bridge-recovery.ts',
+  'packages/knowledge/bridge-studio-kbs.ts',
+  'packages/flows/bridge-studio-runs.ts',
+  'cli/bridge-studio-writes.ts',
+  'cli/bridge-studio.ts',
+  'cli/ui-bridge.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
@@ -295,8 +306,8 @@ function methodsEquivalent(a: string, b: string): boolean {
 function loadAllCandidates(): DerivedCandidate[] {
   const all: DerivedCandidate[] = [];
   for (const relFile of discoverDispatchFiles()) {
-    const source = readFileSync(join(CLI_DIR, relFile), 'utf8');
-    all.push(...extractDispatchCandidates(source, `cli/${relFile}`));
+    const source = readFileSync(join(REPO_ROOT, relFile), 'utf8');
+    all.push(...extractDispatchCandidates(source, relFile));
   }
   return all;
 }
@@ -385,7 +396,7 @@ test("every guard:'route' refuse row has a matching refuseDryBridge( call site (
 
   const calledRoutes = new Set<string>();
   for (const relFile of discoverDispatchFiles()) {
-    const source = readFileSync(join(CLI_DIR, relFile), 'utf8');
+    const source = readFileSync(join(REPO_ROOT, relFile), 'utf8');
     for (const route of extractRefuseDryBridgeRoutes(source)) calledRoutes.add(route);
   }
 

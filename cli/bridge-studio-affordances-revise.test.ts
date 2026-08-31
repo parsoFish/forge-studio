@@ -37,9 +37,9 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { verdictWasAccepted } from './bridge-studio-affordances.ts';
-import { VERDICT_VALUES } from '../orchestrator/studio/session-kinds.ts';
+import { VERDICT_VALUES } from '@forge/sessions/studio/session-kinds.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };

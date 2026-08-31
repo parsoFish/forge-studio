@@ -31,7 +31,7 @@ import {
   resolveCommunitySource,
   discoverProjects,
 } from './registry.ts';
-import type { KbBinding, KbDescriptor } from './types.ts';
+import type { KbBinding, KbDescriptor } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -15,8 +15,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { runBandAgentStandalone, isStandaloneBandAgent } from './band-agent-run.ts';
-import { serializeWorkItem, type WorkItem } from './work-item.ts';
-import type { StreamQueryFn } from './pinned-sdk-query.ts';
+import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
 const INIT = 'INIT-2026-08-02-standalone-demo';
 const RUN = 'RUN-2026-08-02-band-standalone';

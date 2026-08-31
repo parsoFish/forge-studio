@@ -1,0 +1,262 @@
+/**
+ * Shared reflector invocation contract — system prompt + user prompt builders +
+ * tool config.
+ *
+ * Single source of truth for what the reflector agent sees. Called by the live
+ * orchestrator (orchestrator/phases/reflector.ts).
+ *
+ * The reflector is a **one-shot SDK invocation** (not a Ralph loop) that runs
+ * after a successful merge. It consumes the cycle's event log + closed manifest
+ * + merged tree and emits brain theme updates that feed future cycles.
+ *
+ * Stages 2 + 3 (interactive user-Q&A) use **file-based handoff** (decision D5):
+ * the agent writes its questions into `user-questions.md`, then reads
+ * `user-feedback.md` (written by the operator in production). The orchestrator
+ * derives `user-questions.json` post-exit so the in-UI /reflect screen can
+ * render the structured operator handoff. Stdin/CLI transport is deferred.
+ */
+
+import { readFileSync } from 'node:fs';
+
+import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+
+const SKILL_PATH = skillPath('reflector');
+
+export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';
+export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
+
+/**
+ * ADR 024 / M2-3: the reflector spec derived from SKILL.md (single source).
+ * The orchestrator resolves the model from the tier declared in the frontmatter.
+ */
+export const reflectorAgentSpec = deriveAgentSpec(skillPathRelative('reflector'));
+
+/** Tool lists derived from the spec. Production spawning now derives these
+ * inside `runAgent` (R4-01-F2); these exports remain the TEST-facing contract
+ * surface (reflector-binding.test.ts pins them against the SKILL.md source). */
+export const REFLECTOR_ALLOWED_TOOLS = reflectorAgentSpec.allowedTools as ReflectorAllowedTool[];
+export const REFLECTOR_DISALLOWED_TOOLS = reflectorAgentSpec.disallowedTools as ReflectorDisallowedTool[];
+
+/**
+ * Concrete model, derived from the spec's tier (single source: the spec).
+ * Behavior-preserving: resolves to `claude-sonnet-4-6` — same as before.
+ */
+export const REFLECTOR_MODEL = modelForSpec(reflectorAgentSpec);
+
+let cachedSkillText: string | null = null;
+function loadSkillText(): string {
+  if (cachedSkillText !== null) return cachedSkillText;
+  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
+  return cachedSkillText;
+}
+
+let cachedBrainIndex: string | null = null;
+let cachedBrainIndexCwd: string | null = null;
+function loadBrainNavigation(cwd: string): string {
+  if (cachedBrainIndex !== null && cachedBrainIndexCwd === cwd) return cachedBrainIndex;
+  cachedBrainIndex = loadBrainIndex({ cwd });
+  cachedBrainIndexCwd = cwd;
+  return cachedBrainIndex;
+}
+
+/**
+ * S8 / C23 — prompt caching intent.
+ *
+ * Reflector is a **one-shot** call per cycle (not a Ralph loop). The
+ * caching win here is across CYCLES, not within a single call: the SKILL.md
+ * contract block + the brain navigation index are stable from one cycle to
+ * the next. With the Claude Code CLI's server-side caching (which the SDK
+ * uses transparently), the second reflector call within the TTL window
+ * reads from cache.
+ *
+ * The Claude Agent SDK v0.1.0 does NOT expose explicit
+ * `cache_control: { type: 'ephemeral' }` markers — see `S8-DECISIONS.md` D1
+ * for the gap analysis. The work this file does to make caching effective:
+ * KEEP the system prompt stable. Per-cycle data (cycle id, manifest paths,
+ * worktree paths) goes in the USER prompt — never mid system prompt —
+ * exactly so the cache key holds.
+ *
+ * TTL: 5-min ephemeral. Reflector calls are spaced apart by full
+ * cycles (typically > 5 min), so a longer TTL would just inflate the write
+ * premium without enough hits to amortise. Cycles that fire back-to-back DO
+ * still benefit from the within-window cache hit.
+ *
+ * Build the reflector system prompt: brain navigation index + the SKILL.md
+ * contract (ADR 024: the single source of phase intent). All static operational
+ * intent lives in SKILL.md; per-cycle data (cycle id, manifest paths, worktree
+ * paths) goes in the user prompt only.
+ *
+ * @param brainCwd - directory containing `brain/`. For the bench this is the
+ *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
+ */
+export function buildReflectorSystemPrompt(brainCwd: string): string {
+  return [
+    '# Brain navigation index',
+    '',
+    "Below are the brain's category indexes. Use these descriptions to identify candidate theme pages, then read those files in full to verify and extract precise terminology, project names, and patterns. The indexes ARE the retrieval index; you should rarely need grep.",
+    '',
+    loadBrainNavigation(brainCwd),
+    '',
+    '---',
+    '',
+    '# reflector skill contract',
+    '',
+    loadSkillText(),
+  ].join('\n');
+}
+
+export type ReflectorUserPromptInput = {
+  initiativeId: string;
+  cycleId: string;
+  /** Path to the closed manifest in `_queue/done/`. */
+  manifestRelPath: string;
+  /** Path to the cycle's structured event log. */
+  eventLogRelPath: string;
+  /** Path to brain-gaps.jsonl (may reference a non-existent file — agent tolerates). */
+  brainGapsRelPath: string;
+  /** Read-only path to the merged project tree (for evidence inspection). */
+  mergedTreeRelPath: string;
+  /**
+   * R4-09-F2 — path to the merged PR's description (`<worktree>/.forge/
+   * pr-description.md`, the unifier-authored stated intent + what shipped).
+   * The reflector reviews it in Stage 1 so the questionnaire cites the PR's
+   * actual claims, not generic prompts. May not exist (tolerated).
+   */
+  prDescriptionRelPath: string;
+  projectName: string;
+  /** Path the reflector writes its stage-2 questions to. */
+  userQuestionsRelPath: string;
+  /** Path the reflector reads stage-3 user feedback from (pre-populated). */
+  userFeedbackRelPath: string;
+  /** Path the reflector writes its retro to. */
+  retroRelPath: string;
+  /** Where to write the cycle archive. Includes filename. */
+  cycleArchiveRelPath: string;
+  /**
+   * Where to write PROJECT theme files (lessons about the project's own code /
+   * conventions / domain). The reflector decides per-theme filenames; this is
+   * the directory root.
+   */
+  themesDirRelPath: string;
+  /**
+   * Where to write FORGE-MACHINERY theme files (lessons about the orchestrator,
+   * gates, unifier, Ralph loop, scheduler, phase behaviour — NOT project
+   * knowledge). cascade-v4 #7: without an explicit path the reflector dumped
+   * forge lessons (e.g. `gate-too-loose`) into the project's Brain 3.
+   */
+  forgeThemesDirRelPath: string;
+  /**
+   * R4-09-F3: `interactive` (default) asks the operator (Stage 2 writes
+   * questions, Stage 3 reads human feedback); `automated` infers the answers
+   * from the cycle logs / demo / diff and self-answers with `inferred: true`
+   * provenance — no human round-trip.
+   */
+  mode: 'interactive' | 'automated';
+};
+
+/**
+ * Render the per-cycle prompt body the reflector reads. Walks the agent through
+ * the four-stage process with concrete file paths. Stages 2+3 branch on
+ * `input.mode` (R4-09-F3): the interactive text is byte-identical to the
+ * pre-F3 prompt so the golden spawn-capture is unaffected by default.
+ */
+export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): string {
+  const stage2 =
+    input.mode === 'automated'
+      ? `3. **Stage 2 (INFER the answers — AUTOMATED mode, R4-09-F3)**: write \`${input.userQuestionsRelPath}\` with the SAME up-to-4 \`## N. <header>\` questions you would ask a human (same format: heading + one-line body + optional bullet options), grounded in Stage 1 + the PR — BUT there is no operator to answer them. For EACH question, ALSO write one \`**Inferred answer:** <chosen option label, or a one-line answer for a freeform question> — <citation>\` line immediately under its body, where the answer is INFERRED from the evidence (the event log, \`dev-loop.delivered\` stats, the demo artifacts, the PR description + shipped diff) and the citation is a concrete anchor (a changed file, an event count, a PR claim). Cap at 4. Never invent an answer the evidence doesn't support — if the evidence is genuinely silent, say so in the inferred-answer line ("_insufficient evidence — flag for operator_").`
+      : `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`;
+  const stage3 =
+    input.mode === 'automated'
+      ? `4. **Stage 3 (self-answer — AUTOMATED mode)**: there is no human, so WRITE \`${input.userFeedbackRelPath}\` YOURSELF (machine-authored) — answer each numbered Stage-2 question with its inferred answer, then add any inferred general notes. Prefix the file with a first line \`_(inferred by the reflector — no operator feedback this cycle)_\` so the provenance is unmistakable. Then distil those inferred answers into Section 2 of \`${input.retroRelPath}\` and the free-form notes into Section 3, exactly as the interactive path would from real feedback.`
+      : `4. **Stage 3 (user feedback)**: read \`${input.userFeedbackRelPath}\`. If it exists, distil the answers into Section 2 of \`${input.retroRelPath}\` and the free-form feedback into Section 3. If missing, write \`_(no feedback supplied this cycle)_\` for both.`;
+  return [
+    '# Reflection brief',
+    '',
+    `> Initiative: **${input.initiativeId}** · Cycle: **${input.cycleId}** · Project: **${input.projectName}**`,
+    '',
+    '## Inputs',
+    '',
+    `- Closed manifest: \`${input.manifestRelPath}\``,
+    `- Cycle event log: \`${input.eventLogRelPath}\``,
+    `- Brain-gaps log: \`${input.brainGapsRelPath}\` (may not exist if the cycle had zero gaps)`,
+    `- Merged project tree (read-only): \`${input.mergedTreeRelPath}/\``,
+    `- PR description (the merged PR's stated intent): \`${input.prDescriptionRelPath}\` (may not exist — tolerate).`,
+    '',
+    '## Outputs (paths are pre-resolved; do NOT change them)',
+    '',
+    `- Retro: \`${input.retroRelPath}\` — three sections (\`## Self-reflection\`, \`## User questions\`, \`## User feedback\`).`,
+    `- User questions (stage 2): \`${input.userQuestionsRelPath}\` — at most 4 numbered questions. Skip if none warranted.`,
+    `- User feedback to read (stage 3 input): \`${input.userFeedbackRelPath}\` — pre-populated; if missing, treat as no feedback.`,
+    `- Cycle archive: \`${input.cycleArchiveRelPath}\` — frontmatter mandatory.`,
+    `- **Project** theme files: \`${input.themesDirRelPath}/<YYYY-MM-DD>-<slug>.md\` — lessons about THIS PROJECT's code / conventions / domain.`,
+    `- **Forge-machinery** theme files: \`${input.forgeThemesDirRelPath}/<YYYY-MM-DD>-<slug>.md\` — lessons about FORGE itself (orchestrator, gates, unifier, Ralph loop, scheduler, PM/reflector behaviour). These are NOT project knowledge — route them here, never into the project brain.`,
+    '',
+    '## What to do',
+    '',
+    '1. **Brain query** — run `brain-query` for prior retros, antipatterns surfaced, and outstanding gaps.',
+    `2. **Stage 1 (self-reflection — the WHOLE initiative, DEC-2)**: read \`${input.eventLogRelPath}\` end-to-end. The three flows (architect → develop → reflect) thread ONE cycle_id, so this log spans the entire initiative — reflect across all of it, not just the closing cycle. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. Then surface, explicitly: **(a) repeated actions** — anything the agents did more than once (re-running a gate, re-editing a file, re-deriving a fact, retrying a command), each with its count; **(b) roadblocks/wedges** — where the cycle stalled, wedged, burnt tokens with no tool progress, or needed a recovery/resume, and what (if anything) unblocked it. **Read \`dev-loop.delivered\`/\`dev-loop.discarded\` for the authoritative diff-stat (delivered=shipped, discarded=failed-with-partial-diff). Cross-check before any "nothing delivered" conclusion — per-WI status can be stale on a resume.** Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1, leading with the repeated actions + roadblocks (\`_(none observed)_\` if none). **Also review the PR** (R4-09-F2): read \`${input.prDescriptionRelPath}\` for the stated intent, and cross-reference the shipped diff (\`dev-loop.delivered\` stats + the merged tree). Note where the delivered code diverges from the PR's stated intent — that gap is prime material for question (2).`,
+    stage2,
+    stage3,
+    `5. **Cycle archive**: write \`${input.cycleArchiveRelPath}\` with the frontmatter shown in the system prompt. Body: short summary + reference to the event log.`,
+    `6. **Themes**: for each pattern/antipattern from Stage 1, write a theme file under \`${input.themesDirRelPath}/\`. Filename: \`<YYYY-MM-DD>-<kebab-slug>.md\`. Include a \`## Sources\` section listing ≥ 1 evidence path that resolves to \`_logs/${input.cycleId}/...\` or \`${input.cycleArchiveRelPath}\`.`,
+    `7. **Done.** Stop. The orchestrator does not invoke you again.`,
+    '',
+    '## Constraints',
+    '',
+    '- Brain query MUST happen first. The bench gate fails otherwise.',
+    '- Every theme MUST have resolvable evidence in `## Sources`. Vague observations get rejected.',
+    '- If the cycle\'s event log contains any wedge or send-back event, ≥ 1 theme MUST carry `category: antipattern`.',
+    '- **Scope each theme to the right brain (load-bearing, cascade-v4 #7).** A lesson about THE PROJECT (its code, conventions, domain, a bug in its source) → the project themes dir. A lesson about FORGE MACHINERY (the orchestrator, a gate behaviour like `gate-too-loose`, the unifier, the Ralph loop, the scheduler, PM/reflector behaviour, cycle mechanics) → the forge themes dir. Ask: "would this lesson be true for a DIFFERENT project too?" If yes, it is a forge lesson — it does NOT belong in this project\'s Brain 3.',
+    '- One theme per file. Do not combine unrelated lessons.',
+  ].join('\n');
+}
+
+/** Tool-use telemetry surfaced by both the bench and the live cycle. */
+export type ReflectorToolUseSummary = {
+  brainReads: number;
+  themeWrites: number;
+  retroWrites: number;
+  bashCalls: number;
+};
+
+/**
+ * Inspect a streamed assistant message and increment the summary in place.
+ * - `brainReads`     — Read/Grep/Glob with a target containing `brain/`.
+ * - `themeWrites`    — Write/Edit with a target containing `/themes/` (central Brain 3
+ *                      at `brain/projects/<name>/themes/`, ADR 035) or `brain/cycles/_raw/`.
+ * - `retroWrites`    — Write/Edit with a target ending in `retro.md`.
+ * - `bashCalls`      — any Bash invocation.
+ */
+export function tallyToolUse(
+  message: { content?: Array<{ type?: string; name?: string; input?: unknown }> } | undefined,
+  summary: ReflectorToolUseSummary,
+): void {
+  const blocks = message?.content ?? [];
+  for (const block of blocks) {
+    if (block?.type !== 'tool_use') continue;
+    const name = block.name ?? '';
+    const blob = JSON.stringify(block.input ?? {});
+    if (name === 'Bash') {
+      summary.bashCalls += 1;
+      continue;
+    }
+    if (name === 'Read' || name === 'Grep' || name === 'Glob') {
+      if (blob.includes('brain/') || blob.includes('"brain"')) summary.brainReads += 1;
+      continue;
+    }
+    if (name === 'Write' || name === 'Edit') {
+      if (
+        blob.includes('/themes/') ||
+        blob.includes('brain/cycles/_raw/') ||
+        blob.includes('brain\\_raw\\') ||
+        blob.includes('projects/')
+      ) {
+        summary.themeWrites += 1;
+      }
+      if (blob.includes('retro.md')) summary.retroWrites += 1;
+    }
+  }
+}

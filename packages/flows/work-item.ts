@@ -1,0 +1,712 @@
+/**
+ * Work-item — typed schema + parse/serialise/validate/write/coupling-detect.
+ *
+ * The project-manager phase emits work items; the orchestrator validates them
+ * before dispatching to the developer loop. Sibling of `manifest.ts` — same
+ * shape (gray-matter frontmatter + markdown body), same DFS three-color cycle
+ * detection.
+ *
+ * Schema and rules locked in ADR 015. Files live at
+ * `<worktree>/.forge/work-items/WI-<n>.md`; the dependency graph at
+ * `<worktree>/.forge/work-items/_graph.md`.
+ */
+
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import matter from 'gray-matter';
+
+export type AcceptanceCriterion = {
+  given: string;
+  when: string;
+  then: string;
+};
+
+export type { WorkItemStatus } from '@forge/contracts';
+import type { WorkItemStatus } from '@forge/contracts';
+
+export type WorkItem = {
+  work_item_id: string;            // WI-<n>
+  initiative_id: string;           // INIT-<YYYY-MM-DD>-<slug>
+  status: WorkItemStatus;
+  depends_on: string[];            // WI-ids
+  acceptance_criteria: AcceptanceCriterion[];
+  files_in_scope: string[];        // worktree-relative
+  estimated_iterations: number;    // > 0
+  /**
+   * S3 refinement (2026-05-20, ADR 015 §"Refinement 2026-05-20" + CONTRACTS.md
+   * C5). The four fields below are OPTIONAL and serialised **omit-on-undefined**
+   * — a WI without any of them produces frontmatter byte-identical to the
+   * pre-amendment shape (round-trip test in work-item.test.ts).
+   */
+
+  /** Per-WI gate command override (defaults to manifest's). Non-empty when set. */
+  quality_gate_cmd?: string[];
+  /** Explicit out-of-scope items for this WI (passed through from manifest non_goals). */
+  non_goals?: string[];
+  /** Path (must appear in files_in_scope) the dev-loop must produce that the gate exercises. */
+  verification_artifact?: string;
+  /**
+   * R4-05-F7: coarse subsystem/feature-area tag the plan agent populates so
+   * ADR-037 constraint selectors can match on wi.domain (beyond
+   * manifest.<field> globs). Optional.
+   */
+  domain?: string;
+  /** Structured marker — files this WI creates from scratch. Subset of files_in_scope. */
+  creates?: string[];
+  /**
+   * Behaviour-PRESERVING refactor marker (rename / move / reformat where the
+   * project's existing tests stay green before AND after). Such a WI has no
+   * fail-first gate — the existing suite passes on the base — so the dev-loop's
+   * iter-0 hollow-gate guard (which assumes write-a-failing-test-first) would
+   * wrongly reject it as `gate-too-loose`. When `true`, the dev-loop runs this
+   * WI with `failOnHollowIter0Gate: false`; discrimination shifts to the diff
+   * (the branch must carry real changes — the unifier's empty-delivery guard is
+   * the backstop) plus the gate staying green. Absent/false ⇒ normal
+   * write-a-failing-test-first discipline. The PM sets it ONLY for genuinely
+   * behaviour-preserving work.
+   */
+  behavior_preserving?: boolean;
+  /**
+   * ADR 040 — set only on fix work-items compiled by the send-back/fix loops
+   * (review-loop send-back, demo-fix, gate-fix); PM-authored WIs leave it
+   * unset, so their frontmatter stays byte-identical. Distinguishes
+   * review/demo/gate-originated dev WIs from PM-authored ones. (The retired
+   * unifier's `kind` dispatch selector was removed in R4-01-F4.)
+   */
+  origin?: 'review-fix' | 'demo-fix' | 'gate-fix';
+  body: string;
+};
+
+/**
+ * ADR 040 — valid values for `WorkItem.origin` (fix work-items compiled by
+ * the send-back/fix loops). Exported so the fix-work-items compiler module
+ * (Q2) can validate against the same vocabulary instead of duplicating the
+ * literal list.
+ */
+export const FIX_WI_ORIGINS: readonly NonNullable<WorkItem['origin']>[] = ['review-fix', 'demo-fix', 'gate-fix'];
+export type FixWiOrigin = NonNullable<WorkItem['origin']>;
+
+// `WI-<n>` are dev work items (PM-emitted). `UWI-<n>` are unifier work items
+// (the unifier's own queue, ADR 026): UWI-1 is the static unify/PR-prep mission;
+// UWI-2+ are appended from review feedback. Both reuse the same WorkItem
+// machinery (parse/serialize/validate/topo/read/write) — only the id prefix and
+// the directory (.forge/unifier-items/) differ.
+//
+// The trailing `[a-z]?` is the SPLIT SUFFIX (ADR 015, 2026-08-23 amendment /
+// ON-7): the plan agent names the halves of a split work item `WI-4a` / `WI-4b`
+// unprompted, and the contract now admits exactly that — ONE optional lowercase
+// letter. `WI-4a1`, `WI-4-a`, `wi-4a`, `WI-4A` and `WI-4ab` stay invalid.
+//
+// THESE ARE THE SINGLE SOURCE OF TRUTH. Six narrower hand-rolled copies of this
+// regex existed across orchestrator/, cli/ and loops/ and every one of them
+// broke on a split id; they all import from here now. A second copy of this
+// regex is a defect, not a style choice.
+export const WORK_ITEM_ID_PATTERN = /^U?WI-\d+[a-z]?$/;
+
+/** The same id as it appears in a spec FILENAME (`WI-4a.md`). */
+export const WORK_ITEM_FILE_PATTERN = /^U?WI-\d+[a-z]?\.md$/;
+
+/** Dev work items only (never the `UWI-` unifier queue). */
+export const DEV_WORK_ITEM_ID_PATTERN = /^WI-\d+[a-z]?$/;
+
+/**
+ * The NUMERIC STEM of a dev work-item id — `WI-4a` and `WI-4b` both stem 4 —
+ * or null when the id is not a dev work item. This is the ordering primitive
+ * ADR 037's hidden-coupling reject->compile derives its `depends_on` direction
+ * from, and the one `nextDevWorkItemId` counts from; a split sibling must not be
+ * invisible to either (an ignored `WI-4a` would let the next-free-id allocator
+ * hand out a confusing `WI-4` beside it).
+ */
+export function devWorkItemIdStem(id: string): number | null {
+  const m = /^WI-(\d+)[a-z]?$/.exec(id);
+  return m ? Number(m[1]) : null;
+}
+const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+/**
+ * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror
+ * (`apps/studio/lib/bridge-client.ts`'s `WI_STATUSES`, feeding the roadmap
+ * card's WI done/total badge) can be pinned against this SSOT at runtime by
+ * `apps/studio/lib/wi-status-parity.test.ts`, following the same precedent as
+ * `orchestrator/flow-trigger.ts`'s `SHIPPED_TRIGGER_KIND_IDS` /
+ * `apps/studio/lib/trigger-kind-parity.test.ts`.
+ */
+export { WORK_ITEM_STATUSES } from '@forge/contracts';
+import { WORK_ITEM_STATUSES } from '@forge/contracts';
+
+export function parseWorkItem(content: string): WorkItem {
+  const parsed = matter(content);
+  const data = parsed.data as Record<string, unknown>;
+
+  const work_item_id = stringField(data, 'work_item_id', true);
+  const initiative_id = stringField(data, 'initiative_id', true);
+  const statusRaw = stringField(data, 'status', false) ?? 'pending';
+  const status = (WORK_ITEM_STATUSES.includes(statusRaw as WorkItemStatus)
+    ? statusRaw
+    : 'pending') as WorkItemStatus;
+
+  const depends_on = parseStringArray(data, 'depends_on');
+  const files_in_scope = parseStringArray(data, 'files_in_scope');
+  const estimated_iterations = numberField(data, 'estimated_iterations', false) ?? 0;
+  const acceptance_criteria = parseAcceptanceCriteria(data);
+
+  const w: WorkItem = {
+    work_item_id,
+    initiative_id,
+    status,
+    depends_on,
+    acceptance_criteria,
+    files_in_scope,
+    estimated_iterations,
+    body: parsed.content.replace(/^\n+/, ''),
+  };
+
+  // S3 refinement (C5): omit-on-undefined optional fields. Only set the
+  // property if the frontmatter declared it.
+  if (Array.isArray(data.quality_gate_cmd)) {
+    const cmd = (data.quality_gate_cmd as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (cmd.length > 0) w.quality_gate_cmd = cmd;
+  }
+  if (Array.isArray(data.non_goals)) {
+    const ng = (data.non_goals as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (ng.length > 0) w.non_goals = ng;
+  }
+  if (typeof data.verification_artifact === 'string' && data.verification_artifact.length > 0) {
+    w.verification_artifact = data.verification_artifact;
+  }
+  if (typeof data.domain === 'string' && data.domain.length > 0) {
+    w.domain = data.domain;
+  }
+  if (Array.isArray(data.creates)) {
+    const c = (data.creates as unknown[]).filter((s): s is string => typeof s === 'string');
+    if (c.length > 0) w.creates = c;
+  }
+  if (typeof data.origin === 'string' && (FIX_WI_ORIGINS as readonly string[]).includes(data.origin)) {
+    w.origin = data.origin as WorkItem['origin'];
+  }
+  if (data.behavior_preserving === true) {
+    w.behavior_preserving = true;
+  }
+
+  return w;
+}
+
+export function serializeWorkItem(w: WorkItem): string {
+  const data: Record<string, unknown> = {
+    work_item_id: w.work_item_id,
+    initiative_id: w.initiative_id,
+    status: w.status,
+    depends_on: w.depends_on,
+    acceptance_criteria: w.acceptance_criteria.map((c) => ({
+      given: c.given,
+      when: c.when,
+      then: c.then,
+    })),
+    files_in_scope: w.files_in_scope,
+    estimated_iterations: w.estimated_iterations,
+  };
+  // S3 refinement (C5): omit-on-undefined. When a WI doesn't carry the new
+  // fields, frontmatter stays byte-identical to the pre-amendment shape
+  // (load-bearing round-trip test in work-item.test.ts).
+  if (w.quality_gate_cmd !== undefined && w.quality_gate_cmd.length > 0) {
+    data.quality_gate_cmd = w.quality_gate_cmd;
+  }
+  if (w.non_goals !== undefined && w.non_goals.length > 0) {
+    data.non_goals = w.non_goals;
+  }
+  if (w.verification_artifact !== undefined && w.verification_artifact.length > 0) {
+    data.verification_artifact = w.verification_artifact;
+  }
+  if (w.domain !== undefined && w.domain.length > 0) {
+    data.domain = w.domain;
+  }
+  if (w.creates !== undefined && w.creates.length > 0) {
+    data.creates = w.creates;
+  }
+  if (w.origin !== undefined) {
+    data.origin = w.origin;
+  }
+  if (w.behavior_preserving === true) {
+    data.behavior_preserving = true;
+  }
+  return matter.stringify('\n' + w.body.replace(/^\n+/, ''), data);
+}
+
+/**
+ * Paths the gate-tightening layer requires in the branch diff before an
+ * exit-0 gate may count as passed. Prefers the WI's explicit `creates`
+ * declaration, then `verification_artifact`, then `files_in_scope` (which is
+ * mandatory, so the result is never empty). Surfaced 2026-07-11
+ * (INIT-2026-07-10-framework-auth-parity WI-1): the PM omitted `creates`, the
+ * tightening got `[]`, and a vacuous `go test -run <NoMatchYet>` (exit 0,
+ * "[no tests to run]") passed at iter-0 — killing the WI as `gate-too-loose`
+ * instead of letting the agent write the declared files. A WI whose branch
+ * diff touches NONE of its declared files cannot have done its work, so
+ * files_in_scope is a sound floor. NOTE: this feeds the gate diff-touch check
+ * only — the runner's `already-complete` shortcut stays `creates`-based
+ * (requiring ALL of a broader path set would false-skip WIs whose scope files
+ * were touched by siblings).
+ */
+export function gateRequiredPaths(w: WorkItem): readonly string[] {
+  if (w.creates !== undefined && w.creates.length > 0) return w.creates;
+  if (w.verification_artifact !== undefined && w.verification_artifact.length > 0) return [w.verification_artifact];
+  return w.files_in_scope;
+}
+
+export type ValidateOptions = {
+  /** WI-ids known to exist in the same initiative; depends_on entries must resolve here. */
+  knownWorkItemIds?: ReadonlySet<string>;
+  /** Initiative ID this WI is expected to belong to; if set, mismatch is an error. */
+  expectedInitiativeId?: string;
+};
+
+const SHELL_HEADS = new Set(['sh', 'bash', 'zsh', 'dash', '/bin/sh', '/bin/bash', '/usr/bin/env']);
+
+/**
+ * True when a `quality_gate_cmd` wraps a shell pipeline or command chain — the
+ * masking anti-pattern (re-review #4, 2026-06-04). The gate must be ONE runnable
+ * command whose exit code is the verdict; a `bash -c "go test … | grep …"`
+ * surfaces the pipe's status (not the runner's), and `… && …`/`… ; …` surface
+ * the wrong command's. Structural, not a tool denylist, because `rg`/`jq`/`wc`/
+ * `python` defeat a denylist. We only inspect EXPLICIT shell-wrapped gates
+ * (`bash -c "…"`); a plain argv like `["go","test","-run","A|B","./pkg/"]`
+ * carries the `|` as a literal regex arg, not a shell pipe, and is fine.
+ * Mirrors the project-gate metacharacter ban in cli/preflight.ts (clause n).
+ */
+export function gateIsShellPipeline(cmd: readonly string[]): boolean {
+  const head = cmd[0] ?? '';
+  const shellWrapped = SHELL_HEADS.has(head) && /^-[a-z]*c$/.test(cmd[1] ?? '');
+  if (!shellWrapped) return false;
+  const script = cmd.slice(2).join(' ');
+  return /(\|\||&&|;|\|)/.test(script);
+}
+
+export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): string[] {
+  const errors: string[] = [];
+
+  if (!w.work_item_id) {
+    errors.push('work_item_id is required');
+  } else if (!WORK_ITEM_ID_PATTERN.test(w.work_item_id)) {
+    errors.push(`work_item_id must match WI-<n> with an optional single-letter split suffix: got ${w.work_item_id}`);
+  }
+
+  if (!w.initiative_id) {
+    errors.push('initiative_id is required');
+  } else if (!INITIATIVE_ID_PATTERN.test(w.initiative_id)) {
+    errors.push(`initiative_id must match INIT-YYYY-MM-DD-<slug>: got ${w.initiative_id}`);
+  } else if (opts.expectedInitiativeId && w.initiative_id !== opts.expectedInitiativeId) {
+    errors.push(`initiative_id ${w.initiative_id} does not match expected ${opts.expectedInitiativeId}`);
+  }
+
+  if (!WORK_ITEM_STATUSES.includes(w.status)) {
+    errors.push(`status must be one of ${WORK_ITEM_STATUSES.join('|')}: got ${w.status}`);
+  }
+
+  for (const dep of w.depends_on) {
+    if (!WORK_ITEM_ID_PATTERN.test(dep)) {
+      errors.push(`depends_on entry malformed: ${dep}`);
+    } else if (dep === w.work_item_id) {
+      errors.push(`depends_on may not reference self: ${dep}`);
+    } else if (opts.knownWorkItemIds && !opts.knownWorkItemIds.has(dep)) {
+      errors.push(`depends_on references unknown work item: ${dep}`);
+    }
+  }
+
+  if (w.acceptance_criteria.length === 0) {
+    errors.push('acceptance_criteria must have at least one entry');
+  } else {
+    for (let i = 0; i < w.acceptance_criteria.length; i++) {
+      const c = w.acceptance_criteria[i]!;
+      if (!c.given.trim()) errors.push(`acceptance_criteria[${i}].given is empty`);
+      if (!c.when.trim()) errors.push(`acceptance_criteria[${i}].when is empty`);
+      if (!c.then.trim()) errors.push(`acceptance_criteria[${i}].then is empty`);
+    }
+  }
+
+  if (w.files_in_scope.length === 0) {
+    errors.push('files_in_scope must have at least one entry');
+  } else {
+    for (const f of w.files_in_scope) {
+      if (!f.trim()) {
+        errors.push('files_in_scope entry is empty');
+      } else if (f.startsWith('/')) {
+        errors.push(`files_in_scope entry must be worktree-relative (no leading /): ${f}`);
+      } else if (f.split('/').includes('..')) {
+        errors.push(`files_in_scope entry may not contain '..': ${f}`);
+      }
+    }
+  }
+
+  if (!(w.estimated_iterations > 0)) {
+    errors.push(`estimated_iterations must be > 0: got ${w.estimated_iterations}`);
+  }
+
+  // 2026-05-24 (claude-harness cycle 1 audit): quality_gate_cmd is now
+  // REQUIRED. The previous "fall back to project default `npm test`"
+  // produced hollow gates — a WI could mark complete without exercising
+  // its acceptance criteria because the project's baseline test passed
+  // regardless. Forcing per-WI gates pushes the bug back to PM-quality
+  // (where it belongs) instead of letting it propagate to a unifier-
+  // wedge or a partially-landed PR. PM must write a gate that EXERCISES
+  // the WI's ACs — see skills/project-manager/SKILL.md.
+  if (!Array.isArray(w.quality_gate_cmd) || w.quality_gate_cmd.length === 0) {
+    errors.push(
+      'quality_gate_cmd is required: must be a non-empty array of strings whose execution exercises this WI\'s acceptance_criteria (must FAIL on a clean tree before the agent does any work — otherwise the gate is hollow)',
+    );
+  } else if (!w.quality_gate_cmd.every((s) => typeof s === 'string' && s.length > 0)) {
+    errors.push('quality_gate_cmd entries must be non-empty strings');
+  } else if (gateIsShellPipeline(w.quality_gate_cmd)) {
+    // 2026-06-04 (re-review #4, supersedes the release_folder band-aid): the
+    // gate must be the test runner's own EXIT CODE — ONE runnable command. A
+    // shell-wrapped pipeline (`bash -c "go test … | grep …"`) or chain
+    // (`… && …`, `… ; …`) masks the runner's exit code (you get the pipe's /
+    // last command's status, not the test verdict) and is fragile — a
+    // `grep '--- PASS:…'` pattern starts with `-`, is parsed as grep options,
+    // so the gate ALWAYS errors regardless of the tests (cost a whole cycle).
+    // Structural, not a tool denylist: `rg`/`jq`/`wc`/`python` defeat a
+    // denylist. Mirrors the project-gate ban in cli/preflight.ts (clause n).
+    errors.push(
+      'quality_gate_cmd must be ONE runnable command whose exit code is the verdict — NOT a shell pipeline or chain. Drop the `bash -c "… | grep/awk/… "` / `&&` / `;` wrapper and invoke the runner directly (e.g. `["go","test","-tags","all","-run","<Prefix>","<pkg>"]`); scope with the runner\'s own `-run`/path flags, never a post-filter.',
+    );
+  }
+  if (w.non_goals !== undefined) {
+    if (!Array.isArray(w.non_goals)) {
+      errors.push('non_goals must be an array of strings when set');
+    } else if (!w.non_goals.every((s) => typeof s === 'string' && s.length > 0)) {
+      errors.push('non_goals entries must be non-empty strings');
+    }
+  }
+  if (w.verification_artifact !== undefined) {
+    if (typeof w.verification_artifact !== 'string' || w.verification_artifact.length === 0) {
+      errors.push('verification_artifact must be a non-empty string when set');
+    } else if (!w.files_in_scope.includes(w.verification_artifact)) {
+      errors.push(
+        `verification_artifact ${w.verification_artifact} must appear in files_in_scope`,
+      );
+    }
+  }
+  if (w.domain !== undefined) {
+    if (typeof w.domain !== 'string' || w.domain.length === 0) {
+      errors.push('domain must be a non-empty string when set');
+    }
+  }
+  if (w.creates !== undefined) {
+    if (!Array.isArray(w.creates)) {
+      errors.push('creates must be an array of strings when set');
+    } else {
+      for (const path of w.creates) {
+        if (typeof path !== 'string' || path.length === 0) {
+          errors.push('creates entries must be non-empty strings');
+        } else if (!w.files_in_scope.includes(path)) {
+          errors.push(`creates entry ${path} must appear in files_in_scope`);
+        }
+      }
+    }
+  }
+  if (w.origin !== undefined && !FIX_WI_ORIGINS.includes(w.origin)) {
+    errors.push(`origin must be one of ${FIX_WI_ORIGINS.join(' | ')} when set: got ${String(w.origin)}`);
+  }
+
+  return errors;
+}
+
+/**
+ * Validate the whole set together — checks individual WIs plus cross-WI rules
+ * (no duplicate IDs, no dependency cycles).
+ */
+export function validateWorkItemSet(items: WorkItem[], opts: Omit<ValidateOptions, 'knownWorkItemIds'> = {}): {
+  perItem: Record<string, string[]>;
+  setErrors: string[];
+} {
+  const perItem: Record<string, string[]> = {};
+  const knownIds = new Set(items.map((i) => i.work_item_id).filter((id) => WORK_ITEM_ID_PATTERN.test(id)));
+  for (const item of items) {
+    perItem[item.work_item_id] = validateWorkItem(item, { ...opts, knownWorkItemIds: knownIds });
+  }
+
+  const setErrors: string[] = [];
+
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!item.work_item_id) continue;
+    if (seen.has(item.work_item_id)) {
+      setErrors.push(`duplicate work_item_id: ${item.work_item_id}`);
+    }
+    seen.add(item.work_item_id);
+  }
+
+  const cycle = detectCycle(items);
+  if (cycle) setErrors.push(`work-item dependency cycle: ${cycle.join(' → ')}`);
+
+  return { perItem, setErrors };
+}
+
+export function readWorkItemsFromDir(dir: string): {
+  items: WorkItem[];
+  parseErrors: Record<string, string>;
+} {
+  if (!existsSync(dir)) return { items: [], parseErrors: {} };
+
+  const items: WorkItem[] = [];
+  const parseErrors: Record<string, string> = {};
+  const files = readdirSync(dir)
+    // Skip ALL `_`-prefixed artifacts (_graph.md, _decomposition.md, etc.) — only
+    // WI-<n>.md files are work items. (Name-list skipping regressed when _coverage.md
+    // was renamed _decomposition.md; the prefix rule is future-proof.)
+    .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
+    .sort();
+
+  for (const file of files) {
+    const full = join(dir, file);
+    try {
+      items.push(parseWorkItem(readFileSync(full, 'utf8')));
+    } catch (err) {
+      parseErrors[file] = err instanceof Error ? err.message : String(err);
+    }
+  }
+  return { items, parseErrors };
+}
+
+export type WriteWorkItemOptions = {
+  /** `<worktree>/.forge/work-items/`. Created if missing. */
+  workItemsDir?: string;
+};
+
+export function writeWorkItem(w: WorkItem, worktreeDir: string, opts: WriteWorkItemOptions = {}): string {
+  const errors = validateWorkItem(w);
+  if (errors.length > 0) {
+    throw new Error(`invalid work item:\n  - ${errors.join('\n  - ')}`);
+  }
+  const dir = opts.workItemsDir ?? resolve(worktreeDir, '.forge', 'work-items');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const out = join(dir, `${w.work_item_id}.md`);
+  writeFileSync(out, serializeWorkItem(w));
+  return out;
+}
+
+/**
+ * Update the `status` field in an existing work-item file's YAML frontmatter,
+ * leaving every other field and the markdown body byte-identical (round-trip
+ * via gray-matter). Used by the developer-loop runner to mark each WI
+ * complete | failed after the Ralph loop returns.
+ */
+export function writeWorkItemStatus(specPath: string, status: WorkItemStatus): void {
+  if (!WORK_ITEM_STATUSES.includes(status)) {
+    throw new Error(`invalid status: ${status}`);
+  }
+  const w = parseWorkItem(readFileSync(specPath, 'utf8'));
+  const updated: WorkItem = { ...w, status };
+  writeFileSync(specPath, serializeWorkItem(updated));
+}
+
+/**
+ * Find pairs of work items that share a file in `files_in_scope` but are not
+ * connected by any directed dependency edge in either direction (transitively).
+ *
+ * Hidden coupling = merge-time conflict risk. PM's last-step self-check — see
+ * the "Hidden dependencies" failure mode in docs/phases/project-manager.md.
+ * Drives the `no_hidden_file_coupling` benchmark criterion.
+ *
+ * Reachability is checked in both directions because a `depends_on` edge
+ * serialises the two items (the dependent runs after the prerequisite), which
+ * is enough to avoid concurrent edits to the shared file. We only flag pairs
+ * that are mutually unreachable.
+ */
+export type CouplingPair = { a: string; b: string; sharedFiles: string[] };
+
+export function detectHiddenCoupling(items: WorkItem[]): CouplingPair[] {
+  const fileToItems = new Map<string, string[]>();
+  for (const item of items) {
+    for (const file of item.files_in_scope) {
+      const list = fileToItems.get(file) ?? [];
+      list.push(item.work_item_id);
+      fileToItems.set(file, list);
+    }
+  }
+
+  const adj = new Map<string, string[]>();
+  const reverseAdj = new Map<string, string[]>();
+  for (const item of items) {
+    adj.set(item.work_item_id, item.depends_on.slice());
+    for (const dep of item.depends_on) {
+      const list = reverseAdj.get(dep) ?? [];
+      list.push(item.work_item_id);
+      reverseAdj.set(dep, list);
+    }
+  }
+  for (const item of items) {
+    if (!reverseAdj.has(item.work_item_id)) reverseAdj.set(item.work_item_id, []);
+  }
+
+  function reachable(from: string, to: string, graph: Map<string, string[]>): boolean {
+    if (from === to) return true;
+    const stack = [from];
+    const seen = new Set<string>([from]);
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      for (const next of graph.get(cur) ?? []) {
+        if (next === to) return true;
+        if (!seen.has(next)) {
+          seen.add(next);
+          stack.push(next);
+        }
+      }
+    }
+    return false;
+  }
+
+  const pairs = new Map<string, CouplingPair>();
+  for (const [file, ids] of fileToItems.entries()) {
+    if (ids.length < 2) continue;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = ids[i]!;
+        const b = ids[j]!;
+        const connected =
+          reachable(a, b, adj) ||
+          reachable(b, a, adj) ||
+          reachable(a, b, reverseAdj) ||
+          reachable(b, a, reverseAdj);
+        if (connected) continue;
+        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+        const existing = pairs.get(key);
+        if (existing) {
+          if (!existing.sharedFiles.includes(file)) existing.sharedFiles.push(file);
+        } else {
+          pairs.set(key, { a: a < b ? a : b, b: a < b ? b : a, sharedFiles: [file] });
+        }
+      }
+    }
+  }
+  return [...pairs.values()];
+}
+
+/**
+ * Return work items in dependency order: every WI's prerequisites appear
+ * before it. Items with `depends_on` references that don't resolve in `items`
+ * are treated as roots (orphan dependency = upstream-validation responsibility).
+ * Throws if a cycle is present — callers should run `validateWorkItemSet`
+ * first if they want a structured error.
+ */
+export function topologicalOrder(items: WorkItem[]): WorkItem[] {
+  const cycle = detectCycle(items);
+  if (cycle) {
+    throw new Error(`cannot topo-sort: dependency cycle ${cycle.join(' → ')}`);
+  }
+  const byId = new Map(items.map((i) => [i.work_item_id, i] as const));
+  const indegree = new Map<string, number>();
+  for (const item of items) indegree.set(item.work_item_id, 0);
+  for (const item of items) {
+    for (const dep of item.depends_on) {
+      if (byId.has(dep)) {
+        indegree.set(item.work_item_id, (indegree.get(item.work_item_id) ?? 0) + 1);
+      }
+    }
+  }
+  const ready = items
+    .filter((i) => (indegree.get(i.work_item_id) ?? 0) === 0)
+    .map((i) => i.work_item_id)
+    .sort();
+  const out: WorkItem[] = [];
+  while (ready.length > 0) {
+    const id = ready.shift()!;
+    const item = byId.get(id);
+    if (!item) continue;
+    out.push(item);
+    for (const other of items) {
+      if (other.depends_on.includes(id)) {
+        const next = (indegree.get(other.work_item_id) ?? 0) - 1;
+        indegree.set(other.work_item_id, next);
+        if (next === 0) {
+          insertSorted(ready, other.work_item_id);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function insertSorted(list: string[], value: string): void {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid]! < value) lo = mid + 1;
+    else hi = mid;
+  }
+  list.splice(lo, 0, value);
+}
+
+// ---------- helpers ----------
+
+function stringField(data: Record<string, unknown>, key: string, required: boolean): string {
+  const v = data[key];
+  if (typeof v === 'string') return v;
+  if (v instanceof Date) return v.toISOString();
+  if (required) throw new Error(`work item missing required field: ${key}`);
+  return '';
+}
+
+function numberField(data: Record<string, unknown>, key: string, required: boolean): number | null {
+  const v = data[key];
+  if (typeof v === 'number') return v;
+  if (required) throw new Error(`work item missing required numeric field: ${key}`);
+  return null;
+}
+
+function parseStringArray(data: Record<string, unknown>, key: string): string[] {
+  const v = data[key];
+  if (!Array.isArray(v)) return [];
+  return (v as unknown[]).filter((x): x is string => typeof x === 'string');
+}
+
+function parseAcceptanceCriteria(data: Record<string, unknown>): AcceptanceCriterion[] {
+  const v = data['acceptance_criteria'];
+  if (!Array.isArray(v)) return [];
+  const out: AcceptanceCriterion[] = [];
+  for (const entry of v) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const obj = entry as Record<string, unknown>;
+    out.push({
+      given: typeof obj.given === 'string' ? obj.given : '',
+      when: typeof obj.when === 'string' ? obj.when : '',
+      then: typeof obj.then === 'string' ? obj.then : '',
+    });
+  }
+  return out;
+}
+
+/** DFS three-color cycle detection across work items. */
+function detectCycle(items: WorkItem[]): string[] | null {
+  const adj = new Map<string, string[]>();
+  for (const item of items) adj.set(item.work_item_id, item.depends_on);
+
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const id of adj.keys()) color.set(id, WHITE);
+
+  const stack: string[] = [];
+  function visit(id: string): string[] | null {
+    color.set(id, GRAY);
+    stack.push(id);
+    for (const dep of adj.get(id) ?? []) {
+      const c = color.get(dep);
+      if (c === undefined) continue;
+      if (c === GRAY) return [...stack.slice(stack.indexOf(dep)), dep];
+      if (c === WHITE) {
+        const found = visit(dep);
+        if (found) return found;
+      }
+    }
+    stack.pop();
+    color.set(id, BLACK);
+    return null;
+  }
+
+  for (const id of adj.keys()) {
+    if (color.get(id) === WHITE) {
+      const found = visit(id);
+      if (found) return found;
+    }
+  }
+  return null;
+}

@@ -57,10 +57,10 @@ Named the campaign's recurring TOP finding and logged as a brain gap twelve time
 
 ## Sources
 
-- [`orchestrator/flow-trigger.ts`](../../../orchestrator/flow-trigger.ts) — the trigger producer; carries `projects` onto the staged request since R2-08.
+- [`orchestrator/flow-trigger.ts`](../../../packages/flows/flow-trigger.ts) — the trigger producer; carries `projects` onto the staged request since R2-08.
 - [`apps/studio/lib/studio-client.ts`](../../../apps/studio/lib/studio-client.ts) — `parseRun`, the last client hop where `trigger` and `reflectionLost` were dropped.
 - [`apps/studio/lib/agent-ledger.ts`](../../../apps/studio/lib/agent-ledger.ts) — the R6-06 row validator and `deriveAgentLedgerRows`.
-- [`cli/bridge-studio-sessions.ts`](../../../cli/bridge-studio-sessions.ts) — the documented session-dir guard its siblings did not call.
+- [`cli/bridge-studio-sessions.ts`](../../../packages/sessions/bridge-studio-sessions.ts) — the documented session-dir guard its siblings did not call.
 - `_wave5/ledger.md` (gitignored campaign state) — all `L…` citations above; batch C is the region after `# ============ BATCH C ============`.
 
 ## See also

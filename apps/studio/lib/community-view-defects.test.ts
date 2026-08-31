@@ -147,7 +147,7 @@ test('parseCommunityItem REFUSES a payload whose "category" key is ABSENT — th
 // and `toWireItemSafe`'s degraded arm is the one an item's derivation failure
 // actually goes through.
 test('E11 (server): CommunityItemWire declares category, and BOTH wire builders populate it', () => {
-  const src = readFileSync(resolve(__dirname, '../../../cli/bridge-studio-community.ts'), 'utf8');
+  const src = readFileSync(resolve(__dirname, '../../../packages/library/bridge-studio-community.ts'), 'utf8');
   const wireType = src.slice(src.indexOf('type CommunityItemWire = {'), src.indexOf('type WireCtx'));
   expect(wireType).toMatch(/category:\s*string \| null;/);
   // toWireItem — the real projection, sourced from the registry row itself.

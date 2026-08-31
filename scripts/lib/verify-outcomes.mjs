@@ -42,7 +42,7 @@
  * stripping loads the `.ts` file directly, no build step needed.
  */
 
-import { sumAuthoritativeCostUsd } from '../../orchestrator/event-cost.ts';
+import { sumAuthoritativeCostUsd } from '@forge/kernel';
 
 /** The harness's default verify ground — an independent repo, never `mdtoc`
  *  (which is committed inside forge's own repo). */

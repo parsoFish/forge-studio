@@ -52,7 +52,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge, writeOnboardingSession } from './ui-bridge.ts';
-import { cmdAgentDispatch } from './agent-run.ts';
+import { cmdAgentDispatch } from '@forge/agents/agent-run.ts';
 import { SAFE_ID_RE } from './bridge-studio.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };

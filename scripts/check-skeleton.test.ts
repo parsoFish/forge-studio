@@ -55,7 +55,8 @@ test('every unit declares the ONE entry point the allow-graph is drawn against',
   for (const u of units) {
     const pkg = json(join(ROOT, u.dir, 'package.json'));
     assert.equal(pkg.name, u.name, `${u.dir}: package name`);
-    assert.deepEqual(pkg.exports, { '.': './index.ts' }, `${u.dir}: exports must be exactly the single root entry`);
+    assert.equal(pkg.exports?.['.'], './index.ts', `${u.dir}: the root entry the allow-graph is drawn against must be ./index.ts`);
+    assert.equal(pkg.exports?.['./*'], './*', `${u.dir}: the additive subpath export must be present (ADR 046, amended 2026-08-31)`);
     assert.equal(pkg.private, true, `${u.dir}: nothing here is published`);
   }
 });
@@ -122,7 +123,7 @@ test('the root suite runs the packages\' tests — a package tsc sees but node -
   const root = json(join(ROOT, 'package.json')) as { scripts?: Record<string, string> };
   const script = root.scripts?.test ?? '';
   assert.ok(script.includes('packages/*/*.test.ts'), 'root `npm test` must glob packages/*/*.test.ts');
-  assert.ok(script.includes('apps/*/*.test.ts'), 'root `npm test` must glob apps/*/*.test.ts');
+  assert.ok(script.includes('apps/forge/*.test.ts'), 'root `npm test` must glob apps/forge/*.test.ts');
 });
 
 test('apps/studio is the moved forge-ui — present, a workspace, and still named forge-ui', () => {

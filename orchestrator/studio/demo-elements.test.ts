@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { listDemoElements, loadDemoElement } from './registry.ts';
-import { DEMO_STEP_KINDS } from './types.ts';
+import { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 

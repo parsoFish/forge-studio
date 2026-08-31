@@ -46,7 +46,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { readHookApprovalLedger } from '../orchestrator/studio/hook-scan.ts';
+import { readHookApprovalLedger } from '@forge/library/studio/hook-scan.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -107,7 +107,7 @@ test('it inspects a real dependency graph, not an empty one', () => {
 
 test('it FAILS on a NEW studio → legacy import (the defect it exists for)', () => {
   const victim = join(ROOT, 'apps/studio/lib/__boundary_probe__.ts');
-  writeFileSync(victim, "import { MAX_KICKOFF_COST_CEILING_USD } from '../../../orchestrator/config.ts';\nexport const probe = MAX_KICKOFF_COST_CEILING_USD;\n");
+  writeFileSync(victim, "import { flowRunnerVersion } from '../../../orchestrator/flow-runner.ts';\nexport const probe = flowRunnerVersion;\n");
   try {
     const { code, out } = run();
     assert.equal(code, 1, `a new apps/studio -> orchestrator import must fail — got exit 0:\n${out}`);

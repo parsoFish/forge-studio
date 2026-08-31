@@ -59,7 +59,7 @@ export async function probeHealthyBridge(bridgeUrl) {
 export function spawnStudioReady({ env = {}, fullEnv, timeoutMs = 300_000, log = () => {}, onSpawn } = {}) {
   return new Promise((res, rej) => {
     const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
+      ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],
       { cwd: FORGE_ROOT, env: fullEnv ?? { ...process.env, ...env },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     onSpawn?.(proc);

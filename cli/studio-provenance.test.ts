@@ -51,7 +51,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { loadKbDescriptor, serializeKbDescriptor } from '../orchestrator/studio/kb-descriptor.ts';
+import { loadKbDescriptor, serializeKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (mirrors cli/bridge-studio.test.ts / cli/bridge-studio-kbs.test.ts)
@@ -334,11 +334,11 @@ test('AT-3b: cli/bridge-studio.ts derives provenance via the shared provenanceOf
 });
 
 test('AT-3c: cli/bridge-studio-kbs.ts derives provenance via the shared provenanceOfOrigin — no local copy of the mapping', () => {
-  const src = readFileSync(join(process.cwd(), 'cli', 'bridge-studio-kbs.ts'), 'utf8');
+  const src = readFileSync(join(process.cwd(), 'packages', 'knowledge', 'bridge-studio-kbs.ts'), 'utf8');
   assert.match(
     src,
-    /from ['"]\.\/studio-provenance\.ts['"]/,
-    'bridge-studio-kbs.ts must import the shared mapping from ./studio-provenance.ts (RED at base: not yet wired)',
+    /from ['"]\.\.\/\.\.\/cli\/studio-provenance\.ts['"]/,
+    'bridge-studio-kbs.ts must import the shared mapping from cli/studio-provenance.ts (RED at base: not yet wired)',
   );
   assert.doesNotMatch(
     src,
@@ -601,7 +601,7 @@ function extractFunctionBodyForCallSiteCheck(src: string, fnName: string, fileLa
 }
 
 test('AT-10: cli/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( call site, and it lives inside loadKbDescriptors — so no route built over the loader can forget the field', () => {
-  const filePath = join(process.cwd(), 'cli', 'bridge-studio-kbs.ts');
+  const filePath = join(process.cwd(), 'packages', 'knowledge', 'bridge-studio-kbs.ts');
   const src = stripCommentsForCallSiteCheck(readFileSync(filePath, 'utf8'));
 
   const callSites = src.match(/\bprovenanceOfOrigin\s*\(/g) ?? [];
@@ -611,7 +611,7 @@ test('AT-10: cli/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( c
     `expected exactly ONE provenanceOfOrigin( call site in cli/bridge-studio-kbs.ts (the single attachment point every route inherits), found ${callSites.length}`,
   );
 
-  const loaderBody = extractFunctionBodyForCallSiteCheck(src, 'loadKbDescriptors', 'cli/bridge-studio-kbs.ts');
+  const loaderBody = extractFunctionBodyForCallSiteCheck(src, 'loadKbDescriptors', 'packages/knowledge/bridge-studio-kbs.ts');
   assert.ok(
     /\bprovenanceOfOrigin\s*\(/.test(loaderBody),
     'provenanceOfOrigin( must be called INSIDE loadKbDescriptors — a call site anywhere else (e.g. only in the list route handler) means every OTHER caller of loadKbDescriptors (detail, resolve-node, delete, guidance) silently misses the field',

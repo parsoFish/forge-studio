@@ -16,9 +16,9 @@
  *   3. The literal strings `reflector-ingest` / `DEFAULT_KB_INGEST` appear
  *      ONLY in the three files where they are legitimate today: the
  *      descriptor-default definition/re-export
- *      (orchestrator/studio/kb-descriptor.ts, orchestrator/studio/
+ *      (packages/knowledge/studio/kb-descriptor.ts, orchestrator/studio/
  *      registry.ts) and the reflection-path builtin invocation
- *      (orchestrator/kb-health.ts) — never in a dispatch arm or a UI
+ *      (packages/knowledge/kb-health.ts) — never in a dispatch arm or a UI
  *      action.
  *
  * GREEN-AT-BIRTH, DISCLOSED: all three checks currently PASS against the
@@ -56,9 +56,9 @@ const BRIDGE_SCAN_DIRS = ['cli'];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
 // the descriptor default (+ its re-export) and the reflection builtin.
 const ALLOWED_INGEST_FILES = new Set([
-  'orchestrator/studio/kb-descriptor.ts',
+  'packages/knowledge/studio/kb-descriptor.ts',
   'orchestrator/studio/registry.ts',
-  'orchestrator/kb-health.ts',
+  'packages/knowledge/kb-health.ts',
 ]);
 
 function isTestFile(p: string): boolean {
@@ -169,7 +169,7 @@ function makeCleanFixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'kb-ingest-ratchet-'));
   mkdirSync(join(root, 'apps/studio/app/knowledge'), { recursive: true });
   mkdirSync(join(root, 'cli'), { recursive: true });
-  mkdirSync(join(root, 'orchestrator/studio'), { recursive: true });
+  mkdirSync(join(root, 'packages/knowledge/studio'), { recursive: true });
   writeFileSync(
     join(root, 'apps/studio/app/knowledge/page.tsx'),
     [
@@ -195,7 +195,7 @@ function makeCleanFixture(): string {
     ].join('\n'),
   );
   writeFileSync(
-    join(root, 'orchestrator/studio/kb-descriptor.ts'),
+    join(root, 'packages/knowledge/studio/kb-descriptor.ts'),
     "export const DEFAULT_KB_INGEST = { builtin: 'reflector-ingest' };\n",
   );
   return root;
@@ -300,7 +300,7 @@ test('sanity: an unmodified clean fixture stays violation-free (the checker does
 // =============================================================================
 
 test('precondition: the allowed-files allowlist is not vacuous — the real descriptor file DOES reference DEFAULT_KB_INGEST/reflector-ingest', () => {
-  const descriptorPath = join(FORGE_ROOT, 'orchestrator/studio/kb-descriptor.ts');
+  const descriptorPath = join(FORGE_ROOT, 'packages/knowledge/studio/kb-descriptor.ts');
   const text = readFileSync(descriptorPath, 'utf8');
   assert.ok(text.includes('DEFAULT_KB_INGEST'), 'fixture-precondition: real kb-descriptor.ts must still define DEFAULT_KB_INGEST');
   assert.ok(text.includes('reflector-ingest'), 'fixture-precondition: real kb-descriptor.ts must still name the reflector-ingest builtin');

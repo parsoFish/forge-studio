@@ -44,7 +44,7 @@ UI_PORT=4124
 # Relative to the checkout root. TWO segments since the M2 move; the walk
 # below strips the whole suffix rather than one basename because of it.
 UI_DIR_REL=apps/studio
-CLI_ENTRY=orchestrator/cli.ts
+CLI_ENTRY=apps/forge/cli.ts
 BIN_ENTRY=bin/forge.mjs
 STUDIO_SUBCOMMAND=studio
 # `next` overwrites its own argv with this title in startServer(), for

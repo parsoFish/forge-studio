@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioRoutes } from './bridge-studio.ts';
-import { _resetRunListCacheForTest } from './run-list-cache.ts';
+import { _resetRunListCacheForTest } from '@forge/flows/run-list-cache.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

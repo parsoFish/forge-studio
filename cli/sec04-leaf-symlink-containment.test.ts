@@ -59,8 +59,8 @@ import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
-import type { QueryFn } from '../orchestrator/interactive-session.ts';
+import { runInstructionsTurn } from '@forge/sessions/instructions-runner.ts';
+import type { QueryFn } from '@forge/sessions/interactive-session.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -51,12 +51,12 @@ import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 
 import { normalizeProjectId } from './studio/registry.ts';
-import { stageFlowRunRequest, drainFlowRunRequests, type FlowRunRequest } from './flow-run-requests.ts';
+import { stageFlowRunRequest, drainFlowRunRequests, type FlowRunRequest } from '@forge/flows/flow-run-requests.ts';
 
 type Resolver = (forgeRoot: string, repo: string) => string | null;
 
 async function loadResolver(): Promise<Resolver | undefined> {
-  const mod = (await import('./project-config.ts')) as unknown as Record<string, unknown>;
+  const mod = (await import('@forge/projects/project-config.ts')) as unknown as Record<string, unknown>;
   return mod['resolveProjectIdForRepo'] as Resolver | undefined;
 }
 

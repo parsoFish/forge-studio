@@ -14,9 +14,9 @@
  *      `op === 'ingest'` / `case 'ingest'` dispatch arm.
  *   3. The literal strings `reflector-ingest` / `DEFAULT_KB_INGEST` appear
  *      ONLY in the descriptor-default definition/re-export
- *      (orchestrator/studio/kb-descriptor.ts, orchestrator/studio/
+ *      (packages/knowledge/studio/kb-descriptor.ts, orchestrator/studio/
  *      registry.ts) and the reflection-path builtin invocation
- *      (orchestrator/kb-health.ts) — never in a dispatch arm or a UI
+ *      (packages/knowledge/kb-health.ts) — never in a dispatch arm or a UI
  *      action.
  *   4. No `skills/*\/SKILL.md`'s `composition.skills` names `brain-ingest`,
  *      EXCEPT `skills/reflector/SKILL.md` — the ONE place ingest is
@@ -68,9 +68,9 @@ const BRIDGE_SCAN_DIRS = ['cli'];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
 // the descriptor default (+ its re-export) and the reflection builtin.
 export const ALLOWED_INGEST_FILES = new Set([
-  'orchestrator/studio/kb-descriptor.ts',
+  'packages/knowledge/studio/kb-descriptor.ts',
   'orchestrator/studio/registry.ts',
-  'orchestrator/kb-health.ts',
+  'packages/knowledge/kb-health.ts',
 ]);
 // Top-level dir of runtime-agent SKILL.md files (rule 4 below).
 const SKILLS_DIR = 'skills';

@@ -129,7 +129,7 @@ test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', (
   // silently re-open the UI/server disagreement about a flowless manifest that
   // round 1's S3-8 closed — the UI would offer a confirmation to move an
   // initiative off a flow the server does not think it is on.
-  const src = readFileSync(resolve(__dirname, '..', '..', '..', 'orchestrator', 'run-model.ts'), 'utf8');
+  const src = readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'flows', 'run-model.ts'), 'utf8');
   const match = /const FALLBACK_FLOW_ID = '([^']+)'/.exec(src);
   expect(match, 'FALLBACK_FLOW_ID must still be declared in orchestrator/run-model.ts').not.toBeNull();
   expect(NO_FLOW_SENTINEL).toBe(match![1]);

@@ -38,15 +38,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 
-import { parseManifest } from './manifest.ts';
-import { getPaths } from './queue.ts';
-import { createLogger } from './logging.ts';
+import { parseManifest } from '@forge/flows/manifest.ts';
+import { getPaths } from '@forge/flows/queue.ts';
+import { createLogger } from '@forge/kernel';
 import { loadAgentDefinition } from './studio/registry.ts';
-import { skillPath } from './skill-path.ts';
-import { resolveBandGuard } from './agent-bands.ts';
-import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './phases/demo-agent.ts';
-import { runAdversarialReview, type AdversarialReviewResult } from './phases/adversarial-review.ts';
-import type { StreamQueryFn } from './pinned-sdk-query.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { runDemoAgentPipeline, type DemoAgentPipelineResult } from '@forge/factory/phases/demo-agent.ts';
+import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
+import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
 /** The two band-guard slugs runnable standalone here → their pipeline kind. */
 const STANDALONE_BAND_SLUGS: Record<string, 'demo' | 'review'> = {

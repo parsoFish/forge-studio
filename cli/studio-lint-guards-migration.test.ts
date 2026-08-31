@@ -94,8 +94,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
-import { lintHookComposition } from '../orchestrator/studio/hook-library.ts';
-import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
+import { lintHookComposition } from '@forge/library/studio/hook-library.ts';
+import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
 import { runStudioLint } from './studio-lint.ts';
 
 const LEGACY_SLUG = 'legacy-hooks-fixture';

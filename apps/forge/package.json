@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The CLI router and bridge host: origin/CSRF/JSON envelope, WS, health, daemon wiring. Hard cap 800 lines.",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./*": "./*"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

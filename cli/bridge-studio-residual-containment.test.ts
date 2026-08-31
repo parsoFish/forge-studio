@@ -47,7 +47,7 @@ import { tmpdir } from 'node:os';
 import { connect } from 'node:net';
 
 import { startBridge } from './ui-bridge.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -1,0 +1,739 @@
+/**
+ * `forge studio` (canonical) / `forge watch` (deprecated alias) — the
+ * foreground launcher that brings up the operator UI (ADR-031, M7-6).
+ *
+ * Spawns two children:
+ *   1. The forge-ui bridge (cli/ui-bridge.ts) — WebSocket + HTTP API.
+ *   2. The forge-ui Next.js server (forge-ui workspace) — the browser.
+ *      Default (W6-P3): a production build (`next build`, once — skipped when
+ *      the existing `.next/` output is already fresh, see {@link isBuildFresh})
+ *      followed by `next start`. `--dev` keeps the previous `next dev` path
+ *      (webpack dev server, StrictMode double-effects) for fast UI-code
+ *      iteration. Only one UI child is ever active at a time: a production
+ *      build (when run) completes before `next start` spawns.
+ *
+ * Readiness is DETERMINISTIC, not stdout-scraped: the launcher awaits the
+ * bridge's bound-port promise, then polls the bridge `GET /api/health` until
+ * 200, then polls the UI port `GET http://localhost:<uiPort>/` until it
+ * responds, and ONLY THEN opens the browser and emits a single machine-
+ * readable ready signal — both a `forge-studio-ready {json}` stdout line and
+ * (when `--ready-file <path>` is passed) an atomically-written JSON file. No
+ * dependency on Next.js's "Ready in" log wording.
+ *
+ * On SIGINT (Ctrl-C) it tears both children down and exits 0 — including
+ * during a production build, which can run long on a cold cache.
+ */
+
+import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { existsSync, writeFileSync, renameSync, readdirSync, statSync, readFileSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { startBridge } from '../../cli/ui-bridge.ts';
+
+/** The deterministic ready signal forge studio emits on stdout once both the
+ *  bridge and the UI have answered a health probe. Consumers grep for this
+ *  prefix instead of scraping Next.js log wording. */
+export const READY_SIGNAL_PREFIX = 'forge-studio-ready';
+
+export type ReadyInfo = { bridgeUrl: string; uiUrl: string };
+
+/** Format the single-line stdout ready signal. Pure — unit-tested. */
+export function formatReadySignal(info: ReadyInfo): string {
+  return `${READY_SIGNAL_PREFIX} ${JSON.stringify(info)}`;
+}
+
+/** Parse a stdout line into the ready info, or null if it is not the signal.
+ *  Pure — unit-tested. Tolerant of leading/trailing whitespace so a line
+ *  arriving mid-chunk still matches once isolated. */
+export function parseReadySignal(line: string): ReadyInfo | null {
+  const m = line.trim().match(new RegExp(`^${READY_SIGNAL_PREFIX} (.+)$`));
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]) as Partial<ReadyInfo>;
+    if (typeof parsed.bridgeUrl === 'string' && typeof parsed.uiUrl === 'string') {
+      return { bridgeUrl: parsed.bridgeUrl, uiUrl: parsed.uiUrl };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Atomically write the ready info to a file (write to `.tmp`, then rename) so
+ *  a file-watching consumer never observes partial JSON. */
+export function writeReadyFile(path: string, info: ReadyInfo): void {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(info));
+  renameSync(tmp, path);
+}
+
+/** True when `raw` parses to a valid TCP port (integer 1-65535). Pure — used
+ *  by the CLI's `--bridge-port`/`--ui-port` flag guard so a missing value
+ *  (`--bridge-port --no-open` → `Number('--no-open')` = NaN) or out-of-range
+ *  number is rejected before it ever reaches a bind/takeover. Unit-tested. */
+export function isValidPort(raw: string | undefined): raw is string {
+  if (raw === undefined || raw.startsWith('-')) return false;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 65535;
+}
+
+// ---------------------------------------------------------------------------
+// Production-build freshness (W6-P3): decide whether the existing forge-ui
+// `.next/` output is fresh enough to skip a `next build` before `next start`.
+// ---------------------------------------------------------------------------
+
+/** Source roots (relative to `apps/studio/`) scanned for the freshness check —
+ *  everything a `next build` output actually depends on. `public/` is a next
+ *  build input too (static assets copied into the output) — review finding
+ *  #3, its omission was a completeness bug against this comment's own claim. */
+const BUILD_FRESHNESS_SOURCE_DIRS = ['app', 'components', 'lib', 'public'];
+/** Individual source files (relative to `apps/studio/`) included alongside the
+ *  directories above — config/manifest changes also invalidate a build.
+ *  `tsconfig.json` added per review finding #3 (compiler options feed the
+ *  build; a `strict`/`paths`/target change must trigger a rebuild too). */
+const BUILD_FRESHNESS_SOURCE_FILES = ['package.json', 'next.config.mjs', 'tsconfig.json'];
+
+/** Recursively find the newest mtime (ms) among all files reachable from
+ *  `paths` (files are included directly; directories are walked). A path
+ *  that doesn't exist is skipped rather than thrown on, so a workspace
+ *  missing one of the optional source dirs (e.g. no `lib/` yet) still works.
+ *  Returns `-Infinity` when nothing exists — treated as "no known source",
+ *  which never wins against a real build stamp in {@link isBuildFresh}. */
+function newestMtimeMs(paths: string[]): number {
+  let newest = -Infinity;
+  const stack = [...paths];
+  while (stack.length > 0) {
+    const p = stack.pop() as string;
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue; // doesn't exist — skip
+    }
+    if (st.isDirectory()) {
+      for (const entry of readdirSync(p)) stack.push(resolve(p, entry));
+    } else if (st.mtimeMs > newest) {
+      newest = st.mtimeMs;
+    }
+  }
+  return newest;
+}
+
+/** Scan the forge-ui workspace for the newest mtime across the directories/
+ *  files that feed a `next build` (see {@link BUILD_FRESHNESS_SOURCE_DIRS}/
+ *  {@link BUILD_FRESHNESS_SOURCE_FILES}). Impure (real filesystem) — kept
+ *  separate from the pure decision in {@link isBuildFresh} so that one is
+ *  unit-tested with synthetic timestamps and this one only needs a smoke
+ *  test against a real directory tree. */
+export function scanNewestSourceMtime(uiDir: string): number {
+  const paths = [
+    ...BUILD_FRESHNESS_SOURCE_DIRS.map((d) => resolve(uiDir, d)),
+    ...BUILD_FRESHNESS_SOURCE_FILES.map((f) => resolve(uiDir, f)),
+  ];
+  return newestMtimeMs(paths);
+}
+
+/**
+ * Forge's OWN build-completion stamp — deliberately NOT `.next/BUILD_ID`
+ * (review finding #1, round 2). `next build` writes `BUILD_ID` roughly
+ * two-thirds through its own pipeline, BEFORE static generation/export
+ * finishes; a build that fails LATE (e.g. during "Generating static pages")
+ * still leaves a freshly-stamped `BUILD_ID` sitting over broken/incomplete
+ * output — the next `forge studio` run would read that as fresh, skip the
+ * rebuild, and silently serve the broken build. This stamp is written by
+ * forge ITSELF (see {@link writeBuildStamp}), only once the build child
+ * process has actually exited 0, so its mere existence is proof the MOST
+ * RECENT build attempt against this `.next/` output completed successfully —
+ * not just that some earlier one once did (the other half of that property
+ * is {@link clearBuildStamp}, called before every build attempt starts).
+ *
+ * Its CONTENT — not its own OS mtime — is the newest-source-mtime that was
+ * scanned immediately before that successful build started. Comparing that
+ * recorded value against a fresh scan (rather than comparing two file
+ * mtimes) sidesteps filesystem-clock skew between the stat call and the
+ * write call.
+ */
+const FORGE_BUILD_STAMP_NAME = 'FORGE_BUILD_OK';
+
+function forgeBuildStampPath(uiDir: string): string {
+  return resolve(uiDir, '.next', FORGE_BUILD_STAMP_NAME);
+}
+
+/** Read the source-mtime forge's own build stamp was proven against, or null
+ *  when no build has ever successfully completed: a fresh checkout, a build
+ *  that failed or was interrupted after {@link clearBuildStamp} ran but
+ *  before {@link writeBuildStamp} did, or a `.next/` populated only by
+ *  `next dev` (which never writes this file). */
+export function readBuildStampMs(uiDir: string): number | null {
+  try {
+    const raw = readFileSync(forgeBuildStampPath(uiDir), 'utf8').trim();
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete any existing build stamp. MUST be called before a build attempt
+ * starts (see {@link runWatch}'s production path) — it is the other half of
+ * the "stamp only on proven success" property: if THIS attempt fails or is
+ * interrupted partway, no stamp survives to convince a later run this
+ * (possibly broken) `.next/` output is trustworthy, even when the source
+ * tree hasn't changed since the LAST successful build. Safe to call when no
+ * stamp exists (a missing file is treated as already-cleared, not an error).
+ */
+export function clearBuildStamp(uiDir: string): void {
+  try { rmSync(forgeBuildStampPath(uiDir)); } catch { /* absent — fine */ }
+}
+
+/**
+ * Write forge's build-completion stamp. Call ONLY after the build child
+ * process has exited 0 (see {@link runWatch}). `newestSourceMs` is the
+ * source scan taken immediately BEFORE the build was spawned — the source
+ * state that build's output actually corresponds to. A source file edited
+ * WHILE the build ran is deliberately NOT covered by this stamp: a later
+ * freshness check's fresh scan will see that edit's mtime and correctly
+ * report stale.
+ */
+export function writeBuildStamp(uiDir: string, newestSourceMs: number): void {
+  writeFileSync(forgeBuildStampPath(uiDir), String(newestSourceMs));
+}
+
+/**
+ * Pure freshness decision: is the recorded build-stamp source-mtime newer
+ * than (or equal to) every currently scanned source file? Unit-tested
+ * directly with synthetic timestamps — no filesystem involved.
+ * `buildStampMs === null` (no proven-successful prior build) is always
+ * stale.
+ */
+export function isBuildFresh(buildStampMs: number | null, newestSourceMs: number): boolean {
+  return buildStampMs !== null && buildStampMs >= newestSourceMs;
+}
+
+// ---------------------------------------------------------------------------
+// UI child spawn argv — pure, so the exact argv forge studio hands to `npm`
+// is asserted by a unit test without actually spawning a process (mirrors
+// this file's existing style of testing pure decisions directly).
+// ---------------------------------------------------------------------------
+
+/** `next dev` argv — `--dev` only, webpack dev server + StrictMode. */
+export function devUiSpawnArgs(uiPort: number): string[] {
+  return ['run', 'dev', '--workspace', 'forge-ui', '--', '-p', String(uiPort)];
+}
+
+/** `next build` argv — the one-time production compile step, run before
+ *  `next start` when the existing build is missing/stale. Takes no port. */
+export function buildUiSpawnArgs(): string[] {
+  return ['run', 'build', '--workspace', 'forge-ui'];
+}
+
+/** `next start` argv — the default production-serve path. */
+export function startUiSpawnArgs(uiPort: number): string[] {
+  return ['run', 'start', '--workspace', 'forge-ui', '--', '-p', String(uiPort)];
+}
+
+/**
+ * Gracefully terminate `proc`: SIGTERM, wait up to `graceMs` (default 2.5s)
+ * for it to actually exit, escalate to SIGKILL if it survives that grace
+ * period — the same SIGTERM→wait→SIGKILL escalation `takeoverPort` uses to
+ * reliably free a port on WSL2. No-op when `proc` has already exited or been
+ * killed.
+ *
+ * Extracted (review finding #2) so the SIGINT-during-build race in
+ * `runWatch`'s `shutdown()` — a DIFFERENT owner of the same child (the
+ * build/start continuation) nulling a SHARED `uiProc` variable the instant
+ * this same child's 'exit' event fires, out from under a caller that
+ * re-reads that shared variable after its own await — is unit-testable
+ * without spawning a real process. The contract this function relies on:
+ * every caller passes a LOCALLY CAPTURED reference, never the shared
+ * variable re-read post-await.
+ */
+export async function terminateChild(proc: ChildProcess, opts: { graceMs?: number } = {}): Promise<void> {
+  if (proc.exitCode !== null || proc.killed) return;
+  try { proc.kill('SIGTERM'); } catch { /* already dead */ }
+  await new Promise<void>((r) => {
+    const done = () => r();
+    proc.once('exit', done);
+    setTimeout(done, opts.graceMs ?? 2500);
+  });
+  if (proc.exitCode === null) {
+    try { proc.kill('SIGKILL'); } catch { /* already dead */ }
+  }
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** A fetch-like probe: returns true when the URL answers (status considered
+ *  ready), false on any error/timeout. Injectable for tests. */
+export type ProbeFetch = (url: string) => Promise<boolean>;
+
+/** Default HTTP probe used by the launcher: a short-timeout GET that treats
+ *  ANY HTTP response (even a non-2xx) as "the server is up and answering".
+ *  Next.js dev can return a redirect/HTML before it is fully warm — what we
+ *  need is proof the port is bound and the process responds. */
+async function defaultProbe(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    // Drain the body so the socket frees promptly.
+    try { await res.arrayBuffer(); } catch { /* ignore */ }
+    return res.status > 0;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Poll a URL until {@link probe} reports ready, or the timeout elapses.
+ * Pure control-flow with an injectable probe + clock so the loop is unit-
+ * tested without a real server. Resolves true when ready, false on timeout.
+ */
+export async function pollUntilReady(
+  url: string,
+  opts: {
+    probe?: ProbeFetch;
+    timeoutMs?: number;
+    intervalMs?: number;
+    now?: () => number;
+    wait?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<boolean> {
+  const probe = opts.probe ?? defaultProbe;
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const intervalMs = opts.intervalMs ?? 100;
+  const now = opts.now ?? Date.now;
+  const wait = opts.wait ?? sleep;
+  const deadline = now() + timeoutMs;
+  // First attempt fires immediately; subsequent attempts back off by interval.
+  for (;;) {
+    if (await probe(url)) return true;
+    if (now() >= deadline) return false;
+    await wait(intervalMs);
+  }
+}
+
+/**
+ * The identity a healthy forge bridge reports from `GET /api/health` (F1).
+ * Lets a second `forge studio` recognise "this listener is my own bridge"
+ * before deciding whether to attach read-only or take the port over — the
+ * "identify is this my forge process" the fixed-port-takeover pattern always
+ * anticipated would be needed once the surface was shared.
+ */
+export type BridgeIdentity = { service: 'forge-bridge'; pid: number; startedAt: string };
+
+/** The launcher's decision for an already-occupied bridge port (F1).
+ *  - `attach`             a healthy forge bridge is already up → reuse it read-only.
+ *  - `takeover`           the port is free, stale, or owned by something else → kill+bind.
+ *  - `attach-unavailable` the operator demanded attach-only but nothing healthy is there. */
+export type PortStrategy = 'attach' | 'takeover' | 'attach-unavailable';
+
+/**
+ * Decide whether a second launcher should ATTACH read-only to an existing
+ * forge bridge or TAKE the port over. Pure — unit-tested.
+ *
+ * Default is attach-if-healthy: a live forge bridge is reused (never killed);
+ * anything else (free port, stale/old non-identifying bridge, foreign server)
+ * is taken over so a fresh studio can bind. `forceTakeover` is the escape
+ * hatch that always rebinds; `requireAttach` (`--attach`/`--no-takeover`)
+ * forbids takeover entirely, returning `attach-unavailable` when there is no
+ * healthy bridge rather than silently starting a competing one.
+ */
+export function decidePortStrategy(
+  identity: BridgeIdentity | null,
+  opts: { forceTakeover?: boolean; requireAttach?: boolean } = {},
+): PortStrategy {
+  if (opts.forceTakeover) return 'takeover';
+  const healthy = identity !== null && identity.service === 'forge-bridge';
+  if (healthy) return 'attach';
+  return opts.requireAttach ? 'attach-unavailable' : 'takeover';
+}
+
+/**
+ * Probe a bridge `GET /api/health` URL and return its {@link BridgeIdentity},
+ * or null when nothing healthy/identifying is there (port free, a pre-F1
+ * plain-text `ok` bridge, a non-2xx response, a foreign server, or malformed
+ * JSON). `fetchImpl` is injectable for tests. A short timeout keeps the
+ * launcher from hanging on a half-open socket.
+ */
+export async function probeBridgeIdentity(
+  healthUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BridgeIdentity | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetchImpl(healthUrl, { signal: controller.signal });
+    if (!res.ok) return null;
+    const body = (await res.json()) as Partial<BridgeIdentity>;
+    if (
+      body !== null &&
+      typeof body === 'object' &&
+      body.service === 'forge-bridge' &&
+      typeof body.pid === 'number' &&
+      typeof body.startedAt === 'string'
+    ) {
+      return { service: 'forge-bridge', pid: body.pid, startedAt: body.startedAt };
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fixed default ports so the operator can pin one browser tab open at
+ * `http://localhost:4124` and let it auto-reconnect across `forge watch`
+ * / `forge-ui:demo` re-runs. If a previous forge process is still
+ * listening on these ports, we take it over (kill + bind) on startup.
+ *
+ * Why these specific numbers: outside common dev-server defaults (3000,
+ * 5173, 8080) to avoid colliding with the operator's other projects.
+ */
+import { DEFAULT_BRIDGE_PORT } from '@forge/contracts';
+const DEFAULT_UI_PORT = 4124;
+
+export type WatchOptions = {
+  forgeRoot: string;
+  /** Override the bridge's HTTP port. Default 4123 (takes over if in use). */
+  bridgePort?: number;
+  /** Override the UI port. Default 4124 (takes over if in use). Serves
+   *  `next start` (production) by default, or `next dev` under `dev: true`. */
+  uiPort?: number;
+  /** Keep the pre-W6-P3 `next dev` path (webpack dev server, StrictMode
+   *  double-effects) instead of the default production build+serve. `--dev`. */
+  dev?: boolean;
+  /** Skip the browser open (useful for headless CI). */
+  noOpen?: boolean;
+  /** Skip launching the UI dev server (bridge only). Lets the operator
+   *  point a pre-built static export at the bridge by hand. */
+  bridgeOnly?: boolean;
+  /** When set, atomically write the ready info JSON to this path once both
+   *  the bridge and UI answer a health probe (M7-6). A consumer can wait on
+   *  the file appearing instead of parsing stdout. */
+  readyFile?: string;
+  /** F1 — refuse to take a running forge bridge over: attach read-only if one
+   *  is healthy, else error (do not start a competing bridge). `--attach` /
+   *  `--no-takeover`. Default behaviour is already attach-if-healthy. */
+  noTakeover?: boolean;
+  /** F1 — escape hatch: always take the port over even if a healthy forge
+   *  bridge is already there. `--force-takeover`. */
+  forceTakeover?: boolean;
+  /** Log prefix — `[forge studio]` (canonical) or `[forge watch]`
+   *  (deprecated alias). Defaults to `[forge studio]`. */
+  logLabel?: string;
+};
+
+export async function runWatch(opts: WatchOptions): Promise<void> {
+  const { forgeRoot } = opts;
+  const label = opts.logLabel ?? '[forge studio]';
+  const uiDir = resolve(forgeRoot, 'apps', 'studio');
+  const bridgePort = opts.bridgePort ?? DEFAULT_BRIDGE_PORT;
+  const uiPort = opts.uiPort ?? DEFAULT_UI_PORT;
+  const uiUrl = `http://localhost:${uiPort}`;
+
+  // 1. Decide ATTACH vs TAKEOVER for the bridge port (F1). The default is
+  //    attach-if-healthy: a second `forge studio` that finds a live forge
+  //    bridge reuses it read-only instead of killing the agent's in-flight
+  //    session; only a free/stale/foreign port is taken over. `--force-takeover`
+  //    always rebinds; `--attach`/`--no-takeover` refuse to start a competing
+  //    bridge when none is there.
+  const bridgeBase = `http://localhost:${bridgePort}`;
+  const identity = opts.forceTakeover
+    ? null
+    : await probeBridgeIdentity(`${bridgeBase}/api/health`);
+  const strategy = decidePortStrategy(identity, {
+    forceTakeover: opts.forceTakeover,
+    requireAttach: opts.noTakeover,
+  });
+
+  if (strategy === 'attach-unavailable') {
+    console.error(
+      `${label} --attach/--no-takeover given but no healthy forge bridge is listening on :${bridgePort}. ` +
+        `Start one with \`forge studio\`, or use \`--force-takeover\` to rebind.`,
+    );
+    process.exit(1);
+  }
+
+  if (strategy === 'attach') {
+    // A healthy forge bridge (and its UI) is already up — attach read-only:
+    // do NOT take over either port, start a bridge, or spawn a second Next.js
+    // dev server (that would flap the operator's pinned tab). Just point the
+    // browser at the running UI and let this launcher exit; the owning session
+    // keeps the foreground.
+    console.log(
+      `${label} attaching read-only to existing bridge (pid ${identity?.pid}) at ${bridgeBase} — ` +
+        `not taking over (use --force-takeover to replace it)`,
+    );
+    if (!opts.bridgeOnly && !opts.noOpen) {
+      openBrowser(uiUrl).catch((err) => {
+        console.error(`${label} could not open browser: ${err.message}`);
+        console.log(`${label} open ${uiUrl} manually.`);
+      });
+    }
+    return;
+  }
+
+  // 1b. TAKEOVER: take over the bridge port (kills any previous forge process
+  //     on it) and start. Fixed ports + takeover let the operator keep a
+  //     browser tab pinned at http://localhost:4124 across re-runs and
+  //     have it auto-reconnect via the bridge-client backoff.
+  takeoverPort(bridgePort, 'bridge', label);
+  const bridge = await startBridge({ forgeRoot, port: bridgePort });
+  console.log(`${label} bridge at ${bridge.url}`);
+
+  // 2. Bring up the UI (unless --bridge-only or forge-ui not installed).
+  let uiProc: ChildProcess | null = null;
+  let uiLaunched = false;
+
+  // 3. Clean up on Ctrl-C. Wired BEFORE any UI child spawns — including a
+  //    potentially slow production build (step 2b below) — so Ctrl-C during
+  //    the build, or a slow `next dev` warm-up, still tears the bridge (and
+  //    whichever UI child is currently active) down instead of orphaning it.
+  let shuttingDown = false;
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n${label} shutting down...`);
+    // Capture the child ONCE, locally — do NOT re-read the shared `uiProc`
+    // variable after the await inside terminateChild below. Review finding
+    // #2 (reproduced standalone): during the production build, `uiProc` IS
+    // the build child; that child's own 'exit' listener in the build
+    // continuation (step 2b, registered first, at spawn time) nulls the
+    // shared `uiProc` the moment 'exit' fires — the SAME event this
+    // function's own `terminateChild` awaits. Re-reading `uiProc` after that
+    // await raced `uiProc` already being null, throwing a TypeError on
+    // `.exitCode` and skipping `bridge.close()`/`process.exit(0)` entirely.
+    // Operating on a local capture instead is immune to that race.
+    const proc = uiProc;
+    if (proc) await terminateChild(proc);
+    try { await bridge.close(); } catch { /* ignore */ }
+    process.exit(0);
+  };
+  process.on('SIGINT', () => { void shutdown(); });
+  process.on('SIGTERM', () => { void shutdown(); });
+
+  if (!opts.bridgeOnly) {
+    if (!existsSync(resolve(uiDir, 'package.json'))) {
+      console.log(`${label} forge-ui workspace not present yet (apps/studio/package.json missing).`);
+      console.log(`${label} running bridge-only — install the workspace then re-run.`);
+    } else {
+      takeoverPort(uiPort, 'ui', label);
+      const uiEnv = { ...process.env, FORGE_BRIDGE_URL: bridge.url };
+      const mode = opts.dev ? 'dev' : 'prod';
+
+      if (opts.dev) {
+        console.log(`${label} ui at ${uiUrl} (starting next dev…)`);
+        uiProc = spawn('npm', devUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiLaunched = true;
+      } else {
+        // 2b. Production path (default, W6-P3): build once (skipped when the
+        //     existing `.next/` output is already fresh), then `next start`.
+        //     The build child is tracked as `uiProc` while it runs so Ctrl-C
+        //     during a cold-cache build (it's slow — first run can take a
+        //     minute+) tears it down via `shutdown()` above; it is cleared
+        //     before `next start` spawns so only one UI child is ever active.
+        const newestSourceMs = scanNewestSourceMtime(uiDir);
+        const fresh = isBuildFresh(readBuildStampMs(uiDir), newestSourceMs);
+        if (fresh) {
+          console.log(`${label} production build is up to date — skipping next build.`);
+        } else {
+          console.log(
+            `${label} building forge-ui for production (first run or source changed — this can take a minute)…`,
+          );
+          // Delete any stale stamp BEFORE the build starts (review finding
+          // #1): if THIS attempt fails or is interrupted, no stamp must
+          // survive to convince a later run this (possibly broken) `.next/`
+          // output is trustworthy, even if source hasn't changed since.
+          clearBuildStamp(uiDir);
+          const buildProc = spawn('npm', buildUiSpawnArgs(), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+          uiProc = buildProc;
+          const buildExitCode = await new Promise<number | null>((resolveBuild) => {
+            buildProc.on('error', (err) => {
+              console.error(`${label} forge-ui production build failed to start: ${err.message}`);
+              resolveBuild(1);
+            });
+            buildProc.on('exit', (code) => resolveBuild(code));
+          });
+          uiProc = null;
+          if (shuttingDown) return; // Ctrl-C landed during the build; shutdown() above owns the exit.
+          if (buildExitCode !== 0) {
+            console.error(
+              `${label} forge-ui production build failed (exit code ${buildExitCode ?? 'signal'}) — aborting.`,
+            );
+            try { await bridge.close(); } catch { /* ignore */ }
+            process.exit(1);
+          }
+          // Stamp ONLY on proven success (exit 0, just confirmed above) — the
+          // other half of the "stamp only on proven success" property.
+          writeBuildStamp(uiDir, newestSourceMs);
+        }
+        console.log(`${label} ui at ${uiUrl} (starting next start…)`);
+        uiProc = spawn('npm', startUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiLaunched = true;
+      }
+
+      // Always non-null here: every path above either spawns `next dev` or
+      // falls through to spawning `next start` before reaching this line (the
+      // one path that leaves `uiProc` null — a build-phase Ctrl-C — already
+      // returned above).
+      const launchedProc = uiProc as ChildProcess;
+      launchedProc.on('error', (err) => {
+        console.error(`${label} forge-ui ${mode} server failed to start: ${err.message}`);
+      });
+      // If Next.js dies after startup (OOM, crash, port conflict) we must
+      // surface it and tear the bridge down — otherwise the launcher blocks
+      // forever in the never-resolving Promise below with an orphaned bridge.
+      launchedProc.on('exit', (code, signal) => {
+        if (!shuttingDown) {
+          console.error(`${label} forge-ui ${mode} server exited unexpectedly (code=${code ?? signal})`);
+          void shutdown();
+        }
+      });
+    }
+  }
+
+  // 4. Deterministic readiness: poll the bridge /api/health, then (when the
+  //    UI was launched) the UI port — ONLY THEN open the browser and emit the
+  //    ready signal. No dependency on Next.js's "Ready in" log wording.
+  const bridgeReady = await pollUntilReady(`${bridge.url}/api/health`, { timeoutMs: 30_000 });
+  if (!bridgeReady) {
+    console.warn(`${label} bridge did not answer /api/health within 30s — emitting ready signal anyway`);
+  }
+  if (uiLaunched) {
+    const uiReady = await pollUntilReady(`${uiUrl}/`, { timeoutMs: 60_000 });
+    if (!uiReady) {
+      console.warn(`${label} UI did not answer at ${uiUrl} within 60s — emitting ready signal anyway`);
+    }
+  }
+
+  const info: ReadyInfo = { bridgeUrl: bridge.url, uiUrl };
+  if (opts.readyFile) {
+    try { writeReadyFile(opts.readyFile, info); }
+    catch (err) { console.error(`${label} could not write ready file ${opts.readyFile}: ${(err as Error).message}`); }
+  }
+  // The single deterministic, greppable ready line (emitted exactly once).
+  console.log(formatReadySignal(info));
+
+  // 5. Open the browser AFTER verified readiness (no blind 2s sleep).
+  if (uiLaunched && !opts.noOpen) {
+    openBrowser(uiUrl).catch((err) => {
+      console.error(`${label} could not open browser: ${err.message}`);
+      console.log(`${label} open ${uiUrl} manually.`);
+    });
+  }
+
+  // 6. Block forever (children own the foreground).
+  await new Promise<void>(() => {
+    // intentionally never resolves; SIGINT path handles exit.
+  });
+}
+
+/**
+ * Find the PIDs LISTENing on a TCP port, trying multiple tools so the
+ * takeover works across environments. `lsof` is tried first (works on most
+ * macOS/Linux), but on **WSL2** (and some container / restricted-procfs
+ * setups) lsof cannot enumerate network sockets at all — `lsof -tiTCP:<port>`
+ * returns empty even when a server is bound — so we fall back to `ss`
+ * (netlink-based, reliable on Linux/WSL2) and finally `fuser`.
+ *
+ * Surfaced 2026-05-31: a stale forge-ui `next-server` held :4124 and every
+ * `forge watch` died with EADDRINUSE because the lsof-only takeover found
+ * nothing to kill — directly blocking the UI, forge's sole operator surface.
+ *
+ * Returns a de-duplicated list of PID strings; empty when the port is free
+ * (or no available tool can see it).
+ */
+export function findListenerPids(port: number): string[] {
+  const dedupe = (pids: string[]): string[] => [...new Set(pids.map((p) => p.trim()).filter(Boolean))];
+
+  // 1. lsof — first choice on macOS/Linux.
+  try {
+    const out = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    const pids = dedupe(out.trim().split('\n'));
+    if (pids.length) return pids;
+  } catch { /* no match, or lsof is blind to the socket (WSL2) — fall through */ }
+
+  // 2. ss — reads via netlink, sees sockets lsof misses on WSL2. The
+  //    `sport = :<port>` filter matches the port exactly (not :<port>0…);
+  //    process info renders as `users:(("name",pid=NNN,fd=M))`.
+  try {
+    const out = execSync(`ss -ltnpH 'sport = :${port}'`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    const pids = dedupe([...out.matchAll(/pid=(\d+)/g)].map((m) => m[1]));
+    if (pids.length) return pids;
+  } catch { /* ss absent or no match — fall through */ }
+
+  // 3. fuser — last resort; prints space-separated PIDs on stdout.
+  try {
+    const out = execSync(`fuser ${port}/tcp 2>/dev/null`, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    const pids = dedupe(out.trim().split(/\s+/));
+    if (pids.length) return pids;
+  } catch { /* fuser absent or no match */ }
+
+  return [];
+}
+
+/**
+ * Kill any process listening on the given TCP port so `forge watch` re-runs
+ * can rebind a fixed port and the operator's pinned browser tab
+ * auto-reconnects. Discovery is multi-tool (see {@link findListenerPids}) so
+ * it works on WSL2 where lsof is blind to sockets.
+ *
+ * If no available tool can see a listener (port free), this is a no-op — the
+ * later bind surfaces any unexpected conflict via EADDRINUSE.
+ */
+export function takeoverPort(port: number, label: string, logLabel = '[forge studio]'): void {
+  const pids = findListenerPids(port);
+  if (pids.length === 0) return;
+  console.log(`${logLabel} ${label}: taking over port ${port} from ${pids.length} existing process(es)`);
+
+  // SIGTERM all listeners. Node servers trap SIGTERM and exit cleanly,
+  // releasing the socket.
+  for (const pid of pids) {
+    try { process.kill(Number(pid), 'SIGTERM'); } catch { /* */ }
+  }
+
+  // Wait for the port to actually become listenable, escalating to SIGKILL
+  // after 1.5s if listeners survive. Re-discover before SIGKILL so a
+  // respawned listener (new PID) is still caught. Keep waiting (up to ~3s
+  // total) for the kernel to release the socket.
+  const overallDeadline = Date.now() + 3000;
+  let escalated = false;
+  while (Date.now() < overallDeadline) {
+    if (findListenerPids(port).length === 0) return;
+    if (!escalated && Date.now() > overallDeadline - 1500) {
+      escalated = true;
+      for (const pid of findListenerPids(port)) {
+        try { process.kill(Number(pid), 'SIGKILL'); } catch { /* */ }
+      }
+    }
+    try { execSync('sleep 0.1'); } catch { /* */ }
+  }
+  console.warn(`${logLabel} ${label}: port ${port} still occupied after 3s; the bind below may EADDRINUSE`);
+}
+
+async function openBrowser(url: string): Promise<void> {
+  const platform = process.platform;
+  let cmd: string;
+  let args: string[];
+  if (platform === 'darwin') {
+    cmd = 'open'; args = [url];
+  } else if (platform === 'win32') {
+    cmd = 'cmd'; args = ['/c', 'start', '""', url];
+  } else {
+    cmd = 'xdg-open'; args = [url];
+  }
+  await new Promise<void>((resolveOpen, rejectOpen) => {
+    const proc = spawn(cmd, args, { stdio: 'ignore', detached: true });
+    proc.on('error', rejectOpen);
+    proc.on('spawn', () => {
+      proc.unref();
+      resolveOpen();
+    });
+  });
+}

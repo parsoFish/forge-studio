@@ -566,7 +566,7 @@ export const journey = defineJourney({
               let j2LintOk = false;
               try {
                 execFileSync(process.execPath,
-                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+                  ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', 'lint'],
                   { cwd: FORGE_ROOT, stdio: 'pipe' });
                 j2LintOk = true;
               } catch (e) {
@@ -729,7 +729,7 @@ export const journey = defineJourney({
               let scratchLintOk = false;
               try {
                 execFileSync(process.execPath,
-                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', 'lint'],
+                  ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', 'lint'],
                   { cwd: FORGE_ROOT, stdio: 'pipe' });
                 scratchLintOk = true;
               } catch (e) {
@@ -2089,7 +2089,7 @@ export const journey = defineJourney({
               let brainLintOk = false;
               try {
                 execFileSync(process.execPath,
-                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'brain', 'lint'],
+                  ['--experimental-strip-types', 'apps/forge/cli.ts', 'brain', 'lint'],
                   { cwd: FORGE_ROOT, stdio: 'pipe' });
                 brainLintOk = true;
               } catch (e) {

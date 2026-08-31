@@ -20,8 +20,8 @@
  * existing `test-fixtures/` fixture data, imported only from `*.test.ts`
  * files.
  */
-import type { FlowRunRequest } from '../flow-run-requests.ts';
-import type { WebhookPushPayload, CronTriggerPayload } from '../trigger-payload.ts';
+import type { FlowRunRequest } from '@forge/flows/flow-run-requests.ts';
+import type { WebhookPushPayload, CronTriggerPayload } from '@forge/flows/trigger-payload.ts';
 
 /**
  * Mirrors `cron-triggers.ts`'s `makeFireFn`: every field a real cron fire

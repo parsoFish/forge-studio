@@ -1,0 +1,683 @@
+/**
+ * KB graph builder — pure FS reads.
+ *
+ * Builds a per-KB graph from the brain filesystem:
+ *   - Index nodes: INDEX.md + category index files (patterns.md etc.)
+ *   - Theme nodes: themes/*.md (gray-matter frontmatter)
+ *   - Raw nodes: _raw/**\/*.md, capped to newest 80
+ *
+ * Edges from:
+ *   - related_themes[] frontmatter array
+ *   - [[wiki-link]] mentions in theme bodies (resolved within this kb)
+ *   - INDEX node → each theme (so the graph is connected)
+ *
+ * No external tool dependency — reads the brain FS directly.
+ */
+
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { join, resolve, basename, dirname } from 'node:path';
+import { execSync } from 'node:child_process';
+// gray-matter has no usable types; treated as any for parsing.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import matter from 'gray-matter';
+
+import { resolveKbBrainDir } from './brain-paths.ts';
+import { collectThemeSlugTargets } from './brain-lint.ts';
+import { resolveGuardedPath } from '@forge/kernel';
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+export type KbLayer = 'index' | 'theme' | 'raw' | 'guidance';
+
+export type KbNode = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  updatedAt?: string;
+};
+
+export type KbEdge = { from: string; to: string };
+
+/**
+ * W8-B2 (forge-9kr) — a declared `related_themes` edge whose target is a REAL
+ * theme in a DIFFERENT sub-wiki.
+ *
+ * `buildKbGraph` scopes `nodeIds` to the one KB it is graphing, so such an edge
+ * cannot be drawn. `checkDanglingEdges` deliberately does NOT flag these — its
+ * slug universe is brain-wide, and a cross-sub-wiki reference is legitimate
+ * CONTENT, not a broken link (flagging them would steer a maintenance agent
+ * into "fixing" correct links, which is how forge-d8l happens). So they were
+ * dropped by the `nodeIds.has` guard and again by the `validEdges` filter, with
+ * no signal anywhere. Twenty-five of them exist in the live brain.
+ *
+ * They are now REPORTED rather than silently discarded. Still not drawn — a
+ * per-KB graph has no node to draw them to — but a consumer can say "N links
+ * leave this KB" instead of the graph quietly claiming they do not exist.
+ */
+export type KbExternalEdge = { from: string; toSlug: string };
+
+export type KbGraph = {
+  nodes: KbNode[];
+  edges: KbEdge[];
+  /** Declared edges pointing at a real theme outside this KB (forge-9kr).
+   *  Always present; empty when the KB has none. */
+  externalEdges: KbExternalEdge[];
+};
+
+export type KbNodeArticle = {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  category?: string;
+  body: string;
+  inbound: { id: string; title: string }[];
+  outbound: { id: string; title: string }[];
+  touchedBy?: string;
+};
+
+// ---------------------------------------------------------------------------
+// Internal constants
+// ---------------------------------------------------------------------------
+
+/** Category index file names that live in the kb root dir. */
+const CATEGORY_INDEX_FILES: Record<string, string> = {
+  'patterns.md': 'patterns',
+  'antipatterns.md': 'antipatterns',
+  'decisions.md': 'decisions',
+  'operations.md': 'operations',
+  'reference.md': 'reference',
+};
+
+/** Max raw nodes to include (cap to newest N by mtime). */
+const RAW_NODE_CAP = 80;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve the absolute path to the kb's brain directory. Supports top-level
+ *  brains (brain/<id>) AND central per-project brains (brain/projects/<id>,
+ *  ADR 035) via the shared resolver in brain-paths. */
+function resolveKbDir(forgeRoot: string, kbId: string): string {
+  const kbDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!kbDir) {
+    throw new Error(
+      `Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`,
+    );
+  }
+  return kbDir;
+}
+
+/**
+ * Guarded resolution of a path NESTED under an already-verified kb dir
+ * (bd `forge-wze`). Returns the identity-verified real path, or `null` when
+ * the tail does not exist or any segment fails containment.
+ *
+ * `resolveKbBrainDir` hardens `<brain-root>/<kbId>` itself, but every escape
+ * confirmed live at this site was one level DEEPER: a genuinely real
+ * `brain/<id>/` whose `themes` or `_guidance` is a symlink pointing outside
+ * `brain/`. Guarding only the kb dir would close the first shape and leave
+ * those wide open, so every nested join in this module goes through here.
+ *
+ * Note the call shape. `kbDir` is already a realpath-verified location, but it
+ * is NOT passed as the guard's `root` — that is the root-folding shape
+ * `cli/studio-path-guard.ts`'s CONTRACT section forbids, because `root`
+ * receives no identity check whatsoever. It is split back into its trusted
+ * base (`dirname`) plus its own id (`basename`), so the id re-enters as a
+ * `segments[]` element and is identity-checked again alongside the tail. That
+ * keeps the "every untrusted id is its own segment, never folded into root"
+ * invariant true at this call site by inspection, not by argument.
+ */
+function guardedKbPath(kbDir: string, ...tail: readonly string[]): string | null {
+  const guarded = resolveGuardedPath(dirname(kbDir), [basename(kbDir), ...tail]);
+  return guarded.ok && guarded.exists ? guarded.realPath : null;
+}
+
+/** Convert a filesystem path to a stable slug id. Uses the filename without .md. */
+function fileToSlug(filePath: string): string {
+  return basename(filePath, '.md');
+}
+
+/** Walk a directory recursively, returning all .md files sorted by mtime desc. */
+function walkMdFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+
+  function walk(current: string): void {
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const full = join(current, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+      } else if (e.isFile() && e.name.endsWith('.md')) {
+        results.push(full);
+      }
+    }
+  }
+
+  walk(dir);
+  // Sort by mtime descending (newest first)
+  return results.sort((a, b) => {
+    try {
+      return statSync(b).mtimeMs - statSync(a).mtimeMs;
+    } catch {
+      return 0;
+    }
+  });
+}
+
+/**
+ * Lenient frontmatter parser — mirrors brain-lint.ts:parseTheme.
+ * Tries gray-matter first; on YAML failure (e.g. unquoted `:` in a description
+ * field) falls back to a regex line-by-line extractor so we can still get the
+ * `category` and other scalar fields from themes that gray-matter would reject.
+ *
+ * Additionally, after gray-matter succeeds, we SUPPLEMENT its output with a
+ * line-by-line regex scan of the raw frontmatter block for the known scalar
+ * fields (category, title, created_at, updated_at). gray-matter silently folds
+ * multi-line description values that contain embedded `: ` sequences (e.g.
+ * "Fix: always pass --dir"), swallowing the subsequent `category:` line into
+ * the description value. The line-regex scan is immune to this because it only
+ * captures the first-line value of each key and ignores continuation lines.
+ */
+
+/** Fields to recover via line-regex scan when gray-matter silently folds them. */
+const SCALAR_FIELDS_TO_RECOVER = ['category', 'title', 'created_at', 'updated_at'] as const;
+
+/**
+ * Extract the raw frontmatter block (between the first two `---` lines) and
+ * build a map of scalar key→value via line regex. Continuation/folded lines
+ * (lines that are not themselves `key: value`) are ignored — which is exactly
+ * what we want for category/dates.
+ */
+function extractFrontmatterLineFields(raw: string): Record<string, string> {
+  const lines = raw.split('\n');
+  if (lines[0]?.trim() !== '---') return {};
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '---') { end = i; break; }
+  }
+  if (end < 0) return {};
+  const fields: Record<string, string> = {};
+  for (let i = 1; i < end; i++) {
+    const m = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.+)$/.exec(lines[i]);
+    if (m) fields[m[1]] = m[2].trim();
+  }
+  return fields;
+}
+
+function parseMd(raw: string): { data: Record<string, unknown>; content: string } {
+  try {
+    // `{}` options bypass gray-matter's module-level parse cache (same
+    // poisoning class as cli/theme-frontmatter.ts, see its module header): a
+    // cache-then-throw on first parse would otherwise return the poisoned
+    // `data: {}` hit on every later build without ever re-throwing, so the
+    // catch fallback below never runs and list fields silently vanish.
+    const { data, content } = matter(raw, {}) as { data: Record<string, unknown>; content: string };
+
+    // Supplement gray-matter's output with a line-regex scan of the raw
+    // frontmatter block for the known scalar fields.  gray-matter silently
+    // folds multi-line description values that contain embedded `: ` sequences
+    // (e.g. "Fix: always pass --dir"), swallowing the subsequent `category:`
+    // line.  The line-regex scan is immune to this because it only captures the
+    // first-line value of each key.
+    const lineFields = extractFrontmatterLineFields(raw);
+    for (const field of SCALAR_FIELDS_TO_RECOVER) {
+      const current = data[field];
+      const isMissing =
+        current === undefined || current === null || (typeof current === 'string' && current === '');
+      if (isMissing && lineFields[field]) {
+        data[field] = lineFields[field];
+      }
+    }
+
+    return { data, content };
+  } catch {
+    // Fallback: split on first two `---` delimiters
+    const lineFields = extractFrontmatterLineFields(raw);
+    const lines = raw.split('\n');
+    if (lines[0]?.trim() !== '---') return { data: {}, content: raw };
+    let end = -1;
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') { end = i; break; }
+    }
+    if (end < 0) return { data: {}, content: raw };
+    return { data: lineFields as Record<string, unknown>, content: lines.slice(end + 1).join('\n') };
+  }
+}
+
+/** Extract [[slug]] links from markdown body. */
+function extractWikiLinks(body: string): string[] {
+  const slugs: string[] = [];
+  const re = /\[\[([^\]]+)\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    const slug = m[1].trim();
+    if (slug) slugs.push(slug);
+  }
+  return slugs;
+}
+
+/** Get the git last-author for a file. Returns undefined on failure. */
+function gitLastAuthor(filePath: string): string | undefined {
+  try {
+    const out = execSync(`git log -1 --format=%an -- "${filePath}"`, {
+      encoding: 'utf8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return out || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// buildKbGraph
+// ---------------------------------------------------------------------------
+
+export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+
+  const nodes: KbNode[] = [];
+  const edges: KbEdge[] = [];
+  const externalEdges: KbExternalEdge[] = [];
+
+  // forge-9kr: the brain-wide slug universe, so a related_themes target that
+  // is not in THIS KB can be told apart from one that does not exist at all.
+  // Same single walk `checkDanglingEdges` resolves against (cli/brain-lint.ts)
+  // — this file must never grow its own second answer to "does this theme
+  // exist", which is precisely the disagreement forge-d8l was made of.
+  const externalSlugs = new Set(collectThemeSlugTargets(join(forgeRoot, 'brain')).keys());
+
+  // Track node ids for dedup + edge resolution
+  const nodeIds = new Set<string>();
+
+  function addNode(node: KbNode): void {
+    if (!nodeIds.has(node.id)) {
+      nodeIds.add(node.id);
+      nodes.push(node);
+    }
+  }
+
+  // ---- INDEX node (the kb root) -------------------------------------------
+  const kbIndexId = `${kbId}-index`;
+  addNode({ id: kbIndexId, title: 'INDEX', layer: 'index' });
+
+  // ---- Category index nodes -----------------------------------------------
+  const categoryIndexIds: string[] = [];
+  for (const [filename, label] of Object.entries(CATEGORY_INDEX_FILES)) {
+    const indexPath = guardedKbPath(kbDir, filename);
+    if (!indexPath) continue;
+    const indexId = `${kbId}-index-${label}`;
+    addNode({ id: indexId, title: label.charAt(0).toUpperCase() + label.slice(1), layer: 'index' });
+    categoryIndexIds.push(indexId);
+    // Edge: kb INDEX → category index
+    edges.push({ from: kbIndexId, to: indexId });
+  }
+
+  // ---- Theme nodes --------------------------------------------------------
+  const themesDir = guardedKbPath(kbDir, 'themes');
+  const themeFiles: string[] = [];
+  if (themesDir) {
+    try {
+      const entries = readdirSync(themesDir);
+      for (const f of entries) {
+        if (f === 'README.md' || !f.endsWith('.md')) continue;
+        // Per-FILE guard, not just the dir: a real themes/ holding a symlinked
+        // or hardlinked leaf is escape shape 1/5 from the guard's own catalog.
+        const themeFile = guardedKbPath(kbDir, 'themes', f);
+        if (themeFile) themeFiles.push(themeFile);
+      }
+    } catch {
+      // unreadable themes dir
+    }
+  }
+
+  // Store theme id → frontmatter for edge resolution later
+  const themeData = new Map<
+    string,
+    { related_themes?: string[]; body: string; category?: string; updatedAt?: string; title: string }
+  >();
+
+  for (const tf of themeFiles) {
+    const slug = fileToSlug(tf);
+    let parsed: { data: Record<string, unknown>; content: string } | null = null;
+    try {
+      const raw = readFileSync(tf, 'utf8');
+      parsed = parseMd(raw);
+    } catch {
+      // skip unreadable file
+    }
+
+    const title = (parsed?.data.title as string | undefined) || slug;
+    const category = parsed?.data.category as string | undefined;
+    const updatedAt = parsed?.data.updated_at as string | undefined;
+    const relatedThemes = Array.isArray(parsed?.data.related_themes)
+      ? (parsed!.data.related_themes as string[])
+      : [];
+    const body = parsed?.content ?? '';
+
+    addNode({ id: slug, title, layer: 'theme', category, updatedAt });
+    themeData.set(slug, { related_themes: relatedThemes, body, category, updatedAt, title });
+  }
+
+  // ---- Raw nodes (capped to newest RAW_NODE_CAP) --------------------------
+  // `_raw` is guarded here; the recursive walk BELOW it is contained by
+  // `walkMdFiles`'s dirent-type filter (`readdirSync(..., {withFileTypes:true})`
+  // reports `isDirectory()` AND `isFile()` false for a symlinked entry, so a
+  // symlink can never enter the result set). Residual, stated rather than
+  // implied: a HARDLINKED `.md` deep inside a real `_raw/` tree is a genuine
+  // regular file and passes that filter — see `docs/explanation/security-model.md`.
+  const rawDir = guardedKbPath(kbDir, '_raw');
+  const rawFiles = rawDir ? walkMdFiles(rawDir) : [];
+
+  // Cap to newest 80 — capped flag logged in comment above RAW_NODE_CAP const
+  const cappedRawFiles = rawFiles.length > RAW_NODE_CAP ? rawFiles.slice(0, RAW_NODE_CAP) : rawFiles;
+
+  for (const rf of cappedRawFiles) {
+    const slug = fileToSlug(rf);
+    // Avoid id collision with theme slugs by prefixing with 'raw:'
+    const rawId = `raw:${slug}`;
+    let title = slug;
+    try {
+      const raw = readFileSync(rf, 'utf8');
+      const parsed = parseMd(raw);
+      const sourceTitle = parsed.data.source_title as string | undefined;
+      if (sourceTitle) title = sourceTitle;
+    } catch {
+      // keep slug as title
+    }
+    addNode({ id: rawId, title, layer: 'raw' });
+  }
+
+  // ---- Guidance nodes from _guidance/*.md --------------------------------
+  // Pending human guidance notes render as amber-diamond nodes until consumed
+  // by the next brain-ingest pass (which deletes them).
+  const guidanceDir = guardedKbPath(kbDir, '_guidance');
+  if (guidanceDir) {
+    let guidanceEntries: string[];
+    try {
+      guidanceEntries = readdirSync(guidanceDir).filter((f) => f.endsWith('.md'));
+    } catch {
+      guidanceEntries = [];
+    }
+    for (const filename of guidanceEntries) {
+      const guidancePath = guardedKbPath(kbDir, '_guidance', filename);
+      if (!guidancePath) continue;
+      const guidanceNodeId = `guidance-${basename(filename, '.md')}`;
+      let guidanceTargetNode: string | undefined;
+      try {
+        const raw = readFileSync(guidancePath, 'utf8');
+        const parsed = parseMd(raw);
+        guidanceTargetNode = parsed.data.target_node as string | undefined;
+      } catch {
+        // skip unreadable guidance file
+        continue;
+      }
+      // KbNode does not carry body — the body is returned by getKbNodeArticle.
+      addNode({
+        id: guidanceNodeId,
+        title: 'guidance',
+        layer: 'guidance',
+      });
+      // If target_node is set and the target exists, add an edge (dashed amber link)
+      if (guidanceTargetNode && typeof guidanceTargetNode === 'string') {
+        // edge is added after all nodes are registered — defer it
+        edges.push({ from: guidanceNodeId, to: guidanceTargetNode });
+      }
+    }
+  }
+
+  // ---- Edges from theme → related_themes + wiki-links ---------------------
+  for (const [fromId, data] of themeData) {
+    // related_themes edges
+    for (const relSlug of data.related_themes ?? []) {
+      if (nodeIds.has(relSlug)) {
+        edges.push({ from: fromId, to: relSlug });
+        continue;
+      }
+      // forge-9kr: not in THIS KB. If the slug resolves to a real theme
+      // anywhere in the brain, the edge is legitimate content this graph
+      // simply cannot draw — record it so the drop is visible. If it resolves
+      // nowhere it is genuinely dangling, and checkDanglingEdges owns saying
+      // so; adding a second voice here would be two derivations of one verdict.
+      if (externalSlugs.has(relSlug)) {
+        externalEdges.push({ from: fromId, toSlug: relSlug });
+      }
+    }
+
+    // [[wiki-link]] edges
+    for (const linkSlug of extractWikiLinks(data.body)) {
+      if (nodeIds.has(linkSlug) && linkSlug !== fromId) {
+        // Avoid duplicate edges
+        const exists = edges.some((e) => e.from === fromId && e.to === linkSlug);
+        if (!exists) {
+          edges.push({ from: fromId, to: linkSlug });
+        }
+      }
+    }
+  }
+
+  // ---- INDEX → themes (ensures INDEX isn't an orphan) --------------------
+  // Connect via category index → themes of that category, or directly if no
+  // category index present for a theme.
+  const themesByCat = new Map<string, string[]>();
+  for (const [tId, data] of themeData) {
+    const cat = data.category ?? '__none__';
+    if (!themesByCat.has(cat)) themesByCat.set(cat, []);
+    themesByCat.get(cat)!.push(tId);
+  }
+
+  // Map category label → categoryIndexId
+  const catLabelToIndexId = new Map<string, string>();
+  for (const [, label] of Object.entries(CATEGORY_INDEX_FILES)) {
+    catLabelToIndexId.set(label, `${kbId}-index-${label}`);
+  }
+  // Also map plural category → index label (pattern→patterns, antipattern→antipatterns etc.)
+  const catToLabel: Record<string, string> = {
+    pattern: 'patterns',
+    antipattern: 'antipatterns',
+    decision: 'decisions',
+    operation: 'operations',
+    reference: 'reference',
+  };
+
+  for (const [cat, themeIds] of themesByCat) {
+    const label = catToLabel[cat];
+    const catIndexId = label ? catLabelToIndexId.get(label) : undefined;
+
+    for (const tId of themeIds) {
+      if (catIndexId && nodeIds.has(catIndexId)) {
+        // category-index → theme
+        edges.push({ from: catIndexId, to: tId });
+      } else {
+        // No category index for this theme → connect directly from kb INDEX
+        edges.push({ from: kbIndexId, to: tId });
+      }
+    }
+  }
+
+  // Drop dangling edges (both nodes must exist)
+  const validEdges = edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
+
+  return { nodes, edges: validEdges, externalEdges };
+}
+
+// ---------------------------------------------------------------------------
+// getKbNodeArticle
+// ---------------------------------------------------------------------------
+
+export function getKbNodeArticle(
+  forgeRoot: string,
+  kbId: string,
+  nodeId: string,
+): KbNodeArticle | null {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+
+  // Build the graph to resolve inbound/outbound edges
+  const graph = buildKbGraph(forgeRoot, kbId);
+  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+
+  const node = nodeMap.get(nodeId);
+  if (!node) return null;
+
+  // Resolve inbound (nodes that have an edge TO this node)
+  const inbound: { id: string; title: string }[] = graph.edges
+    .filter((e) => e.to === nodeId)
+    .map((e) => ({ id: e.from, title: nodeMap.get(e.from)?.title ?? e.from }));
+
+  // Resolve outbound (nodes this node points to)
+  const outbound: { id: string; title: string }[] = graph.edges
+    .filter((e) => e.from === nodeId)
+    .map((e) => ({ id: e.to, title: nodeMap.get(e.to)?.title ?? e.to }));
+
+  // Determine the file path for this node
+  let filePath: string | null = null;
+  let body = '';
+
+  if (node.layer === 'guidance') {
+    // guidance node id is 'guidance-<filename-without-.md>'
+    const slug = nodeId.startsWith('guidance-') ? nodeId.slice('guidance-'.length) : nodeId;
+    filePath = guardedKbPath(kbDir, '_guidance', `${slug}.md`);
+  } else if (node.layer === 'theme') {
+    filePath = guardedKbPath(kbDir, 'themes', `${nodeId}.md`);
+  } else if (node.layer === 'raw') {
+    // raw node ids are prefixed with 'raw:'
+    const slug = nodeId.startsWith('raw:') ? nodeId.slice(4) : nodeId;
+    filePath = guardedKbPath(kbDir, '_raw', `${slug}.md`);
+  } else if (node.layer === 'index') {
+    // Could be INDEX.md or a category index file
+    const indexMd = guardedKbPath(kbDir, 'INDEX.md');
+    if (indexMd) {
+      filePath = indexMd;
+    } else {
+      // category index: id is `<kbId>-index-<label>`
+      const prefix = `${kbId}-index-`;
+      if (nodeId.startsWith(prefix)) {
+        const label = nodeId.slice(prefix.length);
+        // Map label back to filename
+        const filename = Object.entries(CATEGORY_INDEX_FILES).find(([, l]) => l === label)?.[0];
+        if (filename) filePath = guardedKbPath(kbDir, filename);
+      }
+    }
+  }
+
+  if (filePath) {
+    try {
+      const raw = readFileSync(filePath, 'utf8');
+      body = parseMd(raw).content;
+    } catch {
+      body = '';
+    }
+  }
+
+  // touchedBy: git last-author or updatedAt
+  let touchedBy: string | undefined;
+  if (filePath) {
+    touchedBy = gitLastAuthor(filePath) ?? node.updatedAt;
+  }
+
+  return {
+    id: nodeId,
+    title: node.title,
+    layer: node.layer,
+    category: node.category,
+    body,
+    inbound,
+    outbound,
+    touchedBy,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// consumeGuidance — list pending guidance files for brain-ingest to process
+// ---------------------------------------------------------------------------
+
+export type PendingGuidance = {
+  /** Absolute path to the guidance .md file */
+  file: string;
+  /** The guidance text (body after frontmatter) */
+  text: string;
+  /** Optional target node slug from frontmatter.target_node */
+  targetNode?: string;
+};
+
+/**
+ * List all pending guidance files in `brain/<kbId>/_guidance/*.md`.
+ *
+ * Called by the brain-ingest skill to discover what human guidance notes
+ * are waiting to be incorporated. The skill reads each note, incorporates
+ * it into the appropriate theme, then calls `deleteGuidanceFile` to remove
+ * the consumed file.
+ *
+ * Returns an empty array if no _guidance/ dir or no pending files.
+ * Throws on unknown kbId (unknown brain dir).
+ */
+export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGuidance[] {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const guidanceDir = guardedKbPath(kbDir, '_guidance');
+  if (!guidanceDir) return [];
+
+  let entries: string[];
+  try {
+    entries = readdirSync(guidanceDir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+
+  const result: PendingGuidance[] = [];
+  for (const filename of entries) {
+    const filePath = guardedKbPath(kbDir, '_guidance', filename);
+    if (!filePath) continue;
+    try {
+      const raw = readFileSync(filePath, 'utf8');
+      const parsed = parseMd(raw);
+      const text = parsed.content.trim();
+      const targetNode = parsed.data.target_node as string | undefined;
+      result.push({ file: filePath, text, targetNode });
+    } catch {
+      // skip unreadable file
+    }
+  }
+  return result;
+}
+
+/**
+ * Delete a consumed guidance file.
+ *
+ * Called by the brain-ingest skill after it has incorporated a guidance note
+ * into the appropriate theme. Validates the path stays within the _guidance
+ * directory before deleting.
+ *
+ * Returns true if the file was deleted, false if it was already gone.
+ */
+export function deleteGuidanceFile(forgeRoot: string, kbId: string, filePath: string): boolean {
+  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+
+  // Containment (bd `forge-wze`): the caller names the file, so re-derive it
+  // from its BASENAME under the guarded `_guidance` tail rather than trusting
+  // the supplied string. The former check was a lexical `startsWith` on a
+  // `resolve()`d path — it blocked a literal `..` (which `resolve()` had
+  // already normalized away) but not a symlinked `_guidance/` or a symlinked
+  // leaf inside it, which is precisely the shape confirmed live here.
+  const resolvedFile = guardedKbPath(kbDir, '_guidance', basename(filePath));
+  if (!resolvedFile || resolvedFile !== resolve(filePath)) {
+    // Not under this kb's real `_guidance/`, or the supplied path pointed
+    // somewhere other than where its own basename resolves to.
+    if (!existsSync(resolve(filePath))) return false;
+    throw new Error(`deleteGuidanceFile: path traversal — "${filePath}" is not under _guidance/`);
+  }
+
+  rmSync(resolvedFile);
+  return true;
+}

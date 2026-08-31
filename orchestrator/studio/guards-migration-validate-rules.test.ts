@@ -41,7 +41,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { validateAgent, type Finding } from './validate.ts';
-import type { AgentDefinition } from './types.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 function mk(slug: string, over: Record<string, unknown> = {}): AgentDefinition {
   const base: Record<string, unknown> = {

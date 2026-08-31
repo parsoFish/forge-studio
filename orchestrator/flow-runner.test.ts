@@ -15,15 +15,15 @@ import { join } from 'node:path';
 
 import { flowPathForId, resolveNodeKind } from './flow-runner.ts';
 import { runFlowT, type TestDeps, type TestDepsPartial, type EnqueueFlowRun, type NodeExecutor, type FlowRunnerDeps } from './test-fixtures/flow-runner-port.ts';
-import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from './flow-run-requests.ts';
-import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
-import { parseManifest } from './manifest.ts';
-import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
+import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from '@forge/flows/flow-run-requests.ts';
+import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
+import { parseManifest } from '@forge/flows/manifest.ts';
+import { WedgeKillError, CostCeilingError } from '@forge/flows/flow-budgets.ts';
 import { loadFlowDefinition, discoverProjects } from './studio/registry.ts';
-import type { FlowDefinition } from './studio/types.ts';
-import type { CycleInput } from './cycle-context.ts';
-import type { EventLogger } from './logging.ts';
-import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { EventLogger } from '@forge/kernel';
+import type { AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

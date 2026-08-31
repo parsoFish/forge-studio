@@ -1,0 +1,612 @@
+/**
+ * Tests for run-model-derive.ts cost derivation (plan item 1.8 + 1.4).
+ *
+ * Pins the cost-summation rule shared with cli/metrics.ts aggregate()
+ * (orchestrator/event-cost.ts): iteration-loop phases restate their
+ * iteration spend on per-WI 'end' + phase-level 'end' rollup events, so
+ * naively summing every event double/triple-counts. buildNodeMeta feeds
+ * Studio's phase-hex cost badges (data-phase-cost-usd) — it must not
+ * overstate. deriveWorkItems carries per-WI cost (data-wi-cost-usd).
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildNodeMeta, deriveWorkItems, findDelivered, eventToNodeId, deriveNodeStatuses, findFailure, deriveStopOnBudget } from './run-model-derive.ts';
+import type { EventLogEntry, Phase } from '@forge/kernel';
+import type { RunPhaseStatus } from './run-model.ts';
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+let seq = 0;
+function ev(
+  phase: Phase | string,
+  event_type: string,
+  opts: {
+    cost_usd?: number;
+    message?: string;
+    work_item_id?: string;
+    status?: string;
+    metadata?: Record<string, unknown>;
+  } = {},
+): EventLogEntry {
+  seq += 1;
+  const metadata: Record<string, unknown> = { ...opts.metadata };
+  if (opts.work_item_id !== undefined) metadata.work_item_id = opts.work_item_id;
+  if (opts.status !== undefined) metadata.status = opts.status;
+  return {
+    event_id: `e-${seq}`,
+    cycle_id: 'CYCLE-test',
+    initiative_id: 'INIT-test',
+    phase: phase as Phase,
+    skill: phase as string,
+    event_type,
+    input_refs: [],
+    output_refs: [],
+    started_at: new Date().toISOString(),
+    ...(opts.cost_usd !== undefined ? { cost_usd: opts.cost_usd } : {}),
+    ...(opts.message !== undefined ? { message: opts.message } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  } as EventLogEntry;
+}
+
+// ---------------------------------------------------------------------------
+// buildNodeMeta cost (1.8 — the double-count defect)
+// ---------------------------------------------------------------------------
+
+test('buildNodeMeta: iteration-loop node counts only iteration cost (no 3x restatement)', () => {
+  // Real pattern: each WI emits iteration + a restating per-WI ralph.end,
+  // then the phase emits a rollup end restating the per-WI sum. True spend
+  // is the iteration sum alone.
+  const events = [
+    ev('developer-loop', 'iteration', { cost_usd: 1.027781, work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { cost_usd: 1.027781, message: 'ralph.end', work_item_id: 'WI-1' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.439271, work_item_id: 'WI-2' }),
+    ev('developer-loop', 'end', { cost_usd: 0.439271, message: 'ralph.end', work_item_id: 'WI-2' }),
+    ev('developer-loop', 'end', { cost_usd: 1.467052 }), // phase-level rollup
+  ];
+  const meta = buildNodeMeta('dev', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 1.467052) < 0.000001,
+    `dev node cost should be ~1.467052 (iterations only), got ${meta.costUsd}`,
+  );
+});
+
+test('buildNodeMeta: unifier node counts only iteration cost (no 2x restatement)', () => {
+  const events = [
+    ev('unifier', 'iteration', { cost_usd: 0.665096, work_item_id: 'UWI-1' }),
+    ev('unifier', 'end', { cost_usd: 0.665096, message: 'unifier.end' }),
+  ];
+  const meta = buildNodeMeta('unifier', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 0.665096) < 0.000001,
+    `unifier node cost should be ~0.665096 (1x), got ${meta.costUsd}`,
+  );
+});
+
+test('buildNodeMeta: single-call node keeps end-event cost (not zeroed)', () => {
+  const events = [
+    ev('project-manager', 'start'),
+    ev('project-manager', 'end', { cost_usd: 0.700842 }),
+  ];
+  const meta = buildNodeMeta('pm', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 0.700842) < 0.000001,
+    `pm node cost should be ~0.700842, got ${meta.costUsd}`,
+  );
+});
+
+test('buildNodeMeta: non-loop node keeps terminal error-event cost', () => {
+  // A phase rejected before completing carries its spend on the terminal
+  // 'error' event (cost-autopsy §4.1) — a non-looping phase must count it.
+  const events = [
+    ev('project-manager', 'start'),
+    ev('project-manager', 'error', { cost_usd: 0.31 }),
+  ];
+  const meta = buildNodeMeta('pm', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 0.31) < 0.000001,
+    `pm node cost should keep error-event cost 0.31, got ${meta.costUsd}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// deriveWorkItems per-WI cost (1.4 — per-WI attribution)
+// ---------------------------------------------------------------------------
+
+const DEV_MAPPING = new Map<string, string | null>([
+  ['developer-loop', 'dev'],
+  ['project-manager', 'pm'],
+  ['unifier', 'unifier'],
+  ['orchestrator', null],
+]);
+
+// None of these deriveWorkItems fixtures exercise a generic execAgent/runAgent
+// node (R2-01-F4) — an empty slug map keeps their pre-existing assertions
+// byte-for-byte unchanged (eventToNodeId's new branch never fires).
+const EMPTY_AGENT_SLUG_MAP = new Map<string, string>();
+
+test('deriveWorkItems: per-WI costUsd from WI-scoped iteration events (restating ends excluded)', () => {
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.6, work_item_id: 'WI-1' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.4, work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { cost_usd: 1.0, message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
+    ev('developer-loop', 'start', { work_item_id: 'WI-2' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.25, work_item_id: 'WI-2' }),
+    ev('developer-loop', 'end', { cost_usd: 0.25, message: 'ralph.end', work_item_id: 'WI-2', status: 'complete' }),
+    ev('developer-loop', 'end', { cost_usd: 1.25 }), // phase rollup (no WI id)
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  assert.equal(wis.length, 2);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  const wi2 = wis.find((w) => w.id === 'WI-2');
+  assert.ok(wi1 && Math.abs(wi1.costUsd - 1.0) < 0.000001,
+    `WI-1 cost should be ~1.0 (its iterations only), got ${wi1?.costUsd}`);
+  assert.ok(wi2 && Math.abs(wi2.costUsd - 0.25) < 0.000001,
+    `WI-2 cost should be ~0.25, got ${wi2?.costUsd}`);
+});
+
+test('deriveWorkItems: per-WI costs stay consistent with the phase rule when the phase looped', () => {
+  // WI-2 crashed before its first iteration; its 'end' carries a cost figure.
+  // Because the dev phase DID loop (WI-1 iterated), only iteration events are
+  // authoritative — the same rule that keeps the phase badge honest — so WI-2
+  // attributes 0 rather than restated/rolled-up dollars.
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'iteration', { cost_usd: 0.5, work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { cost_usd: 0.5, message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
+    ev('developer-loop', 'start', { work_item_id: 'WI-2' }),
+    ev('developer-loop', 'end', { cost_usd: 0.2, message: 'ralph.end', work_item_id: 'WI-2', status: 'failed' }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  const wi2 = wis.find((w) => w.id === 'WI-2');
+  assert.ok(wi1 && Math.abs(wi1.costUsd - 0.5) < 0.000001, `WI-1 cost ~0.5, got ${wi1?.costUsd}`);
+  assert.ok(wi2 && wi2.costUsd === 0, `WI-2 cost should be 0 (no iterations), got ${wi2?.costUsd}`);
+});
+
+test('deriveWorkItems: a non-looping dev stream keeps per-WI end cost (nothing to restate)', () => {
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { cost_usd: 0.3, message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  assert.ok(wi1 && Math.abs(wi1.costUsd - 0.3) < 0.000001,
+    `WI-1 cost should be ~0.3 (end cost, no iterations in phase), got ${wi1?.costUsd}`);
+});
+
+// ---------------------------------------------------------------------------
+// deriveWorkItems crash-retry override — Phase 4/2 regression
+// brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-failed-wi.md
+// ---------------------------------------------------------------------------
+
+test('deriveWorkItems: a failed WI with a dev-loop.discarded event carrying commits reads as retrying, not failed', () => {
+  // A WI that auto-committed real work then crashed is recoverable — status
+  // must still flip to 'retrying' even though its diff-stat now lives on
+  // dev-loop.discarded (message mismatch alone would otherwise hide it from
+  // the override, since findDelivered is honest/success-only).
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'failed' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 3, insertions: 40, deletions: 1, commits: 2, outcome: 'failed' },
+    }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  assert.equal(wi1?.status, 'retrying', 'a WI that committed real work before crashing must not read as a hard failure');
+  assert.equal(wi1?.delivered, undefined, 'delivered stays honest/undefined — the WI did not ship, it is retrying');
+});
+
+test('deriveWorkItems: a failed WI with a zero-commit dev-loop.discarded event stays failed (no override)', () => {
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'failed' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'failed' },
+    }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  assert.equal(wi1?.status, 'failed', 'nothing recoverable was committed — must stay a hard failure');
+});
+
+test('deriveWorkItems: a failed WI whose only earlier delivered attempt was superseded by a later discarded attempt is not treated as delivered', () => {
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 2, insertions: 30, deletions: 0, commits: 1, outcome: 'complete' },
+    }),
+    ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'failed' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 5, insertions: 12, deletions: 3, commits: 1, outcome: 'failed' },
+    }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  assert.equal(wi1?.status, 'retrying', 'the later discarded attempt still carries commits, so the crash-retry override applies');
+  assert.equal(wi1?.delivered, undefined, 'the stale earlier delivered event must not resurface once superseded');
+});
+
+test('deriveWorkItems: a shipped WI followed by a harmless duplicate-dev-loop-after-PR-open zero-diff delivered re-run keeps its real delivered stat', () => {
+  // brain/cycles/themes/2026-07-03-duplicate-dev-loop-after-pr-open.md — a
+  // dev-loop re-run after the PR is already open can emit a second, trivial
+  // all-zero dev-loop.delivered event for a WI that already shipped real
+  // work. FIX ROUND 2 regression: the round-1 fix's findLatestWiVerdict
+  // (single-event, no zero-diff skip) made findDelivered return undefined
+  // for this exact sequence, erasing the real earlier diff-stat.
+  const events = [
+    ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 5, insertions: 90, deletions: 1, commits: 2, outcome: 'complete' },
+    }),
+    ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'complete' },
+    }),
+    ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
+  ];
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
+  const wi1 = wis.find((w) => w.id === 'WI-1');
+  assert.equal(wi1?.status, 'complete');
+  assert.deepEqual(
+    wi1?.delivered,
+    { files: 5, insertions: 90, commits: 2 },
+    'the real delivered stat must survive a trivial zero-diff duplicate re-run',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// findDelivered — Phase 4/2 honest delivery events (delivered is success-only)
+// brain/cycles/themes/2026-07-11-dev-loop-delivered-event-fires-for-failed-wi.md
+// ---------------------------------------------------------------------------
+
+test('findDelivered: a WI-scoped dev-loop.delivered event (outcome complete) is returned', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 4, insertions: 182, deletions: 2, commits: 1, outcome: 'complete' },
+    }),
+  ];
+  assert.deepEqual(findDelivered(events, 'WI-1'), { files: 4, insertions: 182, commits: 1 });
+});
+
+test('findDelivered: a dev-loop.discarded event for the same WI is never matched (message mismatch)', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 4, insertions: 182, deletions: 2, commits: 1, outcome: 'failed' },
+    }),
+  ];
+  assert.equal(findDelivered(events, 'WI-1'), undefined, 'a failed WI must never read as delivered');
+});
+
+test('findDelivered: an explicit outcome other than complete is never matched, even under the dev-loop.delivered message (defense-in-depth)', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 4, insertions: 182, commits: 1, outcome: 'failed' },
+    }),
+  ];
+  assert.equal(findDelivered(events, 'WI-1'), undefined);
+});
+
+test('findDelivered: the cycle-level aggregate (no work_item_id, no outcome field) still matches as before', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { files_changed: 7, insertions: 120, commits: 4 },
+    }),
+  ];
+  assert.deepEqual(findDelivered(events), { files: 7, insertions: 120, commits: 4 });
+});
+
+test('findDelivered: a resumed WI with an earlier discarded attempt and a later delivered attempt returns only the delivered stat', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'failed' },
+    }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 2, insertions: 426, deletions: 0, commits: 1, outcome: 'complete' },
+    }),
+  ];
+  assert.deepEqual(findDelivered(events, 'WI-1'), { files: 2, insertions: 426, commits: 1 });
+});
+
+test('findDelivered: a WI with an earlier delivered attempt and a LATER discarded attempt (rework failed) returns undefined, not the stale delivered stats', () => {
+  // Regression: findDelivered used to match strictly on message name, so a
+  // backward scan would skip the newer dev-loop.discarded (message
+  // mismatch) and fall through to the older dev-loop.delivered — resurfacing
+  // stale success stats for a WI whose rework attempt actually failed.
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 2, insertions: 30, deletions: 0, commits: 1, outcome: 'complete' },
+    }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.discarded',
+      metadata: { work_item_id: 'WI-1', files_changed: 5, insertions: 12, deletions: 3, commits: 1, outcome: 'failed' },
+    }),
+  ];
+  assert.equal(findDelivered(events, 'WI-1'), undefined, 'the later discarded attempt must supersede the earlier delivered one');
+});
+
+// ---------------------------------------------------------------------------
+// findDelivered — FIX ROUND 2 regression: a trivial all-zero dev-loop.delivered
+// re-run (duplicate-dev-loop-after-PR-open,
+// brain/cycles/themes/2026-07-03-duplicate-dev-loop-after-pr-open.md) must
+// not erase an earlier, genuinely non-zero delivered stat for the same WI.
+// ---------------------------------------------------------------------------
+
+test('findDelivered: a real delivered diff followed by a later trivial all-zero delivered re-run still returns the real diff', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 5, insertions: 90, deletions: 1, commits: 2, outcome: 'complete' },
+    }),
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'complete' },
+    }),
+  ];
+  assert.deepEqual(
+    findDelivered(events, 'WI-1'),
+    { files: 5, insertions: 90, commits: 2 },
+    'the trivial zero-diff re-run carries no information and must not shadow the earlier real delivery',
+  );
+});
+
+test('findDelivered: a trivial all-zero delivered event with no earlier meaningful delivery still returns undefined', () => {
+  const events = [
+    ev('developer-loop', 'log', {
+      message: 'dev-loop.delivered',
+      metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'complete' },
+    }),
+  ];
+  assert.equal(findDelivered(events, 'WI-1'), undefined, 'a genuinely empty delivery has nothing meaningful to surface');
+});
+
+// ---------------------------------------------------------------------------
+// R2-01-F4: eventToNodeId / deriveNodeStatuses / buildNodeMeta resolve a
+// generic execAgent/runAgent event (phase:'orchestrator' + metadata.agent_slug
+// — the frozen F1 emission shape, run-agent.test.ts:121) onto its flow node
+// via the agent-slug map, ADDITIVELY ahead of the orchestrator→null canonical
+// override (CANONICAL_PHASE_OVERRIDES, run-model.ts) — never displacing it
+// for events that carry no agent_slug (flow-runner's own bookkeeping).
+// ---------------------------------------------------------------------------
+
+const NODE_MAPPING_WITH_ORCH_NULL = new Map<string, string | null>([
+  ['orchestrator', null],
+  ['brain', null],
+]);
+
+const AGENT_SLUG_MAP = new Map<string, string>([
+  ['project-scoped-review', 'audit'],
+]);
+
+test('eventToNodeId: a generic agent event (phase:orchestrator + metadata.agent_slug) resolves via the slug map, not the orchestrator→null override', () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { agent_slug: 'project-scoped-review', agent_phase: 'audit' }),
+    'audit',
+  );
+});
+
+test("eventToNodeId: flow-runner's own orchestrator bookkeeping (no agent_slug) still resolves to null — additive, not a regression", () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { origin: 'human-directed' }),
+    null,
+    'an orchestrator event with no agent_slug keeps the pre-F4 behaviour',
+  );
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, undefined),
+    null,
+    'an orchestrator event with no metadata at all keeps the pre-F4 behaviour',
+  );
+});
+
+test('eventToNodeId: an agent_slug that resolves in no flow node still falls through to the orchestrator→null override', () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { agent_slug: 'unregistered-agent' }),
+    null,
+  );
+});
+
+test('deriveNodeStatuses: a generic execAgent/runAgent node (start+end, phase:orchestrator) resolves to complete on its own flow node id', () => {
+  const events = [
+    ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),
+    ev('orchestrator', 'end', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, cost_usd: 0.42 }),
+  ];
+  const statuses = deriveNodeStatuses(events, 'complete', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP);
+  assert.equal(statuses['audit'], 'complete', 'generic-agent node status resolves onto its flow node id, not dropped');
+  assert.equal(statuses['orchestrator'], undefined, 'the orchestrator pseudo-node itself never materialises as a hex');
+});
+
+test('buildNodeMeta: a generic execAgent/runAgent node carries its real cost once bucketed onto its flow node id', () => {
+  const events = [
+    ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),
+    ev('orchestrator', 'end', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, cost_usd: 0.42 }),
+  ];
+  const meta = buildNodeMeta('audit', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 0.42) < 0.000001,
+    `audit node cost should be ~0.42 (from its end event), got ${meta.costUsd}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 1): findFailure's no-classification fallback must not
+// leave a failed run with NO failNote at all when the raw error text is
+// sitting one event away.
+// ---------------------------------------------------------------------------
+
+test('findFailure: no failure_classification event — failNote derives from the last error event message (kills the silent-undefined fallback)', () => {
+  const events = [
+    ev('orchestrator', 'start', {}),
+    ev('developer-loop', 'error', { message: "ENOENT: no such file or directory, open '/tmp/x'" }),
+  ];
+  const { failedAt, failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failedAt, 'developer-loop');
+  assert.equal(failNote, "ENOENT: no such file or directory, open '/tmp/x'");
+});
+
+test('findFailure: a failure_classification event still wins its reason over the raw error text (no regression, kills a naive "always use the raw error" implementation)', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'raw crash text that must NOT surface' }),
+    ev('orchestrator', 'log', {
+      message: 'failure_classification',
+      metadata: { reason: 'PM emitted overlapping WIs (hidden coupling)' },
+    }),
+  ];
+  const { failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failNote, 'PM emitted overlapping WIs (hidden coupling)');
+});
+
+test('findFailure: an expected_fail error event is still skipped by the fallback (existing behavior preserved)', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'expected failure, ignore me', metadata: { expected_fail: true } }),
+  ];
+  const { failedAt, failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failedAt, undefined);
+  assert.equal(failNote, undefined);
+});
+
+test('findFailure: an unusually long raw error message is truncated, keeping the leading (most informative) text', () => {
+  const longMsg = 'FATAL: ' + 'x'.repeat(500);
+  const events = [ev('developer-loop', 'error', { message: longMsg })];
+  const { failNote } = findFailure(events, new Map(), new Map());
+  assert.ok(failNote !== undefined);
+  assert.ok(failNote.length < longMsg.length, `truncated failNote must be shorter than the raw ${longMsg.length}-char message, got ${failNote.length}`);
+  assert.ok(
+    longMsg.startsWith(failNote.replace(/…$/, '')),
+    'the KEPT text must be a literal prefix of the original message (leading, most-informative part preserved)',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 2b): deriveStopOnBudget — a distinct terminal outcome,
+// derived at read time from events + the run's own workItems tally. No
+// stored field to go stale.
+// ---------------------------------------------------------------------------
+
+test('deriveStopOnBudget: a cost-ceiling stop event + all work items complete derives the outcome with the right tally', () => {
+  const events = [
+    ev('orchestrator', 'log', {
+      message: 'flow.cost-ceiling-stop',
+      metadata: { spentUsd: 80.8324, ceilingUsd: 52, pct: 155.4, stoppedBeforeNode: null },
+    }),
+    ev('orchestrator', 'error', {
+      message: 'cost-ceiling: flow spent $80.8324 which meets or exceeds the $52.00 ceiling — stopping at a clean phase boundary (resumable).',
+    }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [
+    { status: 'complete' }, { status: 'complete' }, { status: 'complete' },
+    { status: 'complete' }, { status: 'complete' }, { status: 'complete' },
+  ];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.notEqual(result, null);
+  assert.equal(result?.spentUsd, 80.8324);
+  assert.equal(result?.ceilingUsd, 52);
+  assert.equal(result?.resumable, true);
+  assert.equal(result?.completedWorkItems, 6);
+  assert.equal(result?.totalWorkItems, 6);
+});
+
+test('deriveStopOnBudget: an ordinary crash (no cost-ceiling event) with zero work items complete does NOT derive a stop-on-budget outcome', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'agent_threw: some unrelated crash' }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [{ status: 'failed' }, { status: 'pending' }];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.equal(result, null);
+});
+
+test('deriveStopOnBudget: negative control — an ordinary terminal PM hidden-coupling failure does not derive stop-on-budget', () => {
+  const events = [
+    ev('project-manager', 'error', {
+      message: 'pm.end',
+      metadata: { hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }] },
+    }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [{ status: 'complete' }];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.equal(result, null);
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7) — a terminal state must not name a phase that no longer exists.
+//
+// `findFailure` defaulted an unattributable failure to `failedAt: 'unifier'`.
+// The unifier node was RETIRED from the live flow by R4-01-F4 (ADR-039/040);
+// `studio/flows/forge-develop/flow.yaml` mentions it only in a comment
+// explaining that it is gone. So an unattributable failure pointed the
+// operator at a node that exists in no flow — the monitor silently draws no
+// outline for it (no hex has that id) and anyone reading the field is
+// misinformed. Reproduced on the real cycle
+// 2026-08-18T12-42-15_INIT-2026-08-14-betterado-gap-registry, which reports
+// `failedAt: unifier` through the real `listRuns` entry point.
+//
+// Honest unknown beats a confident wrong answer: leave `failedAt` absent when
+// no flow node can be attributed. Every consumer is already null-safe
+// (RunControls, RunRail, flow-ledger gate on `status`, monitor-layout reads it
+// optionally) — enumerated before this change, not assumed.
+// ---------------------------------------------------------------------------
+
+test('findFailure: an unattributable classified failure leaves failedAt ABSENT, never the retired "unifier"', () => {
+  const events = [
+    { event_type: 'error', phase: 'orchestrator', message: 'cost-ceiling: flow spent $80', metadata: {} },
+    { event_type: 'log', phase: 'orchestrator', message: 'failure_classification', metadata: { reason: 'stopped on budget' } },
+  ] as unknown as Parameters<typeof findFailure>[0];
+  // Fixture mirrors PRODUCTION: `orchestrator` maps to null in the real
+  // nodeMapping (run-model.ts:263 "orchestrator: null — ignored for phase
+  // status"), which is exactly why the real 2026-08-18 cycle resolved no node
+  // and fell to the retired-`unifier` default. An empty Map would NOT
+  // reproduce it — eventToNodeId echoes the raw phase back instead.
+  const nodeMapping = new Map<string, string | null>([['orchestrator', null]]);
+  const r = findFailure(events, nodeMapping, new Map());
+  assert.equal(r.failedAt, undefined, 'no flow node resolved — say nothing rather than naming a retired phase');
+  assert.equal(r.failNote, 'stopped on budget');
+});
+
+test('findFailure: an unattributable UNclassified failure also leaves failedAt absent but still carries the error text', () => {
+  const events = [
+    { event_type: 'error', phase: 'orchestrator', message: 'boom: the runner died', metadata: {} },
+  ] as unknown as Parameters<typeof findFailure>[0];
+  const nodeMapping = new Map<string, string | null>([['orchestrator', null]]);
+  const r = findFailure(events, nodeMapping, new Map());
+  assert.equal(r.failedAt, undefined);
+  assert.equal(r.failNote, 'boom: the runner died');
+});
+
+test('deriveStopOnBudget: carries the node the flow stopped BEFORE — the resumable boundary the operator needs', () => {
+  const events = [
+    {
+      event_type: 'log',
+      phase: 'orchestrator',
+      message: 'flow.cost-ceiling-stop',
+      metadata: { spentUsd: 80.83237065, ceilingUsd: 52, pct: 155.4, stoppedBeforeNode: 'demo' },
+    },
+  ] as unknown as Parameters<typeof deriveStopOnBudget>[0];
+  const r = deriveStopOnBudget(events, [{ status: 'complete' }, { status: 'complete' }] as never);
+  assert.ok(r);
+  assert.equal(r.stoppedBeforeNode, 'demo', 'the event already carries it; the derivation must not drop it');
+  assert.equal(r.completedWorkItems, 2);
+});
+
+test('deriveStopOnBudget: a stop event with no stoppedBeforeNode omits the field rather than inventing one', () => {
+  const events = [
+    { event_type: 'log', phase: 'orchestrator', message: 'flow.cost-ceiling-stop', metadata: { spentUsd: 10, ceilingUsd: 5 } },
+  ] as unknown as Parameters<typeof deriveStopOnBudget>[0];
+  const r = deriveStopOnBudget(events, [] as never);
+  assert.ok(r);
+  assert.equal(r.stoppedBeforeNode, undefined);
+});

@@ -108,7 +108,7 @@ import type { SessionShellPayload, SessionShellFetchResult } from './session-cli
 import {
   isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor,
   COMMUNITY_REFRESH_PROJECT_ANCHOR as SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR,
-} from '../../../cli/bridge-studio-sessions.ts';
+} from '../../../packages/sessions/bridge-studio-sessions.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures

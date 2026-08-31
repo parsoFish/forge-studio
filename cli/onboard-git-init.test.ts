@@ -29,7 +29,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { scaffoldContractArtifacts } from './bridge-studio-writes.ts';
-import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
+import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from '@forge/projects/preflight.ts';
 
 test('AT-B6-5 (RED, projects-11) onboarding a dir INSIDE an enclosing git work tree still git-inits the project itself', () => {
   const enclosing = mkdtempSync(join(tmpdir(), 'onboard-gitinit-'));

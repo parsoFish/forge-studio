@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { startBridge } from './ui-bridge.ts';
-import { sessionLogDirName } from './bridge-studio-lifecycle.ts';
+import { sessionLogDirName } from '@forge/sessions/bridge-studio-lifecycle.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 const PROJECT = 'demoproj';

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Skills, hooks, connections, templates, seeds, community: author, scan, approve, list.",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./*": "./*"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

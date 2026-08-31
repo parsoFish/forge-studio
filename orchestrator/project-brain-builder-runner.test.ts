@@ -11,7 +11,7 @@ import {
   PROJECT_BRAIN_MODEL,
   type ProjectBrainStatus,
 } from './project-brain-builder-runner.ts';
-import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from '@forge/sessions/interactive-session.ts';
 import { loadKbDescriptor } from './studio/registry.ts';
 
 function setup(

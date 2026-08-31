@@ -243,26 +243,26 @@ test('F17: every fold-allowlist row carries an audited positive-integer occurren
 test('F18: a surplus occurrence beyond the audited count is kept as ONE build-failing finding', () => {
   withFixture(
     {
-      // orchestrator/cli.ts + folded "target" is audited for count 1 in the real
+      // apps/forge/cli.ts + folded "target" is audited for count 1 in the real
       // allowlist; this fixture holds TWO occurrences of the identical fold.
-      'orchestrator/cli.ts': "const a = resolve('projects', target);\nconst b = resolve('projects', target);\n",
+      'apps/forge/cli.ts': "const a = resolve('projects', target);\nconst b = resolve('projects', target);\n",
       // Remaining fold-scope modules present but benign, so the scan sees a
       // complete module set rather than skipping absent files.
-      'cli/agent-run.ts': 'export const noop = true;\n',
-      'orchestrator/agent-dispatch.ts': 'export const noop = true;\n',
-      'orchestrator/scheduler.ts': 'export const noop = true;\n',
+      'packages/agents/agent-run.ts': 'export const noop = true;\n',
+      'packages/agents/agent-dispatch.ts': 'export const noop = true;\n',
+      'packages/flows/scheduler.ts': 'export const noop = true;\n',
     },
     (root) => {
-      const onDisk = readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8');
+      const onDisk = readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8');
       assert.equal(
         (onDisk.match(/resolve\('projects', target\)/g) ?? []).length,
         2,
         'precondition: the fixture holds exactly two occurrences of the audited "target" fold',
       );
       const auditedRow = PROJECTS_ROOT_FOLD_ALLOWLIST.find(
-        (r) => r.file === 'orchestrator/cli.ts' && r.folded === 'target',
+        (r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target',
       );
-      assert.ok(auditedRow, 'precondition: the real allowlist audits orchestrator/cli.ts + "target"');
+      assert.ok(auditedRow, 'precondition: the real allowlist audits apps/forge/cli.ts + "target"');
       assert.equal(auditedRow.count, 1, 'precondition: the real audit for this token is count 1');
 
       const res = runLint({ root });
@@ -271,7 +271,7 @@ test('F18: a surplus occurrence beyond the audited count is kept as ONE build-fa
         1,
         'exactly one kept finding — the surplus occurrence beyond the audited count (not 0, not 2)',
       );
-      assert.equal(res.findings[0].file, 'orchestrator/cli.ts');
+      assert.equal(res.findings[0].file, 'apps/forge/cli.ts');
       assert.equal(res.findings[0].folded, 'target');
     },
   );
@@ -280,14 +280,14 @@ test('F18: a surplus occurrence beyond the audited count is kept as ONE build-fa
 test('F19: exactly the audited number of occurrences is fully suppressed (0 kept)', () => {
   withFixture(
     {
-      'orchestrator/cli.ts': "const a = resolve('projects', target);\n",
-      'cli/agent-run.ts': 'export const noop = true;\n',
-      'orchestrator/agent-dispatch.ts': 'export const noop = true;\n',
-      'orchestrator/scheduler.ts': 'export const noop = true;\n',
+      'apps/forge/cli.ts': "const a = resolve('projects', target);\n",
+      'packages/agents/agent-run.ts': 'export const noop = true;\n',
+      'packages/agents/agent-dispatch.ts': 'export const noop = true;\n',
+      'packages/flows/scheduler.ts': 'export const noop = true;\n',
     },
     (root) => {
       assert.ok(
-        readFileSync(join(root, 'orchestrator/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
         'precondition: the audited-count fold is present in the fixture',
       );
       const res = runLint({ root });
@@ -313,20 +313,20 @@ test('G20: runLint against the real repo root has zero fold findings and no stal
 
 // =============================================================================
 // H. MUTATION ON THE REAL TREE — the durable class-closer. Each evasion shape is
-// appended to the REAL cli/agent-run.ts text (never written to disk); the
+// appended to the REAL packages/agents/agent-run.ts text (never written to disk); the
 // mutation's presence is asserted BEFORE any verdict is read.
 // =============================================================================
 
 test('H21a: a renamed-import/local-alias callee fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'cli/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'cli/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
 
   const MUT = "const localResolve = resolve;\nconst mutatedEvasionPath1 = localResolve('projects', evasionTokenAlias);";
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the alias-callee mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'cli/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the alias-callee fold adds a finding beyond the unmutated baseline',
@@ -338,15 +338,15 @@ test('H21a: a renamed-import/local-alias callee fold, re-introduced into the rea
 });
 
 test('H21b: a differently-named-root binding fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'cli/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'cli/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
 
   const MUT = "const evasionBase = resolve('projects');\nconst mutatedEvasionPath2 = join(evasionBase, evasionTokenBinding);";
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the differently-named-root-binding mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'cli/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the differently-named-root-binding fold adds a finding beyond the unmutated baseline',
@@ -358,15 +358,15 @@ test('H21b: a differently-named-root binding fold, re-introduced into the real t
 });
 
 test('H21c: a template-literal fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'cli/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'cli/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
 
   const MUT = 'const mutatedEvasionPath3 = `projects/${evasionTokenTemplate}`;';
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the template-literal mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'cli/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the template-literal fold adds a finding beyond the unmutated baseline',

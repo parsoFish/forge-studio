@@ -57,9 +57,9 @@ import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from './project-brain-builder-runner.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
-import { cyclesRawDir } from './brain-paths.ts';
-import { splitSkillTurnSections } from './skill-path.ts';
+import { writeSessionStatus, type QueryFn } from '@forge/sessions/interactive-session.ts';
+import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
+import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 const RUNNER_TS_PATH = resolve(import.meta.dirname, 'project-brain-builder-runner.ts');
 const SKILL_MD_PATH = resolve(import.meta.dirname, '..', 'skills', 'project-brain-builder', 'SKILL.md');

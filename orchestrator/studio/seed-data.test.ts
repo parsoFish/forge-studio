@@ -13,9 +13,9 @@ import { existsSync, readdirSync } from 'node:fs';
 
 import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
 import { validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
-import { resolveProjectsDir } from '../config.ts';
-import { MODEL_BY_TIER } from '../phase-agent.ts';
-import { MATERIAL_KINDS } from './materials.ts';
+import { resolveProjectsDir } from '@forge/kernel';
+import { MODEL_BY_TIER } from '@forge/agents/phase-agent.ts';
+import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
 
 const ROOT = process.cwd();
 

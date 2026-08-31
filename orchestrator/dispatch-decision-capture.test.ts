@@ -91,10 +91,10 @@ import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import { isStudioAgent, listAgentDefinitions, loadAgentDefinition, listFlowIds, loadFlowDefinition } from './studio/registry.ts';
-import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
+import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
 import { resolveNodeKind, flowPathForId } from './flow-runner.ts';
-import { skillsDir, listSkillMdDirs } from './skill-path.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { assertMatchesJsonSnapshot } from './test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');

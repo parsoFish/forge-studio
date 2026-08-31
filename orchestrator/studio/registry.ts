@@ -9,14 +9,14 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { listSkillMdDirs, listSkillDirs, PROJECT_ID_RE } from '../skill-path.ts';
-import { skillTrustState } from './skill-library.ts';
-import { parseMaterials } from './materials.ts';
-import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
-import { BAND_GUARD_IDS } from '../agent-bands.ts';
-import { parseConnectionEntries } from './connection-catalog.ts';
-import { communitySourceKey } from './community-source-url.ts';
-import { extractLeadingCommentBlock, findCommentLinesInBlock } from './yaml-comments.ts';
+import { listSkillMdDirs, listSkillDirs, PROJECT_ID_RE } from '@forge/agents/skill-path.ts';
+import { skillTrustState } from '@forge/library/studio/skill-library.ts';
+import { parseMaterials } from '@forge/agents/studio/materials.ts';
+import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts/studio/types.ts';
+import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import { parseConnectionEntries } from '@forge/library/studio/connection-catalog.ts';
+import { communitySourceKey } from '@forge/library/studio/community-source-url.ts';
+import { extractLeadingCommentBlock, findCommentLinesInBlock } from '@forge/library/studio/yaml-comments.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -42,7 +42,7 @@ import type {
   FlowTrigger,
   InstructionSeed,
   ProjectRef,
-} from './types.ts';
+} from '@forge/contracts/studio/types.ts';
 
 import {
   reqString,
@@ -55,7 +55,7 @@ import {
   oneOf,
   loadYaml,
   loadYamlWithRaw,
-} from './yaml-fields.ts';
+} from '@forge/kernel/studio/yaml-fields.ts';
 
 // The KB descriptor's load / serialize / process-resolution live in
 // ./kb-descriptor.ts (extracted to keep this file under the 800-line cap).
@@ -68,7 +68,7 @@ export {
   DEFAULT_KB_LINT,
   DEFAULT_KB_INGEST,
   DEFAULT_KB_CONSOLIDATE,
-} from './kb-descriptor.ts';
+} from '@forge/knowledge/studio/kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
 // Union-field guard helpers live in ./yaml-fields.ts (oneOf, loadYaml)
@@ -285,7 +285,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';
 // it remains the ONE canonical serializer (ADR-027).
-export { serializeAgentDefinition } from './skill-md-fidelity.ts';
+export { serializeAgentDefinition } from '@forge/agents/studio/skill-md-fidelity.ts';
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
   const defs: AgentDefinition[] = [];

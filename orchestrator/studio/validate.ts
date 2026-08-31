@@ -7,18 +7,18 @@
  */
 
 
-import { DEMO_STEP_KINDS } from './types.ts';
-import { FANOUT_ISOLATION_KINDS } from './types.ts';
-import { FLOW_KICKOFF_KINDS } from './types.ts';
-import { KB_BACKENDS } from './types.ts';
-import { SLUG_RE, EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH, RESERVED_OBJECT_IDS, isReservedId } from '../skill-path.ts';
-import { isSafeProjectName } from '../../cli/manifest-path-guard.ts';
+import { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
+import { FANOUT_ISOLATION_KINDS } from '@forge/contracts/studio/types.ts';
+import { FLOW_KICKOFF_KINDS } from '@forge/contracts/studio/types.ts';
+import { KB_BACKENDS } from '@forge/contracts/studio/types.ts';
+import { SLUG_RE, EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH, RESERVED_OBJECT_IDS, isReservedId } from '@forge/agents/skill-path.ts';
+import { isSafeProjectName } from '@forge/flows/manifest-path-guard.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
-import { MATERIAL_KINDS } from './materials.ts';
-import { communitySourceKey } from './community-source-url.ts';
-import { agentCapabilityDescriptor } from './derive.ts';
-import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
-import { BAND_CANONICAL_SLUG } from '../agent-bands.ts';
+import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
+import { communitySourceKey } from '@forge/library/studio/community-source-url.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { checkFlowTriggers, type TriggerCheckOpts } from '@forge/flows/studio/validate-triggers.ts';
+import { BAND_CANONICAL_SLUG } from '@forge/agents/agent-bands.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -28,7 +28,7 @@ import type {
   InstructionSeed,
   KbDescriptor,
   ProjectDefinition,
-} from './types.ts';
+} from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Public API types
