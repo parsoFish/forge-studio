@@ -77,7 +77,10 @@ interprets it ([ADR 028](docs/decisions/028-flow-engine.md) §1).
   run, surface the artifact, wait on the verdict endpoint) — ADR 028 §1.
 - **The runner holds the port, not the phases.** A station is executed through
   `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }`. The runner imports no
-  phase (`1.0.md` §4 M2 Lane B).
+  phase (`1.0.md` §4 M2 Lane B). The injectable seam this replaced is
+  [ADR 028](docs/decisions/028-flow-engine.md), amended 2026-08-31 to name
+  `createPhaseExecutor({ overrides })` instead of the deleted
+  `FlowRunArgs.nodeExecutors`.
 - **A run is derived, never stored.** The run view is aggregated from queue
   state, manifest, `events.jsonl` and the artifacts directory. Read-only; there
   is no second write path for run state (ADR 028 §3).
@@ -236,6 +239,11 @@ contract** ([ADR 017](docs/decisions/017-forge-project-contract.md),
   command exists and is plausibly fast; it does not run it (ADR 017 C1).
 - **Flows reach the preflight through a port.** `ProjectGate { runPreflight }` is
   injected; a flow does not import the project package (`1.0.md` §4 M2 Lane B).
+  [ADR 036](docs/decisions/036-orchestrator-owned-gate-execution.md), amended
+  2026-08-31, records what that costs: its principle holds — the orchestrator
+  runs the gate, the agent never self-certifies — but its stronger claim, that
+  the ABSENCE of an injection seam is what makes the gate unfakeable, does not.
+  Exactly one production caller wires the real preflight.
 
 ### Forbidden
 

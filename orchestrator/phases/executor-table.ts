@@ -386,11 +386,13 @@ const execReflect: NodeExecutor = async (ctx) => {
  * verdict. The OTHER half changed in M2-B and the change is not silent: the
  * preflight now arrives through the injected `ProjectGate` port
  * (`ctx.projectGate`), because SPEC.md §6 and `docs/roadmaps/1.0.md` §4 M2
- * Lane B require that a flow not import the project package. ADR 036's
- * implemented-note still claims there is DELIBERATELY no injection seam here,
- * and that claim is now false — the amendment is parked with the operator
- * (`_1.0/ledger.md`), because an ADR is amended before the code that
- * contradicts it merges, never after. The
+ * Lane B require that a flow not import the project package. ADR 036 was
+ * AMENDED for this (2026-08-31, operator ruling): its principle holds, and its
+ * stronger claim — that the ABSENCE of an injection seam is what makes this
+ * gate unfakeable — is retired there rather than left to rot. What guards it
+ * now: exactly one production caller wires the real preflight
+ * (`orchestrator/cycle.ts` via `createProjectGate()`), and a conformance test
+ * fails if `flow-runner.ts` ever imports `cli/preflight.ts` again. The
  * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
  * declaration carrier + display identity the band-guard machinery needs
  * (composition.guards, runtime/budgets for lint); it is never spawned.
