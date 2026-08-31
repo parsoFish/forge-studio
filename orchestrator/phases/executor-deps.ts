@@ -8,11 +8,11 @@
  * files move to `@forge/factory` with the phases they wire.
  */
 
-import { resolve, dirname, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '../logging.ts';
 import { parseManifest } from '../manifest.ts';
+import { FORGE_ROOT } from '../skill-path.ts';
 import { runPreflight } from '../../cli/preflight.ts';
 import type { ProjectGate } from '../_pkg/kernel.ts';
 import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '../cycle-context.ts';
@@ -26,13 +26,6 @@ import { runReflector } from './reflector.ts';
 import { rebasePreservedBranchOntoMain } from '../pr.ts';
 import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateResult } from '../cycle-helpers.ts';
 
-/**
- * Forge repo root — `<root>/orchestrator/phases/executor-deps.ts` resolves to
- * `<root>`. It is the same path `flow-runner.ts`'s `FORGE_ROOT` resolves
- * to; the two are computed apart because the runner may not import this file,
- * which is where the phases live.
- */
-export const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
  * Injectable executor set for testability. Every field defaults to the real
@@ -282,3 +275,10 @@ export async function raceWithWedge<T>(
 export function createProjectGate(): ProjectGate {
   return { runPreflight };
 }
+
+/**
+ * The shipped early-terminate closure. `runFlow` takes it directly (not through
+ * the phase port) because stopping the walk is the runner's own act; exporting
+ * it here keeps the runner's caller free of a phase import.
+ */
+export const defaultRunClosure = DEFAULT_DEPS.runClosure;

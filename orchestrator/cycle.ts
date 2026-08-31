@@ -66,7 +66,7 @@ export {
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
 import { runFlow, flowPathForId } from './flow-runner.ts';
 import { createPhaseExecutor } from './phases/executor-table.ts';
-import { createProjectGate } from './phases/executor-deps.ts';
+import { createProjectGate, defaultRunClosure } from './phases/executor-deps.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
@@ -245,7 +245,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       }
       const flow = loadFlowDefinition(flowPath);
       const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, executor: createPhaseExecutor(), projectGate: createProjectGate() });
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, executor: createPhaseExecutor(), projectGate: createProjectGate(), runClosure: defaultRunClosure });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

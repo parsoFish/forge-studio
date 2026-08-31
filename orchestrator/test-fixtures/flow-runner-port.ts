@@ -17,7 +17,7 @@
  */
 import { runFlow, type FlowRunArgs } from '../flow-runner.ts';
 import { createPhaseExecutor, type NodeExecutor } from '../phases/executor-table.ts';
-import { createProjectGate } from '../phases/executor-deps.ts';
+import { createProjectGate, defaultRunClosure } from '../phases/executor-deps.ts';
 import type { FlowRunnerDeps } from '../phases/executor-deps.ts';
 import type { NodeKind } from '../flow-node-kind.ts';
 
@@ -30,16 +30,24 @@ export function runFlowT({
   deps,
   nodeExecutors,
   ...rest
-}: Omit<FlowRunArgs, 'executor' | 'projectGate'> & {
+}: Omit<FlowRunArgs, 'executor' | 'projectGate' | 'runClosure'> & {
   projectGate?: FlowRunArgs['projectGate'];
+  runClosure?: FlowRunArgs['runClosure'];
   deps?: TestDepsPartial;
   nodeExecutors?: Partial<Record<NodeKind, NodeExecutor>>;
 }): ReturnType<typeof runFlow> {
   const { enqueueFlowRun, ...phaseDeps } = deps ?? {};
+  const { projectGate, runClosure, ...args } = rest;
   return runFlow({
-    projectGate: createProjectGate(),
-    ...rest,
-    ...(enqueueFlowRun ? { enqueueFlowRun } : {}),
+    ...args,
+    // Defaults resolve AFTER the caller's fields, so an explicit `undefined`
+    // cannot silently win against a required argument.
+    projectGate: projectGate ?? createProjectGate(),
+    runClosure: runClosure ?? phaseDeps.runClosure ?? defaultRunClosure,
+    // Hermetic by default: `stageFlowRunRequest` writes claimable run requests
+    // into the repo's `_queue/`, which a running `forge serve` would drain, so a
+    // suite that does not care about triggers must not reach it by omission.
+    enqueueFlowRun: enqueueFlowRun ?? (() => {}),
     executor: createPhaseExecutor({ deps: phaseDeps, overrides: nodeExecutors }),
   });
 }

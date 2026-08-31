@@ -35,15 +35,15 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 1 | 738 | **1,000** | the spec targets ~0.3k. The single quarried file is 738 lines and must be pruned to types + constants; the cap is the ceiling it must come under, not a licence to stay at 738. |
-| `kernel` | 12 | 5,220 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `contracts` | 2 | 750 | **1,000** | the spec targets ~0.3k. The single quarried file is 738 lines and must be pruned to types + constants; the cap is the ceiling it must come under, not a licence to stay at 738. |
+| `kernel` | 13 | 3,803 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 33 | 12,070 | **12,500** | seeded from the quarried total, rounded up to the next 500. |
 | `knowledge` | 26 | 11,157 | **11,500** | seeded from the quarried total, rounded up to the next 500. |
-| `projects` | 22 | 7,841 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
+| `projects` | 22 | 7,820 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
 | `sessions` | 20 | 13,078 | **13,500** | seeded from the quarried total, rounded up to the next 500. |
-| `flows` | 64 | 22,260 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
-| `factory` | 35 | 12,044 | **12,500** | seeded from the quarried total, rounded up to the next 500. This package is deletable; its cap is a ceiling on the EXAMPLE, not on the platform. |
+| `flows` | 62 | 21,327 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
+| `factory` | 37 | 13,004 | **12,500** | **OVER, and parked (M2-B).** Two effects landed together: M2-B quarried `orchestrator/phases/executor-{deps,table}.ts` (960 lines) to this package, where the phases they wire already live; and the per-package columns in this table, which were hand-seeded and never recomputed, are now derived from the rows below — `factory` measured 12,044 before M2-B's two files, not the figure the cap was seeded from. The cap is a ceiling on the EXAMPLE, not the platform, but it is ratified: raising it, re-seeding every cap from the recomputed totals, or keeping the two files owned by `flows` is an operator ruling, not a lane's. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
 | **total** | **241** | **103,166** | | |
@@ -150,7 +150,7 @@ operator-ratified new cap — never a silent raise.
 | cli/metrics.ts | flows | verbatim | 142 |
 | cli/preflight-fix-auto.ts | projects | verbatim | 171 |
 | cli/preflight-resolve.ts | projects | verbatim | 67 |
-| cli/preflight.ts | projects | pruned | 1135 |
+| cli/preflight.ts | projects | pruned | 1110 |
 | cli/project-migrate.ts | projects | verbatim | 197 |
 | cli/reflect-reconcile.ts | factory | verbatim | 167 |
 | cli/reflection-doc.ts | factory | verbatim | 354 |
@@ -191,11 +191,11 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/constraint-author.ts | projects | verbatim | 99 |
 | orchestrator/constraint-blocks.ts | projects | verbatim | 257 |
 | orchestrator/cron-triggers.ts | flows | verbatim | 242 |
-| orchestrator/ci-gate.ts | flows | verbatim | 148 |
-| orchestrator/cycle-context.ts | flows | verbatim | 332 |
-| orchestrator/cycle-helpers.ts | flows | verbatim | 695 |
+| orchestrator/ci-gate.ts | flows | verbatim | 147 |
+| orchestrator/cycle-context.ts | flows | verbatim | 346 |
+| orchestrator/cycle-helpers.ts | flows | verbatim | 694 |
 | orchestrator/cycle-report.ts | flows | verbatim | 29 |
-| orchestrator/cycle.ts | flows | verbatim | 485 |
+| orchestrator/cycle.ts | flows | verbatim | 484 |
 | orchestrator/daemon.ts | flows | verbatim | 248 |
 | orchestrator/demo-builder-runner.ts | sessions | verbatim | 814 |
 | orchestrator/demo-fix-loop.ts | flows | verbatim | 218 |
@@ -211,9 +211,9 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/flow-artifacts.ts | flows | pruned | 437 |
 | orchestrator/flow-budgets.ts | flows | verbatim | 450 |
 | orchestrator/flow-run-requests.ts | flows | verbatim | 397 |
-| orchestrator/flow-node-context.ts | flows | verbatim | 51 |
+| orchestrator/flow-node-context.ts | flows | verbatim | 54 |
 | orchestrator/flow-node-kind.ts | flows | verbatim | 66 |
-| orchestrator/flow-runner.ts | flows | rewritten | 632 |
+| orchestrator/flow-runner.ts | flows | rewritten | 638 |
 | orchestrator/flow-trigger.ts | flows | verbatim | 214 |
 | orchestrator/gate-fix-loop.ts | flows | verbatim | 163 |
 | orchestrator/gate-recipes.ts | projects | verbatim | 146 |
@@ -236,9 +236,9 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/phases/adversarial-review-binding.ts | factory | verbatim | 139 |
 | orchestrator/phases/adversarial-review.ts | factory | verbatim | 393 |
 | orchestrator/phases/agent-scope-guard.ts | agents | verbatim | 111 |
-| orchestrator/phases/closure.ts | flows | verbatim | 438 |
-| orchestrator/phases/executor-deps.ts | flows | rewritten | 273 |
-| orchestrator/phases/executor-table.ts | flows | rewritten | 671 |
+| orchestrator/phases/closure.ts | flows | verbatim | 431 |
+| orchestrator/phases/executor-deps.ts | factory | rewritten | 284 |
+| orchestrator/phases/executor-table.ts | factory | rewritten | 676 |
 | orchestrator/phases/decompose-completeness.ts | factory | verbatim | 197 |
 | orchestrator/phases/demo-agent-binding.ts | factory | verbatim | 214 |
 | orchestrator/phases/demo-agent.ts | factory | verbatim | 740 |
@@ -271,8 +271,8 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/review-comments.ts | factory | verbatim | 229 |
 | orchestrator/run-agent.ts | agents | verbatim | 665 |
 | orchestrator/run-model-derive.ts | flows | verbatim | 988 |
-| orchestrator/run-model.ts | flows | verbatim | 818 |
-| orchestrator/run-view-types.ts | flows | verbatim | 190 |
+| orchestrator/run-model.ts | flows | verbatim | 817 |
+| orchestrator/run-view-types.ts | flows | verbatim | 189 |
 | orchestrator/scheduler-dispatch.ts | flows | verbatim | 252 |
 | orchestrator/scheduler.ts | flows | verbatim | 1031 |
 | orchestrator/skill-path.ts | agents | verbatim | 373 |
@@ -327,7 +327,7 @@ operator-ratified new cap — never a silent raise.
 | skills/brain-maintenance/SKILL.md | knowledge | verbatim | 139 |
 | skills/brain-query/SKILL.md | knowledge | verbatim | 92 |
 | skills/changelog-semver/SKILL.md | flows | verbatim | 56 |
-| skills/contract-check/SKILL.md | projects | verbatim | 85 |
+| skills/contract-check/SKILL.md | projects | verbatim | 89 |
 | skills/creation-agent/SKILL.md | library | verbatim | 117 |
 | skills/cruft-sweep/SKILL.md | kernel | verbatim | 91 |
 | skills/demo-agent/SKILL.md | factory | verbatim | 141 |

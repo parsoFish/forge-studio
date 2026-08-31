@@ -32,8 +32,9 @@ first-class citizen of the platform (a `composition.guards` entry, a
 `studio/catalog.yaml` display row, a real roster member `forge studio lint`
 can validate) — nothing more. The `onboard-project` flow's `contract-check`
 node carries both `agent:"contract-check"` and `gate:"contract"`
-(ADR-039 declared dispatch); at runtime, `flow-runner.ts`'s `execAgent`
-resolves the declared `onboard-preflight` band guard and routes the node to
+(ADR-039 declared dispatch); at runtime, `execAgent`
+(`orchestrator/phases/executor-table.ts`) resolves the declared
+`onboard-preflight` band guard and routes the node to
 `execOnboardPreflight`, which calls the REAL `runPreflight` function
 (`cli/preflight.ts`) **directly, orchestrator-side**. On this path — the
 only path the `onboard-project` flow uses — no agent is spawned, no prompt
@@ -74,8 +75,11 @@ away.
 
 ## What actually produces the gate's outcome
 
-`execOnboardPreflight` (`orchestrator/flow-runner.ts`) runs `runPreflight`
-against the initiative's `projectRepoPath`, computes the hard-failing clause
+`execOnboardPreflight` (`orchestrator/phases/executor-table.ts` since M2-B)
+runs `runPreflight` against the initiative's `projectRepoPath` — through the
+injected `ProjectGate` port (`ctx.projectGate`, SPEC.md §6), which is the
+security-relevant half: production wires the real preflight in `cycle.ts`, and
+a caller that injects another gate decides this outcome, computes the hard-failing clause
 ids in `runPreflight`'s own clause order, and emits them as
 `failing_clause_ids` on the reported event. A red report
 (`report.ok === false`) terminates the flow walk early and routes the

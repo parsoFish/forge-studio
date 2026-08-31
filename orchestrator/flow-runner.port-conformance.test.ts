@@ -84,6 +84,7 @@ test('runFlow drives every node through the injected PhaseExecutor — a stub th
     logger: makeLogger(),
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('the stub flow must never reach the preflight'); } },
+    runClosure: async () => { throw new Error('a flow that does not terminate early must never close'); },
   });
 
   assert.deepEqual(seen, ['pm', 'review'], 'every node executed through the port, in topological order');
@@ -106,6 +107,7 @@ test('the port receives the resolved node kind and the shared mutable state, so 
     logger: makeLogger(),
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
+    runClosure: async () => { throw new Error('unreachable'); },
   });
 
   assert.deepEqual(kinds, ['review'], 'the runner resolved the node kind and handed it over on the context');
@@ -118,9 +120,8 @@ test('a ProjectGate that refuses parks the flow at ready-for-review, and the run
     flow: makeFlow([{ id: 'contract-check', agent: 'contract-check' }]),
     input: makeInput(),
     logger: makeLogger(),
-    executor: createPhaseExecutor({
-      deps: { runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; } },
-    }),
+    executor: createPhaseExecutor(),
+    runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; },
     projectGate: {
       runPreflight: () => ({
         projectDir: '/tmp/port/project',
@@ -141,9 +142,8 @@ test('a ProjectGate that PASSES lets the flow finish — the positive control th
     flow: makeFlow([{ id: 'contract-check', agent: 'contract-check' }]),
     input: makeInput(),
     logger: makeLogger(),
-    executor: createPhaseExecutor({
-      deps: { runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; } },
-    }),
+    executor: createPhaseExecutor(),
+    runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; },
     projectGate: {
       runPreflight: () => ({
         projectDir: '/tmp/port/project',

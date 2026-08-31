@@ -74,7 +74,7 @@ flowchart TB
         direction LR
         RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>loops/_adapters/registry.ts"]
         KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>orchestrator/kb-backend.ts"]
-        FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via nodeExecutors"]
+        FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via createPhaseExecutor({overrides})"]
     end
 
     subgraph CAP["Composable capabilities — skills · CLIs · MCP"]

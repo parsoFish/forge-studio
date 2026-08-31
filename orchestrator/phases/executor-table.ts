@@ -24,7 +24,8 @@ import { createBandRegistry } from '../_pkg/kernel.ts';
 import { BAND_GUARD_IDS, type BandGuardId } from '../_pkg/contracts.ts';
 import type { NodeExecContext } from '../flow-node-context.ts';
 import type { NodeKind } from '../flow-node-kind.ts';
-import { type FlowRunnerDeps, DEFAULT_DEPS, raceWithWedge, FORGE_ROOT } from './executor-deps.ts';
+import { type FlowRunnerDeps, DEFAULT_DEPS, raceWithWedge } from './executor-deps.ts';
+import { FORGE_ROOT } from '../skill-path.ts';
 
 /**
  * What an executor sees: the runner's node context PLUS the deps this table was
@@ -380,11 +381,16 @@ const execReflect: NodeExecutor = async (ctx) => {
  * orchestrator-side — mirrors `execDemo`'s shape (start event, do the real
  * work, end event carrying `status`) but spawns NO agent at all.
  *
- * ADR-036: the orchestrator runs gates, the agent never self-certifies —
- * so unlike every other band executor above, there is no `deps.run*` call
- * here and DELIBERATELY no `FlowRunnerDeps` injection seam for
- * `runPreflight`. The absence of a seam is the point: it is what makes this
- * gate unfakeable from a test or a misbehaving dependency override. The
+ * ADR-036: the orchestrator runs gates, the agent never self-certifies. That
+ * half is intact — no agent is spawned and no `deps.run*` call decides the
+ * verdict. The OTHER half changed in M2-B and the change is not silent: the
+ * preflight now arrives through the injected `ProjectGate` port
+ * (`ctx.projectGate`), because SPEC.md §6 and `docs/roadmaps/1.0.md` §4 M2
+ * Lane B require that a flow not import the project package. ADR 036's
+ * implemented-note still claims there is DELIBERATELY no injection seam here,
+ * and that claim is now false — the amendment is parked with the operator
+ * (`_1.0/ledger.md`), because an ADR is amended before the code that
+ * contradicts it merges, never after. The
  * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
  * declaration carrier + display identity the band-guard machinery needs
  * (composition.guards, runtime/budgets for lint); it is never spawned.
@@ -554,7 +560,7 @@ const execAgent: NodeExecutor = async (ctx) => {
     const band = AGENT_BANDS.get(bandGuard);
     if (band === undefined) {
       throw new Error(
-        `flow-runner: band '${bandGuard}' resolved from a declared guard has no registered executor — registered: ${AGENT_BANDS.ids().join(', ')}`,
+        `execAgent: band '${bandGuard}' resolved from a declared guard has no registered executor — registered: ${AGENT_BANDS.ids().join(', ')}`,
       );
     }
     return band(ctx);
@@ -607,9 +613,9 @@ const execAgent: NodeExecutor = async (ctx) => {
 
 /**
  * Default executor per node kind. The dispatch loop resolves a node's kind via
- * resolveNodeKind() and looks it up here — no switch. Inject overrides/additions
- * through FlowRunArgs.nodeExecutors to register a custom executor without
- * touching this file.
+ * resolveNodeKind() and looks it up here — no switch. Register or replace one
+ * through `createPhaseExecutor({ overrides })`: that is where ADR 028's
+ * injectable seam moved when the runner stopped holding the table.
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   architect: execArchitect,
@@ -664,17 +670,6 @@ export function createPhaseExecutor(opts: {
     async run(_nodeId, ctx) {
       const nodeExecutor = executors[ctx.kind] ?? execUnknown;
       await nodeExecutor({ ...ctx, deps });
-      // R4-10-F2: a node (execDemo on a red merge-boundary gate, or
-      // execOnboardPreflight on a red contract) asked to terminate. The branch
-      // is not shippable, so route the manifest to ready-for-review via
-      // closure. This runs exactly where the runner used to run it — after the
-      // node returns, before the cost-ceiling check — so the event stream is
-      // the sequence it always was.
-      if (ctx.state.terminateEarly) {
-        ctx.state.reviewerOutcome = 'ready-for-review';
-        ctx.state.closure = await deps.runClosure(ctx.input, ctx.nodeLogger, 'ready-for-review');
-        ctx.state.cycleOutcome = ctx.state.closure.outcome as CycleOutcome;
-      }
       return ctx.state.cycleOutcome;
     },
   };

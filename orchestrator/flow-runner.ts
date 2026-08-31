@@ -1,62 +1,49 @@
 /**
- * flow-runner.ts — Definition-driven DAG executor (ADR-028, M3-1/2/3).
+ * flow-runner.ts — Definition-driven DAG executor (ADR 028).
  *
- * Walks a FlowDefinition in topological order and dispatches each node to its
- * executor function. Phase functions are UNCHANGED — they are invoked as node
- * executors and receive the same CycleInput they always have.
+ * Walks a `FlowDefinition` in topological order and executes each node through
+ * ONE port: `PhaseExecutor { run(nodeId, ctx) -> CycleOutcome }`
+ * ([SPEC.md](../SPEC.md) §2 Station, `docs/roadmaps/1.0.md` §4 M2 Lane B). This
+ * file imports no phase and no preflight; the executors, the injectable phase
+ * set and the band registrations live in `orchestrator/phases/executor-table.ts`
+ * and `executor-deps.ts`, and `orchestrator/flow-runner.port-conformance.test.ts`
+ * asserts that this source keeps neither import.
  *
- * Develop-flow nodes (R4-10-F1, ADR-039/040): the live forge-develop flow is
- * dev → demo → adversarial-review → verdict. execDev runs the per-WI loop only;
- * execDemo (the `demo-band`) wraps the R4-07 demo pipeline + the RELOCATED
- * close-contract gates (items 4-8) and the demo-fix loop; execAdversarialReview
- * (the `review-band`) wraps the R4-08 critique pipeline. Both are selected by a
- * declared `composition.guards` band, not a privileged executor enum. The former
- * unifier node — execUnifier / the `developer-unifier` slug — STAYS in the
- * registry (retired at R4-01-F4) but is off the live flow; it still executes for
- * the retained forge-cycle-shaped DAG fixtures.
+ * What the runner still owns, because none of it is a station:
+ *   - topological order, node-kind resolution (`./flow-node-kind.ts`) and the
+ *     per-node context it hands the port (`./flow-node-context.ts`);
+ *   - the ADR 027 inbound-artifact guard, with the reflection-close exemption
+ *     (that node's `verdict` is produced out of band by the human gate);
+ *   - budgets and safety (ADR 028 §4): `costCeilingUsd` warns at 70% and stops
+ *     at a CLEAN NODE BOUNDARY at 100%, never mid-write; per-node `wedgeKillMs`
+ *     races a concurrent timer so a hung executor is killed even if it never
+ *     returns; the rate-limit gate waits before a spawn and records `resetsAt`
+ *     when an executor throws one;
+ *   - early termination (R4-10-F2): when a node sets `terminateEarly` the walk
+ *     STOPS, the manifest routes to `ready-for-review` through the injected
+ *     `runClosure`, and NO PR is opened. That call is deliberately outside the
+ *     node's try/catch, so a closure failure is never reclassified as the
+ *     node's rate-limit error;
+ *   - the `ProjectGate` port (SPEC.md §6) — declared here, threaded onto the
+ *     node context, never imported;
+ *   - `on: flow-complete` trigger dispatch and the synthetic architect events.
  *
- * Architect node: the PLAN gate is satisfied before the queue picks up the
- * run (the architect ran out-of-cycle via the UI). When flow-runner encounters
- * the architect node it emits the same synthetic start/end events that
- * cycle.ts:119-147 emitted — then proceeds.
- *
- * M3-3 budgets/safety (additive — flows without these fields behave exactly as before):
- *   - costCeilingUsd: runner wraps the logger to accumulate cost_usd from every
- *     emitted event; at ≥70% emits flow.cost-warn; at ≥100% at the next clean
- *     node boundary emits flow.cost-ceiling-stop + throws CostCeilingError
- *     (resumable classification).
- *   - wedgeKillMs: per-node WedgeDetector watches the event stream; if heartbeats
- *     fire but no tool_use/file_change/test_run for wedgeKillMs ms → emits
- *     phase.wedge-killed + throws WedgeKillError (resumable). Detection races the
- *     executor via a concurrent poll timer (raceWithWedge) so a hung executor is
- *     killed even if it never returns. An AbortSignal is threaded into PM; dev-loop
- *     accepts the param (best-effort, not yet chained into per-WI Ralphs).
- *   - rate-limit gate: before spawning each node, awaits RateLimitGate.waitIfNeeded();
- *     when an executor throws a rate-limit error, gate.recordRateLimit() is called
- *     and the error is rethrown (scheduler auto-retry handles the actual retry).
- *
- * The 8 ported items from the former hardcoded runCycle sequence:
- *   1. resolveQualityGateCmd → inputWithGate threading (caller's responsibility;
- *      runFlow receives the already-resolved inputWithGate)
- *   2. emitSyntheticArchitect — real manifest-read + architect.start/end events
- *   3. Resume rebase (preservingForgeScratch + rebasePreservedBranchOntoMain)
- *   4. commitDevLoopBoundary in execUnifier (after runUnifierPhase)
- *   5. enforceDevLoopCloseInvariant after boundary commit
- *   6. Unifier delivery gate (!unifierOutcome.unifierSucceeded → throw)
- *   7. assertNonEmptyDelivery after unifier gate
- *   8. enforceFinalCiGate before openPrInline
+ * The architect node is a marker: its PLAN gate is satisfied before the queue
+ * picks the run up (the architect ran out-of-cycle via the UI), so the runner
+ * emits the same synthetic start/end pair the hardcoded sequence emitted and
+ * proceeds.
  */
 
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from './logging.ts';
-import { type CycleInput, type CycleOutcome } from './cycle-context.ts';
+import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
 import { listArtifactTemplates, listAgentDefinitions, normalizeProjectId } from './studio/registry.ts';
 import { resolveBandGuard } from './agent-bands.ts';
-import { skillsDir } from './skill-path.ts';
+import { FORGE_ROOT, skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -73,9 +60,6 @@ import { resolveNodeKind } from './flow-node-kind.ts';
  * golden tests import it from this path.
  */
 export { resolveNodeKind };
-
-/** Forge repo root — `<root>/orchestrator/flow-runner.ts` resolves to `<root>`. */
-const FLOW_RUNNER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -187,6 +171,19 @@ export type FlowRunArgs = {
    * `orchestrator/phases/executor-deps.ts` builds the shipped one.
    */
   projectGate: ProjectGate;
+  /**
+   * Close the run when a node asks to terminate early (R4-10-F2). It is the
+   * RUNNER's act, not a station's — the walk stops here — so it stays outside
+   * the port and outside the node's try/catch, where a closure failure keeps
+   * being classified as itself and never as the node's rate-limit error. The
+   * runner imports no phase, so it is injected: `DEFAULT_DEPS.runClosure` in
+   * `orchestrator/phases/executor-deps.ts` is the shipped one.
+   */
+  runClosure: (
+    input: CycleInput,
+    logger: EventLogger,
+    reviewerOutcome: ReviewerOutcome,
+  ) => Promise<ClosureResult>;
   /**
    * Stage a triggered flow run. Injectable because the trigger tests assert the
    * call, not its side effect on disk. It is NOT part of the phase set: staging
@@ -378,6 +375,7 @@ export async function runFlow({
   logger,
   executor,
   projectGate,
+  runClosure,
   enqueueFlowRun = defaultEnqueueFlowRun,
   nodeBudgets,
   rateLimitGate: injectedGate,
@@ -446,14 +444,14 @@ export async function runFlow({
   // ADR-027 runtime artifact contracts — built once per run (7 small files; an
   // absent template dir → empty map → the guard no-ops).
   const artifactTemplates = new Map<string, ArtifactContract>(
-    listArtifactTemplates(FLOW_RUNNER_ROOT).map((t) => [t.id, { id: t.id, kind: t.kind, schema: t.schema }]),
+    listArtifactTemplates(FORGE_ROOT).map((t) => [t.id, { id: t.id, kind: t.kind, schema: t.schema }]),
   );
 
   // R2-01-F2: the run's agent roster, built once per run (cheap — a handful
   // of skill dirs). Node-kind resolution reads `AgentDefinition.executor` off
   // this map instead of a hardcoded slug table.
   const agents = new Map<string, AgentDefinition>(
-    listAgentDefinitions(skillsDir(FLOW_RUNNER_ROOT)).map((a) => [a.slug, a]),
+    listAgentDefinitions(skillsDir(FORGE_ROOT)).map((a) => [a.slug, a]),
   );
 
   for (const nodeId of order) {
@@ -514,7 +512,7 @@ export async function runFlow({
         flow,
         nodeId,
         input,
-        forgeRoot: FLOW_RUNNER_ROOT,
+        forgeRoot: FORGE_ROOT,
         templates: artifactTemplates,
         onMissing: (detail) =>
           nodeLogger.emit({
@@ -551,9 +549,18 @@ export async function runFlow({
     // DAG walk (no demo/adversarial/verdict, no PR) and route the manifest to
     // ready-for-review via closure. The gate-fix WIs it compiled make the drain
     // re-enter resume_from:'develop'; only a green baseline ever reaches openPr.
-    // The executor performed the closure (see createPhaseExecutor); the runner
-    // only stops walking.
-    if (state.terminateEarly) break;
+    // R4-10-F2: a node (execDemo on a red merge-boundary gate, execOnboardPreflight
+    // on a red contract) asked to terminate. The branch is not shippable, so STOP
+    // the walk (no demo, no adversarial review, no verdict, NO PR) and route the
+    // manifest to ready-for-review via closure. One branch, run once, outside the
+    // node's try: the walk ends here, so nothing can call it twice.
+    if (state.terminateEarly) {
+      state.reviewerOutcome = 'ready-for-review';
+      const closure = await runClosure(input, nodeLogger, 'ready-for-review');
+      state.closure = closure;
+      state.cycleOutcome = closure.outcome;
+      break;
+    }
 
     // M3-3: Cost-ceiling check — at every clean node boundary (after the node
     // completes, before the next spawns). Never mid-write.
