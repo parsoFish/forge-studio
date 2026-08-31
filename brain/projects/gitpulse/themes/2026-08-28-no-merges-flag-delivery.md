@@ -16,7 +16,7 @@ keywords:
   - parentCount
   - breaking-change
   - single-seam
-related_themes: [2026-07-11-exclude-path-filter-single-seam, 2026-07-12-sort-flag-delivery, git-truth-and-pure-aggregation]
+related_themes: [2026-07-11-exclude-path-filter-single-seam, 2026-07-12-sort-flag-delivery, git-truth-and-pure-aggregation, 2026-08-31-author-filter-flag-delivery]
 created_at: 2026-08-28T12:30:00.000Z
 updated_at: 2026-08-28T12:30:00.000Z
 ---
@@ -55,3 +55,4 @@ updated_at: 2026-08-28T12:30:00.000Z
 - [[2026-07-11-exclude-path-filter-single-seam]] — structural twin (apply filter once at seam, all pipelines inherit; text annotation + JSON field conventions)
 - [[2026-07-12-sort-flag-delivery]] — apply transformation once before any renderer
 - [[git-truth-and-pure-aggregation]] — the seam this filter sits at
+- [[2026-08-31-author-filter-flag-delivery]] — successor filter using the same 3-WI TDD pattern; authorEmail breaking-change sweep

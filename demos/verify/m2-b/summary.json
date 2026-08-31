@@ -1,0 +1,66 @@
+{
+  "runHandle": "m2-b",
+  "initiatives": [
+    {
+      "initiativeId": "INIT-2026-08-31-init-2026-08-31-author-filter-flag",
+      "cycleId": "2026-08-31T01-33-01_INIT-2026-08-31-init-2026-08-31-author-filter-flag",
+      "finalStatus": "done",
+      "totalEvents": 612,
+      "costUsd": 9.0961,
+      "workItems": {
+        "total": 3,
+        "complete": 3,
+        "failed": 0
+      }
+    }
+  ],
+  "project": "gitpulse",
+  "baseSha": null,
+  "costUsd": 9.0961,
+  "costCeilingUsd": 23,
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "finalStatus=done"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "3/3 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($23)",
+      "pass": true,
+      "detail": "$9.10 / $23"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": true,
+      "detail": "6 theme(s) written this run (e.g. 2026-06-21-acceptance-gate-covers-only-headline-output.md)"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.12.0)"
+    },
+    {
+      "name": "aggregate cost under ceiling",
+      "pass": true,
+      "detail": "$9.10 across 1 initiative(s) ≤ $23"
+    },
+    {
+      "name": "post-run boundary: forge repo/PR state unchanged",
+      "pass": true,
+      "detail": "clean"
+    }
+  ],
+  "gate": "pass",
+  "framesCaptured": 6,
+  "completedAt": "2026-08-31T02:12:11.134Z"
+}

@@ -14,7 +14,7 @@ keywords:
   - uncommitted-work-swept
   - repeated-actions
   - recurrence
-related_themes: [2026-07-12-gitignored-scratch-fifth-cycle]
+related_themes: [2026-07-12-gitignored-scratch-fifth-cycle, 2026-08-31-gitignored-scratch-seventh-cycle]
 created_at: 2026-08-28T12:30:00.000Z
 updated_at: 2026-08-28T12:30:00.000Z
 recurrence: gitignored-scratch-files
@@ -63,3 +63,4 @@ This is a brain-to-agent-template propagation gap: the theme pages document the 
 ## See also
 
 - [[2026-07-12-gitignored-scratch-fifth-cycle]] — the prior (fifth) cycle of this recurrence
+- [[2026-08-31-gitignored-scratch-seventh-cycle]] — the next (seventh) cycle of this recurrence

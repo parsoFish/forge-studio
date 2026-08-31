@@ -16,6 +16,8 @@
 - [`2026-07-11-gitignored-scratch-fourth-cycle`](./themes/2026-07-11-gitignored-scratch-fourth-cycle.md) — ralph writes fix_plan.md and AGENT.md after every WI commit in the tags-command cycle — the 4th gitpulse cycle in a row with this pattern; SKILL.md and AGENT.md still not updated.
 - [`2026-07-12-gitignored-scratch-fifth-cycle`](./themes/2026-07-12-gitignored-scratch-fifth-cycle.md) — >-
 - [`2026-08-28-gitignored-scratch-sixth-cycle`](./themes/2026-08-28-gitignored-scratch-sixth-cycle.md) — ralph writes fix_plan.md and AGENT.md after WI-1 and WI-2 in the no-merges-flag cycle — 6th consecutive gitpulse cycle; AGENT.md worktree template still not updated.
+- [`2026-08-31-gitignored-scratch-seventh-cycle`](./themes/2026-08-31-gitignored-scratch-seventh-cycle.md) — ralph.uncommitted-work-swept fired for all 3 WIs in the author-filter cycle; seventh consecutive gitpulse cycle; AGENT.md worktree template still unpatched.
+- [`2026-08-31-author-filter-compare-coverage-gap`](./themes/2026-08-31-author-filter-compare-coverage-gap.md) — --author silently ignored under --compare; filterAuthorCommits() not called in the compare branch; none of the 7 acceptance assertions tested --compare --author composition; adversarial review caught it post-merge.
 
 ## Format
 
