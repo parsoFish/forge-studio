@@ -503,3 +503,23 @@ packages/sessions/studio/session-kinds.ts readFileSync 2
 packages/sessions/studio/session-transcript.ts readFileSync 1
 packages/sessions/studio/session-transcript.ts readdirSync 2
 packages/sessions/studio/session-transcript.ts realpathSync 6
+
+# --- M3 move: five loops/-origin files that had NEVER been scanned -----------
+# pre-existing / never scanned before M3 / M4-agents owns  (bead forge-8vfn.5.22)
+# `loops/` was never in this checker's WALK_ALLOWED_PREFIXES, so these files were
+# neither scanned nor baselined before the move. Landing under packages/agents/ —
+# an already-allowed prefix — makes them visible for the first time. These rows
+# record a pre-existing blind spot, NOT a surface the M3 move introduced. Each
+# site is classified and guarded by the M4 agents lane, and the ratchet may only
+# shrink from here.
+packages/agents/_adapters/aider/index.ts execFile 1
+packages/agents/_adapters/aider/index.ts execFileSync 4
+packages/agents/_adapters/aider/index.ts readFileSync 1
+packages/agents/_adapters/gemini/index.ts readFileSync 1
+packages/agents/ralph/claude-agent.ts existsSync 1
+packages/agents/ralph/claude-agent.ts readFileSync 1
+packages/agents/ralph/runner.ts existsSync 3
+packages/agents/ralph/runner.ts readFileSync 3
+packages/agents/ralph/runner.ts writeFileSync 3
+packages/agents/ralph/stop-conditions.ts execFileSync 9
+packages/agents/ralph/stop-conditions.ts readFileSync 2

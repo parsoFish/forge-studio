@@ -44,7 +44,7 @@ export const OWNERS = Object.freeze([
 export const DISPOSITIONS = Object.freeze(['verbatim', 'pruned', 'rewritten', 'deleted']);
 
 /** The four legacy trees the quarry accounts for. */
-const QUARRIED_TREES = ['orchestrator', 'cli', 'loops', 'skills'];
+const QUARRIED_TREES = ['orchestrator', 'cli', 'loops', 'skills', 'packages', 'apps/forge'];
 const CODE = ['.ts', '.tsx', '.mjs', '.js', '.cjs'];
 const NOT_PRODUCTION = /(\.test\.[cm]?[jt]sx?$)|(^|\/)test-fixtures\//;
 

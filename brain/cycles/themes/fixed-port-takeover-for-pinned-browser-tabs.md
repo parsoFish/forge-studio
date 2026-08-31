@@ -73,4 +73,4 @@ catches the bridge port too.
 - [[dom-as-metrics-for-headless-driven-uis]] (the other half of the
   watch/operator workflow — they go together)
 - [[windows-browser-to-wsl-via-window-location]]
-- [`cli/forge-watch.ts:takeoverPort`](../../../cli/forge-watch.ts)
+- [`cli/forge-watch.ts:takeoverPort`](../../../apps/forge/forge-watch.ts)

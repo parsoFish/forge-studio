@@ -5,8 +5,8 @@ and fails CI when a production file has no row, has two, or names an owner or a
 disposition outside the vocabularies below. A file that changes owner changes this
 file in the same PR.
 
-**Scope.** Every production file under `orchestrator/`, `cli/`, `loops/` and
-`skills/` — code (`.ts .tsx .mjs .js .cjs`) plus the `SKILL.md` agent definitions,
+**Scope.** Every production file under `orchestrator/`, `cli/`, `loops/`,
+`skills/`, `packages/` and `apps/forge/` — code (`.ts .tsx .mjs .js .cjs`) plus the `SKILL.md` agent definitions,
 which are production artifacts ([ADR 024](docs/decisions/024-phases-as-subagents-invoking-skills.md):
 the `SKILL.md` **is** the agent). Test files and fixtures are excluded — a test
 travels with the module it tests.
@@ -339,3 +339,21 @@ operator-ratified new cap — never a silent raise.
 | skills/project-scoped-review/SKILL.md | projects | verbatim | 215 |
 | skills/reflector/SKILL.md | factory | verbatim | 179 |
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
+| apps/forge/index.ts | apps/forge | verbatim | 8 |
+| packages/agents/index.ts | agents | verbatim | 11 |
+| packages/contracts/index.ts | contracts | verbatim | 108 |
+| packages/contracts/studio-types.ts | contracts | verbatim | 738 |
+| packages/factory/index.ts | factory | verbatim | 8 |
+| packages/flows/index.ts | flows | verbatim | 11 |
+| packages/kernel/config.ts | kernel | verbatim | 448 |
+| packages/kernel/event-cost.ts | kernel | verbatim | 63 |
+| packages/kernel/index.ts | kernel | verbatim | 30 |
+| packages/kernel/init.ts | kernel | verbatim | 144 |
+| packages/kernel/logging.ts | kernel | verbatim | 169 |
+| packages/kernel/path-guard.ts | kernel | verbatim | 607 |
+| packages/kernel/ports.ts | kernel | verbatim | 71 |
+| packages/kernel/project-contract.ts | kernel | verbatim | 37 |
+| packages/knowledge/index.ts | knowledge | verbatim | 11 |
+| packages/library/index.ts | library | verbatim | 8 |
+| packages/projects/index.ts | projects | verbatim | 11 |
+| packages/sessions/index.ts | sessions | verbatim | 11 |

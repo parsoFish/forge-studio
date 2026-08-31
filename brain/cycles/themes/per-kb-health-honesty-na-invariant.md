@@ -48,7 +48,7 @@ The per-check status must iterate a **registry-derived `CHECK_NAMES`**, not a ha
 ## Sources
 
 - `_wave5/ledger.md` (gitignored campaign state) — R6-08 project-KB false-pass, `checkReflectorLoss` global, `CHECK_NAMES` registry derivation, batch D region.
-- [`cli/brain-lint.ts`](../../../cli/brain-lint.ts) — the check registry the per-check status must derive from.
+- [`cli/brain-lint.ts`](../../../packages/knowledge/brain-lint.ts) — the check registry the per-check status must derive from.
 
 ## See also
 

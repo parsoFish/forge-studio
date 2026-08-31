@@ -50,7 +50,7 @@ Batch C hit four structurally different shapes, and one initiative recorded thre
 ## Sources
 
 - [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) — line 34 sets `FORGE_ARCHITECT_NO_SPAWN: "1"` for the whole test job; the env a gate must mirror.
-- [`orchestrator/run-agent-ceiling.test.ts`](../../../orchestrator/run-agent-ceiling.test.ts) — the `withoutSpawnSuppressionEnv()` pattern, applied 15 times.
+- [`orchestrator/run-agent-ceiling.test.ts`](../../../packages/agents/run-agent-ceiling.test.ts) — the `withoutSpawnSuppressionEnv()` pattern, applied 15 times.
 - [`cli/ui-bridge-agent-run-ceiling.test.ts`](../../../cli/ui-bridge-agent-run-ceiling.test.ts) — the sibling that inherited the precondition and could not pass in CI.
 - [`cli/studio-lint.ts`](../../../cli/studio-lint.ts) — a library module with no CLI entry; invoked directly it exits 0 with no output.
 - `_wave5/ledger.md` (gitignored campaign state) — all `L…` citations above; batch C is the region after `# ============ BATCH C ============`.
