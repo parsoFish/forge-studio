@@ -148,6 +148,8 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 747 |
 | packages/knowledge/kb-drain-structural.ts | knowledge | verbatim | 230 |
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 208 |
+| packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 395 |
+| packages/knowledge/routes.ts | knowledge | verbatim | 153 |
 | packages/knowledge/kb-lint-summary.ts | knowledge | verbatim | 545 |
 | packages/knowledge/kb-read-policy.ts | knowledge | verbatim | 91 |
 | packages/knowledge/kb-sites.ts | knowledge | verbatim | 110 |
@@ -196,6 +198,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 141 |
 | packages/flows/claim-validator.ts | flows | verbatim | 233 |
 | apps/forge/cli.ts | apps/forge | pruned | 998 |
+| apps/forge/routes.ts | apps/forge | verbatim | 38 |
 | packages/sessions/completeness-critic-runner.ts | sessions | verbatim | 286 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
@@ -372,6 +375,8 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/path-guard.ts | kernel | verbatim | 607 |
 | packages/kernel/ports.ts | kernel | verbatim | 71 |
 | packages/kernel/spawn-env.ts | kernel | verbatim | 181 |
+| packages/kernel/route-entry.ts | kernel | verbatim | 114 |
+| packages/kernel/http-envelope.ts | kernel | verbatim | 72 |
 | packages/kernel/project-contract.ts | kernel | verbatim | 37 |
 | packages/knowledge/index.ts | knowledge | verbatim | 11 |
 | packages/library/index.ts | library | verbatim | 8 |
