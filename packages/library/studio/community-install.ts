@@ -30,7 +30,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { assertSkillSlug, skillPath } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { skillPath } from '../skill-path.ts';
 import { hooksDir } from './hook-library.ts';
 import { guardedFile } from '@forge/kernel';
 import { listConnections } from './connection-library.ts';

@@ -54,7 +54,7 @@ import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
 import { isDryBridge } from '../../cli/dry-bridge.ts';
-import { assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection } from './studio/connection-install.ts';

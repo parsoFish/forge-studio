@@ -29,8 +29,9 @@
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
-import { assertSkillSlug, FORGE_ROOT, listSkillMdDirs } from '@forge/agents/skill-path.ts';
-import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import { assertSkillSlug, FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { listSkillMdDirs } from '../skill-path.ts';
+import { PLATFORM_GUARD_IDS } from '@forge/contracts';
 import { isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
 import { reqString, optString, optBool, stringArray, oneOf, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';

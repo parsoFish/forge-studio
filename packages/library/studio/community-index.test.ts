@@ -62,7 +62,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { skillPath } from '../skill-path.ts';
 import { communitySourceKey } from './community-source-url.ts';
 import { listConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-library.ts';

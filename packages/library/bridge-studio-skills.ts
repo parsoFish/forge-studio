@@ -38,7 +38,7 @@ import {
   pathOnly,
   type StudioContext,
 } from '../../cli/bridge-studio.ts';
-import { skillPath, skillsDir } from '@forge/agents/skill-path.ts';
+import { skillPath, skillsDir } from './skill-path.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '../../orchestrator/studio/validate.ts';

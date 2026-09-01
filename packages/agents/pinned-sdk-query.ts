@@ -32,7 +32,7 @@
  */
 
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { buildChildEnv } from './spawn-env.ts';
+import { buildChildEnv } from '@forge/kernel/spawn-env.ts';
 
 /** The exact shape of the SDK's `query` function. */
 export type SdkQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
