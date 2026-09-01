@@ -102,8 +102,8 @@ import type { Dirent } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { parseManifest } from '@forge/flows/manifest.ts';
-import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library/studio/skill-library.ts';
-import type { PackageFile } from '@forge/library/studio/skill-library.ts';
+import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library/studio/skill-package.ts';
+import type { PackageFile } from '@forge/library/studio/skill-package.ts';
 import { sessionArtifactKindState, type SessionKindDescriptor, type SessionStage } from './session-kinds.ts';
 
 // ---------------------------------------------------------------------------

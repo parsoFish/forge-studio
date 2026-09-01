@@ -64,7 +64,7 @@ import yaml from 'js-yaml';
 import { skillPath } from '../skill-path.ts';
 import { communitySourceKey } from './community-source-url.ts';
 import { listConnections } from './connection-library.ts';
-import { installSkillPackage, approveSkillDraft } from './skill-library.ts';
+import { installSkillPackage, approveSkillDraft } from './skill-install.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
 import { scanHookScript } from './hook-scan.ts';
 import { approveHook } from './hook-approval-ledger.ts';

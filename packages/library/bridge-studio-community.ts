@@ -77,7 +77,7 @@ import {
   type CommunityKind,
 } from './studio/community-index.ts';
 import { routeCommunityInstall, installCommunityHookPackage } from './studio/community-install.ts';
-import { installSkillPackage } from './studio/skill-library.ts';
+import { installSkillPackage } from './studio/skill-install.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection } from './studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../../orchestrator/studio/registry.ts';

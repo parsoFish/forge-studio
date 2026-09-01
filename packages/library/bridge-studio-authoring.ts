@@ -157,7 +157,6 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
-
 import {
   sendJson,
   allowedOrigin,
@@ -167,7 +166,8 @@ import {
   type StudioContext,
 } from '../../cli/bridge-studio.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
-import { installSkillPackage, SkillIdOccupiedError, MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from './studio/skill-library.ts';
+import { installSkillPackage, SkillIdOccupiedError } from './studio/skill-install.ts';
+import { MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from './studio/skill-package.ts';
 import {
   hookDir,
   hooksDir,

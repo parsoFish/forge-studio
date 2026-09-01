@@ -10,7 +10,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { listSkillMdDirs, listSkillDirs, PROJECT_ID_RE } from '@forge/agents/skill-path.ts';
-import { skillTrustState } from '@forge/library/studio/skill-library.ts';
+import { skillTrustState } from '@forge/library/studio/skill-trust.ts';
 import { parseMaterials } from '@forge/agents/studio/materials.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts/studio/types.ts';
 import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';

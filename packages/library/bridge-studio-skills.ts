@@ -43,16 +43,9 @@ import { resolveGuardedPath } from '@forge/kernel';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
 import { isStudioAgent } from '../../orchestrator/studio/registry.ts';
-import {
-  listSkillLibrary,
-  readSkillPackage,
-  scanSkillPackage,
-  skillTrustDetail,
-  installSkillPackage,
-  approveSkillDraft,
-  repinSkillPackage,
-  type SkillLibraryEntry,
-} from './studio/skill-library.ts';
+import { listSkillLibrary, skillTrustDetail, type SkillLibraryEntry } from './studio/skill-trust.ts';
+import { readSkillPackage, scanSkillPackage } from './studio/skill-package.ts';
+import { installSkillPackage, approveSkillDraft, repinSkillPackage } from './studio/skill-install.ts';
 import { removeInstallLedgerEntry } from './studio/skill-install-ledger.ts';
 
 // SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept

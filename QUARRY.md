@@ -306,7 +306,9 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/studio/session-kinds.ts | sessions | verbatim | 1389 |
 | packages/sessions/studio/session-transcript.ts | sessions | verbatim | 1359 |
 | packages/library/studio/skill-install-ledger.ts | library | verbatim | 166 |
-| packages/library/studio/skill-library.ts | library | verbatim | 890 |
+| packages/library/studio/skill-install.ts | library | verbatim | 324 |
+| packages/library/studio/skill-package.ts | library | verbatim | 183 |
+| packages/library/studio/skill-trust.ts | library | verbatim | 461 |
 | packages/agents/studio/skill-md-fidelity.ts | agents | verbatim | 224 |
 | packages/library/studio/template-library.ts | library | verbatim | 610 |
 | packages/contracts/studio/types.ts | contracts | verbatim | 738 |

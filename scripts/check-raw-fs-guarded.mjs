@@ -370,7 +370,7 @@ export const EXPLICIT_MODULES = [
   // helpers the /api/studio/skills/install and community-install/index routes
   // DELEGATE their per-entry filesystem walk to. The request-derived `id` and
   // package entry paths flow into these bodies by parameter.
-  'packages/library/studio/skill-library.ts',
+  'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts',
   'packages/library/studio/community-install.ts',
   'packages/library/studio/community-index.ts',
 ];

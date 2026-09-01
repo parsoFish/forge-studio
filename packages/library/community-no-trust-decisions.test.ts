@@ -89,8 +89,8 @@ for (const relPath of COMMUNITY_SURFACE_FILES) {
 // known to reference one of the five names.
 // ---------------------------------------------------------------------------
 
-test('sanity: the forbidden-reference technique actually detects a real reference (against orchestrator/studio/skill-library.ts, which legitimately defines approveSkillDraft)', () => {
-  const text = readFileSync(resolve(REPO_ROOT, 'packages/library/studio/skill-library.ts'), 'utf8');
+test('sanity: the forbidden-reference technique actually detects a real reference (against packages/library/studio/skill-install.ts, which legitimately defines approveSkillDraft)', () => {
+  const text = readFileSync(resolve(REPO_ROOT, 'packages/library/studio/skill-install.ts'), 'utf8');
   const hits = [...text.matchAll(FORBIDDEN_RE)].map((m) => m[0]);
   assert.ok(hits.includes('approveSkillDraft'), 'the regex must be capable of matching a real occurrence — proves the check is not vacuously toothless');
 });

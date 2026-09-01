@@ -54,8 +54,10 @@ import matter from 'gray-matter';
 
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { skillPath } from '../skill-path.ts';
-import { skillTrustState, extractProvenance } from './skill-library.ts';
-import type { PackageFile, SkillTrust } from './skill-library.ts';
+import { skillTrustState } from './skill-trust.ts';
+import type { SkillTrust } from './skill-trust.ts';
+import { extractProvenance } from './skill-package.ts';
+import type { PackageFile } from './skill-package.ts';
 import { hookYamlPath } from './hook-library.ts';
 import { hookRunState } from './hook-approval-ledger.ts';
 import { listConnections } from './connection-library.ts';

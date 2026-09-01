@@ -39,7 +39,7 @@ import {
   listFlowIds,
   isStudioAgent,
 } from '../orchestrator/studio/registry.ts';
-import { listSkillLibrary } from '@forge/library/studio/skill-library.ts';
+import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import {
   communityRegistryPath,
