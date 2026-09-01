@@ -11,8 +11,17 @@
 > Scope 2 shipping. What operators author into these libraries at runtime is
 > out of scope (index §7).
 
-**Status vocabulary:** implemented | in-progress | planned | deferred. All
-initiatives in this file are planned/deferred as of 2026-07-17.
+**Status vocabulary:** implemented | in-progress | planned | deferred.
+
+**Status as of 2026-09-01: R3-01 through R3-07 are IMPLEMENTED.** This banner
+read "all initiatives in this file are planned/deferred as of 2026-07-17" for
+seven weeks after they shipped. Every production file in `packages/library`
+traces to an R3-XX-FX id in this document's own numbering — `bridge-studio-hooks.ts`
+to R3-03-F4, `studio/skill-library.ts` to R3-01-F3/F4, `studio/community-index.ts`
+to R3-07-F1/F2, and so on through the package. A roadmap that says "planned"
+about shipped code is a current-state document that lies, which is what
+`check-docs-claims` and the identity gate exist to prevent; corrected here by
+the M4-library cull rather than left for a reader to discover.
 
 ## As-built baseline (implemented)
 
