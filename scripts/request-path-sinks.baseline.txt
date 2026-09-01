@@ -50,9 +50,7 @@ packages/agents/phases/agent-scope-guard.ts statSync 1
 packages/agents/run-agent.ts existsSync 1
 packages/agents/run-agent.ts mkdirSync 1
 packages/agents/run-agent.ts writeFileSync 1
-packages/agents/skill-path.ts existsSync 1
 packages/agents/skill-path.ts readFileSync 1
-packages/agents/skill-path.ts readdirSync 1
 packages/factory/architect-plan.ts existsSync 4
 packages/factory/architect-plan.ts mkdirSync 2
 packages/factory/architect-plan.ts renameSync 1
@@ -286,6 +284,7 @@ packages/flows/worktree.ts mkdirSync 1
 packages/flows/worktree.ts rmSync 1
 packages/kernel/config.ts existsSync 1
 packages/kernel/config.ts readFileSync 1
+packages/kernel/config.ts readdirSync 1
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1
@@ -393,6 +392,8 @@ packages/library/community-refresh-run.ts writeFileSync 1
 packages/library/instruction-seed-match.ts existsSync 1
 packages/library/instruction-seed-match.ts readFileSync 2
 packages/library/instruction-seed-match.ts readdirSync 1
+packages/library/skill-path.ts existsSync 1
+packages/library/skill-path.ts readdirSync 1
 packages/library/skill-staging.ts mkdirSync 1
 packages/library/skill-staging.ts writeFileSync 1
 packages/library/studio/community-index.ts existsSync 10
@@ -450,7 +451,7 @@ packages/projects/project-create.ts execFileSync 3
 packages/projects/project-create.ts lstatSync 2
 packages/projects/project-create.ts mkdirSync 2
 packages/projects/project-create.ts readFileSync 1
-packages/projects/project-create.ts readdirSync 3
+packages/projects/project-create.ts readdirSync 2
 packages/projects/project-create.ts renameSync 2
 packages/projects/project-create.ts rmSync 3
 packages/projects/project-create.ts writeFileSync 2

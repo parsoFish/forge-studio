@@ -33,28 +33,14 @@ import { BAND_GUARD_IDS } from '@forge/contracts';
 import type { BandGuardId } from '@forge/contracts';
 
 /**
- * The toggle-style guard ids (ADR-027 R3-03 amendment) — platform behaviours
- * an agent switches on/off, as opposed to BAND_GUARD_IDS's dispatch-routing
- * ids. Each has a display row in `studio/catalog.yaml`'s `guards:` section
- * but, unlike a band guard, resolves nothing through `resolveBandGuard` —
- * each is read directly by its own subsystem (event-log by the logger
- * config, cost-guard by the budget enforcer, ...).
+ * The toggle-style guard ids and the closed platform-guard set moved to
+ * `@forge/contracts` in M4-library PR 2, beside `BAND_GUARD_IDS`, which was
+ * already there — `packages/library/studio/hook-library.ts` needs
+ * `PLATFORM_GUARD_IDS` and library (rank 2) may not import agents (rank 3).
+ * Re-exported here so this module's fifteen existing importers are unchanged.
  */
-export const TOGGLE_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip'] as const;
-export type ToggleGuardId = (typeof TOGGLE_GUARD_IDS)[number];
-
-/**
- * The full closed set of platform guard ids (ADR-027 R3-03 amendment) — the
- * union of the 5 toggle ids and the 5 band ids. This is the "is this id
- * platform machinery, not a library hook" check `lintHookComposition`
- * (`orchestrator/studio/hook-library.ts`) needs to enforce the
- * `composition.hooks` vs `composition.guards` split — sourced as a fixed
- * platform-vocabulary constant, deliberately NOT re-derived from
- * `studio/catalog.yaml`, because catalog.yaml is a DISPLAY surface over
- * these ids (a hand-edited name/desc row), not their source of truth, and a
- * lint fixture root legitimately may not seed a catalog.yaml at all.
- */
-export const PLATFORM_GUARD_IDS: readonly string[] = [...TOGGLE_GUARD_IDS, ...BAND_GUARD_IDS];
+export { TOGGLE_GUARD_IDS, PLATFORM_GUARD_IDS } from '@forge/contracts';
+export type { ToggleGuardId } from '@forge/contracts';
 
 /**
  * Band guard id → the ONE canonical agent slug the band's pipeline loads its

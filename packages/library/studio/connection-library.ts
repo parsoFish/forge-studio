@@ -46,8 +46,8 @@
 
 import { join } from 'node:path';
 
-import { assertSkillSlug } from '@forge/agents/skill-path.ts';
-import { listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { listSkillMdDirs } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition, loadCatalog } from '../../../orchestrator/studio/registry.ts';
 import type {
   AgentDefinition,

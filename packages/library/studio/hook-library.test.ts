@@ -93,8 +93,7 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { loadAgentDefinition, loadCatalog } from '../../../orchestrator/studio/registry.ts';
-import { resolveBandGuard, PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { PLATFORM_GUARD_IDS } from '@forge/contracts';
 import type { Finding } from '../../../orchestrator/studio/validate.ts';
 
 import {
@@ -224,23 +223,9 @@ Process body.
 /** A minimal, valid AgentDefinition fixture (no disk I/O) matching the
  *  CURRENT `AgentComposition` shape — see D-E in the header for the ONE test
  *  that widens this with a `hooks` field via `as unknown as`. */
-function makeAgentDef(slug: string, guards: string[]): AgentDefinition {
-  return {
-    slug,
-    name: slug,
-    description: `Agent ${slug}.`,
-    purpose: 'Test purpose.',
-    composition: { skills: [], tools: [], mcps: [], hooks: [], guards },
-    runtime: { sdk: 'claude', strategy: 'fixed' },
-    brainAccess: 'none',
-    interactivity: 'Fully autonomous.',
-    budgets: {},
-    allowedTools: [],
-    disallowedTools: [],
-    body: 'Body.',
-    path: `/fake/${slug}/SKILL.md`,
-  } as AgentDefinition;
-}
+// `makeAgentDef` moved with the dispatch-hijack proof to
+// `packages/agents/agent-bands-dispatch-hijack.test.ts` (M4-library PR 2) — it
+// was this file's only `AgentDefinition` fixture and had no other reader.
 
 // ---------------------------------------------------------------------------
 // HOOK_LIFECYCLE_EVENTS — closed registry (mirrors flow-trigger.ts's
@@ -717,37 +702,14 @@ describe('lintHookComposition: the correct placement in each field produces no f
 });
 
 // ---------------------------------------------------------------------------
-// The dispatch-hijack case, explicitly (the whole point of this round): a
-// library hook whose id collides with a band id must NOT reach
-// resolveBandGuard. Dispatch is unaffected by anything in composition.hooks.
+// The dispatch-hijack proof MOVED to `packages/agents/agent-bands-dispatch-hijack.test.ts`
+// in M4-library PR 2. It asserted about `resolveBandGuard`, which is agents'
+// function, from this library test file — a `library -> agents` import, which
+// PACKAGE_RANK forbids (library 2, agents 3). The assertions are verbatim
+// there; nothing was weakened. What stays HERE is the complementary half: that
+// `lintHookComposition` refuses a band id placed in `composition.hooks` at all
+// (the `hook-library/guard-in-hooks` finding above). Two packages, two halves.
 // ---------------------------------------------------------------------------
-
-describe('dispatch-hijack proof: resolveBandGuard reads ONLY composition.guards', () => {
-  it('a colliding id ("wi-contract") sitting in composition.hooks does not resolve a band', () => {
-    const base = makeAgentDef('innocent-agent', []); // no band declared in guards
-    // D-E: widen with `hooks` via `as unknown as`, documented in the file
-    // header — `AgentComposition` does not carry `hooks` on the type yet.
-    const hijacked = {
-      ...base,
-      composition: { ...base.composition, hooks: ['wi-contract'] },
-    } as unknown as AgentDefinition;
-    assert.equal(resolveBandGuard(hijacked), undefined, 'composition.hooks must never influence band dispatch');
-  });
-
-  it('the SAME agent WITH the id correctly placed in composition.guards DOES resolve the band', () => {
-    const legit = makeAgentDef('project-manager', ['wi-contract']);
-    assert.equal(resolveBandGuard(legit), 'wi-contract');
-  });
-
-  it('composition.hooks containing every band id simultaneously still resolves nothing', () => {
-    const base = makeAgentDef('another-innocent-agent', []);
-    const hijacked = {
-      ...base,
-      composition: { ...base.composition, hooks: ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] },
-    } as unknown as AgentDefinition;
-    assert.equal(resolveBandGuard(hijacked), undefined);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // hooksDir / hookDir / hookYamlPath — path plumbing sanity (mirrors

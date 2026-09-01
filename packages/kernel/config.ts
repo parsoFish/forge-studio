@@ -10,7 +10,7 @@
  * ADR 009 but never read by any code path. This module wires it.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type ForgeConfig = {
@@ -118,6 +118,41 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
  */
 export function defaultConfigPath(forgeRoot: string): string {
   return join(resolve(forgeRoot), 'forge.config.json');
+}
+
+/**
+ * The `studio/starters/projects/` dir — the F2 project-template library root.
+ *
+ * MOVED VERBATIM from `packages/projects/project-create.ts` (M4-library PR 2).
+ * `packages/library/studio/template-library.ts` lists project scaffolds as one
+ * of the template kinds it surfaces, and library (rank 2) may not import
+ * projects (rank 2 — `check-boundaries.mjs` treats SAME rank as a violation,
+ * `b >= a`). It is a layout fact, so it sits beside `resolveProjectsDir` here
+ * rather than being duplicated; `project-create.ts` re-exports both names, so
+ * its own importers (`cli/bridge-studio.ts`, `apps/forge/cli.ts`, its tests)
+ * are unchanged.
+ *
+ * The previous body composed this as `join(skillsDir(forgeRoot), '..',
+ * 'studio', 'starters', 'projects')`. `join` normalizes the `..`, so the two
+ * forms are byte-identical; the indirection through `skillsDir` is dropped
+ * because kernel (rank 1) may not import library (rank 2), where that helper
+ * now lives.
+ */
+export function projectStartersDir(forgeRoot: string): string {
+  return join(resolve(forgeRoot), 'studio', 'starters', 'projects');
+}
+
+/** The curated app-type templates available for creation. */
+export function listProjectStarters(forgeRoot: string): string[] {
+  const dir = projectStartersDir(forgeRoot);
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /**

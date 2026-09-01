@@ -59,7 +59,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
 import { composeInstructionsDraft } from './studio/instructions-draft.ts';
 import { resolveGuardedPath } from '@forge/kernel';
-import { skillsDir } from '@forge/agents/skill-path.ts';
+import { skillsDir } from './skill-path.ts';
 import {
   sendJson,
   allowedOrigin,

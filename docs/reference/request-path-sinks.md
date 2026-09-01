@@ -941,6 +941,35 @@ is already confined at that choke point before any theme file is read.
 
 ---
 
+### M4-library PR 2 — three baseline rows RE-KEYED, no new sink surface
+
+The skill-path module was split three ways and the child-env seam moved to
+kernel. Three `(file, sink)` rows changed path and nothing else: the code, the
+guard in front of it and the call count are byte-identical either side.
+
+| was | is now | sink | why it moved |
+|---|---|---|---|
+| `packages/agents/skill-path.ts` | `packages/library/skill-path.ts` | `existsSync` 1, `readdirSync` 1 | the `skills/` tree walk (`listSkillMdDirs`) is the Skill kind's layout, which spec §3.1 gives library; `agents` (rank 3) may import library (rank 2), never the reverse |
+| `packages/projects/project-create.ts` (`readdirSync` 3) | `packages/kernel/config.ts` (`readdirSync` 1) + `project-create.ts` (`readdirSync` 2) | `readdirSync` | `listProjectStarters` is a layout fact beside `resolveProjectsDir`; `packages/library/studio/template-library.ts` surfaces project scaffolds as a template kind and may not import projects (SAME rank is a violation, `b >= a`) |
+
+**The proof that this is a re-key and not growth is the guard's own total: 1,340
+sink calls before and 1,340 after.** `(file, sink)` rows go 513 → 514 and the
+baseline file 516 → 517 lines, both because one `readdirSync` site separated
+from two siblings into its own file. Accepted by hand-editing the four affected
+lines, NOT by `--write`: bead `forge-8vfn.5.19` records that `--write` harvests
+unrelated baseline slack, and five tightenable lines belonging to other lanes
+(`packages/flows/fix-work-items.ts`, `packages/knowledge/brain-lint.ts`) were
+deliberately left un-harvested.
+
+The guard classification is unchanged and is restated here rather than assumed:
+every one of these sites resolves a path from a **slug-validated** id —
+`assertSkillSlug` refuses `/`, `\`, `.`, `..`, the empty string and anything
+over 100 characters before a join happens — and the walk sites take a
+**directory** argument that is composed from a fixed root, never from request
+bytes. `assertSkillSlug` itself moved to `@forge/kernel/ids.ts` in the same PR;
+`packages/kernel/ids.test.ts` pins which shapes it rejects, so the move cannot
+quietly widen it.
+
 ### R4-23 — `loadSkillTurnPrompt`'s `readFileSync` (`orchestrator/skill-path.ts`)
 
 R4-23 consolidated the four legacy interactive runners' private `loadSkillPrompt`

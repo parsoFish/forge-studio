@@ -181,7 +181,7 @@ import { reqString, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts
 import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
-import { isReservedId } from '@forge/agents/skill-path.ts';
+import { isReservedId } from '@forge/kernel/ids.ts';
 import { listTemplateLibrary } from './studio/template-library.ts';
 import {
   writableCategoryOrReason,

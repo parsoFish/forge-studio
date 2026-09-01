@@ -28,7 +28,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './community-source-url.ts';
 
-import { skillDir, skillPath, skillsDir } from '@forge/agents/skill-path.ts';
+import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
 import { isStudioAgent, listPlainSkills, listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
@@ -1464,9 +1464,9 @@ describe('ledger integrity — duplicate/non-slug entry ids must fail loud', () 
 
 describe('assertSkillSlug — length cap', () => {
   it('AT-84: an over-long but charset-valid id → installSkillPackage throws an actionable (non-ENAMETOOLONG) message naming the length limit; nothing written; the cap is an exported named constant', async () => {
-    const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
-    const cap = skillPathModule['MAX_SKILL_ID_LENGTH'];
-    assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in orchestrator/skill-path.ts for the id length cap');
+    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
+    const cap = idsModule['MAX_SKILL_ID_LENGTH'];
+    assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in @forge/kernel/ids.ts for the id length cap');
 
     const root = makeForgeRoot();
     mkdirSync(skillsDir(root), { recursive: true });
@@ -1569,15 +1569,15 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
 });
 
 describe('SLUG_RE relocation regression guard', () => {
-  it('AT-89: SLUG_RE re-exported identically from orchestrator/skill-path.ts and orchestrator/studio/validate.ts', async () => {
-    const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
+  // Survived two relocations; now asserts IDENTITY, which equal `.source` did not.
+  it('AT-89: SLUG_RE reaches validate.ts as the SAME object kernel defines — one definition, not two with matching sources', async () => {
+    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
     const validateModule = (await import('../../../orchestrator/studio/validate.ts')) as Record<string, unknown>;
 
-    const fromSkillPath = skillPathModule['SLUG_RE'] as RegExp | undefined;
+    const fromKernel = idsModule['SLUG_RE'] as RegExp | undefined;
     const fromValidate = validateModule['SLUG_RE'] as RegExp;
 
-    assert.ok(fromSkillPath, 'orchestrator/skill-path.ts must export SLUG_RE once the definition moves there (breaking the import cycle)');
-    assert.equal(fromSkillPath!.source, fromValidate.source, 'both re-exports must be the identical regex, not a divergent copy');
+    assert.equal(fromKernel, fromValidate, '@forge/kernel/ids.ts must define SLUG_RE and validate.ts must RE-EXPORT that object — not a second regex with a matching source');
   });
 });
 
