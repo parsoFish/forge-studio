@@ -364,10 +364,11 @@ packages/knowledge/project-brain-seed.ts existsSync 2
 packages/knowledge/project-brain-seed.ts mkdirSync 2
 packages/knowledge/project-brain-seed.ts writeFileSync 1
 packages/knowledge/theme-frontmatter.ts readFileSync 1
-packages/library/bridge-studio-authoring.ts mkdirSync 2
-packages/library/bridge-studio-authoring.ts readdirSync 1
+packages/library/bridge-studio-authoring-hook.ts mkdirSync 2
+packages/library/bridge-studio-authoring-hook.ts readdirSync 1
+packages/library/bridge-studio-authoring-hook.ts writeFileSync 2
+packages/library/bridge-studio-authoring-template.ts writeFileSync 1
 packages/library/bridge-studio-authoring.ts rmSync 1
-packages/library/bridge-studio-authoring.ts writeFileSync 3
 packages/library/bridge-studio-community-wire.ts existsSync 1
 packages/library/bridge-studio-community.ts execFileSync 1
 packages/library/bridge-studio-community.ts existsSync 2
