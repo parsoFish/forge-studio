@@ -15,11 +15,12 @@
  * exactly ONE derivation.
  */
 
-import { existsSync, realpathSync, readdirSync, statSync, type Dirent } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { readdirSync, statSync, type Dirent } from 'node:fs';
+import { join } from 'node:path';
 
-import { resolveKbBrainDir } from './brain-paths.ts';
-import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, isForgeBrainDir, type Finding, type RunBrainLintResult } from './brain-lint.ts';
+import { pathUnderDir } from './brain-paths.ts';
+import { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
+import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, type Finding, type RunBrainLintResult } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Findings-scoping helpers (moved verbatim from cli/bridge-studio-kbs.ts)
@@ -29,9 +30,12 @@ import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, isFor
  * R1-06 WI-3 review MAJOR 1 + MAJOR 2 — the ONE exact-dir scoping root both a
  * KB's health lint COUNT (read) and its consolidate/fix-auto obligation (WRITE)
  * share. A finding belongs to `kbId` iff its file resolves to a path AT or
- * nested UNDER the KB's OWN resolved brain dir — `resolveKbBrainDir`, the SAME
- * resolution consolidate/lint/health use, covering BOTH `brain/<id>` and the
- * central per-project `brain/projects/<id>` (ADR 035).
+ * nested UNDER the KB's OWN brain dir, covering BOTH `brain/<id>` and the
+ * central per-project `brain/projects/<id>` (ADR 035). This entry point takes
+ * an already-resolved `brainDir` (the drain and the bridge hold one); the
+ * kbId-shaped question is `KbBackend.contains`, and both route through the ONE
+ * comparison in `brain-paths.ts::pathUnderDir` so read scope and write scope
+ * cannot drift apart.
  *
  * The two shapes this replaces were both live defects:
  *   - substring `f.file.includes(kbId)` (the old `scopeFindingsToKb`) folded a
@@ -43,31 +47,28 @@ import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, isFor
  *     lintFlags=0 and hid the Lint section for exactly the project KBs WI-3
  *     targets (declared-data-fails-open, MAJOR 1).
  *
- * Comparison is by identity-after-realpath (not a lexical prefix): the finding's
- * file is realpath'd where it exists, matching `resolveKbBrainDir`'s own
- * realpath'd return — so a symlinked forge-root component (e.g. macOS `/tmp`)
- * can't defeat the prefix check, and a theme reached through a symlink that
- * escapes the dir is correctly EXCLUDED from a write scope rather than folded in.
+ * Comparison is by identity-after-realpath (not a lexical prefix) — see
+ * `pathUnderDir` for why, and for the TOCTOU fallback.
  */
 export function findingUnderDir(forgeRoot: string, brainDir: string, f: Finding): boolean {
-  if (!f.file) return false;
-  const abs = resolve(forgeRoot, f.file);
-  // Never let a realpath fs-throw (e.g. a TOCTOU unlink between existsSync and
-  // realpathSync) escape the scoping path and 500 an otherwise-fine lint —
-  // fall back to the lexical absolute path.
-  let real = abs;
-  try {
-    if (existsSync(abs)) real = realpathSync(abs);
-  } catch {
-    real = abs;
-  }
-  return real === brainDir || real.startsWith(brainDir + sep);
+  return pathUnderDir(forgeRoot, brainDir, f.file);
 }
 
-export function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!brainDir) return [];
-  return findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
+/**
+ * H8 — the KB's own store is reached through `KbBackend`, never resolved here.
+ * `backend` is the seam, injected so this module never imports the resolution
+ * it used to perform (SPEC.md §4: a per-KB read path that bypasses the backend
+ * is a defect). It defaults to the real backend so no caller's signature moved;
+ * `null` (an unknown kbId) is the same empty answer the direct resolution gave.
+ */
+export function scopeFindingsToKb(
+  forgeRoot: string,
+  kbId: string,
+  findings: readonly Finding[],
+  backend: KbBackend | null = tryGetKbBackend(forgeRoot, kbId),
+): Finding[] {
+  if (!backend) return [];
+  return findings.filter((f) => (f.file ? backend.contains(f.file) : false));
 }
 
 /**
@@ -90,8 +91,13 @@ export function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: rea
  * (classify() re-derives kind/resolution from the check name, which would
  * clobber a caller-supplied classification).
  */
-export function collectKbFindings(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
-  return scopeFindingsToKb(forgeRoot, kbId, findings).map((f) => (f.resolution ? f : classify(f)));
+export function collectKbFindings(
+  forgeRoot: string,
+  kbId: string,
+  findings: readonly Finding[],
+  backend: KbBackend | null = tryGetKbBackend(forgeRoot, kbId),
+): Finding[] {
+  return scopeFindingsToKb(forgeRoot, kbId, findings, backend).map((f) => (f.resolution ? f : classify(f)));
 }
 
 // ---------------------------------------------------------------------------
@@ -136,33 +142,30 @@ export function computeKbLintChecks(
   forgeRoot: string,
   kbId: string,
   findings: readonly Finding[],
+  backend: KbBackend | null = tryGetKbBackend(forgeRoot, kbId),
 ): { checks: CheckHealthEntry[]; lintErrors: number; lintFlags: number } {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  const brainRoot = join(forgeRoot, 'brain');
-
-  const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
+  const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings, backend);
 
   // Is this KB's brain dir within a given check's CHECK_SCOPE domain? Every
   // arm DERIVES the answer from cli/brain-lint.ts — this function holds no
   // copy of what the scan covers. It used to hardcode the two forge sub-wikis
   // here, which stayed silently correct only for as long as `readThemeFiles`
   // walked exactly those two.
-  const ownThemesDir = brainDir ? join(brainDir, 'themes') : '';
   const scanReadThisKb =
-    brainDir !== null && themeScanFiles(forgeRoot).some((f) => dirname(f) === ownThemesDir);
+    backend !== null && themeScanFiles(forgeRoot).some((f) => backend.ownsTheme(f));
   const isApplicableScoped = (name: string): boolean => {
-    if (!brainDir) return false;
+    if (!backend) return false;
     switch (CHECK_SCOPE[name]) {
       case 'themes':
         // Applicable iff the full-scope scan actually READ a theme of this KB.
         return scanReadThisKb;
       case 'forge-themes':
         // The ADR 018 category→sub-wiki routing rules; forge sub-wikis only.
-        return isForgeBrainDir(forgeRoot, brainDir);
+        return backend.placement() === 'forge';
       case 'project-indexes':
         // checkProjectBrainIndexes walks brain/projects/* — applicable iff
-        // this KB's dir is a direct child of brain/projects/.
-        return dirname(brainDir) === join(brainRoot, 'projects');
+        // this KB is a central per-project brain (ADR 035).
+        return backend.placement() === 'project';
       case 'global':
       default:
         // checkReflectorLoss (_queue/done) is never scoped to any one KB.
