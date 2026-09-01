@@ -102,7 +102,12 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/architect-plan.ts | factory | verbatim | 862 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 255 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
-| packages/knowledge/brain-lint.ts | knowledge | verbatim | 1697 |
+| packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 326 |
+| packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
+| packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 484 |
+| packages/knowledge/brain-lint-theme-paths.ts | knowledge | verbatim | 146 |
+| packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
+| packages/knowledge/brain-lint.ts | knowledge | verbatim | 646 |
 | packages/flows/bridge-hooks.ts | flows | verbatim | 397 |
 | packages/flows/bridge-recovery.ts | flows | verbatim | 258 |
 | cli/bridge-studio-affordances.ts | sessions | rewritten | 1313 |

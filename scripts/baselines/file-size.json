@@ -62,7 +62,6 @@
   "packages/flows/scheduler.ts": 1031,
   "packages/kernel/path-guard.test.ts": 876,
   "packages/knowledge/brain-lint.test.ts": 1463,
-  "packages/knowledge/brain-lint.ts": 1697,
   "packages/knowledge/bridge-studio-kb-drain.ts": 1456,
   "packages/knowledge/bridge-studio-kbs.test.ts": 1306,
   "packages/knowledge/bridge-studio-kbs.ts": 2068,
