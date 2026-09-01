@@ -14,9 +14,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runContractComplianceLoop, formatComplianceReport } from './contract-compliance-loop.ts';
-import type { ClauseId, ClauseResult, PreflightReport } from './preflight.ts';
-import type { PreflightAutoFixResult } from './preflight-fix-auto.ts';
+import { runContractComplianceLoop, formatComplianceReport } from '../../contract-compliance-loop.ts';
+import type { ClauseId, ClauseResult, PreflightReport } from '../../preflight.ts';
+import type { PreflightAutoFixResult } from '../../preflight-fix-auto.ts';
 
 function clause(id: ClauseId, pass: boolean, hard: boolean): ClauseResult {
   return { clause: id, title: id, hard, pass, detail: `${id} ${pass ? 'ok' : 'fail'}` };

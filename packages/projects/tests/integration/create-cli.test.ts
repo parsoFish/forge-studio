@@ -9,11 +9,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-const ROOT = process.cwd();
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 function create(args: string[]): { code: number | null; out: string } {
   const r = spawnSync(process.execPath, ['--experimental-strip-types', 'apps/forge/cli.ts', 'create', ...args], {
-    cwd: ROOT, encoding: 'utf8',
+    cwd: FORGE_ROOT, encoding: 'utf8',
   });
   return { code: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
 }

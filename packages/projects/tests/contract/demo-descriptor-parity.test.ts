@@ -14,16 +14,16 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { checkDemo } from './preflight.ts';
+import { checkDemo } from '../../preflight.ts';
 import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/demo-builder-runner.ts';
 import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
-import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import { listDemoElements } from '../../../../orchestrator/studio/registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 
 /** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately
  * NOT in the library's alphabetical order so order-preservation is actually asserted. */
