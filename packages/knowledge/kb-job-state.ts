@@ -34,7 +34,7 @@ export const KB_DRAIN_STALE_MS = 45_000;
 /** Consolidates carry NO heartbeat (a single agent turn can run minutes with
  *  zero events) — the only honest staleness signal is a generous ceiling on
  *  the whole run. 15 min without a terminal event = not active. */
-export const KB_CONSOLIDATE_STALE_MS = 15 * 60_000;
+const KB_CONSOLIDATE_STALE_MS = 15 * 60_000;
 
 export type KbActiveJob = { kind: 'drain' | 'consolidate'; runId: string } | null;
 
