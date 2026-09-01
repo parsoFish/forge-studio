@@ -2811,7 +2811,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
   `GET /api/studio/projects/:id/contract-stages` (`fetchContractStages`,
-  `cli/contract-stages.ts`'s `deriveContractStages`) and renders the SAME
+  `packages/projects/contract-stages.ts`'s `deriveContractStages`) and renders the SAME
   five-stage buildout the onboarding session's `contract-buildout` artifact
   shows, REUSING that checklist vocabulary verbatim:
   `[data-section="contract-checklist"][data-checklist-row-count]` with one
@@ -3924,7 +3924,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   onboarding entry point AND the R4-03 create-from-template flow) declares
   `stages: [contract, instructions, secrets, demo, roadmap]`,
   `defaultStage: contract`, and a new **live** artifact kind
-  `contract-buildout` — a five-row PRESENCE report (`cli/contract-stages.ts`'s
+  `contract-buildout` — a five-row PRESENCE report (`packages/projects/contract-stages.ts`'s
   `deriveContractStages`; D11: presence only, "present"/"absent", never a
   clause verdict — `forge preflight`'s exit code stays the only authoritative
   contract-green signal). Stage-aware, mirroring

@@ -47,7 +47,7 @@ export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
  * (explicit override). The two were kept in lockstep by hand before — now the
  * sidecar can stand alone.
  */
-export const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
+const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
 
 /**
  * The project's agent-instruction file candidates, in precedence order. AGENTS.md

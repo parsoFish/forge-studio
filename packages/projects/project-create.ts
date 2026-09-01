@@ -102,7 +102,7 @@ export function validateCreationManifest(raw: unknown): CreationManifest {
 }
 
 /** Derive the slug id from a human name (mirrors the onboard create route). */
-export function slugifyProjectName(name: string): string {
+function slugifyProjectName(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
 }
 
@@ -369,11 +369,4 @@ export function scaffoldGreenfieldProject(input: {
     failingClauses: report.clauses.filter((c) => c.hard && !c.pass),
     filesWritten,
   };
-}
-
-/** True iff the given text still carries an unsubstituted template token.
- *  A fresh non-global regex — never the module-level `/g` ones, whose stateful
- *  `.test()` lastIndex would make repeated calls flap. */
-export function hasUnsubstitutedTokens(text: string): boolean {
-  return /\{\{(NAME|TITLE|NORTH_STAR)\}\}/.test(text);
 }
