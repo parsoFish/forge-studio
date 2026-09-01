@@ -26,13 +26,12 @@
  * failure never aborts the others or the rest of the reflector pipeline.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { lintThemeFiles, classify, type Finding } from './brain-lint.ts';
 import { applyAutoFixes } from './brain-fix-auto.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
 import type { KbDescriptor, KbProcessImpl } from '@forge/contracts/studio/types.ts';
 import type { EventLogger } from '@forge/kernel';
@@ -62,6 +61,13 @@ export type KbHealthDeps = {
   loadKbDescriptor?: (kbYamlPath: string) => KbDescriptor;
   /** Run a `cmd`-shaped process (R1-01 invocation contract). */
   runCmdProcess?: (cmd: string, ctx: CmdProcessContext) => number;
+  /**
+   * H8 — resolve a kbId to its `KbBackend`, the seam every per-KB read in this
+   * module goes through (SPEC.md §4). Injected rather than imported-and-called
+   * so this module never performs the brain-dir resolution itself; `null` means
+   * "no such KB", the same answer the direct resolution used to give.
+   */
+  resolveBackend?: (forgeRoot: string, kbId: string) => KbBackend | null;
 };
 
 export type CmdProcessContext = {
@@ -74,31 +80,9 @@ export type CmdProcessContext = {
   forgeRoot: string;
 };
 
-const THEME_INDEX_FILES = new Set(['README.md', 'patterns.md', 'antipatterns.md', 'operations.md', 'decisions.md', 'reference.md']);
-
-/** Fresh (`mtime >= sinceMs`) theme file paths in a KB's `themes/` dir, excluding index pages. */
-function listFreshThemeFiles(themesDir: string, sinceMs: number): string[] {
-  if (!existsSync(themesDir)) return [];
-  const out: string[] = [];
-  for (const name of readdirSync(themesDir)) {
-    if (!name.endsWith('.md') || THEME_INDEX_FILES.has(name)) continue;
-    const p = join(themesDir, name);
-    try {
-      if (statSync(p).mtimeMs >= sinceMs) out.push(p);
-    } catch {
-      /* unreadable entry — not fresh */
-    }
-  }
-  return out;
-}
-
-/** Path to a KB's kb.yaml, or null if the KB has no brain dir / descriptor. */
-function kbYamlPathFor(forgeRoot: string, kbId: string): string | null {
-  const dir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!dir) return null;
-  const p = join(dir, 'kb.yaml');
-  return existsSync(p) ? p : null;
-}
+// The fresh-theme enumeration and the descriptor lookup that used to live here
+// are `KbBackend.freshThemeFiles` / `KbBackend.descriptorPath` (H8): both are
+// per-KB reads, and this module reaches a KB's store only through the seam.
 
 /** The default `cmd` process runner: exec with the R1-01-F1 invocation contract. */
 function defaultRunCmdProcess(cmd: string, ctx: CmdProcessContext): number {
@@ -140,6 +124,7 @@ export function runPostReflectionKbHealth(opts: {
   const regenFn = deps.regenerateBrainIndex ?? ((o: { cwd: string }) => { regenerateBrainIndex(o); });
   const loadDescriptor = deps.loadKbDescriptor ?? loadKbDescriptor;
   const runCmd = deps.runCmdProcess ?? defaultRunCmdProcess;
+  const resolveBackend = deps.resolveBackend ?? tryGetKbBackend;
   const rawDir = join(forgeRoot, 'brain', 'cycles', '_raw');
 
   const emit = (message: string, eventType: 'log' | 'error', metadata: Record<string, unknown>, outputRefs: string[] = []): void => {
@@ -159,12 +144,12 @@ export function runPostReflectionKbHealth(opts: {
   // Which candidate KBs were actually touched this cycle. 'cycles' is always
   // touched (the reflector archives the cycle log to brain/cycles/_raw), so it
   // is processed regardless of fresh theme count. Others require a fresh theme.
-  const touched: Array<{ kbId: string; brainDir: string; freshFiles: string[] }> = [];
+  const touched: Array<{ kbId: string; backend: KbBackend; freshFiles: string[] }> = [];
   for (const kbId of [...new Set(candidateKbIds)]) {
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-    if (!brainDir) continue;
-    const freshFiles = listFreshThemeFiles(join(brainDir, 'themes'), sinceMs);
-    if (freshFiles.length > 0 || kbId === 'cycles') touched.push({ kbId, brainDir, freshFiles });
+    const backend = resolveBackend(forgeRoot, kbId);
+    if (!backend) continue;
+    const freshFiles = backend.freshThemeFiles(sinceMs);
+    if (freshFiles.length > 0 || kbId === 'cycles') touched.push({ kbId, backend, freshFiles });
   }
 
   if (touched.length === 0) return { kbs: [] };
@@ -184,8 +169,8 @@ export function runPostReflectionKbHealth(opts: {
   };
 
   const entries: KbHealthEntry[] = [];
-  for (const { kbId, brainDir, freshFiles } of touched) {
-    const yamlPath = kbYamlPathFor(forgeRoot, kbId);
+  for (const { kbId, backend, freshFiles } of touched) {
+    const yamlPath = backend.descriptorPath();
     let procs: ReturnType<typeof resolveKbProcesses> | null = null;
     if (yamlPath) {
       try {
@@ -194,7 +179,11 @@ export function runPostReflectionKbHealth(opts: {
         procs = null;
       }
     }
-    const cmdCtx: CmdProcessContext = { kbRoot: brainDir, runId: cycleId, rawDir, forgeRoot };
+    // `kbRoot` is only ever read by `runCmd`, and a `cmd`-shaped process can only
+    // be declared IN the descriptor — so when there is no descriptor there is no
+    // cmd process and no root to hand out. Deriving it from the descriptor's own
+    // location keeps the store's root from leaking out of the seam as a method.
+    const cmdCtx: CmdProcessContext = { kbRoot: yamlPath ? dirname(yamlPath) : '', runId: cycleId, rawDir, forgeRoot };
     const builtinName = (impl: KbProcessImpl | undefined, dflt: string): string => (impl && 'builtin' in impl ? impl.builtin : dflt);
 
     // --- ingest ---

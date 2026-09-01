@@ -162,8 +162,10 @@ written only by reflection** ([ADR 018](docs/decisions/018-three-brain-model.md)
   source of intent. Brain 3 is advisory to them.
 - **A theme is markdown with a frontmatter contract** — the same artifact shape
   as §3, with keywords and related-theme links that keep the graph connected.
-- **One backend seam.** Every read and write of a knowledge base goes through
-  `KbBackend`. A read path that bypasses it is a defect, not an optimisation.
+- **One backend seam.** Every **per-knowledge-base** read and write goes through
+  `KbBackend`. A per-KB read path that bypasses it is a defect, not an
+  optimisation. Cross-brain navigation (`loadBrainIndex`, the planner's index
+  prefix) sits **above** the seam and is not bound to a single backend.
 - **Never deleted.** Knowledge is superseded by a `status: historical` marker,
   never removed.
 

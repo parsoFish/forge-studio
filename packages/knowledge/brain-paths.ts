@@ -22,8 +22,8 @@
  * (project.json) now governs only that in-repo demo location.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
 
@@ -138,4 +138,35 @@ export function readArtifactRoot(projectRoot: string): string {
   } catch {
     return '.';
   }
+}
+
+
+/**
+ * Is `file` — absolute, or relative to `forgeRoot` — at or nested under `dir`?
+ *
+ * THE one containment comparison the KB scoping family shares: `KbBackend`'s
+ * per-KB `contains()` (kb-backend.ts) and the findings lens `findingUnderDir`
+ * (kb-lint-summary.ts) both route through here, so a KB's read scope and its
+ * WRITE scope can never drift apart. It lives in this module because it is a
+ * path rule, and because a copy in either caller would be a second definition
+ * of "inside this knowledge base".
+ *
+ * Comparison is by identity-after-realpath, not a lexical prefix: `dir` is
+ * already the realpath'd directory `resolveKbBrainDir` hands back, so a
+ * symlinked forge-root component (e.g. macOS `/tmp`) cannot defeat the check,
+ * and a file reached through a symlink that escapes `dir` is correctly EXCLUDED
+ * rather than folded in. A realpath throw (a TOCTOU unlink between the
+ * `existsSync` probe and the call) falls back to the lexical absolute path
+ * rather than escaping and 500-ing an otherwise-fine caller.
+ */
+export function pathUnderDir(forgeRoot: string, dir: string, file: string): boolean {
+  if (!file) return false;
+  const abs = resolve(forgeRoot, file);
+  let real = abs;
+  try {
+    if (existsSync(abs)) real = realpathSync(abs);
+  } catch {
+    real = abs;
+  }
+  return real === dir || real.startsWith(dir + sep);
 }
