@@ -11,6 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -60,14 +61,10 @@ test('getNodeArticle returns an article for a real node and null for a missing o
   assert.equal(backend.getNodeArticle('definitely-not-a-node'), null);
 });
 
-// ---------------------------------------------------------------------------
-// Contract §4: listPendingGuidance returns an array
-// ---------------------------------------------------------------------------
-
-test('listPendingGuidance returns an array', () => {
-  const backend = getKbBackend(FORGE_ROOT, 'cycles');
-  assert.ok(Array.isArray(backend.listPendingGuidance()));
-});
+// Contract §4 (listPendingGuidance) is asserted in
+// `tests/contract/kb-backend-conformance.test.ts`. The `Array.isArray` check
+// that stood here was passed by a backend returning `[]` for everything — the
+// exact implementation a conformance gate exists to reject (H8).
 
 // ---------------------------------------------------------------------------
 // Contract §5: search returns title hits (the FS backend's honest floor)
@@ -132,9 +129,24 @@ for (const c of CONFORMANCE_CASES) {
     const backend = getKbBackend(FORGE_ROOT, c.id);
     assert.equal(backend.kbId, c.id);
     assert.ok(backend instanceof FilesystemKbBackend);
+    // CONTENT, not shape (H8): the three `Array.isArray` assertions that stood
+    // here were all satisfied by a backend that returns `[]` and `null` for
+    // everything. Each line below fails for such a backend.
     const graph = backend.buildGraph();
-    assert.ok(Array.isArray(graph.nodes) && Array.isArray(graph.edges), 'buildGraph returns a graph');
-    assert.ok(Array.isArray(backend.listPendingGuidance()), 'listPendingGuidance returns an array');
-    assert.ok(Array.isArray(backend.search('index', 3)), 'search returns an array');
+    assert.ok(
+      graph.nodes.some((n) => n.id === `${c.id}-index`),
+      `${c.id}'s graph carries its INDEX node`,
+    );
+    assert.equal(
+      backend.descriptorPath() && realpathSync(backend.descriptorPath() as string),
+      realpathSync(c.kbYaml),
+      `${c.id} resolves its own kb.yaml through the seam`,
+    );
+    assert.equal(backend.contains(c.kbYaml), true, `${c.id} contains its own descriptor`);
+    assert.equal(
+      backend.contains(resolve(FORGE_ROOT, 'brain', 'INDEX.md')),
+      false,
+      'the cross-brain navigation index belongs to no single KB',
+    );
   });
 }
