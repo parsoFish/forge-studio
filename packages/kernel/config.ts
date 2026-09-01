@@ -133,13 +133,23 @@ export function defaultConfigPath(forgeRoot: string): string {
  * are unchanged.
  *
  * The previous body composed this as `join(skillsDir(forgeRoot), '..',
- * 'studio', 'starters', 'projects')`. `join` normalizes the `..`, so the two
- * forms are byte-identical; the indirection through `skillsDir` is dropped
- * because kernel (rank 1) may not import library (rank 2), where that helper
- * now lives.
+ * 'studio', 'starters', 'projects')`. `join` normalizes the `..`, so dropping
+ * the indirection through `skillsDir` — which kernel (rank 1) may not import
+ * from library (rank 2), where that helper now lives — leaves the SAME string
+ * for every input, relative roots included.
+ *
+ * Deliberately `join`, NOT `resolve(forgeRoot)`. An earlier draft of this move
+ * used `resolve` for symmetry with `resolveProjectsDir` below, and that is a
+ * real behaviour change hiding behind a claim of equivalence: `join` leaves a
+ * relative `forgeRoot` relative, `resolve` anchors it to `process.cwd()`.
+ * Every caller today passes an absolute root (`FORGE_ROOT`, `ctx.forgeRoot`,
+ * or a test's `process.cwd()`), so it would have been inert — which is exactly
+ * why it would have survived review and gone wrong later, under a caller that
+ * passes a relative root. Equivalence claimed in a comment has to be true for
+ * every input, not for the inputs that happen to exist.
  */
 export function projectStartersDir(forgeRoot: string): string {
-  return join(resolve(forgeRoot), 'studio', 'starters', 'projects');
+  return join(forgeRoot, 'studio', 'starters', 'projects');
 }
 
 /** The curated app-type templates available for creation. */
