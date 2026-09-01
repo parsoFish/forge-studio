@@ -61,13 +61,13 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-
 import { skillPath } from '../skill-path.ts';
 import { communitySourceKey } from './community-source-url.ts';
 import { listConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-library.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
-import { approveHook, scanHookScript } from './hook-scan.ts';
+import { scanHookScript } from './hook-scan.ts';
+import { approveHook } from './hook-approval-ledger.ts';
 
 import {
   COMMUNITY_KINDS,

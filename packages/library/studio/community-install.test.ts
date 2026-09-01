@@ -59,7 +59,7 @@ import { communitySourceKey } from './community-source-url.ts';
 
 import { skillPath } from '../skill-path.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
-import { hookRunState, isHookRunnable, readHookApprovalLedger, approveHook } from './hook-scan.ts';
+import { hookRunState, isHookRunnable, readHookApprovalLedger, approveHook } from './hook-approval-ledger.ts';
 import { vendoredPackageDir } from './community-index.ts';
 import { MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from './skill-library.ts';
 import { routeCommunityInstall, installCommunityHookPackage } from './community-install.ts';

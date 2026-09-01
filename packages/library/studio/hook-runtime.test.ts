@@ -154,17 +154,11 @@ import {
   buildChildEnv,
 } from '@forge/kernel/spawn-env.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { approveHook, overrideHookBlock, scanHookPackage } from './hook-scan.ts';
+import { scanHookPackage } from './hook-scan.ts';
+import { approveHook, overrideHookBlock } from './hook-approval-ledger.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
 
-import {
-  buildHookChildEnv,
-  detectUndeclaredEnvRefs,
-  runHookScript,
-  buildHookApprovalGateView,
-  HookRunError,
-  type HookRunResult,
-} from './hook-runtime.ts';
+import { buildHookChildEnv, detectUndeclaredEnvRefs, runHookScript, buildHookApprovalGateView, HookRunError, type HookRunResult } from './hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

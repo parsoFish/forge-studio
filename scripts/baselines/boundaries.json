@@ -17,7 +17,7 @@
   "legacy-to-package-not-via-shim|cli/bridge-studio-project-create-containment.test.ts|packages/knowledge/brain-lint.ts",
   "legacy-to-package-not-via-shim|cli/bridge-studio-project-health.test.ts|packages/projects/project-config.ts",
   "legacy-to-package-not-via-shim|cli/bridge-studio-residual-containment.test.ts|packages/kernel/index.ts",
-  "legacy-to-package-not-via-shim|cli/bridge-studio-sibling-containment.test.ts|packages/library/studio/hook-scan.ts",
+  "legacy-to-package-not-via-shim|cli/bridge-studio-sibling-containment.test.ts|packages/library/studio/hook-approval-ledger.ts",
   "legacy-to-package-not-via-shim|cli/bridge-studio-slug-message.test.ts|packages/agents/skill-path.ts",
   "legacy-to-package-not-via-shim|cli/bridge-studio-starter-materialisation.test.ts|packages/agents/studio/derive.ts",
   "legacy-to-package-not-via-shim|cli/bridge-studio-triggers.test.ts|packages/flows/flow-run-requests.ts",

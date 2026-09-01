@@ -47,7 +47,7 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { createLogger, type EventLogEntry, type EventLogger } from '@forge/kernel';
-import { approveHook } from '@forge/library/studio/hook-scan.ts';
+import { approveHook } from '@forge/library/studio/hook-approval-ledger.ts';
 import type { HookLifecycleEvent, HookPermissionManifest } from '@forge/library/studio/hook-library.ts';
 
 import { describeHookRunFailure, sdkHooksForAgent, type SdkHooksOption } from './hook-dispatch.ts';

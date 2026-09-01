@@ -295,7 +295,8 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/hook-library.ts | library | verbatim | 526 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 372 |
-| packages/library/studio/hook-scan.ts | library | verbatim | 803 |
+| packages/library/studio/hook-approval-ledger.ts | library | verbatim | 355 |
+| packages/library/studio/hook-scan.ts | library | verbatim | 480 |
 | packages/library/studio/instructions-draft.ts | library | verbatim | 185 |
 | packages/knowledge/studio/kb-descriptor.ts | knowledge | verbatim | 210 |
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
