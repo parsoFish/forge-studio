@@ -130,8 +130,6 @@ S1–S9 unchanged, plus **one** promotion:
 | knowledge | `KbBackend` plural (T-05) | H8 |
 | projects | `preflight/fix-agent` + `fix-auto` (R-13) | one `fix` with a mode |
 | projects | secrets UI, settings page (O-02, O-03) | never build — file conventions by design |
-| library | community registry refresh **session** (S8) | an agent to refresh star counts; justify or replace with a plain fetch |
-| library | `story-registry.mjs` (parity vs retired mockup) | dies with `mockups/` in M1-A |
 | harness | adversarial test-literal routes (`/api/agents/Bad_Slug`, `evilkb`, `dblslash-hook-detail`, `/api/a\|b\|thing/:id`…) | not surface; the tests are among the 29 presumed-keep ratchets — count as zero stories |
 | harness | 19 journeys + `index.mjs` | replaced by S0–S10 (M6) — do not port beats that no story owns |
 

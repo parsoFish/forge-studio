@@ -95,8 +95,8 @@ lands (e.g. an `origin:` frontmatter key) is a one-line edit here."*
 
 Two files are written by Studio into the tracked `studio/` tree and are **not** gitignored:
 
-- `studio/installed-skills.yaml` — the per-machine skill install ledger (`orchestrator/studio/skill-install-ledger.ts`)
-- `studio/hook-approvals.yaml` — per-machine hook approval verdicts (`orchestrator/studio/hook-scan.ts`)
+- `studio/installed-skills.yaml` — the per-machine skill install ledger (`packages/library/studio/skill-install-ledger.ts`)
+- `studio/hook-approvals.yaml` — per-machine hook approval verdicts (`packages/library/studio/hook-scan.ts`)
 
 Neither exists in a clean checkout; `git check-ignore` reports both as not ignored. These are the
 operator's "non-committed settings" ask as a live defect: per-machine trust decisions and install

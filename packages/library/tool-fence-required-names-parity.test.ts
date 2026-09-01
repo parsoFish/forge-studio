@@ -27,7 +27,7 @@
  * IDENTICAL — so a name added/removed on one side and forgotten on the
  * other is a RED test, not a silent gap.
  *
- * RUN: node --experimental-strip-types --test cli/tool-fence-required-names-parity.test.ts
+ * RUN: node --experimental-strip-types --test packages/library/tool-fence-required-names-parity.test.ts
  */
 
 import { test } from 'node:test';
