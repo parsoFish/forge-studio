@@ -222,20 +222,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 
-import {
-  scanHookScript,
-  scanHookPackage,
-  hashHookScript,
-  hashHookPermissions,
-  hashHookTrigger,
-  readHookApprovalLedger,
-  hookRunState,
-  approveHook,
-  overrideHookBlock,
-  isHookRunnable,
-  type HookScanReport,
-  type HookScanFinding,
-} from './hook-scan.ts';
+import { scanHookScript, scanHookPackage, hashHookScript, hashHookPermissions, hashHookTrigger, type HookScanReport, type HookScanFinding } from './hook-scan.ts';
+import { readHookApprovalLedger, hookRunState, approveHook, overrideHookBlock, isHookRunnable } from './hook-approval-ledger.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
 
 // ---------------------------------------------------------------------------

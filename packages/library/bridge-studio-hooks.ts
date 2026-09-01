@@ -90,17 +90,8 @@ import {
   type HookPermissionManifest,
   hookTriggerError,
 } from './studio/hook-library.ts';
-import {
-  scanHookPackage,
-  hookRunState,
-  readHookApprovalLedger,
-  approveHook,
-  overrideHookBlock,
-  revokeHookApproval,
-  revokeHookApprovalIfPresent,
-  type HookApprovalLedgerEntry,
-  type HookRunState,
-} from './studio/hook-scan.ts';
+import { scanHookPackage } from './studio/hook-scan.ts';
+import { hookRunState, readHookApprovalLedger, approveHook, overrideHookBlock, revokeHookApproval, revokeHookApprovalIfPresent, type HookApprovalLedgerEntry, type HookRunState } from './studio/hook-approval-ledger.ts';
 // PIN E (2026-08-28 hostile review): the whole-package read/hash primitives
 // the detail route's `files`/`packageHash` are now built from — the SAME
 // primitives the approval ledger's `packageHash` pin is computed from (see

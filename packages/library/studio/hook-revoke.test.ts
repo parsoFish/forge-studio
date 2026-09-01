@@ -21,13 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import {
-  approveHook,
-  hookRunState,
-  readHookApprovalLedger,
-  revokeHookApproval,
-  revokeHookApprovalIfPresent,
-} from './hook-scan.ts';
+import { approveHook, hookRunState, readHookApprovalLedger, revokeHookApproval, revokeHookApprovalIfPresent } from './hook-approval-ledger.ts';
 
 let root: string;
 

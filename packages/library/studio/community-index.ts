@@ -57,7 +57,7 @@ import { skillPath } from '../skill-path.ts';
 import { skillTrustState, extractProvenance } from './skill-library.ts';
 import type { PackageFile, SkillTrust } from './skill-library.ts';
 import { hookYamlPath } from './hook-library.ts';
-import { hookRunState } from './hook-scan.ts';
+import { hookRunState } from './hook-approval-ledger.ts';
 import { listConnections } from './connection-library.ts';
 import type { ConnectionDefinition } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
