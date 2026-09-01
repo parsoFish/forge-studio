@@ -62,7 +62,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
-import { listProjectStarters } from '@forge/projects/project-create.ts';
+import { listProjectStarters } from '@forge/kernel';
 import {
   discoverProjects,
   listFlowIds,

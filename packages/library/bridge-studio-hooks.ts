@@ -77,7 +77,7 @@ import {
   pathOnly,
   type StudioContext,
 } from '../../cli/bridge-studio.ts';
-import { assertSkillSlug, isReservedId } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug, isReservedId } from '@forge/kernel/ids.ts';
 import {
   hookDir,
   hooksDir,

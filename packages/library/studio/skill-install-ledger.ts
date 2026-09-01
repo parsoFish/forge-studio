@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { reqString, optString } from '@forge/kernel/studio/yaml-fields.ts';
-import { assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
 
 export interface InstalledSkillLedgerEntry {
   id: string;

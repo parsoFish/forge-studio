@@ -10,7 +10,7 @@
  * ADR 009 but never read by any code path. This module wires it.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type ForgeConfig = {
@@ -118,6 +118,51 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
  */
 export function defaultConfigPath(forgeRoot: string): string {
   return join(resolve(forgeRoot), 'forge.config.json');
+}
+
+/**
+ * The `studio/starters/projects/` dir — the F2 project-template library root.
+ *
+ * MOVED VERBATIM from `packages/projects/project-create.ts` (M4-library PR 2).
+ * `packages/library/studio/template-library.ts` lists project scaffolds as one
+ * of the template kinds it surfaces, and library (rank 2) may not import
+ * projects (rank 2 — `check-boundaries.mjs` treats SAME rank as a violation,
+ * `b >= a`). It is a layout fact, so it sits beside `resolveProjectsDir` here
+ * rather than being duplicated; `project-create.ts` re-exports both names, so
+ * its own importers (`cli/bridge-studio.ts`, `apps/forge/cli.ts`, its tests)
+ * are unchanged.
+ *
+ * The previous body composed this as `join(skillsDir(forgeRoot), '..',
+ * 'studio', 'starters', 'projects')`. `join` normalizes the `..`, so dropping
+ * the indirection through `skillsDir` — which kernel (rank 1) may not import
+ * from library (rank 2), where that helper now lives — leaves the SAME string
+ * for every input, relative roots included.
+ *
+ * Deliberately `join`, NOT `resolve(forgeRoot)`. An earlier draft of this move
+ * used `resolve` for symmetry with `resolveProjectsDir` below, and that is a
+ * real behaviour change hiding behind a claim of equivalence: `join` leaves a
+ * relative `forgeRoot` relative, `resolve` anchors it to `process.cwd()`.
+ * Every caller today passes an absolute root (`FORGE_ROOT`, `ctx.forgeRoot`,
+ * or a test's `process.cwd()`), so it would have been inert — which is exactly
+ * why it would have survived review and gone wrong later, under a caller that
+ * passes a relative root. Equivalence claimed in a comment has to be true for
+ * every input, not for the inputs that happen to exist.
+ */
+export function projectStartersDir(forgeRoot: string): string {
+  return join(forgeRoot, 'studio', 'starters', 'projects');
+}
+
+/** The curated app-type templates available for creation. */
+export function listProjectStarters(forgeRoot: string): string[] {
+  const dir = projectStartersDir(forgeRoot);
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /**

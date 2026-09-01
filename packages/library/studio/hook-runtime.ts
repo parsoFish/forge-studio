@@ -77,7 +77,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/agents/spawn-env.ts';
+import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
 import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, hookRunState, scanHookPackage, type HookScanReport } from './hook-scan.ts';

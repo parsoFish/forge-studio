@@ -62,10 +62,10 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs, assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
 import { communitySkillsFromRegistry, isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
 import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
-import { guardedFile } from '@forge/kernel';
+import { assertSkillSlug, guardedFile } from '@forge/kernel';
 import type { AgentDefinition, CommunitySkill } from '@forge/contracts/studio/types.ts';
 import type { Finding } from '../../../orchestrator/studio/validate.ts';
 

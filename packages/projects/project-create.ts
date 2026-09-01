@@ -21,7 +21,8 @@ import { dirname, join, resolve } from 'node:path';
 
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
-import { skillsDir, isReservedId } from '@forge/agents/skill-path.ts';
+import { isReservedId } from '@forge/agents/skill-path.ts';
+import { projectStartersDir, listProjectStarters } from '@forge/kernel';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the
@@ -52,24 +53,15 @@ export type ScaffoldResult = {
   filesWritten: string[];
 };
 
-/** The `studio/starters/projects/` dir — the F2 template library root. */
-export function projectStartersDir(forgeRoot: string): string {
-  // Starters live beside the skills tree, under studio/.
-  return join(skillsDir(forgeRoot), '..', 'studio', 'starters', 'projects');
-}
-
-/** The curated app-type templates available for creation. */
-export function listProjectStarters(forgeRoot: string): string[] {
-  const dir = projectStartersDir(forgeRoot);
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    return [];
-  }
-}
+/**
+ * `projectStartersDir` and `listProjectStarters` moved to `@forge/kernel`
+ * (M4-library PR 2): they are layout facts, and
+ * `packages/library/studio/template-library.ts` surfaces project scaffolds as
+ * a template kind but may not import this package (same rank). Re-exported
+ * here so every existing importer — `cli/bridge-studio.ts`,
+ * `apps/forge/cli.ts`, `project-create.test.ts` — is unchanged.
+ */
+export { projectStartersDir, listProjectStarters };
 
 /** Validate + normalize an untyped creation manifest (R4-03-F1). Throws on any
  *  missing/invalid field so a bad manifest fails fast at the boundary. */

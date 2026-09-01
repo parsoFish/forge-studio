@@ -1,168 +1,34 @@
 /**
- * The single shared skill-path resolver (R3-01-F1). Before this module, ~40
- * production sites hardcoded `skills/<name>/SKILL.md` path construction and two
- * independent readdir walks discovered the skills tree. Every skill lookup AND
- * enumeration now routes through here, so the physical `skills/` layout is a
- * one-place change (the known-gaps §6 precondition — the move itself is a
- * separate decision, NOT taken here).
+ * Per-turn skill sections (R4-23, ADR-024) — the per-spawn half of what used
+ * to be one 373-line `skill-path` module.
  *
- * `skillPath` returns an ABSOLUTE path — use it for direct file reads
- * (`readFileSync`, `existsSync`, ...). `deriveAgentSpec('skills/<name>/SKILL.md')`
- * sites must instead use `skillPathRelative(name)`: its argument is echoed
- * verbatim into `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT
- * (see `orchestrator/phase-agent.ts`) — an absolute path there would leak a
- * worktree-specific filesystem path into the portable, greppable event log.
+ * M4-library PR 2 split that module three ways, because it was three things
+ * wearing one name:
+ *   - the id vocabulary and the ONE slug guard  → `@forge/kernel/ids.ts`
+ *     (`orchestrator/studio/validate.ts` re-exports them to validate PROJECTS
+ *     and KNOWLEDGE BASES, so they were never any one kind's);
+ *   - the `skills/` tree layout                 → `@forge/library/skill-path.ts`
+ *     (spec §3.1 gives library the Skill kind, and that is its on-disk shape);
+ *   - per-turn prompt composition               → HERE, which is the
+ *     "per-spawn runtime" spec §3.1 carves out to agents.
  *
- * `name` is ALWAYS slug-validated before it touches a path (R3-01-F4,
- * adversarial re-review, Blocker 1): a naive `join(skillsDir(root), name)`
- * lets an unvalidated `name` collapse the join (`'.'` resolves to `skillsDir`
- * itself), escape it (`'..'`, an absolute path), or open an orphan directory
- * `listSkillDirs` never discovers (`'sub/evil'`). Every current and future
- * caller of `skillDir`/`skillPath`/`skillPathRelative` inherits the guard —
- * this module is the one resolution point, so it is the one place the check
- * belongs.
+ * Both moved groups are RE-EXPORTED below so this module's ~60 existing
+ * importers — including `orchestrator/` and `cli/`, whose rows are baselined
+ * against `agents` — need no edit. The re-export is a legal `agents → library`
+ * / `agents → kernel` edge (PACKAGE_RANK: agents 3, library 2, kernel 1) over
+ * code that genuinely MOVED; it is a transition affordance the wave-3 agents
+ * lane may delete by repointing those importers, not a shim that greens a
+ * boundary row while the code stays put.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 
-/**
- * The slug shape shared across every studio object id (agents, flows,
- * artifacts, KBs, skills, ...). Defined HERE — this module is a true leaf
- * (only `node:fs`/`node:path`) — and re-exported from
- * `orchestrator/studio/validate.ts` for its 20+ existing call sites.
- *
- * This definition used to live in `validate.ts` and be imported back into
- * this file, closing a `skill-path → validate → registry → skill-path`
- * cycle (registry.ts imports this module; validate.ts imports registry.ts).
- * It worked only because every cyclic import was consumed inside function
- * bodies, never at module top level — one future eager top-level call would
- * have reintroduced a TDZ crash for whichever module became the process
- * entry. Moving the definition to this leaf module removes the cycle
- * entirely rather than relying on that fragile invariant.
- */
-export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+import { skillPath } from '@forge/library/skill-path.ts';
 
-/**
- * W7-A4 — the ONE id rule for projects and knowledge bases: the id IS the
- * on-disk directory name, case-preserving, matched exactly (see
- * `orchestrator/studio/validate.ts` for the full contract + the reserved-id
- * and reason helpers). Defined in this leaf for the same cycle reason as
- * SLUG_RE; `PROJECT_ID_RE`/`KB_ID_RE` are named aliases of one predicate so
- * a project and the KB bound to it can never disagree about legality.
- */
-export const EXACT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-export const PROJECT_ID_RE = EXACT_ID_RE;
-export const KB_ID_RE = EXACT_ID_RE;
-/** Length cap shared by every project/KB id validator (one path segment). */
-export const MAX_EXACT_ID_LENGTH = 128;
+/** The id vocabulary and the one slug guard — definition in `@forge/kernel`. */
+export * from '@forge/kernel/ids.ts';
+/** The `skills/` tree layout — definition in `@forge/library`. */
+export * from '@forge/library/skill-path.ts';
 
-/**
- * Ids the UI reserves as static route segments (`/projects/new`, `/agents/new`,
- * `/flows/new`, `/skills/new`, `/hooks/new`, `/knowledge/new`). An object
- * literally named `new` would be permanently shadowed by the builder that lives
- * at that path (W7-A4, projects-30 / crosscut-20), so every create route refuses
- * it — case-insensitively, since slugs are lowercased at creation and a
- * case-preserving KB id `New` would still sit next to the static segment.
- */
-export const RESERVED_OBJECT_IDS: ReadonlySet<string> = new Set(['new']);
-
-export function isReservedId(id: string): boolean {
-  return RESERVED_OBJECT_IDS.has(id.toLowerCase());
-}
-
-/** Hard cap on a skill id's length. Without this, a charset-valid but
- *  absurdly long id sails past the regex guard and dies later as a raw
- *  `ENAMETOOLONG` from `mkdir`/`writeFileSync` — an opaque OS error instead
- *  of an actionable validation message naming the actual limit. */
-export const MAX_SKILL_ID_LENGTH = 100;
-
-/** The slug rule as PLAIN PROSE + the bare pattern source (no leading `/`):
- *  `sanitizeError` (cli/bridge-studio.ts) redacts every `/…` token from
- *  bridge error strings, and a RegExp literal's own `/^…$/` was being eaten
- *  into `[path]:-[a-z0-9]+)*$/` on the wire (walkthrough library-13). */
-export const SLUG_RULE_TEXT = `a single lowercase-kebab path segment matching ${SLUG_RE.source} (lowercase letters, digits and hyphens); no "/", "\\", ".", or ".."`;
-
-/** Reject any `name` that is not a bare slug component — no `/`, `\`, `.`,
- *  `..`, or empty string can ever reach a path join past this point — and no
- *  id longer than `MAX_SKILL_ID_LENGTH` characters. `noun` names the object
- *  kind in the message (skill / hook / connection / community item) — the
- *  same rule guards every file-package id, so the caller supplies the word
- *  the operator will read (library-13: a hooks route used to say "invalid
- *  skill id"). Additive-optional (ADR 042: disclose-not-park). */
-export function assertSkillSlug(name: string, noun: string = 'skill'): void {
-  if (name.length > MAX_SKILL_ID_LENGTH) {
-    throw new Error(
-      `invalid ${noun} id "${name.slice(0, 40)}…" — ${name.length} characters exceeds the ${MAX_SKILL_ID_LENGTH}-character length limit for a ${noun} id`,
-    );
-  }
-  if (!SLUG_RE.test(name)) {
-    throw new Error(
-      `invalid ${noun} id "${name}" — must be ${SLUG_RULE_TEXT}`,
-    );
-  }
-}
-
-/** The forge repo root — the parent of `orchestrator/`. */
-export const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
-
-/** The `skills/` directory under a given root (default: the real repo root).
- *  The one place the literal `skills` directory name is constructed. */
-export function skillsDir(root: string = FORGE_ROOT): string {
-  return join(root, 'skills');
-}
-
-/** Absolute path to a named skill's directory: `<root>/skills/<name>`. */
-export function skillDir(name: string, root: string = FORGE_ROOT): string {
-  assertSkillSlug(name);
-  return join(skillsDir(root), name);
-}
-
-/** Absolute path to a named skill's `SKILL.md`: `<root>/skills/<name>/SKILL.md`. */
-export function skillPath(name: string, root: string = FORGE_ROOT): string {
-  assertSkillSlug(name);
-  return join(skillsDir(root), name, 'SKILL.md');
-}
-
-/**
- * Root-relative path to a named skill's `SKILL.md`: `skills/<name>/SKILL.md`
- * — always relative, regardless of root. This is the string form
- * `deriveAgentSpec` requires: its `skill` argument is echoed verbatim into
- * `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT (see
- * `orchestrator/phase-agent.ts` — it flows into event-log `agent_skill`
- * attribution, so it must stay a portable, greppable relative path, never an
- * absolute filesystem path). Use `skillPath()` (absolute) for direct file
- * reads instead.
- */
-export function skillPathRelative(name: string): string {
-  assertSkillSlug(name);
-  return join('skills', name, 'SKILL.md');
-}
-
-/**
- * The generic SKILL.md-bearing-subdirectory walk of ANY directory (used for both
- * the live `skills/` tree and the `studio/starters/agents/` template tree).
- * Returns absolute directory paths, sorted. Absent/unreadable dir ⇒ [].
- */
-export function listSkillMdDirs(dir: string): string[] {
-  let names: string[];
-  try {
-    names = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
-  return names
-    .map((n) => join(dir, n))
-    .filter((d) => existsSync(join(d, 'SKILL.md')))
-    .sort();
-}
-
-/** The skills-tree discovery walk: every skill directory under `<root>/skills/`
- *  that carries a `SKILL.md`. Parameterized by root (default: the real repo). */
-export function listSkillDirs(root: string = FORGE_ROOT): string[] {
-  return listSkillMdDirs(skillsDir(root));
-}
 
 // ---------------------------------------------------------------------------
 // R4-23 — per-turn skill sections (ADR-024 artifact migration)
