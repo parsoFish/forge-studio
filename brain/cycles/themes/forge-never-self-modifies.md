@@ -22,7 +22,7 @@ related_themes:
 
 # Forge never self-modifies while running
 
-Forge is the orchestrator managing active jobs, event logs, and queue state. If a reflect agent modified `orchestrator/scheduler.ts` or `orchestrator/queue.ts` while jobs are running, the next heartbeat cycle would execute against partially-written files, corrupting state.
+Forge is the orchestrator managing active jobs, event logs, and queue state. If a reflect agent modified `packages/flows/scheduler.ts` or `packages/flows/queue.ts` while jobs are running, the next heartbeat cycle would execute against partially-written files, corrupting state.
 
 Discipline:
 

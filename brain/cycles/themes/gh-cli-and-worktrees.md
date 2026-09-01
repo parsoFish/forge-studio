@@ -28,7 +28,7 @@ V1 hand-rolled a git workflow module and a job runner. Both correct but heavy, a
 - **`git worktree`** — parallel work units. `git worktree add` per claimed initiative, `git worktree remove` on completion or recovery. Native filesystem isolation replaces v1's process-isolation module.
 - **GitHub Actions** — CI execution we don't have to maintain. TBD per managed project, not forge itself.
 
-Thin TS wrappers in `orchestrator/worktree.ts` exist only because the scheduler tracks lockfiles and heartbeats per worktree — they shell out to `git worktree`, they don't reimplement it.
+Thin TS wrappers in `packages/flows/worktree.ts` exist only because the scheduler tracks lockfiles and heartbeats per worktree — they shell out to `git worktree`, they don't reimplement it.
 
 Trade-off: skills shell to `gh` rather than calling a typed library. Errors come back as exit codes / stderr. `git worktree` quirks (locked worktrees, nested git dirs) handled per-case.
 

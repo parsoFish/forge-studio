@@ -23,7 +23,7 @@ related_themes:
 
 Forge v2 uses the first-party [`@anthropic-ai/claude-agent-sdk`](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) for every agent invocation rather than spawning the `claude` CLI as subprocesses (v1's approach). Subagents, headless mode, hooks, and MCP servers all come from the SDK — Anthropic-maintained, version-bumped, no re-implementation tax.
 
-The Ralph loop driver (`loops/ralph/runner.ts`) calls `query()` from the SDK. The orchestrator's `cycle.ts` invokes Claude Code skills via the SDK. Subagents (parallel, isolated context, per-agent tool/model config) use the SDK's native subagent support.
+The Ralph loop driver (`packages/agents/ralph/runner.ts`) calls `query()` from the SDK. The orchestrator's `cycle.ts` invokes Claude Code skills via the SDK. Subagents (parallel, isolated context, per-agent tool/model config) use the SDK's native subagent support.
 
 Trade-off: Anthropic-only models. v1 already standardised on Claude. If portability later matters, an Aider adapter under `loops/_adapters/` is the documented escape hatch.
 

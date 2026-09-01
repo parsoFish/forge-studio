@@ -39,7 +39,7 @@ metric (a measurable outcome), the agentic improvement loop collapses to:
 3. Read the score-delta vs the locked baseline
 4. Lock the new champion
 
-trafficGame's `scripts/grading/runSweep.mjs` (in the trafficGame managed-project checkout — gitignored, machine-local)
+trafficGame's `projects/trafficGame/scripts/grading/runSweep.mjs` (in the trafficGame managed-project checkout — gitignored, machine-local)
 is the reference instantiation: a parallel worker pool (default 8) pulls
 parameter values off a shared queue, calls a per-value `drawDesign` + validation
 + measurement, and aggregates per-run JSON into a `sweep.csv` + `sweep.md` with
