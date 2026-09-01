@@ -647,6 +647,48 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
 // ---------- checkStaleness ----------
 
 /**
+ * Top-level directories a FORGE theme's citation resolves against the forge
+ * root. The set FOLLOWS THE TREE, and a test enforces that: `brain-lint.test.ts`
+ * fails if the repo grows a tracked top-level source directory this set does not
+ * name. That test is the point of the constant — the old inline list
+ * (`docs/|orchestrator/|skills/|loops/`) was correct when it was written and
+ * then silently stopped covering the tree, so every citation under `packages/`
+ * and `apps/` went un-staleness-checked with nothing red (bead
+ * `forge-8vfn.5.24`).
+ *
+ * Deliberately absent, each with its reason:
+ *   `brain/`            — skipped earlier in `checkStaleness`; `checkSourceLinks` owns it
+ *   `projects/`         — managed-project clones, absent on a cold checkout, so a
+ *                         citation there would flag on one machine and not another
+ *   `_logs/`, `_queue/`, `.forge/` — runtime state, not source. `.forge/` is
+ *                         gitignored in this repo, so it is present on a
+ *                         developer's checkout and absent on a fresh clone
+ */
+const FORGE_INTERNAL_PREFIXES = [
+  '.claude/',
+  '.github/',
+  'apps/',
+  'bin/',
+  'cli/',
+  'demos/',
+  'docs/',
+  'loops/',
+  'orchestrator/',
+  'packages/',
+  'scripts/',
+  'skills/',
+  'studio/',
+  'tests/',
+] as const;
+
+/** The exclusions above, exported so the coverage test asserts against ONE list. */
+export const STALENESS_PREFIX_EXCLUSIONS = ['brain', 'projects', '_logs', '_queue', '.forge'] as const;
+
+/** Every prefix a forge citation may resolve against. Exported for the coverage test. */
+export const STALENESS_PREFIXES: readonly string[] = FORGE_INTERNAL_PREFIXES;
+
+
+/**
  * For each theme citing a path in `## Sources` (or anywhere in the body):
  * - For FORGE themes: resolve relative to `<forgeRoot>/`. Flag missing files
  *   that look like source paths.
@@ -673,6 +715,11 @@ function extractCitedPaths(content: string): string[] {
     const s = m[1].trim();
     // Heuristic: looks like a path (has a / and a . extension) and doesn't look
     // like a code snippet (no spaces, no parens).
+    // A citation carrying a wildcard is a PATTERN, not a path — `scripts/*.mjs`
+    // names a set, and existence-checking it would flag forever. Surfaced by
+    // widening the staleness prefix set (bead `forge-8vfn.5.24`): `scripts/`
+    // was previously unchecked, so this class had never been reachable.
+    if (s.includes('*') || s.includes('?')) continue;
     if (s.includes('/') && /\.[a-zA-Z0-9]+$/.test(s) && !s.includes(' ') && !s.includes('(')) {
       out.push(s);
     }
@@ -701,7 +748,7 @@ export function checkStaleness(forgeRoot: string): Finding[] {
 
       // Only a FORGE theme's citation is a forge path (see the docblock).
       if (!isForgeTheme(brainRoot, file)) continue;
-      if (p.startsWith('docs/') || p.startsWith('orchestrator/') || p.startsWith('skills/') || p.startsWith('loops/')) {
+      if (FORGE_INTERNAL_PREFIXES.some((prefix) => p.startsWith(prefix))) {
         // Forge-internal path. Resolve against forge root.
         const target = resolve(forgeRoot, p);
         if (!existsSync(target)) {
