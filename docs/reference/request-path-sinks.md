@@ -1645,3 +1645,49 @@ Baseline delta pending: 5 new rows (`cli/community-refresh-run.ts` ×
 `existsSync` / `mkdirSync` / `renameSync` / `unlinkSync` / `writeFileSync`,
 each at count 1), 490 → 495. Accept with
 `node scripts/check-request-path-sinks.mjs --write`.
+
+### M4-knowledge H8 — five baseline rows RE-KEYED behind the `KbBackend` seam, no new sink surface
+
+Four measured per-KB read sites (`kb-lint-summary.ts:68,140`, `kb-health.ts:97,164`)
+resolved a KB's brain directory for themselves and then read it, bypassing the
+`KbBackend` seam SPEC.md §4 names as the only per-KB read path. The resolution
+and the reads moved behind the seam; the two lint/health modules now receive a
+backend rather than constructing one. No read gained a new argument, a new root
+or a new caller — each moved intact into the implementation of the interface
+method that answers the same question.
+
+| was | is now | sink | why it moved |
+|---|---|---|---|
+| `packages/knowledge/kb-health.ts` (`listFreshThemeFiles`) | `packages/knowledge/kb-backend.ts` (`FilesystemKbBackend.freshThemeFiles`) | `existsSync` 1, `readdirSync` 1, `statSync` 1 | enumerating a KB's own fresh themes is a per-KB read; behind the seam it is one method, and a non-filesystem backend answers it its own way |
+| `packages/knowledge/kb-health.ts` (`kbYamlPathFor`) | `packages/knowledge/kb-backend.ts` (`FilesystemKbBackend.descriptorPath`) | `existsSync` 1 | the descriptor lookup is per-KB; resolved per call rather than cached, so a KB that loses its `kb.yaml` while a backend is held answers null |
+| `packages/knowledge/kb-lint-summary.ts` (`findingUnderDir`) | `packages/knowledge/brain-paths.ts` (`pathUnderDir`) | `existsSync` 1, `realpathSync` 1 | the containment comparison is now shared by `findingUnderDir` and `KbBackend.contains`, so a KB's read scope and its WRITE scope cannot drift apart — the defect class the original comment already records |
+
+**The proof that this is a re-key and not growth is the guard's own total: 1,340
+sink calls before and 1,340 after.** `(file, sink)` rows go 528 → 527 and the
+baseline file 531 → 530 lines, both because `kb-health.ts`'s `existsSync` 2 split
+into a `kb-backend.ts` 2 that absorbed one and a `brain-paths.ts` 1 → 2 that
+absorbed the other. Accepted by hand-editing the affected lines, NOT by
+`--write`: bead `forge-8vfn.5.19` records that `--write` harvests unrelated
+baseline slack, and the five tightenable lines belonging to other lanes
+(`packages/flows/fix-work-items.ts` ×3, `packages/knowledge/brain-lint.ts` ×2 —
+the latter recorded at this lane's pin as pre-existing) were deliberately left
+un-harvested and are unchanged either side of this PR.
+
+The guard classification is unchanged and is restated here rather than assumed.
+Every one of these sites still resolves through `resolveKbBrainDir`, the KB
+family's single containment choke point (`resolveGuardedPath` on both candidate
+roots, `kbId` always its own `segments[]` element) — the seam moved WHO calls it,
+not WHAT it checks. `FilesystemKbBackend` calls it per method rather than caching
+a directory, so a KB that stops resolving stops answering; the guard cannot be
+outlived by a held backend. Nothing hands the resolved root back out: the
+interface exposes containment (`contains`, `ownsTheme`), placement, the descriptor
+path and the fresh-theme list, and deliberately no `root()` — a caller holding the
+root could read around the seam, which is the bypass this change removes.
+
+`packages/knowledge/tests/contract/kb-backend-conformance.test.ts` pins the
+behaviour with content assertions against a seeded brain, including the
+prefix-sibling case (`alpha-two` must never fold into `alpha`) that was a live
+cross-KB WRITE defect, and CONF-8a asserts the two modules resolve no KB brain
+directory of their own. Both were positive-controlled: restoring the substring
+form of `contains` fails CONF-1a/1b, and restoring the self-resolution in
+`kb-lint-summary.ts` fails CONF-7a/8a.

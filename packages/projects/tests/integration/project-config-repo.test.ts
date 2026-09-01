@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { loadProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from '../../project-config.ts';
 import { REPO_RE } from '@forge/flows/trigger-payload.ts';
 
 function newTempDir(): string {

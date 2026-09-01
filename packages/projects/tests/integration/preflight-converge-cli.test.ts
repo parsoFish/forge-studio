@@ -11,13 +11,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-const ROOT = process.cwd();
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 function converge(args: string[]): { code: number | null; stderr: string } {
   const r = spawnSync(
     process.execPath,
     ['--experimental-strip-types', 'apps/forge/cli.ts', 'preflight', 'converge', ...args],
-    { cwd: ROOT, encoding: 'utf8' },
+    { cwd: FORGE_ROOT, encoding: 'utf8' },
   );
   return { code: r.status, stderr: (r.stderr ?? '') + (r.stdout ?? '') };
 }

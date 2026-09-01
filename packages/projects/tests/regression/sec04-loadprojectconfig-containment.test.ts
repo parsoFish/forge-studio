@@ -56,7 +56,7 @@ import {
 import { join, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { loadProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from '../../project-config.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -24,9 +24,8 @@ import {
   validateCreationManifest,
   projectStartersDir,
   type CreationManifest,
-} from './project-create.ts';
-
-const REAL_ROOT = process.cwd();
+} from '../../project-create.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir.
  *  Duplicated from project-create.test.ts (small + self-contained — see the
@@ -36,7 +35,7 @@ function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pcreate-'));
   const startersDest = join(root, 'studio', 'starters', 'projects');
   mkdirSync(startersDest, { recursive: true });
-  cpSync(projectStartersDir(REAL_ROOT), startersDest, { recursive: true });
+  cpSync(projectStartersDir(FORGE_ROOT), startersDest, { recursive: true });
   mkdirSync(join(root, 'brain', 'projects'), { recursive: true });
   mkdirSync(join(root, 'projects'), { recursive: true });
   return root;
@@ -358,7 +357,7 @@ test('AT-4on-1 (RED) [SEC-05 4on] a copyTemplate invalid-JSON throw mid-Phase-2 
 
     // Clear the transient (restore the good template) and retry — RED at base:
     // the orphan trips existsSync(projectDir) → "already exists".
-    cpSync(join(projectStartersDir(REAL_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    cpSync(join(projectStartersDir(FORGE_ROOT), 'typescript-cli', 'package.json'), pkgPath);
     let ok = false;
     let err = '';
     try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
@@ -504,7 +503,7 @@ test('AT-4on-7 (RED) [SEC-05 4on] retryability regression lock — a mid-Phase-2
       'injection precondition: copyTemplate throws mid-Phase-2',
     );
     // Restore the shared template input; the identical create must now succeed.
-    cpSync(join(projectStartersDir(REAL_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    cpSync(join(projectStartersDir(FORGE_ROOT), 'typescript-cli', 'package.json'), pkgPath);
     let ok = false;
     let err = '';
     try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }

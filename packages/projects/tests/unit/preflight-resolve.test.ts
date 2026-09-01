@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyClause } from './preflight-resolve.ts';
-import type { ClauseId, ClauseResult } from './preflight.ts';
+import { classifyClause } from '../../preflight-resolve.ts';
+import type { ClauseId, ClauseResult } from '../../preflight.ts';
 
 function clause(id: ClauseId): ClauseResult {
   return { clause: id, title: id, hard: false, pass: false, detail: '' };

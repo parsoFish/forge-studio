@@ -10,7 +10,7 @@ import {
   parseConstraintBlocks,
   selectorMatches,
   type ConstraintMatchContext,
-} from './constraint-blocks.ts';
+} from '../../constraint-blocks.ts';
 
 // ---------- parseConstraintBlocks: happy path ----------
 

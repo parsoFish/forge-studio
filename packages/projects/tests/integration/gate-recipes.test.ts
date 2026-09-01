@@ -15,7 +15,7 @@ import {
   gateRecipeFor,
   deriveGateRecipe,
   renderGateRecipeBlock,
-} from './gate-recipes.ts';
+} from '../../gate-recipes.ts';
 
 function tmp(files: Record<string, string>): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-gate-'));
