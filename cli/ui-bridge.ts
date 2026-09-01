@@ -76,8 +76,8 @@ import {
   computeAgentCleanupFindings,
   KB_SEEDING_ANCHOR_PREFIX,
 } from '@forge/knowledge/bridge-studio-kbs.ts';
-import { handleStudioKbDrainRoutes } from '@forge/knowledge/bridge-studio-kb-drain.ts';
 import { deriveKbActiveJob, activeJobReason } from '@forge/knowledge/kb-job-state.ts';
+import { routeTable, dispatchRoute } from '../apps/forge/routes.ts';
 import { handleStudioSkillsRoutes } from '@forge/library/bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from '@forge/library/bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from '@forge/library/bridge-studio-authoring.ts';
@@ -2093,6 +2093,7 @@ async function handleHttp(
     }
   }
 
+  if (await dispatchRoute(routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW (apps/forge/routes.ts)
   if (method === 'GET' && url === '/api/health') {
     // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
     // healthy forge bridge from a stale/foreign listener and attach instead of
@@ -2364,7 +2365,6 @@ async function handleHttp(
   }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioKbDrainRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioAuthoringRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
