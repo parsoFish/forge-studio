@@ -346,25 +346,18 @@ function scanTree(): FileScan[] {
  * reviewer reading the expected-files list, even though its pairing is not
  * mechanically enforced.
  *
- * cli/bridge-studio-authoring.ts — the interactive-authoring FINALIZE route's
- * `finally` block (rmSync at :673, discovered by THIS test 2026-08-23 W8-B4 —
- * missed by the accompanying hand-audit) removes
- * `_interactive-library/<id>/`, the STAGING/landed-draft scratch area a
- * finalize turn writes to BEFORE `finalizeHookFromLanded` copies it into
- * `studio/hooks/<id>` — never the installed hook package itself, and the
- * cleanup fires regardless of outcome (success or failure), after the real
- * install step has already run (or been reverted). `hooksDir(...)` is used
- * elsewhere in this file by `finalizeHookFromLanded` — a CREATE-only writer
- * with a 409-on-exists guard, never a delete — which is what the whole-file
- * co-occurrence heuristic actually saw; it cannot see that these are two
- * unrelated call sites. Verified by hand.
+ * The one historical entry is GONE, and its absence is the point. M4-library
+ * PR 4b split `bridge-studio-authoring.ts`: the staging-cleanup `rmSync` stayed
+ * in the retained route file (which now contains no `hooksDir` at all) and
+ * `finalizeHookFromLanded`'s `hooksDir` usage moved to
+ * `bridge-studio-authoring-hook.ts` (which contains no destroy verb at all).
+ * The whole-file co-occurrence that produced the false positive no longer
+ * occurs, so the suppression is not merely stale — the split removed the cause.
+ * Verified: no file among the five carries both a destroy verb and a hooksDir
+ * reference. An empty allowlist is the honest state; a row that suppresses
+ * nothing is a row that hides the next real one.
  */
-const HOOK_CENSUS_ALLOWLIST: Record<string, string> = {
-  'packages/library/bridge-studio-authoring.ts':
-    'FINALIZE route cleanup of `_interactive-library/<id>/` staging (rmSync at :673) — not the installed ' +
-    'studio/hooks/<id> package. hooksDir(...) is used elsewhere in this file only by the CREATE-only ' +
-    'finalizeHookFromLanded (409-on-exists, never deletes).',
-};
+const HOOK_CENSUS_ALLOWLIST: Record<string, string> = {};
 
 test('ENUMERATION (library-34 class): every hook-package-destroying module is the known DELETE route (plus audited false positives), and calls revokeHookApprovalIfPresent', () => {
   const scans = scanTree();

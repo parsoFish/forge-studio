@@ -929,7 +929,7 @@ test('G5: the derived scope is a SUPERSET of the charter list and of every cli/b
     'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
     'packages/sessions/architect-runner.ts', 'packages/sessions/instructions-runner.ts',
     'orchestrator/project-brain-builder-runner.ts', 'packages/sessions/demo-builder-runner.ts',
-    'packages/projects/project-config.ts', 'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts',
+    'packages/projects/project-config.ts', 'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
     'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',
   ]) {
     assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
