@@ -79,10 +79,16 @@ import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE, type Provenan
 // Context surface needed by studio routes
 // ---------------------------------------------------------------------------
 
-export type StudioContext = {
-  forgeRoot: string;
-  logsRoot: string;
-};
+// StudioContext, allowedOrigin, sendJson, sanitizeError and pathOnly now live
+// in `@forge/kernel` (M4 §4 step 2): every package that carves its routes out
+// of this bridge needs them, and a package importing `cli/` is a
+// `package-to-legacy` boundary violation. Re-exported here as a transition
+// affordance so this module's existing importers are untouched; the re-export
+// moves with the host when the host does (flows lane).
+export type { StudioContext } from '@forge/kernel';
+// …and imported for this module's own use: a re-export does not bind the name
+// locally, and several handlers below still call these directly.
+import { allowedOrigin, sendJson, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 
 /**
  * W8-F6 (bead forge-6gv.27) — "can this bridge actually serve
@@ -191,38 +197,7 @@ export const LEGACY_SESSION_WORKING_PHASES: Readonly<Record<string, ReadonlySet<
 export const CSRF_HEADER = 'x-forge-csrf';
 
 /** Regex matching the forge-ui dev origin (any port on localhost/127.0.0.1). */
-const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-
-/**
- * Returns the request's Origin if it matches the forge-ui dev-origin pattern,
- * otherwise returns 'null' (the literal string that signals "no access").
- * Used to tighten CORS beyond the old wildcard.
- */
-export function allowedOrigin(req: IncomingMessage, _pattern?: RegExp): string {
-  const origin = req.headers?.['origin'];
-  if (typeof origin === 'string' && LOCAL_ORIGIN_RE.test(origin)) return origin;
-  return 'null';
-}
-
-export function sendJson(res: ServerResponse, status: number, body: unknown, origin = 'null'): void {
-  const payload = JSON.stringify(body);
-  res.writeHead(status, {
-    'content-type': 'application/json',
-    'access-control-allow-origin': origin,
-    'vary': 'origin',
-  });
-  res.end(payload);
-}
-
-/**
- * Strip absolute filesystem paths from error strings before sending them to
- * the browser. Prevents leaking the operator's directory layout.
- * Pattern: any token starting with / that looks like a path segment.
- * Exported so alias catch-blocks in ui-bridge.ts can reuse it (M2).
- */
-export function sanitizeError(err: unknown): string {
-  return String(err).replace(/\/[^\s:,'"]+/g, '[path]');
-}
+export { allowedOrigin, sendJson, sanitizeError };
 
 /** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle'). */
 export function parseQuery(rawUrl: string): URLSearchParams {
@@ -230,11 +205,7 @@ export function parseQuery(rawUrl: string): URLSearchParams {
   return new URLSearchParams(idx >= 0 ? rawUrl.slice(idx + 1) : '');
 }
 
-/** Strip the query-string from a URL string. */
-export function pathOnly(rawUrl: string): string {
-  const idx = rawUrl.indexOf('?');
-  return idx >= 0 ? rawUrl.slice(0, idx) : rawUrl;
-}
+export { pathOnly };
 
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
 

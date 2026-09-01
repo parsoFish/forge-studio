@@ -79,16 +79,13 @@
  * unchanged from how consolidate's per-group turns already work.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { createLogger } from '@forge/kernel';
 import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
-import { KB_ID_RE } from '../../orchestrator/studio/validate.ts';
 import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
@@ -99,15 +96,15 @@ import {
   type Finding,
 } from './brain-lint.ts';
 import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
-import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import {
   guardAgentKbEdits, auditKbEdit, buildKbEditSoundnessCtx, snapshotBrainTree, brainRootDir, noKbEdits,
   type KbEditGateResult, type KbEditUnsoundness,
 } from './kb-drain-edit-soundness.ts';
-import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
+import { KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
 import { guardedWriteFile } from '@forge/kernel';
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { sanitizeError } from '@forge/kernel';
 import { isDryBridge } from '../../cli/dry-bridge.ts';
 
 // ---------------------------------------------------------------------------
@@ -316,7 +313,7 @@ function kbDrainLogDir(forgeRoot: string, runId: string): string {
  *  a multi-KB JSON blob); `renameSync` on the same filesystem is atomic, so
  *  a reader only ever sees the FULLY-written prior version or the
  *  FULLY-written new one, never a truncated/interleaved one. */
-function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbDrainStatus): void {
+export function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbDrainStatus): void {
   const logDir = kbDrainLogDir(forgeRoot, runId);
   mkdirSync(logDir, { recursive: true });
   const finalPath = join(logDir, 'status.json');
@@ -330,7 +327,7 @@ function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbDrainSta
  *  walk keyed off caller input. Returns `null` on any missing/unparseable
  *  status file — a genuinely unknown or not-yet-started run, never a thrown
  *  500. */
-function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStatus | null {
+export function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStatus | null {
   const statusPath = join(kbDrainLogDir(forgeRoot, runId), 'status.json');
   if (!existsSync(statusPath)) return null;
   try {
@@ -369,11 +366,11 @@ function findKbDrainRuns(forgeRoot: string, kbId: string): Array<{ runId: string
   return runs;
 }
 
-function findActiveKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
+export function findActiveKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
   return findKbDrainRuns(forgeRoot, kbId).find((r) => r.status.state === 'running') ?? null;
 }
 
-function latestKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
+export function latestKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
   const runs = findKbDrainRuns(forgeRoot, kbId);
   if (runs.length === 0) return null;
   return runs.reduce((a, b) => (a.status.updatedAt >= b.status.updatedAt ? a : b));
@@ -513,7 +510,7 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
   return rows.sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
 }
 
-function initialKbDrainStatus(
+export function initialKbDrainStatus(
   kbId: string,
   maxRounds: number = KB_DRAIN_MAX_ROUNDS,
   maxCostUsd: number = DEFAULT_KB_DRAIN_MAX_COST_USD,
@@ -1456,241 +1453,4 @@ export async function runKbDrain(
   } finally {
     if (heartbeat) clearInterval(heartbeat);
   }
-}
-
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
-
-/**
- * Handle the KB drain-to-green routes:
- *   POST /api/studio/kbs/:id/drain             → dispatch, { ok, runId } (409 if active)
- *   GET  /api/studio/kbs/:id/drain/:runId      → a specific run's status
- *   GET  /api/studio/kbs/:id/drain             → the active run, or the latest terminal one
- *
- * Returns false for non-matching URLs (passthrough), never throws.
- */
-export async function handleStudioKbDrainRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  const url = pathOnly(rawUrl);
-  const origin = allowedOrigin(req);
-
-  // ---- POST /api/studio/kbs/:id/drain/cancel (W7-B2, knowledge-14) --------
-  // Cancels the ACTIVE run for this kb. A live loop (fresh heartbeat) gets a
-  // cancel-flag it honors between turns (`mode:'requested'`); a run whose
-  // status stopped moving past KB_DRAIN_STALE_MS is DEAD (the in-process
-  // loop is gone — e.g. the bridge restarted mid-drain) and is terminated
-  // directly (`mode:'forced'`), so a wedged 'running' status is always
-  // resolvable from the UI.
-  const cancelMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain\/cancel$/);
-  if (cancelMatch && method === 'POST') {
-    try {
-      const kbId = decodeURIComponent(cancelMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
-      if (!active) {
-        // W7 FIX-B-KB (knowledge-14): refuse HONESTLY — when the latest run
-        // is already terminal, SAY so (state + runId), so the operator
-        // learns why there is nothing to cancel rather than a bare
-        // "no active run". No run at all keeps the bare reason (and no
-        // fabricated runId).
-        const latest = latestKbDrainRun(ctx.forgeRoot, kbId);
-        if (latest) {
-          sendJson(res, 409, {
-            error: `no active drain run for this kb — the latest run "${latest.runId}" is already terminal (state "${latest.status.state}")`,
-            runId: latest.runId,
-            state: latest.status.state,
-          }, origin);
-          return true;
-        }
-        sendJson(res, 409, { error: 'no active drain run for this kb' }, origin);
-        return true;
-      }
-      const updatedMs = new Date(active.status.updatedAt).getTime();
-      const stale = !Number.isFinite(updatedMs) || Date.now() - updatedMs > KB_DRAIN_STALE_MS;
-      if (stale) {
-        // BOTH signals, always (W7-B2 code-review round). A stale status is
-        // NOT proof the loop is dead: a drain that sat QUEUED behind another
-        // job on the same per-kbId `enqueueConsolidate` lock never heartbeats
-        // either, so it reads stale while being perfectly alive. Writing only
-        // the terminal status let such a run start late, re-persist 'running'
-        // over the operator's 'cancelled', and execute every agent turn to a
-        // real terminal AFTER the operator was told it had been terminated.
-        // The FLAG is what a late start actually observes (`cancelRequested`).
-        requestKbDrainCancel(ctx.forgeRoot, active.runId);
-        writeKbDrainStatus(ctx.forgeRoot, active.runId, { ...active.status, state: 'cancelled', updatedAt: new Date().toISOString() });
-        sendJson(res, 200, { ok: true, runId: active.runId, mode: 'forced' }, origin);
-        return true;
-      }
-      requestKbDrainCancel(ctx.forgeRoot, active.runId);
-      sendJson(res, 200, { ok: true, runId: active.runId, mode: 'requested' }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- GET /api/studio/kbs/:id/active-job (W7-B2, knowledge-05) -----------
-  // The KB-level "a job is running" fact the action group gates on — the
-  // SAME derivation every mutating route 409s with (kb-job-state.ts).
-  const activeJobMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/active-job$/);
-  if (activeJobMatch && method === 'GET') {
-    try {
-      const kbId = decodeURIComponent(activeJobMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      const job = deriveKbActiveJob(ctx.forgeRoot, kbId);
-      sendJson(res, 200, { ok: true, job, ...(job ? { reason: activeJobReason(job) } : {}) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- GET /api/studio/kbs/:id/runs (W7-B2, knowledge-20) ------------------
-  // Every drain / consolidate / kb-cleanup run recorded for this KB — the
-  // data source for the KB screen's RecentRuns widget. All names are
-  // SERVER-enumerated directory listings (same class as findKbDrainRuns
-  // above); the kbId only ever selects among them, never builds a path tail.
-  const runsMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/runs$/);
-  if (runsMatch && method === 'GET') {
-    try {
-      const kbId = decodeURIComponent(runsMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, runs: listKbRuns(ctx.forgeRoot, kbId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- GET /api/studio/kbs/:id/drain/:runId — must match BEFORE the bare
-  // /drain routes below (more specific path). --------------------------------
-  const specificMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain\/([^/]+)$/);
-  if (specificMatch && method === 'GET') {
-    const kbId = decodeURIComponent(specificMatch[1]);
-    const runId = decodeURIComponent(specificMatch[2]);
-    if (!KB_ID_RE.test(kbId)) {
-      sendJson(res, 400, { error: 'invalid kb id' }, origin);
-      return true;
-    }
-    // Never trust runId alone to reach a dir: charset-gated (isSafeRunId,
-    // blocks '/' and '..') AND kbId-prefix-checked (a syntactically valid but
-    // foreign-kb runId is treated identically to an unknown one — same
-    // "unknown drain run" 404, no information about WHICH check failed).
-    if (!isSafeRunId(runId) || !runId.startsWith(`${kbId}-drain-`)) {
-      sendJson(res, 404, { error: 'unknown drain run' }, origin);
-      return true;
-    }
-    const status = readKbDrainStatus(ctx.forgeRoot, runId);
-    if (!status) {
-      sendJson(res, 404, { error: 'unknown drain run' }, origin);
-      return true;
-    }
-    sendJson(res, 200, { ok: true, runId, ...status }, origin);
-    return true;
-  }
-
-  const baseMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain$/);
-
-  // ---- POST /api/studio/kbs/:id/drain — dispatch ---------------------------
-  if (baseMatch && method === 'POST') {
-    try {
-      const kbId = decodeURIComponent(baseMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      if (!resolveKbBrainDir(ctx.forgeRoot, kbId)) {
-        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
-        return true;
-      }
-
-      const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
-      if (active) {
-        sendJson(res, 409, { error: 'a drain run is already active for this kb', runId: active.runId }, origin);
-        return true;
-      }
-      // W7-B2 (knowledge-05): a live CONSOLIDATE also blocks a new drain —
-      // queueing behind it invisibly is exactly the confusion the action
-      // group exists to end; the 409 carries the same reason the UI shows.
-      const otherJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
-      if (otherJob && otherJob.kind !== 'drain') {
-        sendJson(res, 409, { error: activeJobReason(otherJob), runId: otherJob.runId }, origin);
-        return true;
-      }
-
-      // Server-minted, kbId-prefixed — mirrors consolidate's own
-      // `${kbId}-consolidate-${Date.now().toString(36)}` runId shape
-      // (cli/bridge-studio-kbs.ts).
-      const runId = `${kbId}-drain-${Date.now().toString(36)}`;
-
-      // Write the initial 'running' snapshot SYNCHRONOUSLY, before queuing —
-      // enqueueConsolidate defers real execution (CONSOLIDATE_DISPATCH_DEFER_MS),
-      // so without this an immediate second POST would race past the 409
-      // check above and see no status file yet. runKbDrain also (re-)writes
-      // this same snapshot as its own first step, so a caller that invokes it
-      // directly (unit tests) still gets a real initial status.
-      writeKbDrainStatus(ctx.forgeRoot, runId, initialKbDrainStatus(kbId));
-
-      // W7-B2 (knowledge-13): create the run's event log SYNCHRONOUSLY too —
-      // the UI's one-shot event snapshot fetch fires the instant this route
-      // returns a runId, but the queued job (createLogger inside runKbDrain)
-      // only writes events.jsonl after the dispatch defer + any queue
-      // backlog. Without this the fetch 404s and never retries.
-      createLogger(`_kb-drain-${runId}`, join(ctx.forgeRoot, '_logs')).emit({
-        initiative_id: `_kb-drain-${runId}`,
-        phase: 'reflection',
-        skill: 'kb-drain',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'kb-drain.queued',
-        metadata: { kind: 'progress', kbId, runId },
-      });
-
-      enqueueConsolidate(kbId, async () => {
-        await runKbDrain(ctx.forgeRoot, kbId, runId);
-      });
-      sendJson(res, 200, { ok: true, runId }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- GET /api/studio/kbs/:id/drain — active-or-latest (page reattach) ---
-  if (baseMatch && method === 'GET') {
-    try {
-      const kbId = decodeURIComponent(baseMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      const chosen = findActiveKbDrainRun(ctx.forgeRoot, kbId) ?? latestKbDrainRun(ctx.forgeRoot, kbId);
-      if (!chosen) {
-        sendJson(res, 200, { ok: true, runId: null }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, runId: chosen.runId, ...chosen.status }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  return false;
 }

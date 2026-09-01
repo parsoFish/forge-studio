@@ -127,7 +127,11 @@ function discoverDispatchFiles(): readonly string[] {
     const abs = join(REPO_ROOT, dir);
     for (const f of readdirSync(abs)) {
       if (f.endsWith('.test.ts')) continue;
-      if (f === 'ui-bridge.ts' || (f.startsWith('bridge-') && f.endsWith('.ts'))) out.push(`${dir}/${f}`);
+      // `routes.ts` is the M4 §4 step-2 carved route TABLE. A route that moved
+      // out of an if-chain into a table is still a real dispatch route; without
+      // this the parity check reports its dry-table row as stale and the
+      // classification silently stops being enforced for it.
+      if (f === 'ui-bridge.ts' || f === 'routes.ts' || (f.startsWith('bridge-') && f.endsWith('.ts'))) out.push(`${dir}/${f}`);
     }
   }
   return out.sort();
@@ -141,6 +145,7 @@ const KNOWN_DISPATCH_FILES = [
   'cli/bridge-studio-writes.ts',
   'cli/bridge-studio.ts',
   'cli/ui-bridge.ts',
+  'packages/knowledge/routes.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
@@ -303,11 +308,42 @@ function methodsEquivalent(a: string, b: string): boolean {
   return a === '*' || b === '*' || a === b;
 }
 
+/**
+ * Candidates from a carved route TABLE (`packages/<pkg>/routes.ts`, M4 §4
+ * step 2), whose entries are object literals rather than if-chain arms:
+ *
+ *   { method: 'POST', path: '/api/studio/kbs/:id/drain', dryClassification: … }
+ *
+ * `extractDispatchCandidates` reads `if (url === …)` / `url.match(…)` shapes
+ * and cannot see these, so a route that moved from the chain to a table would
+ * make its own dry-table row look stale — and the fix that "resolves" a stale
+ * row is deleting it, which is how a classification silently stops being
+ * enforced. Reading the table directly keeps the parity two-sided across the
+ * carve rather than shrinking one side to match the other.
+ */
+function extractRouteTableCandidates(source: string, relFile: string): DerivedCandidate[] {
+  const out: DerivedCandidate[] = [];
+  const clean = stripComments(source);
+  const re = /method:\s*'(GET|POST|PUT|PATCH|DELETE)'\s*,\s*\n?\s*path:\s*'([^']+)'/g;
+  for (const m of clean.matchAll(re)) {
+    // Same rule as extractDispatchCandidates' own `if (method === 'GET') continue`
+    // — GET routes are blanket-covered by the table's wildcard GET row, so
+    // emitting them here would demand per-route rows the table deliberately
+    // does not carry (it holds 70 POST rows against 2 GET).
+    if (m[1] === 'GET') continue;
+    const line = clean.slice(0, m.index ?? 0).split('\n').length;
+    out.push({ route: m[2]!, method: m[1]!, file: relFile, line });
+  }
+  return out;
+}
+
 function loadAllCandidates(): DerivedCandidate[] {
   const all: DerivedCandidate[] = [];
   for (const relFile of discoverDispatchFiles()) {
     const source = readFileSync(join(REPO_ROOT, relFile), 'utf8');
-    all.push(...extractDispatchCandidates(source, relFile));
+    all.push(...(relFile.endsWith('/routes.ts')
+      ? extractRouteTableCandidates(source, relFile)
+      : extractDispatchCandidates(source, relFile)));
   }
   return all;
 }

@@ -33,4 +33,9 @@ export * from './ports.ts';
 export * from './ids.ts';
 /** The child-process env allowlist seam: deny-by-default, one composer. */
 export * from './spawn-env.ts';
-
+/** The route-table shape every package's `routes.ts` declares, and the
+ *  first-match-wins dispatcher `apps/forge` assembles them into (M4 §4 step 2). */
+export * from './route-entry.ts';
+/** The HTTP response envelope every carved route table needs: origin decision,
+ *  JSON write, error sanitisation, URL splitting, `StudioContext`. */
+export * from './http-envelope.ts';
