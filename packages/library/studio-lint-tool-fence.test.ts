@@ -19,6 +19,8 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+
 import { runStudioLint } from '../../cli/studio-lint.ts';
 
 const CHECK = 'skill-tool-fence/task-agent-not-disallowed';
@@ -304,7 +306,9 @@ test('forge studio lint: a synthetic root with no studio/starters/agents/ direct
 
 test('every real OOTB starter agent (studio/starters/agents/**) satisfies the tool fence', () => {
   const KNOWN_STARTER_SLUGS = ['dev', 'plan', 'review'] as const;
-  const result = runStudioLint(process.cwd());
+  // FORGE_ROOT, not process.cwd(): under `npm test --workspace=packages/library`
+  // the cwd is `packages/library/`, and this sweep must lint the REAL repo.
+  const result = runStudioLint(FORGE_ROOT);
 
   const starterHits = result.findings.filter((f) => f.object.startsWith('starter-agent:') && f.check === CHECK);
   assert.strictEqual(
@@ -319,7 +323,7 @@ test('every real OOTB starter agent (studio/starters/agents/**) satisfies the to
   // too — a bare "0 findings" is not proof the sweep actually ran over
   // anything.
   const scannedDirs = new Set(
-    readdirSync(join(process.cwd(), 'studio', 'starters', 'agents'), { withFileTypes: true })
+    readdirSync(join(FORGE_ROOT, 'studio', 'starters', 'agents'), { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name),
   );

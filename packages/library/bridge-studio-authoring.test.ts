@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 import { startBridge } from '../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ let forgeRoot: string;
 let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 
-const REAL_ROOT = process.cwd();
+const REAL_ROOT = FORGE_ROOT; // never process.cwd(): the workspace runner's cwd is packages/library/
 
 function writeHookFixture(id: string, opts: { script?: string; on?: string } = {}): void {
   const dir = join(forgeRoot, 'studio', 'hooks', id, 'scripts');
