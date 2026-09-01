@@ -230,7 +230,7 @@ test('runBrainConsolidateNow: the journey kb-maintain fixture (unquoted-colon de
     mkdirSync(join(kbDir, 'themes'), { recursive: true });
     writeFileSync(join(kbDir, 'kb.yaml'), `id: ${kbId}\nname: ${kbId} (project)\nbinding:\n  kind: project\n  ref: ${kbId}\ndesc: journey-shaped fixture\nbackend: filesystem\n`);
     const now = new Date().toISOString();
-    // Mirrors scripts/journeys/knowledge.mjs seedScratchKbMaintain() —
+    // Mirrors the retired knowledge journey's seedScratchKbMaintain() —
     // including the unquoted colon in `description:` that gray-matter
     // rejects (the lenient-fallback + cache-poisoning trigger). Uniquified
     // so no earlier parse in this process can pre-poison the content key.

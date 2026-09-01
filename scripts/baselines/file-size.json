@@ -108,7 +108,6 @@
   "scripts/journeys/flows-run.mjs": 2267,
   "scripts/journeys/home.mjs": 909,
   "scripts/journeys/hooks.mjs": 843,
-  "scripts/journeys/knowledge.mjs": 2212,
   "scripts/journeys/stand-up-create.mjs": 1043,
   "scripts/lib/journey-fixtures.mjs": 1939,
   "scripts/ui-walkthrough/crawl.test.ts": 1038,
