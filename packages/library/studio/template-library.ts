@@ -71,7 +71,7 @@ import {
   loadFlowDefinition,
   type DiscoveredProject,
 } from '../../../orchestrator/studio/registry.ts';
-import type { PackageFile } from './skill-library.ts';
+import type { PackageFile } from './skill-package.ts';
 import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
 import type { Finding } from '../../../orchestrator/studio/validate.ts';
 

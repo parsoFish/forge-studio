@@ -33,23 +33,9 @@ import { isStudioAgent, listPlainSkills, listAgentDefinitions } from '../../../o
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 
-import {
-  MAX_PACKAGE_FILES,
-  MAX_PACKAGE_BYTES,
-  EXECUTABLE_EXTENSIONS,
-  listSkillLibrary,
-  deriveSkillUsage,
-  readSkillPackage,
-  hashSkillPackage,
-  skillTrustState,
-  scanSkillPackage,
-  installSkillPackage,
-  SkillIdOccupiedError,
-  approveSkillDraft,
-  repinSkillPackage,
-  lintSkillTrust,
-  lintSkillRefs,
-} from './skill-library.ts';
+import { MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES, EXECUTABLE_EXTENSIONS, readSkillPackage, hashSkillPackage, scanSkillPackage } from './skill-package.ts';
+import { listSkillLibrary, deriveSkillUsage, skillTrustState, lintSkillTrust, lintSkillRefs } from './skill-trust.ts';
+import { installSkillPackage, SkillIdOccupiedError, approveSkillDraft, repinSkillPackage } from './skill-install.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

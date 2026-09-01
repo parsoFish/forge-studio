@@ -74,7 +74,7 @@ import yaml from 'js-yaml';
 import { hookDir, hooksDir } from './hook-library.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
 import { guardedFile } from '@forge/kernel';
-import { EXECUTABLE_EXTENSIONS, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
+import { EXECUTABLE_EXTENSIONS, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-package.ts';
 
 // ---------------------------------------------------------------------------
 // Types

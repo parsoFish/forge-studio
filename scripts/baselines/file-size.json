@@ -77,7 +77,6 @@
   "packages/library/studio/hook-runtime.test.ts": 981,
   "packages/library/studio/hook-scan.test.ts": 1330,
   "packages/library/studio/skill-library.test.ts": 1965,
-  "packages/library/studio/skill-library.ts": 890,
   "packages/projects/preflight.test.ts": 1044,
   "packages/projects/project-config.test.ts": 1025,
   "packages/sessions/architect-runner.test.ts": 1420,
