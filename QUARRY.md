@@ -108,7 +108,9 @@ operator-ratified new cap — never a silent raise.
 | cli/bridge-studio-affordances.ts | sessions | rewritten | 1313 |
 | packages/sessions/bridge-studio-agent-capability.ts | sessions | verbatim | 117 |
 | packages/library/bridge-studio-authoring.ts | library | verbatim | 956 |
-| packages/library/bridge-studio-community.ts | library | verbatim | 833 |
+| packages/library/bridge-studio-community-hook-preinstall.ts | library | verbatim | 105 |
+| packages/library/bridge-studio-community-wire.ts | library | verbatim | 213 |
+| packages/library/bridge-studio-community.ts | library | verbatim | 545 |
 | packages/library/bridge-studio-connections.ts | library | verbatim | 225 |
 | packages/library/bridge-studio-hooks.ts | library | verbatim | 727 |
 | packages/library/bridge-studio-instructions.ts | library | verbatim | 149 |

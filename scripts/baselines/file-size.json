@@ -71,7 +71,6 @@
   "packages/library/bridge-studio-authoring.test.ts": 922,
   "packages/library/bridge-studio-authoring.ts": 956,
   "packages/library/bridge-studio-community.test.ts": 908,
-  "packages/library/bridge-studio-community.ts": 833,
   "packages/library/bridge-studio-hooks.test.ts": 821,
   "packages/library/studio/community-index.test.ts": 933,
   "packages/library/studio/community-install.test.ts": 816,

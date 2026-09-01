@@ -44,8 +44,16 @@ const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 const FORBIDDEN_NAMES = ['approveSkillDraft', 'approveHook', 'overrideHookBlock', 'writeHookApprovalLedgerEntry', 'repinSkillPackage'];
 const FORBIDDEN_RE = new RegExp(`\\b(${FORBIDDEN_NAMES.join('|')})\\b`, 'g');
 
+// M4-library PR 4b: `bridge-studio-community.ts` split three ways, and this
+// array is PATH-KEYED. The existence assertion below fails loud for a file
+// that MOVED, but not for one that SPLIT — the scan would keep passing on the
+// shrunk remainder while the two new modules carried no coverage at all. Both
+// are listed here in the same commit as the split, which is the only reason
+// this guard still means what its name says.
 const COMMUNITY_SURFACE_FILES = [
   'packages/library/bridge-studio-community.ts',
+  'packages/library/bridge-studio-community-wire.ts',
+  'packages/library/bridge-studio-community-hook-preinstall.ts',
   'packages/library/studio/community-index.ts',
   'packages/library/studio/community-install.ts',
   'apps/studio/lib/community-client.ts',

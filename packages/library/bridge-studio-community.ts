@@ -61,8 +61,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import yaml from 'js-yaml';
+import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
 import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
@@ -76,29 +75,19 @@ import {
   readVendoredPackage,
   COMMUNITY_KINDS,
   type CommunityKind,
-  type CommunityItem,
 } from './studio/community-index.ts';
 import { routeCommunityInstall, installCommunityHookPackage } from './studio/community-install.ts';
-import { installSkillPackage, type PackageFile } from './studio/skill-library.ts';
-import { scanHookFiles, type HookScanReport } from './studio/hook-scan.ts';
-import type { HookPackageFile } from './studio/hook-package.ts';
-import {
-  HOOK_LIFECYCLE_EVENTS,
-  hookTriggerError,
-  type HookLifecycleEvent,
-  type HookPermissionManifest,
-} from './studio/hook-library.ts';
-import { listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
-import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from './studio/connection-probe.ts';
+import { installSkillPackage } from './studio/skill-library.ts';
+import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection } from './studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../../orchestrator/studio/registry.ts';
-import { reqString, stringArray, optBool, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { type WireCtx, buildWireCtx, toWireItemSafe } from './bridge-studio-community-wire.ts';
+import { scanVendoredHookPackage, vendoredHookTriggerError } from './bridge-studio-community-hook-preinstall.ts';
 import {
   communityRefreshRemedy,
   runCommunityRefresh,
   type CommunityRefreshRunReason,
 } from './community-refresh-run.ts';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
  *  only — every AT that exercises this route pins FORGE_ARCHITECT_NO_SPAWN=1
@@ -107,81 +96,6 @@ import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
  *  coupling for one number. */
 const INSTALL_TIMEOUT_MS = 120_000;
 
-/** Every real committed vendored package (studio/community/{skills,hooks}/)
- *  is forge-authored and attributed to this repo's own seed hub — the same
- *  real, literal URL community-index.ts/community-install.ts already name
- *  for hub resolution (duplicated there twice already; a third read-only
- *  copy here follows that established convention rather than exporting a
- *  cross-module constant for one string). */
-const VENDORED_UPSTREAM_SOURCE = 'https://github.com/parsoFish/forge-studio';
-
-/** D5's "no signals published" idiom, applied to description: a source
- *  record with no description renders an honest statement of absence, never
- *  a fabricated string and never a silently-dropped wire field. */
-const NO_DESCRIPTION = 'No description published.';
-
-// ---------------------------------------------------------------------------
-// Wire projection
-// ---------------------------------------------------------------------------
-
-type CommunityItemWire = {
-  id: string;
-  kind: CommunityKind;
-  name: string;
-  desc: string;
-  /** W8-B5 (community-05 / exit row E11) — the registry row's OWN `category`,
-   *  so `/community`'s search can match the word the registry actually files
-   *  rows under ("planning", "memory", "review"). It reached the client
-   *  nowhere before this, which is why adding the search term alone would
-   *  have been a no-op.
-   *
-   *  `null` is LOAD-BEARING and never an invented string: a vendored package
-   *  or a catalog connection has no registry row at all, so it genuinely has
-   *  no category. Same discipline as `hub`/`signals` — an honest absence,
-   *  never a fabricated value, and deliberately not `''` (an empty string
-   *  would make every empty-ish query "match" it). */
-  category: string | null;
-  upstream: string;
-  hub: CommunityItem['hub'];
-  signals: CommunityItem['signals'];
-  vendored: boolean;
-  installState: CommunityItem['installState'];
-  probeState: ProbeState | null;
-  origin: string;
-  /** W6-CR-2 — carried straight through from the item's own real fact (D14 in
-   *  community-index.ts): null/'local' for a vendored package or connection
-   *  with no registry row, never fabricated. */
-  fetchedAt: CommunityItem['fetchedAt'];
-  fetchedBy: CommunityItem['fetchedBy'];
-  upstreamUpdatedAt: CommunityItem['upstreamUpdatedAt'];
-  error?: string;
-};
-
-type WireCtx = {
-  communitySkills: readonly CommunitySkill[];
-  connections: readonly ConnectionDefinition[];
-};
-
-/** T2 round 6, AT GROUP 5: mirrors listCommunityIndex's own deliberate
- *  missing-vs-malformed split (orchestrator/studio/community-index.ts, MAJOR
- *  2) at the ROUTE level, now over TWO independent files (W6-CR-1 decoupled
- *  community-skill sourcing from catalog.yaml):
- *   - connections: `listConnections` calls `loadCatalog` unguarded — correct
- *     for ITS callers, which never expect a catalog-less root — so this
- *     function must not call it at all when studio/catalog.yaml is genuinely
- *     absent (the fresh/half-onboarded shape: degrade to no connections,
- *     never a 500).
- *   - communitySkills: `communitySkillsFromRegistry` is tolerant of a MISSING
- *     studio/community/registry.yaml (degrades to `[]`) but throws loud on a
- *     MALFORMED one (via its own unguarded `loadCommunityRegistry` call) — a
- *     corrupt registry must never render identically to an honest empty one. */
-function buildWireCtx(forgeRoot: string): WireCtx {
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  const catalogExists = existsSync(catalogPath);
-  const communitySkills = communitySkillsFromRegistry(forgeRoot);
-  const connections = catalogExists ? listConnections(forgeRoot) : [];
-  return { communitySkills, connections };
-}
 
 /**
  * W7-B3 (community-16 / community-03) — the registry-level `meta` block on
@@ -213,208 +127,6 @@ function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; re
     registryDirty = null;
   }
   return { lastRefresh, registryDirty };
-}
-
-function originFor(item: CommunityItem): string {
-  if (item.kind === 'skill') {
-    return item.vendored ? `studio/community/skills/${item.id}/SKILL.md` : 'studio/community/registry.yaml';
-  }
-  if (item.kind === 'hook') return `studio/community/hooks/${item.id}/hook.yaml`;
-  return `listConnections (studio/catalog.yaml ${item.kind}s:)`;
-}
-
-/**
- * W8-B5 (exit row E11) — the item's category, read from the ONE place it is
- * declared: the registry row this item was sourced from (`CommunitySkill`,
- * itself projected from `CommunityRegistryItem`). Never derived, never
- * guessed, never defaulted to a plausible-looking string.
- *
- * A vendored-only skill package, a vendored hook and a catalog connection all
- * have NO registry row (D1's other two sources), so they honestly carry
- * `null` — the same treatment `fetchedAt`/`upstreamUpdatedAt` already get for
- * exactly the same reason (D14).
- */
-function categoryFor(item: CommunityItem, ctx: WireCtx): string | null {
-  if (item.kind !== 'skill') return null;
-  const cs = ctx.communitySkills.find((c) => c.id === item.id);
-  return cs ? cs.category : null;
-}
-
-/** The item's own real source link — never hub.url substituted in (see this
- *  file's header: a hub can be a coarser prefix of an item's own upstream). */
-function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
-  if (item.vendored) return VENDORED_UPSTREAM_SOURCE;
-  if (item.kind === 'hook') {
-    // Unreachable under D1 (every hook item is sourced from a vendored
-    // package) — thrown, not guessed, if that invariant is ever violated.
-    throw new Error(`community item "${item.id}" (hook) is not vendored — every hook item must be vendored (D1)`);
-  }
-  if (item.kind === 'skill') {
-    const cs = ctx.communitySkills.find((c) => c.id === item.id);
-    if (!cs) {
-      throw new Error(`community item "${item.id}" (skill) is not vendored and has no studio/community/registry.yaml community-skills entry`);
-    }
-    return cs.source;
-  }
-  const conn = ctx.connections.find((c) => c.kind === item.kind && c.id === item.id);
-  if (!conn) throw new Error(`community item "${item.id}" (${item.kind}) has no matching listConnections entry`);
-  return conn.provenance;
-}
-
-/** The REAL live probe state for a tool/mcp item; null for skill/hook (no
- *  probe concept exists for either). Read directly off the item's own
- *  `probeState` — `listCommunityIndex`/`communityItem`/`buildConnectionItem`
- *  populate it from the ONE real probe execution they already ran (T2 round
- *  5/6 probe-budget fix); this function never spawns a second one to get it.
- *  The throw below is defensive only — an invariant violation, not a
- *  reachable production path. */
-function probeStateFor(item: CommunityItem): ProbeState | null {
-  if (item.kind !== 'tool' && item.kind !== 'mcp') return null;
-  if (item.probeState === undefined) {
-    throw new Error(`community item "${item.id}" (${item.kind}) carries no probeState — expected it to be populated for every connection-kind item`);
-  }
-  return item.probeState;
-}
-
-/** One item's wire projection. THROWS on a genuine derivation failure — the
- *  caller (`toWireItemSafe`) is the one place that degrades, so this
- *  function itself stays honest about failing loud. */
-function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
-  return {
-    id: item.id,
-    kind: item.kind,
-    name: item.name,
-    desc: item.description ?? NO_DESCRIPTION,
-    category: categoryFor(item, ctx),
-    upstream: upstreamFor(item, ctx),
-    hub: item.hub,
-    signals: item.signals,
-    vendored: item.vendored,
-    installState: item.installState,
-    probeState: probeStateFor(item),
-    origin: originFor(item),
-    fetchedAt: item.fetchedAt,
-    fetchedBy: item.fetchedBy,
-    upstreamUpdatedAt: item.upstreamUpdatedAt,
-    ...(item.error !== undefined ? { error: item.error } : {}),
-  };
-}
-
-/** Anti-pattern #3: one item's wire-projection failure degrades to an honest
- *  `error` field on THAT item — never a 500 for the other N-1 rows in the
- *  list route. */
-function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
-  try {
-    return toWireItem(item, ctx);
-  } catch (err) {
-    return {
-      id: item.id,
-      kind: item.kind,
-      name: item.name,
-      desc: item.description ?? NO_DESCRIPTION,
-      // The degraded row still carries the honest absence rather than
-      // omitting the key: an ABSENT key is a malformed response to the
-      // client's parser, which would turn one item's derivation failure into
-      // a whole-list parse throw — the opposite of this arm's purpose.
-      category: null,
-      upstream: VENDORED_UPSTREAM_SOURCE,
-      hub: item.hub,
-      signals: item.signals,
-      vendored: item.vendored,
-      installState: item.installState,
-      probeState: null,
-      origin: originFor(item),
-      fetchedAt: item.fetchedAt,
-      fetchedBy: item.fetchedBy,
-      upstreamUpdatedAt: item.upstreamUpdatedAt,
-      error: `cannot fully derive community wire item — ${sanitizeError(err)}`,
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pre-install hook scan (D7) — run it on the VENDORED bytes, never the
-// installed ones. Parses hook.yaml with the SAME shared low-level field
-// helpers hook-library.ts's own loadHookDefinition uses (reqString/
-// stringArray/optBool/loadYaml) — a narrow, generic YAML read, not a
-// re-implementation of that (install-path-scoped) loader.
-//
-// 2026-08-28 (hostile review, PIN A/B/C's enumeration duty): this used to
-// scan ONLY the one declared entry script — the same sibling-file blind spot
-// hook-scan.ts's scanHookPackage fixed post-install. Left unfixed here, this
-// PRE-INSTALL preview would report `clean` for a package the POST-install
-// scan reports `blocked` — an operator approving on the preview would be
-// approving on a lie. Now delegates to `scanHookFiles`, the SAME primitive
-// `scanHookPackage` uses — one predicate, one meaning.
-//
-// A vendored `PackageFile` carries no executable bit (readVendoredPackage
-// never stats the leaf) — every file below gets `executable: false`, making
-// this preview a LOWER BOUND: a file selected only via a real `+x` bit is
-// invisible here and caught only post-install. Every other selection route
-// (entry path, extension, sourced-basename fixpoint) is unaffected.
-// ---------------------------------------------------------------------------
-
-function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): HookScanReport {
-  const label = `studio/community/hooks/${id}/hook.yaml`;
-  const yamlFile = files.find((f) => f.path === 'hook.yaml');
-  if (!yamlFile) throw new Error(`${label}: no vendored hook.yaml — cannot run the pre-install scan`);
-
-  const parsed: unknown = yaml.load(yamlFile.body);
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${label}: YAML root must be a mapping`);
-  }
-  const d = parsed as Record<string, unknown>;
-
-  const scriptRel = reqString(d, 'script', label);
-  const permsRaw = d['permissions'];
-  const permsObj = permsRaw !== null && typeof permsRaw === 'object' && !Array.isArray(permsRaw) ? (permsRaw as Record<string, unknown>) : {};
-  const permissions: HookPermissionManifest = {
-    env: stringArray(permsObj, 'env', label),
-    read: stringArray(permsObj, 'read', label),
-    network: optBool(permsObj, 'network') ?? false,
-  };
-
-  if (!files.some((f) => f.path === scriptRel)) {
-    throw new Error(`${label}: declares script "${scriptRel}" but no such file exists in the vendored package`);
-  }
-
-  const hookFiles: HookPackageFile[] = files.map((f) => ({ path: f.path, body: f.body, executable: false }));
-  return scanHookFiles(hookFiles, permissions, scriptRel);
-}
-
-
-// ---------------------------------------------------------------------------
-// W8-B6 — trigger coherence on the FIFTH (and least-trusted) write path into
-// studio/hooks/. A vendored community package is authored by a third party, so
-// it is the LAST place to assume the matcher/event pair is coherent. Checked
-// HERE, in the route, rather than inside `installCommunityHookPackage`, for the
-// same reason `cli/bridge-studio-authoring.ts:80-85` gives about its own copy
-// step: the install function is a generic COPY primitive and must not grow
-// hook-shape awareness. Same shared predicate as the other four callers.
-// ---------------------------------------------------------------------------
-
-function vendoredHookTriggerError(id: string, files: readonly PackageFile[]): string | undefined {
-  const label = `studio/community/hooks/${id}/hook.yaml`;
-  const yamlFile = files.find((f) => f.path === 'hook.yaml');
-  if (!yamlFile) return `${label}: no vendored hook.yaml — refusing to install a hook package with no definition`;
-
-  let parsed: unknown;
-  try {
-    parsed = yaml.load(yamlFile.body);
-  } catch (err) {
-    return `${label}: not valid YAML — ${sanitizeError(err)}`;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return `${label}: YAML root must be a mapping`;
-  const d = parsed as Record<string, unknown>;
-
-  let on: HookLifecycleEvent;
-  try {
-    on = oneOf(reqString(d, 'on', label), HOOK_LIFECYCLE_EVENTS, label, 'on');
-  } catch (err) {
-    return sanitizeError(err);
-  }
-  const triggerError = hookTriggerError(on, optString(d, 'matcher'));
-  return triggerError ? `${label}: ${triggerError}` : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +165,7 @@ function handleDetail(ctx: StudioContext, res: ServerResponse, origin: string, r
     // (communityItem/routeCommunityInstall both degrade to "not found" for
     // an unrecognised discriminant) — no separate validation branch needed.
     const kind = rawKind as CommunityKind;
-    const wctx = buildWireCtx(ctx.forgeRoot);
+    const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
 
     // mcp | tool — resolved AND probed directly here, exactly ONCE (T2 round
     // 5/6 probe-budget fix): the SAME ProbeResult feeds both the wire item's
@@ -595,7 +307,7 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
 
     if (route.pipeline === 'hook') {
       // Refused BEFORE any byte is materialised under studio/hooks/<id>/.
-      const triggerError = vendoredHookTriggerError(id, readVendoredPackage(ctx.forgeRoot, 'hook', id));
+      const triggerError = vendoredHookTriggerError(id, readVendoredPackage(ctx.forgeRoot, 'hook', id), sanitizeError);
       if (triggerError) { sendJson(res, 400, { error: triggerError }, origin); return true; }
       const result = installCommunityHookPackage({ forgeRoot: ctx.forgeRoot, id });
       sendJson(res, 200, { ok: true, routedTo: 'hook-needs-approval', alreadyInstalled: result.alreadyInstalled }, origin);
@@ -603,7 +315,7 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
     }
 
     if (route.pipeline === 'connection') {
-      const wctx = buildWireCtx(ctx.forgeRoot);
+      const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
       return handleConnectionInstall(ctx, res, origin, wctx, route.connectionId);
     }
 
@@ -711,7 +423,7 @@ export async function handleStudioCommunityRoutes(
       // probes a second (and third) time.
       const rawItems = listCommunityIndex(ctx.forgeRoot, kindParam === null ? undefined : [kindParam as CommunityKind]);
       const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
-      const wctx = buildWireCtx(ctx.forgeRoot);
+      const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
       const items = rawItems.map((item) => toWireItemSafe(item, wctx));
       sendJson(res, 200, { hubs, items, meta: communityIndexMeta(ctx.forgeRoot) }, origin);
     } catch (err) {
