@@ -737,7 +737,7 @@ function checkDemoSkill(dir: string): ClauseResult {
  */
 const DEMO_ALIGN_TOKEN_STOPLIST = new Set(['bash', 'npm', 'node', 'make', 'test', 'run', 'npx', 'go']);
 
-export function demoAlignmentTokens(cfg: ProjectConfig): string[] {
+function demoAlignmentTokens(cfg: ProjectConfig): string[] {
   const tokens = new Set<string>();
   const cmds = [cfg.testProcess.local.cmd, cfg.testProcess.ci?.cmd ?? []];
   for (const cmd of cmds) {

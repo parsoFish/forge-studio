@@ -5,7 +5,7 @@
 > and checked in the UI before any flow run. This document is the single source
 > of truth; the *decision* is [ADR-034](./decisions/034-studio-aligned-contract.md)
 > (extends [ADR-017](./decisions/017-forge-project-contract.md)), the *preflight
-> enforcement* is [`cli/preflight.ts`](../cli/preflight.ts), and the *UI readiness
+> enforcement* is [`packages/projects/preflight.ts`](../packages/projects/preflight.ts), and the *UI readiness
 > surface* is
 > [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx).
 > Last aligned to [ADR-035](./decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
@@ -722,7 +722,7 @@ contract gap instead.
   the Studio-aligned unification (extends ADR-017).
 - [ADR-017](./decisions/017-forge-project-contract.md) — the original contract
   decision (trafficGame arc, C1–C6 derivation).
-- [`cli/preflight.ts`](../cli/preflight.ts) — the operational-clause enforcement.
+- [`packages/projects/preflight.ts`](../packages/projects/preflight.ts) — the operational-clause enforcement.
 - [`orchestrator/project-config.ts`](../orchestrator/project-config.ts) — the
   authoritative `ProjectConfig` type + `validateProjectConfig`.
 - [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx) — the UI readiness surface.

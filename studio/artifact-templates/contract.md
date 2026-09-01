@@ -12,7 +12,7 @@ schema: {}
 The signal that the onboarding agent has finished converging a project
 against the forge↔project contract (`docs/forge-project-contract.md`) and the
 project directory is ready for the REAL, structural preflight check
-(`runPreflight`, `cli/preflight.ts`) that `execOnboardPreflight` runs next.
+(`runPreflight`, `packages/projects/preflight.ts`) that `execOnboardPreflight` runs next.
 
 Deliberately **schema-empty** (no `requiredFiles`): unlike the develop flow's
 artifacts, this edge does not gate on one fixed on-disk path. The onboarding
