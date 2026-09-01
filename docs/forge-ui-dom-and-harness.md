@@ -2811,7 +2811,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
   `GET /api/studio/projects/:id/contract-stages` (`fetchContractStages`,
-  `cli/contract-stages.ts`'s `deriveContractStages`) and renders the SAME
+  `packages/projects/contract-stages.ts`'s `deriveContractStages`) and renders the SAME
   five-stage buildout the onboarding session's `contract-buildout` artifact
   shows, REUSING that checklist vocabulary verbatim:
   `[data-section="contract-checklist"][data-checklist-row-count]` with one
@@ -3924,7 +3924,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   onboarding entry point AND the R4-03 create-from-template flow) declares
   `stages: [contract, instructions, secrets, demo, roadmap]`,
   `defaultStage: contract`, and a new **live** artifact kind
-  `contract-buildout` — a five-row PRESENCE report (`cli/contract-stages.ts`'s
+  `contract-buildout` — a five-row PRESENCE report (`packages/projects/contract-stages.ts`'s
   `deriveContractStages`; D11: presence only, "present"/"absent", never a
   clause verdict — `forge preflight`'s exit code stays the only authoritative
   contract-green signal). Stage-aware, mirroring
@@ -3983,12 +3983,14 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
   band-scoped, agent-seeded create + maintain surface (R1-01's binding
   contract, extended by R1-06 WI-2/WI-3, R4-19 WI-1/WI-2 and R6-08 WI-1/WI-2/
-  WI-3; journeys:
-  `knowledge-graph`, `knowledge-pin-guidance`, `knowledge-create-kb`,
-  `knowledge-ingest`, `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
-  `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
-  `knowledge-kb-maintain-session`, `knowledge-kb-cleanup-launch`,
-  `knowledge-kb-cleanup-approve`, `knowledge-explore-tabs`).
+  WI-3). **Harness coverage:** the twelve `knowledge-*` journey beats were
+  retired with `scripts/journeys/knowledge.mjs` at M4 (stories replaced
+  journeys; `ui:journey` was never a CI gate — `.github/workflows/ci.yml`).
+  `tests/stories/S6.story.mjs` ("Create a new knowledge base") is the
+  replacement and covers the create path. It does **not** yet reach the
+  drain-to-green Health-tab reads or the planner's brain-read proof — those
+  are beads `forge-8vfn.5.14` and `forge-8vfn.5.16`, and until they land this
+  surface has no executable coverage below the create path.
   - **Persistent "+ New KB" CTA + empty state (W6-IA-4, sweep findings C4#1/
     C4#2).** This is where the OLD Library landing page's own New-KB
     affordance moved to (Library no longer creates or lists knowledge bases
@@ -4039,14 +4041,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     unconditionally; W6-B13 replaced `LintResolutionPanel` with
     `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
-    below). Journey: `knowledge-explore-tabs`.
+    below). Harness coverage: none today — the `knowledge-explore-tabs`
+    beat was retired at M4 and no S6 beat can name these tabs until bead
+    `forge-8vfn.5.14` gives them a `data-action`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]
     [data-fetch-status][data-health-ready]` — `data-health-ready="true"` is
     present iff the selected KB's `health` payload has actually arrived
     (W7-B2): `data-page-ready` settles on the roster + detail reads alone, so
     the Health tab's own content lags it. Automation that reads health must
     wait on `data-health-ready`, not `data-page-ready`
-    (`scripts/journeys/knowledge.mjs`'s `kb-maintain` health beat does). The
+    (the retired `kb-maintain` health beat did; no story reaches it today —
+    bead `forge-8vfn.5.14`). The
     attribute is ABSENT (not `"false"`) while health is unresolved. The root
     status itself folds BOTH the roster read AND the
     selected KB's detail read (W7-FIX-A1 A1-07: `kbsError || kbDetailError`);
@@ -4143,8 +4148,9 @@ is what this contract reads — but it cannot be the only distinguisher.
       project-repo read. **What still has no agent behind it:** the
       SDK theme-authoring turn itself never runs under
       `FORGE_ARCHITECT_NO_SPAWN=1` (this harness's env, same as every other
-      agentic surface) — the journey harness (`knowledge-create-kb-band-
-      scope-seed`) honestly narrates a scripted stand-in there, grounded in
+      agentic surface) — the retired journey harness
+      (`knowledge-create-kb-band-scope-seed`) honestly narrated a scripted
+      stand-in there, grounded in
       forge's own real, already-committed review findings, never presented
       as a real agent run. Docs/roadmap pointer:
       `docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
@@ -4254,9 +4260,10 @@ is what this contract reads — but it cannot be the only distinguisher.
       remounts it), the panel calls `GET /api/studio/kbs/:id/drain`
       (active-or-latest) BEFORE assuming there is no run — this is what
       makes nav-away genuinely lose nothing: the SAME `data-drain-run-id`
-      and `data-drain-state` reappear. Journey:
-      `knowledge-lint-index` drives exactly this (drain → nav to Explore →
-      back to Health → assert the SAME run id/state).
+      and `data-drain-state` reappear. Harness coverage: none today — the
+      `knowledge-lint-index` beat drove exactly this (drain → nav to Explore →
+      back to Health → assert the SAME run id/state) and was retired at M4;
+      S6's drain beats are red pending bead `forge-8vfn.5.14`.
     - **The poll.** `lib/agent-dispatch.ts`'s `pollKbDrain` (built on the
       SAME generic `pollUntilTerminal` core `pollAgentRun` now also uses) —
       bounded, immediate-then-interval, and PROGRESS-AWARE (W7-B2,
@@ -4406,10 +4413,9 @@ is what this contract reads — but it cannot be the only distinguisher.
       `pollAgentFix`'s returned stop fn in a ref and cancels it from the
       SAME unmount-cleanup effect the runId poll already uses), and
       `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
-      `fetchActiveOrLatestKbDrain` wire contracts). Journey:
-      `knowledge-lint-index` (renamed in spirit from the old lint/index
-      beat — the file's own `id` is unchanged for RUN_ORDER stability; the
-      W7-B2 beat additionally asserts per-finding rows + round groups, the
+      `fetchActiveOrLatestKbDrain` wire contracts). Harness coverage: the
+      `knowledge-lint-index` beat carried this and was retired at M4 (the
+      W7-B2 beat additionally asserted per-finding rows + round groups, the
       cancel endpoint's 409-on-terminal honesty, and the RecentRuns ledger).
   - **KB recent runs (Health tab, W7-B2 — knowledge-20):**
     `[data-section="kb-recent-runs"]` wraps the SHARED
@@ -4469,9 +4475,11 @@ is what this contract reads — but it cannot be the only distinguisher.
       `_queue/done` advisory) is `'n/a'` for every KB, always, since it is
       never scoped to any one KB. `status:'unknown'` fires only when the
       whole lint run threw, paired with a top-level `healthError` string
-      (RULING 3) — never a silent 0/0 clean. Journey: `knowledge-explore-tabs`
-      asserts both a real check (`checkFrontmatter` on the `cycles` KB) and
-      the always-`n/a` `checkReflectorLoss`, side by side, in the same panel.
+      (RULING 3) — never a silent 0/0 clean. The retired
+      `knowledge-explore-tabs` beat asserted both a real check
+      (`checkFrontmatter` on the `cycles` KB) and the always-`n/a`
+      `checkReflectorLoss` side by side in the same panel; the unit coverage
+      in `packages/knowledge` remains, the DOM assertion does not.
   - **Ingest Activity panel (R6-08 WI-2) + no ingest affordance (decision 3,
     cross-referenced R1-06-F3 + R6-08-F2):** the Ingest Activity tab hosts a
     real, **read-only** `IngestActivityPanel` —
@@ -4492,9 +4500,11 @@ is what this contract reads — but it cannot be the only distinguisher.
     reflection-only pass (the reflector phase), never a KB-page-triggerable
     operation. `scripts/check-kb-ingest-affordance.test.ts` is the standing
     ratchet — it fails the build the moment any UI `data-action` or bridge
-    route dispatch arm names `ingest`. Journey: `knowledge-explore-tabs`
-    asserts both the rendered seeded event AND the negative affordance count
-    (`button`/`[data-action]` inside the panel) is zero.
+    route dispatch arm names `ingest` — that ratchet is unaffected by the M4
+    journey retirement and remains the standing guard. The retired
+    `knowledge-explore-tabs` beat additionally asserted the rendered seeded
+    event AND that the negative affordance count (`button`/`[data-action]`
+    inside the panel) is zero.
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's card drawer (**W6-RV-2**; see `/projects/[id]`

@@ -1,6 +1,6 @@
 ---
 name: contract-check
-description: "The declaration carrier and display identity for the onboard-project flow's contract gate — the REAL forge↔project contract preflight (runPreflight, cli/preflight.ts) runs orchestrator-side (ADR-036); never spawned via the flow path (the only path onboard-project uses), but standalone-dispatchable like any other band-guard def — see 'What this is, honestly' below."
+description: "The declaration carrier and display identity for the onboard-project flow's contract gate — the REAL forge↔project contract preflight (runPreflight, packages/projects/preflight.ts) runs orchestrator-side (ADR-036); never spawned via the flow path (the only path onboard-project uses), but standalone-dispatchable like any other band-guard def — see 'What this is, honestly' below."
 library: true
 phase: contract-check
 surface: unattended
@@ -36,7 +36,7 @@ node carries both `agent:"contract-check"` and `gate:"contract"`
 (`orchestrator/phases/executor-table.ts`) resolves the declared
 `onboard-preflight` band guard and routes the node to
 `execOnboardPreflight`, which calls the REAL `runPreflight` function
-(`cli/preflight.ts`) **directly, orchestrator-side**. On this path — the
+(`packages/projects/preflight.ts`) **directly, orchestrator-side**. On this path — the
 only path the `onboard-project` flow uses — no agent is spawned, no prompt
 is assembled, no model call is made.
 
@@ -85,5 +85,5 @@ ids in `runPreflight`'s own clause order, and emits them as
 (`report.ok === false`) terminates the flow walk early and routes the
 manifest to `ready-for-review`, exactly as the develop flow's merge-boundary
 gate does on a red full-suite baseline. `formatPreflightReport`
-(`cli/preflight.ts`) renders the same report as human-readable text — not
+(`packages/projects/preflight.ts`) renders the same report as human-readable text — not
 consumed by this def.

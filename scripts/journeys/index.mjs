@@ -5,9 +5,9 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving). The 19 journeys, in that order:
+ * interleaving). The 18 journeys, in that order:
  * home → monitor → sessions-index → projects → skills → hooks → templates →
- * connections → stand-up-onboard → stand-up-create → knowledge → agents →
+ * connections → stand-up-onboard → stand-up-create → agents →
  * flows-author → flows-run → flows-onboard → roadmap → demo-showcase →
  * demo-builder →
  * community (R3-07 — deliberately
@@ -40,20 +40,9 @@
  * own finally (the last beat that needs them), mirroring demo-showcase's own
  * cross-beat seed/sweep shape.
  * Every other journey (skills, hooks, templates, connections, agents,
- * knowledge, demo-showcase, demo-builder, flows-onboard) is self-contained: templates is pure read-only browsing (no seed, no
+ * demo-showcase, demo-builder, flows-onboard) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
- * skills-detail-package's own read-only precedent (R3-01-F3/F4)); knowledge
- * (R1-06 WI-4 + R4-19-F2) drives FOUR disjoint, create-and-destroy-itself
- * scratch KBs (journey-scratch-kb, journey-scratch-kb-band, journey-scratch-
- * kb-maintain, journey-scratch-kb-cleanup — the maintain one nested one level
- * deeper, under brain/projects/, since that's the ONE containment root
- * checkProjectBrainIndexes scans; none is ever a real project brain like
- * brain/projects/mdtoc), each swept inside its own beat's drive() (the
- * cleanup one's sweep lands in knowledge-kb-cleanup-approve, the LAST beat
- * that needs it — knowledge-kb-cleanup-launch leaves it live across the
- * pair, mirroring the band-scope arc's own multi-beat shape), never
- * brain/cycles, brain/forge-dev, or a real project's central brain — see
- * knowledge.mjs's own header comment for the full discipline; skills-edit
+ * skills-detail-package's own read-only precedent (R3-01-F3/F4)); skills-edit
  * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, skills-agentic-build/hooks-agentic-build (R4-21 phase 2, T3) each
@@ -206,7 +195,6 @@ import { journey as templates } from './templates.mjs';
 import { journey as connections } from './connections.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
 import { journey as standUpCreate } from './stand-up-create.mjs';
-import { journey as knowledge } from './knowledge.mjs';
 import { journey as agents } from './agents.mjs';
 import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
@@ -227,7 +215,6 @@ export const JOURNEYS = [
   connections,
   standUpOnboard,
   standUpCreate,
-  knowledge,
   agents,
   flowsAuthor,
   flowsRun,
@@ -331,19 +318,6 @@ export const RUN_ORDER = [
   // (never a session-creation path of its own).
   ['stand-up-create', 'su-create-project-brain-kickoff-chip'],
   ['stand-up-create', 'su-create-project-builder'],
-
-  ['knowledge', 'knowledge-graph'],
-  ['knowledge', 'knowledge-pin-guidance'],
-  ['knowledge', 'knowledge-create-kb'],
-  ['knowledge', 'knowledge-ingest'],
-  ['knowledge', 'knowledge-lint-index'],
-  ['knowledge', 'knowledge-create-kb-band-scope'],
-  ['knowledge', 'knowledge-create-kb-band-scope-seed'],
-  ['knowledge', 'knowledge-create-kb-band-scope-commit'],
-  ['knowledge', 'knowledge-kb-maintain-session'],
-  ['knowledge', 'knowledge-kb-cleanup-launch'],
-  ['knowledge', 'knowledge-kb-cleanup-approve'],
-  ['knowledge', 'knowledge-explore-tabs'],
 
   ['agents', 'agents-index-roster'],
   ['agents', 'agents-starters'],
