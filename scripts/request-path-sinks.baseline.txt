@@ -369,8 +369,9 @@ packages/library/bridge-studio-authoring.ts mkdirSync 2
 packages/library/bridge-studio-authoring.ts readdirSync 1
 packages/library/bridge-studio-authoring.ts rmSync 1
 packages/library/bridge-studio-authoring.ts writeFileSync 3
+packages/library/bridge-studio-community-wire.ts existsSync 1
 packages/library/bridge-studio-community.ts execFileSync 1
-packages/library/bridge-studio-community.ts existsSync 3
+packages/library/bridge-studio-community.ts existsSync 2
 packages/library/bridge-studio-community.ts spawnSync 1
 packages/library/bridge-studio-connections.ts spawnSync 1
 packages/library/bridge-studio-hooks.ts mkdirSync 1
