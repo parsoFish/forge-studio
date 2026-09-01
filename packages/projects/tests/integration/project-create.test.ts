@@ -25,17 +25,16 @@ import {
   listProjectStarters,
   projectStartersDir,
   type CreationManifest,
-} from './project-create.ts';
-import { discoverProjects } from '../../orchestrator/studio/registry.ts';
-
-const REAL_ROOT = process.cwd();
+} from '../../project-create.ts';
+import { discoverProjects } from '../../../../orchestrator/studio/registry.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pcreate-'));
   const startersDest = join(root, 'studio', 'starters', 'projects');
   mkdirSync(startersDest, { recursive: true });
-  cpSync(projectStartersDir(REAL_ROOT), startersDest, { recursive: true });
+  cpSync(projectStartersDir(FORGE_ROOT), startersDest, { recursive: true });
   mkdirSync(join(root, 'brain', 'projects'), { recursive: true });
   mkdirSync(join(root, 'projects'), { recursive: true });
   return root;
@@ -63,7 +62,7 @@ test('F1 validateCreationManifest: missing/invalid fields throw; valid → typed
 });
 
 test('F2: the curated starter library lists ≥2 app types', () => {
-  const types = listProjectStarters(REAL_ROOT);
+  const types = listProjectStarters(FORGE_ROOT);
   assert.ok(types.includes('typescript-cli') && types.includes('typescript-api'), `got ${types.join(', ')}`);
   assert.ok(types.length >= 2);
 });
@@ -151,7 +150,7 @@ test('F3: a duplicate project id is refused', () => {
 test('the shipped templates carry no stray files that would break substitution', () => {
   // Each app-type dir has the load-bearing files.
   for (const appType of ['typescript-cli', 'typescript-api']) {
-    const entries = readdirSync(join(projectStartersDir(REAL_ROOT), appType));
+    const entries = readdirSync(join(projectStartersDir(FORGE_ROOT), appType));
     assert.ok(entries.includes('package.json') && entries.includes('AGENTS.md') && entries.includes('roadmap.md'));
   }
 });
@@ -164,7 +163,7 @@ test('the shipped templates carry no stray files that would break substitution',
 // ---------------------------------------------------------------------------
 
 test('AT-46: F3 — listProjectStarters(FORGE_ROOT) includes "typescript-web" alongside "typescript-cli"/"typescript-api"', () => {
-  const types = listProjectStarters(REAL_ROOT);
+  const types = listProjectStarters(FORGE_ROOT);
   assert.ok(
     types.includes('typescript-web') && types.includes('typescript-cli') && types.includes('typescript-api'),
     `expected typescript-web + typescript-cli + typescript-api, got: ${types.join(', ')}`,

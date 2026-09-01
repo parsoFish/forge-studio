@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
-import { runPreflight, type ClauseResult, type ClauseId } from './preflight.ts';
+import { applyPreflightAutoFixes } from '../../preflight-fix-auto.ts';
+import { runPreflight, type ClauseResult, type ClauseId } from '../../preflight.ts';
 
 /** A non-git typescript project with a .gitignore that lacks scratch + build globs. */
 function setup(): { forgeRoot: string; projectDir: string } {

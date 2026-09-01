@@ -14,7 +14,7 @@ import {
   hasPendingStudioChanges,
   defaultBranch,
   isGitRepo,
-} from './project-repo-tx.ts';
+} from '../../project-repo-tx.ts';
 
 function g(dir: string, args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();

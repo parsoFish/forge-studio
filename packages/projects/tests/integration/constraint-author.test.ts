@@ -13,9 +13,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { authorConstraintBlocks, extractConstraintsSource } from './constraint-author.ts';
+import { authorConstraintBlocks, extractConstraintsSource } from '../../constraint-author.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
-import { loadProjectConstraintBlocks } from './constraint-blocks.ts';
+import { loadProjectConstraintBlocks } from '../../constraint-blocks.ts';
 
 const PROJECT = 'demoproj';
 

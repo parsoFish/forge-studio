@@ -47,13 +47,14 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
+import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '../../contract-stages.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
+const REPO_ROOT = FORGE_ROOT;
 const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] as const;
 
 /**
