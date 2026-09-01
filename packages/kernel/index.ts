@@ -28,3 +28,9 @@ export * from './path-guard.ts';
 export * from './project-contract.ts';
 /** The ports M2-B cuts, and the closed band registry (SPEC.md §2 Station). */
 export * from './ports.ts';
+
+/** The id vocabulary and the ONE slug guard every studio object id passes. */
+export * from './ids.ts';
+/** The child-process env allowlist seam: deny-by-default, one composer. */
+export * from './spawn-env.ts';
+

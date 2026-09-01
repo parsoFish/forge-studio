@@ -66,7 +66,7 @@ import yaml from 'js-yaml';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
 import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
-import { assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
   hubCountsFrom,
   listCommunityHubs,

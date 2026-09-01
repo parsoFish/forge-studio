@@ -52,7 +52,8 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import { assertSkillSlug, skillPath } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { skillPath } from '../skill-path.ts';
 import { skillTrustState, extractProvenance } from './skill-library.ts';
 import type { PackageFile, SkillTrust } from './skill-library.ts';
 import { hookYamlPath } from './hook-library.ts';

@@ -83,7 +83,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { reqString, optString } from '@forge/kernel/studio/yaml-fields.ts';
 import { loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import {

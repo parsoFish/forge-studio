@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from './spawn-env.ts';
+import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from './spawn-env.ts';
 
 test('AGENT_ENV_ALLOWLIST: does not include ANTHROPIC_BASE_URL or any HEADROOM_* var (the recurring G8 leak)', () => {
   assert.ok(!AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_BASE_URL'), 'ANTHROPIC_BASE_URL must never be inheritable');
@@ -171,4 +171,59 @@ test('buildChildEnv: rejects an oversized overrides blob (allowlist stays closed
     /overrides/,
     'passing more override keys than the cap must throw, not silently reopen the allowlist',
   );
+});
+
+// ---------------------------------------------------------------------------
+// M4-library PR 2 — the module MOVED from `packages/agents/spawn-env.ts` to
+// `packages/kernel/spawn-env.ts` (T1 ruling, park #1 Q3): library's
+// `hook-runtime.ts` and `connection-probe.ts` need `HOOK_ENV_BASE_ALLOWLIST`
+// and `buildChildEnv`, and library (rank 2) may not import agents (rank 3).
+// `HOOK_ENV_BASE_ALLOWLIST` is a `.filter()` over `AGENT_ENV_ALLOWLIST`, so
+// the whole seam travelled together rather than being copied.
+//
+// The three assertions below exist ONLY because of that move. Every test
+// above is a property test — each would still pass if the move had silently
+// added a name to the allowlist, because none of them pins the SET. These
+// pin the set, so a name added or dropped in transit fails loudly.
+// ---------------------------------------------------------------------------
+
+test('MOVE PIN: AGENT_ENV_ALLOWLIST membership is byte-identical to its pre-move value', () => {
+  assert.deepEqual(
+    [...AGENT_ENV_ALLOWLIST],
+    ['PATH', 'HOME', 'SHELL', 'TERM', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LANGUAGE', 'TMPDIR', 'TMP', 'TEMP', 'USER', 'LOGNAME', 'ANTHROPIC_API_KEY'],
+    'the allowlist changed in the move from packages/agents/ to packages/kernel/',
+  );
+});
+
+test('MOVE PIN: the HOOK base is the AGENT list MINUS the credential exclusions, and stays narrower', () => {
+  assert.deepEqual([...HOOK_ENV_CREDENTIAL_EXCLUSIONS], ['ANTHROPIC_API_KEY']);
+  assert.ok(!HOOK_ENV_BASE_ALLOWLIST.includes('ANTHROPIC_API_KEY'), 'an untrusted hook child must never inherit the API key');
+  assert.deepEqual(
+    [...HOOK_ENV_BASE_ALLOWLIST],
+    AGENT_ENV_ALLOWLIST.filter((n) => !HOOK_ENV_CREDENTIAL_EXCLUSIONS.has(n)),
+    'the hook base must stay a strict filter of the agent list, not a hand-maintained second copy',
+  );
+  assert.ok(HOOK_ENV_BASE_ALLOWLIST.length < AGENT_ENV_ALLOWLIST.length);
+});
+
+test('MOVE PIN: buildChildEnv layers overrides UNCONDITIONALLY — the credential refusal is the caller\'s, and that premise moved intact', () => {
+  // Executed, not read. `buildChildEnv` filters `parentEnv` against
+  // AGENT_ENV_ALLOWLIST and then layers `overrides` on top with no allowlist
+  // check at all — by design, because overrides are the caller's own
+  // composition. That is precisely why `HOOK_ENV_CREDENTIAL_EXCLUSIONS` is
+  // exported from this module rather than applied inside it: the UNTRUSTED
+  // caller (`hook-runtime.ts`'s `buildHookChildEnv`, which stays in library)
+  // must filter its own overrides first, and W8-B6 FIX-1 exists because it
+  // once did not. A move that quietly started filtering overrides here would
+  // look like a hardening and would in fact hide the seam this test names.
+  const parent = { PATH: '/usr/bin' } as NodeJS.ProcessEnv;
+  const child = buildChildEnv(parent, { ANTHROPIC_API_KEY: 'sk-caller-supplied' });
+  assert.equal(
+    child.ANTHROPIC_API_KEY,
+    'sk-caller-supplied',
+    'overrides must still win unconditionally — if this now filters, the hook-side refusal has moved and hook-runtime.ts must be re-reviewed',
+  );
+  // And the constant the untrusted caller is required to filter against is
+  // reachable from this module, which is the whole reason it lives here.
+  assert.ok(HOOK_ENV_CREDENTIAL_EXCLUSIONS.has('ANTHROPIC_API_KEY'));
 });

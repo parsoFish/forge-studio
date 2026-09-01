@@ -97,7 +97,7 @@ import { communitySourceKey } from './studio/community-source-url.ts';
 
 import { startBridge } from '../../cli/ui-bridge.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { skillPath } from './skill-path.ts';
 import { listSkillLibrary, skillTrustState } from './studio/skill-library.ts';
 import { hookYamlPath } from './studio/hook-library.ts';
 import { isHookRunnable, hookRunState, readHookApprovalLedger, scanHookPackage } from './studio/hook-scan.ts';

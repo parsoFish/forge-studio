@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import {
   loadConfig,
@@ -26,6 +26,8 @@ import {
   ORCHESTRATOR_GIT_IDENTITY,
   gitIdentityEnvOverlay,
   gitIdentityConfigArgs,
+  projectStartersDir,
+  listProjectStarters,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -414,4 +416,37 @@ test('gitIdentityEnvOverlay: distinct identities produce distinct overlays (no s
   const a = gitIdentityEnvOverlay(UNIFIER_GIT_IDENTITY);
   const b = gitIdentityEnvOverlay(ORCHESTRATOR_GIT_IDENTITY);
   assert.notEqual(a.GIT_AUTHOR_EMAIL, b.GIT_AUTHOR_EMAIL);
+});
+
+// ---------------------------------------------------------------------------
+// M4-library PR 2 — `projectStartersDir`/`listProjectStarters` moved here from
+// `packages/projects/project-create.ts`. The move's claim is that the new body
+// returns the SAME string as the old `join(skillsDir(forgeRoot), '..', ...)`
+// for EVERY input. A relative root is the only input that can distinguish
+// `join` from `resolve`, and no production caller passes one — so without this
+// test the divergence would be inert today and live the first time one did.
+// ---------------------------------------------------------------------------
+
+test('projectStartersDir: an ABSOLUTE root composes studio/starters/projects', () => {
+  assert.equal(projectStartersDir('/srv/forge'), join('/srv/forge', 'studio', 'starters', 'projects'));
+});
+
+test('projectStartersDir: a RELATIVE root stays relative — join, never resolve', () => {
+  // `resolve('rel')` would anchor to process.cwd() and return an absolute path.
+  const out = projectStartersDir('rel/root');
+  assert.equal(out, join('rel', 'root', 'studio', 'starters', 'projects'));
+  assert.equal(isAbsolute(out), false, 'a relative forgeRoot must stay relative — resolve() would silently anchor it to cwd');
+});
+
+test('projectStartersDir: equals the pre-move composition for both root shapes', () => {
+  // The exact expression `packages/projects/project-create.ts` used before the
+  // move, with skillsDir inlined as join(root, 'skills').
+  const preMove = (root: string): string => join(join(root, 'skills'), '..', 'studio', 'starters', 'projects');
+  for (const root of ['/srv/forge', 'rel/root', '.', '../sibling']) {
+    assert.equal(projectStartersDir(root), preMove(root), `diverged from the pre-move form for root ${JSON.stringify(root)}`);
+  }
+});
+
+test('listProjectStarters: an absent starters dir yields [] rather than throwing', () => {
+  assert.deepEqual(listProjectStarters(join(tmpdir(), `no-such-root-${Date.now()}`)), []);
 });
