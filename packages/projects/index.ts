@@ -12,5 +12,5 @@
  * own lane; a placeholder export for the rest would be a lie the boundary
  * lint could not see.
  */
-export { computeContractDrift, applyContractReset } from './reset.ts';
+export { computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';
 export type { ContractSection, DriftAction, DriftRow, SkillMove, DriftReport, ResetResult } from './reset.ts';

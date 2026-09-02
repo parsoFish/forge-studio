@@ -675,6 +675,11 @@ export function cmdProjectReset(args: string[]): number {
   const apply = args.includes('--apply');
   const appTypeFlagIndex = args.indexOf('--app-type');
   const appTypeFlagValue = appTypeFlagIndex >= 0 ? args[appTypeFlagIndex + 1] : undefined;
+  // An EMPTY `--app-type ''` must not read as "not given": the flag was
+  // passed, so the operator meant something by it, and silently falling back
+  // to the unresolved path would report "pass --app-type explicitly" to
+  // someone who just did. Kept as the empty string so it reaches the
+  // allowlist check and is refused by name.
   const appTypeFlag = appTypeFlagValue !== undefined && !appTypeFlagValue.startsWith('--') ? appTypeFlagValue : undefined;
 
   // NOT `resolve('.')`. That reads the process cwd, and it is correct today
@@ -712,7 +717,7 @@ export function cmdProjectReset(args: string[]): number {
 
   let drift: DriftReport;
   try {
-    drift = computeContractDrift(projectRoot, { forgeRoot, ...(appTypeFlag ? { appType: appTypeFlag } : {}) });
+    drift = computeContractDrift(projectRoot, { forgeRoot, ...(appTypeFlag !== undefined ? { appType: appTypeFlag } : {}) });
   } catch (err) {
     console.error(`forge project reset: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
