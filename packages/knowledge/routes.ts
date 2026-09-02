@@ -66,7 +66,8 @@ import {
   handleKbGet,
 } from './bridge-studio-kb-routes-read.ts';
 import {
-  handleKbCreate,
+  createKbCreateHandler,
+  type KbCreateDeps,
   handleKbDelete,
   handleKbGuidance,
 } from './bridge-studio-kb-routes-lifecycle.ts';
@@ -131,7 +132,19 @@ const m = {
  * :1783 :1809 :1842) precede the six `bridge-studio-kb-drain.ts` arms (:1490
  * :1544 :1565 :1582 :1607 :1676).
  */
-export const knowledgeRoutes: RouteTable<KnowledgeRouteContext> = [
+/**
+ * The collaborators this package cannot import, supplied by the host.
+ *
+ * `apps/forge/routes.ts` is where the real implementations live, because
+ * `classify()` gives that tree no rule at all — the same assembly point, and
+ * the same reason, as `projectsRoutes(deps)`. Declared structurally so this
+ * package names no forbidden module even in a type position.
+ */
+export type KnowledgeRouteDeps = KbCreateDeps;
+
+export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {
+  const handleKbCreate = createKbCreateHandler(deps);
+  return [
   {
     method: 'GET',
     path: '/api/studio/kbs',
@@ -288,3 +301,4 @@ export const knowledgeRoutes: RouteTable<KnowledgeRouteContext> = [
     handler: handleKbDrainStatus,
   },
 ];
+}

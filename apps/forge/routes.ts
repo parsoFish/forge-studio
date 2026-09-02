@@ -42,7 +42,8 @@ import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
 import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { listStarterAgents, loadStarterFlow } from '../../orchestrator/studio/registry.ts';
+import { listStarterAgents, loadStarterFlow, listFlowIds } from '../../orchestrator/studio/registry.ts';
+import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from '../../cli/bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects/routes.ts';
 
@@ -64,7 +65,7 @@ export { dispatchRoute } from '@forge/kernel';
  * assignable where one taking the subtype is expected.
  */
 export const routeTable: RouteTable<RouteContext> = [
-  ...knowledgeRoutes,
+  ...knowledgeRoutes({ listFlowIds, listFlowBandIds }),
   ...libraryRoutes,
   ...projectsRoutes({
     seedBrain: seedProjectBrain,
