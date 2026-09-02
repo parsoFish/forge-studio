@@ -8,18 +8,25 @@
  * `apps/forge/routes.ts` assembles and the host dispatches at `:2094`,
  * before its own switch.
  *
+ * THIRTY-ONE of the table's 34 routes came from that carve. The other
+ * three — the community-registry item's POST/PUT/DELETE arms
+ * (`bridge-studio-community-crud.ts`) — are an M4 §4 step 2 RESIDUE carve:
+ * they left an EIGHTH legacy dispatcher, `handleStudioWriteRoutes`
+ * (`cli/bridge-studio-writes.ts` `:583` `:615` `:654`), that a separate carve
+ * (M4-projects) had already been pulling routes out of one at a time.
+ *
  * WHICH WRONG IMPLEMENTATION EACH TEST KILLS — an if-chain rewritten as a
  * table has four ways to go quietly wrong, and every assertion here exists
  * for one of them:
  *
- *  1. A ROUTE IS DROPPED. Thirty-one arms spread over seven files are only
+ *  1. A ROUTE IS DROPPED. Thirty-four arms spread over eight files are only
  *     visible by reading all of them; a lost route 404s where it used to work
- *     with nothing red. `everyRouteIsTabled` pins the exact 31.
+ *     with nothing red. `everyRouteIsTabled` pins the exact 34.
  *  2. TWO ENTRIES CONTEND FOR ONE URL. `dispatchRoute` is first-match-wins,
  *     so an overlapping pair dispatches by POSITION — and dispatching the
  *     wrong handler still returns 200, which no status-code assertion catches.
  *     Knowledge's table pins its one real collision by order. LIBRARY HAS
- *     NONE: re-checked entry-by-entry, no two of these 31 share a method and
+ *     NONE: re-checked entry-by-entry, no two of these 34 share a method and
  *     both claim any one URL (`dispatchRoute` filters on method BEFORE it
  *     calls `matches`, `packages/kernel/route-entry.ts:108`, and every
  *     same-method near-pair is separated by segment count). An ORDER
@@ -35,7 +42,7 @@
  *     RAW url and must strip the query itself, or it fails its anchored
  *     regex against `…?x=1`, declines, and the request 404s with nothing red
  *     (measured on the knowledge lane's carve). `everyEntryMatchesWithAQuery`
- *     pins it for all 31 at once.
+ *     pins it for all 34 at once.
  *  4. A ROUTE LOSES ITS DRY CLASSIFICATION. `cli/dry-bridge.ts` classifies
  *     every mutating route so `FORGE_DRY_BRIDGE=1` can refuse or stub it. A
  *     carved route whose `dryClassification` is dropped becomes a route that
@@ -53,8 +60,10 @@ import { libraryRoutes } from '../../routes.ts';
 /**
  * The 31 routes the seven dispatchers matched at `c323dc04`, in the order
  * their if-chains matched them, grouped in the order `cli/ui-bridge.ts`
- * called the dispatchers. Derived by reading every `url === …` / `url.match(…)`
- * arm in all seven files, not from prose:
+ * called the dispatchers, PLUS the 3 residue routes `handleStudioWriteRoutes`
+ * (`cli/bridge-studio-writes.ts`) still answered at that same commit.
+ * Derived by reading every `url === …` / `url.match(…)` arm in all eight
+ * files, not from prose:
  *   bridge-studio-skills.ts       :105 :122 :186 :273 :360 :420 :473
  *   bridge-studio-hooks.ts        :275 :286 :389 :430 :475 :500 :595 :630
  *   bridge-studio-authoring.ts    :471-474
@@ -62,6 +71,8 @@ import { libraryRoutes } from '../../routes.ts';
  *   bridge-studio-instructions.ts :89
  *   bridge-studio-connections.ts  :129 :140 :153 :212
  *   bridge-studio-community.ts    :406 :440 :469 :533 :539
+ *   bridge-studio-writes.ts       :583 :615 :654 (residue — see this table's
+ *                                  own trailing group, and the file header)
  */
 const PINNED: ReadonlyArray<readonly [string, string]> = [
   // ---- bridge-studio-skills.ts (7) ----
@@ -102,6 +113,10 @@ const PINNED: ReadonlyArray<readonly [string, string]> = [
   ['POST', '/api/studio/community/refresh'],
   ['POST', '/api/studio/community/:kind/:id/install'],
   ['GET', '/api/studio/community/:kind/:id'],
+  // ---- bridge-studio-community-crud.ts (3, RESIDUE — see file header) ----
+  ['POST', '/api/studio/community/registry/items'],
+  ['PUT', '/api/studio/community/registry/items/:id'],
+  ['DELETE', '/api/studio/community/registry/items/:id'],
 ];
 
 /** A concrete URL for an entry's own `path`. `:param` segments are filled
@@ -114,7 +129,7 @@ function concreteUrl(path: string): string {
 
 const key = (method: string, path: string): string => `${method} ${path}`;
 
-test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains dispatched', () => {
+test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains dispatched plus the 3 residue routes', () => {
   const tabled = libraryRoutes.map((e) => key(e.method, e.path));
   const pinned = PINNED.map(([m, p]) => key(m, p));
 
@@ -123,7 +138,7 @@ test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains
 
   assert.deepEqual(missing, [], `routes that left an if-chain without arriving in the table:\n${missing.join('\n')}`);
   assert.deepEqual(extra, [], `table entries with no if-chain arm behind them:\n${extra.join('\n')}`);
-  assert.equal(libraryRoutes.length, PINNED.length, 'the table must carry exactly 31 entries — a duplicate is as wrong as a gap');
+  assert.equal(libraryRoutes.length, PINNED.length, 'the table must carry exactly 34 entries — a duplicate is as wrong as a gap');
 });
 
 test('theProbeIsNotVacuous: every entry matches the concrete URL built from its own path', () => {

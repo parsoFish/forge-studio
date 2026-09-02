@@ -1,17 +1,24 @@
 /**
  * routes.ts — `@forge/library`'s HTTP routes, as a table.
  *
- * M4 §4 step 2. These 31 routes used to reach their handlers through SEVEN
- * monolithic prefix dispatchers that `cli/ui-bridge.ts` called in sequence
- * (`:2365` skills, `:2366` hooks, `:2367` authoring, `:2368` templates,
- * `:2418` instructions, `:2422` connections, `:2423` community). Every one of
- * those dispatchers is now DELETED; nothing dispatches these routes but this
- * table, which `apps/forge/routes.ts` assembles and the host claims at
+ * M4 §4 step 2. Thirty-one of these 34 routes used to reach their handlers
+ * through SEVEN monolithic prefix dispatchers that `cli/ui-bridge.ts` called
+ * in sequence (`:2365` skills, `:2366` hooks, `:2367` authoring, `:2368`
+ * templates, `:2418` instructions, `:2422` connections, `:2423` community).
+ * Every one of those dispatchers is now DELETED; nothing dispatches those 31
+ * routes but this table.
+ *
+ * THE OTHER THREE — the community-registry item's POST/PUT/DELETE arms
+ * (`bridge-studio-community-crud.ts`) — are an M4 §4 step 2 RESIDUE carve:
+ * they left an EIGHTH dispatcher, `handleStudioWriteRoutes`
+ * (`cli/bridge-studio-writes.ts`), a separate carve (M4-projects) was already
+ * emptying route by route. Grouped right after the GET arm of the same URL.
+ * This table is what `apps/forge/routes.ts` assembles and the host claims at
  * `cli/ui-bridge.ts:2094`, before its own switch.
  *
  * ORDER. `dispatchRoute` is first-match-wins, and knowledge's table pins its
  * one real collision (`drain/cancel` vs `drain/:runId`) by order. LIBRARY HAS
- * NO COLLISION: no two of these 31 share a method and both claim any one URL.
+ * NO COLLISION: no two of these 34 share a method and both claim any one URL.
  * `dispatchRoute` filters on method BEFORE calling `matches`
  * (`packages/kernel/route-entry.ts:108`), and every same-method near-pair is
  * separated by segment count — `POST /skills/install` is two segments where
@@ -36,7 +43,8 @@
  * NOT the same kind of claim:
  *   · A row carried VERBATIM from `cli/dry-bridge.ts`'s
  *     `BRIDGE_ROUTE_CLASSIFICATION`, with that table's line cited in the
- *     entry's comment. Eighteen of the twenty non-GET routes are these.
+ *     entry's comment. Twenty-one of the twenty-three non-GET routes are
+ *     these (the three residue routes included, at `:304` `:305` `:306`).
  *   · A route with no row there is `exempt-local` BY CONSTRUCTION, with the
  *     reason stated: it reads on-disk state and nothing else — no spawn, no
  *     remote call, no write. All eleven GETs are these; that table is
@@ -113,6 +121,11 @@ import {
   INSTALL_RE as COMMUNITY_INSTALL_RE,
   DETAIL_RE as COMMUNITY_DETAIL_RE,
 } from './bridge-studio-community.ts';
+import {
+  handleCommunityRegistryItemCreate,
+  handleCommunityRegistryItemUpdate,
+  handleCommunityRegistryItemDelete,
+} from './bridge-studio-community-crud.ts';
 
 /**
  * The context these handlers receive. `RouteContext` (`@forge/kernel`) is
@@ -369,8 +382,8 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     path: '/api/studio/community/registry/items/:id',
     matches: (url) => REGISTRY_ROW_RE.test(pathOf(url)),
     // exempt-local BY CONSTRUCTION: reads one on-disk registry row. The POST /
-    // PUT / DELETE forms of this same URL live in `cli/bridge-studio-writes.ts`
-    // and are NOT carved here — different methods, so no contention.
+    // PUT / DELETE forms of this same URL are carved below, in
+    // bridge-studio-community-crud.ts — different methods, so no contention.
     dryClassification: 'exempt-local',
     handler: handleCommunityRegistryItem,
   },
@@ -397,5 +410,30 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     // exempt-local BY CONSTRUCTION: reads one on-disk community item.
     dryClassification: 'exempt-local',
     handler: handleCommunityDetail,
+  },
+
+  // ---- bridge-studio-community-crud.ts (3 routes, RESIDUE — moved from
+  // cli/bridge-studio-writes.ts :583 :615 :654; see file header. Same URL
+  // family as the GET above — REGISTRY_ROW_RE reused, not re-declared.)
+  {
+    method: 'POST',
+    path: '/api/studio/community/registry/items',
+    matches: (url) => pathOf(url) === '/api/studio/community/registry/items',
+    dryClassification: 'exempt-local', // cli/dry-bridge.ts:304, verbatim
+    handler: handleCommunityRegistryItemCreate,
+  },
+  {
+    method: 'PUT',
+    path: '/api/studio/community/registry/items/:id',
+    matches: (url) => REGISTRY_ROW_RE.test(pathOf(url)),
+    dryClassification: 'exempt-local', // cli/dry-bridge.ts:305, verbatim
+    handler: handleCommunityRegistryItemUpdate,
+  },
+  {
+    method: 'DELETE',
+    path: '/api/studio/community/registry/items/:id',
+    matches: (url) => REGISTRY_ROW_RE.test(pathOf(url)),
+    dryClassification: 'exempt-local', // cli/dry-bridge.ts:306, verbatim
+    handler: handleCommunityRegistryItemDelete,
   },
 ];

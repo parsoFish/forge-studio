@@ -4,7 +4,7 @@
  * not one of them took a lock:
  *
  *   1. `runCommunityRefresh`      (cli/community-refresh-run.ts)
- *   2. `mutateCommunityRegistry`  (cli/bridge-studio-writes.ts, the CRUD routes)
+ *   2. `mutateCommunityRegistry`  (bridge-studio-community-crud.ts, the CRUD routes)
  *
  * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
  * (orchestrator/interactive-finalizers.ts), existed until the community-
