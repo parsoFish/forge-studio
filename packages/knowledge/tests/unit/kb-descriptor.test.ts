@@ -171,3 +171,47 @@ describe('deriveKbUsageDefaults — band vocabulary mapping (R1-06 WI-1, T1 ruli
     assert.deepEqual(usage.readers, ['planner', 'reflector']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// (4) origin round-trip — moved from `cli/studio-provenance.test.ts` (AT-6)
+//
+// It was the only case in that 654-line bridge integration test that touched
+// these two functions, and the only reason a `cli/` file imported
+// `@forge/knowledge` at all. It never booted the bridge. Its subject is this
+// module, so it lives beside this module. The provenance MAPPING's own cases
+// went the other way, to `packages/kernel/provenance.test.ts`.
+// ---------------------------------------------------------------------------
+
+describe('origin round-trip', () => {
+  /** The fixture shape the bridge test used, carried over verbatim. */
+  function makeKbYaml(id: string, bindingYaml: string, origin?: string): string {
+    const lines = [`id: ${id}`, `name: ${id} KB`, bindingYaml, `desc: Test KB ${id} for provenance pins.`];
+    if (origin !== undefined) lines.push(`origin: ${origin}`);
+    return lines.join('\n') + '\n';
+  }
+
+  it('[was AT-6 in cli/studio-provenance.test.ts, moved here with its subject] loadKbDescriptor -> serializeKbDescriptor preserves origin:seed when present, and invents nothing when absent', () => {
+    const withOriginPath = writeFixture('provenance-with-origin.yaml', makeKbYaml('with-origin', 'binding: { kind: unique }', 'seed'));
+    const withoutOriginPath = writeFixture('provenance-without-origin.yaml', makeKbYaml('without-origin', 'binding: { kind: unique }'));
+
+    type KbDescriptorParam = Parameters<typeof serializeKbDescriptor>[0];
+
+    const withOriginLoaded = loadKbDescriptor(withOriginPath);
+    const withOriginBag = withOriginLoaded as unknown as Record<string, unknown>;
+    assert.equal(withOriginBag['origin'], 'seed', 'loadKbDescriptor must read a present origin: key');
+    const reserializedWith = serializeKbDescriptor(withOriginLoaded as KbDescriptorParam);
+    assert.match(reserializedWith, /origin:\s*seed\b/, 'serializeKbDescriptor must preserve a present origin — never drop it');
+
+    const withoutOriginLoaded = loadKbDescriptor(withoutOriginPath);
+    const withoutOriginBag = withoutOriginLoaded as unknown as Record<string, unknown>;
+    assert.equal(withoutOriginBag['origin'], undefined, 'loadKbDescriptor must not invent an origin when the yaml has none');
+    const reserializedWithout = serializeKbDescriptor(withoutOriginLoaded as KbDescriptorParam);
+    assert.doesNotMatch(reserializedWithout, /origin:/, 'serializeKbDescriptor must not invent an origin: key when the descriptor has none');
+});
+
+// ---------------------------------------------------------------------------
+// AT-7 — the two shipped OOTB brains are really stamped. Kills: a change
+// that adds the mechanism but never stamps the only two objects that can
+// honestly use it (mechanism shipped, data never populated).
+// ---------------------------------------------------------------------------
+});

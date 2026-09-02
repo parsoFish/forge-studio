@@ -73,11 +73,11 @@ operator-ratified new cap — never a silent raise.
 | `cli/bridge-studio.ts` | `apps/forge` | 1,750 | generic CSRF/origin/JSON plumbing interleaved with flows and library GET routes |
 | `cli/dry-bridge.ts` | `kernel` | 453 | one static table classifying routes owned by flows, agents and library alike |
 | `cli/studio-lint.ts` | `apps/forge` | 805 | validates agent, flow, catalog and community definitions in a single pass. **Owner corrected `kernel` → `apps/forge` (ruling 55, M4-knowledge s5): the `kernel` cell was unsatisfiable.** This file imports `@forge/flows` (rank 5), `@forge/sessions` (4), `@forge/agents` (3), five `@forge/library` modules — and `orchestrator/studio/{registry,validate}.ts` directly. Rule 1 ("packages never import legacy") has no rank exception, so no package at ANY rank can host it, kernel least of all; and it is a live CLI entry point (`apps/forge/cli.ts:471` backs `forge studio lint`). `apps/forge` is the one tree `classify()` gives no rule. Cell only — the two knowledge rows into it go to the host carve. |
-| `cli/studio-provenance.ts` | `kernel` | 54 | a 54-line pure mapping whose ONLY test is a 642-line bridge integration test that imports `ui-bridge.ts`; the test cannot follow it into a package without dragging the bridge across the boundary, and a kernel module with no package-level test is the shape this campaign exists to stop. Needs its pure-mapping test extracted from the integration test first |
+| `packages/kernel/provenance.ts` | `kernel` | 54 | a 54-line pure mapping whose ONLY test is a 642-line bridge integration test that imports `ui-bridge.ts`; the test cannot follow it into a package without dragging the bridge across the boundary, and a kernel module with no package-level test is the shape this campaign exists to stop. Needs its pure-mapping test extracted from the integration test first. **MOVED 2026-09-03 (M4-knowledge s5): `cli/studio-provenance.ts` → `packages/kernel/provenance.ts`, with that precondition met in the same PR** — AT-3a's mapping cases are now `packages/kernel/provenance.test.ts` beside the module, and the bridge test keeps only what is genuinely about a route's response. The move closed the `package-to-legacy` row from `packages/knowledge/bridge-studio-kbs.ts` into this file: knowledge had to reach into `cli/` for a mapping that is "a fact every package needs and none of them owns" — kernel's own charter. |
 | `cli/ui-bridge.ts` | `apps/forge` | 6,602 | the 6,602-line host: agent spawn, session index and authoring routes in one file |
 | `orchestrator/band-agent-run.ts` | `agents` | 242 | generic band dispatch that hardcodes two `orchestrator/phases/` imports — the port must exist first |
 | `orchestrator/flow-runner.ts` | `flows` | 615 | M2-B replaced its ten phase imports with the `PhaseExecutor` port; the table it shed is `phases/executor-{table,deps}.ts` |
-| `orchestrator/project-brain-builder-runner.ts` | `knowledge` | 448 | a knowledge concern wrapped in the sessions turn-loop plumbing it must shed |
+| `orchestrator/project-brain-builder-runner.ts` | `knowledge` | 448 | a knowledge concern wrapped in the sessions turn-loop plumbing it must shed. **Split 2026-09-03 (M4-knowledge s5, ruling 56):** the brain half — `buildAnalyzePlan`, `commitProjectBrain`, `listStagedThemes`, `PROJECT_BRAIN_KIND_DIR` — is now `packages/knowledge/project-brain-build.ts` (its own row below). The file could not move whole: it dispatches an agent turn, so it imports `@forge/agents` (rank 3) and `@forge/sessions` (rank 4). **The 295-line residue IS the shed plumbing** — the turn loop, `runAnalyzeStep`, and `writeProjectBrainStatus`, which calls `guardedWriteSessionStatus`/`statusWriteRefusalReason` from `@forge/sessions` and is why the commit no longer writes the session status. Owner cell left at `knowledge` deliberately: the residue belongs to M4-sessions' port of this runner as a session kind, and the cell should follow it there rather than be guessed now. |
 | `orchestrator/studio/registry.ts` | `kernel` | 1,180 | one loader for Agent, Flow, KB, Catalog, Community, Template and Project — five packages in one file |
 | `orchestrator/studio/validate.ts` | `kernel` | 1,066 | the same five-way split on the validation side |
 
@@ -193,7 +193,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio-lint-library-passes.ts | library | verbatim | 239 |
 | packages/library/studio-lint-tool-fence.ts | library | verbatim | 149 |
 | cli/studio-lint.ts | kernel | rewritten | 662 |
-| cli/studio-provenance.ts | kernel | rewritten | 54 |
+| packages/kernel/provenance.ts | kernel | rewritten | 54 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | cli/ui-bridge.ts | apps/forge | rewritten | 6602 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
@@ -283,7 +283,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
 | packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
-| orchestrator/project-brain-builder-runner.ts | knowledge | rewritten | 448 |
+| orchestrator/project-brain-builder-runner.ts | knowledge | rewritten | 295 |
+| packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |
 | packages/projects/project-config-sidecar.ts | projects | verbatim | 76 |

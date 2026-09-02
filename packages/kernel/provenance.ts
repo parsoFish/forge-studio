@@ -1,12 +1,23 @@
 /**
  * Server-side per-type provenance (bead forge-3oq, exit row 14).
  *
+ * Moved from `cli/studio-provenance.ts` (M4-knowledge s5) — QUARRY:76 owns
+ * this file to kernel, and its stated prerequisite is met by the same PR: the
+ * pure-mapping test that used to live inside a 654-line bridge integration
+ * test is now `provenance.test.ts` beside this module. A kernel module with
+ * no package-level test is the shape this campaign exists to stop.
+ *
+ * Its real consumer was never legacy: `packages/knowledge/bridge-studio-kbs.ts`
+ * had to import `cli/` to reach it, which is a `package-to-legacy` violation.
+ * The mapping is a fact every package needs and none of them owns — kernel's
+ * own charter, verbatim.
+ *
  * `apps/studio/components/ProvenanceBadge.tsx` used to derive its badge from a
  * CLIENT-SIDE inference over `flow.origin`, and Flow was the only Studio
  * object type carrying a real per-object origin signal — a "universal" badge
  * for agent/project/kb would have been fabricated. This module is the ONE
  * shared origin->provenance mapping every server descriptor route uses
- * (cli/bridge-studio.ts, cli/bridge-studio-kbs.ts) so the mapping never
+ * (`cli/bridge-studio.ts`, `packages/knowledge/bridge-studio-kbs.ts`) so the mapping never
  * forks into a second, driftable copy.
  *
  * The n/a-invariant: a type (or object) the server cannot attest reports the
