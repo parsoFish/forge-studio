@@ -50,3 +50,10 @@ export * from './route-entry.ts';
 /** The HTTP response envelope every carved route table needs: origin decision,
  *  JSON write, error sanitisation, URL splitting, `StudioContext`. */
 export * from './http-envelope.ts';
+/** The dry-bridge env gate and the typed 409 refusal — the two pieces five
+ *  packages consumed and could previously reach only by importing `cli/`.
+ *  The route classification table itself stays in `cli/dry-bridge.ts`. */
+export * from './dry-bridge.ts';
+/** `_logs/` cycle discovery and the run-id charset gate — moved down from
+ *  `flows` and `agents` so a rank-2 package can reach them (ruling 57). */
+export * from './log-cycles.ts';

@@ -194,6 +194,8 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio-lint-tool-fence.ts | library | verbatim | 149 |
 | cli/studio-lint.ts | kernel | rewritten | 662 |
 | packages/kernel/provenance.ts | kernel | rewritten | 54 |
+| packages/kernel/dry-bridge.ts | kernel | rewritten | 86 |
+| packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | cli/ui-bridge.ts | apps/forge | rewritten | 6602 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |

@@ -25,7 +25,7 @@ import matter from 'gray-matter';
 import { runBrainFixTurn } from '@forge/sessions/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { type Finding } from './brain-lint.ts';
-import { isDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge } from '@forge/kernel';
 import { collectKbFindings, runBrainLintFullMemoized, runBrainLintFullFresh } from './kb-lint-summary.ts';
 
 /**

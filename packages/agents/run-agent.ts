@@ -69,18 +69,12 @@ import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
  * alnum-first-char and so doesn't fit `runAgent`'s own runId formats,
  * `_agent-<slug>` / `_agent-<slug>-<n>`, and cycleId-like ids).
  */
-const SAFE_RUN_ID_RE = /^[A-Za-z0-9._-]+$/;
+// `SAFE_RUN_ID_RE` + `isSafeRunId` moved to `@forge/kernel` (M4-knowledge s5,
+// ruling 57): `packages/knowledge`'s drain routes need the same predicate and
+// may not import agents. Re-exported so every existing caller is unchanged.
+export { isSafeRunId } from '@forge/kernel';
+import { isSafeRunId } from '@forge/kernel';
 
-/**
- * Exported (mirrors `review-comments.ts`'s `isSafeCycleId`) so other
- * path-traversal-sensitive call sites that build a `_logs/`-relative dir
- * name from a caller-supplied id — e.g. `cli/ui-bridge.ts`'s
- * `spawnAgentTurn` — can reuse this exact predicate as their SSOT instead of
- * re-deriving the regex.
- */
-export function isSafeRunId(runId: string): boolean {
-  return SAFE_RUN_ID_RE.test(runId) && !runId.includes('..');
-}
 
 function assertSafeRunId(runId: string): void {
   if (!isSafeRunId(runId)) {

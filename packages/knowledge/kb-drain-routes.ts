@@ -11,7 +11,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { isSafeRunId } from '@forge/kernel';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { createLogger } from '@forge/kernel';
 import { KB_ID_RE } from '@forge/kernel';
