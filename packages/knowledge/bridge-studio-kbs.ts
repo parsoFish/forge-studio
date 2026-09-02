@@ -35,9 +35,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
-import { provenanceOfOrigin, type Provenance } from '../../cli/studio-provenance.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
