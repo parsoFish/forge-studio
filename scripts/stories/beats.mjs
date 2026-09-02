@@ -335,10 +335,12 @@ async function performSteps(page, steps) {
     const key = fills ? step.fill : step.press;
     const handle = `[data-${fills ? 'field' : 'action'}="${key}"]`;
     try {
-      const el = page.locator(handle).first();
-      if (!fills) await el.click();
-      else if ((await el.evaluate((n) => n.tagName)) === 'SELECT') await el.selectOption(step.with);
-      else await el.fill(step.with);
+      if (!fills) {
+        await page.locator(handle).first().click();
+        continue;
+      }
+      const refusal = await setControl(page, handle, step.with);
+      if (refusal !== null) return refusal;
     } catch (e) {
       return (
         `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
@@ -346,6 +348,109 @@ async function performSteps(page, steps) {
       );
     }
   }
+  return null;
+}
+
+/**
+ * The two states a checkbox has, as story-file vocabulary. CLOSED and total:
+ * an unknown `with` is refused naming the value and the allowed set, never
+ * guessed — a checkbox that silently defaulted would arm or disarm a
+ * permission in the beat that exists to prove which way it sits.
+ */
+const CHECKBOX_STATES = Object.freeze({ '': false, false: false, unchecked: false, true: true, checked: true });
+
+/**
+ * Read what ONE match actually is. Kept as a single `evaluate` so the common
+ * path costs the same round trip it always did, and so the radio/checkbox
+ * decision is made from the DOM rather than from the story's wording.
+ */
+const readShape = (el) =>
+  el.evaluate((n) => {
+    const self = n.tagName === 'INPUT' ? n : null;
+    const inner = self ?? n.querySelector('input[type="radio"],input[type="checkbox"]');
+    const type = inner === null ? '' : inner.type;
+    return {
+      tag: n.tagName,
+      kind: type === 'radio' || type === 'checkbox' ? type : '',
+      value: inner === null ? '' : inner.value,
+      text: (n.textContent ?? '').trim(),
+    };
+  });
+
+/**
+ * The input to act on: the match itself when `data-field` sits ON the input
+ * (the hook checkbox), the input it wraps when the field sits on a label (the
+ * model-tier radios).
+ *
+ * `locator.locator()` searches DESCENDANTS ONLY, so descending unconditionally
+ * looks for a checkbox inside the checkbox and times out after 30 s — measured
+ * against real chromium on the planted DOM, invisible to a fake whose child
+ * lookup fell back to the node itself. Measure the thing, not something next
+ * to it.
+ */
+const inputOf = (el, tag, type) => (tag === 'INPUT' ? el : el.locator(`input[type="${type}"]`).first());
+
+/**
+ * Set one control to `want`.
+ *
+ * Ruling 52 (operator, wave-2 open). `fill` used to call `locator.fill` on
+ * whatever the handle resolved to, and playwright refuses a radio or a
+ * checkbox outright (`Input of type "radio" cannot be filled`), so three
+ * stories died on the harness rather than on the product — S9 beat 5 on the
+ * model-tier radios, S7 beat 7 on the network-egress checkbox.
+ *
+ * A radio group publishes ONE `data-field` on N elements, so `want` SELECTS
+ * among the matches by the input's value (or, for a picker that renders its
+ * label as text, by that text) — never by index. Picking `.first()` would
+ * have made S9 beat 5 green having set the wrong model, which is worse than
+ * the red it replaced.
+ *
+ * `data-field` sits on the `<label>` for the radios and on the `<input>` for
+ * the checkbox, and playwright's `check()` refuses anything that is not the
+ * input, so both act through the input — the match itself when it is one, the
+ * input it wraps when it is not.
+ *
+ * Returns a refusal string, or null.
+ */
+async function setControl(page, handle, want) {
+  const all = page.locator(handle);
+  const shape = await readShape(all.first());
+
+  if (shape.kind === 'radio') {
+    const n = await all.count();
+    const options = [];
+    for (let i = 0; i < n; i += 1) {
+      const candidate = all.nth(i);
+      const s = await readShape(candidate);
+      options.push(s.value === '' ? s.text : s.value);
+      if (s.value === want || (s.value === '' && s.text === want)) {
+        await inputOf(candidate, s.tag, 'radio').check();
+        return null;
+      }
+    }
+    return (
+      `could not fill ${handle} with "${want}": no radio option carries that value. ` +
+      `The options on the page are: ${options.map((o) => `"${o}"`).join(', ')}.`
+    );
+  }
+
+  if (shape.kind === 'checkbox') {
+    if (!Object.hasOwn(CHECKBOX_STATES, want)) {
+      return (
+        `could not fill ${handle} with "${want}": a checkbox has two states and that names neither. ` +
+        `Allowed: ${Object.keys(CHECKBOX_STATES).map((k) => `"${k}"`).join(', ')} ` +
+        '(the empty string, "false" and "unchecked" leave it unticked; "true" and "checked" tick it).'
+      );
+    }
+    const input = inputOf(all.first(), shape.tag, 'checkbox');
+    if (CHECKBOX_STATES[want]) await input.check();
+    else await input.uncheck();
+    return null;
+  }
+
+  const el = all.first();
+  if (shape.tag === 'SELECT') await el.selectOption(want);
+  else await el.fill(want);
   return null;
 }
 
