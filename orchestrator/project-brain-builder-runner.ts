@@ -26,14 +26,17 @@ import {
   type QueryFn,
 } from '@forge/sessions/interactive-session.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile, guardedReadDir } from '@forge/kernel';
+import { resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
-import { regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
-import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
+import {
+  PROJECT_BRAIN_KIND_DIR,
+  buildAnalyzePlan,
+  commitProjectBrain,
+  listStagedThemes,
+} from '@forge/knowledge/project-brain-build.ts';
 import type { KbBinding } from '@forge/contracts/studio/types.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
@@ -98,7 +101,6 @@ export type RunProjectBrainTurnResult = {
 };
 
 /** The kind-dir under a project root that holds project-brain sessions. */
-const PROJECT_BRAIN_KIND_DIR = '_project-brain';
 
 export function projectBrainSessionDir(projectRoot: string, sessionId: string): string {
   return join(projectRoot, PROJECT_BRAIN_KIND_DIR, sessionId);
@@ -174,7 +176,16 @@ export async function runProjectBrainTurn(
   if (status.phase === 'analyzing') {
     result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onThinking });
   } else if (status.phase === 'committing') {
-    result = runCommitStep({ input, sessionDir, status, forgeRoot, logger, initiativeId });
+    // The brain half is `@forge/knowledge`'s; the phase transition is this
+    // runner's, because it is the half that may touch `@forge/sessions`.
+    const committed = commitProjectBrain({
+      projectRoot: input.projectRoot,
+      sessionId: input.sessionId,
+      forgeRoot,
+      status,
+    });
+    writeProjectBrainStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
+    result = { phase: 'committed', wrote: committed.wrote, themes: committed.themes };
   } else if (status.phase === 'abandoned') {
     writeProjectBrainStatus(input.projectRoot, input.sessionId, { ...status, phase: 'abandoned' });
     result = { phase: 'abandoned', wrote: [] };
@@ -198,71 +209,6 @@ export async function runProjectBrainTurn(
 }
 
 // --- analyze step: the agent reads the project + authors staged themes --------
-
-/**
- * R4-19 WI-1: pure `{cwd, prompt}` plan for the analyze-step agent turn.
- * Extracted from `runAnalyzeStep` (ADR-042 pure-function allowance) so the
- * read-source branch is directly testable without spinning up an agent turn.
- *
- * Branches on `status.kb_binding`:
- *   - a `flow` binding WITH a `band` (the create-kb-cycle case, e.g.
- *     `review-insights` bound to `{kind:'flow', ref:'forge-develop',
- *     band:'review-band'}`) has NO project repo to read — its evidence is
- *     the forge-owned cycle archives (Brain 2, `cyclesRawDir`) plus the
- *     review-band / adversarial-review findings logged inside them.
- *   - every other binding shape (`project`, `unique`, a `flow` binding
- *     WITHOUT a band, or no `kb_binding` at all — the historical default)
- *     stays on the ordinary project-repo read.
- *
- * R4-23 WI-3: the task PROSE for each branch (the `## Your task this turn:
- * …` header, the evidence-source sentence, the closing write-contract
- * instruction) now lives in `skills/project-brain-builder/SKILL.md` as the
- * `analyze-project-repo` / `analyze-cycle-archives` turn sections (ADR-024 —
- * SKILL.md is the single source of intent). This function selects the right
- * turn id per branch via `skillFor` and composes it with DATA ONLY (project
- * name, working directory, staging directory, operator guidance, and —
- * replacing the old inline `${binding.ref}` / `${binding.band}`
- * interpolation into the prose — the `Evidence flow:` / `Evidence band:`
- * data lines the SKILL.md prose now names instead of embedding).
- */
-export function buildAnalyzePlan(
-  status: ProjectBrainStatus,
-  forgeRoot: string,
-  staging: string,
-  skillFor: (turnId: string) => string,
-): { cwd: string; prompt: string } {
-  const binding = status.kb_binding;
-  if (binding?.kind === 'flow' && binding.band) {
-    const cwd = cyclesRawDir(forgeRoot);
-    const prompt = [
-      skillFor('analyze-cycle-archives'),
-      '',
-      `Project: ${status.project}`,
-      `Cycle archives (your working directory — READ from here): ${cwd}`,
-      `Staging directory (WRITE every theme + profile.md here, as absolute paths): ${staging}`,
-      '',
-      'Operator focus / guidance:',
-      status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
-      '',
-      `Evidence flow: ${binding.ref}`,
-      `Evidence band: ${binding.band}`,
-    ].join('\n');
-    return { cwd, prompt };
-  }
-
-  const cwd = status.project_repo_path;
-  const prompt = [
-    skillFor('analyze-project-repo'),
-    '',
-    `Project: ${status.project}`,
-    `Project repo (your working directory — READ from here): ${status.project_repo_path}`,
-    `Staging directory (WRITE every theme + profile.md here, as absolute paths): ${staging}`,
-    '',
-    'Operator focus / guidance:',
-    status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
-  ].join('\n');
-  return { cwd, prompt };
-}
 
 async function runAnalyzeStep(args: {
   input: RunProjectBrainTurnInput;
@@ -316,108 +262,10 @@ async function runAnalyzeStep(args: {
 
 // --- commit step: copy staged themes into the central project brain -----------
 
-function runCommitStep(args: {
-  input: RunProjectBrainTurnInput;
-  sessionDir: string;
-  status: ProjectBrainStatus;
-  forgeRoot: string;
-  logger: EventLogger;
-  initiativeId: string;
-}): RunProjectBrainTurnResult {
-  const { input, status, forgeRoot } = args;
-  const staged = listStagedThemes(input.projectRoot, input.sessionId);
-
-  // R1-06 WI-2 (T1 ruling Q4 option (a)): honor a descriptor-derived binding
-  // when this session carries one (the POST /api/studio/kbs create hand-off,
-  // F2) — never silently re-derive `{ kind: 'project', ref: status.project }`.
-  // Absent a descriptor (the ordinary, non-KB-scoped project-brain flow), the
-  // fallback IS that historical default, unchanged.
-  //
-  // `kb_id` present ⇔ this session is a POST /api/studio/kbs create hand-off.
-  const isCreateHandoff = status.kb_id !== undefined;
-  const kbId = status.kb_id ?? status.project;
-  const binding: KbBinding = status.kb_binding ?? { kind: 'project', ref: status.project };
-
-  // Brain-dir resolution MUST agree with what POST /api/studio/kbs already
-  // scaffolded, or the descriptor splits in two (one empty kb.yaml at the
-  // create location, one seeded kb.yaml here) and every operator-authored theme
-  // is silently orphaned. Create scaffolds brain/<id> UNCONDITIONALLY for EVERY
-  // binding kind (cli/bridge-studio-kbs.ts create route), so a create hand-off
-  // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
-  // (orchestrator/brain-paths.ts) resolves it there. Only the ORDINARY
-  // project-brain flow (no hand-off, kbId === status.project, a real project)
-  // targets the central per-project brain brain/projects/<project> (ADR 035).
-  //
-  // SEC-04: `kbId` is request-derived (either `status.project` or a
-  // descriptor's own id) — it rides as its OWN guarded segment against the
-  // TRUSTED forgeRoot below, NEVER folded into a root (the root-folding bypass
-  // the guard cannot self-detect).
-  const brainSegs = isCreateHandoff ? ['brain', kbId] : ['brain', 'projects', kbId];
-
-  const wrote: string[] = [];
-  for (const file of staged) {
-    // Source: a staged theme leaf the agent authored under the session dir.
-    // Route the READ through the guard (a symlinked staged file → null → skip),
-    // and route the central-brain WRITE through the guard too (kb id +
-    // filename as guarded segments). `file` is a readdir entry name, so it is a
-    // single safe path component by construction.
-    const contents = guardedReadFile(input.projectRoot, [PROJECT_BRAIN_KIND_DIR, input.sessionId, 'themes', file]);
-    if (contents === null) continue; // unreadable / escaping staged leaf — skip
-    const destSegs = file === 'profile.md' ? [...brainSegs, 'profile.md'] : [...brainSegs, 'themes', file];
-    const dest = guardedWriteFile(forgeRoot, destSegs, contents);
-    if (dest === null) {
-      throw new Error(
-        `project-brain runner: refusing to commit — destination for "${file}" failed containment (kb="${kbId}").`,
-      );
-    }
-    wrote.push(dest);
-  }
-
-  // Ensure a kb.yaml descriptor exists so the brain is discoverable.
-  // Existence + write both routed through the guard (kb id folded as a
-  // segment, not the root).
-  const existingKb = guardedReadFile(forgeRoot, [...brainSegs, 'kb.yaml']);
-  if (existingKb === null) {
-    const kbDest = guardedWriteFile(
-      forgeRoot,
-      [...brainSegs, 'kb.yaml'],
-      serializeKbDescriptor({
-        id: kbId,
-        name: `${kbId} Brain`,
-        binding,
-        desc: binding.kind === 'project' ? `Per-project brain for ${kbId}.` : `Brain for ${kbId}.`,
-        path: '',
-      }),
-    );
-    if (kbDest === null) {
-      throw new Error(
-        `project-brain runner: refusing to commit — kb.yaml for "${kbId}" failed containment.`,
-      );
-    }
-    // Loud self-check (parity with project-brain-seed): a malformed kb.yaml
-    // fails the commit rather than shipping an undiscoverable brain.
-    loadKbDescriptor(kbDest);
-    wrote.push(kbDest);
-  }
-
-  try { regenerateBrainIndex({ cwd: forgeRoot }); } catch { /* index regen best-effort */ }
-
-  writeProjectBrainStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
-  return { phase: 'committed', wrote, themes: staged };
-}
-
 // W6-B1 review round 2: the local makeThinkingSink duplicate was removed —
 // this file now consumes the ONE shared sink exported from
 // interactive-session.ts (imported above). This runner still has no
 // reasoning sink (it never had one before W6-B1; unchanged scope).
-
-/** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir
- *  included) — a symlinked `themes/` collapses to null → []. */
-function listStagedThemes(projectRoot: string, sessionId: string): string[] {
-  const entries = guardedReadDir(projectRoot, [PROJECT_BRAIN_KIND_DIR, sessionId, 'themes']);
-  if (entries === null) return [];
-  return entries.filter((f) => f.endsWith('.md')).sort();
-}
 
 /**
  * SEC-04 leaf: guarded status.json write. Routes the WHOLE

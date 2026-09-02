@@ -36,8 +36,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildAnalyzePlan, type ProjectBrainStatus } from './project-brain-builder-runner.ts';
-import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
+import { buildAnalyzePlan, type ProjectBrainAnalyzeInput } from '../../project-brain-build.ts';
+import { cyclesRawDir } from '../../brain-paths.ts';
+
+/**
+ * The fixture keeps the fields the runner's own wider status carries but
+ * `buildAnalyzePlan` never reads — `session_id`, `phase`, `updated_at`. That
+ * is the point: passing a wider object proves the function ignores the rest,
+ * which is exactly how the runner calls it.
+ */
+type TestStatus = ProjectBrainAnalyzeInput & {
+  session_id: string;
+  phase: string;
+  updated_at: string;
+  kb_id?: string;
+};
 
 const FORGE_ROOT = '/fake/forge-root';
 const STAGING = '/fake/forge-root/projects/demoproj/_project-brain/2026-08-10T00-00-00/themes';
@@ -57,7 +70,7 @@ const skillFor = (turnId: string) => `${SKILL} [[turn:${turnId}]]`;
 
 const PROJECT_REPO_PATH = '/fake/forge-root/projects/demoproj';
 
-function baseStatus(overrides: Partial<ProjectBrainStatus> = {}): ProjectBrainStatus {
+function baseStatus(overrides: Partial<TestStatus> = {}): TestStatus {
   return {
     session_id: '2026-08-10T00-00-00',
     project: 'demoproj',
@@ -79,7 +92,7 @@ function baseStatus(overrides: Partial<ProjectBrainStatus> = {}): ProjectBrainSt
  * lines, so this helper drops those two lines and asserts turn selection via
  * `skillFor` instead.
  */
-function expectedProjectPrompt(status: ProjectBrainStatus, staging: string): string {
+function expectedProjectPrompt(status: TestStatus, staging: string): string {
   return [
     skillFor('analyze-project-repo'),
     '',
