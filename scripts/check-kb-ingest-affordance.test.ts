@@ -49,10 +49,17 @@ import { checkNoIngestAffordance as checkNoIngestAffordanceReal } from './check-
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+import { BRIDGE_SCAN_DIRS as SCRIPT_BRIDGE_SCAN_DIRS } from './check-kb-ingest-affordance.mjs';
+
 // Directories walked for forge-ui UI-action affordances.
 const UI_SCAN_DIRS = ['apps/studio/app', 'apps/studio/components', 'apps/studio/lib'];
-// Directories walked for bridge KB-route dispatch code.
-const BRIDGE_SCAN_DIRS = ['cli'];
+// Directories walked for bridge KB-route dispatch code — IMPORTED from the
+// script, not re-declared. This file re-implements the scan to drive it over
+// synthetic trees, and a local copy of the dir list is precisely how a scan
+// and its test drift apart: the script narrowed to `['cli']` would leave this
+// file still asserting over the packages, or vice versa, and either way the
+// green would be about a list nothing runs.
+const BRIDGE_SCAN_DIRS = SCRIPT_BRIDGE_SCAN_DIRS;
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
 // the descriptor default (+ its re-export) and the reflection builtin.
 const ALLOWED_INGEST_FILES = new Set([
@@ -635,5 +642,17 @@ test('W7-D1 (the gate bites): the same file OUTSIDE a worktree, at a path the al
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the bridge scan reaches the PACKAGES, not just cli/ — M3-A moved every bridge route module out of cli/ and this scan did not follow', () => {
+  for (const dir of ['packages/knowledge', 'packages/flows', 'packages/library', 'packages/sessions']) {
+    assert.ok(
+      SCRIPT_BRIDGE_SCAN_DIRS.includes(dir),
+      `check-kb-ingest-affordance.mjs must walk ${dir}: the bridge KB routes live in the packages now, and a scan ` +
+      'limited to cli/ PASSES on a tree that dispatches op === \'ingest\' from a package. Measured, not argued — an ' +
+      'op === \'ingest\' probe planted in packages/knowledge/bridge-studio-kb-routes-maintenance.ts is caught with ' +
+      'these dirs present and invisible without them.',
+    );
   }
 });

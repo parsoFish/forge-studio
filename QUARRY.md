@@ -123,8 +123,12 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-connections.ts | library | verbatim | 225 |
 | packages/library/bridge-studio-hooks.ts | library | verbatim | 727 |
 | packages/library/bridge-studio-instructions.ts | library | verbatim | 149 |
+| packages/knowledge/bridge-studio-kb-consolidate.ts | knowledge | verbatim | 376 |
 | packages/knowledge/bridge-studio-kb-drain.ts | knowledge | verbatim | 1696 |
-| packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 2068 |
+| packages/knowledge/bridge-studio-kb-routes-lifecycle.ts | knowledge | verbatim | 538 |
+| packages/knowledge/bridge-studio-kb-routes-maintenance.ts | knowledge | verbatim | 546 |
+| packages/knowledge/bridge-studio-kb-routes-read.ts | knowledge | verbatim | 308 |
+| packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 720 |
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 424 |
 | packages/flows/bridge-studio-runs.ts | flows | verbatim | 947 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 206 |

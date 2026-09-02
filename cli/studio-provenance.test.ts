@@ -567,40 +567,52 @@ function stripCommentsForCallSiteCheck(src: string): string {
 }
 
 /**
- * Extract a top-level `function <fnName>` declaration's BODY only — the
- * LAST top-level (depth 0->1->0) brace block within the span from the
- * signature to the next top-level `export`. Mirrors
- * cli/kb-lint-summary.test.ts's `extractFunctionBody` — same technique,
- * duplicated locally rather than imported across test files.
+ * Extract a `function <fnName>` declaration's BODY.
+ *
+ * REWRITTEN IN M4 PR 4b, because the previous implementation was wrong and its
+ * own doc comment said otherwise. It claimed to mirror
+ * `packages/knowledge/kb-lint-summary.test.ts`'s `extractFunctionBody`; in fact
+ * it took the LAST top-level brace block between the signature and the next
+ * `\nexport `, which is the target's body only while no NON-EXPORTED function
+ * happens to follow it. When PR 4b moved `newProjectBrainSessionId` to sit
+ * between `loadKbDescriptors` and the next `export`, this returned THAT
+ * function's body and AT-10 failed against source that was entirely correct.
+ *
+ * The failure was loud, which is the lucky half. The same swap in the other
+ * direction is silent: had the neighbour contained a `provenanceOfOrigin(`
+ * call, AT-10 would have passed while asserting nothing about the loader.
+ *
+ * This is now genuinely the sibling's algorithm — walk from the signature,
+ * tracking `(`/`<`/`[` so a parameter list or generic cannot be mistaken for
+ * the body, take the first `{` at depth zero, then brace-match it.
  */
 function extractFunctionBodyForCallSiteCheck(src: string, fnName: string, fileLabel: string): string {
   const sigIdx = src.indexOf(`function ${fnName}`);
   assert.ok(sigIdx >= 0, `expected a "function ${fnName}" declaration in ${fileLabel}`);
-  let nextIdx = src.indexOf('\nexport ', sigIdx + 1);
-  if (nextIdx === -1) nextIdx = src.length;
-  const span = src.slice(sigIdx, nextIdx);
+
+  const closerFor: Record<string, string> = { '(': ')', '<': '>', '[': ']' };
+  const stack: string[] = [];
+  let bodyStart = -1;
+  for (let i = sigIdx; i < src.length; i++) {
+    const ch = src[i];
+    if (ch in closerFor) stack.push(closerFor[ch]);
+    else if (stack.length > 0 && ch === stack[stack.length - 1]) stack.pop();
+    else if (ch === '{' && stack.length === 0) { bodyStart = i; break; }
+  }
+  assert.ok(bodyStart >= 0, `could not locate the opening { for ${fnName} in ${fileLabel}`);
 
   let depth = 0;
-  let blockStart = -1;
-  let lastBlock: [number, number] | null = null;
-  for (let i = 0; i < span.length; i++) {
-    if (span[i] === '{') {
-      if (depth === 0) blockStart = i;
-      depth++;
-    } else if (span[i] === '}') {
+  for (let j = bodyStart; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}') {
       depth--;
-      if (depth === 0 && blockStart >= 0) {
-        lastBlock = [blockStart, i];
-        blockStart = -1;
-      }
+      if (depth === 0) return src.slice(bodyStart, j + 1);
     }
   }
-  assert.ok(lastBlock, `could not locate a { } body for ${fnName} in ${fileLabel}`);
-  const [start, end] = lastBlock as [number, number];
-  return span.slice(start, end + 1);
+  assert.fail(`unbalanced braces in ${fnName} (${fileLabel})`);
 }
 
-test('AT-10: cli/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( call site, and it lives inside loadKbDescriptors — so no route built over the loader can forget the field', () => {
+test('AT-10: packages/knowledge/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( call site, and it lives inside loadKbDescriptors — so no route built over the loader can forget the field', () => {
   const filePath = join(process.cwd(), 'packages', 'knowledge', 'bridge-studio-kbs.ts');
   const src = stripCommentsForCallSiteCheck(readFileSync(filePath, 'utf8'));
 
@@ -608,7 +620,7 @@ test('AT-10: cli/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( c
   assert.equal(
     callSites.length,
     1,
-    `expected exactly ONE provenanceOfOrigin( call site in cli/bridge-studio-kbs.ts (the single attachment point every route inherits), found ${callSites.length}`,
+    `expected exactly ONE provenanceOfOrigin( call site in packages/knowledge/bridge-studio-kbs.ts (the single attachment point every route inherits), found ${callSites.length}`,
   );
 
   const loaderBody = extractFunctionBodyForCallSiteCheck(src, 'loadKbDescriptors', 'packages/knowledge/bridge-studio-kbs.ts');

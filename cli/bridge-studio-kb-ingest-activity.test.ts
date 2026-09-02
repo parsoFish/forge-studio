@@ -25,7 +25,16 @@ import { fileURLToPath } from 'node:url';
 import { startBridge } from './ui-bridge.ts';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BRIDGE_KBS_PATH = join(FORGE_ROOT, 'packages', 'knowledge', 'bridge-studio-kbs.ts');
+/** The KB SURFACE. M4 PR 4b split `bridge-studio-kbs.ts` five ways, and the
+ *  ingest-activity route travelled to the maintenance heir. The obligation this
+ *  file pins is a property of the whole surface — "no POST gate anywhere near an
+ *  ingest-activity occurrence" — so it scans every heir. Left pointed at the old
+ *  path it would have failed loudly (it did), but a variant that silently found
+ *  zero occurrences and passed is the shape worth guarding against: the
+ *  occurrences-exist assertion below is what makes a blind scan impossible. */
+const BRIDGE_KBS_PATHS = ['bridge-studio-kbs.ts', 'bridge-studio-kb-consolidate.ts',
+  'bridge-studio-kb-routes-read.ts', 'bridge-studio-kb-routes-lifecycle.ts',
+  'bridge-studio-kb-routes-maintenance.ts'].map((f) => join(FORGE_ROOT, 'packages', 'knowledge', f));
 
 // A scratch project KB — never a real project brain, seeded ONLY for these
 // ingest-activity RED pins.
@@ -134,23 +143,28 @@ test('R6-08 WI-2 RED-F (risk #3, real-source): events from TWO different cycle d
   );
 });
 
-test('R6-08 WI-2 RED-G (risk #4, stricter-than-ratchet): the /ingest-activity route is GET-only (no POST branch on its URL pattern) — source-text; RED today because the route is absent', () => {
-  const text = readFileSync(BRIDGE_KBS_PATH, 'utf8');
-  const occurrences = [...text.matchAll(/ingest-activity/g)];
-  assert.ok(
-    occurrences.length > 0,
-    'expected cli/bridge-studio-kbs.ts to define the /ingest-activity route (WI-2 F2 read-only ingest-activity route) — no occurrence of "ingest-activity" found; the route has not been implemented yet',
-  );
-  // Once the route exists: no occurrence's surrounding context may pair with
-  // a POST method gate for the same URL pattern — the whole point of this
-  // WI-2 obligation (read-only, no ingest affordance anywhere).
-  for (const m of occurrences) {
-    const start = Math.max(0, (m.index ?? 0) - 300);
-    const end = Math.min(text.length, (m.index ?? 0) + 300);
-    const windowText = text.slice(start, end);
-    assert.ok(
-      !/method\s*===\s*['"]POST['"]/.test(windowText),
-      `found a POST-method gate near an "ingest-activity" occurrence at offset ${m.index} — the route must stay GET-only:\n${windowText}`,
-    );
+test('R6-08 WI-2 RED-G (risk #4, stricter-than-ratchet): the /ingest-activity route is GET-only (no POST branch on its URL pattern) — source-text, across the whole KB surface', () => {
+  let total = 0;
+  for (const path of BRIDGE_KBS_PATHS) {
+    const text = readFileSync(path, 'utf8');
+    const occurrences = [...text.matchAll(/ingest-activity/g)];
+    total += occurrences.length;
+    // Each file is scanned on its OWN text, never a concatenation: the ±300
+    // char window below is about real adjacency in a real file, and joining
+    // the surface would invent (or hide) neighbours that do not exist.
+    for (const m of occurrences) {
+      const start = Math.max(0, (m.index ?? 0) - 300);
+      const end = Math.min(text.length, (m.index ?? 0) + 300);
+      const windowText = text.slice(start, end);
+      assert.ok(
+        !/method\s*===\s*['"]POST['"]/.test(windowText),
+        `found a POST-method gate near an "ingest-activity" occurrence at ${path}:${m.index} — the route must stay GET-only:\n${windowText}`,
+      );
+    }
   }
+  assert.ok(
+    total > 0,
+    `expected the KB surface to define the /ingest-activity route — no occurrence of "ingest-activity" in any of ${BRIDGE_KBS_PATHS.join(', ')}. ` +
+    'A scan that finds nothing must fail, not pass: zero occurrences means either the route was deleted or this list has gone stale, and both are defects.',
+  );
 });

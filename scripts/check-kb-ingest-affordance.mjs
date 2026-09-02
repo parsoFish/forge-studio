@@ -64,7 +64,17 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // reported PASS — the same silent-disarm the containment ratchets hit.
 const UI_SCAN_DIRS = ['apps/studio/app', 'apps/studio/components', 'apps/studio/lib'];
 // Directories walked for bridge KB-route dispatch code.
-const BRIDGE_SCAN_DIRS = ['cli'];
+// M4 PR 4b: `['cli']` alone had gone BLIND. M3-A moved the bridge route
+// modules out of `cli/` into their owning packages, and this scan did not
+// follow — proven, not assumed: an `op === 'ingest'` probe planted in
+// `packages/knowledge/bridge-studio-kb-routes-maintenance.ts` is caught with
+// these dirs and INVISIBLE with `['cli']` alone (the same control shape the
+// raw-fs `EXPLICIT_MODULES` remedy needed in this PR). The real tree passes
+// either way, which is exactly why the blindness was silent.
+export const BRIDGE_SCAN_DIRS = [
+  'cli', 'packages/knowledge', 'packages/flows', 'packages/library',
+  'packages/sessions', 'packages/agents', 'packages/projects', 'packages/factory',
+];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
 // the descriptor default (+ its re-export) and the reflection builtin.
 export const ALLOWED_INGEST_FILES = new Set([

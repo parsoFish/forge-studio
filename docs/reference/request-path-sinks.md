@@ -1691,3 +1691,42 @@ cross-KB WRITE defect, and CONF-8a asserts the two modules resolve no KB brain
 directory of their own. Both were positive-controlled: restoring the substring
 form of `contains` fails CONF-1a/1b, and restoring the self-resolution in
 `kb-lint-summary.ts` fails CONF-7a/8a.
+
+### Relocated in M4 PR 4b — the KB surface splits five ways (no new surface)
+
+`packages/knowledge/bridge-studio-kbs.ts` was 2,068 lines holding the whole KB
+surface behind one `handleStudioKbRoutes` if-chain. PR 4b carved its eleven
+routes into `packages/knowledge/routes.ts`'s table and split the module under
+the 800-line cap. **Every row above that cites `cli/bridge-studio-kbs.ts` or
+`packages/knowledge/bridge-studio-kbs.ts` still records what was found, and
+where it was found at the time.** Those citations are deliberately NOT rewritten:
+a line number in a historical finding is part of the record, and a sed over them
+would turn a description of the past into a claim about the present. This
+section is the forwarding address.
+
+| sinks that were in `bridge-studio-kbs.ts` | now live in |
+|---|---|
+| `writeConsolidateTerminalEvent` / `writeConsolidateErrorTerminalEvent` (`mkdirSync` ×2, `appendFileSync` ×2), `runBrainConsolidateNow`, `enqueueConsolidate`, the deterministic consolidate fixes | `bridge-studio-kb-consolidate.ts` |
+| the roster / resolve-node / node-article / KB-detail reads | `bridge-studio-kb-routes-read.ts` |
+| create (`mkdirSync`/`writeFileSync`), delete (`rmSync`), guidance (`guardKbTail`) | `bridge-studio-kb-routes-lifecycle.ts` |
+| `spawnBrainFix` (`spawn`, `mkdirSync`, `openSync`), `readBrainFixState`, the consolidate-reattach and ingest-activity reads, the five-op maintenance POST | `bridge-studio-kb-routes-maintenance.ts` |
+| `loadKbDescriptors`, `subDirs`, `buildKbHealth`, `approveKbCleanup`, `computeAgentCleanupFindings` | `bridge-studio-kbs.ts` (retained base) |
+
+**It is a relocation, and that was measured rather than asserted.** Every sink
+kind conserves exactly across the split — `appendFileSync` 2→2, `existsSync`
+5→2+2+1, `mkdirSync` 9→2+2+3+2, `openSync` 1→1, `readFileSync` 4→1+1+1+1,
+`readdirSync` 5→2+2+1, `rmSync` 2→2, `spawn` 1→1, `writeFileSync` 3→1+2 — and
+`check-request-path-sinks` reports the same 1,340 total sink calls either side.
+The guard classification of each site is unchanged; only its file is.
+
+**The split blinded `check-raw-fs-guarded` first, and that is the part worth
+remembering.** Tier-1 scope is derived from an HTTP-plumbing text signal, so
+moving the sinks into modules that no longer carry it dropped them to tier 2,
+where `runId` is excluded — four audited residuals silently stopped suppressing
+and the check still reported PASS. Measured: **92 residual sinks before the
+split, 88 after.** A residual count that FALLS after a carve is a blinded
+scanner, not progress. The five heirs are named in `EXPLICIT_MODULES` (the
+remedy that script documents for exactly this case, and the same one the drain
+carve needed one PR earlier), which restores 92, and all 24 re-keyed allowlist
+rows were paired to findings by sink kind and order from a real
+`node scripts/check-raw-fs-guarded.mjs --json` run — never by arithmetic.
