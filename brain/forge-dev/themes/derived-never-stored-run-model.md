@@ -55,10 +55,10 @@ acceptance weight lands in the `npm test` CI home the derivation lives in, not a
 
 [ADR-044](../../../docs/decisions/044-read-path-memoization.md) narrows this posture, not reverses
 it: a read-path cache is still this same single derivation wrapped in a keyed memo — manifest
-content hash + events-log mtime+size, asymmetric on purpose (`cli/run-list-cache.ts` header) —
+content hash + events-log mtime+size, asymmetric on purpose (`packages/flows/run-list-cache.ts` header) —
 never a second derivation, never a persisted artifact. `_queue/done/` grows unbounded and a
 terminal run's derivation never changes, so `GET /api/runs` re-read+JSON-parsed 507 MB of settled
-event logs per request before `cli/run-list-cache.ts` (P1) landed. Still forbidden: writing a
+event logs per request before `packages/flows/run-list-cache.ts` (P1) landed. Still forbidden: writing a
 derived value to a manifest/status file and reading it back, or deriving the same fact twice — the
 memo lives only in the serving process and fails open on any doubt.
 

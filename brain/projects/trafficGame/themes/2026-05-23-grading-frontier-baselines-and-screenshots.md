@@ -96,7 +96,7 @@ load-bearing for that reason.
 ## Sources
 
 - [`docs/baselines/`](../../../../projects/trafficGame/docs/baselines/) — the locks.
-- [`scripts/grading/runSweep.mjs`](../../../../projects/trafficGame/scripts/grading/runSweep.mjs) — the library that produces the numbers.
+- [`projects/trafficGame/scripts/grading/runSweep.mjs`](../../../../projects/trafficGame/scripts/grading/runSweep.mjs) — the library that produces the numbers.
 - Commit `146cf5c` "feat(grading): parametric sweep harness + locked design-frontier baselines" on trafficGame `main`.
 
 ## See also

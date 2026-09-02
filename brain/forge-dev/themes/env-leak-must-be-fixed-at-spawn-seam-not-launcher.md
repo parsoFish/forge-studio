@@ -23,12 +23,12 @@ The durable fix is an allowlist/scrub applied **once at the shared spawn boundar
 so every current and future launch path inherits it. The fix *location*, not the
 fix itself, is what kept getting missed.
 
-**Shipped 2026-07-18 (R5-02, roadmap R5-B9):** `orchestrator/spawn-env.ts`
+**Shipped 2026-07-18 (R5-02, roadmap R5-B9):** `packages/kernel/spawn-env.ts`
 (`AGENT_ENV_ALLOWLIST` — 14 explicit names, `ANTHROPIC_BASE_URL`/proxy/headroom
 vars excluded, `ANTHROPIC_API_KEY` retained; `buildChildEnv` with a
-`MAX_ENV_OVERRIDE_KEYS` cap) applied at `orchestrator/pinned-sdk-query.ts`, the
+`MAX_ENV_OVERRIDE_KEYS` cap) applied at `packages/agents/pinned-sdk-query.ts`, the
 single SDK-query boundary every agent spawn passes. A **default-deny** structural
-lock (`orchestrator/pinned-sdk-query.enforce.test.ts`) flags any import of a
+lock (`packages/agents/pinned-sdk-query.enforce.test.ts`) flags any import of a
 child-spawning SDK export (`query`, `unstable_v2_*`) outside the wrapper — across
 `orchestrator/`, `loops/`, `cli/`, **and** `scripts/*.mjs` — so a new bypassing
 launch path can't ship silently. Gate children additionally strip each project's

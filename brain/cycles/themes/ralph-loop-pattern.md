@@ -33,7 +33,7 @@ loop:
   if stop: exit; else update fix_plan.md, repeat
 ```
 
-Stop conditions are pluggable (`loops/ralph/stop-conditions.ts`): quality gates pass, iteration budget exceeded. (A dedicated wedged-detector was removed in the Tier 2 thinning — see [[wedged-loop-detector]] for why.) The pattern is **agent-swappable** — `loops/_adapters/` will hold hermes/aider/openhands variants implementing the same loop shape with different underlying agents.
+Stop conditions are pluggable (`packages/agents/ralph/stop-conditions.ts`): quality gates pass, iteration budget exceeded. (A dedicated wedged-detector was removed in the Tier 2 thinning — see [[wedged-loop-detector]] for why.) The pattern is **agent-swappable** — `loops/_adapters/` will hold hermes/aider/openhands variants implementing the same loop shape with different underlying agents.
 
 Reference implementations exist from Anthropic (ralph-wiggum plugin), Vercel (ralph-loop-agent), and HumanLayer's writeup.
 

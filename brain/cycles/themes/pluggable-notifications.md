@@ -23,7 +23,7 @@ related_themes:
 
 The system runs unattended. Human input is needed at three moments (architect, review, reflection); review-ready is the one the system has to *surface* — the human cannot poll, and an initiative sitting in `_queue/ready-for-review/` for a week is wasted progress.
 
-`orchestrator/notify.ts` exposes a pluggable interface — `notify(event: NotifyEvent): Promise<void>`. Two providers ship:
+`packages/flows/notify.ts` exposes a pluggable interface — `notify(event: NotifyEvent): Promise<void>`. Two providers ship:
 
 1. **`desktop`** (default, on) — `notify-send` (Linux), `osascript` (macOS), or PowerShell `BurntToast` (Windows) via Bash. No extra deps.
 2. **`webhook`** (optional, off) — POSTs JSON to `notify.webhook_url`. Drop-in for Slack, Discord, Mattermost, custom endpoints.
