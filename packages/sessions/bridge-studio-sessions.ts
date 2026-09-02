@@ -118,8 +118,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import { readdirSync } from 'node:fs';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE, type StudioContext } from '../../cli/bridge-studio.ts';
-import { KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../../orchestrator/studio/validate.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, type StudioContext } from '@forge/kernel';
+import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '@forge/agents/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';

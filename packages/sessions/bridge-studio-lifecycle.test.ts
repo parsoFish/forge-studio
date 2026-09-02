@@ -48,7 +48,7 @@ import {
   DEFAULT_STALL_CEILING_MS,
   type SessionLifecycleInputs,
 } from './bridge-studio-lifecycle.ts';
-import { CANCELLED_PHASE } from '../../cli/bridge-studio.ts';
+import { CANCELLED_PHASE } from './interactive-session.ts';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 

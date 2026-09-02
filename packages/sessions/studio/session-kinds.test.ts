@@ -182,7 +182,7 @@ import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
 // too structurally distant from `{ level: string }` / `{ message: string }`
 // for `as` to convert between them; the fix is a correct type, not a
 // broader cast).
-import type { Finding } from '../../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 // Real production call path (Ruling 36): `runStudioLint` is what `forge
 // studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
 // apps/forge/cli.ts), and CI invokes exactly that command
