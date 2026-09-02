@@ -45,6 +45,7 @@ import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { listStarterAgents, loadStarterFlow } from '../../orchestrator/studio/registry.ts';
 import { spawnPreflightFix } from '../../cli/bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects/routes.ts';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 
 /**
  * Re-exported so the host imports its whole routing surface from one module:
@@ -56,25 +57,54 @@ import { projectsRoutes } from '@forge/projects/routes.ts';
  */
 export { dispatchRoute } from '@forge/kernel';
 
-/** Every carved route, in package order. */
 /**
- * Typed on `RouteContext` — `StudioContext` plus the host-supplied `readBody`
- * (kernel, T1 ruling 30). A package table whose handlers accept the narrower
- * `StudioContext` slots in unchanged: a handler taking a supertype is
- * assignable where one taking the subtype is expected.
+ * The bridge-instance state the assembled table needs, as the COMPOSITION of
+ * each package's own deps type (T1 ruling 59 §2). No package's vocabulary is
+ * spelled out here and none of it reaches `@forge/kernel`: a package that later
+ * needs instance state adds its `XRouteDeps` to this intersection and nothing
+ * else in the repository moves.
  */
-export const routeTable: RouteTable<RouteContext> = [
-  ...knowledgeRoutes,
-  ...libraryRoutes,
-  ...projectsRoutes({
-    seedBrain: seedProjectBrain,
-    checkBrainSeedContainment: checkProjectBrainSeedContainment,
-    readArtifactRoot,
-    isContainedProjectRepoPath,
-    spawnPreflightFix,
-    projectKbBindings,
-    listStarterAgents,
-    loadStarterFlow,
-    agentCapabilityDescriptor,
-  }),
-];
+export type RouteTableDeps = SessionsRouteDeps;
+
+/**
+ * Build the assembled table for ONE bridge instance.
+ *
+ * This was a module-level constant until M4's sessions lane (T1 ruling 59).
+ * Three session routes act on the live bridge — they start a tail on its WS
+ * fan-out and broadcast to its connections — and those closures do not exist at
+ * module load, so a table built at import time could never hold them. Building
+ * it where the host builds its own context is both the fix and the honest
+ * place: a table of handlers that act on a bridge is built when that bridge is.
+ *
+ * Deliberately NOT a module-level holder the host assigns into: two bridges in
+ * one process would silently share it. Every call returns its own table closed
+ * over its own deps, and `tests/…/routes-assembly.test.ts` pins that by calling
+ * this twice with distinct closures and asserting each table calls its own.
+ *
+ * Packages with no instance state spread in exactly as before — a package that
+ * does not need `deps` never sees it.
+ */
+/** The assembled table's type, named so the host states it in one word. */
+export type AssembledRouteTable = RouteTable<RouteContext>;
+
+export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
+  return [
+    ...knowledgeRoutes,
+    ...libraryRoutes,
+    ...projectsRoutes({
+      seedBrain: seedProjectBrain,
+      checkBrainSeedContainment: checkProjectBrainSeedContainment,
+      readArtifactRoot,
+      isContainedProjectRepoPath,
+      spawnPreflightFix,
+      projectKbBindings,
+      listStarterAgents,
+      loadStarterFlow,
+      agentCapabilityDescriptor,
+    }),
+    ...sessionsRoutes({
+      ensureSessionTail: deps.ensureSessionTail,
+      broadcastKindChanged: deps.broadcastKindChanged,
+    }),
+  ];
+}
