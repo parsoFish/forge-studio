@@ -64,6 +64,7 @@ export { readQualityGateSidecar, injectSidecarIntoTestProcess } from './project-
 import { readQualityGateSidecar, injectSidecarIntoTestProcess } from './project-config-sidecar.ts';
 
 import {
+  parseAppType,
   parseArtifactRoot,
   parseBuildProcess,
   parseDemoProcess,
@@ -236,6 +237,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const releaseProcess = parseReleaseProcess(obj.releaseProcess);
   const buildProcess = parseBuildProcess(obj.buildProcess);
   const repo = parseRepo(obj.repo);
+  const appType = parseAppType(obj.appType);
 
   return {
     testProcess,
@@ -254,6 +256,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(skills !== undefined ? { skills } : {}),
     ...(kb !== undefined ? { kb } : {}),
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
+    ...(appType !== undefined ? { appType } : {}),
     ...(releaseProcess !== undefined ? { releaseProcess } : {}),
     ...(buildProcess !== undefined ? { buildProcess } : {}),
     ...(repo !== undefined ? { repo } : {}),

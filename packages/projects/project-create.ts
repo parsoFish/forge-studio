@@ -12,6 +12,23 @@
  * The only forge-owned piece not in a template is the CENTRAL Brain-3 stub
  * (ADR-035), which `seedProjectBrain` lays down — so a scaffold reaches hard-green
  * with no manual repo surgery.
+ *
+ * RULING 38 fix (c), M4-projects-reset: `manifest.appType` — already validated
+ * against `listProjectStarters` below — is now stamped into the scaffolded
+ * `.forge/project.json` by `stampAppType`, AFTER `copyTemplate` finishes. This
+ * is the root fix for the shipped PR #289 defect: `reset.ts`'s
+ * `computeContractDrift` used to GUESS an appType for every project because
+ * none was ever persisted here — silently rewriting a Go/Terraform project's
+ * contract into a TypeScript one. Deliberately a POST-copy patch, not a
+ * template token: `reset.ts`'s `loadStarterConfig` reads a starter's OWN
+ * `.forge/project.json` raw (no substitution pass) to diff sections against,
+ * and its header explicitly documents that only `{{NAME}}`/`{{TITLE}}`/
+ * `{{NORTH_STAR}}` tokens are safe to appear there unsubstituted — adding a
+ * 5th token would leak a literal `"{{APP_TYPE}}"` into that raw read. appType
+ * is never inferred from disk after creation; a project created before this
+ * fix, or onboarded rather than scaffolded, simply has none (optional field,
+ * `project-config-types.ts`) — `reset.ts` requires an explicit `--app-type`
+ * for those rather than guessing.
  */
 
 import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,6 +40,7 @@ import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowl
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import { isReservedId } from '@forge/agents/skill-path.ts';
 import { projectStartersDir, listProjectStarters } from '@forge/kernel';
+import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the
@@ -154,6 +172,24 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
     writeFileSync(dest, text, 'utf8');
     written.push(rel);
   }
+}
+
+/**
+ * Ruling 38 fix (c), M4-projects-reset — stamp `appType` into the just-copied
+ * `.forge/project.json`. Called AFTER `copyTemplate` (so it patches the fully
+ * substituted, JSON.parse-validated file, not a template still carrying
+ * `{{NAME}}`/`{{TITLE}}`/`{{NORTH_STAR}}`) and BEFORE the staging tree's `git
+ * add`/`commit`, so the initial commit already carries it. `appType` is
+ * `manifest.appType`, already whitelisted against `listProjectStarters` by the
+ * caller — never re-derived from the template's own content, never inferred
+ * from disk afterward. See the module header for why this is a post-copy
+ * patch and not a fifth template token.
+ */
+function stampAppType(projectDir: string, appType: string): void {
+  const configPath = join(projectDir, ...PROJECT_CONFIG_REL_PATH.split('/'));
+  const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  raw.appType = appType;
+  writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
 }
 
 /** Provenance marker `scaffoldGreenfieldProject` stages into `.forge/` before
@@ -291,6 +327,11 @@ export function scaffoldGreenfieldProject(input: {
   let report;
   try {
     copyTemplate(templateDir, stagingProjectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
+    // Ruling 38 fix (c) — stamp appType into the just-copied config, AFTER the
+    // token substitution pass above (this is not a token; see the module
+    // header). Must run before `git add`/`commit` below so the initial commit
+    // already carries it.
+    stampAppType(stagingProjectDir, manifest.appType);
     // W7-B6 (projects-11): the project is its OWN git repository from birth —
     // `git init` + a first commit of the scaffold, run INSIDE the staging dir
     // (a git repo is position-independent, so the rename below carries it).

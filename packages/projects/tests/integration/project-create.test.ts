@@ -26,6 +26,7 @@ import {
   projectStartersDir,
   type CreationManifest,
 } from '../../project-create.ts';
+import { loadProjectConfig } from '../../project-config.ts';
 import { discoverProjects } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
@@ -90,6 +91,19 @@ for (const appType of ['typescript-cli', 'typescript-api']) {
     }
   });
 }
+
+test('ruling 38 fix (c): appType is persisted into .forge/project.json and survives loadProjectConfig — the root fix for PR #289 (reset.ts used to GUESS appType because none was ever recorded)', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'typescript-api' }), forgeRoot });
+    const raw = JSON.parse(readFileSync(join(out.projectDir, '.forge', 'project.json'), 'utf8')) as { appType?: string };
+    assert.equal(raw.appType, 'typescript-api', 'the scaffolded appType must be written verbatim into .forge/project.json — never left for reset.ts to guess later');
+    const loaded = loadProjectConfig(out.projectDir);
+    assert.equal(loaded?.appType, 'typescript-api', 'loadProjectConfig must round-trip the persisted appType');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
 
 test('F2/F3: a north star with a quote/backslash produces VALID JSON + stays hard-green', () => {
   const forgeRoot = isolatedForgeRoot();

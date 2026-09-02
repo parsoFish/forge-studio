@@ -16,6 +16,14 @@
  *      create one (the `project-create.ts` `copyTemplate` shape this module
  *      deliberately does not reuse, per ruling 4), and the JSON `instructions`
  *      field survives byte-identical as the sole fallback source.
+ *
+ * RULING 38, M4-projects-reset (finding, not a chore): both fixtures have no
+ * persisted `appType`, and neither `computeContractDrift` call passed one —
+ * before fix (a) that silently guessed a starter; it now throws
+ * `AppTypeUnresolvedError` instead (`reset-app-type-required.test.ts`). This
+ * file's concern (AGENTS.md/instructions preservation, C8) is orthogonal to
+ * which starter gets matched, so both calls now pass an explicit
+ * `appType: 'typescript-cli'`.
  */
 
 import { test } from 'node:test';
@@ -58,7 +66,7 @@ test('a project WITH AGENTS.md: the file survives byte-identical and the JSON in
     writeFileSync(join(dir, 'AGENTS.md'), AGENTS_CONTENT, 'utf8');
     writeConfig(dir, JSON_INSTRUCTIONS);
 
-    const drift = computeContractDrift(dir, { forgeRoot });
+    const drift = computeContractDrift(dir, { forgeRoot, appType: 'typescript-cli' });
     applyContractReset(dir, drift);
 
     assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), AGENTS_CONTENT, 'AGENTS.md must survive byte-identical — never overwritten');
@@ -81,7 +89,7 @@ test('a project WITHOUT an agent-instruction file: none is created by the reset,
     assert.equal(existsSync(join(dir, 'AGENTS.md')), false, 'arrange: no AGENTS.md');
     assert.equal(existsSync(join(dir, 'CLAUDE.md')), false, 'arrange: no CLAUDE.md');
 
-    const drift = computeContractDrift(dir, { forgeRoot });
+    const drift = computeContractDrift(dir, { forgeRoot, appType: 'typescript-cli' });
     applyContractReset(dir, drift);
 
     assert.equal(existsSync(join(dir, 'AGENTS.md')), false, 'the reset must never generate AGENTS.md — C8 stays human-authored');

@@ -502,11 +502,11 @@ packages/projects/preflight.ts readdirSync 1
 packages/projects/project-create.ts execFileSync 3
 packages/projects/project-create.ts lstatSync 2
 packages/projects/project-create.ts mkdirSync 2
-packages/projects/project-create.ts readFileSync 1
+packages/projects/project-create.ts readFileSync 2
 packages/projects/project-create.ts readdirSync 2
 packages/projects/project-create.ts renameSync 2
 packages/projects/project-create.ts rmSync 3
-packages/projects/project-create.ts writeFileSync 2
+packages/projects/project-create.ts writeFileSync 3
 packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
 packages/projects/project-repo-tx.ts realpathSync 2
