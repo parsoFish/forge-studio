@@ -367,13 +367,38 @@ export async function probeConnection(id: string): Promise<{ ok: boolean; probe?
 }
 
 /** The D6/D7 security-core round trip, client side: this route is called
- *  with NO body — package/version/registry are never client-supplied fields
- *  in the first place, so there is nothing here that COULD leak into the
- *  request (the server-side guarantee is that it never reads the body at
- *  all; this client reinforces it by never sending anything to read). */
+ *  with NO body except the `confirm` flag itself — package/version/registry
+ *  are never client-supplied fields in the first place, so there is nothing
+ *  here that COULD leak into the request (the server-side guarantee is that
+ *  it never reads the body for anything but `confirm`; this client
+ *  reinforces it by never sending anything else to read).
+ *
+ * forge-6gv.8.2 — the confirm gate (bridge-studio-connections.ts's own
+ * header) means an UNCONFIRMED call returns a `preview` (ZERO network/
+ * executor side effects on the bridge) rather than an install result — the
+ * `preview` variant below is reached on every call this client makes unless
+ * `{ confirm: true }` is explicitly requested (`installConnection(id,
+ * {confirm:true})`). The three variants mirror the server's three DISJOINT
+ * response shapes exactly: `{ok,preview}` / `{ok,suppressed,wouldInstall}` /
+ * `{ok,installed,probe}` — never a shape this client invents. */
 export type ConnectionInstallOutcome =
+  | { ok: true; preview: InstallPreview }
   | { ok: true; suppressed: true; wouldInstall: { command: string; args: string[] } }
   | { ok: true; suppressed: false; installed: boolean; probe: ConnectionProbeResult };
+
+/** forge-6gv.8.2 — the CONFIRM-BEFORE-INSTALL preview
+ *  (studio/connection-install.ts's `InstallPreview`, carried verbatim):
+ *  package, version, registry, the exact argv, and whether npm lifecycle
+ *  scripts will run. Every field is REQUIRED — a preview response missing
+ *  one is malformed, never defaulted. */
+export type InstallPreview = {
+  package: string;
+  version: string;
+  registry: string;
+  command: string;
+  args: string[];
+  willRunLifecycleScripts: boolean;
+};
 
 function parseWouldInstall(raw: unknown): { command: string; args: string[] } {
   const r = asRecord(raw);
@@ -385,13 +410,37 @@ function parseWouldInstall(raw: unknown): { command: string; args: string[] } {
   return { command, args: args as string[] };
 }
 
-export async function installConnection(id: string): Promise<{ ok: boolean; result?: ConnectionInstallOutcome; error?: string }> {
+/** Exported (not private) so community-client.ts — the mcp/tool install
+ *  branch there is "byte-identical" to this route's own (bridge-studio-
+ *  community.ts's own header) — parses the SAME preview shape rather than
+ *  maintaining a second, independently-drifting copy. */
+export function parseInstallPreview(raw: unknown): InstallPreview {
+  const r = asRecord(raw);
+  const args = r['args'];
+  if (!Array.isArray(args) || !args.every((a) => typeof a === 'string')) {
+    throw new Error(`expected "args" to be a string array, got ${JSON.stringify(args)}`);
+  }
+  return {
+    package: requireString(r, 'package'),
+    version: requireString(r, 'version'),
+    registry: requireString(r, 'registry'),
+    command: requireString(r, 'command'),
+    args: args as string[],
+    willRunLifecycleScripts: requireBoolean(r, 'willRunLifecycleScripts'),
+  };
+}
+
+export async function installConnection(
+  id: string,
+  opts?: { confirm?: boolean },
+): Promise<{ ok: boolean; result?: ConnectionInstallOutcome; error?: string }> {
+  const confirmed = opts?.confirm === true;
   let res: Response;
   try {
     res = await bridgeFetch(`/api/studio/connections/${encodeURIComponent(id)}/install`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(confirmed ? { confirm: true } : {}),
     });
   } catch (err) {
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
@@ -401,6 +450,15 @@ export async function installConnection(id: string): Promise<{ ok: boolean; resu
     const data = await res.json().catch(() => undefined);
     if (!res.ok) return { ok: false, error: errorFrom(data, `HTTP ${res.status}`) };
     const r = asRecord(data);
+
+    // Discriminate on the server's own disjoint key sets (never a second,
+    // independently-maintained "which shape is this" guess): `preview` only
+    // exists on the unconfirmed shape, `suppressed` only on the D7 dry-run
+    // shape — `requireBoolean(r, 'installed')` below is reached ONLY once
+    // both are ruled out, i.e. only on a genuine confirmed install result.
+    if (r['preview'] !== undefined) {
+      return { ok: true, result: { ok: true, preview: parseInstallPreview(r['preview']) } };
+    }
 
     if (r['suppressed'] === true) {
       return { ok: true, result: { ok: true, suppressed: true, wouldInstall: parseWouldInstall(r['wouldInstall']) } };

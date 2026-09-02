@@ -7,11 +7,10 @@
  * helpers + types for the `/api/studio/connections*` bridge routes (see
  * cli/bridge-studio-connections.ts's own header for the transport shapes).
  *
- * Tests ONLY the pure `parseConnection` function — no fetch, no window, no
- * jsdom (this repo's forge-ui vitest config is `environment: 'node'` with no
- * DOM, a standing decision — `resolveBridgeUrl()` requires `window`, which
- * does not exist under plain node; the over-the-wire behaviour is pinned by
- * cli/bridge-studio-connections.test.ts instead).
+ * Tests the pure `parseConnection` function directly — no fetch, no window,
+ * no jsdom needed there (this repo's forge-ui vitest config is
+ * `environment: 'node'` with no DOM, a standing decision — `resolveBridgeUrl()`
+ * requires `window`, which does not exist under plain node).
  *
  * `parseConnection` is EXPORTED (not private) for the same reason
  * hook-client.ts exports `parseHookLibraryEntry`/`parseHookDetail`: the
@@ -19,9 +18,39 @@
  * original bug — a malformed/missing array silently became a confident
  * empty answer) must never recur here. Every parser below REFUSES (throws)
  * on a malformed payload rather than coercing it.
+ *
+ * forge-6gv.8.2 — the confirm-gate round trip (`installConnection`) is
+ * ADDITIONALLY covered below via a mocked `bridgeFetch`, following the
+ * `bridgeFetch`-mocking convention `studio-client-fail-closed.test.ts`
+ * already established (`vi.mock('./bridge-client.ts', ...)`) rather than
+ * this file's older parse-only convention: the defect under test — the
+ * client never sending `confirm:true`, and never recognising the server's
+ * `preview` shape — lives in the DISPATCH logic (which body to send, which
+ * key to check first), not in a pure parse function, so only a real,
+ * mocked-transport round trip can prove it. The over-the-wire behaviour
+ * itself (server-side) is still pinned by cli/bridge-studio-connections.
+ * test.ts.
  */
-import { test, expect } from 'vitest';
-import { parseConnection } from './connection-client.ts';
+import { test, expect, vi, beforeEach } from 'vitest';
+
+const mockBridgeFetch = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>();
+vi.mock('./bridge-client.ts', () => ({
+  bridgeFetch: (path: string, init?: RequestInit) => mockBridgeFetch(path, init),
+}));
+
+import { parseConnection, installConnection } from './connection-client.ts';
+
+beforeEach(() => {
+  mockBridgeFetch.mockReset();
+});
+
+function jsonRes(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as unknown as Response;
+}
 
 const WELL_FORMED_TOOL = {
   id: 'git',
@@ -170,4 +199,74 @@ test('parseConnection: provenance missing or non-string THROWS', () => {
   const { provenance: _drop, ...missing } = WELL_FORMED_TOOL as Record<string, unknown>;
   expect(() => parseConnection(missing)).toThrow();
   expect(() => parseConnection({ ...WELL_FORMED_TOOL, provenance: 5 })).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// installConnection — forge-6gv.8.2 confirm gate. Kills the pre-fix client:
+// `installConnection(id)` took no options, always sent `body: '{}'`, and its
+// response parser only knew `suppressed`/`installed` — a server preview
+// response (the confirm gate's new UNCONFIRMED default) has neither key, so
+// the pre-fix parser fell through to `requireBoolean(r, 'installed')`, which
+// THROWS on the real (post-fix) server's preview shape. That throw is caught
+// by installConnection's own try/catch and surfaces as `ok:false` — every
+// assertion below that the preview round-trips as `ok:true` fails red
+// against the pre-fix client.
+// ---------------------------------------------------------------------------
+
+const WELL_FORMED_PREVIEW = {
+  package: '@modelcontextprotocol/server-memory',
+  version: '2026.7.4',
+  registry: 'https://registry.npmjs.org/',
+  command: 'npm',
+  args: ['install', '--prefix', '/forge/connections', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', '@modelcontextprotocol/server-memory@2026.7.4'],
+  willRunLifecycleScripts: false,
+};
+
+test('installConnection: unconfirmed (default) call sends NO confirm flag ({} body) and parses the preview shape without crashing', async () => {
+  mockBridgeFetch.mockResolvedValue(jsonRes(200, { ok: true, preview: WELL_FORMED_PREVIEW }));
+
+  const r = await installConnection('memory');
+
+  expect(mockBridgeFetch).toHaveBeenCalledTimes(1);
+  const [path, init] = mockBridgeFetch.mock.calls[0]!;
+  expect(path).toBe('/api/studio/connections/memory/install');
+  expect(JSON.parse(String(init?.body))).toEqual({});
+
+  expect(r.ok).toBe(true);
+  expect(r.error).toBeUndefined();
+  expect(r.result).toEqual({ ok: true, preview: WELL_FORMED_PREVIEW });
+});
+
+test('installConnection: a preview response never produces a false "installed" — no "installed" key is ever fabricated, and the call never errors', async () => {
+  mockBridgeFetch.mockResolvedValue(jsonRes(200, { ok: true, preview: WELL_FORMED_PREVIEW }));
+
+  const r = await installConnection('memory');
+
+  expect(r.ok).toBe(true);
+  expect(r.result && 'installed' in r.result).toBe(false);
+  expect(r.result && 'suppressed' in r.result).toBe(false);
+});
+
+test('installConnection: {confirm:true} sends {"confirm":true} on the wire and parses a genuine confirmed install result', async () => {
+  mockBridgeFetch.mockResolvedValue(
+    jsonRes(200, { ok: true, installed: true, argv: { command: 'npm', args: ['install'] }, probe: { state: 'available' } }),
+  );
+
+  const r = await installConnection('memory', { confirm: true });
+
+  const [, init] = mockBridgeFetch.mock.calls[0]!;
+  expect(JSON.parse(String(init?.body))).toEqual({ confirm: true });
+
+  expect(r.ok).toBe(true);
+  expect(r.result).toEqual({ ok: true, suppressed: false, installed: true, probe: { state: 'available' } });
+});
+
+test('installConnection: {confirm:true} against a suppressed (D7) response still discriminates correctly — never mistaken for a preview or a real install', async () => {
+  mockBridgeFetch.mockResolvedValue(
+    jsonRes(200, { ok: true, suppressed: true, wouldInstall: { command: 'npm', args: ['install', '--prefix', '/x'] } }),
+  );
+
+  const r = await installConnection('memory', { confirm: true });
+
+  expect(r.result).toEqual({ ok: true, suppressed: true, wouldInstall: { command: 'npm', args: ['install', '--prefix', '/x'] } });
 });

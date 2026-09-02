@@ -317,11 +317,29 @@ export function revokeHookApproval(input: { forgeRoot: string; id: string }): vo
  * "needs-review forever" — but decline GRANTS NOTHING: it never writes an
  * `approved` entry, so `hookRunState`'s `needsReview`/`runnable` are exactly
  * what they were before this function ran. Declining supersedes any live
- * approval for the same id (a hook cannot be both approved and declined at
- * once) — the mirror image of `writeHookApprovalLedgerEntry`'s own clear.
+ * approval for the same id — the mirror image of `writeHookApprovalLedgerEntry`'s
+ * own clear, so neither writer can leave both set.
+ *
+ * PRECISE CLAIM, corrected after the independent security review (finding 5):
+ * the two cannot both be set THROUGH THESE WRITERS. A HAND-EDITED ledger can
+ * still carry an id in both lists, and in that case `approved` silently wins —
+ * `hookRunState` and `computeTrust` key off `approved`/`needsReview` alone and
+ * never consult `declined`. That is the safe direction (it never widens
+ * access) but it is not a contradiction the surface reports, so do not read
+ * this comment as saying the state is impossible. It is impossible to reach
+ * by writing; it is merely resolved, silently, by reading.
  */
 export function declineHook(input: { forgeRoot: string; id: string; reason?: string }): void {
   const { forgeRoot, id, reason } = input;
+  // Self-defending, like `approveHook`/`overrideHookBlock` — which validate via
+  // `snapshotHookPackage → loadHookDefinition → assertSkillSlug` before they
+  // write. The only caller today validates first (`handleHookDecline` goes
+  // through `locateHook`), so this is unreachable now; that is exactly why it
+  // belongs here. A future caller writing an invalid id would poison the whole
+  // `declined` array, and `readHookDeclinedLedger` throws on the ARRAY, so one
+  // bad entry degrades EVERY hook's list row and 500s the detail route.
+  // Found by the independent security review of this change (finding 2).
+  assertSkillSlug(id);
   const ledger = readHookApprovalLedger(forgeRoot);
   const revoked = readHookLedgerRevoked(forgeRoot);
   const declined = readHookDeclinedLedger(forgeRoot);

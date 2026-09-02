@@ -1477,13 +1477,29 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-install-version]` for a pinned npm entry;
   `[data-action="install-connection"]` renders ONLY when `installable` is
   true — a `system-provided`/`external` entry has no install control at all,
-  structural absence, not a disabled button (F2 AC). An install outcome
+  structural absence, not a disabled button (F2 AC).
+  **forge-6gv.8.2 — confirm gate:** every installable connection is npm
+  (D13), so this button is ALWAYS the two-step confirm mirroring
+  `/community`'s own (`[data-confirming="true"|"false"]` on the SAME
+  `[data-action="install-connection"]` element — first click fetches the
+  real server preview and stops there, ZERO network/executor calls; second
+  click, now `data-confirming="true"`, sends `{confirm:true}` and runs the
+  real install) plus `[data-action="install-connection-abort"]` to discard an
+  armed preview without installing. While armed, `[data-component=
+  "install-preview"]` renders the preview itself — an operator must be able
+  to SEE what will be fetched and run before agreeing to it: package/version
+  (plain text), registry (`[data-install-preview-registry]`), the exact argv
+  (`[data-install-preview-argv]`, a `<pre>`, never executed while only a
+  preview), and whether npm lifecycle scripts will run
+  (`[data-will-run-lifecycle-scripts="true"|"false"]`, always `"false"` today
+  — `installArgvFor` always passes `--ignore-scripts`, D7). An install
+  outcome (the CONFIRMED result only — a preview never reaches this block)
   renders `[data-component="install-outcome"]
   [data-install-outcome-status="installed"|"suppressed"|"failed"]`, a
   suppressed result additionally carrying `[data-would-install-argv]` (the
-  real argv, never executed — every harness that drives this button runs
-  under the dry-bridge/no-spawn suppression, D7: no journey ever performs a
-  network install). Config schema: `[data-section="config-schema"]
+  real argv, never executed — every harness that drives this button through
+  to a real install runs under the dry-bridge/no-spawn suppression, D7: no
+  journey ever performs a network install). Config schema: `[data-section="config-schema"]
   [data-config-count]`, per row `[data-config-env][data-config-required]
   [data-config-status="set"|"unset"|"unchecked"]` — NAMES only (D5); an
   optional var's presence is never probed, so it reads `unchecked` rather
@@ -1753,11 +1769,18 @@ is what this contract reads — but it cannot be the only distinguisher.
     "skill-draft"|"hook-needs-approval"]` button (draft/approval pipeline
     owns trust, unchanged);
   - `install-confirm` — an npm connection: the SAME button is a TWO-STEP
-    confirm (`[data-confirming="true"|"false"]`; first click arms and
-    renders `[data-component="install-confirm-notice"]` naming the exact
-    `npm install <package>@<version>` child process, second click fires;
-    `[data-action="install-community-item-abort"]` disarms) — a real
-    networked child process never fires on one click (community-19);
+    confirm (`[data-confirming="true"|"false"]`; first click fetches the
+    REAL server preview — ZERO network/executor calls — and renders it in
+    `[data-component="install-confirm-notice"]`: package/version, registry
+    (`[data-install-preview-registry]`), the exact argv
+    (`[data-install-preview-argv]`, a `<pre>`), and whether npm lifecycle
+    scripts will run (`[data-will-run-lifecycle-scripts="true"|"false"]`,
+    always `"false"` today — D7's `--ignore-scripts`); second click, now
+    `data-confirming="true"`, sends `{confirm:true}` and fires the real
+    install; `[data-action="install-community-item-abort"]` disarms without
+    installing) — forge-6gv.8.2's confirm gate, mirrored byte-identically
+    from `/connections/[id]`'s own two-step (same attribute vocabulary) — a
+    real networked child process never fires on one click (community-19);
   - `open-owning` — any already-present item, connections on EVERY install
     method included (community-18): `[data-action="open-owning-page"]` links
     `/skills/<id>`, `/hooks/<id>` or `/connections/<id>`;
@@ -1795,7 +1818,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   the outcome text and the presence of `[data-would-install-argv]` itself,
   the same signal `[data-page="community-detail"]`'s own `data-install-state`
   independently confirms by staying `"not-installed"` after a suppressed
-  attempt). Action errors surface as `[data-component="community-action-error"]`.
+  attempt). **forge-6gv.8.2:** this block renders ONLY a CONFIRMED (or
+  suppressed/routed) result — an armed-but-unconfirmed preview never reaches
+  it; that state is `[data-component="install-confirm-notice"]`, above, next
+  to the button that is still waiting on a second click. Action errors
+  surface as `[data-component="community-action-error"]`.
 
   **Registry-row curation (W7-B3, community-23).** A detail page whose item
   originates from `studio/community/registry.yaml` renders
