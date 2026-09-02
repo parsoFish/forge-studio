@@ -112,3 +112,56 @@ test('reset CLI: an id failing the id rule is refused with exit 2, before any pa
     rmSync(outside, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// The fail-closed claim, proved AT THE CLI, not one layer down.
+//
+// A security review of ruling 38's fix noted that only `computeContractDrift`'s
+// own throw was pinned with a before/after file-content check, while the claim
+// being made is about `forge project reset --apply` writing nothing. The code
+// path is unconditional — the drift computation and its throw precede the
+// `apply` branch structurally — but "verified by code, unverified by test" is
+// exactly the gap that lets a later refactor move the throw below the branch
+// and keep every existing test green.
+// ---------------------------------------------------------------------------
+
+test('reset CLI: --apply on a project with no resolvable app type exits non-zero and writes NOTHING', () => {
+  const { forgeRoot, projectsDir, outside } = scaffold();
+  try {
+    const proj = join(projectsDir, 'unstamped');
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    // No `appType` field — the shape every project created before ruling 38's
+    // fix (c) has on disk, which is the whole reason the hard error exists.
+    const contract = { name: 'unstamped', northStar: 'keep me', testProcess: { local: { cmd: ['make', 'test'] } } };
+    const configPath = join(proj, '.forge', 'project.json');
+    writeFileSync(configPath, `${JSON.stringify(contract, null, 2)}\n`, 'utf8');
+    const before = readFileSync(configPath, 'utf8');
+
+    const r = reset(projectsDir, ['unstamped', '--apply']);
+
+    assert.notEqual(r.code, 0, `expected a non-zero exit, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /--app-type/, 'the error must tell the operator how to proceed');
+    assert.equal(readFileSync(configPath, 'utf8'), before, 'the contract must be byte-identical — --apply must write nothing when the app type is unresolved');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('reset CLI: an EMPTY --app-type is refused by name, never silently treated as absent', () => {
+  const { forgeRoot, projectsDir, outside } = scaffold();
+  try {
+    const proj = join(projectsDir, 'unstamped2');
+    mkdirSync(join(proj, '.forge'), { recursive: true });
+    writeFileSync(
+      join(proj, '.forge', 'project.json'),
+      `${JSON.stringify({ name: 'unstamped2', northStar: 'x', testProcess: { local: { cmd: ['make'] } } }, null, 2)}\n`,
+      'utf8',
+    );
+    const r = reset(projectsDir, ['unstamped2', '--app-type', '', '--apply']);
+    assert.notEqual(r.code, 0);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});

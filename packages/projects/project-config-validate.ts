@@ -367,6 +367,24 @@ export function parseInstructions(v: unknown): string | undefined {
   return v;
 }
 
+/**
+ * Ruling 38 fix (c) — the app-type template id this project was scaffolded
+ * from. Absent ⇒ `undefined` (an onboarded project, or one created before this
+ * field existed, is a valid config with no opinion here — backward compat for
+ * every project.json already on disk). Present-but-malformed throws, same
+ * fail-closed rule as every other M2 field. Deliberately NOT validated against
+ * `listProjectStarters` here: that list is filesystem/forgeRoot-scoped and this
+ * module has no `forgeRoot` to check it against — `reset.ts`'s own
+ * `resolveAppType` is where a persisted-but-unknown appType is caught.
+ */
+export function parseAppType(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || v.trim() === '') {
+    throw new Error('project-config: appType must be a non-empty string when present');
+  }
+  return v;
+}
+
 export function parseDemoProcess(v: unknown): DemoStep[] | undefined {
   if (v === undefined || v === null) return undefined;
   if (!Array.isArray(v)) {

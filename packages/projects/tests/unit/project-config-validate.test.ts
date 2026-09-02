@@ -204,6 +204,40 @@ test('validateProjectConfig: instructions must be a string when present', () => 
   );
 });
 
+// ----- appType (ruling 38 fix c — M4-projects-reset) -----
+
+test('validateProjectConfig: appType absent → undefined (an existing project.json without it must still load)', () => {
+  const cfg = validateProjectConfig({ testProcess: { local: { cmd: ['true'] } } });
+  assert.equal(cfg.appType, undefined);
+});
+
+test('validateProjectConfig: appType string round-trips', () => {
+  const cfg = validateProjectConfig({
+    testProcess: { local: { cmd: ['true'] } },
+    appType: 'typescript-cli',
+  });
+  assert.equal(cfg.appType, 'typescript-cli');
+});
+
+test('validateProjectConfig: appType must be a non-empty string when present', () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        testProcess: { local: { cmd: ['true'] } },
+        appType: 42,
+      }),
+    /appType/,
+  );
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        testProcess: { local: { cmd: ['true'] } },
+        appType: '',
+      }),
+    /appType/,
+  );
+});
+
 test('validateProjectConfig: demoProcess array of valid steps round-trips', () => {
   const cfg = validateProjectConfig({
     testProcess: { local: { cmd: ['true'] } },
