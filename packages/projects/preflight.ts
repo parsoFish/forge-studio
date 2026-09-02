@@ -64,6 +64,8 @@ import { checkC2, checkC6 } from './preflight-repo.ts';
 import { checkC10 } from './preflight-release.ts';
 import { checkDemo, checkDemoSkill, checkDemoAlignment } from './preflight-demo.ts';
 import { checkBuild, checkBuildArtifacts } from './preflight-build.ts';
+import { checkSkills } from './preflight-skills.ts';
+import { checkDeps } from './preflight-deps.ts';
 
 // Re-export every symbol the pre-split file exported from these siblings, so
 // `from '@forge/projects/preflight.ts'` / `from './preflight.ts'` keeps
@@ -106,6 +108,15 @@ export function runPreflight(
     checkDemoAlignment(cfg),
     checkBuild(dir, cfg),
     checkBuildArtifacts(dir),
+    checkSkills(dir, cfg, forgeRoot),
+    // DEPS (bead 5.21): the declared gate must be RUNNABLE in this ground, not
+    // merely declared. `linkProjectDeps` used to skip an unprovisioned ground
+    // silently (`if (!existsSync(src)) continue`), so the run died three
+    // minutes and $1.61 later as `dev-loop.baseline-red` "Cannot find package
+    // tsx". `claim-validator.ts` already runs this preflight against the
+    // ground at claim time, so refusing here is what makes the failure loud
+    // and early rather than expensive and late.
+    ...(opts.requireRunnableGate ? [checkDeps(dir, cfg)] : []),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
 
