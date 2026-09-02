@@ -37,7 +37,7 @@
  * caught exactly like one that would resolve there by default.
  */
 
-import { resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
+import { resolveKbProcesses } from './studio/kb-descriptor.ts';
 import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
 
 /** The one ratified band → reader-role exception (ADR-010 amendment). */

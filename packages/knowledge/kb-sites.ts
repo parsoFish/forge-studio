@@ -23,9 +23,8 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { resolveGuardedPath } from '@forge/kernel';
-import { loadKbDescriptor } from '../../orchestrator/studio/registry.ts';
-import { KB_ID_RE } from '../../orchestrator/studio/validate.ts';
+import { resolveGuardedPath, KB_ID_RE } from '@forge/kernel';
+import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 
 export type KbSite = { base: string; name: string };
 
