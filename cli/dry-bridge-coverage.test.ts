@@ -120,7 +120,7 @@ const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 // harmless (zero candidates) or visibly red (unclassified candidates) — never
 // silent. The containment test below pins the currently-known dispatch files
 // as a floor so an accidental narrowing of this filter also goes red.
-const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/sessions'];
+const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/projects', 'packages/sessions'];
 
 function discoverDispatchFiles(): readonly string[] {
   const out: string[] = [];
@@ -155,12 +155,7 @@ const KNOWN_DISPATCH_FILES = [
   'cli/bridge-studio.ts',
   'cli/ui-bridge.ts',
   'packages/knowledge/routes.ts',
-  // M4 §4 step 2 — library's carved table. Pinned for the same reason as
-  // knowledge's: `discoverDispatchFiles` finds any `routes.ts` automatically,
-  // so this row does not widen the scan; it makes a table that stops being
-  // discovered fail LOUDLY instead of shrinking the scan in silence. A floor
-  // entry only ever strengthens this guard.
-  'packages/library/routes.ts',
+  'packages/projects/routes.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
@@ -345,18 +340,7 @@ function extractRouteTableCandidates(source: string, relFile: string): DerivedCa
     // does not carry (it holds 70 POST rows against 2 GET).
     if (m[1] === 'GET') continue;
     const line = clean.slice(0, m.index ?? 0).split('\n').length;
-    // Canonicalize `:param` to `:id`, the SAME normalization
-    // `canonicalizeTableRow` applies to the dry-table side and the same form
-    // `extractDispatchCandidates` emits (it only ever writes `:id`). Without
-    // this the routes.ts side was the ONLY one comparing raw parameter NAMES,
-    // so a table whose path read `:kind`/`:slug` failed BOTH directions at once
-    // against a dry-table row that meant the identical route — reported as an
-    // unclassified route and a stale row simultaneously, which is the signature
-    // of an asymmetric comparison rather than a real gap. Parameter names are
-    // documentation on both sides; the route's identity is its shape. Measured
-    // by M4-library's carve, which is the first table to use any name but `:id`.
-    const route = m[2]!.replace(/:[A-Za-z][A-Za-z0-9]*/g, ':id');
-    out.push({ route, method: m[1]!, file: relFile, line });
+    out.push({ route: m[2]!, method: m[1]!, file: relFile, line });
   }
   return out;
 }
