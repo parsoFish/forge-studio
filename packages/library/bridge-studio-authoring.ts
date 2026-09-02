@@ -150,6 +150,14 @@
  *  GHOST-dir 409 (a collision against nothing but a leftover copy from a
  *  prior, unrelated attempt under the same id) is gone.
  * ---------------------------------------------------------------------------
+ *
+ *  M4 §4 step 2 — carved into `handleAuthoringFinalize`, the one exported
+ *  route handler the table `packages/library/routes.ts` assembles. The
+ *  sequence above (`runFinalize`) has not moved; what moved is the DISPATCH,
+ *  out of this module's own single-arm if-chain and into that table. This
+ *  route reads a body, so its ctx is `RouteContext` (`StudioContext` plus
+ *  the host-supplied `readBody`) — the legacy body-parsing import is gone.
+ * ---------------------------------------------------------------------------
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -159,10 +167,10 @@ import {
   sendJson,
   allowedOrigin,
   sanitizeError,
-  readJson,
   pathOnly,
   type StudioContext,
-} from '../../cli/bridge-studio.ts';
+  type RouteContext,
+} from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
@@ -183,7 +191,7 @@ import { finalizeHookFromLanded } from './bridge-studio-authoring-hook.ts';
 import { finalizeTemplateFromLanded } from './bridge-studio-authoring-template.ts';
 import { INTERACTIVE_LIBRARY_DIRNAME, type InstallOutcome } from './bridge-studio-authoring-types.ts';
 
-const FINALIZE_URL = '/api/studio/authoring/finalize';
+export const FINALIZE_URL = '/api/studio/authoring/finalize';
 
 const REQUIRED_PHASE = 'awaiting-review';
 
@@ -458,16 +466,11 @@ export async function runFinalize(
 }
 
 // ---------------------------------------------------------------------------
-// Route handler
+// Route handler — POST /api/studio/authoring/finalize. Formerly the sole arm
+// of handleStudioAuthoringRoutes (guarded at :471, matched at :474).
 // ---------------------------------------------------------------------------
 
-export async function handleStudioAuthoringRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
+export async function handleAuthoringFinalize(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
   if (method !== 'POST') return false;
 
   const url = pathOnly(rawUrl);
@@ -477,7 +480,7 @@ export async function handleStudioAuthoringRoutes(
 
   let body: unknown;
   try {
-    body = await readJson(req);
+    body = await ctx.readBody();
   } catch {
     sendJson(res, 400, { error: 'invalid JSON body' }, origin);
     return true;

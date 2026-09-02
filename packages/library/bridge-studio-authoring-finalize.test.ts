@@ -119,7 +119,7 @@ import { startBridge } from '../../cli/ui-bridge.ts';
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
 // happy paths — see the T3 report for the exact captured failure per test).
-import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from './studio/hook-library.ts';
 import { listTemplateLibrary } from './studio/template-library.ts';
 import { SCAFFOLD_READONLY } from './bridge-studio-templates.ts';
@@ -1264,7 +1264,7 @@ test('WI3-5-c (library-37 does not weaken the real collision check): a same-id f
 // Handler contract — direct invocation (unchanged passthrough contract).
 // ===========================================================================
 
-test('handleStudioAuthoringRoutes returns false for a non-matching URL (passthrough contract)', async () => {
+test('the library route table declines a non-matching URL (passthrough contract)', async () => {
   const mockRes = {
     writeHead: () => { throw new Error('must not write a response for a non-matching URL'); },
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
@@ -1272,7 +1272,7 @@ test('handleStudioAuthoringRoutes returns false for a non-matching URL (passthro
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await handleStudioAuthoringRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-authoring URL must return false');
 });
 

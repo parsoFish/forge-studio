@@ -264,6 +264,18 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/hooks/:id/approve', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry — no spawn/remote' },
   { method: 'POST', route: '/api/studio/hooks/:id/override', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (overridden:true) — no spawn/remote' },
   { method: 'POST', route: '/api/studio/connections/:id/probe', classification: 'exempt-local', reason: 'R3-04 D3/D11 — spawns a declared, credential-stripped local presence/version check only; deliberately NEVER suppressed by dry-bridge (readiness must stay real, D3) — no git-remote/daemon/agent-turn' },
+  // M4 §4 step 2 — TWO ROUTES THIS TABLE HAD NEVER SEEN. Both already existed
+  // and both are non-GET; neither was ever classified, because
+  // `dry-bridge-coverage.test.ts` derives its candidates by reading
+  // `url === '<literal>'` / `url.match(/…/)` arms and BOTH of these arms
+  // compared against a module CONST instead (`FINALIZE_URL`,
+  // `INSTRUCTIONS_DRAFT_ROUTE_RE`). Carving them into
+  // `packages/library/routes.ts` states their method and path as DATA, which
+  // is what makes them visible — the carve un-blinded the scanner rather than
+  // adding routes. Same failure shape as COMMON §15.16's directory-list-scoped
+  // guard: the check passed while its scope silently excluded real routes.
+  { method: 'POST', route: '/api/studio/authoring/finalize', classification: 'exempt-local', reason: 'lands an authoring session\'s staged package into the local library — the `committing` turn performs NO SDK spawn at all — it runs copyStagingToLibrary, per bridge-studio-authoring.ts step 5, and the install writes local skills/<id>/ or studio/hooks/<id>/ bytes through the guarded-path helpers; no spawn, no remote, no daemon' },
+  { method: 'POST', route: '/api/studio/agents/:slug/instructions-draft', classification: 'exempt-local', reason: 'composes an instructions draft from the request body and confirms the agent exists via a guarded SKILL.md existence check — writes nothing at all, no spawn, no remote (a POST only because the draft input arrives as a body)' },
   { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
   { method: 'DELETE', route: '/api/studio/kbs/:id', classification: 'exempt-local', reason: 'removes a local KB directory' },
   // W7-B3 (community-23) — registry CRUD: all three write ONLY the local

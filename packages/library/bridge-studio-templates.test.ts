@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
 import { startBridge } from '../../cli/ui-bridge.ts';
-import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -133,7 +133,7 @@ test('AT-44: GET /api/studio/templates/<traversal-or-malformed> returns 400, nev
 // non-matching URL returns false (passthrough) — AT-45
 // ---------------------------------------------------------------------------
 
-test('AT-45: handleStudioTemplatesRoutes returns false for a non-matching URL (passthrough contract)', async () => {
+test('the library route table declines a non-matching URL (passthrough contract)', async () => {
   const mockRes = {
     writeHead: () => { throw new Error('must not write a response for a non-matching URL'); },
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
@@ -141,6 +141,6 @@ test('AT-45: handleStudioTemplatesRoutes returns false for a non-matching URL (p
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await handleStudioTemplatesRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-templates URL must return false');
 });

@@ -3,20 +3,35 @@
  *
  * Owns EVERY `/api/studio/skills*` route — one home, per _wave5/specs/R3-01-F3F4.md:
  *
- *   GET  /api/studio/skills            → { skills: SkillLibraryEntry[] }
- *   GET  /api/studio/skills/:id        → detail: { files, scan? } + entry fields
- *   POST /api/studio/skills            → author a plain composable skill
+ *   GET  /api/studio/skills            → { skills: SkillLibraryEntry[] }         (handleSkillsList)
+ *   GET  /api/studio/skills/:id        → detail: { files, scan? } + entry fields (handleSkillDetail)
+ *   POST /api/studio/skills            → author a plain composable skill        (handleSkillCreate)
  *                                         (MOVED VERBATIM from bridge-studio-writes.ts;
  *                                         behaviour unchanged, same test coverage)
- *   POST /api/studio/skills/install    → install an already-materialised package (D2)
- *   POST /api/studio/skills/:id/approve → approve a draft (D4: never restores runtime), OR
+ *   POST /api/studio/skills/install    → install an already-materialised package (D2) (handleSkillInstall)
+ *   POST /api/studio/skills/:id/approve → approve a draft (D4: never restores runtime), OR (handleSkillApprove)
  *                                         re-pin a needs-review skill (W8-B4, library-36) —
  *                                         see the dispatch comment at the route itself
+ *   PUT    /api/studio/skills/:id      → edit (W7-B4, library-05)      (handleSkillUpdate)
+ *   DELETE /api/studio/skills/:id      → delete (W7-B4, library-05)    (handleSkillDelete)
  *
- * Matches the existing handler contract exactly: `sendJson`/`allowedOrigin`/
- * `sanitizeError`/`readJson`/`pathOnly` from bridge-studio.ts, returning `true`
- * once a route is handled and `false` for passthrough (mirrors
- * bridge-studio-kbs.ts / bridge-studio-writes.ts).
+ * M4 route-carve: each route above used to be one arm of a single dispatcher,
+ * `handleStudioSkillsRoutes`, that `cli/ui-bridge.ts` called directly. That
+ * dispatcher is now gone — `packages/library/routes.ts` is what dispatches
+ * these, as a table. Each handler below keeps the SAME five-parameter
+ * contract the dispatcher's arms ran under —
+ * `(req, res, ctx, rawUrl, method): Promise<boolean>` — normalises its own
+ * url via `pathOnly` (a handler that skipped this would fail its own
+ * anchored regex against `/api/studio/skills?x=1` and 404 silently), computes
+ * its own `origin` via `allowedOrigin`, and returns `false` on a non-match so
+ * it still composes as a passthrough (mirrors the already-carved
+ * bridge-studio-kbs.ts handlers).
+ *
+ * `sendJson`/`allowedOrigin`/`sanitizeError`/`pathOnly`/`StudioContext`/
+ * `RouteContext` come from `@forge/kernel` — never the legacy host module,
+ * which would be a `package-to-legacy` boundary violation. The old body
+ * reader import is gone entirely; every route that reads a body now calls
+ * `ctx.readBody()` (the host-supplied reader `RouteContext` carries) instead.
  *
  * Every id-bearing route resolves the id through `skillPath`/`skillDir`
  * (orchestrator/skill-path.ts), which slug-validates and throws on anything
@@ -34,12 +49,12 @@ import {
   sendJson,
   allowedOrigin,
   sanitizeError,
-  readJson,
   pathOnly,
   type StudioContext,
-} from '../../cli/bridge-studio.ts';
-import { skillPath, skillsDir } from './skill-path.ts';
+  type RouteContext,
+} from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
+import { skillPath, skillsDir } from './skill-path.ts';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
 import { isStudioAgent } from '../../orchestrator/studio/registry.ts';
@@ -49,8 +64,8 @@ import { installSkillPackage, approveSkillDraft, repinSkillPackage } from './stu
 import { removeInstallLedgerEntry } from './studio/skill-install-ledger.ts';
 
 // SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept
-// at or below the transport's MAX_BODY_BYTES (~1 MiB, cli/bridge-studio.ts) so
-// a staged package can never exceed what the body reader already admits; a
+// at or below the host's own body-size cap (~1 MiB, cli/ui-bridge.ts) so a
+// staged package can never exceed what the body reader already admits; a
 // request over this cap is refused before any staging write.
 const MAX_STAGED_PACKAGE_BYTES = 1 * 1024 * 1024; // 1 MiB
 
@@ -85,23 +100,24 @@ function decodeIdSegment(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Route handler
+// Route handlers
 // ---------------------------------------------------------------------------
 
-export async function handleStudioSkillsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  // PUT/DELETE joined in W7-B4 (library-05): the edit/delete half of CRUD.
-  if (method !== 'GET' && method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return false;
+/** GET /api/studio/skills — the library listing. */
+/**
+ * Route matchers, hoisted out of the arms they were inlined in so that
+ * `routes.ts` and the handler share ONE source per route. A regex duplicated
+ * between a table entry and its handler drifts on a one-sided edit, and the
+ * failure is silent: the table matches, the handler declines, the request
+ * 404s with nothing red.
+ */
+export const SKILL_APPROVE_RE = /^\/api\/studio\/skills\/([^/]+)\/approve$/;
+export const SKILL_ID_RE = /^\/api\/studio\/skills\/([^/]+)$/;
 
+export async function handleSkillsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // ---- GET /api/studio/skills — the library listing -----------------------
   if (method === 'GET' && url === '/api/studio/skills') {
     try {
       const skills = listSkillLibrary(ctx.forgeRoot).map(toClientEntry);
@@ -112,17 +128,27 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/skills (P2) — author a plain composable skill -----
-  // MOVED VERBATIM from cli/bridge-studio-writes.ts (deleted there in this
-  // same commit) — behaviour must not change at all; AT-55 pins it.
-  // A "skill" here is a plain SKILL.md (name + description + body, no runtime
-  // block) — composable into agents. Distinct from a studio agent (which has a
-  // runtime block). Stamped `library: true` so it is palette-visible (R3-01-F2
-  // union) and passes the `library`-must-be-explicit lint on the very next run.
+  return false;
+}
+
+/**
+ * POST /api/studio/skills (P2) — author a plain composable skill.
+ *
+ * MOVED VERBATIM from cli/bridge-studio-writes.ts (deleted there in this
+ * same commit) — behaviour must not change at all; AT-55 pins it.
+ * A "skill" here is a plain SKILL.md (name + description + body, no runtime
+ * block) — composable into agents. Distinct from a studio agent (which has a
+ * runtime block). Stamped `library: true` so it is palette-visible (R3-01-F2
+ * union) and passes the `library`-must-be-explicit lint on the very next run.
+ */
+export async function handleSkillCreate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
   if (method === 'POST' && url === '/api/studio/skills') {
     try {
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
       const description = typeof b['description'] === 'string' ? b['description'].trim() : '';
@@ -169,26 +195,36 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/skills/install -------------------------------------
-  // SEC-05 q80 (d1): inline-upload contract. The route NO LONGER accepts a
-  // client-supplied `packageDir` — a caller-controlled absolute host path
-  // handed straight into installSkillPackage's filesystem walk was the P1 this
-  // fix closes. Instead it consumes inline-uploaded bytes:
-  //   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
-  // Every field is validated at this boundary; a SERVER-derived sourceId (never
-  // from the client) names a private staging dir under
-  // <forgeRoot>/_skill-staging; stageSkillPackage (cli/skill-staging.ts) writes
-  // each entry through the shared realpath containment guard, and the returned
-  // server-trusted staged realpath is what installSkillPackage copies from. The
-  // staging dir is rm'd in a `finally` on BOTH success and failure. Every
-  // stage/install throw is, by contract, a caller-input problem — reported 400,
-  // never 500, never a bare stack trace.
+  return false;
+}
+
+/**
+ * POST /api/studio/skills/install.
+ *
+ * SEC-05 q80 (d1): inline-upload contract. The route NO LONGER accepts a
+ * client-supplied `packageDir` — a caller-controlled absolute host path
+ * handed straight into installSkillPackage's filesystem walk was the P1 this
+ * fix closes. Instead it consumes inline-uploaded bytes:
+ *   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
+ * Every field is validated at this boundary; a SERVER-derived sourceId (never
+ * from the client) names a private staging dir under
+ * <forgeRoot>/_skill-staging; stageSkillPackage (cli/skill-staging.ts) writes
+ * each entry through the shared realpath containment guard, and the returned
+ * server-trusted staged realpath is what installSkillPackage copies from. The
+ * staging dir is rm'd in a `finally` on BOTH success and failure. Every
+ * stage/install throw is, by contract, a caller-input problem — reported 400,
+ * never 500, never a bare stack trace.
+ */
+export async function handleSkillInstall(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
   if (method === 'POST' && url === '/api/studio/skills/install') {
     const sourceId = newSourceId();
     const stagingRoot = resolve(ctx.forgeRoot, '_skill-staging');
     try {
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       if (typeof b !== 'object' || b === null || Array.isArray(b)) {
         sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
@@ -269,8 +305,15 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/skills/:id/approve ---------------------------------
-  const approveMatch = url.match(/^\/api\/studio\/skills\/([^/]+)\/approve$/);
+  return false;
+}
+
+/** POST /api/studio/skills/:id/approve. */
+export async function handleSkillApprove(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const approveMatch = url.match(SKILL_APPROVE_RE);
   if (approveMatch && method === 'POST') {
     try {
       let id: string;
@@ -350,14 +393,24 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- PUT /api/studio/skills/:id — edit / rename (W7-B4, library-05) ------
-  // The edit half of CRUD the create-only surface never had. Edits the THREE
-  // operator-authorable fields of a plain composable skill — display `name`,
-  // `description`, and the SKILL.md body — never the id (the directory) and
-  // never runtime/frontmatter machinery. Editing a community-installed skill
-  // is legitimate; the trust pipeline already answers honestly (the pinned
-  // content hash no longer matches ⇒ needs-review), nothing here launders it.
-  const putMatch = url.match(/^\/api\/studio\/skills\/([^/]+)$/);
+  return false;
+}
+
+/**
+ * PUT /api/studio/skills/:id — edit / rename (W7-B4, library-05).
+ *
+ * The edit half of CRUD the create-only surface never had. Edits the THREE
+ * operator-authorable fields of a plain composable skill — display `name`,
+ * `description`, and the SKILL.md body — never the id (the directory) and
+ * never runtime/frontmatter machinery. Editing a community-installed skill
+ * is legitimate; the trust pipeline already answers honestly (the pinned
+ * content hash no longer matches ⇒ needs-review), nothing here launders it.
+ */
+export async function handleSkillUpdate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const putMatch = url.match(SKILL_ID_RE);
   if (putMatch && method === 'PUT') {
     try {
       let id: string;
@@ -389,7 +442,7 @@ export async function handleStudioSkillsRoutes(
       }
 
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       const name = typeof b['name'] === 'string' ? b['name'].trim() : undefined;
       const description = typeof b['description'] === 'string' ? b['description'].trim() : undefined;
@@ -414,9 +467,20 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- DELETE /api/studio/skills/:id (W7-B4, library-05) -------------------
-  // Refuses (409, naming them) while any agent still composes the skill —
-  // the same real `usedBy` derivation the listing renders, one source.
+  return false;
+}
+
+/**
+ * DELETE /api/studio/skills/:id (W7-B4, library-05).
+ *
+ * Refuses (409, naming them) while any agent still composes the skill —
+ * the same real `usedBy` derivation the listing renders, one source.
+ */
+export async function handleSkillDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const putMatch = url.match(SKILL_ID_RE);
   if (putMatch && method === 'DELETE') {
     try {
       let id: string;
@@ -469,8 +533,15 @@ export async function handleStudioSkillsRoutes(
     return true;
   }
 
-  // ---- GET /api/studio/skills/:id — detail ---------------------------------
-  const detailMatch = url.match(/^\/api\/studio\/skills\/([^/]+)$/);
+  return false;
+}
+
+/** GET /api/studio/skills/:id — detail. */
+export async function handleSkillDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const detailMatch = url.match(SKILL_ID_RE);
   if (detailMatch && method === 'GET') {
     try {
       let id: string;

@@ -35,7 +35,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { startBridge } from '../../cli/ui-bridge.ts';
-import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -528,7 +528,7 @@ test('POST /api/studio/skills: a legitimate new skill still authors successfully
 // handler-invocation pattern): non-matching URL returns false (passthrough).
 // ---------------------------------------------------------------------------
 
-test('handleStudioSkillsRoutes returns false for a non-matching URL (passthrough contract)', async () => {
+test('the library route table declines a non-matching URL (passthrough contract)', async () => {
   const mockRes = {
     writeHead: () => { throw new Error('must not write a response for a non-matching URL'); },
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
@@ -536,7 +536,7 @@ test('handleStudioSkillsRoutes returns false for a non-matching URL (passthrough
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await handleStudioSkillsRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-skills URL must return false');
 });
 
