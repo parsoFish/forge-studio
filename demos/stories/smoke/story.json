@@ -64,5 +64,9 @@
       },
       "frame": "frames/02-click-through-to-the-projects-pillar.png"
     }
-  ]
+  ],
+  "reap": {
+    "reaped": [],
+    "skipped": []
+  }
 }
