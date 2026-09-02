@@ -76,15 +76,14 @@ import {
   KB_SEEDING_ANCHOR_PREFIX,
 } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { deriveKbActiveJob, activeJobReason } from '@forge/knowledge/kb-job-state.ts';
-import { routeTable, dispatchRoute } from '../apps/forge/routes.ts';
+import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
-import { handleStudioSessionsRoutes, isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/sessions/bridge-studio-sessions.ts';
+import { isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/sessions/bridge-studio-sessions.ts';
 import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
-import { handleSessionCancelRoute } from '@forge/sessions/bridge-studio-session-cancel.ts';
 import {
   deriveSessionLifecycleFor, sessionLogDirName, sessionHeartbeatMtimeMs, killTrackedRun,
   type SessionLifecycleState, type SessionLifecycle,
@@ -95,7 +94,6 @@ import {
   // independently-invented staleness rule.
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
-import { handleStudioAgentCapabilityRoute } from '@forge/sessions/bridge-studio-agent-capability.ts';
 // M4 §4 step 2 — instructions, connections and community carved the same way.
 // This file's line COUNT is held constant across the carve on purpose: 18 audited
 // rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
@@ -658,8 +656,16 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     }
   };
 
+  /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */
+  const KIND_LIST_CHANGED = { architect: 'architect-list-changed', instructions: 'instructions-list-changed', demo: 'demo-list-changed', 'project-brain': 'project-brain-list-changed' } as const;
+  const broadcastKindChanged = (kind: string): void => { const t = KIND_LIST_CHANGED[kind as keyof typeof KIND_LIST_CHANGED]; if (t !== undefined) broadcast({ type: t }); };
+  /** T1 ruling 59 — built ONCE here: the session routes' deps are this bridge's own closures. */
+  const routeTable = makeRouteTable({ ensureSessionTail, broadcastKindChanged });
+
   const http = createServer((req, res) => {
     void handleHttp(req, res, {
+      routeTable,
+      broadcastKindChanged,
       identity,
       scanCycles,
       liveness: computeLiveness,
@@ -795,6 +801,10 @@ type HttpContext = {
    *  on the session-kind id (== `SPAWN_AGENT_SPECS[agentId].logPrefix`).
    *  Replaces the four former per-kind `ensure<Kind>Tail` fields. */
   ensureSessionTail: (kind: string, sessionId: string) => void;
+  /** T1 ruling 59 — THIS bridge's route table (its session routes act on this bridge's WS fan-out, so two bridges must not share one). */
+  routeTable: AssembledRouteTable;
+  /** W7-C2 (A12) — the ONE per-kind live-refresh mapping, shared by the tabled cancel route and the affordance write route. */
+  broadcastKindChanged: (kind: string) => void;
   /** W7-B5 (agents-20) — start (idempotently) live-tailing a STANDALONE
    *  agent-dispatch run's event log (`_logs/<runId>/events.jsonl`, runId
    *  minted `_agent-<slug>-<stamp>`) — the third tailable category next to
@@ -2092,7 +2102,7 @@ async function handleHttp(
     }
   }
 
-  if (await dispatchRoute(routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => readJson(req) }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW; `readBody` hands down the RESULT of the host's body policy (CSRF checked just above), never the policy itself (ruling 30)
+  if (await dispatchRoute(ctx.routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => readJson(req) }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW; `readBody` hands down the RESULT of the host's body policy (CSRF checked just above), never the policy itself (ruling 30)
   if (method === 'GET' && url === '/api/health') {
     // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
     // healthy forge bridge from a stale/foreign listener and attach instead of
@@ -2377,7 +2387,7 @@ async function handleHttp(
   // segments vs exactly two), so ordering doesn't affect matching, but this
   // keeps the two GET /api/studio/sessions... routes textually adjacent.
   if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
-  if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
+  // M4 §4 step 2 — GET /api/studio/sessions/:kind/:id carved to packages/sessions/routes.ts.
   // W7-A2 — the generic session CANCEL route. MUST be dispatched BEFORE the
   // affordance write route immediately below: that route's regex matches
   // any `/api/studio/sessions/:kind/:sid/<segment>` and would swallow the
@@ -2388,17 +2398,7 @@ async function handleHttp(
   // `*-list-changed` message in the bridge's WS vocabulary (authoring /
   // kb-cleanup) honestly no-ops here; those surfaces refresh on the
   // session shell's own poll.
-  const broadcastKindChanged = (kind: string): void => {
-    if (kind === 'architect') ctx.broadcastArchitectChanged();
-    else if (kind === 'instructions') ctx.broadcastInstructionsChanged();
-    else if (kind === 'demo') ctx.broadcastDemoChanged();
-    else if (kind === 'project-brain') ctx.broadcastProjectBrainChanged();
-  };
-  if (await handleSessionCancelRoute(req, res, {
-    forgeRoot: ctx.forgeRoot,
-    logsRoot: ctx.logsRoot,
-    broadcastKindChanged,
-  }, url, method)) return;
+  // M4 §4 step 2 — POST …/:id/cancel carved to packages/sessions/routes.ts (its entry precedes any three-segment matcher for this family).
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
   // module's own function) rather than imported by bridge-studio-affordances.ts
@@ -2408,17 +2408,15 @@ async function handleHttp(
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
     spawnAgentTurn,
-    // W7-C2 T1 review (A12) — the SAME per-kind mapping the cancel route
-    // above is injected with, so there is exactly one place that knows which
-    // kinds have a list-changed WS event.
-    broadcastKindChanged,
+    // W7-C2 (A12) — the SAME per-kind mapping the tabled cancel route gets.
+    broadcastKindChanged: ctx.broadcastKindChanged,
   }, url, method)) return;
   // M4 §4 step 2 — carved to packages/library/routes.ts; the table dispatch above already claimed this route.
   // W6-B6 fix — the per-slug capability route, resolved against the
   // UNFILTERED agent defs (bypasses the library:false roster gate
   // /api/studio/agents applies). Adjacent to the instructions-draft route:
   // same /api/studio/agents/:slug/... URL family, same guarded-path posture.
-  if (await handleStudioAgentCapabilityRoute(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // M4 §4 step 2 — carved to packages/sessions/routes.ts.
   // M4 §4 step 2 — connections (4 routes) and community (5) dispatched here, last
   // of the seven. Both are in `packages/library/routes.ts` now.
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
