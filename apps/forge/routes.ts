@@ -21,6 +21,7 @@
  */
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
+import { libraryRoutes } from '@forge/library/routes.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
 // these nine dependencies STRUCTURALLY rather than importing their real
@@ -64,6 +65,7 @@ export { dispatchRoute } from '@forge/kernel';
  */
 export const routeTable: RouteTable<RouteContext> = [
   ...knowledgeRoutes,
+  ...libraryRoutes,
   ...projectsRoutes({
     seedBrain: seedProjectBrain,
     checkBrainSeedContainment: checkProjectBrainSeedContainment,
