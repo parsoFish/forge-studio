@@ -9,11 +9,14 @@
  * Wire-level rule (path-shaped param — mirrors the R4-16 precedent in
  * cli/bridge-studio-sessions.test.ts's own header): a real `fetch()` client
  * normalizes a LITERAL `..` path segment away before the request ever leaves
- * the client, so that shape can only be exercised by calling
- * `handleStudioRoutes` DIRECTLY with a hand-built `rawUrl` string (AT-3). A
- * PERCENT-ENCODED traversal (`%2e%2e%2f`) is NOT normalized client-side and
- * genuinely reaches the server over a real `fetch()` call (AT-2) — both
- * shapes are tested, on the path that actually exercises them.
+ * the client, so that shape can only be exercised by handing the raw url
+ * straight to the dispatcher — which is what AT-3 did. The M4 routes carve
+ * moved this route out of `handleStudioRoutes` into the projects route
+ * table, so AT-3 moved with it (pointer below); every test remaining in this
+ * file drives the live bridge over real HTTP. A PERCENT-ENCODED traversal
+ * (`%2e%2e%2f`) is NOT normalized client-side and genuinely reaches the
+ * server over a real `fetch()` call (AT-2) — both shapes are still tested,
+ * each on the path that actually exercises it.
  */
 
 import { test, before, after } from 'node:test';
@@ -23,8 +26,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { handleStudioRoutes } from './bridge-studio.ts';
-import type { StudioRunsContext } from './bridge-studio.ts';
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '@forge/projects/contract-stages.ts';
 
 let forgeRoot: string;
