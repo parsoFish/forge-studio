@@ -15,10 +15,8 @@ import { join } from 'node:path';
 import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile } from './kb-graph.ts';
 
 // Resolve forge root relative to this test file's location
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const FORGE_ROOT = resolve(__dirname, '..', '..');
+// Depth-INDEPENDENT — see the note in kb-backend.test.ts.
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 // ---------------------------------------------------------------------------
 // buildKbGraph — cycles kb (Brain 2: themes + _raw)

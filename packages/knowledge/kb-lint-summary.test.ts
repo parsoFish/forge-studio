@@ -38,9 +38,8 @@ import {
   statSync,
   existsSync,
 } from 'node:fs';
-import { join, relative, dirname } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 
 import { startBridge } from '../../cli/ui-bridge.ts';
 import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
@@ -50,7 +49,8 @@ import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
 import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from './kb-lint-summary.ts';
 import type { KbLintSummary } from './kb-lint-summary.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// Depth-INDEPENDENT — see the note in kb-backend.test.ts.
+import { FORGE_ROOT as ROOT } from '@forge/kernel/ids.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

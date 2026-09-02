@@ -506,9 +506,9 @@ test('checkCategoryScope: reference theme in forge-dev/themes/ (correctly routed
 test('checkCategoryScope: real brain has 0 scope-guard errors', async () => {
   // This test asserts the real brain is clean under the scope-guard rule.
   // If it fails, that is a genuine brain data inconsistency (not a test bug).
-  const { resolve: nodeResolve } = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const dir = nodeResolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  // Depth-INDEPENDENT: a hand-counted chain would resolve short after a move,
+  // find no `brain/`, return [], and pass VACUOUSLY (see this commit's message).
+  const { FORGE_ROOT: dir } = await import('@forge/kernel/ids.ts');
   const findings = checkCategoryScope(dir);
   const errors = findings.filter((f) => f.category === 'error');
   assert.equal(
