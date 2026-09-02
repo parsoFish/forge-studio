@@ -28,7 +28,7 @@ related_themes:
 
 # Cost restatement — sum the restatements and you triple-count
 
-Agent SDK turns report **cumulative** cost: a turn emits its per-turn dollars on an `iteration` event, then later events **restate the same dollars**. `orchestrator/event-cost.ts` says so in its own header — "every other row restates dollars already counted". A totaller that naively sums every cost-bearing row therefore reports a multiple of the truth.
+Agent SDK turns report **cumulative** cost: a turn emits its per-turn dollars on an `iteration` event, then later events **restate the same dollars**. `packages/kernel/event-cost.ts` says so in its own header — "every other row restates dollars already counted". A totaller that naively sums every cost-bearing row therefore reports a multiple of the truth.
 
 Measured: the betterado docs run (`_logs/2026-08-18T12-42-15_INIT-2026-08-14-betterado-gap-registry/`) reported **$80.83** against a real **$30.19** — a 2.7× over-report. An over-report is not a harmless conservatism: it trips the cost ceiling and parks a cycle that was well inside budget, which is how a run that should have merged instead stopped at "$80 / $52".
 
@@ -43,7 +43,7 @@ The naive summation is *locally* reasonable at every call site — that is exact
 
 ## Sources
 
-- `orchestrator/event-cost.ts` — the restatement rule, stated in the module header (lines 6, 15).
+- `packages/kernel/event-cost.ts` — the restatement rule, stated in the module header (lines 6, 15).
 - Bead `forge-6gv.16` — "Cost ceiling is enforced only at phase boundaries — one dev-loop phase overshot it by 55%".
 - `_logs/2026-08-18T12-42-15_INIT-2026-08-14-betterado-gap-registry/events.jsonl` — the run whose $30.19 was reported as $80.83.
 - `docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md` §5.7 — "`CostTracker` adopts the `event-cost.ts` restatement rule and checks per WI".

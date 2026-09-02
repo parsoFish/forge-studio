@@ -26,8 +26,8 @@ iteration included ~15 Bash calls probing how to invoke `forge demo render`:
 1. `forge demo render <init-id>` — succeeded but produced no DEMO.md in the
    expected path.
 2. `which forge`, `forge --version` — PATH/version checks.
-3. Probing `orchestrator/studio/`, `orchestrator/demo/`, `orchestrator/cli.ts`,
-   `orchestrator/brain-paths.ts`, `bin/forge.mjs` for render logic.
+3. Probing `orchestrator/studio/`, `orchestrator/demo/`, `apps/forge/cli.ts`,
+   `packages/knowledge/brain-paths.ts`, `bin/forge.mjs` for render logic.
 4. `forge demo render <init-id> --dir <path>` — tried with explicit `--dir`.
 5. Eventually fell back to `cp demo/pulse-capture.md forge/history/.../DEMO.md`.
 

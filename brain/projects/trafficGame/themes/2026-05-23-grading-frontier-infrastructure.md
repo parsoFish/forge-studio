@@ -38,7 +38,7 @@ The infrastructure is three pieces. This page records the first — the
 measurement library. The locks, the screenshot index and the loop they enable
 are in [[2026-05-23-grading-frontier-baselines-and-screenshots]].
 
-## 1. `scripts/grading/runSweep.mjs` — the reusable parallel library
+## 1. `projects/trafficGame/scripts/grading/runSweep.mjs` — the reusable parallel library
 
 A new map-design theory is **~30 lines**:
 
@@ -77,7 +77,7 @@ workers) takes **~10 s wall-clock**.
 
 ## Sources
 
-- [`scripts/grading/runSweep.mjs`](../../../../projects/trafficGame/scripts/grading/runSweep.mjs) — the library.
+- [`projects/trafficGame/scripts/grading/runSweep.mjs`](../../../../projects/trafficGame/scripts/grading/runSweep.mjs) — the library.
 - [`scripts/grading/README.md`](../../../../projects/trafficGame/scripts/grading/README.md) — the "add a theory" guide.
 - Commit `146cf5c` "feat(grading): parametric sweep harness + locked design-frontier baselines" on trafficGame `main`.
 

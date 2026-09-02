@@ -25,7 +25,7 @@ related_themes:
 
 Forge writes one JSONL event log per cycle to `_logs/<cycle-id>/events.jsonl`. Every skill invocation, every Ralph iteration, every cost event, every error gets a line. Schema fields include `event_id` (ULID), `cycle_id`, `initiative_id`, `parent_event_id`, `phase`, `skill`, `iteration`, `event_type` (start/end/log/error/cost/tool_use), `input_refs` (file paths, *not* contents), `output_refs`, `cost_usd`, `tokens_in/out`, `duration_ms`, `started_at`, `finished_at`.
 
-Only file *references* are logged, never file contents — log stays small; reflection re-reads artifacts. `orchestrator/logging.ts` is the single writer (append-only, line-buffered). Readers: `metrics.ts` (aggregations), `visualise.ts` (live tail), the reflector skill (retro generation).
+Only file *references* are logged, never file contents — log stays small; reflection re-reads artifacts. `packages/kernel/logging.ts` is the single writer (append-only, line-buffered). Readers: `metrics.ts` (aggregations), `visualise.ts` (live tail), the reflector skill (retro generation).
 
 Trade-off: log size grows with cycle complexity. Mitigated by refs-not-contents and archival of old cycles to `brain/_raw/cycles/`. Writer must be reliable — simple append-only semantics with no batching.
 

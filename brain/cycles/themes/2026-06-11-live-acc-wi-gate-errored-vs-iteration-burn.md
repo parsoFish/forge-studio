@@ -14,7 +14,7 @@ Run 2 of `INIT-2026-06-08-release-definition-artifact-trigger-enhancements` (202
 
 - PM re-decomposed to 1 WI with gate: `go test -tags all -run TestAccReleaseDefinition_triggerEnhancements -count=1 ./azuredevops/internal/acceptancetests/`
 - `TF_ACC` not set. Gate requires live ADO.
-- The `requires_env` guard (in `orchestrator/phases/developer-loop.ts`, commit `94beb85`) reads `project.json`'s `acceptance_gate.match: "acceptancetests"`. The gate command path contains `acceptancetests` — guard should have fired gate.errored at iteration 0.
+- The `requires_env` guard (in `packages/factory/phases/developer-loop.ts`, commit `94beb85`) reads `project.json`'s `acceptance_gate.match: "acceptancetests"`. The gate command path contains `acceptancetests` — guard should have fired gate.errored at iteration 0.
 - Guard did NOT fire. Ralph ran 5 full iterations, each ending `gate.fail` exit code 1.
 - `ralph.end`: status=failed, stop_reason=iteration-budget, cost_usd=1.67104585.
 - Total waste: $1.67 vs $0.00 if gate.errored had fired at iter-0.
