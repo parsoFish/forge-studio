@@ -37,7 +37,7 @@ operator-ratified new cap — never a silent raise.
 |---|---|---|---|---|
 | `contracts` | 2 | 750 | **1,000** | the spec targets ~0.3k. The single quarried file is 738 lines and must be pruned to types + constants; the cap is the ceiling it must come under, not a licence to stay at 738. |
 | `kernel` | 13 | 3,803 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
-| `library` | 33 | 12,070 | **12,500** | seeded from the quarried total, rounded up to the next 500. |
+| `library` | 33 | 12,070 | **14,500** | **Re-seeded 12,500 → 13,500 → 14,500 (M4-library, two operator rulings).** Ledger 2026-09-02: "library cap RATIFIED at 13,500" (measured projection 13,104; six object kinds against one; equals `sessions`' peer cap), then ledger 2026-09-02: "library cap RATIFIED at 14,500". The second raise was asked for with the by-kind carve re-derived SYMBOL BY SYMBOL rather than from the plan's stale ranges — 1,021 lines in (registry 521 + validate 217 + studio-lint 168 + 15 shared-helper + ~100 headers), floor 754, ceiling 1,071, against a measured base of 12,964. The lane recommended 14,500 over the next-500 rule's 14,000 because 14,000 sat BELOW its own measured ceiling of 14,035, and ratifying a number your own upper bound already exceeds is how the same park fires twice mid-PR. Base 12,964 is `check-owner`'s `productionFiles()` filter; the exit-row command reads 20 lines higher because it counts `package.json` and `tsconfig.json`. **Cap cell only** — the per-package columns are still hand-seeded and bead `forge-8vfn.5.18` owns their recomputation. |
 | `knowledge` | 26 | 11,157 | **12,000** | seeded from the quarried total, rounded up to the next 500; **re-seeded 11,500 → 12,000 (M4, operator ruling: "knowledge cap RATIFIED at 12,000").** The cap was seeded before the 800-line per-file cap forced the package's three largest files apart (`brain-lint.ts` 1,744 → six, `bridge-studio-kbs.ts` 2,068 → five, `bridge-studio-kb-drain.ts` 1,456 → three); a split adds module headers, import blocks and re-exported signatures without adding behaviour, so the two caps are in tension by construction. The named cause of the breach that forced the ruling is the ruling-31 public-door `index.ts` (+62). This row's own rule applied to the measured total (11,538 on main at `c323dc04`) rounds up to 12,000. |
 | `projects` | 22 | 7,820 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
@@ -187,8 +187,9 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-readability.ts | sessions | verbatim | 207 |
 | packages/library/skill-path.ts | library | verbatim | 91 |
 | packages/library/skill-staging.ts | library | verbatim | 136 |
+| packages/library/studio-lint-library-passes.ts | library | verbatim | 239 |
 | packages/library/studio-lint-tool-fence.ts | library | verbatim | 149 |
-| cli/studio-lint.ts | kernel | rewritten | 805 |
+| cli/studio-lint.ts | kernel | rewritten | 662 |
 | cli/studio-provenance.ts | kernel | rewritten | 54 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | cli/ui-bridge.ts | apps/forge | rewritten | 6602 |
@@ -303,9 +304,12 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler.ts | flows | verbatim | 1031 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 74 |
+| packages/library/studio/artifact-registry.ts | library | verbatim | 149 |
+| packages/library/studio/catalog-registry.ts | library | verbatim | 90 |
 | packages/library/studio/community-index.ts | library | verbatim | 693 |
 | packages/library/studio/community-install.ts | library | verbatim | 208 |
 | packages/library/studio/community-refresh-api.ts | library | verbatim | 588 |
+| packages/library/studio/community-registry.ts | library | verbatim | 321 |
 | packages/library/studio/community-source-url.ts | library | verbatim | 164 |
 | packages/library/studio/connection-catalog.ts | library | verbatim | 163 |
 | packages/library/studio/connection-install.ts | library | verbatim | 101 |
@@ -322,20 +326,22 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/hook-approval-ledger.ts | library | verbatim | 355 |
 | packages/library/studio/hook-scan.ts | library | verbatim | 480 |
 | packages/library/studio/instructions-draft.ts | library | verbatim | 185 |
+| packages/library/studio/library-validate.ts | library | verbatim | 259 |
 | packages/knowledge/studio/kb-descriptor.ts | knowledge | verbatim | 210 |
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
-| orchestrator/studio/registry.ts | kernel | rewritten | 1180 |
+| orchestrator/studio/registry.ts | kernel | rewritten | 588 |
 | packages/sessions/studio/session-kinds.ts | sessions | verbatim | 1389 |
 | packages/sessions/studio/session-transcript.ts | sessions | verbatim | 1359 |
 | packages/library/studio/skill-install-ledger.ts | library | verbatim | 166 |
 | packages/library/studio/skill-install.ts | library | verbatim | 324 |
 | packages/library/studio/skill-package.ts | library | verbatim | 183 |
+| packages/library/studio/skill-registry.ts | library | verbatim | 43 |
 | packages/library/studio/skill-trust.ts | library | verbatim | 461 |
 | packages/agents/studio/skill-md-fidelity.ts | agents | verbatim | 224 |
 | packages/library/studio/template-library.ts | library | verbatim | 610 |
 | packages/contracts/studio/types.ts | contracts | verbatim | 738 |
 | packages/flows/studio/validate-triggers.ts | flows | verbatim | 431 |
-| orchestrator/studio/validate.ts | kernel | rewritten | 1066 |
+| orchestrator/studio/validate.ts | kernel | rewritten | 868 |
 | packages/library/studio/yaml-comments.ts | library | verbatim | 132 |
 | packages/kernel/studio/yaml-fields.ts | kernel | verbatim | 105 |
 | packages/agents/tool-event-emit.ts | agents | verbatim | 244 |
@@ -393,6 +399,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/route-entry.ts | kernel | verbatim | 114 |
 | packages/kernel/http-envelope.ts | kernel | verbatim | 72 |
 | packages/kernel/project-contract.ts | kernel | verbatim | 37 |
+| packages/kernel/findings.ts | kernel | verbatim | 37 |
 | packages/kernel/project-layout.ts | kernel | verbatim | 125 |
 | packages/knowledge/index.ts | knowledge | verbatim | 11 |
 | packages/library/index.ts | library | verbatim | 8 |

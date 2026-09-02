@@ -52,7 +52,7 @@ import { basename, join } from 'node:path';
 import matter from 'gray-matter';
 
 import { listSkillDirs, listSkillMdDirs } from './skill-path.ts';
-import type { Finding } from '../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 
 // forge-6gv.19 (W8-B4) — exported so `apps/studio/lib/tool-fence-required-
 // names.ts` (the Agent Builder's from-blank compose, `BLANK_STATE`) and

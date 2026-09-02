@@ -12,6 +12,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import type { AgentDefinition } from './types.ts';
+// `loadCatalog` (Catalog kind) moved to `@forge/library/studio/catalog-registry.ts`
+// (M4 library-by-kind carve, PR 3 / Part 2) and is re-exported from
+// `registry.ts` for this importer specifically: `contracts` is rank 0, the
+// lowest, and may not import `library` (rank 2) even indirectly — repointing
+// this one line would trade the file's existing `package-to-legacy` debt
+// (already baselined against `registry.ts`) for a NEW `package-layer-order`
+// violation, which the carve must not introduce.
 import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from '../../../orchestrator/studio/registry.ts';
 import { validateAgent, validateFlow } from '../../../orchestrator/studio/validate.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';

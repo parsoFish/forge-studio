@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 
 import { communityRefreshRemedy, runCommunityRefresh, type CommunityRefreshRunReason } from './community-refresh-run.ts';
 import { cmdCommunity } from './community-refresh-cmd.ts';
-import { loadCommunityRegistry } from '../../orchestrator/studio/registry.ts';
+import { loadCommunityRegistry } from './studio/community-registry.ts';
 import type { FetchLike } from './studio/community-refresh-api.ts';
 
 // ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { seedThroughlineSkillFixture, SK_NEW_SLUG, SK_NEW_NAME, SK_NEW_DESC } from './lib/journey-fixtures.mjs';
-import { listPlainSkills } from '../orchestrator/studio/registry.ts';
+import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'w7-bfix-ui-'));

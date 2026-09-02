@@ -75,11 +75,7 @@ import {
   type CommunityRefreshOutcome,
   type FetchLike,
 } from './studio/community-refresh-api.ts';
-import {
-  communityRegistryPath,
-  loadCommunityRegistry,
-  serializeCommunityRegistry,
-} from '../../orchestrator/studio/registry.ts';
+import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from './studio/community-registry.ts';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';

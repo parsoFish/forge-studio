@@ -20,6 +20,13 @@ import { test } from 'node:test';
 import { checkDemo } from '../../preflight.ts';
 import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/demo-builder-runner.ts';
 import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
+// `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
+// library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
+// for this importer specifically: `projects` (rank 2) may not import
+// `library` (rank 2, a same-rank sibling) — repointing this line would trade
+// the file's existing `package-to-legacy` debt (already baselined against
+// `registry.ts`) for a NEW `package-layer-order` violation not covered by the
+// carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
 import { listDemoElements } from '../../../../orchestrator/studio/registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
