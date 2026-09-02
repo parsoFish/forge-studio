@@ -4,7 +4,8 @@
  *
  * These three tables moved here from `cli/bridge-studio.ts` (M4 sessions lane).
  * They were put in the host originally to break an import cycle: the generic
- * session route lived in `cli/bridge-studio-sessions.ts`, `cli/ui-bridge.ts`
+ * session route lived in the host's own `cli/` tree (it is
+ * `packages/sessions/bridge-studio-sessions.ts` today), `cli/ui-bridge.ts`
  * imported its handler, and a shared constant in either would have closed the
  * loop — so a third, dependency-free host module held it. That reason expired
  * when the route moved into this package: a package never imports the host, so
