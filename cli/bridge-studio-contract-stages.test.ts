@@ -9,11 +9,14 @@
  * Wire-level rule (path-shaped param — mirrors the R4-16 precedent in
  * cli/bridge-studio-sessions.test.ts's own header): a real `fetch()` client
  * normalizes a LITERAL `..` path segment away before the request ever leaves
- * the client, so that shape can only be exercised by calling
- * `handleStudioRoutes` DIRECTLY with a hand-built `rawUrl` string (AT-3). A
- * PERCENT-ENCODED traversal (`%2e%2e%2f`) is NOT normalized client-side and
- * genuinely reaches the server over a real `fetch()` call (AT-2) — both
- * shapes are tested, on the path that actually exercises them.
+ * the client, so that shape can only be exercised by handing the raw url
+ * straight to the dispatcher — which is what AT-3 did. The M4 routes carve
+ * moved this route out of `handleStudioRoutes` into the projects route
+ * table, so AT-3 moved with it (pointer below); every test remaining in this
+ * file drives the live bridge over real HTTP. A PERCENT-ENCODED traversal
+ * (`%2e%2e%2f`) is NOT normalized client-side and genuinely reaches the
+ * server over a real `fetch()` call (AT-2) — both shapes are still tested,
+ * each on the path that actually exercises it.
  */
 
 import { test, before, after } from 'node:test';
@@ -23,8 +26,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { handleStudioRoutes } from './bridge-studio.ts';
-import type { StudioRunsContext } from './bridge-studio.ts';
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '@forge/projects/contract-stages.ts';
 
 let forgeRoot: string;
@@ -68,42 +69,14 @@ test('R4-17 AT-2 (real client path — percent-encoded traversal survives client
   assert.equal(res.status, 400, 'a percent-encoded traversal must be rejected by the server-side slug check, not silently 404 as "not found" (which would be indistinguishable from an unvalidated pass-through)');
 });
 
-test('R4-17 AT-3 (RAW-request, wire-level rule): a LITERAL ".." path segment — which a real fetch() client normalizes away before the request is ever sent — is rejected by the SERVER-SIDE guard when driven directly, proving the guard does not rely on client-side normalization', async () => {
-  // Explicit inline type annotation (not the previous `as unknown as
-  // ServerResponse` cast on the object literal itself) so `this` inside
-  // `writeHead`'s shorthand method is typed against THIS declared shape,
-  // never inferred as `{}` — TS6133/TS2339 fix, mechanical only, no
-  // assertion changed.
-  type MockServerResponse = {
-    statusCode: number;
-    headers: Record<string, string>;
-    writeHead(code: number): MockServerResponse;
-    end(): void;
-    setHeader(): void;
-  };
-  const mockRes: MockServerResponse = {
-    statusCode: 0,
-    headers: {},
-    writeHead(code: number) { this.statusCode = code; return this; },
-    end() { /* no-op — we only inspect statusCode */ },
-    setHeader() { /* no-op */ },
-  };
-  const mockReq = { headers: {} } as import('node:http').IncomingMessage;
-  // W8-F6 (bead forge-6gv.27) — `handleStudioRoutes` now REQUIRES an injected
-  // session-readability probe (it gates the runs routes' `architectSessionId`).
-  // AT-3 never reaches a runs payload, so the probe THROWS rather than
-  // answering: a future change that starts consulting it here fails loudly
-  // instead of silently taking a stub's permissive answer.
-  const ctx: StudioRunsContext = {
-    forgeRoot,
-    logsRoot: join(forgeRoot, '_logs'),
-    sessionIsReadable: () => { throw new Error('sessionIsReadable must not be consulted by this route'); },
-  };
-
-  const handled = await handleStudioRoutes(mockReq, mockRes as unknown as import('node:http').ServerResponse, ctx, '/api/studio/projects/../contract-stages', 'GET');
-  assert.equal(handled, true, 'the route must claim this URL (matching [^/]+ literally on the raw ".." segment) rather than falling through unmatched');
-  assert.equal(mockRes.statusCode, 400, 'the raw ".." segment must be rejected by the slug check — never treated as a real project id');
-});
+// R4-17 AT-3 MOVED, not deleted (M4 projects routes carve): it drove
+// `handleStudioRoutes` directly, and the contract-stages route has left that
+// if-chain for `packages/projects/routes.ts`. Its assertion — a LITERAL ".."
+// segment must be CLAIMED by the route and rejected 400 by the server-side
+// slug check, never left unmatched to 404 with the guard never running — now
+// lives in `packages/projects/tests/contract/routes-table.test.ts`, as two
+// cases against the table entry and its handler. The remaining ATs in this
+// file drive the live bridge over HTTP and are unaffected by the carve.
 
 test('R4-17 AT-4: GET /api/studio/projects/<id>/contract-stages — unknown project (valid slug, no such directory) → 404', async () => {
   const res = await fetch(`${url}/api/studio/projects/no-such-project-xyz/contract-stages`);

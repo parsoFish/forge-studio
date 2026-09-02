@@ -85,7 +85,7 @@
   "packages/sessions/studio/session-kinds.ts": 1389,
   "packages/sessions/studio/session-transcript.test.ts": 2400,
   "packages/sessions/studio/session-transcript.ts": 1359,
-  "scripts/check-raw-fs-guarded.mjs": 1786,
+  "scripts/check-raw-fs-guarded.mjs": 1790,
   "scripts/check-raw-fs-guarded.test.ts": 1036,
   "scripts/journeys/agents.mjs": 2252,
   "scripts/journeys/community.mjs": 1591,

@@ -120,7 +120,7 @@ const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 // harmless (zero candidates) or visibly red (unclassified candidates) — never
 // silent. The containment test below pins the currently-known dispatch files
 // as a floor so an accidental narrowing of this filter also goes red.
-const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/sessions'];
+const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/projects', 'packages/sessions'];
 
 function discoverDispatchFiles(): readonly string[] {
   const out: string[] = [];
@@ -161,6 +161,11 @@ const KNOWN_DISPATCH_FILES = [
   // discovered fail LOUDLY instead of shrinking the scan in silence. A floor
   // entry only ever strengthens this guard.
   'packages/library/routes.ts',
+  // …and projects'. Note the SCAN DIRS above gained `packages/projects` in the
+  // same PR: this list is a floor, not a scope, and the scope had never
+  // included this package at all — the guard could not see a projects table
+  // however loudly this list named one.
+  'packages/projects/routes.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
