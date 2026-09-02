@@ -4017,12 +4017,31 @@ is what this contract reads — but it cannot be the only distinguisher.
     effect-gated `currentId` never resolve under `renderToStaticMarkup` —
     also used by `lib/knowledge-page-fail-closed-wiring.test.ts` and
     W7-B2's `lib/knowledge-page-node-resolve-wiring.test.ts`).
+  - **Seeding-session banner (W7-B2 knowledge-23; `data-seed-session-id`
+    added M4, bead `forge-8vfn.5.10`).** After `POST /api/studio/kbs` the
+    create form navigates to
+    `/knowledge?id=<kb>&seedSession=<sid>&seedProject=.kb-<kb>`, and the page
+    renders `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`
+    wrapping `a[data-action="open-seed-session"]`
+    (`href="/sessions/project-brain/<sid>?project=<seedProject>"`). The banner
+    and the link have been there since W7-B2; what did NOT exist was the id as
+    a `data-*` VALUE — it lived only inside the href and the query string, so
+    no beat could bind `<seedSessionId>`, and a runner that resolves a route
+    before performing any `do` step could never arrive at the session. Same
+    shape M1-G closed for the architect (`data-architect-session-id` beside
+    `[data-action="view-architect-session"]`); the KB hand-off was one of the
+    six sites that kept the old shape. Rendered only when `seedSession` is
+    present in the query. Harness coverage: `tests/stories/S6.story.mjs`
+    beats 4-7.
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
     see, and the OS-native "no options" affordance is not a discoverable
-    creation path. Now: `data-kb-select-empty="true"|"false"` on the
-    `<select>` itself, and when empty, a disabled placeholder
+    creation path. Now: `data-field="kb-select"` +
+    `data-kb-select-empty="true"|"false"` on the `<select>` itself (the
+    `data-field` added at M4, bead `forge-8vfn.5.14` — `#kb-select` is a CSS
+    id, not a declared handle, so the operator could not say which knowledge
+    base they were working on), and when empty, a disabled placeholder
     (`[data-kb-select-placeholder="true"]`, "No knowledge bases yet") PLUS a
     real, selectable `[data-action="new-kb-select-option"]` `<option>`
     ("+ New knowledge base") that navigates to `/knowledge/new` via a
@@ -4030,8 +4049,21 @@ is what this contract reads — but it cannot be the only distinguisher.
     Render-tested: `components/studio/knowledge/KbSelector.test.ts`.
   - **Tabs (R6-08 WI-3, RULING 5 — URL-synced via `?tab=`):**
     `[data-tab="explore"|"health"|"ingest-activity"][data-tab-active="true"|"false"]`,
-    one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
-    like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
+    one button per tab, and on the FIRST TWO also
+    `[data-action="open-kb-tab-explore"|"open-kb-tab-health"]`; clicking pushes
+    `?tab=<id>` into the URL, deep-linkable like `?id=`/`?node=`/`?theme=`. The
+    `data-action` half landed at M4 (bead `forge-8vfn.5.14`): `data-tab` is
+    STATE (which tab is which) and a beat presses a CONTROL, so until a
+    `data-action` existed everything behind Health — the whole KB action group,
+    the drain panel, KB health — had no door an automated beat could open.
+    **The Ingest Activity tab deliberately has NO `data-action`.**
+    `scripts/check-kb-ingest-affordance.mjs` rule 1 forbids any forge-ui
+    `data-action` whose value names ingest, case-insensitively (operator
+    decision 3, "ingest stays reflection-only"). That is a VOCABULARY ban, not
+    a behaviour test, and it is right to be: this panel is read-only and starts
+    nothing, but the guard cannot know that and a name chosen to slip past it
+    would be gaming it. Naming that tab needs the guard amended first, so it
+    stays unnameable and no story beat can reach it today. **Explore** (default — `?tab=` absent) is
     the pre-existing graph + reader body, re-anchored under this branch
     unchanged; **Health** hosts (in order, W7-B2) `KbActionGroup` (the ONE
     action group — see "KB action group" below) + `KbDrainPanel` (now a pure
@@ -4041,9 +4073,9 @@ is what this contract reads — but it cannot be the only distinguisher.
     unconditionally; W6-B13 replaced `LintResolutionPanel` with
     `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
-    below). Harness coverage: none today — the `knowledge-explore-tabs`
-    beat was retired at M4 and no S6 beat can name these tabs until bead
-    `forge-8vfn.5.14` gives them a `data-action`.
+    below). Harness coverage: the `knowledge-explore-tabs` journey beat was
+    retired at M4; `tests/stories/S6.story.mjs` beat 13 reaches the Health tab
+    through `[data-action="open-kb-tab-health"]`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]
     [data-fetch-status][data-health-ready]` — `data-health-ready="true"` is
     present iff the selected KB's `health` payload has actually arrived
