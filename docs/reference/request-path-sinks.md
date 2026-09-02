@@ -1761,6 +1761,39 @@ carve needed one PR earlier), which restores 92, and all 24 re-keyed allowlist
 rows were paired to findings by sink kind and order from a real
 `node scripts/check-raw-fs-guarded.mjs --json` run — never by arithmetic.
 
+### Relocated in M4-knowledge s5 — `listCycles` moves DOWN to kernel (two sink pairs, no new surface)
+
+`listCycles` lived in `packages/flows/metrics.ts` (rank 5) while
+`packages/knowledge` (rank 2) needed it to walk `_logs/<cycleId>/events.jsonl`
+for `GET /:id/ingest-activity` — an upward import the allow-graph forbids. Ruling
+57: the symbol moves down to `@forge/kernel` (`log-cycles.ts`) and `metrics.ts`
+re-exports it, so no caller changes.
+
+| sink | was | now |
+|---|---|---|
+| `existsSync` | `packages/flows/metrics.ts` 1 | `packages/kernel/log-cycles.ts` 1 |
+| `readdirSync` | `packages/flows/metrics.ts` 1 | `packages/kernel/log-cycles.ts` 1 |
+
+**Measured, not asserted:** `check-request-path-sinks` reported the two source
+pairs `1 -> 0` as *tightenable* and the two destination pairs `0 -> 1` as new, in
+the same run — a 1:1 relocation with the totals unchanged. `--write` was run only
+after that pairing was read, and its diff checked to touch these four rows and
+nothing else (a previous carve in this campaign swept a third lane's rows into
+its own `--write`).
+
+**The classification is unchanged, and it was already written down.** The
+"`findKbDrainRuns`" bullet above files `listCycles` under *server-enumerated
+names, holding no client string*: its argument is a `logsRoot` (a `TRUSTED_ROOTS`
+name, config-derived), it returns directory names the server enumerated, and
+knowledge's caller feeds each one back as its OWN guarded segment
+(`guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl'])`) rather than folding
+it into a root. Moving the function between packages changes none of that — the
+same reasoning now lives one rank lower, where more callers can reach it without
+importing upward.
+
+`isSafeRunId` moved in the same commit and is NOT in this table: it is a charset
+predicate with no fs sink at all.
+
 ### M4-projects — "Rebuild contract" becomes bridge-reachable (`packages/projects/reset.ts`, four sink pairs, all guard-terminal, no new mechanism)
 
 S3 (1.0.md §3): `packages/projects/routes.ts` gained two new rows, `POST

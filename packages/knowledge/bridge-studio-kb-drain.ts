@@ -98,7 +98,7 @@ import {
   noKbEdits,
   type KbEditGateResult,
 } from './kb-drain-edit-soundness.ts';
-import { isDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge } from '@forge/kernel';
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_HEARTBEAT_MS,
