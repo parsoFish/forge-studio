@@ -389,6 +389,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/route-entry.ts | kernel | verbatim | 114 |
 | packages/kernel/http-envelope.ts | kernel | verbatim | 72 |
 | packages/kernel/project-contract.ts | kernel | verbatim | 37 |
+| packages/kernel/project-layout.ts | kernel | verbatim | 125 |
 | packages/knowledge/index.ts | knowledge | verbatim | 11 |
 | packages/library/index.ts | library | verbatim | 8 |
 | packages/projects/index.ts | projects | verbatim | 11 |

@@ -51,7 +51,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '../../contract-stages.ts';
-import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { projectBrainDir } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 const REPO_ROOT = FORGE_ROOT;

@@ -1,19 +1,18 @@
 /**
- * forge↔project contract preflight — the repo-hygiene clauses that need no
- * cross-package brain-paths dependency: C2 (scratch hygiene, HARD) and C6 (a
- * satisfiable merge model, ADVISORY). Split out of `preflight.ts` (the
- * barrel) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
+ * forge↔project contract preflight — the repo-hygiene clauses C2 (scratch
+ * hygiene, HARD) and C6 (a satisfiable merge model, ADVISORY). Split out of
+ * `preflight.ts` (the barrel) when that file grew past the 800-line baseline
+ * cap; see `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
  *
  * C4 (machine-consumable architecture context) and BRAIN (brain freshness)
- * are the plan's other two "repo" clauses, but both import
- * `@forge/knowledge/brain-paths.ts` — the ONE already-baselined cross-package
- * edge `preflight.ts` carries (`scripts/baselines/boundaries.json`,
- * `package-layer-order|packages/projects/preflight.ts|packages/knowledge/brain-paths.ts`).
- * Moving them here would swap that single row for a same-count rename, but
- * this worker was told not to touch `scripts/baselines/` — so C4 and BRAIN
- * stay in the barrel (`preflight.ts`) instead, where that edge already lives
- * unchanged. See this split's PR/report for the full reasoning.
+ * are the plan's other two "repo" clauses and stay in the barrel. At the
+ * split they were held there by a boundary row: both resolved brain paths
+ * through `@forge/knowledge/brain-paths.ts`, the one baselined cross-package
+ * edge `preflight.ts` carried, and moving them would have swapped that row
+ * for a same-count rename. M4's layout PR removed the constraint entirely —
+ * `projectBrainDir`/`projectThemesDir` are `@forge/kernel` exports now
+ * (ruling 18) and the row is deleted from `scripts/baselines/boundaries.json`
+ * — so the division here is by clause family alone.
  *
  * Siblings: `preflight-gate.ts` (C1/C1b/C7), `preflight-instructions.ts`
  * (C5/C8), `preflight-demo.ts` (DEMO family), `preflight-release.ts` (C10),
