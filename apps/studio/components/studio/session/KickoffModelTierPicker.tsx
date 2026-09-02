@@ -49,7 +49,18 @@ export function KickoffModelTierPicker({ capability, modelTier, onChange }: Kick
   const isRangeTier = allowedTiers.length > 0;
 
   return (
-    <div data-section="kickoff-model-tier" data-model-tier-picker={isRangeTier ? 'range' : 'fixed'} style={{ ...cardStyle, marginBottom: 14 }}>
+    // S9 beat 5 — `data-model-tier` names the tier THIS SESSION WILL RUN ON, in
+    // both branches: the operator's selection where they can choose, the agent's
+    // declared fixed tier where they cannot. Derived from what is already
+    // rendered (`modelTier` is the value the radios bind to), so it cannot drift
+    // from the control beside it. Empty until something is selected — the honest
+    // zero-state, never a default the operator did not pick.
+    <div
+      data-section="kickoff-model-tier"
+      data-model-tier-picker={isRangeTier ? 'range' : 'fixed'}
+      data-model-tier={isRangeTier ? modelTier : (capability?.fixedTier ?? '')}
+      style={{ ...cardStyle, marginBottom: 14 }}
+    >
       <div style={rowLabel}>Model</div>
       {isRangeTier ? (
         <div role="radiogroup" aria-label="Model tier" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

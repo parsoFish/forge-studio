@@ -156,3 +156,51 @@ test('R06: a NOT-YET-LOADED capability keeps the read-only chip — the picker m
   const html = render({ capability: null });
   expect(html).toContain('fixed · read-only');
 });
+
+// ---------------------------------------------------------------------------
+// S9 beat 5 — "Set the SDK, the model and the effort this session will run on".
+//
+// THE GAP, read off a live bridge and recorded in `_1.0/stories/S9.md`: the
+// picker publishes `data-model-tier-picker` ("range" | "fixed") and, in the
+// FIXED branch only, a chip carrying `data-model-tier`. In the RANGE branch —
+// the one an operator can actually act on — nothing in the DOM says which tier
+// is selected. So a story could set the radio and still have no attribute to
+// assert against, which is why S9 beat 5 stayed red after the harness learned
+// to fill radios: the verb worked and the claim had nothing to read.
+//
+// The root now names the tier THIS SESSION WILL RUN ON in both branches:
+// the selected tier when the operator picks, the agent's declared fixed tier
+// when they cannot. One attribute, one question, derived from what is already
+// rendered — never a second source of truth.
+// ---------------------------------------------------------------------------
+
+test('S9-5: the RANGE picker publishes the SELECTED tier on its root', () => {
+  const html = render({ capability: rangeCapability(), modelTier: 'opus' });
+  expect(html).toContain('data-model-tier-picker="range"');
+  expect(html).toContain('data-model-tier="opus"');
+});
+
+test('S9-5: the published tier FOLLOWS the selection rather than being fixed at render', () => {
+  // Kills a hardcoded default, and kills publishing the first allowed tier
+  // instead of the chosen one — a story that set "opus" and read "sonnet"
+  // would report the knob working while proving the opposite.
+  expect(render({ capability: rangeCapability(), modelTier: 'sonnet' })).toContain('data-model-tier="sonnet"');
+  expect(render({ capability: rangeCapability(), modelTier: 'opus' })).toContain('data-model-tier="opus"');
+});
+
+test('S9-5: with nothing selected yet the root publishes an EMPTY tier, never an invented one', () => {
+  // The honest zero-state. `_1.0/stories/S9.md` records that until a session
+  // starts nothing says what it will run on; the fix is to publish the truth,
+  // not to default the attribute to a tier the operator never chose.
+  const html = render({ capability: rangeCapability(), modelTier: '' });
+  expect(html).toContain('data-model-tier=""');
+});
+
+test('S9-5: the FIXED branch still names its tier on the root as well as on the chip', () => {
+  const cap = { ...rangeCapability(), allowedTiers: [], fixedTier: 'sonnet' } as unknown as AgentCapability;
+  const html = render({ capability: cap, modelTier: '' });
+  expect(html).toContain('data-model-tier-picker="fixed"');
+  expect(html).toContain('data-field="kickoff-model-fixed-chip"');
+  // The chip's own attribute is unchanged — S9 beat 11 reads it.
+  expect((html.match(/data-model-tier="sonnet"/g) ?? []).length).toBe(2);
+});

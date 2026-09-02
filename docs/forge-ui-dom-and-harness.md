@@ -3805,7 +3805,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `?project=` prefill on a forge-wide kind states it is ignored
   (`[data-section="kickoff-project-ignored"]`) + a model-tier picker
   (`KickoffModelTierPicker.tsx`, `forge-ui/components/studio/session/`),
-  `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"]`,
+  `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"][data-model-tier]`,
   rendered from `agentCapabilityDescriptor.allowedTiers` — fetched via
   `fetchAgentCapability(agentSlug)` (`GET
   /api/studio/agents/:slug/capability`, `forge-ui/lib/studio-client.ts`'s
@@ -3820,6 +3820,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   a read-only chip (`[data-field="kickoff-model-fixed-chip"]`, `"fixed ·
   read-only"`) for `strategy:fixed` or an absent/not-yet-loaded capability;
   widening a skill's range is a `SKILL.md` edit, never a UI decision.
+  **M4 (S9 beat 5):** the section root also carries `data-model-tier` — the
+  tier THIS SESSION WILL RUN ON — in BOTH branches: the operator's selection
+  under `range`, `capability.fixedTier` under `fixed`. It is derived from the
+  same `modelTier` value the radios bind to, so it cannot drift from the
+  control beside it, and it is the **empty string until something is
+  selected** — the honest zero-state, never a default the operator did not
+  pick. Before this the range branch published no selected-tier attribute at
+  all, so a story could set the radio and have nothing to assert against:
+  S9 beat 5 stayed red after the harness learned to fill radios because the
+  verb worked and the claim had nothing to read. The `fixed` chip keeps its
+  own `data-model-tier` (S9 beat 11 reads that one), so a fixed-tier page
+  carries the value twice, on the root and on the chip, by design.
   **W7-A2 duplicate guard:** the page also reads `GET /api/studio/sessions?active=1`
   (the SAME index /sessions and Home read); when a non-terminal session of
   THIS kind already exists on the chosen target (project id, `.kb-<id>` for
