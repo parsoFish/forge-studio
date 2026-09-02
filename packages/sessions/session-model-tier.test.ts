@@ -12,7 +12,7 @@
  * files in this repo, not fixtures, so the day an agent's strategy changes the
  * assertion moves with it rather than pinning a stale answer.
  *
- * RUN: node --experimental-strip-types --test cli/session-model-tier.test.ts
+ * RUN: node --experimental-strip-types --test packages/sessions/session-model-tier.test.ts
  */
 
 import { test } from 'node:test';

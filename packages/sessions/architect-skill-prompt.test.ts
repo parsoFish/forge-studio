@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for R4-23 WI-4 — re-authoring the architect runner's three
  * prompts (interview / explore / draft, + the draft-force-emit retry) so
- * instruction PROSE moves out of `orchestrator/architect-runner.ts` and into
+ * instruction PROSE moves out of `packages/sessions/architect-runner.ts` and into
  * named `<!-- turn: ... -->` sections of `skills/architect/SKILL.md`, while
  * the runner keeps injecting only DATA + control flow (lane design:
  * `_wave5/parks/R4-23-design.md` and the WI-4 brief).
@@ -207,7 +207,7 @@ test('AT-2 (no-fail-open-remains): architect-runner.ts deletes the "You are the 
   assert.ok(
     !/function\s+loadSkillPrompt\s*\(/.test(runnerSrc),
     'the private loadSkillPrompt helper must be deleted — every runner routes through the shared, ' +
-      'fail-LOUD loadSkillTurnPrompt (orchestrator/skill-path.ts) with no caller-local fallback',
+      'fail-LOUD loadSkillTurnPrompt (packages/agents/skill-path.ts) with no caller-local fallback',
   );
 });
 
@@ -523,7 +523,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
         message: {
           content: [
             { type: 'tool_use', name: 'Read', input: { file_path: 'brain/cycles/themes/at8-sentinel-theme.md' } },
-            { type: 'tool_use', name: 'Read', input: { file_path: 'cli/architect-plan.ts' } },
+            { type: 'tool_use', name: 'Read', input: { file_path: 'packages/factory/architect-plan.ts' } },
           ],
         },
       };
@@ -546,7 +546,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
     'the brain/ read must survive into the PLAN brain-context section',
   );
   assert.ok(
-    !planMd.includes('cli/architect-plan.ts'),
+    !planMd.includes('packages/factory/architect-plan.ts'),
     'a non-brain/ Read must be dropped from brainReads — this is the silent-drop hazard the park file flags ' +
       'as uncovered by any existing golden fixture',
   );
@@ -649,7 +649,7 @@ test('AT-9 (Round-2, Part A): frozen no-content-loss set — every distinct pre-
 
 // AT-9b covers the two SAMPLE sentences from the untouched TS region
 // (`renderExploreBlock`'s edge-cases/brain-constraints framing, embedded in
-// the draft prompt) — per `git diff c45e3892 HEAD -- orchestrator/architect-runner.ts`,
+// the draft prompt) — per `git diff c45e3892 HEAD -- packages/sessions/architect-runner.ts`,
 // this region carries NO hunk at all, so two sample sentences stand in for
 // it per the design's untouched-region allowance. This content legitimately
 // STAYS in TypeScript (it is conditionally rendered from `edge-cases.json`,

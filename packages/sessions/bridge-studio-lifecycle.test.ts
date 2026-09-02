@@ -28,7 +28,7 @@
  * copied into the fixture root so the real kinds/tables are exercised (the
  * bridge only loads it structurally — no agent-ref resolution at load time).
  *
- * RUN: node --test --experimental-strip-types cli/bridge-studio-lifecycle.test.ts
+ * RUN: node --test --experimental-strip-types packages/sessions/bridge-studio-lifecycle.test.ts
  */
 
 import { test, before, after } from 'node:test';
@@ -57,13 +57,13 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // ---------------------------------------------------------------------------
 const KB_CLEANUP_STDERR = [
   'InteractiveRunnerError: runInteractiveTurn: session kind "kb-cleanup" phase "drafting" declares writes: [plan], but the turn produced no files there — refusing to advance the session with an empty package rather than persisting a ghost turn to status.json.',
-  '    at runAgentStyleStep (file:///home/parso/forge/orchestrator/interactive-runner.ts:493:11)',
+  '    at runAgentStyleStep (file:///home/parso/forge/packages/sessions/interactive-runner.ts:493:11)',
   '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)',
-  '    at async runInteractiveTurn (file:///home/parso/forge/orchestrator/interactive-runner.ts:328:16)',
-  '    at async runTurnSpecAgent (file:///home/parso/forge/cli/agent-run.ts:571:18)',
-  '    at async cmdAgentRun (file:///home/parso/forge/cli/agent-run.ts:601:14)',
-  '    at async cmdAgent (file:///home/parso/forge/cli/agent-run.ts:137:29)',
-  '    at async file:///home/parso/forge/orchestrator/cli.ts:101:14',
+  '    at async runInteractiveTurn (file:///home/parso/forge/packages/sessions/interactive-runner.ts:328:16)',
+  '    at async runTurnSpecAgent (file:///home/parso/forge/packages/agents/agent-run.ts:571:18)',
+  '    at async cmdAgentRun (file:///home/parso/forge/packages/agents/agent-run.ts:601:14)',
+  '    at async cmdAgent (file:///home/parso/forge/packages/agents/agent-run.ts:137:29)',
+  '    at async file:///home/parso/forge/apps/forge/cli.ts:101:14',
   '',
 ].join('\n');
 // W8-B5b — the community-refresh kind retired; this is a SYNTHETIC

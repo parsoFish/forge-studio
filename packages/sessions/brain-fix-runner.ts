@@ -77,7 +77,7 @@ export type RunBrainFixResult = {
    * True when the re-lint after the agent turn found no same-kind finding
    * AND the edit gate left every one of the turn's writes standing.
    *
-   * W8-F1: `cmdBrainFix` (orchestrator/cli.ts — what the per-finding
+   * W8-F1: `cmdBrainFix` (apps/forge/cli.ts — what the per-finding
    * `op=fix-agent` button spawns) reads ONLY this field and prints "CLEARED".
    * A turn whose writes were refused has not cleared anything, so the refusal
    * is folded in here rather than left for a caller to remember to check.

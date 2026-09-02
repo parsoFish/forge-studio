@@ -10,7 +10,7 @@
  * never mentioned community-refresh.
  *
  * Deleting them took the ONLY assertion of
- * `orchestrator/interactive-session.ts`'s `maxTurns: args.maxTurns ?? 16` with
+ * `packages/sessions/interactive-session.ts`'s `maxTurns: args.maxTurns ?? 16` with
  * them: after the retirement, a repo-wide grep for a test asserting that
  * default returned nothing. The `?? 16` branch would have shipped unguarded.
  * That is the "excise the block, keep the file" rule failing at the granularity
@@ -26,7 +26,7 @@
  * frontmatter changes the test says "arrange" failed rather than silently
  * testing the other branch.
  *
- * Harness mirrors `orchestrator/interactive-runner.test.ts`: isolated tempdir
+ * Harness mirrors `packages/sessions/interactive-runner.test.ts`: isolated tempdir
  * fixture tree, real `loadSessionKinds` parse, stubbed `queryFn`. Only the LLM
  * call is stubbed — spec/model/budget derivation runs against the REAL skills
  * roster.

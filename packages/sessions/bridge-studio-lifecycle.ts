@@ -21,7 +21,7 @@
  * Findings: home-sessions-05/08/09/15, sessions-kinds-11/15/33,
  * community-02/15, knowledge-16.
  *
- * Every filesystem read is routed through cli/studio-path-guard.ts
+ * Every filesystem read is routed through packages/kernel/path-guard.ts
  * (`resolveGuardedPath` / `guardedReadFile`) with request-derived ids as
  * their OWN segments under the trusted roots — this module is auto-linted by
  * scripts/check-raw-fs-guarded.mjs via the `cli/bridge-studio*.ts` glob.
@@ -201,7 +201,7 @@ export type SessionLifecycleFacts = {
 };
 
 /** `_logs/_<kind>-<sessionId>`. W8-F6 (bead forge-6gv.27) MOVED the
- *  implementation to cli/session-readability.ts — that module is an import
+ *  implementation to packages/sessions/session-readability.ts — that module is an import
  *  leaf and needs this template, while this module imports
  *  cli/bridge-studio.ts and so cannot be imported by it. Re-exported here
  *  unchanged so every existing importer keeps its one import. */
@@ -338,7 +338,7 @@ function guardedReadFileTail(root: string, segments: readonly string[], maxBytes
 
 /** Glue: descriptor + phase + on-disk facts → lifecycle. `terminal` is
  *  supplied by the caller (its own `isTerminalPhase` derivation,
- *  cli/bridge-studio-sessions.ts) so this module never imports the route
+ *  packages/sessions/bridge-studio-sessions.ts) so this module never imports the route
  *  module that imports it. */
 export function deriveSessionLifecycleFor(args: {
   descriptor: SessionKindDescriptor;

@@ -1,18 +1,18 @@
 /**
- * Acceptance tests for the LEAF primitives in cli/session-readability.ts
+ * Acceptance tests for the LEAF primitives in packages/sessions/session-readability.ts
  * (wave-8 F6 — "a linked session must be readable").
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./session-readability.ts` import is the
  * expected red), mirroring the header convention already used at the top of
- * cli/bridge-studio-sessions.test.ts.
+ * packages/sessions/bridge-studio-sessions.test.ts.
  *
  * SCOPE (T2 module-split course-correction, 2026-08-28): `session-
  * readability.ts` must stay an import LEAF — node:*, `./studio-path-guard.ts`,
  * and `../orchestrator/**` only — so it can never validate a project id
- * against `invalidProjectReason` (cli/bridge-studio-sessions.ts, which itself
+ * against `invalidProjectReason` (packages/sessions/bridge-studio-sessions.ts, which itself
  * pulls `SAFE_ID_RE` from cli/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX`
- * from cli/bridge-studio-kbs.ts — importing either into the leaf would create
+ * from packages/knowledge/bridge-studio-kbs.ts — importing either into the leaf would create
  * the bridge module graph's first import cycle). This file therefore covers
  * ONLY the pure derivations and the guarded log-dir resolution:
  *   - `sessionLogDirName`, `parseGuardedEventsJsonl` (the MOVED-verbatim
@@ -22,7 +22,7 @@
  *     first metadata.project string verbatim, unrejected; validating it
  *     against the ".kb-"/".community-registry" carve-out rules is
  *     `resolveReadableSession`'s job, covered in
- *     cli/session-readability-resolve.test.ts, not this pure function's)
+ *     packages/sessions/session-readability-resolve.test.ts, not this pure function's)
  *   - `resolveLegacySession({ logsRoot, kind, sessionId })` — the guarded
  *     read of `<logsRoot>/_<kind>-<sessionId>/events.jsonl`, returning
  *     `{ok:true, logDir, phase, projectFromLog}` or `{ok:false}`. ALL of this
@@ -31,8 +31,8 @@
  *     target this function.
  *
  * The higher-level composition (`resolveReadableSession` / `sessionIsReadable`,
- * which live on cli/bridge-studio-sessions.ts per the same course-correction)
- * is covered separately in cli/session-readability-resolve.test.ts.
+ * which live on packages/sessions/bridge-studio-sessions.ts per the same course-correction)
+ * is covered separately in packages/sessions/session-readability-resolve.test.ts.
  *
  * Containment tests plant a SECRET MARKER outside the guarded root and assert
  * on the ARTIFACT (the marker never appears anywhere in the returned value,
