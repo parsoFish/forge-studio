@@ -284,6 +284,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-validate.ts | projects | verbatim | 468 |
 | packages/projects/project-create.ts | projects | verbatim | 364 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 201 |
+| packages/projects/reset.ts | projects | verbatim | 583 |
 | packages/flows/promote-manifests.ts | flows | verbatim | 76 |
 | packages/flows/queue.ts | flows | verbatim | 231 |
 | packages/factory/reflector-rerun.ts | factory | verbatim | 112 |
@@ -383,7 +384,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/index.ts | kernel | verbatim | 30 |
 | packages/kernel/init.ts | kernel | verbatim | 144 |
 | packages/kernel/logging.ts | kernel | verbatim | 169 |
-| packages/kernel/path-guard.ts | kernel | verbatim | 607 |
+| packages/kernel/path-guard.ts | kernel | verbatim | 707 |
 | packages/kernel/ports.ts | kernel | verbatim | 71 |
 | packages/kernel/spawn-env.ts | kernel | verbatim | 181 |
 | packages/kernel/route-entry.ts | kernel | verbatim | 114 |

@@ -525,7 +525,15 @@ The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
 
 - **`<artifactRoot>/history/<id>/demo/`** — the per-cycle in-PR demo the
   demo-agent writes (committed to the PR for review).
-- **`<artifactRoot>/skills/`** — project-action skills.
+
+Project-action skills are **not** `artifactRoot`-scoped, despite an earlier
+version of this line saying so: the resolver (`SkillsBind`/
+`resolveSkillBinding`, `cli/bridge-studio.ts`'s `deriveProjectLocalSkills`)
+scans the fixed, literal path **`.forge/skills/<id>/SKILL.md`** — one level
+deep — and `artifactRoot` never enters that function or its caller. A project
+onboarded before this was fixed (skills physically under
+`<artifactRoot>/skills/`) reads every such skill as `missing`; `forge project
+reset` relocates them to the path above (`packages/projects/reset.ts`).
 
 Validated as a clean relative path (no leading `/`, no `..`). Existing projects
 retain the default `"."` (no migration required).
