@@ -506,6 +506,7 @@ packages/projects/project-contract-scaffold.ts existsSync 8
 packages/projects/project-contract-scaffold.ts mkdirSync 1
 packages/projects/project-contract-scaffold.ts realpathSync 3
 packages/projects/project-contract-scaffold.ts writeFileSync 4
+packages/projects/project-create.ts existsSync 1
 packages/projects/project-create.ts execFileSync 3
 packages/projects/project-create.ts lstatSync 2
 packages/projects/project-create.ts mkdirSync 2

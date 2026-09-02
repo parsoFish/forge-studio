@@ -31,7 +31,7 @@
  * for those rather than guessing.
  */
 
-import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -187,6 +187,13 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
  */
 function stampAppType(projectDir: string, appType: string): void {
   const configPath = join(projectDir, ...PROJECT_CONFIG_REL_PATH.split('/'));
+  // A template is not REQUIRED to ship a `.forge/project.json` — a scaffold
+  // from a bare template legitimately produces none, and `runCreate` reports
+  // that as `scaffolded` + not-hard-green (the preflight's job), not as a
+  // failed create. There is nothing to stamp in that case, and throwing here
+  // would turn a clause the preflight is supposed to REPORT into a create
+  // that dies. Pinned by `apps/forge/cli-create.test.ts:140`.
+  if (!existsSync(configPath)) return;
   const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
   raw.appType = appType;
   writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
