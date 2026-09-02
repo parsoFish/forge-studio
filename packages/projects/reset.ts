@@ -39,7 +39,7 @@
  * `reset-preservation.test.ts` for the call-record assertion that pins this.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 import {
@@ -460,6 +460,18 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     skillMovesApplied.push(move);
   }
 
+  // COMMIT SCOPE: every path this call wrote, and nothing else. `paths` is
+  // not optional here — `commitStudioChange` falls through to
+  // `git add -A -- .` when it is absent, which would sweep any unrelated
+  // dirty file in the operator's working tree into a commit messaged
+  // "reset project contract" (and, on a project whose .gitignore is wrong,
+  // a secrets file with it). Both other `withStudioWrite` call sites in the
+  // repo scope their paths; this one now does too. Note the moves must be
+  // listed EXPLICITLY: the unscoped `add -A` was the only thing committing
+  // them, so scoping without naming them would have quietly stopped the
+  // relocation from ever being committed.
+  const movePaths = skillMovesApplied.flatMap((m) => [m.from as string, m.to]);
+
   const applied = drift.rows.filter((r) => r.action === 'regenerate' || r.action === 'add');
   if (applied.length > 0) {
     const guarded = resolveGuardedPath(dir, PROJECT_CONFIG_REL_PATH.split('/'));
@@ -487,9 +499,19 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     }
     if (!forgeDirGuard.exists) mkdirSync(forgeDirGuard.realPath, { recursive: true });
 
-    withStudioWrite(dir, 'forge-studio: reset project contract', () => {
-      writeFileSync(guarded.realPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
-    });
+    withStudioWrite(
+      dir,
+      'forge-studio: reset project contract',
+      () => {
+        writeFileSync(guarded.realPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
+      },
+      [PROJECT_CONFIG_REL_PATH, ...movePaths],
+    );
+  } else if (movePaths.length > 0) {
+    // Moves happened but no config section changed: still commit the
+    // relocation, scoped the same way. Before this branch existed the moves
+    // reached a commit only as collateral of the unscoped `add -A`.
+    withStudioWrite(dir, 'forge-studio: reset project skill layout', () => undefined, movePaths);
   }
 
   const preflight = runPreflight(dir, { forgeRoot: drift.forgeRoot });
@@ -542,17 +564,38 @@ export function cmdProjectReset(args: string[]): number {
   }
   const apply = args.includes('--apply');
 
-  const forgeRoot = resolve('.');
+  // NOT `resolve('.')`. That reads the process cwd, and it is correct today
+  // only by accident: `apps/forge/cli.ts:51` does `process.chdir(FORGE_ROOT)`
+  // before dispatch, two files away from here. Anything else calling this
+  // function — the Studio "Rebuild contract" route this module's own header
+  // anticipates, a daemon, a test — would resolve the projects root against
+  // whatever cwd it happened to have, and a wrong root here does not fail
+  // loudly: it makes the projects scan come up empty, or worse, resolve
+  // somewhere real. Anchor on kernel's depth- and cwd-independent constant.
+  const forgeRoot = FORGE_ROOT;
   const projectsDir = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
-  const projectRoot = resolve(projectsDir, id);
-  if (!projectRoot.startsWith(resolve(projectsDir) + '/')) {
-    console.error('forge project reset: project path escapes the projects root');
+  // The id is request-derived (an operator argument today, and this same
+  // function is what a Studio "Rebuild contract" route would call), so the
+  // project dir is resolved as a SEGMENT under the config-derived projects
+  // root — never `join(projectsDir, id)` with a lexical `startsWith` check.
+  // That check is worthless on an unresolved path (path-guard.ts's own header
+  // says so) and it matters more here than usual: `projectRoot` becomes the
+  // TRUSTED `root` argument for every `resolveGuardedPath`/`guardedRename`
+  // call inside this module, and `resolveGuardedPath` performs no identity
+  // check on its own root. A planted symlink at `projects/<id>` would
+  // therefore have been followed by `realpathSync`, and the whole reset would
+  // have written outside the projects root with every inner guard passing.
+  // Same shape, same remedy as `cli/bridge-studio.ts:605`.
+  const guardedRoot = resolveGuardedPath(projectsDir, [id]);
+  if (!guardedRoot.ok) {
+    console.error(`forge project reset: project path containment check failed: ${guardedRoot.reason}`);
     return 1;
   }
-  if (!existsSync(projectRoot)) {
-    console.error(`forge project reset: no project directory at ${projectRoot}`);
+  if (!guardedRoot.exists) {
+    console.error(`forge project reset: no project directory for ${id} under ${projectsDir}`);
     return 1;
   }
+  const projectRoot = guardedRoot.realPath;
 
   let drift: DriftReport;
   try {
