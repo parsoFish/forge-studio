@@ -1,6 +1,6 @@
 /**
  * R4-22 WI-2 (T3, acceptance tests) — pins the contract for
- * `orchestrator/interactive-finalizers.ts` BEFORE it exists (ADR-043 §2/§5).
+ * `packages/sessions/interactive-finalizers.ts` BEFORE it exists (ADR-043 §2/§5).
  *
  * ADR-043 §5 ratifies a deep-frozen `FINALIZERS` registry of pure exported
  * functions with explicit error contracts (ADR-042's third boundary), seeded
@@ -29,7 +29,7 @@
  * Layout pinned: walks `<sessionDir>/staging/` recursively; installs each
  * entry at `<libraryRoot>/<packageId>/<relPath...>`, resolving that FULL
  * destination (leaf included) through the EXISTING `resolveGuardedPath`
- * (`cli/studio-path-guard.ts`) with `packageId` and every relative-path
+ * (`packages/kernel/path-guard.ts`) with `packageId` and every relative-path
  * component passed as their OWN elements of `segments[]` — never folded into
  * the `root` argument (see that module's CONTRACT section: folding makes the
  * containment comparison tautological).
@@ -43,7 +43,7 @@
  * *before* invoking the finalizer and byte-compares it *after*, so a
  * rejection is proven to be containment, not an accidental miss (the
  * "counter-proof" discipline already established in
- * cli/studio-path-guard.test.ts SEC-04 P1 etc.). Every symlink/hardlink
+ * packages/kernel/path-guard.test.ts SEC-04 P1 etc.). Every symlink/hardlink
  * fixture asserts its own precondition (lstat/nlink) before reading the
  * verdict, and skips cleanly via `t.skip` if the platform cannot create the
  * link — never silently passes.
@@ -87,7 +87,7 @@ import { FINALIZERS, resolveFinalizer, copyStagingToLibrary } from './interactiv
 import { deriveSessionArtifact } from './studio/session-transcript.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
-/** Repo root, computed the same way orchestrator/interactive-runner.test.ts's
+/** Repo root, computed the same way packages/sessions/interactive-runner.test.ts's
  *  own REPO_ROOT does (`resolve(import.meta.dirname, '..')`) — robust
  *  regardless of the shell's cwd when the test runner is invoked, unlike a
  *  `process.cwd()`-relative path. Only P3 (below) reads a real, checked-in
@@ -311,7 +311,7 @@ test('POSITIVE CONTROL: a legitimate staged file literally named "..foo" is NOT 
       error,
       null,
       `"..foo" is a perfectly legal, fully-contained directory-entry name — it is neither "." nor ".." and holds no ` +
-        `separator (the exact reasoning documented in cli/studio-path-guard.ts's isSafeSegment). A regex-based ` +
+        `separator (the exact reasoning documented in packages/kernel/path-guard.ts's isSafeSegment). A regex-based ` +
         `traversal check (e.g. /^\\.\\./) instead of strict equality to ".." would wrongly reject this. Got: ${error}`,
     );
     const dest = join(libraryRoot, 'dotted-name-pkg', '..foo');

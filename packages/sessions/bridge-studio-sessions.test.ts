@@ -1,18 +1,18 @@
 /**
- * Acceptance tests for cli/bridge-studio-sessions.ts (R2-10, PR1: the
+ * Acceptance tests for packages/sessions/bridge-studio-sessions.ts (R2-10, PR1: the
  * session-shell backend contract).
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-sessions.ts` import is the
- * expected red). Mirrors cli/bridge-studio-templates.test.ts's idiom: a real
+ * expected red). Mirrors packages/library/bridge-studio-templates.test.ts's idiom: a real
  * bridge (startBridge) + fetch for the "happy" behavioral tests, plus direct
  * handler invocation for the passthrough contract AND the slug-validation
  * sweep (see the design-decision note below on why the sweep needs direct
  * invocation).
  *
  * AT numbers continue the flat R2-10 sequence started in
- * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18) and continued in
- * orchestrator/studio/session-transcript.test.ts (AT-19..AT-37). This file
+ * packages/sessions/studio/session-kinds.test.ts (AT-1..AT-18) and continued in
+ * packages/sessions/studio/session-transcript.test.ts (AT-19..AT-37). This file
  * covers AT-38..AT-48, plus AT-59..AT-60 added in the AT-amendment-2 round
  * (session-kinds.test.ts gained AT-49..56, session-transcript.test.ts gained
  * AT-57..58 in the same round — see those files' headers), plus AT-70..AT-74
@@ -21,7 +21,7 @@
  *
  * AT-amendment-2 additions in THIS file:
  *   AT-59 (A1, the review-flagged BLOCKER) — `phase` is read via
- *     `readSessionStatus` (orchestrator/interactive-session.ts), a plain
+ *     `readSessionStatus` (packages/sessions/interactive-session.ts), a plain
  *     `existsSync`/`readFileSync` on `status.json` with NO realpath
  *     containment check — a completely different (unguarded) read path from
  *     session-transcript.ts's `safeReadFileInSession`. A symlinked
@@ -59,7 +59,7 @@
  *     SLUG_RE — real session ids are ISO-ish timestamps
  *     (`2026-08-05T10-00-00`) with an uppercase `T`, which SLUG_RE (strict
  *     lowercase-kebab) rejects. `project` is validated with SLUG_RE. This
- *     mirrors the EXACT precedent in cli/bridge-studio-runs.ts's plan-verdict
+ *     mirrors the EXACT precedent in packages/flows/bridge-studio-runs.ts's plan-verdict
  *     route ("project uses SLUG_RE ... sessionId uses SAFE_ID_RE").
  *   - The slug-validation variant sweep (AT-45/AT-46) uses DIRECT handler
  *     invocation, not real fetch() calls. Several required variants (a bare
@@ -201,7 +201,7 @@ function writeSessionKindsYaml(root: string): void {
         artifact: { kind: 'roadmap-draft', label: 'Roadmap draft' },
       },
       // W6-B3 — carries `panel.phases` (the real studio/session-kinds.yaml
-      // row's own shape, orchestrator/instructions-runner.ts:17-24), the
+      // row's own shape, packages/sessions/instructions-runner.ts:17-24), the
       // fixture this file's own AT-39 test below drives affordance
       // assertions against (fixture phase 'drafting' -> [staged-review,
       // next-turn], see deriveSessionAffordances's own doc comment for why).
@@ -263,7 +263,7 @@ function writeSessionKindsYaml(root: string): void {
         },
       },
       // R4-19-F2: the new "kb-cleanup" session kind — the ADR-043-shaped
-      // turnSpec table verbatim (see orchestrator/studio/session-kinds.test.ts's
+      // turnSpec table verbatim (see packages/sessions/studio/session-kinds.test.ts's
       // own R4-19-F2 block for the pin against the REAL, checked-in yaml;
       // this file's fixture yaml is this file's OWN pre-existing convention
       // of hand-writing every shipped kind locally rather than reading the
@@ -499,10 +499,10 @@ function writeProjectBrainSession(projectsRoot: string, project: string, session
 
 // ---------------------------------------------------------------------------
 // R4-19 WI-2 — the ".kb-" seeding-anchor carve-out fixture. CONTEXT: R1-06's
-// KB-create hand-off (cli/bridge-studio-kbs.ts:1005-1044) anchors a
+// KB-create hand-off (packages/knowledge/bridge-studio-kbs.ts:1005-1044) anchors a
 // non-project-bound KB's seeding session at
 // `projects/.kb-<id>/_project-brain/<sid>/` (KB_SEEDING_ANCHOR_PREFIX =
-// '.kb-', cli/bridge-studio-kbs.ts:690, unexported — mirrored here as a
+// '.kb-', packages/knowledge/bridge-studio-kbs.ts:690, unexported — mirrored here as a
 // literal, same idiom this file already uses for `newProjectBrainSessionId`)
 // so `discoverProjects` (which filters ALL dot-dirs) never surfaces it as a
 // phantom project. This route's `invalidProjectReason` currently rejects
@@ -522,7 +522,7 @@ const KB_SEEDING_MIXED_PROJECT = `.kb-${KB_SEEDING_MIXED_ID}`;
 const KB_SEEDING_MIXED_SESSION = '2026-08-19T09-12-00';
 
 /**
- * Mirrors the REAL create hand-off (cli/bridge-studio-kbs.ts:1026-1044)
+ * Mirrors the REAL create hand-off (packages/knowledge/bridge-studio-kbs.ts:1026-1044)
  * byte-for-byte — same `guardedWriteSessionStatus` call, same dir segments
  * (`[sessionProject, '_project-brain', sessionId]`), same initial `phase:
  * 'briefing'` — rather than a hand-rolled `writeFileSync`, so this fixture's
@@ -554,7 +554,7 @@ function writeKbSeedingHandoffSession(projectsRoot: string, kbId: string, sessio
 
 // R4-17 — the onboarding session dir (honestly one turn, D8: no fabricated
 // interview) + a REAL project fixture with a well-formed `.forge/project.json`
-// so `deriveContractStages` (cli/contract-stages.ts) has something real to
+// so `deriveContractStages` (packages/projects/contract-stages.ts) has something real to
 // derive over when the route threads it in.
 function writeOnboardingSession(projectsRoot: string, project: string, sessionId: string): void {
   const dir = join(projectsRoot, project, '_onboarding', sessionId);
@@ -920,7 +920,7 @@ test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the 
   // W8-B3 AMENDMENT — see AT-38 above. This fixture's instructions-creator is
   // written as `strategy:fixed` on claude-sonnet-4-6 (writeSkillAgent), so the
   // fallback resolves. The scoping — that a strategy:RANGE agent resolves
-  // nothing — is pinned separately below and in cli/session-model-tier.test.ts
+  // nothing — is pinned separately below and in packages/sessions/session-model-tier.test.ts
   // against the REAL registry.
   assert.equal(body.modelTier, 'sonnet');
 });
@@ -1034,7 +1034,7 @@ test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns
 // required"): `?project=` is now OPTIONAL — a deep link that omits it
 // resolves the anchor project server-side (`findSessionProject`) and
 // returns the SAME 200 payload, `project` filled in. The unresolvable /
-// ambiguous cases are pinned in cli/bridge-studio-lifecycle.test.ts.
+// ambiguous cases are pinned in packages/sessions/bridge-studio-lifecycle.test.ts.
 test('AT-44 (W7-A2): GET /api/studio/sessions/architect/<id> with NO project query param resolves the project server-side and returns 200 with it filled in', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}`);
   assert.equal(res.status, 200);
@@ -1289,7 +1289,7 @@ test('AT-77: GET /api/studio/sessions/architect/<id>?project=<p> carries "depend
 
 // ---------------------------------------------------------------------------
 // R4-17 — the "onboarding" session kind threads deriveContractStages
-// (cli/contract-stages.ts) into the contract-buildout artifact. This is the
+// (packages/projects/contract-stages.ts) into the contract-buildout artifact. This is the
 // REAL wire (route → deriveContractStages → deriveSessionArtifact), not a
 // unit-level fixture — the standing R2-09 rule that a value's survival
 // through the route's own serialization needs at least one real-client-path

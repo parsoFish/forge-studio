@@ -20,7 +20,7 @@
  *                        └ (bridge: abandon) ──▶ abandoned
  *
  * Accepted residual (same trust tier as the hardlink/TOCTOU notes in
- * `orchestrator/studio/session-transcript.ts`'s header — read that first for
+ * `packages/sessions/studio/session-transcript.ts`'s header — read that first for
  * the precedent this follows): `runLockStep`'s selected-generation restore
  * writes `DEMO.html` then the generator skill as two separate `writeFileSync`
  * calls, not one atomic transaction. A genuine fs failure between the two
@@ -715,7 +715,7 @@ function isAllowedSkillRelPath(relPath: string): boolean {
  *  no ancestor can be resolved at all.
  *
  *  Honest limit (R4-16 round 2), same trust tier as the TOCTOU residual
- *  documented in `orchestrator/studio/session-transcript.ts`'s header — read
+ *  documented in `packages/sessions/studio/session-transcript.ts`'s header — read
  *  that first; this follows the same disclosure shape (mechanism, trust
  *  tier, why accepted). This check and the `mkdirSync`/`writeFileSync` calls
  *  it gates (this function's caller, above) are separate syscalls, not one

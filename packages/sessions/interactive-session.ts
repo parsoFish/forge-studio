@@ -388,13 +388,13 @@ export async function runStructuredTurn<T>(args: {
 // caller-supplied, TRUSTED, already-realpath-resolved, ALREADY-EXISTING
 // absolute directory paths — this module performs no mkdir and no identity
 // check on the roots themselves (mirrors how `cwd` is already trusted);
-// `orchestrator/interactive-runner.ts` derives them from each phase row's
+// `packages/sessions/interactive-runner.ts` derives them from each phase row's
 // OWN declared `writes:` entries (never hardcoded), GUARD-TERMINAL-
 // provisioning each one via `resolveGuardedPath` before the turn starts.
 // ---------------------------------------------------------------------------
 
 /** Tool names whose input names a file this fence must evaluate — mirrors
- *  `loops/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS` (kept as an
+ *  `packages/agents/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS` (kept as an
  *  independent literal here, not imported, so this spine file's only
  *  cross-subsystem edge stays the pre-existing type-only one). Every OTHER
  *  tool call passes through this fence unmodified — it never gates reads.
@@ -403,7 +403,7 @@ export async function runStructuredTurn<T>(args: {
  *  write-capable tool with no single path, so it is not in THIS set (which
  *  drives the one-path check) but in `FENCE_STRIPPED_TOOLS` below, and gets
  *  its own policy (`BashFenceMode`): denied outright unless the kind opts
- *  into static inspection (`inspectBashCommand`, orchestrator/bash-fence.ts). */
+ *  into static inspection (`inspectBashCommand`, packages/sessions/bash-fence.ts). */
 const FENCE_GATED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 /** Every tool a fenced turn must NOT pre-approve via `allowedTools` (so the
@@ -427,7 +427,7 @@ export type BashFenceOptions =
   | { readonly bash: 'inspect'; /** the turn's cwd — relative paths resolve against it */ readonly cwd: string };
 
 /** Extract the target file path from a gated tool's input — mirrors
- *  `loops/ralph/claude-agent.ts`'s own `extractPath` (`file_path` for
+ *  `packages/agents/ralph/claude-agent.ts`'s own `extractPath` (`file_path` for
  *  Write/Edit/MultiEdit, `notebook_path` for NotebookEdit, `path` as a
  *  belt-and-suspenders fallback). Returns `null` for a malformed/missing
  *  field — the caller DENIES on `null` (fail closed: "couldn't find a
@@ -575,7 +575,7 @@ export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence
  * call through `canUseTool`. Every read-only grant survives verbatim.
  *
  * W8-F1: extracted from `runAgentTurn`'s body so the SECOND fenced spawn path
- * — `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), which drives its own
+ * — `runBrainFixTurn` (packages/sessions/brain-fix-runner.ts), which drives its own
  * raw SDK stream loop and therefore never went through `runAgentTurn` — cannot
  * get two of the three right and ship a fence the SDK never consults. One
  * enumeration of what "fenced" means, not one per caller.
@@ -824,8 +824,8 @@ export function guardedReadSessionStatus<S>(
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
- *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
- *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
+ *  (packages/sessions/bridge-studio-session-cancel.ts) and read as terminal by
+ *  `isTerminalPhase` (packages/sessions/bridge-studio-sessions.ts) for EVERY kind BEFORE
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
  *  is the same fact for all kinds, and N copies of one fact in N tables is

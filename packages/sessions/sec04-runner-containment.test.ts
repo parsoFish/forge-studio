@@ -7,9 +7,9 @@
  * no containment). A traversal or symlink riding on `sessionId` therefore folds
  * the read OUT of the intended project subtree:
  *
- *   - runInstructionsTurn   → instructionsSessionDir  (orchestrator/instructions-runner.ts:142/153)
+ *   - runInstructionsTurn   → instructionsSessionDir  (packages/sessions/instructions-runner.ts:142/153)
  *   - runProjectBrainTurn   → projectBrainSessionDir  (orchestrator/project-brain-builder-runner.ts:76/96)
- *   - runDemoBuilderTurn    → demoSessionDir          (orchestrator/demo-builder-runner.ts:171/182)
+ *   - runDemoBuilderTurn    → demoSessionDir          (packages/sessions/demo-builder-runner.ts:171/182)
  *
  * The Stage-1 reproduce agent exercised only the HTTP surface and SUPPRESSED
  * the spawn, so this leg was never executed. These tests invoke each runner

@@ -2,7 +2,7 @@
  * Tests for brain-fix-runner.ts.
  *
  * Uses an injectable queryFn seam (mirroring architect-runner.test.ts) and a
- * minimal brain/ fixture (mirroring cli/brain-lint.test.ts) so no live LLM or
+ * minimal brain/ fixture (mirroring packages/knowledge/tests/unit/brain-lint-integrity.test.ts) so no live LLM or
  * live forge brain is touched.
  *
  * Two key assertions:
@@ -27,7 +27,7 @@ import { runBrainFixTurn, type QueryFn } from './brain-fix-runner.ts';
 import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
 
 // ---------------------------------------------------------------------------
-// Helpers — minimal brain fixture (same pattern as cli/brain-lint.test.ts)
+// Helpers — minimal brain fixture (same pattern as packages/knowledge/tests/unit/brain-lint-integrity.test.ts)
 // ---------------------------------------------------------------------------
 
 /**
@@ -487,8 +487,8 @@ test('W8-B2: a project-theme finding the turn genuinely DOES fix still reports c
 // WHICH WRONG IMPLEMENTATION THIS KILLS: wiring the audit into the drain's
 // round loop alone. runBrainFixTurn has three production callers — the drain,
 // `runBrainConsolidateNow` (the Consolidate button and approveKbCleanup's
-// non-draft arm, cli/bridge-studio-kbs.ts), and `forge brain fix`
-// (orchestrator/cli.ts, which the per-finding `op=fix-agent` route spawns as a
+// non-draft arm, packages/knowledge/bridge-studio-kbs.ts), and `forge brain fix`
+// (apps/forge/cli.ts, which the per-finding `op=fix-agent` route spawns as a
 // subprocess). Two of the three are what an operator clicks by hand, and both
 // could land the exact 2026-08-22 edits with the drain fully guarded.
 // ---------------------------------------------------------------------------
