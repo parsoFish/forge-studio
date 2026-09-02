@@ -77,10 +77,10 @@ import {
 } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { deriveKbActiveJob, activeJobReason } from '@forge/knowledge/kb-job-state.ts';
 import { routeTable, dispatchRoute } from '../apps/forge/routes.ts';
-import { handleStudioSkillsRoutes } from '@forge/library/bridge-studio-skills.ts';
-import { handleStudioHooksRoutes } from '@forge/library/bridge-studio-hooks.ts';
-import { handleStudioAuthoringRoutes } from '@forge/library/bridge-studio-authoring.ts';
-import { handleStudioTemplatesRoutes } from '@forge/library/bridge-studio-templates.ts';
+// M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
+// here (skills, hooks, authoring, templates) are GONE: every arm is now a
+// per-route handler in `packages/library/routes.ts`, which the `routeTable`
+// imported on the line above already carries and `dispatchRoute` claims first.
 import { handleStudioSessionsRoutes, isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/sessions/bridge-studio-sessions.ts';
 import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
@@ -95,10 +95,10 @@ import {
   // independently-invented staleness rule.
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
-import { handleStudioInstructionsRoutes } from '@forge/library/bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from '@forge/sessions/bridge-studio-agent-capability.ts';
-import { handleStudioConnectionsRoutes } from '@forge/library/bridge-studio-connections.ts';
-import { handleStudioCommunityRoutes } from '@forge/library/bridge-studio-community.ts';
+// M4 §4 step 2 — instructions, connections and community carved the same way.
+// This file's line COUNT is held constant across the carve on purpose: 18 audited
+// rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
 import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
 import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
 import {
@@ -2363,10 +2363,10 @@ async function handleHttp(
     }),
   }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioAuthoringRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioTemplatesRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // M4 §4 step 2 — skills (7 routes), hooks (8), authoring (1) and templates (5)
+  // were dispatched here in this order. All 21 are entries in
+  // `packages/library/routes.ts` now and the table dispatch at :2094 claims them
+  // BEFORE this chain is reached, so nothing dispatches them but that table.
   // W6-B2 — the generic session-detail GET is the ONLY read route authoring
   // and kb-cleanup sessions have (no per-kind list route like architect/
   // instructions/demo-builder/project-brain); ensureSessionTail must be
@@ -2413,14 +2413,14 @@ async function handleHttp(
     // kinds have a list-changed WS event.
     broadcastKindChanged,
   }, url, method)) return;
-  if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // M4 §4 step 2 — carved to packages/library/routes.ts; the table dispatch above already claimed this route.
   // W6-B6 fix — the per-slug capability route, resolved against the
   // UNFILTERED agent defs (bypasses the library:false roster gate
   // /api/studio/agents applies). Adjacent to the instructions-draft route:
   // same /api/studio/agents/:slug/... URL family, same guarded-path posture.
   if (await handleStudioAgentCapabilityRoute(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // M4 §4 step 2 — connections (4 routes) and community (5) dispatched here, last
+  // of the seven. Both are in `packages/library/routes.ts` now.
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
   const studioPostCtx: StudioPostContext = {
     forgeRoot: ctx.forgeRoot,

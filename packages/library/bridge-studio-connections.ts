@@ -12,10 +12,16 @@
  *   POST /api/studio/connections/:id/install → the D6 security core
  *
  * D1 (structural negative AC): there is NO create/update/delete route for a
- * connection, anywhere. This module exports exactly one route handler and no
- * write-verb-named function (`cli/connections-no-authoring.test.ts` asserts
- * the export surface directly); every other method/URL falls through
- * (`return false`) to the real bridge dispatcher's final 404.
+ * connection, anywhere. This module exports no write-verb-named function
+ * (`packages/library/connections-no-authoring.test.ts` asserts the export
+ * surface directly); every other method/URL falls through (`return false`)
+ * to the real bridge dispatcher's final 404.
+ *
+ * M4 §4 step 2 — carved into one exported handler per route (the table
+ * `packages/library/routes.ts` assembles). The handlers have not moved;
+ * what has moved is the DISPATCH, out of this module's own if-chain and into
+ * that table. Order preserved below — see each handler's own comment for the
+ * source line it lived at before the carve.
  *
  * ---------------------------------------------------------------------------
  * CONTRACT DECISIONS made here that the spec did not fully dictate (mirrors
@@ -52,7 +58,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import { isDryBridge } from '../../cli/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
@@ -110,23 +116,15 @@ function toWireConnection(forgeRoot: string, def: ConnectionDefinition): Record<
 }
 
 // ---------------------------------------------------------------------------
-// Route handler
+// GET /api/studio/connections — the library listing (D-2). Formerly the
+// first arm of handleStudioConnectionsRoutes, :129.
 // ---------------------------------------------------------------------------
 
-export async function handleStudioConnectionsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  if (method !== 'GET' && method !== 'POST') return false;
-
+export async function handleConnectionsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // ---- GET /api/studio/connections — the library listing (D-2) ------------
-  if (method === 'GET' && url === '/api/studio/connections') {
+  if (url === '/api/studio/connections' && method === 'GET') {
     try {
       const connections = listConnections(ctx.forgeRoot).map((def) => toWireConnection(ctx.forgeRoot, def));
       sendJson(res, 200, { connections }, origin);
@@ -136,8 +134,21 @@ export async function handleStudioConnectionsRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/connections/:id/probe — explicit re-check (D-3) ---
-  const probeMatch = url.match(/^\/api\/studio\/connections\/([^/]+)\/probe$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/connections/:id/probe — explicit re-check (D-3). Formerly
+// the second arm of handleStudioConnectionsRoutes, :140.
+// ---------------------------------------------------------------------------
+
+export const PROBE_RE = /^\/api\/studio\/connections\/([^/]+)\/probe$/;
+
+export async function handleConnectionsProbe(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const probeMatch = url.match(PROBE_RE);
   if (method === 'POST' && probeMatch) {
     try {
       const def = resolveConnectionOrRespond(ctx.forgeRoot, probeMatch[1], res, origin);
@@ -149,8 +160,21 @@ export async function handleStudioConnectionsRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/connections/:id/install — the D6 security core ----
-  const installMatch = url.match(/^\/api\/studio\/connections\/([^/]+)\/install$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/connections/:id/install — the D6 security core. Formerly
+// the third arm of handleStudioConnectionsRoutes, :153.
+// ---------------------------------------------------------------------------
+
+export const INSTALL_RE = /^\/api\/studio\/connections\/([^/]+)\/install$/;
+
+export async function handleConnectionsInstall(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const installMatch = url.match(INSTALL_RE);
   if (method === 'POST' && installMatch) {
     try {
       const def = resolveConnectionOrRespond(ctx.forgeRoot, installMatch[1], res, origin);
@@ -208,8 +232,21 @@ export async function handleStudioConnectionsRoutes(
     return true;
   }
 
-  // ---- GET /api/studio/connections/:id — detail (D-1/D-5) ------------------
-  const detailMatch = url.match(/^\/api\/studio\/connections\/([^/]+)$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/studio/connections/:id — detail (D-1/D-5). Formerly the fourth
+// arm of handleStudioConnectionsRoutes, :212.
+// ---------------------------------------------------------------------------
+
+export const DETAIL_RE = /^\/api\/studio\/connections\/([^/]+)$/;
+
+export async function handleConnectionsDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const detailMatch = url.match(DETAIL_RE);
   if (method === 'GET' && detailMatch) {
     try {
       const def = resolveConnectionOrRespond(ctx.forgeRoot, detailMatch[1], res, origin);

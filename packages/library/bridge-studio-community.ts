@@ -56,6 +56,16 @@
  * its own try/catch (`toWireItemSafe`) — one item's derivation failure
  * degrades to an honest `error` field on THAT item, never a 500 for the
  * other N-1.
+ *
+ * M4 §4 step 2 — carved into one exported handler per route (the table
+ * `packages/library/routes.ts` assembles). The handlers have not moved;
+ * what has moved is the DISPATCH, out of this module's own if-chain and into
+ * that table. Three arms (detail, connection-install, install) still
+ * delegate to the local `handleDetail` / `handleConnectionInstall` /
+ * `handleInstall` helpers below, unchanged — the exported handler is the thin
+ * arm that resolves the match and calls them. Order preserved below — see
+ * each handler's own comment for the source line it lived at before the
+ * carve.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -63,7 +73,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
@@ -132,7 +142,8 @@ function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; re
 // ---------------------------------------------------------------------------
 // Id resolution — decode + slug-validate. Writes its own 400 and returns null
 // on failure, mirroring bridge-studio-connections.ts's
-// resolveConnectionOrRespond.
+// resolveConnectionOrRespond. Exported: cli/bridge-studio-writes.ts's own
+// registry-item routes reuse it directly.
 // ---------------------------------------------------------------------------
 
 export function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
@@ -387,22 +398,14 @@ function statusForRefreshReason(reason: CommunityRefreshRunReason): number {
 }
 
 // ---------------------------------------------------------------------------
-// Route handler
+// GET /api/studio/community — hubs + cross-kind items (D1). Formerly the
+// first arm of handleStudioCommunityRoutes, :406.
 // ---------------------------------------------------------------------------
 
-export async function handleStudioCommunityRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  if (method !== 'GET' && method !== 'POST') return false;
-
+export async function handleCommunityList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // ---- GET /api/studio/community — hubs + cross-kind items (D1) -----------
   if (method === 'GET' && url === '/api/studio/community') {
     try {
       // W7-B3 review F7: `?kind=<k>` narrows the BUILD, not just the response
@@ -432,12 +435,25 @@ export async function handleStudioCommunityRoutes(
     return true;
   }
 
-  // ---- GET /api/studio/community/registry/items/:id — the RAW registry row
-  // (W7-B3, community-23: the edit form pre-fills from the row's own fields —
-  // category/tier/signals — which the browse wire projection does not carry).
-  // Matched BEFORE the 2-segment detail route cannot collide: this is 3
-  // segments after /community/.
-  const registryRowMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/studio/community/registry/items/:id — the RAW registry row
+// (W7-B3, community-23: the edit form pre-fills from the row's own fields —
+// category/tier/signals — which the browse wire projection does not carry).
+// Matched BEFORE the 2-segment detail route cannot collide: this is 3
+// segments after /community/. Formerly the second arm of
+// handleStudioCommunityRoutes, :440.
+// ---------------------------------------------------------------------------
+
+export const REGISTRY_ROW_RE = /^\/api\/studio\/community\/registry\/items\/([^/]+)$/;
+
+export async function handleCommunityRegistryItem(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const registryRowMatch = url.match(REGISTRY_ROW_RE);
   if (method === 'GET' && registryRowMatch) {
     try {
       const id = decodeIdOrRespond(registryRowMatch[1], res, origin);
@@ -455,9 +471,20 @@ export async function handleStudioCommunityRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/community/refresh — the DETERMINISTIC refresh -----
-  // (W8-B5, exit row E7.) This route holds NO refresh logic of its own: it
-  // calls the same `runCommunityRefresh` that `forge community refresh` calls
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/community/refresh — the DETERMINISTIC refresh (W8-B5,
+// exit row E7). Formerly the third arm of handleStudioCommunityRoutes, :469.
+// ---------------------------------------------------------------------------
+
+export async function handleCommunityRefresh(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  // This route holds NO refresh logic of its own: it calls the same
+  // `runCommunityRefresh` that `forge community refresh` calls
   // (cli/community-refresh-run.ts) and renders the typed result as HTTP. That
   // sharing IS the deliverable — two hand-rolled load→refresh→write copies
   // would drift, and a byte-parity test pins the two surfaces together.
@@ -529,14 +556,42 @@ export async function handleStudioCommunityRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/community/:kind/:id/install ------------------------
-  const installMatch = url.match(/^\/api\/studio\/community\/([^/]+)\/([^/]+)\/install$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/community/:kind/:id/install. Formerly the fourth arm of
+// handleStudioCommunityRoutes, :533 — a thin match-and-delegate to the
+// unmoved `handleInstall` helper above.
+// ---------------------------------------------------------------------------
+
+export const INSTALL_RE = /^\/api\/studio\/community\/([^/]+)\/([^/]+)\/install$/;
+
+export async function handleCommunityInstall(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const installMatch = url.match(INSTALL_RE);
   if (method === 'POST' && installMatch) {
     return handleInstall(ctx, res, origin, installMatch[1], installMatch[2]);
   }
 
-  // ---- GET /api/studio/community/:kind/:id — detail ------------------------
-  const detailMatch = url.match(/^\/api\/studio\/community\/([^/]+)\/([^/]+)$/);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/studio/community/:kind/:id — detail. Formerly the fifth arm of
+// handleStudioCommunityRoutes, :539 — a thin match-and-delegate to the
+// unmoved `handleDetail` helper above.
+// ---------------------------------------------------------------------------
+
+export const DETAIL_RE = /^\/api\/studio\/community\/([^/]+)\/([^/]+)$/;
+
+export async function handleCommunityDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const detailMatch = url.match(DETAIL_RE);
   if (method === 'GET' && detailMatch) {
     return handleDetail(ctx, res, origin, detailMatch[1], detailMatch[2]);
   }

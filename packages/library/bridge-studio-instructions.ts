@@ -58,18 +58,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
 import { composeInstructionsDraft } from './studio/instructions-draft.ts';
-import { resolveGuardedPath } from '@forge/kernel';
-import { skillsDir } from './skill-path.ts';
 import {
+  resolveGuardedPath,
   sendJson,
   allowedOrigin,
   sanitizeError,
-  readJson,
   pathOnly,
-  type StudioContext,
-} from '../../cli/bridge-studio.ts';
+  type RouteContext,
+} from '@forge/kernel';
+import { skillsDir } from './skill-path.ts';
 
-const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructions-draft$/;
+export const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructions-draft$/;
 
 /**
  * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via the shared
@@ -90,7 +89,7 @@ function resolveSafeSkillMdPath(forgeRoot: string, slug: string): string | null 
 export async function handleStudioInstructionsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -128,7 +127,7 @@ export async function handleStudioInstructionsRoutes(
 
     let body: unknown;
     try {
-      body = await readJson(req);
+      body = await ctx.readBody();
     } catch {
       sendJson(res, 400, { error: 'invalid JSON body' }, origin);
       return true;

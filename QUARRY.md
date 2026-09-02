@@ -161,6 +161,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-drain-model.ts | knowledge | verbatim | 381 |
 | packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 434 |
 | packages/knowledge/routes.ts | knowledge | verbatim | 153 |
+| packages/library/routes.ts | library | verbatim | 401 |
 | packages/knowledge/kb-lint-summary.ts | knowledge | verbatim | 545 |
 | packages/knowledge/kb-read-policy.ts | knowledge | verbatim | 91 |
 | packages/knowledge/kb-sites.ts | knowledge | verbatim | 110 |

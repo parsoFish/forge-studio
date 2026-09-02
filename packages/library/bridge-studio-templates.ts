@@ -4,17 +4,32 @@
  *
  * Owns EVERY `/api/studio/templates*` route:
  *
- *   GET    /api/studio/templates      → { templates: TemplateLibraryEntry[] }
- *   GET    /api/studio/templates/:id  → TemplateDetail (404 unknown id, 400 malformed id)
- *   POST   /api/studio/templates      → create / duplicate a single-file template
- *   PUT    /api/studio/templates/:id  → overwrite a single-file template's content
- *   DELETE /api/studio/templates/:id  → remove a single-file template (409 while `usedBy` is non-empty)
+ *   GET    /api/studio/templates      → { templates: TemplateLibraryEntry[] } (handleTemplatesList)
+ *   GET    /api/studio/templates/:id  → TemplateDetail (404 unknown id, 400 malformed id) (handleTemplateDetail)
+ *   POST   /api/studio/templates      → create / duplicate a single-file template (handleTemplateCreate)
+ *   PUT    /api/studio/templates/:id  → overwrite a single-file template's content (handleTemplatePut)
+ *   DELETE /api/studio/templates/:id  → remove a single-file template (409 while `usedBy` is non-empty) (handleTemplateDeleteRoute)
  *
- * Mirrors bridge-studio-skills.ts's contract exactly: a single
- * `handleStudioTemplatesRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
- * a linear if-chain, an exact-string compare for the collection route and a
- * `match()` regex for the id route, returning `false` on fallthrough. Same
- * convention as the skills/hooks files.
+ * M4 route-carve: each route above used to be one arm of a single dispatcher,
+ * `handleStudioTemplatesRoutes`, that `cli/ui-bridge.ts` called directly.
+ * That dispatcher is now gone — `packages/library/routes.ts` is what
+ * dispatches these, as a table. Each handler below keeps the SAME
+ * five-parameter contract the dispatcher's arms ran under —
+ * `(req, res, ctx, rawUrl, method): Promise<boolean>` — normalises its own
+ * url via `pathOnly` (a handler that skipped this would fail its own
+ * anchored regex against `/api/studio/templates?x=1` and 404 silently),
+ * computes its own `origin` via `allowedOrigin`, and returns `false` on a
+ * non-match so it still composes as a passthrough. The PUT and DELETE arms
+ * shared one local `handleTemplateMutation` helper in the dispatcher; that
+ * stays a shared module-local helper here too, with one thin exported
+ * handler per method calling into it (rule: the shared mutation logic is not
+ * duplicated between the two).
+ *
+ * `sendJson`/`allowedOrigin`/`sanitizeError`/`pathOnly`/`StudioContext`/
+ * `RouteContext` come from `@forge/kernel` — never the legacy host module,
+ * which would be a `package-to-legacy` boundary violation. The old body
+ * reader import is gone entirely; every route that reads a body now calls
+ * `ctx.readBody()` (the host-supplied reader `RouteContext` carries) instead.
  *
  * These routes are READ-WRITE — EXCEPT `project-scaffold` templates, which
  * stay read-only: a scaffold (`studio/starters/projects/<id>/`) is a whole
@@ -38,7 +53,14 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, type StudioContext } from '../../cli/bridge-studio.ts';
+import {
+  sendJson,
+  allowedOrigin,
+  sanitizeError,
+  pathOnly,
+  type StudioContext,
+  type RouteContext,
+} from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
 import { listTemplateLibrary, templateDetail, type TemplateCategory } from './studio/template-library.ts';
@@ -159,23 +181,26 @@ export function invalidTemplateContentReason(
   }
 }
 
-export async function handleStudioTemplatesRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  if (method !== 'GET' && method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return false;
+// ---------------------------------------------------------------------------
+// Route handlers
+// ---------------------------------------------------------------------------
 
+/** POST /api/studio/templates — create / duplicate (W7-B4). */
+/**
+ * Route matcher, hoisted out of the arms it was inlined in so that
+ * `routes.ts` and the handlers share ONE source — see
+ * `bridge-studio-skills.ts` for the drift this prevents.
+ */
+export const TEMPLATE_ID_RE = /^\/api\/studio\/templates\/([^/]+)$/;
+
+export async function handleTemplateCreate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // ---- POST /api/studio/templates — create / duplicate (W7-B4) -------------
   if (url === '/api/studio/templates' && method === 'POST') {
     try {
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
 
       const categoryCheck = writableCategoryOrReason(b['category']);
@@ -238,71 +263,108 @@ export async function handleStudioTemplatesRoutes(
     return true;
   }
 
-  // ---- PUT / DELETE /api/studio/templates/:id (W7-B4) ----------------------
-  // One dispatch line per method (not a combined `||`) so the dry-bridge
-  // coverage scanner (cli/dry-bridge-coverage.test.ts) derives BOTH
-  // candidates — its explicit-method regex reads only the first
-  // `method ===` on an if-line. Same convention as the skills/hooks files.
-  const writeMatch = url.match(/^\/api\/studio\/templates\/([^/]+)$/);
-  const handleTemplateMutation = async (rawId: string): Promise<boolean> => {
-    try {
-      let id: string;
-      try { id = decodeIdSegment(rawId); } catch { sendJson(res, 400, { error: 'invalid template id — malformed URL encoding' }, origin); return true; }
-      const invalidId = invalidTemplateIdReason(id);
-      if (invalidId) { sendJson(res, 400, { error: invalidId }, origin); return true; }
+  return false;
+}
 
-      const entry = listTemplateLibrary(ctx.forgeRoot).find((e) => e.id === id);
-      if (!entry) { sendJson(res, 404, { error: `unknown template "${id}"` }, origin); return true; }
-      if (entry.category === 'project-scaffold') {
-        sendJson(res, 400, { error: SCAFFOLD_READONLY }, origin);
-        return true;
-      }
-      const category = entry.category as 'planning' | 'demo-output';
-      const dirSegments = WRITABLE_CATEGORY_DIRS[category];
-      // The leaf is the entry's OWN definitionRef basename (server-derived),
-      // still routed through the guard — containment discipline, not trust.
-      const leaf = entry.definitionRef.split('/').pop() ?? `${id}.md`;
-      const targetGuard = resolveGuardedPath(resolve(ctx.forgeRoot, ...dirSegments), [leaf]);
-      if (!targetGuard.ok || !targetGuard.exists) {
-        sendJson(res, 404, { error: `unknown template "${id}"` }, origin);
-        return true;
-      }
+/**
+ * Shared mutation body for PUT and DELETE /api/studio/templates/:id
+ * (W7-B4). One dispatch line per exported handler (not a combined `||`) so
+ * the dry-bridge coverage scanner (cli/dry-bridge-coverage.test.ts) derives
+ * BOTH candidates — its explicit-method regex reads only the first
+ * `method ===` on an if-line. Module-local: the two exported handlers below
+ * are its only callers.
+ */
+async function handleTemplateMutation(
+  res: ServerResponse,
+  ctx: RouteContext,
+  origin: string,
+  method: string,
+  rawId: string,
+): Promise<boolean> {
+  try {
+    let id: string;
+    try { id = decodeIdSegment(rawId); } catch { sendJson(res, 400, { error: 'invalid template id — malformed URL encoding' }, origin); return true; }
+    const invalidId = invalidTemplateIdReason(id);
+    if (invalidId) { sendJson(res, 400, { error: invalidId }, origin); return true; }
 
-      if (method === 'PUT') {
-        let body: unknown;
-        try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
-        const b = (body ?? {}) as Record<string, unknown>;
-        const content = typeof b['content'] === 'string' ? b['content'] : '';
-        if (!content) { sendJson(res, 400, { error: 'content is required' }, origin); return true; }
-        const invalidContent = invalidTemplateContentReason(ctx.forgeRoot, category, id, content);
-        if (invalidContent) { sendJson(res, 400, { error: invalidContent }, origin); return true; }
-        writeFileSync(targetGuard.realPath, content, 'utf8');
-        sendJson(res, 200, { ok: true, id }, origin);
-        return true;
-      }
-
-      // DELETE — refuse while anything real still uses it (the same derived
-      // usedBy the listing renders; an empty list is "scanned N, found none").
-      if (entry.usedBy.length > 0) {
-        sendJson(res, 409, {
-          error: `template "${id}" is still used by: ${entry.usedBy.join(', ')} — detach those first`,
-          usedBy: entry.usedBy,
-        }, origin);
-        return true;
-      }
-      rmSync(targetGuard.realPath, { force: true });
-      sendJson(res, 200, { ok: true, id }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    const entry = listTemplateLibrary(ctx.forgeRoot).find((e) => e.id === id);
+    if (!entry) { sendJson(res, 404, { error: `unknown template "${id}"` }, origin); return true; }
+    if (entry.category === 'project-scaffold') {
+      sendJson(res, 400, { error: SCAFFOLD_READONLY }, origin);
+      return true;
     }
-    return true;
-  };
-  if (writeMatch && method === 'PUT') return handleTemplateMutation(writeMatch[1]);
-  if (writeMatch && method === 'DELETE') return handleTemplateMutation(writeMatch[1]);
+    const category = entry.category as 'planning' | 'demo-output';
+    const dirSegments = WRITABLE_CATEGORY_DIRS[category];
+    // The leaf is the entry's OWN definitionRef basename (server-derived),
+    // still routed through the guard — containment discipline, not trust.
+    const leaf = entry.definitionRef.split('/').pop() ?? `${id}.md`;
+    const targetGuard = resolveGuardedPath(resolve(ctx.forgeRoot, ...dirSegments), [leaf]);
+    if (!targetGuard.ok || !targetGuard.exists) {
+      sendJson(res, 404, { error: `unknown template "${id}"` }, origin);
+      return true;
+    }
+
+    if (method === 'PUT') {
+      let body: unknown;
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const content = typeof b['content'] === 'string' ? b['content'] : '';
+      if (!content) { sendJson(res, 400, { error: 'content is required' }, origin); return true; }
+      const invalidContent = invalidTemplateContentReason(ctx.forgeRoot, category, id, content);
+      if (invalidContent) { sendJson(res, 400, { error: invalidContent }, origin); return true; }
+      writeFileSync(targetGuard.realPath, content, 'utf8');
+      sendJson(res, 200, { ok: true, id }, origin);
+      return true;
+    }
+
+    // DELETE — refuse while anything real still uses it (the same derived
+    // usedBy the listing renders; an empty list is "scanned N, found none").
+    if (entry.usedBy.length > 0) {
+      sendJson(res, 409, {
+        error: `template "${id}" is still used by: ${entry.usedBy.join(', ')} — detach those first`,
+        usedBy: entry.usedBy,
+      }, origin);
+      return true;
+    }
+    rmSync(targetGuard.realPath, { force: true });
+    sendJson(res, 200, { ok: true, id }, origin);
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+  }
+  return true;
+}
+
+/** PUT /api/studio/templates/:id — overwrite content (W7-B4). Thin wrapper
+ *  around the shared `handleTemplateMutation` — see its own header. */
+export async function handleTemplatePut(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const writeMatch = url.match(TEMPLATE_ID_RE);
+  if (writeMatch && method === 'PUT') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1]);
+
+  return false;
+}
+
+/** DELETE /api/studio/templates/:id — remove (W7-B4). Thin wrapper around
+ *  the shared `handleTemplateMutation` — see its own header. */
+export async function handleTemplateDeleteRoute(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const writeMatch = url.match(TEMPLATE_ID_RE);
+  if (writeMatch && method === 'DELETE') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1]);
+
+  return false;
+}
+
+/** GET /api/studio/templates — the library listing. */
+export async function handleTemplatesList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
 
   if (method !== 'GET') return false;
 
-  // ---- GET /api/studio/templates — the library listing ---------------------
   if (url === '/api/studio/templates') {
     try {
       const templates = listTemplateLibrary(ctx.forgeRoot).map((e) => toClientEntry(e));
@@ -313,8 +375,17 @@ export async function handleStudioTemplatesRoutes(
     return true;
   }
 
-  // ---- GET /api/studio/templates/:id — detail -------------------------------
-  const detailMatch = url.match(/^\/api\/studio\/templates\/([^/]+)$/);
+  return false;
+}
+
+/** GET /api/studio/templates/:id — detail. */
+export async function handleTemplateDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  if (method !== 'GET') return false;
+
+  const detailMatch = url.match(TEMPLATE_ID_RE);
   if (detailMatch) {
     try {
       let id: string;

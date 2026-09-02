@@ -95,7 +95,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import { startBridge } from '../../cli/ui-bridge.ts';
-import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 import { skillPath } from './skill-path.ts';
 import { listSkillLibrary, skillTrustState } from './studio/skill-trust.ts';
 import { hookYamlPath } from './studio/hook-library.ts';
@@ -809,14 +809,14 @@ test('per-target reality: two connections never cross-contaminate state — a re
 // Handler contract — direct invocation (mirrors bridge-studio-connections.test.ts)
 // ---------------------------------------------------------------------------
 
-test('handleStudioCommunityRoutes returns false for a non-matching URL (passthrough contract)', async () => {
+test('the library route table declines a non-matching URL (passthrough contract)', async () => {
   const mockRes = {
     writeHead: () => { throw new Error('must not write a response for a non-matching URL'); },
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
   } as unknown as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
-  const handled = await handleStudioCommunityRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-community URL must return false');
 });
 
