@@ -354,6 +354,47 @@ test('onboard: a full success wires seedBrain/readArtifactRoot correctly and ans
   }
 });
 
+test('[forge-8vfn.5.3] onboard: a directory already DISCOVERED on disk with no .forge/ is onboardable, not a 409 (S1 beat 3)', async () => {
+  const forgeRoot = baseForgeRoot();
+  // Discovered-but-unonboarded: a bare directory on disk, no .forge/project.json —
+  // exactly what discoverProjects() reports as hasConfig: false, and exactly
+  // what the onboarding form exists to close.
+  mkdirSync(join(forgeRoot, 'projects', 'gitweave'), { recursive: true });
+  try {
+    const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
+    const { res, captured } = mockRes();
+    const answered = await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'gitweave', qualityGateCmd: 'echo ok' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(answered, true);
+    assert.equal(captured.status, 200, `expected 200, got ${captured.status} body=${captured.body}`);
+    assert.ok(existsSync(join(forgeRoot, 'projects', 'gitweave', '.forge', 'project.json')));
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('[forge-8vfn.5.3] onboard: an id collision with an ALREADY-ONBOARDED project (has .forge/project.json) still 409s', async () => {
+  const forgeRoot = baseForgeRoot();
+  const dir = join(forgeRoot, 'projects', 'demoproj');
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ name: 'demoproj', testProcess: { local: { cmd: ['echo', 'ok'] } } }, null, 2));
+  try {
+    const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
+    const { res, captured } = mockRes();
+    const answered = await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'demoproj', qualityGateCmd: 'echo ok' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(answered, true);
+    assert.equal(captured.status, 409, `expected 409, got ${captured.status} body=${captured.body}`);
+    assert.match(JSON.parse(captured.body).error, /already exists/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // handleProjectPut — PUT and POST /api/studio/projects/:id (never DELETE)
 // ---------------------------------------------------------------------------

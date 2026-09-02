@@ -48,6 +48,23 @@ test('/projects/new: BOTH doors live inside the one page root, so the contract i
   }
 });
 
+test('[forge-8vfn.5.3] /projects/new: the onboard door carries its own error sentinel (data-fetch-status / data-load-error), separate from the page root\'s starter-fetch sentinel', async () => {
+  const { default: ProjectBuilderPage } = await import('@/app/projects/[id]/page');
+  const html = renderToStaticMarkup(React.createElement(ProjectBuilderPage, { params: { id: 'new' } }));
+
+  const sectionStart = html.indexOf('data-section="project-onboard"');
+  expect(sectionStart).toBeGreaterThanOrEqual(0);
+  // The onboard door's own open tag (walk back to the nearest preceding tag
+  // start) — a rejected submit (409 id-collision, 400 validation, …) used to
+  // render as bare text with NO data-* here at all, so a story beat could
+  // only observe the failure as a missing route.
+  const tagStart = html.lastIndexOf('<div', sectionStart);
+  const tagEnd = html.indexOf('>', tagStart);
+  const openTag = html.slice(tagStart, tagEnd + 1);
+  expect(openTag).toContain('data-fetch-status="ok"');
+  expect(openTag).toContain('data-load-error="false"');
+});
+
 test('/architect/new: the root cannot say ready while the roster it renders says loading', async () => {
   const { default: ArchitectNewPage } = await import('@/app/architect/new/page');
   const html = renderToStaticMarkup(React.createElement(ArchitectNewPage));

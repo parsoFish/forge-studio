@@ -55,6 +55,14 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   C10: { resolution: 'user', fixHint: 'Add the missing release substrate (changelogPath / versionFile / docsDir) or correct the releaseProcess declaration.' },
   // R1-04-F3: the build process is operator-declared project policy.
   BUILD: { resolution: 'user', fixHint: 'Declare buildProcess.local (the compile/package command) and buildProcess.remote (the CI workflow) so a broken build is its own obligation.' },
+  // forge-8vfn.5.13: an unresolved binding needs a JUDGMENT call (rebind to
+  // the right id, author the missing skill, or drop the stale declaration) —
+  // none of which is a safe deterministic edit or a single agentic runner.
+  SKILLS: { resolution: 'user', fixHint: 'Rebind each unresolved skill id to a real project-local (.forge/skills/<id>) or forge-wide (skills/<id>) skill, or remove the stale declaration.' },
+  // forge-8vfn.5.21: running an installer (network access, lockfile
+  // resolution, arbitrary postinstall scripts) is not a safe surgical file
+  // edit the way C2/ARTIFACTS/C4's fixers are — the operator runs it.
+  DEPS: { resolution: 'user', fixHint: 'Run npm ci (or npm install) in the project\'s own ground checkout so node_modules is provisioned before the next claim.' },
 };
 
 /**

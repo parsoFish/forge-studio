@@ -906,7 +906,7 @@ function ProjectOnboardForm() {
   const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', boxSizing: 'border-box' };
 
   return (
-    <div data-section="project-onboard" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
+    <div /* forge-8vfn.5.3 error sentinel, own root — see docs */ data-section="project-onboard" data-fetch-status={error ? 'error' : 'ok'} data-load-error={error ? 'true' : 'false'} style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
         <PageHeader
           title="Onboard a project"
           lede={
@@ -969,7 +969,7 @@ function ProjectOnboardForm() {
             </div>
           </details>
 
-          {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
+          {error && <div role="alert" style={{ fontSize: 12.5, color: 'var(--red)' }}><span data-fetch-error-text>{error}</span></div>}
 
           {failing && (
             <div

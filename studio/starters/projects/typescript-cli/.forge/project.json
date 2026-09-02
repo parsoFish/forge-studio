@@ -7,5 +7,6 @@
     { "kind": "verify", "text": "Run npm run acceptance — the built binary vs a checked-in fixture." }
   ],
   "testProcess": { "local": { "cmd": ["npm", "test"] } },
+  "skills": ["cli-conventions"],
   "kb": "{{NAME}}"
 }

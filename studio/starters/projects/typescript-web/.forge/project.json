@@ -7,5 +7,6 @@
     { "kind": "verify", "text": "GET the page (e.g. /) and assert the HTML contains the expected heading." }
   ],
   "testProcess": { "local": { "cmd": ["npm", "test"] } },
+  "skills": ["web-conventions"],
   "kb": "{{NAME}}"
 }
