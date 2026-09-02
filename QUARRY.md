@@ -124,7 +124,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-hooks.ts | library | verbatim | 727 |
 | packages/library/bridge-studio-instructions.ts | library | verbatim | 149 |
 | packages/knowledge/bridge-studio-kb-consolidate.ts | knowledge | verbatim | 376 |
-| packages/knowledge/bridge-studio-kb-drain.ts | knowledge | verbatim | 1696 |
+| packages/knowledge/bridge-studio-kb-drain.ts | knowledge | verbatim | 753 |
 | packages/knowledge/bridge-studio-kb-routes-lifecycle.ts | knowledge | verbatim | 538 |
 | packages/knowledge/bridge-studio-kb-routes-maintenance.ts | knowledge | verbatim | 546 |
 | packages/knowledge/bridge-studio-kb-routes-read.ts | knowledge | verbatim | 308 |
@@ -158,6 +158,8 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-drain-structural.ts | knowledge | verbatim | 230 |
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 208 |
 | packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 395 |
+| packages/knowledge/kb-drain-model.ts | knowledge | verbatim | 381 |
+| packages/knowledge/kb-drain-store.ts | knowledge | verbatim | 434 |
 | packages/knowledge/routes.ts | knowledge | verbatim | 153 |
 | packages/knowledge/kb-lint-summary.ts | knowledge | verbatim | 545 |
 | packages/knowledge/kb-read-policy.ts | knowledge | verbatim | 91 |

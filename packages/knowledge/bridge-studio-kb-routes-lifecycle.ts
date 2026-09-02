@@ -23,8 +23,8 @@ import { resolveKbBrainDir } from './brain-paths.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts/studio/types.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
-import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
-import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession, readJson } from './bridge-studio-kbs.ts';
+import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
+import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession } from './bridge-studio-kbs.ts';
 
 // ---------------------------------------------------------------------------
 // Guidance size cap
@@ -65,7 +65,7 @@ function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult
 export async function handleKbCreate(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -82,7 +82,7 @@ export async function handleKbCreate(
       // 1. Parse request body
       let body: unknown;
       try {
-        body = await readJson(req);
+        body = await ctx.readBody();
       } catch {
         sendJson(res, 400, { error: 'invalid JSON body' }, origin);
         return true;
@@ -297,7 +297,7 @@ export async function handleKbCreate(
 export async function handleKbDelete(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -395,7 +395,7 @@ export async function handleKbDelete(
 export async function handleKbGuidance(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -440,7 +440,7 @@ export async function handleKbGuidance(
       // 4. Parse request body
       let body: unknown;
       try {
-        body = await readJson(req);
+        body = await ctx.readBody();
       } catch {
         sendJson(res, 400, { error: 'invalid JSON body' }, origin);
         return true;

@@ -53,23 +53,6 @@ import {
 } from './kb-lint-summary.ts';
 import { sanitizeError } from '@forge/kernel';
 
-// ---------------------------------------------------------------------------
-// The KB surface's ONE remaining door to the legacy host
-// ---------------------------------------------------------------------------
-//
-// Three of the eleven routes read a JSON request body, and one validates a run
-// id; `readJson` and `SAFE_ID_RE` live in `cli/bridge-studio.ts` and have no
-// kernel home — `@forge/kernel`'s `http-envelope.ts` deliberately scopes itself
-// to the RESPONSE envelope and leaves body policy (size caps, CSRF,
-// content-type) with the host.
-//
-// They are re-exported HERE, from the module that already carried this edge,
-// rather than imported directly by each route file. Said plainly: a five-way
-// split must not turn one boundary row into three, and centralising the door
-// also means the repoint has ONE call site when T1 ruling 30's
-// `ctx.readBody` lands from the library lane — at which point this block and
-// the package's last `package-to-legacy` body-read edge both go away.
-export { readJson, SAFE_ID_RE } from '../../cli/bridge-studio.ts';
 import { enqueueConsolidate, runBrainConsolidateNow } from './bridge-studio-kb-consolidate.ts';
 
 // ---------------------------------------------------------------------------

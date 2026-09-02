@@ -57,7 +57,7 @@
  * its classification would be a route that SPAWNS under `FORGE_DRY_BRIDGE=1`;
  * the contract test asserts every entry carries one.
  */
-import { pathOnly, type RouteTable, type StudioContext } from '@forge/kernel';
+import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
 
 import {
   handleKbList,
@@ -91,7 +91,7 @@ import {
  * re-export rather than the structural duplicate it had to be while the type
  * still lived in `cli/bridge-studio.ts`.
  */
-export type KnowledgeRouteContext = StudioContext;
+export type KnowledgeRouteContext = RouteContext;
 
 const KB = String.raw`/api/studio/kbs`;
 

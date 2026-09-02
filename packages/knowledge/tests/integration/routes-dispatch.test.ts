@@ -30,7 +30,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
-import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -53,10 +52,23 @@ function mockRes(): { res: ServerResponse; captured: Captured } {
 /** `allowedOrigin` reads `req.headers.origin` and nothing else. */
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
 
-function ctx(): KnowledgeRouteContext {
+/** `readBody` is the HOST's supplier (T1 ruling 30): the host applies the CSRF
+ *  and transport policy and hands the RESULT down, so a test drives the seam by
+ *  supplying the result — not by faking a request stream, which would be
+ *  re-testing the host's body policy inside a package test. A handler that
+ *  needs no body never calls it, so the default throws rather than returning
+ *  `undefined`: a handler reading a body it was not given should fail loudly. */
+function ctx(body?: unknown): KnowledgeRouteContext {
   const root = mkdtempSync(join(tmpdir(), 'forge-knowledge-routes-'));
   mkdirSync(join(root, 'brain'), { recursive: true });
-  return { forgeRoot: root, logsRoot: join(root, '_logs') };
+  return {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => {
+      if (arguments.length === 0 && body === undefined) throw new Error('readBody() called by a handler this test gave no body');
+      return body;
+    },
+  };
 }
 
 test('routes-dispatch: a query-bearing url reaches its handler — the table hands handlers the RAW url, so a handler that does not normalise for itself 404s silently', async () => {
@@ -148,12 +160,6 @@ test('routes-dispatch: a method no entry declares returns false — DELETE on a 
  * They boot no bridge (ruling 5): `dispatchRoute` against the real table with
  * a mock req/res, which is the whole point of carving dispatch out of the host.
  */
-function mockJsonReq(body: unknown): IncomingMessage {
-  const req = Readable.from([Buffer.from(JSON.stringify(body), 'utf8')]) as unknown as IncomingMessage;
-  (req as unknown as { headers: Record<string, string> }).headers = {};
-  return req;
-}
-
 /** Set `FORGE_DRY_BRIDGE=1` for one call and restore whatever was there —
  *  including the `undefined` case, which a naive save/restore turns into the
  *  literal string 'undefined' and leaks into every later test in the file. */
@@ -172,8 +178,9 @@ async function underDryBridge<T>(fn: () => Promise<T>): Promise<T> {
 test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the maintenance route REFUSES op=fix-agent — the one op that spawns', async () => {
   const { res, captured } = mockRes();
   const answered = await underDryBridge(() => dispatchRoute(
-    knowledgeRoutes, mockJsonReq({ op: 'fix-agent', file: 'brain/forge-dev/themes/x.md', check: 'frontmatter', kind: 'agent', message: 'x' }),
-    res, ctx(), '/api/studio/kbs/cycles/maintenance', 'POST',
+    knowledgeRoutes, mockReq(), res,
+    ctx({ op: 'fix-agent', file: 'brain/forge-dev/themes/x.md', check: 'frontmatter', kind: 'agent', message: 'x' }),
+    '/api/studio/kbs/cycles/maintenance', 'POST',
   ));
   assert.equal(answered, true, 'no entry claimed POST /api/studio/kbs/cycles/maintenance');
   assert.equal(captured.status, 409,
@@ -188,7 +195,7 @@ test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the maintenance rout
 test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the SAME route lets op=lint proceed — which is why the row is stub-actions and not refuse', async () => {
   const { res, captured } = mockRes();
   const answered = await underDryBridge(() => dispatchRoute(
-    knowledgeRoutes, mockJsonReq({ op: 'lint' }), res, ctx(), '/api/studio/kbs/cycles/maintenance', 'POST',
+    knowledgeRoutes, mockReq(), res, ctx({ op: 'lint' }), '/api/studio/kbs/cycles/maintenance', 'POST',
   ));
   assert.equal(answered, true, 'no entry claimed POST /api/studio/kbs/cycles/maintenance');
   assert.notEqual(captured.status, 409,
