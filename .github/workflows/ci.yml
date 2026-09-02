@@ -239,7 +239,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cache the browser download, mirroring the `ui-walkthrough` job above
+      # (`actions/cache@v4`, IDENTICAL key) so the entry that job saves HITS
+      # here: a differently-keyed cache would miss and re-enter the apt path
+      # this exists to avoid. `--with-deps` runs an `apt-get update`, which on
+      # 2026-09-02 failed for every run on this job — `packages.microsoft.com`
+      # returned 403 Forbidden for the runner's azure-cli and ubuntu prod
+      # repos ("no longer signed"), so the install exited 100 and the gate went
+      # red for a reason wholly outside this repo. On a cache hit chromium is
+      # already in ~/.cache/ms-playwright and the ubuntu-latest image carries
+      # its OS libs, which is exactly the reasoning the walkthrough job records.
+      # The crawl and the story runs themselves are unchanged; only the browser
+      # INSTALL is cached, so no gate is weakened.
+      - name: Cache Playwright chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright-core install --with-deps chromium
 
       - name: Run the harness proof stories
@@ -271,7 +291,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cache the browser download, mirroring the `ui-walkthrough` job above
+      # (`actions/cache@v4`, IDENTICAL key) so the entry that job saves HITS
+      # here: a differently-keyed cache would miss and re-enter the apt path
+      # this exists to avoid. `--with-deps` runs an `apt-get update`, which on
+      # 2026-09-02 failed for every run on this job — `packages.microsoft.com`
+      # returned 403 Forbidden for the runner's azure-cli and ubuntu prod
+      # repos ("no longer signed"), so the install exited 100 and the gate went
+      # red for a reason wholly outside this repo. On a cache hit chromium is
+      # already in ~/.cache/ms-playwright and the ubuntu-latest image carries
+      # its OS libs, which is exactly the reasoning the walkthrough job records.
+      # The crawl and the story runs themselves are unchanged; only the browser
+      # INSTALL is cached, so no gate is weakened.
+      - name: Cache Playwright chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright-core install --with-deps chromium
 
       - name: Dead-path crawl (every route, twice)
