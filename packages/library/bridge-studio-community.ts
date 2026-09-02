@@ -73,7 +73,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
@@ -89,7 +89,7 @@ import {
 import { routeCommunityInstall, installCommunityHookPackage } from './studio/community-install.ts';
 import { installSkillPackage } from './studio/skill-install.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
-import { installArgvFor, installConnection } from './studio/connection-install.ts';
+import { installArgvFor, installConnection, installPreviewFor } from './studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from './studio/community-registry.ts';
 import { type WireCtx, buildWireCtx, toWireItemSafe } from './bridge-studio-community-wire.ts';
 import { scanVendoredHookPackage, vendoredHookTriggerError } from './bridge-studio-community-hook-preinstall.ts';
@@ -242,9 +242,9 @@ function handleDetail(ctx: StudioContext, res: ServerResponse, origin: string, r
 
 /** The mcp/tool install branch — byte-identical behaviour to
  *  bridge-studio-connections.ts's own install route (D13 refusal, D6 argv
- *  derivation, D7 dual suppression seam) so the community surface can never
- *  drift from R3-04's own security core. */
-function handleConnectionInstall(ctx: StudioContext, res: ServerResponse, origin: string, wctx: WireCtx, connectionId: string): true {
+ *  derivation, forge-6gv.8.2 confirm gate, D7 dual suppression seam) so the
+ *  community surface can never drift from R3-04's own security core. */
+async function handleConnectionInstall(ctx: RouteContext, res: ServerResponse, origin: string, wctx: WireCtx, connectionId: string): Promise<true> {
   const def = wctx.connections.find((c) => c.id === connectionId && (c.kind === 'tool' || c.kind === 'mcp'));
   if (!def) {
     // Unreachable in practice — routeCommunityInstall only returns
@@ -262,6 +262,19 @@ function handleConnectionInstall(ctx: StudioContext, res: ServerResponse, origin
   }
 
   const connectionsRoot = resolve(ctx.forgeRoot, CONNECTIONS_DIR);
+
+  // forge-6gv.8.2 — SAME confirm gate as bridge-studio-connections.ts's own
+  // install route: a body is read for `confirm` alone, never for
+  // package/version/registry. Unconfirmed → preview only, ZERO network/
+  // executor calls; installConnection below is unreached on this path.
+  let body: unknown;
+  try { body = await ctx.readBody(); } catch { body = undefined; }
+  const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  if (b['confirm'] !== true) {
+    sendJson(res, 200, { ok: true, routedTo: 'connection-install', preview: installPreviewFor(def, connectionsRoot) }, origin);
+    return true;
+  }
+
   const argv = installArgvFor(def, connectionsRoot);
 
   if (isDryBridge() || process.env.FORGE_ARCHITECT_NO_SPAWN === '1') {
@@ -289,7 +302,7 @@ function handleConnectionInstall(ctx: StudioContext, res: ServerResponse, origin
   return true;
 }
 
-function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, rawKind: string, rawIdSegment: string): true {
+async function handleInstall(ctx: RouteContext, res: ServerResponse, origin: string, rawKind: string, rawIdSegment: string): Promise<true> {
   try {
     const id = decodeIdOrRespond(rawIdSegment, res, origin);
     if (id === null) return true;
@@ -327,7 +340,7 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
 
     if (route.pipeline === 'connection') {
       const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
-      return handleConnectionInstall(ctx, res, origin, wctx, route.connectionId);
+      return await handleConnectionInstall(ctx, res, origin, wctx, route.connectionId);
     }
 
     // pipeline === 'none' — item is KNOWN (checked above), so this is always
@@ -567,7 +580,7 @@ export async function handleCommunityRefresh(req: IncomingMessage, res: ServerRe
 
 export const INSTALL_RE = /^\/api\/studio\/community\/([^/]+)\/([^/]+)\/install$/;
 
-export async function handleCommunityInstall(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleCommunityInstall(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 

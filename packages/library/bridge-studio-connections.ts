@@ -39,15 +39,27 @@
  *  D-3. `POST .../:id/probe` returns `{ ok: true, probe: ProbeResult }`.
  *  D-4. `POST .../:id/install` (D6/D7): a `system-provided` or `external`
  *       entry (both `installable: false`, D13) → 400. Unknown id → 404. The
- *       request body is NEVER READ by this route at all — not validated-
- *       then-ignored, simply never consulted — which is what makes "a body
- *       carrying package/version/registry changes nothing" trivially true
- *       rather than merely tested. Suppressed (FORGE_DRY_BRIDGE=1 or
- *       FORGE_ARCHITECT_NO_SPAWN=1, mirroring orchestrator/run-agent.ts's own
- *       double-env check): `{ ok: true, suppressed: true, wouldInstall:
- *       {command, args} }` — no execution, argv only. A real (non-suppressed)
- *       install returns a structurally DISTINCT shape (no `suppressed` key):
- *       `{ ok, installed, argv, probe }`, so the two can never be confused.
+ *       request body is read for EXACTLY ONE thing — the `confirm` flag
+ *       (forge-6gv.8.2) — and never for package/version/registry, which is
+ *       what makes "a body carrying package/version/registry changes
+ *       nothing" trivially true rather than merely tested: `installArgvFor`/
+ *       `installPreviewFor` take only `(def, connectionsRoot)`, so there is
+ *       no parameter through which a body value could reach the argv even in
+ *       principle.
+ *         - UNCONFIRMED (no body, or a body without `confirm: true`): 200,
+ *           `{ ok: true, preview: InstallPreview }` — ZERO network calls,
+ *           ZERO executor invocations. `installConnection` is not called at
+ *           all on this path.
+ *         - CONFIRMED (`{ confirm: true }`): the pre-existing behaviour,
+ *           unchanged — including the suppression seam below.
+ *       Suppressed (FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1,
+ *       mirroring orchestrator/run-agent.ts's own double-env check):
+ *       `{ ok: true, suppressed: true, wouldInstall: {command, args} }` — no
+ *       execution, argv only. A real (non-suppressed) install returns a
+ *       structurally DISTINCT shape (no `suppressed` key): `{ ok, installed,
+ *       argv, probe }`. All three shapes — preview / suppressed / real — are
+ *       pairwise disjoint in their key sets, so none can ever be mistaken for
+ *       another.
  *  D-5. Every id-bearing route resolves through `resolveConnectionOrRespond`:
  *       decode → `assertSkillSlug` → `connectionById`. A malformed/traversal-
  *       shaped id is rejected (400) before any read; an unknown-but-valid id
@@ -58,12 +70,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
 import { isDryBridge } from '../../cli/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
-import { installArgvFor, installConnection } from './studio/connection-install.ts';
+import { installArgvFor, installConnection, installPreviewFor } from './studio/connection-install.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
  *  only — every AT that exercises this route pins FORGE_ARCHITECT_NO_SPAWN=1
@@ -170,7 +182,7 @@ export async function handleConnectionsProbe(req: IncomingMessage, res: ServerRe
 
 export const INSTALL_RE = /^\/api\/studio\/connections\/([^/]+)\/install$/;
 
-export async function handleConnectionsInstall(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleConnectionsInstall(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -187,10 +199,30 @@ export async function handleConnectionsInstall(req: IncomingMessage, res: Server
         return true;
       }
 
-      // D6: the argv is derived from the catalog pin ONLY — this route never
-      // reads the request body, so a client-supplied package/version/registry
-      // cannot influence it even in principle.
+      // D6: the argv is derived from the catalog pin ONLY — a body value is
+      // consulted for the `confirm` flag alone, below, and NEVER for
+      // package/version/registry: installArgvFor/installPreviewFor take only
+      // (def, connectionsRoot), so a client-supplied field cannot influence
+      // the argv even in principle.
       const connectionsRoot = resolve(ctx.forgeRoot, CONNECTIONS_DIR);
+
+      // forge-6gv.8.2 — confirm gate. Read ONLY for `confirm`; a malformed
+      // body is treated the same as an absent one (unconfirmed), never a 500
+      // for a route whose whole point on this path is to execute nothing.
+      let body: unknown;
+      try { body = await ctx.readBody(); } catch { body = undefined; }
+      const b = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+      const confirmed = b['confirm'] === true;
+
+      if (!confirmed) {
+        // ZERO network calls, ZERO executor invocations — installConnection
+        // is never reached on this path. Structurally distinct from both the
+        // suppressed and the real-install shapes (no `suppressed`/`installed`
+        // key), mirroring the precedent that shape sets below.
+        sendJson(res, 200, { ok: true, preview: installPreviewFor(def, connectionsRoot) }, origin);
+        return true;
+      }
+
       const argv = installArgvFor(def, connectionsRoot);
 
       // D7: both suppression seams, exactly mirroring run-agent.ts's own

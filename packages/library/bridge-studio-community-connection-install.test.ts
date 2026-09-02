@@ -32,6 +32,12 @@
  * real install; it only records that it ran and exits with the code the
  * test wants, so the two directions below are driven by a REAL spawned
  * child's REAL exit code, never simulated in-process.
+ *
+ * forge-6gv.8.2 — the confirm gate (bridge-studio-connections.ts's own D-4)
+ * applies to THIS route too: every `postJson(..., {})` below now carries
+ * `confirm: true` so it still reaches the real (non-suppressed) branch this
+ * file exists to drive; the no-confirm/preview direction is pinned once more
+ * here, against the real shadowed npm, for this route's own dispatch path.
  */
 
 import { test, before, after } from 'node:test';
@@ -132,7 +138,7 @@ test('REAL non-suppressed install, shadowed npm exits NON-ZERO: top-level "ok" m
   writeMcpCatalog('doomed-mcp');
   const shadow = shadowFakeNpm(1); // real, controlled failure — no network
   try {
-    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/doomed-mcp/install`, {});
+    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/doomed-mcp/install`, { confirm: true });
     assert.equal(res.status, 200, 'the route itself must not 500 on a failed npm exit — same as bridge-studio-connections.ts');
     const body = (await res.json()) as { ok: unknown; installed: unknown; routedTo: unknown; suppressed?: unknown };
 
@@ -152,7 +158,7 @@ test('REAL non-suppressed install, shadowed npm exits ZERO: top-level "ok" must 
   writeMcpCatalog('lucky-mcp');
   const shadow = shadowFakeNpm(0); // real, controlled success — no network
   try {
-    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/lucky-mcp/install`, {});
+    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/lucky-mcp/install`, { confirm: true });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { ok: unknown; installed: unknown; suppressed?: unknown };
 
@@ -168,7 +174,7 @@ test('REAL non-suppressed install: the response shape mirrors bridge-studio-conn
   writeMcpCatalog('shape-check-mcp');
   const shadow = shadowFakeNpm(1);
   try {
-    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/shape-check-mcp/install`, {});
+    const res = await postJson(`${bridgeUrl}/api/studio/community/mcp/shape-check-mcp/install`, { confirm: true });
     const body = (await res.json()) as Record<string, unknown>;
     assert.ok(existsSync(shadow.scratchRoot), 'sanity: the shadow dir must still exist at inspection time (guards against a shadow.restore() ordering bug in this test itself)');
     for (const key of ['ok', 'installed', 'argv', 'probe']) {
@@ -177,5 +183,44 @@ test('REAL non-suppressed install: the response shape mirrors bridge-studio-conn
     assert.equal(body['routedTo'], 'connection-install');
   } finally {
     shadow.restore();
+  }
+});
+
+test('forge-6gv.8.2: POST .../community/mcp/<id>/install with NO confirm makes ZERO executor calls even on THIS route (real shadowed npm, no suppression env) — confirm:true is the only path that installs', async () => {
+  // A marker-writing fake npm (shadowFakeNpm's own fake only records an exit
+  // code, not that it ran at all) — mirrors bridge-studio-connections.test.ts's
+  // own confirm-gate repro.
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'community-confirm-gate-'));
+  const markerPath = join(scratchRoot, 'ran.marker');
+  const fakeNpmPath = join(scratchRoot, 'npm');
+  writeFileSync(fakeNpmPath, `#!/usr/bin/env bash\necho ran > "${markerPath}"\nexit 0\n`, 'utf8');
+  chmodSync(fakeNpmPath, 0o755);
+
+  const priorPath = process.env.PATH;
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  try {
+    delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    delete process.env.FORGE_DRY_BRIDGE;
+    process.env.PATH = `${scratchRoot}${process.env.PATH ? delimiter + process.env.PATH : ''}`;
+    writeMcpCatalog('community-confirm-gate-mcp');
+
+    const unconfirmed = await postJson(`${bridgeUrl}/api/studio/community/mcp/community-confirm-gate-mcp/install`, {});
+    assert.equal(unconfirmed.status, 200);
+    const unconfirmedBody = (await unconfirmed.json()) as Record<string, unknown>;
+    assert.equal(unconfirmedBody['routedTo'], 'connection-install');
+    assert.ok('preview' in unconfirmedBody, `expected a preview response for the unconfirmed request; got: ${JSON.stringify(unconfirmedBody)}`);
+    assert.equal(existsSync(markerPath), false, 'the real npm child must never have run for an unconfirmed request');
+
+    const confirmed = await postJson(`${bridgeUrl}/api/studio/community/mcp/community-confirm-gate-mcp/install`, { confirm: true });
+    const confirmedBody = (await confirmed.json()) as { suppressed?: unknown; installed?: unknown };
+    assert.notEqual(confirmedBody.suppressed, true, 'sanity: with the shadow env in place, confirm:true must reach the REAL executor');
+    assert.equal(confirmedBody.installed, true, 'confirm:true is the ONLY path that installs — the real (fake) npm child must have run exactly now');
+    assert.equal(existsSync(markerPath), true, 'the real npm child must have run exactly once confirm:true was sent');
+  } finally {
+    if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath;
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN; else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE; else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+    rmSync(scratchRoot, { recursive: true, force: true });
   }
 });

@@ -7,10 +7,12 @@
  * static scan: it touches no filesystem, and every one of its module-level
  * pattern constants is read by exactly one scan function. Everything here is
  * the opposite — it reads and writes a git-tracked yaml file and decides
- * whether a hook may run. All four of the module's request-path fs sink rows
- * (`existsSync` ×2, `mkdirSync` ×1, `readFileSync` ×2, `writeFileSync` ×1) lived
- * in this half, which is the corroborating evidence that the I/O boundary was
- * already there and this split only names it.
+ * whether a hook may run. All four of the module's request-path fs sink kinds
+ * (`existsSync`, `mkdirSync`, `readFileSync`, `writeFileSync` — each now a
+ * SINGLE call site behind the shared `readHookLedgerDoc`/`writeHookLedgerDoc`,
+ * bead forge-8vfn.5.2's `declined`-state refactor) lived in this half, which
+ * is the corroborating evidence that the I/O boundary was already there and
+ * this split only names it.
  *
  * The dependency is one-directional — this module imports `scanHookFiles` from
  * `hook-scan.ts` (via `snapshotHookPackage`), and nothing in `hook-scan.ts`
@@ -88,6 +90,25 @@ export interface HookRunState {
   runnable: boolean;
   needsReview: boolean;
 }
+
+/**
+ * bead forge-8vfn.5.2 — the THIRD ledger outcome, alongside `approved` and
+ * `revoked`: an operator REVIEWED a hook and REJECTED it (the live example
+ * the bead names is `pre-pr-security-review`). Without this a declined hook
+ * sat at `needs-review` forever — indistinguishable from "nobody has looked
+ * at this yet" — so the review queue never closed honestly.
+ *
+ * GRANTS NOTHING (say-so, load-bearing): `declineHook` never writes an
+ * `approved` entry, so `hookRunState`'s `needsReview`/`runnable` computation
+ * — which reads `approved` alone — is UNCHANGED by a decline. `declined` is a
+ * label for DISPLAY (`computeTrust`, bridge-studio-hooks.ts), never a second
+ * grant path the runtime authority has to know about.
+ */
+export interface HookDeclinedLedgerEntry {
+  id: string;
+  reason?: string;
+  declinedAt: string;
+}
 // hashHookScript/hashHookPermissions/hashHookTrigger MOVED to hook-package.ts (see re-export above).
 // ---------------------------------------------------------------------------
 // The approval ledger (studio/hook-approvals.yaml) — a SECOND, git-tracked
@@ -100,6 +121,34 @@ export interface HookRunState {
 
 function hookApprovalLedgerPath(forgeRoot: string): string {
   return join(forgeRoot, 'studio', 'hook-approvals.yaml');
+}
+
+/** Reads and YAML-parses the ledger file's raw mapping — shared by every
+ *  per-list reader below so `approved`/`revoked`/`declined` fail exactly
+ *  alike on a missing vs. a malformed file. Absent file ⇒ `null` (nothing
+ *  recorded yet); a file that EXISTS but fails to read/parse/root-shape
+ *  fails LOUD — never silently "no ledger". */
+function readHookLedgerDoc(forgeRoot: string): Record<string, unknown> | null {
+  const file = hookApprovalLedgerPath(forgeRoot);
+  if (!existsSync(file)) return null;
+
+  let raw: string;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch (err) {
+    throw new Error(`${file}: cannot read hook approval ledger — ${(err as Error).message}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch (err) {
+    throw new Error(`${file}: hook approval ledger YAML parse error — ${(err as Error).message}`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${file}: hook approval ledger YAML root must be a mapping`);
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function parseHookApprovalLedgerEntries(raw: unknown, file: string): HookApprovalLedgerEntry[] {
@@ -142,27 +191,7 @@ function parseHookApprovalLedgerEntries(raw: unknown, file: string): HookApprova
 /** Absent file ⇒ empty map (nothing has ever been approved). A file that
  *  EXISTS but fails to parse fails LOUD — never silently "no ledger". */
 export function readHookApprovalLedger(forgeRoot: string): Map<string, HookApprovalLedgerEntry> {
-  const file = hookApprovalLedgerPath(forgeRoot);
-  if (!existsSync(file)) return new Map();
-
-  let raw: string;
-  try {
-    raw = readFileSync(file, 'utf8');
-  } catch (err) {
-    throw new Error(`${file}: cannot read hook approval ledger — ${(err as Error).message}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = yaml.load(raw);
-  } catch (err) {
-    throw new Error(`${file}: hook approval ledger YAML parse error — ${(err as Error).message}`);
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${file}: hook approval ledger YAML root must be a mapping`);
-  }
-
-  const entries = parseHookApprovalLedgerEntries((parsed as Record<string, unknown>)['approved'], file);
+  const entries = parseHookApprovalLedgerEntries(readHookLedgerDoc(forgeRoot)?.['approved'], hookApprovalLedgerPath(forgeRoot));
   return new Map(entries.map((e) => [e.id, e]));
 }
 
@@ -173,23 +202,73 @@ export function readHookApprovalLedger(forgeRoot: string): Map<string, HookAppro
  *  unreadable/unparseable EXISTING file fails loud exactly like
  *  `readHookApprovalLedger` (same file, same contract). */
 function readHookLedgerRevoked(forgeRoot: string): unknown[] {
-  const file = hookApprovalLedgerPath(forgeRoot);
-  if (!existsSync(file)) return [];
-  const parsed = yaml.load(readFileSync(file, 'utf8'));
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
-  const revoked = (parsed as Record<string, unknown>)['revoked'];
+  const revoked = readHookLedgerDoc(forgeRoot)?.['revoked'];
   return Array.isArray(revoked) ? revoked : [];
 }
 
+/** bead forge-8vfn.5.2 — the SAME strict validation discipline
+ *  `parseHookApprovalLedgerEntries` uses: a malformed `declined[i]` throws,
+ *  naming the file and the index — never a silent skip. Mirrors that
+ *  function's shape (duplicate-id check included) rather than inventing a
+ *  new one. */
+function parseHookDeclinedLedgerEntries(raw: unknown, file: string): HookDeclinedLedgerEntry[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${file}: "declined" must be an array`);
+  }
+  const seenIds = new Set<string>();
+  return raw.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${file}: declined[${i}] must be a mapping`);
+    }
+    const e = item as Record<string, unknown>;
+    const id = reqString(e, 'id', file);
+    try {
+      assertSkillSlug(id);
+    } catch (err) {
+      throw new Error(`${file}: declined[${i}] has an invalid id — ${(err as Error).message}`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`${file}: duplicate declined-hook id "${id}" — the ledger must have exactly one entry per id`);
+    }
+    seenIds.add(id);
+    return {
+      id,
+      reason: optString(e, 'reason'),
+      declinedAt: reqString(e, 'declinedAt', file),
+    };
+  });
+}
+
+/** Absent file ⇒ empty map (nothing has ever been declined). A file that
+ *  EXISTS but fails to parse fails LOUD, same discipline as
+ *  `readHookApprovalLedger`. RUNTIME NOTE: `hookRunState` never consults
+ *  this map — see `HookDeclinedLedgerEntry`'s doc comment; `declined` grants
+ *  nothing, it is a review-outcome label for display only. */
+export function readHookDeclinedLedger(forgeRoot: string): Map<string, HookDeclinedLedgerEntry> {
+  const entries = parseHookDeclinedLedgerEntries(readHookLedgerDoc(forgeRoot)?.['declined'], hookApprovalLedgerPath(forgeRoot));
+  return new Map(entries.map((e) => [e.id, e]));
+}
+
 /** One writer for the whole ledger document — `approved` (sorted) plus the
- *  carried-through `revoked` history, so no code path can drop one half while
- *  writing the other. */
-function writeHookLedgerDoc(forgeRoot: string, approvedMap: Map<string, HookApprovalLedgerEntry>, revoked: unknown[]): void {
+ *  carried-through `revoked` history and `declined` outcomes (sorted), so no
+ *  code path can drop any one of the three while writing the others. */
+function writeHookLedgerDoc(
+  forgeRoot: string,
+  approvedMap: Map<string, HookApprovalLedgerEntry>,
+  revoked: unknown[],
+  declinedMap: Map<string, HookDeclinedLedgerEntry>,
+): void {
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   const approved = [...approvedMap.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const declined = [...declinedMap.values()].sort((a, b) => a.id.localeCompare(b.id));
   writeFileSync(
     hookApprovalLedgerPath(forgeRoot),
-    yaml.dump({ approved, ...(revoked.length > 0 ? { revoked } : {}) }),
+    yaml.dump({
+      approved,
+      ...(revoked.length > 0 ? { revoked } : {}),
+      ...(declined.length > 0 ? { declined } : {}),
+    }),
     'utf8',
   );
 }
@@ -197,8 +276,13 @@ function writeHookLedgerDoc(forgeRoot: string, approvedMap: Map<string, HookAppr
 export function writeHookApprovalLedgerEntry(forgeRoot: string, entry: HookApprovalLedgerEntry): void {
   const ledger = readHookApprovalLedger(forgeRoot);
   const revoked = readHookLedgerRevoked(forgeRoot);
+  const declined = readHookDeclinedLedger(forgeRoot);
   ledger.set(entry.id, entry);
-  writeHookLedgerDoc(forgeRoot, ledger, revoked);
+  // A review outcome is exclusive — approving/overriding supersedes an
+  // earlier decline for the same id (mirrors declineHook's own symmetric
+  // clear in the other direction, below).
+  declined.delete(entry.id);
+  writeHookLedgerDoc(forgeRoot, ledger, revoked, declined);
 }
 
 /**
@@ -222,7 +306,28 @@ export function revokeHookApproval(input: { forgeRoot: string; id: string }): vo
   ledger.delete(id);
   const revoked = readHookLedgerRevoked(forgeRoot);
   revoked.push({ ...entry, revokedAt: new Date().toISOString() });
-  writeHookLedgerDoc(forgeRoot, ledger, revoked);
+  writeHookLedgerDoc(forgeRoot, ledger, revoked, readHookDeclinedLedger(forgeRoot));
+}
+
+/**
+ * bead forge-8vfn.5.2 — the THIRD review outcome, alongside approve/override:
+ * "an operator looked at this hook and rejected it" (the live example:
+ * `pre-pr-security-review`). Records a `declined` ledger entry so a reviewed-
+ * and-rejected hook has something honest to be LABELLED besides
+ * "needs-review forever" — but decline GRANTS NOTHING: it never writes an
+ * `approved` entry, so `hookRunState`'s `needsReview`/`runnable` are exactly
+ * what they were before this function ran. Declining supersedes any live
+ * approval for the same id (a hook cannot be both approved and declined at
+ * once) — the mirror image of `writeHookApprovalLedgerEntry`'s own clear.
+ */
+export function declineHook(input: { forgeRoot: string; id: string; reason?: string }): void {
+  const { forgeRoot, id, reason } = input;
+  const ledger = readHookApprovalLedger(forgeRoot);
+  const revoked = readHookLedgerRevoked(forgeRoot);
+  const declined = readHookDeclinedLedger(forgeRoot);
+  ledger.delete(id);
+  declined.set(id, { id, ...(reason ? { reason } : {}), declinedAt: new Date().toISOString() });
+  writeHookLedgerDoc(forgeRoot, ledger, revoked, declined);
 }
 
 /**
@@ -291,6 +396,13 @@ function snapshotHookPackage(forgeRoot: string, id: string): HookPackageSnapshot
 // clause is LOAD-BEARING (PIN C): a legacy entry has nothing to compare
 // against, and treating a missing pin as "trust it" is the fail-open shape
 // this fix exists to close.
+//
+// DECLINED HOOKS ARE NOT CONSULTED HERE (bead forge-8vfn.5.2, load-bearing):
+// this function reads `approved` ONLY — never `readHookDeclinedLedger` — so
+// a declined hook computes needsReview/runnable EXACTLY as an untouched
+// never-reviewed hook does (no approved entry ⇒ needsReview:true,
+// runnable:false). `declined` is a display label the bridge derives
+// separately (computeTrust); it can never widen what this function grants.
 
 export function hookRunState(forgeRoot: string, id: string): HookRunState {
   const { report, ledgerCandidate } = snapshotHookPackage(forgeRoot, id);

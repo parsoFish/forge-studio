@@ -122,6 +122,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-community-wire.ts | library | verbatim | 213 |
 | packages/library/bridge-studio-community.ts | library | verbatim | 545 |
 | packages/library/bridge-studio-connections.ts | library | verbatim | 225 |
+| packages/library/bridge-studio-hooks-decline.ts | library | verbatim | 61 |
 | packages/library/bridge-studio-hooks.ts | library | verbatim | 727 |
 | packages/library/bridge-studio-instructions.ts | library | verbatim | 149 |
 | packages/knowledge/bridge-studio-kb-consolidate.ts | knowledge | verbatim | 376 |

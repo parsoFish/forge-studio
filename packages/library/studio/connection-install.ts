@@ -18,6 +18,11 @@
  * takes an injected `executor` (the one production caller — the not-yet-built
  * WI-4 bridge route — will inject the real `spawnSync('npm', argv)` call);
  * this module only builds the argv and re-probes real disk state afterward.
+ *
+ * forge-6gv.8.2 — `installPreviewFor` adds the CONFIRM-BEFORE-INSTALL preview
+ * the bridge route shows an operator before it runs anything: package,
+ * version, registry, and the exact argv, built from `installArgvFor`'s own
+ * output so preview and real install can never diverge.
  */
 
 import { resolve } from 'node:path';
@@ -57,6 +62,53 @@ export function installArgvFor(connection: ConnectionDefinition, connectionsRoot
       '--save-exact',
       `${pkg}@${version}`,
     ],
+  };
+}
+
+/**
+ * forge-6gv.8.2 — the well-known public npm registry, stated as data for the
+ * install PREVIEW below. There is no per-connection registry override
+ * anywhere in `ConnectionDefinition.install` (D6's catalog pin is only
+ * `{package, version}`), so this is the one registry `installArgvFor`'s argv
+ * ever actually resolves against — never a client-suppliable value.
+ */
+export const NPM_DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
+
+/**
+ * forge-6gv.8.2 — what `POST .../install` shows an operator BEFORE it does
+ * anything: package/version/registry, the exact argv, and whether lifecycle
+ * scripts run. Built from `installArgvFor`'s own output (never a second,
+ * parallel argv computation) so the preview and the real install can never
+ * drift apart.
+ */
+export interface InstallPreview {
+  readonly package: string;
+  readonly version: string;
+  readonly registry: string;
+  readonly command: string;
+  readonly args: string[];
+  readonly willRunLifecycleScripts: boolean;
+}
+
+/** Throws under the identical condition `installArgvFor` does (D13) — never
+ *  a second, independently-maintained "is this installable" check. */
+export function installPreviewFor(connection: ConnectionDefinition, connectionsRoot: string): InstallPreview {
+  const argv = installArgvFor(connection, connectionsRoot);
+  const { install } = connection;
+  if (install.method !== 'npm') {
+    // Unreachable — installArgvFor already threw above for this case. Kept
+    // only so TypeScript narrows `install` to the npm variant below.
+    throw new Error(`installPreviewFor: connection "${connection.id}" is not npm-installable`);
+  }
+  return {
+    package: install.package,
+    version: install.version,
+    registry: NPM_DEFAULT_REGISTRY,
+    command: argv.command,
+    args: argv.args,
+    // installArgvFor ALWAYS includes --ignore-scripts (D7) — stated here as
+    // its own field so a caller never has to parse argv to answer this.
+    willRunLifecycleScripts: false,
   };
 }
 

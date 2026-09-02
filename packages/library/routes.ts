@@ -92,6 +92,7 @@ import {
   HOOK_REVOKE_RE,
   HOOK_ID_RE,
 } from './bridge-studio-hooks.ts';
+import { handleHookDecline, HOOK_DECLINE_RE } from './bridge-studio-hooks-decline.ts';
 import { handleAuthoringFinalize, FINALIZE_URL } from './bridge-studio-authoring.ts';
 import {
   handleTemplateCreate,
@@ -204,6 +205,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
   },
 
   // ---- bridge-studio-hooks.ts (8 routes, was :275 :286 :389 :430 :475 :500 :595 :630)
+  // + bridge-studio-hooks-decline.ts (1 route, NEW — forge-8vfn.5.2)
   {
     method: 'GET',
     path: '/api/studio/hooks',
@@ -239,6 +241,13 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => HOOK_REVOKE_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:256, verbatim
     handler: handleHookRevokeApproval,
+  },
+  {
+    method: 'POST',
+    path: '/api/studio/hooks/:id/decline',
+    matches: (url) => HOOK_DECLINE_RE.test(pathOf(url)),
+    dryClassification: 'exempt-local', // cli/dry-bridge.ts:288, verbatim
+    handler: handleHookDecline,
   },
   {
     method: 'PUT',
