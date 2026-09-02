@@ -493,13 +493,10 @@ export async function fetchCommunityItemDetail(
  *  `confirm` flag itself — this route takes an item id only (D9: the server
  *  decides what is installed).
  *
- * forge-6gv.8.2 — the mcp/tool arm of this route is "byte-identical" to
- * bridge-studio-connections.ts's own install route (that route's own
- * header), confirm gate included: an UNCONFIRMED call returns `preview`
- * (ZERO network/executor side effects), reached unless `{confirm:true}` is
- * explicitly requested. The `skill-draft`/`hook-needs-approval` arms never
- * gate on `confirm` server-side (their pipelines don't read it) — this
- * client still defaults to unconfirmed for them, which the server ignores. */
+ * forge-6gv.8.2 — the mcp/tool arm is byte-identical to
+ * `installConnection`'s route, confirm gate included: unconfirmed returns
+ * `preview` with zero side effects. The skill-draft/hook arms ignore
+ * `confirm` server-side; defaulting them to unconfirmed is harmless. */
 export type CommunityInstallOutcome =
   | { routedTo: 'skill-draft'; alreadyInstalled: boolean }
   | { routedTo: 'hook-needs-approval'; alreadyInstalled: boolean }
@@ -544,10 +541,8 @@ export async function installCommunityItem(
       return { ok: true, result: { routedTo, alreadyInstalled: requireBoolean(r, 'alreadyInstalled') } };
     }
     if (routedTo === 'connection-install') {
-      // Same disjoint-key discrimination as connection-client.ts's own
-      // installConnection: `preview` first (the confirm gate's default
-      // shape), then `suppressed` (D7 dry-run), then — and ONLY then —
-      // `requireBoolean(r, 'installed')` for a genuine confirmed result.
+      // Disjoint-key discrimination, order and reasoning as in
+      // connection-client.ts's `installConnection` — see its comment.
       if (r['preview'] !== undefined) {
         return { ok: true, result: { routedTo, preview: parseInstallPreview(r['preview']) } };
       }

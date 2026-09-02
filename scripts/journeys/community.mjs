@@ -1086,11 +1086,9 @@ export const journey = defineJourney({
           `CM-19: the confirm names the real npm install child process, package@version included (got "${confirmNotice.slice(0, 80)}")`);
         check(await page.locator('[data-would-install-argv]').count() === 0,
           'CM-19: nothing fired yet — no outcome rendered between arm and confirm');
-        // forge-6gv.8.2 — the arming click is no longer client-side theatre: it
-        // asks the SERVER for the preview and renders what the server says it
-        // would run. Pinning the argv here is what makes the difference visible;
-        // a locally-reconstructed string would have rendered identically while
-        // proving nothing about the command the route would actually issue.
+        // forge-6gv.8.2 — the arming click now asks the SERVER for the preview.
+        // Pinning the argv is what makes that visible: a client-reconstructed
+        // string would render identically while proving nothing.
         const armedArgv = (await page.evaluate(() => document.querySelector('[data-install-preview-argv]')?.textContent ?? '')).trim();
         check(armedArgv === expectedMemoryInstallArgvText(),
           `CM-19: the ARMED state shows the server's own preview argv, byte-exact vs this journey's independent reconstruction from the catalog pin (got "${armedArgv}", want "${expectedMemoryInstallArgvText()}")`);
