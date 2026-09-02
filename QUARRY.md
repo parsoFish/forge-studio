@@ -38,7 +38,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 2 | 750 | **1,000** | the spec targets ~0.3k. The single quarried file is 738 lines and must be pruned to types + constants; the cap is the ceiling it must come under, not a licence to stay at 738. |
 | `kernel` | 13 | 3,803 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 33 | 12,070 | **12,500** | seeded from the quarried total, rounded up to the next 500. |
-| `knowledge` | 26 | 11,157 | **11,500** | seeded from the quarried total, rounded up to the next 500. |
+| `knowledge` | 26 | 11,157 | **12,000** | seeded from the quarried total, rounded up to the next 500; **re-seeded 11,500 → 12,000 (M4, operator ruling: "knowledge cap RATIFIED at 12,000").** The cap was seeded before the 800-line per-file cap forced the package's three largest files apart (`brain-lint.ts` 1,744 → six, `bridge-studio-kbs.ts` 2,068 → five, `bridge-studio-kb-drain.ts` 1,456 → three); a split adds module headers, import blocks and re-exported signatures without adding behaviour, so the two caps are in tension by construction. The named cause of the breach that forced the ruling is the ruling-31 public-door `index.ts` (+62). This row's own rule applied to the measured total (11,538 on main at `c323dc04`) rounds up to 12,000. |
 | `projects` | 22 | 7,820 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
 | `sessions` | 20 | 13,078 | **13,500** | seeded from the quarried total, rounded up to the next 500. |

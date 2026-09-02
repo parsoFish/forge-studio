@@ -43,6 +43,7 @@ export function KbSelector({ kbs, currentId }: Props) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <select
         id="kb-select"
+        data-field="kb-select"
         aria-label="Select knowledge base"
         value={isEmpty ? '' : currentId}
         onChange={handleChange}

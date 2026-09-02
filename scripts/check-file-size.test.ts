@@ -51,7 +51,16 @@ test('it inspects a real population, not an empty set', () => {
   const json = JSON.parse(execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }));
   assert.equal(json.cap, 800, 'the cap is the §0 constant');
   assert.ok(json.checked >= 500, `expected the real code-file population, got ${json.checked}`);
-  assert.ok(json.baselined >= 100, `expected the real over-cap set, got ${json.baselined}`);
+  // NOT a floor on the debt. The old assertion here was `baselined >= 100`,
+  // which is a number the 1.0 campaign exists to drive DOWN: M4 deleted the
+  // last two `packages/knowledge/` rows, the count reached 98, and a guard
+  // went red because the work it guards succeeded. What the assertion is
+  // actually for is proving the checker READ a real baseline rather than an
+  // empty one, and the invariant that says so without ever expiring is that
+  // every row on disk was applied — which `stale: []` below then completes.
+  const baselineRows = Object.keys(JSON.parse(readFileSync(BASELINE, 'utf8'))).length;
+  assert.equal(json.baselined, baselineRows, `the checker must apply every on-disk baseline row, got ${json.baselined} of ${baselineRows}`);
+  assert.ok(baselineRows > 0, 'the baseline must not be empty while any file is over the cap');
   assert.deepEqual(json.newOversize, []);
   assert.deepEqual(json.grown, []);
   assert.deepEqual(json.stale, []);
