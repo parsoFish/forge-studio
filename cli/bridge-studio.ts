@@ -54,7 +54,7 @@ import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts
 import type { WorkItem } from '@forge/flows/work-item.ts';
 import type { QueueState } from '@forge/flows/queue.ts';
 import { getPaths } from '@forge/flows/queue.ts';
-import { provenanceOfOrigin, AGENT_PROVENANCE, type Provenance } from './studio-provenance.ts';
+import { provenanceOfOrigin, AGENT_PROVENANCE, type Provenance } from '@forge/kernel';
 // M4 §4 (projects routes carve): `GET /api/studio/projects`,
 // `/api/studio/starters`, `/api/studio/projects/starters`,
 // `/api/studio/projects/:id/preflight`, `/repo-status`,

@@ -35,6 +35,10 @@ export * from './ports.ts';
 
 /** The id vocabulary and the ONE slug guard every studio object id passes. */
 export * from './ids.ts';
+/** The ONE origin -> provenance mapping every server descriptor route shares,
+ *  and the two honest 'unknown' constants for the types the server cannot
+ *  attest — moved from `cli/studio-provenance.ts` (QUARRY:76). */
+export * from './provenance.ts';
 /** Project-layout SSOT: id normalisation, on-disk discovery, and the
  *  per-project brain dirs (ADR 035) shared by projects/knowledge/library. */
 export * from './project-layout.ts';

@@ -17,7 +17,9 @@
  * attribution URL). This file never touches those.
  *
  * The seam pinned here:
- *   - NEW module cli/studio-provenance.ts:
+ *   - the shared mapping, now `packages/kernel/provenance.ts` (moved from
+ *     `cli/studio-provenance.ts` with QUARRY:76; its own cases live in
+ *     `packages/kernel/provenance.test.ts`):
  *       export type Provenance = 'ootb' | 'operator' | 'unknown';
  *       export function provenanceOfOrigin(origin?: string | null): Provenance;
  *       export const AGENT_PROVENANCE: Provenance;   // 'unknown'
@@ -51,7 +53,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { loadKbDescriptor, serializeKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (mirrors cli/bridge-studio.test.ts / cli/bridge-studio-kbs.test.ts)
@@ -289,37 +290,18 @@ test('AT-2 n/a-invariant: unstamped kb + agent + project report the literal "unk
 // that drifts (derive-status-dont-store-it rule 2).
 // ---------------------------------------------------------------------------
 
-test('AT-3a: provenanceOfOrigin maps seed/ootb-library->ootb, studio->operator, everything else (incl. absent)->unknown', async () => {
-  // Dynamic import (not a static top-level import) so a missing module fails
-  // ONLY this test, not the whole file — every other AT here is independently
-  // red/green on its own merits.
-  const mod = await import('./studio-provenance.ts');
-  const cases: Array<[string | undefined | null, string]> = [
-    ['seed', 'ootb'],
-    ['ootb-library', 'ootb'],
-    ['studio', 'operator'],
-    [undefined, 'unknown'],
-    [null, 'unknown'],
-    ['', 'unknown'],
-    ['something-else', 'unknown'],
-  ];
-  for (const [input, expected] of cases) {
-    assert.equal(
-      mod.provenanceOfOrigin(input),
-      expected,
-      `provenanceOfOrigin(${JSON.stringify(input)}) must be ${expected}`,
-    );
-  }
-  assert.equal(mod.AGENT_PROVENANCE, 'unknown', 'AGENT_PROVENANCE must be the unknown token');
-  assert.equal(mod.PROJECT_PROVENANCE, 'unknown', 'PROJECT_PROVENANCE must be the unknown token');
-});
+// AT-3a — the pure mapping cases — moved to `packages/kernel/provenance.test.ts`
+// with the module itself (QUARRY:76). They never needed the bridge this file
+// boots, and a kernel module's own test belongs beside it. AT-3b/AT-3c below
+// stay: their subject is that the two CONSUMERS use the shared mapping rather
+// than a second copy, which is a fact about this tree, not about the mapping.
 
 test('AT-3b: cli/bridge-studio.ts derives provenance via the shared provenanceOfOrigin — no local copy of the mapping', () => {
   const src = readFileSync(join(process.cwd(), 'cli', 'bridge-studio.ts'), 'utf8');
   assert.match(
     src,
-    /from ['"]\.\/studio-provenance\.ts['"]/,
-    'bridge-studio.ts must import the shared mapping from ./studio-provenance.ts (RED at base: not yet wired)',
+    /provenanceOfOrigin[^;]*from ['"]@forge\/kernel['"]/s,
+    'bridge-studio.ts must import the shared mapping from @forge/kernel (it moved there with QUARRY:76; the claim is unchanged — no local copy)',
   );
   assert.doesNotMatch(
     src,
@@ -337,8 +319,8 @@ test('AT-3c: cli/bridge-studio-kbs.ts derives provenance via the shared provenan
   const src = readFileSync(join(process.cwd(), 'packages', 'knowledge', 'bridge-studio-kbs.ts'), 'utf8');
   assert.match(
     src,
-    /from ['"]\.\.\/\.\.\/cli\/studio-provenance\.ts['"]/,
-    'bridge-studio-kbs.ts must import the shared mapping from cli/studio-provenance.ts (RED at base: not yet wired)',
+    /provenanceOfOrigin[^;]*from ['"]@forge\/kernel['"]/s,
+    'bridge-studio-kbs.ts must import the shared mapping from @forge/kernel — reaching into cli/ for it was the package-to-legacy row this move closed',
   );
   assert.doesNotMatch(
     src,
@@ -451,37 +433,10 @@ test('AT-5: POST /api/studio/kbs writes origin:studio into the new kb.yaml on di
 // (silently downgrading an OOTB brain to unknown) or that defaults it in.
 // ---------------------------------------------------------------------------
 
-test('AT-6: loadKbDescriptor -> serializeKbDescriptor preserves origin:seed when present, and invents nothing when absent', () => {
-  const scratchDir = mkdtempSync(join(tmpdir(), 'studio-provenance-roundtrip-'));
-  try {
-    const withOriginPath = join(scratchDir, 'with-origin.yaml');
-    const withoutOriginPath = join(scratchDir, 'without-origin.yaml');
-    writeFileSync(withOriginPath, makeKbYaml('with-origin', 'binding: { kind: unique }', 'seed'));
-    writeFileSync(withoutOriginPath, makeKbYaml('without-origin', 'binding: { kind: unique }'));
-
-    type KbDescriptorParam = Parameters<typeof serializeKbDescriptor>[0];
-
-    const withOriginLoaded = loadKbDescriptor(withOriginPath);
-    const withOriginBag = withOriginLoaded as unknown as Record<string, unknown>;
-    assert.equal(withOriginBag['origin'], 'seed', 'loadKbDescriptor must read a present origin: key');
-    const reserializedWith = serializeKbDescriptor(withOriginLoaded as KbDescriptorParam);
-    assert.match(reserializedWith, /origin:\s*seed\b/, 'serializeKbDescriptor must preserve a present origin — never drop it');
-
-    const withoutOriginLoaded = loadKbDescriptor(withoutOriginPath);
-    const withoutOriginBag = withoutOriginLoaded as unknown as Record<string, unknown>;
-    assert.equal(withoutOriginBag['origin'], undefined, 'loadKbDescriptor must not invent an origin when the yaml has none');
-    const reserializedWithout = serializeKbDescriptor(withoutOriginLoaded as KbDescriptorParam);
-    assert.doesNotMatch(reserializedWithout, /origin:/, 'serializeKbDescriptor must not invent an origin: key when the descriptor has none');
-  } finally {
-    rmSync(scratchDir, { recursive: true, force: true });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// AT-7 — the two shipped OOTB brains are really stamped. Kills: a change
-// that adds the mechanism but never stamps the only two objects that can
-// honestly use it (mechanism shipped, data never populated).
-// ---------------------------------------------------------------------------
+// AT-6 — the KB descriptor origin round-trip — moved to
+// `packages/knowledge/tests/unit/kb-descriptor.test.ts`, beside the two
+// functions it exercises. It never touched the bridge this file boots, and it
+// was the whole reason a `cli/` test imported `@forge/knowledge` at all.
 
 test('AT-7: brain/cycles/kb.yaml and brain/forge-dev/kb.yaml (the two shipped OOTB brains) carry origin: seed', () => {
   const cyclesKb = readFileSync(join(process.cwd(), 'brain', 'cycles', 'kb.yaml'), 'utf8');
