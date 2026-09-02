@@ -29,7 +29,7 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillPath, skillsDir } from '../skill-path.ts';
+import { skillsDir } from '../skill-path.ts';
 import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
 import { assertSkillSlug, guardedFile } from '@forge/kernel';
 import {
@@ -279,9 +279,39 @@ export function installSkillPackage(input: InstallInput): InstallResult {
 // approveSkillDraft / repinSkillPackage
 // ---------------------------------------------------------------------------
 
+/**
+ * The one containment choke point these two functions share (COMMON §15.19).
+ *
+ * They used to call `skillPath(id, forgeRoot)` — a bare `join()` behind
+ * `assertSkillSlug`, which validates the id's CHARSET and nothing about the
+ * filesystem. A symlink planted at `skills/<id>` is lexically inside `skills/`
+ * and resolves anywhere, so both read and rewrote a file OUTSIDE the library
+ * while every check said fine. `installSkillPackage` above already defends
+ * itself with `guardedFile`; these two did not, which made them a landmine for
+ * the next caller and widened the approve route's TOCTOU window by three raw
+ * syscalls on a RE-DERIVED lexical path.
+ *
+ * The fix is the pattern `bridge-studio-templates.ts` already follows: resolve
+ * ONCE through the guard, then read AND write through the returned `realPath` —
+ * never re-derive a lexical path after a check. Refusal names the id so a
+ * caller can act on it; `guardedFile` collapses "outside the root" and "does
+ * not exist" into one `null` deliberately (no existence oracle across the
+ * root), so this message must not claim to know which of the two it was.
+ *
+ * Pinned by `tests/regression/skill-install-symlink-containment.test.ts`,
+ * proven RED against the pre-fix code.
+ */
+function guardedSkillMd(forgeRoot: string, id: string, caller: string): string {
+  const realPath = guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read');
+  if (realPath === null) {
+    throw new Error(`${caller}: skill "${id}" has no readable SKILL.md inside the library (missing, or the path escapes skills/)`);
+  }
+  return realPath;
+}
+
 export function approveSkillDraft(input: { forgeRoot: string; id: string }): void {
   const { forgeRoot, id } = input;
-  const mdPath = skillPath(id, forgeRoot);
+  const mdPath = guardedSkillMd(forgeRoot, id, 'approveSkillDraft');
   const raw = readFileSync(mdPath, 'utf8');
   const { data, content } = matter(raw, {});
   const d = (data ?? {}) as Record<string, unknown>;
@@ -297,7 +327,7 @@ export function approveSkillDraft(input: { forgeRoot: string; id: string }): voi
 
 export function repinSkillPackage(input: { forgeRoot: string; id: string }): string {
   const { forgeRoot, id } = input;
-  const mdPath = skillPath(id, forgeRoot);
+  const mdPath = guardedSkillMd(forgeRoot, id, 'repinSkillPackage');
   const raw = readFileSync(mdPath, 'utf8');
   const { data, content } = matter(raw, {});
   const d = (data ?? {}) as Record<string, unknown>;
