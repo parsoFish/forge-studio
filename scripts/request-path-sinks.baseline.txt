@@ -325,13 +325,22 @@ packages/knowledge/brain-lint.ts readFileSync 1
 packages/knowledge/brain-paths.ts existsSync 2
 packages/knowledge/brain-paths.ts readFileSync 1
 packages/knowledge/brain-paths.ts realpathSync 1
-packages/knowledge/bridge-studio-kb-drain.ts existsSync 7
-packages/knowledge/bridge-studio-kb-drain.ts mkdirSync 4
-packages/knowledge/bridge-studio-kb-drain.ts readFileSync 4
-packages/knowledge/bridge-studio-kb-drain.ts readdirSync 3
-packages/knowledge/bridge-studio-kb-drain.ts renameSync 1
-packages/knowledge/bridge-studio-kb-drain.ts rmSync 1
-packages/knowledge/bridge-studio-kb-drain.ts writeFileSync 3
+# --- M4 PR 5: bridge-studio-kb-drain.ts split three ways ---------------------
+# A RELOCATION. Every sink kind conserves exactly: existsSync 7->1+6,
+# mkdirSync 4->0+4, readFileSync 4->1+3, readdirSync 3->0+3, renameSync 1->0+1,
+# rmSync 1->0+1, writeFileSync 3->0+3. `kb-drain-model.ts` gets no row at all —
+# it is the pure half and touches no filesystem. Total sink calls repo-wide
+# unchanged at 1,340.
+packages/knowledge/bridge-studio-kb-drain.ts existsSync 1
+packages/knowledge/bridge-studio-kb-drain.ts readFileSync 1
+packages/knowledge/kb-drain-store.ts existsSync 6
+packages/knowledge/kb-drain-store.ts mkdirSync 4
+packages/knowledge/kb-drain-store.ts readFileSync 3
+packages/knowledge/kb-drain-store.ts readdirSync 3
+packages/knowledge/kb-drain-store.ts renameSync 1
+packages/knowledge/kb-drain-store.ts rmSync 1
+packages/knowledge/kb-drain-store.ts writeFileSync 3
+# -----------------------------------------------------------------------------
 # --- M4 PR 4b: bridge-studio-kbs.ts split five ways --------------------------
 # A RELOCATION, not growth. Every sink kind conserves EXACTLY across the split:
 # appendFileSync 2->2, existsSync 5->2+2+1, mkdirSync 9->2+2+3+2, openSync 1->1,

@@ -31,7 +31,7 @@ import {
   runBrainLintFullMemoized,
   runBrainLintFullFresh,
 } from './kb-lint-summary.ts';
-import { KB_ID_RE, sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { EXACT_ID_RE, KB_ID_RE, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
 import {
   applyDeterministicConsolidateFixes,
   enqueueConsolidate,
@@ -39,7 +39,7 @@ import {
   runBrainConsolidateNow,
   type AgentFinding,
 } from './bridge-studio-kb-consolidate.ts';
-import { SAFE_ID_RE, readJson, subDirs } from './bridge-studio-kbs.ts';
+import { subDirs } from './bridge-studio-kbs.ts';
 
 // ---------------------------------------------------------------------------
 // Lint-resolution helpers (the guided-resolution UI)
@@ -79,7 +79,7 @@ export function readBrainFixState(
   forgeRoot: string,
   runId: string,
 ): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean; total?: number; clearedCount?: number } {
-  // Containment (forge-2zz): `runId` reaching here is only SAFE_ID_RE-gated
+  // Containment (forge-2zz): `runId` reaching here is only EXACT_ID_RE-gated
   // (charset only, never realpath) at the calling routes — route it through
   // the shared resolveGuardedPath so a symlinked `_logs/_brainfix-<runId>`
   // cannot be read through. `_brainfix-<runId>` and 'events.jsonl' are each
@@ -130,7 +130,7 @@ export function readBrainFixState(
 export async function handleKbFixAgentStatus(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -145,7 +145,7 @@ export async function handleKbFixAgentStatus(
   const fixStatusMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/fix-agent\/([^/]+)$/);
   if (fixStatusMatch && method === 'GET') {
     const runId = decodeURIComponent(fixStatusMatch[2]);
-    if (!SAFE_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
+    if (!EXACT_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
     return true;
   }
@@ -164,7 +164,7 @@ export async function handleKbFixAgentStatus(
 export async function handleKbConsolidateActive(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -228,7 +228,7 @@ export async function handleKbConsolidateActive(
 export async function handleKbIngestActivity(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -305,7 +305,7 @@ export async function handleKbIngestActivity(
 export async function handleKbMaintenance(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: RouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -323,7 +323,7 @@ export async function handleKbMaintenance(
       const kbId = decodeURIComponent(maintMatch[1]);
       if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const op = (body as Record<string, unknown>)?.['op'];
 
       if (op === 'lint') {

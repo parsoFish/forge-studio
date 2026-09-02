@@ -79,468 +79,82 @@
  * unchanged from how consolidate's per-group turns already work.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
-import { randomBytes } from 'node:crypto';
-
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { resolveKbBrainDir } from './brain-paths.ts';
-import { createLogger } from '@forge/kernel';
-import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
-import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { loadConfig, defaultConfigPath, resolveProjectsDir } from '@forge/kernel';
-import { loadKbDescriptor } from './studio/kb-descriptor.ts';
+import { createLogger, sanitizeError } from '@forge/kernel';
 import {
-  applyAutoFixesUntilStable,
-  resolutionCounts,
-  type AutoFixStableResult,
-  type Finding,
-} from './brain-lint.ts';
+  runBrainFixTurn,
+  type RunBrainFixInput,
+  type RunBrainFixResult,
+} from '@forge/sessions/brain-fix-runner.ts';
+import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
 import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
-import { diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
 import {
-  guardAgentKbEdits, auditKbEdit, buildKbEditSoundnessCtx, snapshotBrainTree, brainRootDir, noKbEdits,
-  type KbEditGateResult, type KbEditUnsoundness,
+  guardAgentKbEdits,
+  snapshotBrainTree,
+  brainRootDir,
+  noKbEdits,
+  type KbEditGateResult,
 } from './kb-drain-edit-soundness.ts';
-import { KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
-import { guardedWriteFile } from '@forge/kernel';
-import { sanitizeError } from '@forge/kernel';
 import { isDryBridge } from '../../cli/dry-bridge.ts';
+import {
+  DEFAULT_KB_DRAIN_MAX_COST_USD,
+  KB_DRAIN_HEARTBEAT_MS,
+  KB_DRAIN_MAX_ROUNDS,
+  autoAppliedEntry,
+  autoSkippedEntry,
+  autoUnattributedEntry,
+  buildAutoProposedChanges,
+  buildProposedChanges,
+  finalizeRoundRows,
+  findingKey,
+  pendingRows,
+  progressKeySet,
+  setsEqual,
+  type KbDrainApplyAutoFixesFn,
+  type KbDrainLintFn,
+  type KbDrainPerFinding,
+  type KbDrainRoundRow,
+  type KbDrainState,
+  type KbDrainStatus,
+} from './kb-drain-model.ts';
+import {
+  initialKbDrainStatus,
+  isKbDrainCancelRequested,
+  mintKbCleanupDraftSession,
+  revertProseChanges,
+  writeKbDrainStatus,
+} from './kb-drain-store.ts';
 
 // ---------------------------------------------------------------------------
-// Tunables
+// Re-export barrel — PR 5 kept every importer untouched
 // ---------------------------------------------------------------------------
-
-/** "max 5 rounds" per the initiative brief — a round is a full
- *  fresh-lint→auto-drain→agent-turns→fresh-lint cycle. */
-export const KB_DRAIN_MAX_ROUNDS = 5;
-
-/** Operator-confirmable default cost ceiling for one drain RUN (not one
- *  turn) — proposed at 2.00 USD, sized against a real per-finding
- *  `brain-fix` turn's typical cost (a handful of cents to low tens of
- *  cents per turn observed on the consolidate path) times a KB's realistic
- *  worst-case agent-tier finding count. Overridable per-run via
- *  `opts.maxCostUsd`. */
-export const DEFAULT_KB_DRAIN_MAX_COST_USD = 2.0;
-
-/** W7-B2 (knowledge-14/15): while the loop is inside a long agent turn it
- *  cannot persist a real transition, so it refreshes `status.json`'s
- *  `updatedAt` on this cadence instead — a liveness heartbeat that lets the
- *  UI poll distinguish "long turn in flight" from "bridge died mid-drain"
- *  without any pid bookkeeping (the drain runs in-process on the bridge). */
-export const KB_DRAIN_HEARTBEAT_MS = 10_000;
-
-/** Staleness cutoff for a 'running' status — SINGLE-SOURCED in
- *  cli/kb-job-state.ts (the active-job derivation shares it); re-exported
- *  here for this module's own cancel route and its tests. */
-export { KB_DRAIN_STALE_MS };
-
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-export type KbDrainState =
-  | 'running'
-  | 'green'
-  | 'needs-you'
-  | 'no-progress'
-  | 'round-cap'
-  | 'cost-ceiling'
-  | 'cancelled'
-  | 'failed';
-
-/**
- * W8-B2 (ON-3) — what the fix turn actually PROPOSED for one file, and what
- * became of it.
- *
- * Operator note ON-3: "it's very hard to see what changes are being proposed
- * when it raises those up to the operator, and there's no way to drill into
- * what it thinks the issues are and what it's trying to do to fix them."
- * Before this, the entire per-finding UI was a glyph, a filename basename, a
- * rule id and one sentence — the diff existed (the structural gate computes it
- * to render the draft plan) and simply never reached the row.
- */
-export type KbDrainProposedChange = {
-  /** Path relative to forgeRoot — greppable, and the same label the gated
-   *  draft plan uses for the same file. */
-  file: string;
-  /** Unified diff of the proposal, truncated at `KB_DRAIN_DIFF_MAX_LINES`. */
-  diff: string;
-  /** True when `diff` was cut short — never a silently shortened diff. */
-  diffTruncated: boolean;
-  /**
-   * What became of the proposal:
-   *   - `applied`  — sound and structural; it is on disk.
-   *   - `repaired` — unsound; the drain wrote a verified repair instead.
-   *   - `refused`  — unsound with no unique repair; reverted, nothing landed.
-   *   - `drafted`  — prose; reverted and parked for operator approval.
-   */
-  disposition: 'applied' | 'repaired' | 'refused' | 'drafted';
-  /** The soundness audit's own reasons, verbatim. Empty for `applied`. */
-  reasons: string[];
-};
-
-/** Line cap for one rendered proposal diff. A theme is lint-capped at 800
- *  lines, but a turn can touch several files and the whole status object is
- *  polled; truncation is DECLARED on the row (`diffTruncated`) so a cut diff
- *  can never read as a small one. */
-export const KB_DRAIN_DIFF_MAX_LINES = 200;
-
-export type KbDrainPerFinding = {
-  key: string;
-  check: string;
-  kind: string;
-  file: string;
-  message: string;
-  tier: 'auto' | 'agent' | 'user';
-  /** W8-B2 — DERIVED, never stored from a self-report. `pending` is the honest
-   *  in-flight value: the turn has run and this round's post-fix lint has not.
-   *  `finalizeRoundRows` (below) is the ONLY producer of a terminal value, and
-   *  it reads the post-fix lint's own key set. */
-  outcome: 'cleared' | 'not-cleared' | 'needs-you' | 'pending';
-  /** W7-B2 (knowledge-12): the round this entry was recorded in — perFinding
-   *  accumulates across rounds now, so a finished run keeps every round's
-   *  work instead of only the last round's list. */
-  round: number;
-  /** W7-B2 (orch-01): set when this finding's agent fix was GATED — the
-   *  proposed prose edit was reverted and parked as a kb-cleanup draft
-   *  session the operator approves with a diff. */
-  draftSession?: { id: string; project: string };
-  /** W8-B2: the fix turn threw. A SEPARATE fact from `outcome`, deliberately:
-   *  a turn can crash after writing a valid edit, and the round's post-fix lint
-   *  — not the crash — is the authority on whether the finding cleared. Before
-   *  this field existed the crash was silently folded into `not-cleared`, which
-   *  produced a green run carrying a not-cleared row for a finding its own lint
-   *  said was gone. */
-  turnError?: string;
-  /** W8-B2 (ON-3): every file the turn proposed to change for this finding,
-   *  with its diff and its disposition. */
-  proposedChanges?: KbDrainProposedChange[];
-  /** W8-B2 (ON-3): the targeted instruction the fix turn was given for this
-   *  finding (`Finding.fixHint`) — the closest thing to the agent's brief, and
-   *  the thing that explains WHY it did what the diff shows. */
-  fixHint?: string;
-};
-
-export type KbDrainStatus = {
-  state: KbDrainState;
-  round: number;
-  counts: { auto: number; agent: number; user: number };
-  perFinding: KbDrainPerFinding[];
-  costUsd: number;
-  updatedAt: string;
-  kbId: string;
-  /** W7-B2 (knowledge-14): when the run started — the UI's elapsed ticker. */
-  startedAt: string;
-  /** W7-B2 (knowledge-14): the run's own budget, so the panel can say what
-   *  the ceiling actually is instead of a hardcoded display constant. */
-  maxRounds: number;
-  maxCostUsd: number;
-};
-
-/** Same fresh-lint shape `runBrainLintFullFresh` (cli/kb-lint-summary.ts)
- *  returns — injectable so termination-matrix tests can drive the state
- *  machine with a synthetic finding sequence instead of a real brain-lint
- *  scan. */
-export type KbDrainLintFn = (forgeRoot: string) => { findings: Finding[] };
-
-/** Same signature as `applyAutoFixesUntilStable` (cli/brain-lint.ts) —
- *  injectable for the same reason as `KbDrainLintFn`. */
-export type KbDrainApplyAutoFixesFn = (
-  forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean },
-) => AutoFixStableResult;
-
-/** Same input as `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), but
- *  the result additionally carries `costUsd` — `RunBrainFixResult` itself
- *  does not return cost (it only logs `cost_usd` on the turn's own 'end'
- *  event), so the default implementation reads it back out of that event
- *  log (`readBrainFixTurnCostUsd` below) after every real turn. Injectable
- *  so termination-matrix tests (esp. the cost-ceiling case) can hand back a
- *  precise, deterministic cost per call without a real SDK turn. */
-export type KbDrainRunFixTurnFn = (
-  input: RunBrainFixInput,
-) => Promise<RunBrainFixResult & { costUsd: number }>;
-
-/** Same signature as the internal `writeKbDrainStatus` (below). Injectable
- *  ONLY so a test can fail a PRECISE persist call (e.g. the very first one)
- *  while later calls to the SAME (forgeRoot, runId) succeed — a filesystem-
- *  level fault (an unwritable dir, a blocked leaf) cannot isolate "first call
- *  fails, second succeeds" because both the initial persist and the
- *  catch-block's crash-recovery persist target the identical on-disk path.
- *  Defaults to the real atomic (temp+rename) writer. */
-export type KbDrainPersistFn = (forgeRoot: string, runId: string, status: KbDrainStatus) => void;
-
-export type KbDrainOpts = {
-  maxRounds?: number;
-  maxCostUsd?: number;
-  lint?: KbDrainLintFn;
-  applyAutoFixes?: KbDrainApplyAutoFixesFn;
-  runFixTurn?: KbDrainRunFixTurnFn;
-  persistStatus?: KbDrainPersistFn;
-  /** Liveness-heartbeat cadence (W7-B2); 0 disables (unit tests). Defaults
-   *  to KB_DRAIN_HEARTBEAT_MS. */
-  heartbeatMs?: number;
-};
-
-// ---------------------------------------------------------------------------
-// Status-file persistence (_logs/_kb-drain-<runId>/status.json)
-// ---------------------------------------------------------------------------
-
-/** `_logs/_kb-drain-<runId>` — same construction class as
- *  `writeConsolidateTerminalEvent`'s `_logs/_brainfix-<runId>`
- *  (cli/bridge-studio-kbs.ts): a bare `runId` parameter matches the
- *  raw-fs-guarded lint's curated taint-list name, but at every real call
- *  site the value is TRUSTED AT CONSTRUCTION — either freshly minted by
- *  `POST /api/studio/kbs/:id/drain` as `` `${kbId}-drain-${Date.now()
- *  .toString(36)}` `` (kbId already `KB_ID_RE`-gated at that same route
- *  strictly before this is ever called), or read back via `isSafeRunId` +
- *  an explicit `${kbId}-drain-` PREFIX check at the two GET routes below
- *  (never trusted on charset alone). Documented in
- *  docs/reference/request-path-sinks.md's "Extended in W6-B12" section;
- *  allowlisted in scripts/check-raw-fs-guarded.mjs. */
-function kbDrainLogDir(forgeRoot: string, runId: string): string {
-  return join(forgeRoot, '_logs', `_kb-drain-${runId}`);
-}
-
-/** Atomic write (temp + rename) — mirrors this repo's own convention
- *  (cli/bridge-studio-runs.ts's manifest-move: `writeFileSync(tmpPath, …)`
- *  then `renameSync(tmpPath, toPath)`). `status.json` is read by a SEPARATE
- *  process turn (the GET routes, polled every ~100-250ms by a caller) while
- *  this function is called repeatedly (once per round) by the in-flight
- *  drain — a plain `writeFileSync` on the final path would let a concurrent
- *  reader observe a PARTIALLY-written file (the write is not one syscall for
- *  a multi-KB JSON blob); `renameSync` on the same filesystem is atomic, so
- *  a reader only ever sees the FULLY-written prior version or the
- *  FULLY-written new one, never a truncated/interleaved one. */
-export function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbDrainStatus): void {
-  const logDir = kbDrainLogDir(forgeRoot, runId);
-  mkdirSync(logDir, { recursive: true });
-  const finalPath = join(logDir, 'status.json');
-  const tmpPath = `${finalPath}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(status, null, 2), 'utf8');
-  renameSync(tmpPath, finalPath);
-}
-
-/** Mirrors `readBrainFixState`'s (cli/bridge-studio-kbs.ts) LOG-READ shape:
- *  a boolean-existence probe plus a single scoped read, never a directory
- *  walk keyed off caller input. Returns `null` on any missing/unparseable
- *  status file — a genuinely unknown or not-yet-started run, never a thrown
- *  500. */
-export function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStatus | null {
-  const statusPath = join(kbDrainLogDir(forgeRoot, runId), 'status.json');
-  if (!existsSync(statusPath)) return null;
-  try {
-    return JSON.parse(readFileSync(statusPath, 'utf8')) as KbDrainStatus;
-  } catch {
-    return null;
-  }
-}
-
-/** Every drain run recorded for `kbId`, discovered by enumerating `_logs/`
- *  (SERVER-enumerated directory names, never a caller-supplied path — same
- *  "server-enumerated names, holding no client string" class as
- *  `cli/metrics.ts`'s `listCycles`) and filtering to this kb's own
- *  `_kb-drain-<kbId>-drain-*` prefix. Used by BOTH the 409-active check
- *  (`POST /drain`) and the active-or-latest reattach route
- *  (`GET /drain`). */
-function findKbDrainRuns(forgeRoot: string, kbId: string): Array<{ runId: string; status: KbDrainStatus }> {
-  const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return [];
-  let entries: string[];
-  try {
-    entries = readdirSync(logsRoot);
-  } catch {
-    return [];
-  }
-  const dirPrefix = '_kb-drain-';
-  const runIdPrefix = `${kbId}-drain-`;
-  const runs: Array<{ runId: string; status: KbDrainStatus }> = [];
-  for (const name of entries) {
-    if (!name.startsWith(dirPrefix)) continue;
-    const runId = name.slice(dirPrefix.length);
-    if (!runId.startsWith(runIdPrefix)) continue;
-    const status = readKbDrainStatus(forgeRoot, runId);
-    if (status) runs.push({ runId, status });
-  }
-  return runs;
-}
-
-export function findActiveKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
-  return findKbDrainRuns(forgeRoot, kbId).find((r) => r.status.state === 'running') ?? null;
-}
-
-export function latestKbDrainRun(forgeRoot: string, kbId: string): { runId: string; status: KbDrainStatus } | null {
-  const runs = findKbDrainRuns(forgeRoot, kbId);
-  if (runs.length === 0) return null;
-  return runs.reduce((a, b) => (a.status.updatedAt >= b.status.updatedAt ? a : b));
-}
-
-// ---------------------------------------------------------------------------
-// KB run history (W7-B2, knowledge-20) — every drain / consolidate /
-// kb-cleanup run recorded for one KB, for the RecentRuns widget.
-// ---------------------------------------------------------------------------
-
-export type KbRunRow = {
-  kind: 'drain' | 'consolidate' | 'cleanup';
-  id: string;
-  /** ISO start stamp, or '' when genuinely unknown (never fabricated). */
-  when: string;
-  /** drain: KbDrainState · consolidate: running|done|failed · cleanup: the
-   *  session's own phase, verbatim. */
-  status: string;
-  /** null = the cost genuinely is not recorded (never a fabricated 0). */
-  costUsd: number | null;
-  detail: string | null;
-  /** cleanup only — the session's anchor project, for the deep link. */
-  project?: string;
-};
-
-/** One consolidate run's terminal facts, read from its own events.jsonl
- *  through the SHARED readers in cli/kb-job-state.ts (W7-B2 code-review
- *  round) — the same 'end'=done / 'error'=failed definition the active-job
- *  gate uses, so the RecentRuns status and the gate can never disagree about
- *  whether a run has finished. */
-function readConsolidateRunRow(forgeRoot: string, runId: string): { status: string; costUsd: number | null; when: string; detail: string | null } {
-  const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
-  let raw: string | null = null;
-  try {
-    // Probe and read on separate lines — the raw-fs-guarded allowlist keys
-    // one audited entry per (file, line, sink).
-    if (existsSync(evPath)) {
-      raw = readFileSync(evPath, 'utf8');
-    }
-  } catch {
-    raw = null;
-  }
-  const events = parseKbRunEvents(raw ?? '');
-  const terminal = terminalKbRunEvent(events);
-  const when = firstKbRunEventTs(events) ?? '';
-  let costUsd: number | null = null;
-  let detail: string | null = null;
-  if (terminal?.status === 'done') {
-    if (typeof terminal.event.cost_usd === 'number') costUsd = terminal.event.cost_usd;
-    const md = terminal.event.metadata ?? {};
-    if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
-      detail = `cleared ${md['clearedCount']}/${md['total']}`;
-    }
-  }
-  return { status: terminal?.status ?? 'running', costUsd, when, detail };
-}
-
-/** Best-effort ISO stamp from a session id shaped `2026-08-18T12-54-32-…`
- *  (the bridge's own session-id convention). '' when it does not parse. */
-function whenFromSessionId(sessionId: string): string {
-  const m = sessionId.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
-  if (!m) return '';
-  return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
-}
-
-export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
-  const rows: KbRunRow[] = [];
-
-  // Drain runs — status.json is the record.
-  for (const { runId, status } of findKbDrainRuns(forgeRoot, kbId)) {
-    rows.push({
-      kind: 'drain',
-      id: runId,
-      when: status.startedAt ?? status.updatedAt ?? '',
-      status: status.state,
-      costUsd: typeof status.costUsd === 'number' ? status.costUsd : null,
-      detail: `round ${status.round}/${status.maxRounds ?? KB_DRAIN_MAX_ROUNDS} · auto ${status.counts?.auto ?? 0} · agent ${status.counts?.agent ?? 0} · you ${status.counts?.user ?? 0}`,
-    });
-  }
-
-  // Consolidate runs — `_brainfix-<kbId>-consolidate-*` top-level dirs
-  // (per-finding `__<i>` sub-runs excluded, mirroring the consolidate/active
-  // route's own exclusion in cli/bridge-studio-kbs.ts).
-  const logsRoot = join(forgeRoot, '_logs');
-  let entries: string[] = [];
-  try {
-    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
-  } catch {
-    entries = [];
-  }
-  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
-  for (const name of entries) {
-    if (!name.startsWith(consolidatePrefix)) continue;
-    const runId = name.slice('_brainfix-'.length);
-    if (runId.includes('__')) continue;
-    const r = readConsolidateRunRow(forgeRoot, runId);
-    rows.push({ kind: 'consolidate', id: runId, when: r.when, status: r.status, costUsd: r.costUsd, detail: r.detail });
-  }
-
-  // kb-cleanup sessions — anchored under the KB's own session project
-  // (binding.ref for a project KB, the `.kb-<id>` anchor otherwise).
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  let anchor = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  if (brainDir) {
-    try {
-      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
-      if (kb.binding.kind === 'project') anchor = kb.binding.ref;
-    } catch {
-      // fall through to the dot anchor
-    }
-  }
-  const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
-  const cleanupDir = join(projectsRoot, anchor, '_kb-cleanup');
-  let sids: string[] = [];
-  try {
-    sids = existsSync(cleanupDir) ? readdirSync(cleanupDir) : [];
-  } catch {
-    sids = [];
-  }
-  for (const sid of sids) {
-    let phase = 'unknown';
-    let sessionKbId: string | null = null;
-    try {
-      const parsed = JSON.parse(readFileSync(join(cleanupDir, sid, 'status.json'), 'utf8')) as { phase?: unknown; kb_id?: unknown };
-      if (typeof parsed.phase === 'string') phase = parsed.phase;
-      if (typeof parsed.kb_id === 'string') sessionKbId = parsed.kb_id;
-    } catch {
-      continue;
-    }
-    // A project anchor can host cleanup sessions for a DIFFERENT kb id
-    // (project-bound KBs share the project dir) — filter on the session's
-    // own kb_id when it carries one.
-    if (sessionKbId !== null && sessionKbId !== kbId) continue;
-    rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
-  }
-
-  return rows.sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
-}
-
-export function initialKbDrainStatus(
-  kbId: string,
-  maxRounds: number = KB_DRAIN_MAX_ROUNDS,
-  maxCostUsd: number = DEFAULT_KB_DRAIN_MAX_COST_USD,
-): KbDrainStatus {
-  const now = new Date().toISOString();
-  return {
-    state: 'running', round: 0, counts: { auto: 0, agent: 0, user: 0 }, perFinding: [],
-    costUsd: 0, kbId, updatedAt: now, startedAt: now, maxRounds, maxCostUsd,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Cancel flag (W7-B2, knowledge-14)
-// ---------------------------------------------------------------------------
-
-function kbDrainCancelPath(forgeRoot: string, runId: string): string {
-  return join(kbDrainLogDir(forgeRoot, runId), 'cancel.json');
-}
-
-/** Ask a live drain run to stop after its current turn. File-based (not
- *  in-memory) so it works across the enqueueConsolidate queue boundary and
- *  survives a bridge restart racing the loop. */
-export function requestKbDrainCancel(forgeRoot: string, runId: string): void {
-  mkdirSync(kbDrainLogDir(forgeRoot, runId), { recursive: true });
-  writeFileSync(kbDrainCancelPath(forgeRoot, runId), JSON.stringify({ requestedAt: new Date().toISOString() }) + '\n', 'utf8');
-}
-
-export function isKbDrainCancelRequested(forgeRoot: string, runId: string): boolean {
-  return existsSync(kbDrainCancelPath(forgeRoot, runId));
-}
+//
+// `kb-drain-routes.ts` and four test files import these names from HERE. They
+// did not change; only the file they live in did. Re-exporting them keeps the
+// split a pure relocation, exactly as PR #277's `brain-lint.ts` barrel kept its
+// 27 importers. The edges point one way — this module imports its parts, the
+// parts import nothing back — so the barrel adds no cycle.
+export {
+  KB_DRAIN_MAX_ROUNDS, DEFAULT_KB_DRAIN_MAX_COST_USD, KB_DRAIN_HEARTBEAT_MS, KB_DRAIN_DIFF_MAX_LINES,
+  // Re-exported from `kb-job-state.ts` through the model, exactly as this file
+  // re-exported it before the split — `bridge-studio-kb-drain-w7.test.ts`
+  // imports it from here and did not move.
+  KB_DRAIN_STALE_MS,
+} from './kb-drain-model.ts';
+export type {
+  KbDrainState, KbDrainProposedChange, KbDrainPerFinding, KbDrainStatus, KbDrainLintFn,
+  KbDrainApplyAutoFixesFn,
+} from './kb-drain-model.ts';
+export {
+  writeKbDrainStatus, readKbDrainStatus, findActiveKbDrainRun, latestKbDrainRun, listKbRuns,
+  initialKbDrainStatus, requestKbDrainCancel, isKbDrainCancelRequested,
+} from './kb-drain-store.ts';
+export type { KbRunRow } from './kb-drain-store.ts';
+export { finalizeRoundRows } from './kb-drain-model.ts';
+export type { KbDrainRoundRow } from './kb-drain-model.ts';
 
 // ---------------------------------------------------------------------------
 // Default fix-turn: runBrainFixTurn + its cost read back from its own log
@@ -595,369 +209,52 @@ async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
 }
 
 // ---------------------------------------------------------------------------
-// perFinding builders
-// ---------------------------------------------------------------------------
-
-/**
- * A row BEFORE its outcome is known. `Omit<…, 'outcome'>` is load-bearing:
- * the type gives the round loop nowhere to park a self-reported verdict, so a
- * row physically cannot exist with an unreconciled outcome. That is the cure
- * for forge-6gu (rows glyphed cleared for findings the round's own post-fix
- * lint still reports) — the previous shape stored `result.cleared` and nothing
- * ever revisited it.
- */
-type KbDrainRoundRow = Omit<KbDrainPerFinding, 'outcome'>;
-
-/**
- * W8-F1 (ON-3, S2) — an APPLIED auto-tier row and the diff it is accountable
- * for, in one constructor. `proposals` is a REQUIRED parameter so a row that
- * mutated the tree has no path to exist without the derivation having been
- * done; before this, auto rows were minted with no `proposedChanges` field at
- * all, so the one tier that lands with NO approval gate was the one tier the
- * operator could not inspect.
- *
- * Attribution is by PATH, which is as precise as the fixers' own report
- * allows: `applyAutoFixesUntilStable` runs several internal rounds and returns
- * one flat `applied` list, so there is no per-fix change set to read. A row
- * claims the diff for its own `file` plus any file its `detail` names (the
- * `index.not-listed` fixer, for instance, edits an INDEX while the finding is
- * keyed by the theme). An idempotent fixer that changed nothing honestly
- * claims nothing.
- */
-function autoAppliedEntry(
-  item: AutoFixStableResult['applied'][number],
-  round: number,
-  proposals: readonly KbDrainProposedChange[],
-): KbDrainRoundRow {
-  const mine = proposals.filter((p) => item.file.endsWith(p.file) || item.detail.includes(p.file));
-  return {
-    key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file,
-    message: item.detail, tier: 'auto', round,
-    ...(mine.length > 0 ? { proposedChanges: [...mine] } : {}),
-  };
-}
-
-/**
- * W8-F1 review round 2 — the auto tier's mutations that no `applied` item
- * claims, on one honest row rather than silently discarded. Its `outcome` is
- * derived like every other row's (`finalizeRoundRows`): the key is not in the
- * post-fix lint's set, so it reads `cleared` — which is true, these writes did
- * land. What the row adds is that they are VISIBLE.
- */
-function autoUnattributedEntry(proposals: readonly KbDrainProposedChange[], round: number): KbDrainRoundRow {
-  return {
-    key: `auto.unattributed::round-${round}`,
-    check: 'auto.unattributed',
-    kind: 'auto.unattributed',
-    file: proposals[0].file,
-    message: `the auto-fix pass also rewrote ${proposals.length} file(s) no single finding accounts for`,
-    tier: 'auto',
-    round,
-    proposedChanges: [...proposals],
-  };
-}
-
-/** Every file the deterministic auto-tier fixers changed, rendered as
- *  operator-inspectable proposals. Disposition is always `applied`: these
- *  fixers are not agent proposals, they are deterministic repairs that have
- *  already landed — the row's job is to SHOW that, not to re-decide it. */
-function buildAutoProposedChanges(
-  forgeRoot: string,
-  brainRoot: string,
-  changes: readonly KbEditChange[],
-): KbDrainProposedChange[] {
-  return changes.map((c) => {
-    const file = relative(forgeRoot, join(brainRoot, c.relPath));
-    const { diff, diffTruncated } = renderProposalDiff(file, c.before ?? '', c.after ?? '');
-    return { file, diff, diffTruncated, disposition: 'applied' as const, reasons: [] };
-  });
-}
-
-function autoSkippedEntry(item: AutoFixStableResult['skipped'][number], round: number): KbDrainRoundRow {
-  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.reason, tier: 'auto', round };
-}
-
-/**
- * The ONE place a round row gets a terminal outcome — derived from this
- * round's real post-fix lint (`afterKeys`, the same set the no-progress and
- * oscillation decisions are made from), never from what a fixer or an agent
- * claimed.
- *
- * A drafted row is the single exception, and it is not an exception to the
- * rule: its finding legitimately still lints (the proposed edit was reverted),
- * so the key IS in `afterKeys`; `needs-you` is the more precise truth about
- * why, not a softer one.
- *
- * W8-F1 extends that exception, on exactly the same reasoning, to a REFUSED
- * row. The gate now reverts an unsound edit whatever its class, so the modal
- * `length.soft-cap` prose-condense that also drops a live link no longer
- * becomes a draft — and without this it would fall through to a bare
- * `not-cleared`, dropping off the operator's attention surface entirely. That
- * would trade the ON-3 fix for an ON-4 regression. The agent tried, the drain
- * refused, and a human has to decide: that is `needs-you`.
- *
- * Derived from the row's own proposals, never a stored flag.
- */
-export function finalizeRoundRows(
-  rows: readonly KbDrainRoundRow[],
-  afterKeys: ReadonlySet<string>,
-): KbDrainPerFinding[] {
-  return rows.map((row) => ({
-    ...row,
-    outcome: row.draftSession || rowWasRefused(row)
-      ? 'needs-you'
-      : afterKeys.has(row.key) ? 'not-cleared' : 'cleared',
-  }));
-}
-
-/** Did the gate refuse something this row proposed? */
-function rowWasRefused(row: KbDrainRoundRow): boolean {
-  return (row.proposedChanges ?? []).some((p) => p.disposition === 'refused');
-}
-
-/** One proposal diff, capped and honestly flagged when cut. */
-function renderProposalDiff(label: string, before: string, after: string): { diff: string; diffTruncated: boolean } {
-  const full = buildUnifiedDiff(label, before, after).split('\n');
-  if (full.length <= KB_DRAIN_DIFF_MAX_LINES) return { diff: full.join('\n'), diffTruncated: false };
-  return {
-    diff: [...full.slice(0, KB_DRAIN_DIFF_MAX_LINES), `… ${full.length - KB_DRAIN_DIFF_MAX_LINES} more diff line(s) not shown`].join('\n'),
-    diffTruncated: true,
-  };
-}
-
-/**
- * W8-B2 (ON-3) — turn every file the turn touched into an operator-inspectable
- * proposal row: the diff, what became of it, and why.
- *
- * Derived entirely from the change set the gate already computed. Nothing here
- * re-reads the filesystem or re-decides a disposition — a second derivation of
- * "what happened to this edit" is exactly the drift this lane exists to close.
- */
-function buildProposedChanges(
-  forgeRoot: string,
-  brainDir: string,
-  changes: readonly KbEditChange[],
-  gate: {
-    refused: readonly KbEditChange[];
-    repaired: readonly KbEditChange[];
-    unsound: readonly KbEditUnsoundness[];
-    /** W8-F1 — disposals the gate could not carry out. */
-    errors: readonly string[];
-  },
-  proseChanges: readonly KbEditChange[],
-  proseDisposition: 'drafted' | 'refused',
-): KbDrainProposedChange[] {
-  const refusedPaths = new Set(gate.refused.map((c) => c.relPath));
-  const repairedByPath = new Map(gate.repaired.map((c) => [c.relPath, c]));
-  const prosePaths = new Set(proseChanges.map((c) => c.relPath));
-  const reasonsByPath = new Map<string, string[]>();
-  for (const u of gate.unsound) {
-    const list = reasonsByPath.get(u.relPath) ?? [];
-    list.push(u.message);
-    reasonsByPath.set(u.relPath, list);
-  }
-  // W8-F1 — a disposal the gate could NOT carry out is the most important
-  // thing on the row: it means bytes it wanted to revert may still be on disk.
-  // `reasons` is already "the audit's own reasons, rendered verbatim", so the
-  // failure goes there rather than inventing a second surface. A merged field
-  // that no consumer reads is the declared-data-fails-open shape this lane
-  // exists to close — it must not be re-shipped by the fix.
-  for (const err of gate.errors) {
-    for (const c of changes) {
-      if (!err.includes(c.relPath)) continue;
-      const list = reasonsByPath.get(c.relPath) ?? [];
-      list.push(err);
-      reasonsByPath.set(c.relPath, list);
-    }
-  }
-
-  return changes.map((c) => {
-    const file = relative(forgeRoot, join(brainDir, c.relPath));
-    const repaired = repairedByPath.get(c.relPath);
-    const disposition: KbDrainProposedChange['disposition'] =
-      repaired ? 'repaired'
-      : refusedPaths.has(c.relPath) ? 'refused'
-      : prosePaths.has(c.relPath) ? proseDisposition
-      : 'applied';
-    // A repaired file's diff shows what LANDED, not the rejected proposal —
-    // the reasons carry what was rejected and why.
-    const after = repaired ? (repaired.after ?? '') : (c.after ?? '');
-    const { diff, diffTruncated } = renderProposalDiff(file, c.before ?? '', after);
-    return { file, diff, diffTruncated, disposition, reasons: reasonsByPath.get(c.relPath) ?? [] };
-  });
-}
-
-/** Rows still awaiting this round's post-fix lint — what a mid-round poll sees. */
-function pendingRows(rows: readonly KbDrainRoundRow[]): KbDrainPerFinding[] {
-  return rows.map((row) => ({ ...row, outcome: 'pending' as const }));
-}
-
-function findingKey(f: Finding): string {
-  return `${f.kind ?? f.check ?? ''}::${f.file}`;
-}
-
-function progressKeySet(findings: readonly Finding[]): Set<string> {
-  return new Set(
-    findings.filter((f) => f.resolution === 'auto' || f.resolution === 'agent').map(findingKey),
-  );
-}
-
-function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const k of a) if (!b.has(k)) return false;
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Structural-only gate helpers (W7-B2, orch-01)
-// ---------------------------------------------------------------------------
-
-/** Restore every gated change to its pre-turn content — a created file is
- *  removed, an edited/deleted file is written back byte-for-byte. Paths are
- *  snapshot-derived (our OWN walk of the trusted `brainDir`), never
- *  request/agent text. */
-function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
-  for (const c of changes) {
-    const abs = join(brainDir, c.relPath);
-    if (c.before === null) {
-      rmSync(abs, { force: true });
-      continue;
-    }
-    mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, c.before, 'utf8');
-  }
-}
-
-function newDraftSessionId(): string {
-  const iso = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-  return `${iso}-${randomBytes(4).toString('hex')}`;
-}
-
-/**
- * Park a gated (prose-touching) agent fix as a kb-cleanup DRAFT session the
- * operator approves with a diff — the EXISTING kb-cleanup session kind
- * (studio/session-kinds.yaml), minted directly in `awaiting-approval` (no
- * agent turn needed; the drain already holds the proposal). `status.json`
- * carries `draft_apply` — `approveKbCleanup` (cli/bridge-studio-kbs.ts)
- * applies exactly those drafts (contained to this KB's own brain dir)
- * instead of running a consolidate. Returns null (and the caller records an
- * honest not-cleared) when the session cannot be written — never a throw
- * that would fail the whole drain over a parking problem.
- */
-function mintKbCleanupDraftSession(
-  forgeRoot: string,
-  kbId: string,
-  /** The KB's own dir — for its `kb.yaml` descriptor. */
-  brainDir: string,
-  /** `<forgeRoot>/brain` — what every `KbEditChange.relPath` is relative to. */
-  brainRoot: string,
-  finding: { check: string; kind: string; file: string; message: string },
-  proseChanges: readonly KbEditChange[],
-  runId: string,
-  round: number,
-): { id: string; project: string } | null {
-  try {
-    // W8-F1 — FAIL CLOSED, in the second layer. The caller already filters out
-    // everything the gate refused; this re-derives the same verdict rather
-    // than trusting that filter, because approving a draft writes `after` back
-    // byte-for-byte and a single miss here is the whole forge-d8l class handed
-    // back as a button. This block used to render the audit's reasons as a
-    // WARNING on the plan page and mint the draft anyway — which the C4
-    // refuter correctly called a one-click destruction button.
-    const guardCtx = buildKbEditSoundnessCtx(forgeRoot, brainRoot);
-    const unsound = proseChanges.flatMap((c) => auditKbEdit(c, guardCtx));
-    if (unsound.length > 0) return null;
-    let binding: unknown = { kind: 'unique' };
-    let project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-    try {
-      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
-      binding = kb.binding;
-      if (kb.binding.kind === 'project') project = kb.binding.ref;
-    } catch {
-      // No/unparseable kb.yaml — the dot-anchor fallback above still works.
-    }
-    const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
-    // The guarded write realpath-walks projectsRoot itself — which may not
-    // exist yet on a fresh install (or an isolated test root).
-    mkdirSync(projectsRoot, { recursive: true });
-    const sessionId = newDraftSessionId();
-
-    const draftApply: Array<{ file: string; draft: string }> = [];
-    const diffs: string[] = [];
-    const draftBodies: string[] = [];
-    for (const c of proseChanges) {
-      if (c.after === null) continue; // a deletion is refused outright, never drafted
-      const relFromRoot = relative(forgeRoot, join(brainRoot, c.relPath));
-      draftApply.push({ file: relFromRoot, draft: `drafts/${draftBodies.length}.md` });
-      diffs.push(buildUnifiedDiff(relFromRoot, c.before ?? '', c.after));
-      draftBodies.push(c.after);
-    }
-    if (draftApply.length === 0) return null;
-
-    const written = guardedWriteSessionStatus(projectsRoot, [project, '_kb-cleanup', sessionId], {
-      session_id: sessionId,
-      project,
-      phase: 'awaiting-approval',
-      kb_id: kbId,
-      kb_binding: binding,
-      findings: [{ kind: finding.kind, check: finding.check, file: finding.file, message: finding.message }],
-      draft_apply: draftApply,
-      origin: 'kb-drain',
-      drain_run_id: runId,
-      drain_round: round,
-    });
-    if (written === null) return null;
-
-    // Session dir now exists (guardedWriteSessionStatus created it); drafts/
-    // and plan/ are its own server-minted children. Every write goes through
-    // guardedWriteFile — the LEAF included (raw-fs-guarded's leaf-append
-    // rule), which also creates the parent dir.
-    let draftsOk = true;
-    draftBodies.forEach((body, i) => {
-      const p = guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'drafts', `${i}.md`], body);
-      if (p === null) draftsOk = false;
-    });
-    if (!draftsOk) return null;
-
-    const plan = [
-      '# Drain-gated prose edit',
-      '',
-      'Drain-to-green applies STRUCTURAL fixes only (frontmatter, links, index',
-      "pages). The brain-fix agent's proposed fix for the finding below rewrites",
-      'theme PROSE, so it is parked here for your approval instead of landing',
-      'silently (wave-7 orch-01).',
-      '',
-      `Finding: [${finding.kind}] ${relative(forgeRoot, finding.file)} — ${finding.message}`,
-      `Drain run: ${runId} (round ${round})`,
-      '',
-      ...draftApply.map((d) => `- [${finding.kind}] ${d.file} — drain-gated prose edit awaiting approval (approve replaces the file with ${d.draft})`),
-      '',
-      'Every change below was audited for graph soundness before it was parked',
-      '(W8-F1): a prose edit that also deletes a resolvable related_themes edge,',
-      'drops a live link or repoints one at a target that does not exist is',
-      'REFUSED outright and never reaches this page. The SAME audit runs again',
-      'when you approve, against the file as it stands then — so if anything',
-      'edits this theme while the session waits, the apply refuses rather than',
-      'writing this draft over it. What is left for you to judge is the prose.',
-      '',
-      'Approving this session applies the draft content below verbatim.',
-      '',
-      '```diff',
-      diffs.join('\n\n'),
-      '```',
-      '',
-    ].join('\n');
-    if (guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'plan', 'cleanup-plan.md'], plan) === null) return null;
-
-    return { id: sessionId, project };
-  } catch {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // The drain loop
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// The engine's own injectable seams
+// ---------------------------------------------------------------------------
+//
+// These two types live HERE, with `runKbDrain`, rather than in
+// `kb-drain-model.ts` with the rest of the vocabulary. They name the fix-turn
+// the engine dispatches, so they reference `@forge/sessions/brain-fix-runner`'s
+// input and result — an edge this file already carries and the model should
+// not acquire. Splitting a file must not multiply the package's boundary rows,
+// and the alternative (the model importing sessions too) would have added one
+// for a pair of type aliases.
+
+/** Same input as `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), but
+ *  the result additionally carries `costUsd` — `RunBrainFixResult` itself
+ *  does not return cost (it only logs `cost_usd` on the turn's own 'end'
+ *  event), so the default implementation reads it back out of that event
+ *  log (`readBrainFixTurnCostUsd` below) after every real turn. Injectable
+ *  so termination-matrix tests (esp. the cost-ceiling case) can hand back a
+ *  precise, deterministic cost per call without a real SDK turn. */
+export type KbDrainRunFixTurnFn = (
+  input: RunBrainFixInput,
+) => Promise<RunBrainFixResult & { costUsd: number }>;
+
+/** Same signature as the internal `writeKbDrainStatus` (below). Injectable
+ *  ONLY so a test can fail a PRECISE persist call (e.g. the very first one)
+ *  while later calls to the SAME (forgeRoot, runId) succeed — a filesystem-
+ *  level fault (an unwritable dir, a blocked leaf) cannot isolate "first call
+ *  fails, second succeeds" because both the initial persist and the
+ *  catch-block's crash-recovery persist target the identical on-disk path.
+ *  Defaults to the real atomic (temp+rename) writer. */
+export type KbDrainPersistFn = (forgeRoot: string, runId: string, status: KbDrainStatus) => void;
+
+export type KbDrainOpts = {
+  maxRounds?: number;
+  maxCostUsd?: number;
+  lint?: KbDrainLintFn;
+  applyAutoFixes?: KbDrainApplyAutoFixesFn;
+  runFixTurn?: KbDrainRunFixTurnFn;
+  persistStatus?: KbDrainPersistFn;
+  /** Liveness-heartbeat cadence (W7-B2); 0 disables (unit tests). Defaults
+   *  to KB_DRAIN_HEARTBEAT_MS. */
+  heartbeatMs?: number;
+};
 
 /**
  * Drive a single KB's `forge brain lint` findings to a fixed point: drain
