@@ -20,8 +20,8 @@ import {
   projectThemesDir,
   readArtifactRoot,
   resolveKbBrainDir,
-} from './brain-paths.ts';
-import * as brainPaths from './brain-paths.ts';
+} from '../../brain-paths.ts';
+import * as brainPaths from '../../brain-paths.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

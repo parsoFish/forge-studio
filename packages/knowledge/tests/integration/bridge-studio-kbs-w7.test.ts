@@ -11,8 +11,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
-import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
+import { deriveKbActiveJob, activeJobReason } from '../../kb-job-state.ts';
 
 async function makeIsolatedBridge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
   const root = mkdtempSync(join(tmpdir(), 'kbs-w7-http-'));
@@ -220,7 +220,7 @@ test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and repo
 // ---------------------------------------------------------------------------
 
 test('runBrainConsolidateNow: the journey kb-maintain fixture (unquoted-colon description) reaches cleared=true under no-spawn (W7 FIX-B-KB)', async () => {
-  const { runBrainConsolidateNow } = await import('./bridge-studio-kb-consolidate.ts');
+  const { runBrainConsolidateNow } = await import('../../bridge-studio-kb-consolidate.ts');
   const root = mkdtempSync(join(tmpdir(), 'kbs-w7-consolidate-'));
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';

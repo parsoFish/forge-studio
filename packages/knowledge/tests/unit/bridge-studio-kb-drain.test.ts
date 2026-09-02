@@ -25,11 +25,11 @@ import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   type KbDrainStatus,
   type KbDrainOpts,
-} from './bridge-studio-kb-drain.ts';
-import type { Finding, AutoFixStableResult } from './brain-lint.ts';
-import { noKbEdits } from './kb-drain-edit-soundness.ts';
+} from '../../bridge-studio-kb-drain.ts';
+import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
+import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
 import type { RunBrainFixInput, RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Part A fixtures/helpers

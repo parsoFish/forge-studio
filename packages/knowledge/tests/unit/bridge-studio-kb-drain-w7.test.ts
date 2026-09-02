@@ -21,13 +21,13 @@ import {
   KB_DRAIN_STALE_MS,
   type KbDrainStatus,
   type KbDrainOpts,
-} from './bridge-studio-kb-drain.ts';
-import { collectKbFindings } from './kb-lint-summary.ts';
-import { deriveKbActiveJob } from './kb-job-state.ts';
-import { noKbEdits } from './kb-drain-edit-soundness.ts';
-import { runBrainLint } from './brain-lint.ts';
-import type { Finding, AutoFixStableResult } from './brain-lint.ts';
-import { startBridge } from '../../cli/ui-bridge.ts';
+} from '../../bridge-studio-kb-drain.ts';
+import { collectKbFindings } from '../../kb-lint-summary.ts';
+import { deriveKbActiveJob } from '../../kb-job-state.ts';
+import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
+import { runBrainLint } from '../../brain-lint.ts';
+import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures (mirrors cli/bridge-studio-kb-drain.test.ts Part A)

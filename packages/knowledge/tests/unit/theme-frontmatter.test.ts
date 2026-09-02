@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseThemeRaw } from './theme-frontmatter.ts';
+import { parseThemeRaw } from '../../theme-frontmatter.ts';
 
 const INVALID_YAML_THEME = [
   '---',

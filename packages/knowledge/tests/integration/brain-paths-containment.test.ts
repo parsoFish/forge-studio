@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync, linkSync, l
 import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { resolveKbBrainDir } from '../../brain-paths.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

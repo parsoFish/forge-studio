@@ -38,7 +38,7 @@ import {
   CHECK_SCOPE,
   LINT_THEME_FILE_CHECKS,
   type Finding,
-} from './brain-lint.ts';
+} from '../../brain-lint.ts';
 
 // ---------- fixture builder ----------
 

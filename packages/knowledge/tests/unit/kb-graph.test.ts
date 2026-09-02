@@ -12,7 +12,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile } from './kb-graph.ts';
+import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile } from '../../kb-graph.ts';
 
 // Resolve forge root relative to this test file's location
 // Depth-INDEPENDENT — see the note in kb-backend.test.ts.

@@ -43,10 +43,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runKbDrain } from './bridge-studio-kb-drain.ts';
-import { noKbEdits } from './kb-drain-edit-soundness.ts';
+import { runKbDrain } from '../../bridge-studio-kb-drain.ts';
+import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
 import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
-import type { Finding } from './brain-lint.ts';
+import type { Finding } from '../../brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture scaffolding
