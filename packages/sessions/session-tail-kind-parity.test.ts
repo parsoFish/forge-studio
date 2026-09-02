@@ -9,7 +9,7 @@
  * `descriptor.id === SPAWN_AGENT_SPECS[...].logPrefix` holds for every
  * spawnable kind, but that is a COINCIDENCE, not an enforced invariant — the
  * kb-cleanup/authoring collocation ratchet
- * (cli/agent-run-log-dir-colocation.test.ts) only pins this for ONE kind
+ * (packages/agents/agent-run-log-dir-colocation.test.ts) only pins this for ONE kind
  * ('authoring'). A future rename of either side (a session-kind id in the
  * yaml, or a SPAWN_AGENT_SPECS key/logPrefix) would silently break
  * ensureSessionTail for that kind: `ensureTailFor`'s `existsSync` guard
@@ -86,7 +86,7 @@ test(
           `it corresponds to is ${JSON.stringify(descriptor.id)}. ensureSessionTail(kind, sessionId) ` +
           '(cli/ui-bridge.ts) derives the WS tail\'s log dir as `_${kind}-${sessionId}` using the session-kind id — ' +
           'if SPAWN_AGENT_SPECS actually writes its stderr/event log under a DIFFERENT prefix, the session-detail ' +
-          'GET route (cli/bridge-studio-sessions.ts) and the four legacy list routes (cli/ui-bridge.ts) tail the ' +
+          'GET route (packages/sessions/bridge-studio-sessions.ts) and the four legacy list routes (cli/ui-bridge.ts) tail the ' +
           'WRONG (non-existent) directory and ensureTailFor\'s existsSync guard silently no-ops — no error anywhere, ' +
           'the WS tail for this kind just never starts. Fix: either rename the drifted side back into agreement, or ' +
           'add this kind to SESSION_KIND_ID_TO_SPAWN_AGENT_ID above if the divergence is intentional (mirroring the ' +

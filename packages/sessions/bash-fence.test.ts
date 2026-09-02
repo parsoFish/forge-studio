@@ -32,7 +32,7 @@
  *      tokens spent. (`community-refresh` was a third non-opted-in real
  *      descriptor exercised here until it was retired in W8-B5b.)
  *
- * RUN: node --test --experimental-strip-types orchestrator/bash-fence.test.ts
+ * RUN: node --test --experimental-strip-types packages/sessions/bash-fence.test.ts
  */
 
 import { test } from 'node:test';

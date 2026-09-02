@@ -1,17 +1,17 @@
 /**
- * Acceptance tests for orchestrator/studio/session-kinds.ts (R2-10, PR1: the
+ * Acceptance tests for packages/sessions/studio/session-kinds.ts (R2-10, PR1: the
  * session-shell backend contract).
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./session-kinds.ts` import is the expected
- * red). Mirrors orchestrator/studio/template-library.ts / .test.ts's idiom:
+ * red). Mirrors packages/library/studio/template-library.ts / .test.ts's idiom:
  * real fs fixtures under mkdtempSync, plus the REAL repo (REPO_ROOT) for facts
  * that must stay true (the 3 shipped session kinds, their real agent ids).
  *
  * AT numbers below are a flat sequence AT-1..AT-48 spanning THREE files:
  *   AT-1  .. AT-18 — this file (session-kinds.ts)
- *   AT-19 .. AT-37 — orchestrator/studio/session-transcript.test.ts
- *   AT-38 .. AT-48 — cli/bridge-studio-sessions.test.ts
+ *   AT-19 .. AT-37 — packages/sessions/studio/session-transcript.test.ts
+ *   AT-38 .. AT-48 — packages/sessions/bridge-studio-sessions.test.ts
  * AT-amendment-2 round (T2-ratified, adversarial-review findings) adds:
  *   AT-49 .. AT-56 — this file (A3: legacyRoutes declared-data-fails-open;
  *                    A4: YAML structural coverage gap)
@@ -132,14 +132,14 @@
  *
  * CRITICAL for the implementer (AT-R422-12): `kindDir`'s sibling field
  * `d.id` is checked against `SLUG_RE` (`/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`,
- * orchestrator/skill-path.ts) one screen up in the same function — but every
+ * packages/agents/skill-path.ts) one screen up in the same function — but every
  * REAL `kindDir` value in this design is underscore-prefixed (`_authoring`,
  * `_architect`, `_demo`, ADR-043 §1's own worked example). SLUG_RE requires
  * a leading `a-z` letter, so it REJECTS every one of them. Reusing
  * SLUG_RE/CHECK_SLUG for kindDir would make every real shipped kindDir value
  * a lint error. The kindDir check must be a NEW, distinct "safe single path
  * segment" shape check (no separators, no `.`/`..`, no control characters —
- * mirrors `isSafeSegment` in cli/studio-path-guard.ts, which the generic
+ * mirrors `isSafeSegment` in packages/kernel/path-guard.ts, which the generic
  * runner's own `resolveGuardedPath(projectRoot, [kindDir, sessionId])` relies
  * on one layer further down, but which nothing calls at LINT time today).
  */
@@ -166,13 +166,13 @@ import {
 // R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
 // session kind must ride the EXISTING generic runInteractiveTurn spine, never
 // a new AGENT_RUNNERS entry. Imported directly from the real production
-// registry (cli/agent-run.ts), not re-derived, so the assertion below is
+// registry (packages/agents/agent-run.ts), not re-derived, so the assertion below is
 // against the actual dispatch table a "just add a fifth runner"
 // implementation would touch. `cli/` importing FROM `orchestrator/studio/` is
 // the established direction (this test file lives at
-// orchestrator/studio/session-kinds.test.ts and imports cli/agent-run.ts, the
-// mirror image of cli/agent-run.ts's own `import { loadSessionKinds } from
-// '../orchestrator/studio/session-kinds.ts'` at its top) — no cycle: this
+// packages/sessions/studio/session-kinds.test.ts and imports packages/agents/agent-run.ts, the
+// mirror image of packages/agents/agent-run.ts's own `import { loadSessionKinds } from
+// '../packages/sessions/studio/session-kinds.ts'` at its top) — no cycle: this
 // TEST file is never itself imported by production code.
 import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
 // The real Finding type (level/object/check/message) `validateSessionKinds`
@@ -185,9 +185,9 @@ import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
 import type { Finding } from '../../../orchestrator/studio/validate.ts';
 // Real production call path (Ruling 36): `runStudioLint` is what `forge
 // studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
-// orchestrator/cli.ts), and CI invokes exactly that command
+// apps/forge/cli.ts), and CI invokes exactly that command
 // (.github/workflows/ci.yml: `node --experimental-strip-types
-// orchestrator/cli.ts studio lint`). This import is STATIC (not dynamic)
+// apps/forge/cli.ts studio lint`). This import is STATIC (not dynamic)
 // because runStudioLint already exists and works today — no RED risk here.
 import { runStudioLint } from '../../../cli/studio-lint.ts';
 // SLUG_RE is the SAME regex CHECK_SLUG already applies one screen up in
@@ -1089,7 +1089,7 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     }
   });
 
-  it('AT-R422-3 (updated W6-B3 post-merge review): a phase.finalizer outside the DISPATCHABLE finalizer set (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id `orchestrator/interactive-finalizers.ts`\'s FINALIZERS registry actually implements — turnSpec.phases validates against the set dispatch will resolve, NOT the wider descriptive FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time; also kills an implementation that lint-approves a merely DESCRIPTIVE finalizer id turnSpec dispatch would throw on)', async () => {
+  it('AT-R422-3 (updated W6-B3 post-merge review): a phase.finalizer outside the DISPATCHABLE finalizer set (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id `packages/sessions/interactive-finalizers.ts`\'s FINALIZERS registry actually implements — turnSpec.phases validates against the set dispatch will resolve, NOT the wider descriptive FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time; also kills an implementation that lint-approves a merely DESCRIPTIVE finalizer id turnSpec dispatch would throw on)', async () => {
     // Parity import (reviewer-preferred over a hand-maintained mirror): the
     // REAL registry a turnSpec finalize step actually dispatches through.
     const { FINALIZERS } = await import('../interactive-finalizers.ts');
@@ -1243,7 +1243,7 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
           // unchanged.
           { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
           // W6-B4 adversarial-review fix: `applying` is the atomic-claim
-          // marker `approveKbCleanup` (cli/bridge-studio-kbs.ts) writes
+          // marker `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) writes
           // SYNCHRONOUSLY before its one await, closing a live-reproduced
           // double-drain race. Unreachable via `next` (same as `applied`
           // always has been) — `approveKbCleanup` is its only writer.
@@ -1353,7 +1353,7 @@ describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (A
 });
 
 describe('the real production call path — forge studio lint (AT-R422-10, Ruling 36)', () => {
-  it('AT-R422-10: runStudioLint(root) — the exact function cmdStudioLint (orchestrator/cli.ts) calls, which `forge studio lint` runs and which CI invokes via `node --experimental-strip-types orchestrator/cli.ts studio lint` (.github/workflows/ci.yml) — surfaces the turnspec-unknown-style finding produced by validateSessionKinds (kills an implementation where the new check exists and is directly callable but is not actually wired into (or is swallowed by) the studio-lint aggregation path an operator/CI actually runs; validateSessionKinds alone being correct is NOT sufficient — this is the "guard exists, no call site calls it" defect class named in the brief)', () => {
+  it('AT-R422-10: runStudioLint(root) — the exact function cmdStudioLint (apps/forge/cli.ts) calls, which `forge studio lint` runs and which CI invokes via `node --experimental-strip-types apps/forge/cli.ts studio lint` (.github/workflows/ci.yml) — surfaces the turnspec-unknown-style finding produced by validateSessionKinds (kills an implementation where the new check exists and is directly callable but is not actually wired into (or is swallowed by) the studio-lint aggregation path an operator/CI actually runs; validateSessionKinds alone being correct is NOT sufficient — this is the "guard exists, no call site calls it" defect class named in the brief)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'not-a-real-turn-style-at-all';
@@ -1399,7 +1399,7 @@ describe('validateSessionKinds — turnSpec.kindDir must be a safe single path s
     }
   });
 
-  it('AT-R422-12: turnSpec.kindDir POSITIVE CONTROL — legitimate underscore-prefixed dir names (`_authoring` per the ADR §1 worked example, plus `_architect`/`_demo`, the real values this design actually uses) validate CLEAN (without this, a blanket-reject kindDir implementation would pass every negative probe in AT-R422-11 for the WRONG reason). Also asserts the determination the implementer needs: SLUG_RE (imported straight from orchestrator/skill-path.ts — the SAME regex CHECK_SLUG already applies to the sibling `d.id` field one screen up in validateSessionKinds) does NOT accept these values, because it requires a leading a-z letter — reusing SLUG_RE/CHECK_SLUG for kindDir would make every REAL shipped kindDir value a permanent lint error, so a distinct check is required.', () => {
+  it('AT-R422-12: turnSpec.kindDir POSITIVE CONTROL — legitimate underscore-prefixed dir names (`_authoring` per the ADR §1 worked example, plus `_architect`/`_demo`, the real values this design actually uses) validate CLEAN (without this, a blanket-reject kindDir implementation would pass every negative probe in AT-R422-11 for the WRONG reason). Also asserts the determination the implementer needs: SLUG_RE (imported straight from packages/agents/skill-path.ts — the SAME regex CHECK_SLUG already applies to the sibling `d.id` field one screen up in validateSessionKinds) does NOT accept these values, because it requires a leading a-z letter — reusing SLUG_RE/CHECK_SLUG for kindDir would make every REAL shipped kindDir value a permanent lint error, so a distinct check is required.', () => {
     for (const good of ['_authoring', '_architect', '_demo']) {
       assert.ok(
         !SLUG_RE.test(good),
@@ -1711,10 +1711,10 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
 // ===========================================================================
 
 describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup', () => {
-  it('AGENT_RUNNERS (cli/agent-run.ts) gains NO "kb-cleanup" key — the session rides the existing turnSpec dispatch fork in cmdAgentRun, not a new bespoke runner', () => {
+  it('AGENT_RUNNERS (packages/agents/agent-run.ts) gains NO "kb-cleanup" key — the session rides the existing turnSpec dispatch fork in cmdAgentRun, not a new bespoke runner', () => {
     assert.ok(
       !Object.prototype.hasOwnProperty.call(AGENT_RUNNERS, 'kb-cleanup'),
-      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's ADR-043 §3 fork BEFORE AGENT_RUNNERS is ever consulted (cli/agent-run.ts); adding a key here re-opens the exact per-runner cap park ADR-043 dissolved.`,
+      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's ADR-043 §3 fork BEFORE AGENT_RUNNERS is ever consulted (packages/agents/agent-run.ts); adding a key here re-opens the exact per-runner cap park ADR-043 dissolved.`,
     );
     // Belt-and-suspenders grep on the real source TEXT (not just the
     // imported object's own keys) — catches a "kb-cleanup" entry added under
@@ -1724,11 +1724,11 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
     assert.doesNotMatch(
       src,
       /['"]kb-cleanup['"]\s*:/,
-      'the real cli/agent-run.ts source text must not declare a "kb-cleanup" key anywhere',
+      'the real packages/agents/agent-run.ts source text must not declare a "kb-cleanup" key anywhere',
     );
   });
 
-  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; W6-CR-3 briefly grew it a third time for community-refresh\'s real dispatchable turnSpec finalizer, commitRegistryDraft — retired in W8-B5b along with the kind; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
+  it('FINALIZER_IDS (packages/sessions/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; W6-CR-3 briefly grew it a third time for community-refresh\'s real dispatchable turnSpec finalizer, commitRegistryDraft — retired in W8-B5b along with the kind; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
     assert.deepEqual(
       FINALIZER_IDS.map((f) => f.id),
       ['copyStagingToLibrary', 'writeToRepoRoot', 'recordLockedDemo'],
@@ -2137,7 +2137,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
     assert.deepEqual(
       onboarding.panel,
       { phases: [{ phase: 'running', step: 'agent' }, { phase: 'complete', step: 'terminal' }, { phase: 'failed', step: 'terminal' }] },
-      `onboarding's panel must deep-equal the thin running->complete/failed table mirroring writeSessionTerminalPhase (cli/agent-run.ts:198), got: ${JSON.stringify(onboarding.panel)}`,
+      `onboarding's panel must deep-equal the thin running->complete/failed table mirroring writeSessionTerminalPhase (packages/agents/agent-run.ts:198), got: ${JSON.stringify(onboarding.panel)}`,
     );
 
     for (const id of ['architect', 'project-brain', 'authoring', 'kb-cleanup']) {

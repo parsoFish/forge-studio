@@ -17,7 +17,7 @@
  * questions.json/feedback.md; there is no interview for that kind.
  *
  * Real on-disk shapes (verified against source, not guessed):
- *   - answers.json = AnswerRound[] (orchestrator/interactive-session.ts:303).
+ *   - answers.json = AnswerRound[] (packages/sessions/interactive-session.ts:303).
  *     Each round's answers[].question recovers that round's AGENT turn;
  *     answers[].answer is the OPERATOR turn. Both turns of a round share the
  *     source `answers.json#round-N`.
@@ -43,7 +43,7 @@
  * `AWAITING_ANSWERS_PHASE` — the interview-handoff contract both
  * architect-runner.ts and instructions-runner.ts write to `status.json`
  * while blocked on the operator (see the questions.json ↔ answers.json
- * handoff documented at orchestrator/interactive-session.ts's "Interview
+ * handoff documented at packages/sessions/interactive-session.ts's "Interview
  * handoff" section). Any other phase means questions.json (if present) is
  * stale leftover from a prior round and contributes NO turn, regardless of
  * its text — text-based re-ask detection silently dropped a legitimately
@@ -115,7 +115,7 @@ const PROMPT_FILENAME = 'prompt.md';
 const ANSWERS_FILENAME = 'answers.json';
 const QUESTIONS_FILENAME = 'questions.json';
 const FEEDBACK_FILENAME = 'feedback.md';
-/** The instructions-runner's draft filename (orchestrator/instructions-runner.ts
+/** The instructions-runner's draft filename (packages/sessions/instructions-runner.ts
  *  `DRAFT_FILENAME`, currently 'AGENTS.draft.md'). Deliberately re-declared as
  *  its own constant here rather than imported: instructions-runner.ts pulls in
  *  the live SDK query chain (pinned-sdk-query.ts) at module top level, and this
@@ -129,7 +129,7 @@ const THEMES_DIRNAME = 'themes';
 /** The phase token the questions/answers interview handoff uses while
  *  blocked on the operator — written to status.json by both
  *  architect-runner.ts and instructions-runner.ts (see
- *  orchestrator/interactive-session.ts's "Interview handoff" section). A
+ *  packages/sessions/interactive-session.ts's "Interview handoff" section). A
  *  questions.json entry is a pending agent turn iff the caller's real phase
  *  equals this constant; any other phase means questions.json is stale. */
 const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
@@ -249,7 +249,7 @@ export type DeriveTranscriptResult =
        *  per-kind guess about which kinds record turns.
        *
        *  This replaces the wire's old `transcript: descriptor.turnSpec ===
-       *  undefined` boolean (cli/bridge-studio-sessions.ts), which was a
+       *  undefined` boolean (packages/sessions/bridge-studio-sessions.ts), which was a
        *  STORED PROXY and factually wrong: `authoring` declares a `turnSpec`
        *  yet its start route (`writeAuthoringSession`, cli/ui-bridge.ts)
        *  writes `prompt.md` before the generic spine ever runs, so the proxy
@@ -490,7 +490,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // feedback.md — an honest single operator turn: the CURRENT, not-yet-
   // consumed revision note. W7-C2 T1 review (P0-2): this file is transient
   // by design — each revise overwrites it and the next agent turn CONSUMES
-  // it (orchestrator/interactive-runner.ts deletes it once it has been
+  // it (packages/sessions/interactive-runner.ts deletes it once it has been
   // folded into a prompt), so it can only ever hold the newest round's
   // words. The DURABLE per-round record is verdicts.json's own `feedback`
   // field, rendered below.
@@ -588,7 +588,7 @@ export type RoadmapDraftRow = {
   // `string[]` target.
   //
   // Sourced verbatim from the manifest's `depends_on_initiatives`
-  // (orchestrator/manifest.ts:73, already parsed by `parseManifest`) —
+  // (packages/flows/manifest.ts:73, already parsed by `parseManifest`) —
   // absent on the manifest ⇒ `[]`, never undefined and never dropped from
   // the row. This field is DERIVED, never fabricated: it is exactly what
   // the manifest declares, in declared order, with no filtering,
@@ -680,7 +680,7 @@ export type GenerationGalleryArtifact = {
 // five stages. D4 (binding): this module's "may not read outside sessionDir"
 // invariant is NOT relaxed for this kind — it performs ZERO filesystem work
 // here, full stop. The real derivation (`deriveContractStages`) lives in
-// `cli/contract-stages.ts`, which reads the PROJECT tree (outside any
+// `packages/projects/contract-stages.ts`, which reads the PROJECT tree (outside any
 // sessionDir) via its own realpath-guarded containment; this module only
 // threads ALREADY-DERIVED, already-guarded rows the caller (cli/bridge-studio-
 // sessions.ts) supplies, and throws when they are absent — never a silently
@@ -688,12 +688,12 @@ export type GenerationGalleryArtifact = {
 // case below).
 //
 // `ContractStageRow`/`ContractBuildoutArtifact` are declared HERE, not in
-// `cli/contract-stages.ts`, so the ONE type has ONE canonical owner and
-// `cli/contract-stages.ts` imports it from here — the same direction that
+// `packages/projects/contract-stages.ts`, so the ONE type has ONE canonical owner and
+// `packages/projects/contract-stages.ts` imports it from here — the same direction that
 // file already needs for `safeReadFileInSession` and `SESSION_STAGES`
 // (`session-kinds.ts`), so this adds no new import direction and creates no
 // cycle (verified: `orchestrator/` already imports plain VALUES from `cli/`
-// in ~30 files today, e.g. `orchestrator/manifest.ts` -> `cli/manifest-path-
+// in ~30 files today, e.g. `packages/flows/manifest.ts` -> `cli/manifest-path-
 // guard.ts`, so a `cli/` -> `orchestrator/` type import here is the
 // established direction, not a reversal).
 // ---------------------------------------------------------------------------
@@ -885,7 +885,7 @@ function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifa
 // ACTIONS only (kind/target/proposal per line, per skills/brain-maintenance/
 // SKILL.md's output contract). CURRENT truth is ALWAYS the caller-supplied
 // `cleanupFindings` — a live, KB-scoped brain-lint run the caller
-// (cli/bridge-studio-sessions.ts, via cli/bridge-studio-kbs.ts's
+// (packages/sessions/bridge-studio-sessions.ts, via packages/knowledge/bridge-studio-kbs.ts's
 // `computeAgentCleanupFindings`) computes fresh on every call. Each action's
 // `state` is DERIVED at read time by joining the two on (kind, target) —
 // there is no stored per-action status field anywhere: not in the plan
@@ -897,7 +897,7 @@ function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifa
 const CLEANUP_PLAN_DIRNAME = 'plan';
 const CLEANUP_PLAN_FILENAME = 'cleanup-plan.md';
 
-/** The caller-supplied CURRENT-truth shape — a subset of cli/brain-lint.ts's
+/** The caller-supplied CURRENT-truth shape — a subset of packages/knowledge/brain-lint.ts's
  *  real `Finding` (post-`classify`) this module deliberately does NOT import
  *  (mirrors `fixtureContractStages`'s own rationale: this module stays a
  *  pure, fs-only derivation with no business importing the lint engine). Any
@@ -911,7 +911,7 @@ export type CleanupFinding = { readonly kind: string; readonly file: string };
  *  how `contractStages` is already threaded. `forgeRoot` is the absolute
  *  root a repo-relative plan `target` resolves against; `brainDir` is the
  *  absolute directory the caller's `cleanupFindings` were ACTUALLY scanned
- *  from (cli/bridge-studio-sessions.ts resolves this via `resolveKbBrainDir`
+ *  from (packages/sessions/bridge-studio-sessions.ts resolves this via `resolveKbBrainDir`
  *  at the same call site that already computes `cleanupFindings`). Presence
  *  of this field is what makes `'cleared'` derivable at all — see
  *  `CleanupPlanAction.state`'s own doc for the full three-way contract. */
@@ -1000,7 +1000,7 @@ function parseCleanupPlanActions(raw: string): ParsedCleanupAction[] {
 // ---------------------------------------------------------------------------
 // R4-19-F2 P1 fix -- path normalization + the cleared/unknown fail-safe
 // split. The live defect: a caller-supplied Finding.file is ABSOLUTE by
-// contract (cli/brain-lint.ts:54), but the agent's plan writes a
+// contract (packages/knowledge/brain-lint.ts:54), but the agent's plan writes a
 // REPO-RELATIVE target (skills/brain-maintenance/SKILL.md's mandated
 // shape) -- comparing the two literally never matched anything, and "no
 // match" silently read as 'cleared'. These helpers normalize BOTH shapes
@@ -1277,7 +1277,7 @@ function deriveGenerationGallery(sessionDir: string, label: string): GenerationG
  * This is the single place the label is attached: the label lives on the
  * descriptor, which every deriver already receives, so there is exactly one
  * copy of "kind → label" (the YAML) rather than a second lookup here or at
- * the route (cli/bridge-studio-sessions.ts), which forwards this artifact
+ * the route (packages/sessions/bridge-studio-sessions.ts), which forwards this artifact
  * object unchanged into the 200 response.
  */
 export function deriveSessionArtifact(input: {
@@ -1326,14 +1326,14 @@ export function deriveSessionArtifact(input: {
       if (contractStages === undefined) {
         throw new Error(
           'deriveSessionArtifact: artifact kind "contract-buildout" requires contractStages to be supplied by the caller ' +
-            '(cli/bridge-studio-sessions.ts derives them via cli/contract-stages.ts\'s deriveContractStages) — never defaults to an empty/silent artifact',
+            '(packages/sessions/bridge-studio-sessions.ts derives them via packages/projects/contract-stages.ts\'s deriveContractStages) — never defaults to an empty/silent artifact',
         );
       }
       return {
         kind: 'contract-buildout',
         label,
         stages: contractStages,
-        sourcesScanned: ['contractStages supplied by the caller (cli/contract-stages.ts) — this module performs no filesystem scanning for this kind (D4)'],
+        sourcesScanned: ['contractStages supplied by the caller (packages/projects/contract-stages.ts) — this module performs no filesystem scanning for this kind (D4)'],
       };
     }
     case 'cleanup-plan': {
@@ -1343,7 +1343,7 @@ export function deriveSessionArtifact(input: {
       if (cleanupFindings === undefined) {
         throw new Error(
           'deriveSessionArtifact: artifact kind "cleanup-plan" requires cleanupFindings to be supplied by the caller ' +
-            '(cli/bridge-studio-sessions.ts derives them via a live, KB-scoped brain-lint scan, cli/bridge-studio-kbs.ts\'s ' +
+            '(packages/sessions/bridge-studio-sessions.ts derives them via a live, KB-scoped brain-lint scan, packages/knowledge/bridge-studio-kbs.ts\'s ' +
             'computeAgentCleanupFindings) — never defaults to an empty/silent artifact',
         );
       }

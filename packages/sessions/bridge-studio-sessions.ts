@@ -10,7 +10,7 @@
  *
  * W6-B3 (ADR-043 2026-08-15 amendment §1/§2) data-contract additions:
  *   - `affordances` — `deriveSessionAffordances(descriptor, phase)`
- *     (orchestrator/studio/session-kinds.ts), computed server-side from
+ *     (packages/sessions/studio/session-kinds.ts), computed server-side from
  *     whichever phase table the descriptor carries (`turnSpec` for a real
  *     dispatchable kind, `panel` for a legacy kind's read-only twin) —
  *     "derived, not authored" (ADR-043 §1): the client renders what it is
@@ -37,7 +37,7 @@
  * response, `sanitizeError` for anything that reaches a user-visible error
  * string derived from a thrown value. Read-only: no writes, no spawns, no
  * mutation of any session — this route only derives a view over
- * already-on-disk session state (orchestrator/studio/session-kinds.ts +
+ * already-on-disk session state (packages/sessions/studio/session-kinds.ts +
  * session-transcript.ts do all the real work; this module is glue + guards).
  *
  * `kind` is resolved against the LIVE `studio/session-kinds.yaml` registry
@@ -46,7 +46,7 @@
  * `<projectsRoot>/<project>/_<kind>/<sessionId>` — `_<kind>` built from
  * `descriptor.id`, the same shape `architectSessionDir` / `instructionsSessionDir`
  * / `projectBrainSessionDir` already use (cli/ui-bridge.ts:1416,
- * orchestrator/instructions-runner.ts:142, orchestrator/project-brain-builder-runner.ts:77).
+ * packages/sessions/instructions-runner.ts:142, orchestrator/project-brain-builder-runner.ts:77).
  *
  * Security (the part reviewers attack hardest — a standing brief after 3
  * consecutive lexical-check failures in this campaign):
@@ -55,10 +55,10 @@
  *     `T`) which a lowercase-only slug rule rejects. `project` is validated
  *     with the ONE case-preserving id rule (PROJECT_ID_RE; a `.kb-<id>`
  *     seeding anchor with KB_ID_RE — W7-A4 / W7-FIX-A4). Exact precedent:
- *     cli/bridge-studio-runs.ts's plan-verdict route. BOTH are validated
+ *     packages/flows/bridge-studio-runs.ts's plan-verdict route. BOTH are validated
  *     (length cap + charset) BEFORE any fs call.
  *   - The session dir is resolved via `resolveGuardedPath`
- *     (cli/studio-path-guard.ts) — a per-segment IDENTITY walk, never a
+ *     (packages/kernel/path-guard.ts) — a per-segment IDENTITY walk, never a
  *     lexical `startsWith(dir + sep)` check on the unresolved path, and
  *     never (R6-06 round 6 fix) a realpath computed on an ALREADY-FOLDED
  *     `<project>/_<kind>` baseline — see `resolveSafeSessionDir` below for
@@ -76,9 +76,9 @@
  *     missed.
  *   - `phase` is read from the session's real `status.json` through the SAME
  *     realpath-guarded choke point (`safeReadFileInSession`,
- *     orchestrator/studio/session-transcript.ts) every other session file in
+ *     packages/sessions/studio/session-transcript.ts) every other session file in
  *     this route goes through — never `readSessionStatus`
- *     (orchestrator/interactive-session.ts:240), a plain
+ *     (packages/sessions/interactive-session.ts:240), a plain
  *     existsSync/readFileSync with no realpath containment that would leak a
  *     symlinked status.json's outside content. `phase` is never fabricated.
  *     A resolved session dir with no readable, parseable, or string-`phase`
@@ -95,7 +95,7 @@
  * W8-F6 (bead forge-6gv.27) — READ existence and WRITE existence are different
  * questions, deliberately. This GET serves a legacy session (working dir gone,
  * central event log intact) as 200; the cancel route
- * (cli/bridge-studio-session-cancel.ts) and the affordance dispatch
+ * (packages/sessions/bridge-studio-session-cancel.ts) and the affordance dispatch
  * (cli/bridge-studio-affordances.ts) still 404 the same session, because THEIR
  * question is "is there a session dir to write into?" and the honest answer is
  * no. Both 404 BEFORE any write, so no phantom session dir is ever created for
@@ -135,7 +135,7 @@ import { resolveLegacySession } from './session-readability.ts';
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
  *  session-transcript.ts uses for every other session file), never via
- *  `readSessionStatus` (orchestrator/interactive-session.ts): that helper
+ *  `readSessionStatus` (packages/sessions/interactive-session.ts): that helper
  *  does a plain existsSync/readFileSync with no realpath containment, which
  *  is a second, unguarded read path — a symlinked status.json pointing
  *  outside the session dir would leak its content into this route. One
@@ -143,7 +143,7 @@ import { resolveLegacySession } from './session-readability.ts';
 const STATUS_FILENAME = 'status.json';
 
 /** Hard length caps on the two path-derived inputs — the same value and
- *  rationale as `MAX_SKILL_ID_LENGTH` (orchestrator/skill-path.ts), imported
+ *  rationale as `MAX_SKILL_ID_LENGTH` (packages/agents/skill-path.ts), imported
  *  rather than re-declared: without a cap, a charset-valid but absurdly long
  *  id sails past SAFE_ID_RE/PROJECT_ID_RE and only dies later as an opaque fs error
  *  (or, worse, a resource-exhaustion vector) instead of an actionable 400. No
@@ -275,7 +275,7 @@ export function invalidProjectReason(id: string): string | null {
 
 // ---------------------------------------------------------------------------
 // Session-dir resolution — delegates to `resolveGuardedPath`
-// (cli/studio-path-guard.ts), the repo's one shared per-segment IDENTITY
+// (packages/kernel/path-guard.ts), the repo's one shared per-segment IDENTITY
 // containment guard, scoped to the specific <project>/_<kind>/ parent (NOT
 // the whole projectsRoot tree — see header note on why that broader check
 // would miss the AT-47 escape shape).
@@ -366,7 +366,7 @@ export function findSessionProject(
  *     `status.json` carrying a string `phase`. The full, live shape: transcript,
  *     artifact, affordances, everything. Unchanged from before W8-F6.
  *   - `source: 'legacy'` — only the runner's central log dir,
- *     `<logsRoot>/_<kind>-<sessionId>/`, survives (see cli/session-readability.ts
+ *     `<logsRoot>/_<kind>-<sessionId>/`, survives (see packages/sessions/session-readability.ts
  *     for why: (2) is never pruned, (1) lives inside a gitignored project tree
  *     that is routinely deleted). Read-only, honest, no live affordances.
  *
@@ -569,14 +569,14 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  * which has no 'onboarding' row at all: onboarding was therefore reported
  * non-terminal at every phase, including its own declared-terminal
  * 'complete'/'failed' rows (`writeSessionTerminalPhase`'s own two literal
- * terminal values, cli/agent-run.ts). Checking `panel` here closes that gap
+ * terminal values, packages/agents/agent-run.ts). Checking `panel` here closes that gap
  * the same way `deriveSessionAffordances` already treats `panel` as a
  * first-class phase-table source.
  */
 export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
   // W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal reserved
   // terminal phase, checked FIRST for every kind: written only by the
-  // generic cancel route (cli/bridge-studio-lifecycle.ts), never by any
+  // generic cancel route (packages/sessions/bridge-studio-lifecycle.ts), never by any
   // runner, and deliberately absent from every per-kind table (see
   // CANCELLED_PHASE's own doc comment, cli/bridge-studio.ts).
   if (phase === CANCELLED_PHASE) return true;
@@ -733,7 +733,7 @@ function finalizedObjectExists(
     // `agents-md`/`demo` name the PROJECT they landed in (instructions writes
     // AGENTS.md at the project repo root; demo's lock lands at
     // .forge/demo/demo.lock.json — DEMO_LOCK_REL_PATH,
-    // orchestrator/demo-builder-runner.ts, hand-copied as segments here the
+    // packages/sessions/demo-builder-runner.ts, hand-copied as segments here the
     // same way this module hand-copies AWAITING_ANSWERS_PHASE).
     case 'agents-md': return guarded(opts.projectsRoot, [id, 'AGENTS.md']);
     case 'demo': return guarded(opts.projectsRoot, [id, '.forge', 'demo', 'demo.lock.json']);
@@ -861,7 +861,7 @@ export async function handleStudioSessionsRoutes(
     // (a log dir holds events.jsonl / stderr.log / .heartbeat / turn.pid /
     // cancel.json, and not one of `manifests/`, `themes/`, `generations/`,
     // `staging/`, `plan/cleanup-plan.md`, `AGENTS.draft.md` — the real names,
-    // orchestrator/studio/session-transcript.ts:125,126,127,758,897,898;
+    // packages/sessions/studio/session-transcript.ts:125,126,127,758,897,898;
     // enumerated on BOTH sides, zero intersection).
     // That yields each kind's genuine EMPTY artifact without a second,
     // hand-kept per-kind empty table here — pinned by AT-F6-R1.
@@ -907,7 +907,7 @@ export async function handleStudioSessionsRoutes(
     try {
       // R4-17 — the 'contract-buildout' kind needs rows derived from the
       // PROJECT tree (outside sessionDir's own containment — D4), so they
-      // are computed HERE, via cli/contract-stages.ts's own realpath-guarded
+      // are computed HERE, via packages/projects/contract-stages.ts's own realpath-guarded
       // containment, and threaded in verbatim. A {ok:false} derivation (an
       // unknown/escaping project, or a malformed .forge/project.json)
       // surfaces as a 409 naming the cause — never a 200 with an empty
@@ -1052,7 +1052,7 @@ export async function handleStudioSessionsRoutes(
         // writer to leave a stale per-kind copy in. ALWAYS present, mirroring
         // `terminal`/`affordances`.
         transcriptSources: transcriptResult !== null && transcriptResult.ok ? [...transcriptResult.sourcesFound] : [],
-        // W7-A2 — the DERIVED lifecycle view (cli/bridge-studio-lifecycle.ts):
+        // W7-A2 — the DERIVED lifecycle view (packages/sessions/bridge-studio-lifecycle.ts):
         // state (working | awaiting-operator | crashed | stalled | terminal),
         // a truthful `needsYou`, the runner's crash text read live off
         // `_logs/_<kind>-<sid>/stderr.log`, idle time, and cancellability.

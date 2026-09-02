@@ -104,7 +104,7 @@ export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.
   // R4-17: the onboarding session's 'contract-buildout' case in
   // deriveSessionArtifact (session-transcript.ts) ships a real renderer —
   // flips reserved→live. It consumes ALREADY-DERIVED rows the caller
-  // supplies (cli/contract-stages.ts's deriveContractStages) rather than
+  // supplies (packages/projects/contract-stages.ts's deriveContractStages) rather than
   // reading sessionDir itself (D4). Declaration order is unchanged; only
   // status flips.
   Object.freeze({ id: 'contract-buildout', status: 'live' }),
@@ -163,7 +163,7 @@ export type BashFenceModeRow = { readonly id: string };
  *  authored switch for how a write-root-fenced turn treats the `Bash` tool:
  *  `deny` (the default when absent — Bash is refused outright, a fenced kind
  *  has no ungated write-capable tool) or `inspect` (every Bash command is
- *  statically inspected against the write roots — orchestrator/bash-fence.ts).
+ *  statically inspected against the write roots — packages/sessions/bash-fence.ts).
  *  Validated by validateSessionKinds; consumed by orchestrator/interactive-
  *  runner.ts → runAgentTurn's `bashFence`. Typed `readonly`, as TURN_STYLES. */
 export const BASH_FENCE_MODES: readonly BashFenceModeRow[] = Object.freeze([
@@ -189,19 +189,19 @@ export type TurnStep = (typeof TURN_STEPS)[number]['id'];
  *  the ADR §5 registry already names but which, per the 2026-08-14 amendment
  *  §1, never gain a `turnSpec` (demo/instructions are never migrated onto the
  *  primitive): `writeToRepoRoot` (instructions' `finalizing` step —
- *  `withStudioWrite`, orchestrator/instructions-runner.ts:491) and
+ *  `withStudioWrite`, packages/sessions/instructions-runner.ts:491) and
  *  `recordLockedDemo` (demo's `locking` step — the deterministic
- *  snapshot-restore lock, orchestrator/demo-builder-runner.ts:405-409). Both
+ *  snapshot-restore lock, packages/sessions/demo-builder-runner.ts:405-409). Both
  *  are used ONLY by `panel.phases` rows (studio/session-kinds.yaml) for
  *  affordance derivation — never by a real `turnSpec`, so `resolveFinalizer`
- *  (orchestrator/interactive-runner.ts) never has to implement them; adding
+ *  (packages/sessions/interactive-runner.ts) never has to implement them; adding
  *  them here does not reopen the "gains no new row for kb-cleanup" ratchet's
  *  intent (that test pinned kb-cleanup's OWN phase table needing none, not a
  *  blanket freeze on this registry's size — see its updated comment).
  *
  *  W6-CR-3 added `commitRegistryDraft` alongside — it WAS dispatched via
  *  `turnSpec` (the `community-refresh` kind's `committing` phase), living in
- *  `FINALIZERS` too (`orchestrator/interactive-finalizers.ts`) and therefore
+ *  `FINALIZERS` too (`packages/sessions/interactive-finalizers.ts`) and therefore
  *  also in `DISPATCHABLE_FINALIZER_IDS` below, unlike
  *  `writeToRepoRoot`/`recordLockedDemo` immediately above. W8-B5b retired the
  *  `community-refresh` kind (superseded by the deterministic `forge
@@ -216,15 +216,15 @@ export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
 /**
  * The DISPATCHABLE finalizer id set — derived DIRECTLY from
- * `orchestrator/interactive-finalizers.ts`'s `FINALIZERS` registry keys, not
+ * `packages/sessions/interactive-finalizers.ts`'s `FINALIZERS` registry keys, not
  * a hand-maintained mirror (that module has no import path back to this one
- * — it only imports node builtins + `cli/studio-path-guard.ts`, which itself
+ * — it only imports node builtins + `packages/kernel/path-guard.ts`, which itself
  * imports only node builtins — so this is a plain, cycle-free import, not a
  * duplicated literal).
  *
  * Reviewer finding (W6-B3 post-merge review): a `turnSpec.phases` row naming
  * a `finalize` step is REAL dispatchable data — `runInteractiveTurn`
- * (orchestrator/interactive-runner.ts) resolves its `finalizer` id via
+ * (packages/sessions/interactive-runner.ts) resolves its `finalizer` id via
  * `resolveFinalizer`, which throws `InteractiveFinalizerError` at SPAWN TIME
  * for any id `FINALIZERS` does not carry. `FINALIZER_IDS` above is the
  * DESCRIPTIVE, ADR-043 §5 vocabulary (every finalizer the ADR names, whether
@@ -429,7 +429,7 @@ export type TurnSpec = {
  *  SAME frozen vocabulary (TURN_STEPS/FINALIZER_IDS) as `turnSpec.phases`,
  *  but carry no `kindDir`/`style`/`schema`: `panel` is consumed ONLY by
  *  `deriveSessionAffordances` (the read half) and is INVISIBLE to dispatch —
- *  `cmdAgentRun`'s turnSpec-fork condition (cli/agent-run.ts) never looks at
+ *  `cmdAgentRun`'s turnSpec-fork condition (packages/agents/agent-run.ts) never looks at
  *  it, so a kind carrying `panel` still dispatches through `AGENT_RUNNERS`
  *  exactly as before this field existed. */
 export type SessionKindPanel = {
@@ -724,7 +724,7 @@ const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
 const CHECK_TURNSPEC_PANEL_EXCLUSIVE = 'session-kinds/turnspec-panel-exclusive';
 
 /** True if `seg` contains any C0 control character (codepoint 0-31
- *  inclusive), mirroring cli/studio-path-guard.ts's own CONTROL_CHAR_RE
+ *  inclusive), mirroring packages/kernel/path-guard.ts's own CONTROL_CHAR_RE
  *  scan for the same range — written here as an explicit codepoint scan,
  *  not a `/[\u0000-\u001f]/`-style character-class literal, so this source
  *  file itself never has to carry a raw control byte inside a regex
@@ -745,7 +745,7 @@ function hasControlChar(seg: string): boolean {
  * every REAL kindDir value in this design is underscore-prefixed
  * (`_authoring`, `_architect`, `_demo`) — reusing SLUG_RE for kindDir would
  * reject every legitimate shipped value. This mirrors `isSafeSegment` in
- * cli/studio-path-guard.ts EXACTLY (no separators, no "." or "..", no C0
+ * packages/kernel/path-guard.ts EXACTLY (no separators, no "." or "..", no C0
  * control characters) — the same predicate `resolveGuardedPath` itself
  * relies on one layer further down. NOT imported from that module because
  * `isSafeSegment` is not exported there (an internal helper of a file this
@@ -827,9 +827,9 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
  *
  * `allowedFinalizers` (W6-B3 post-merge review): the caller supplies its OWN
  * finalizer set rather than this function reading a fixed global — `turnSpec`
- * (real dispatch, `resolveFinalizer` in orchestrator/interactive-runner.ts)
+ * (real dispatch, `resolveFinalizer` in packages/sessions/interactive-runner.ts)
  * must validate against `DISPATCHABLE_FINALIZER_IDS` (derived from
- * `orchestrator/interactive-finalizers.ts`'s `FINALIZERS` registry — the set
+ * `packages/sessions/interactive-finalizers.ts`'s `FINALIZERS` registry — the set
  * dispatch will actually resolve), while `panel` (never dispatched) validates
  * against the full descriptive `FINALIZER_IDS`. A shared vocabulary must
  * never lint-approve a value dispatch will throw on.
@@ -1262,7 +1262,7 @@ export type SessionAffordanceKind = 'question-form' | 'verdict' | 'staged-review
 
 /** One derived affordance the CURRENT phase makes available. JSON-serializable
  *  (no functions, no class instances) — the bridge threads this straight onto
- *  the wire (cli/bridge-studio-sessions.ts), and B6's UI renders each `kind`
+ *  the wire (packages/sessions/bridge-studio-sessions.ts), and B6's UI renders each `kind`
  *  with its own component; it never re-derives from the phase table itself
  *  (the "derived, not authored" discipline, ADR-043 §1). */
 export type SessionAffordance = {
