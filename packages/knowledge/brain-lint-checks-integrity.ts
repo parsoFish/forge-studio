@@ -126,6 +126,15 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
  *   `_logs/`, `_queue/`, `.forge/` — runtime state, not source. `.forge/` is
  *                         gitignored in this repo, so it is present on a
  *                         developer's checkout and absent on a fresh clone
+ *   `_interactive-library/`, `_skill-staging/` — the authoring session's landing
+ *                         root and the skill installer's staging root. The
+ *                         PRODUCT creates them (`packages/library/bridge-studio-authoring-types.ts`
+ *                         `INTERACTIVE_LIBRARY_DIRNAME`; SEC-05 q80's staging
+ *                         root), both gitignored, so they exist on any checkout
+ *                         where forge has been RUN and nowhere else — the
+ *                         `.forge/` case exactly. Excluded by NAME rather than
+ *                         by widening the check: a citation under either would
+ *                         flag on an operator's machine and not in CI
  */
 const FORGE_INTERNAL_PREFIXES = [
   '.claude/',
@@ -145,7 +154,15 @@ const FORGE_INTERNAL_PREFIXES = [
 ] as const;
 
 /** The exclusions above, exported so the coverage test asserts against ONE list. */
-export const STALENESS_PREFIX_EXCLUSIONS = ['brain', 'projects', '_logs', '_queue', '.forge'] as const;
+export const STALENESS_PREFIX_EXCLUSIONS = [
+  'brain',
+  'projects',
+  '_logs',
+  '_queue',
+  '.forge',
+  '_interactive-library',
+  '_skill-staging',
+] as const;
 
 /** Every prefix a forge citation may resolve against. Exported for the coverage test. */
 export const STALENESS_PREFIXES: readonly string[] = FORGE_INTERNAL_PREFIXES;
