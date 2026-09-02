@@ -1,7 +1,7 @@
 /**
  * routes.ts — `@forge/projects`'s HTTP routes, as a table.
  *
- * M4 §4 step 2 (projects routes carve, assembly pass). These fourteen routes
+ * M4 §4 step 2 (projects routes carve, assembly pass). These sixteen routes
  * used to reach their handlers through TWO monolithic if-chain dispatchers —
  * `handleStudioRoutes` (`cli/bridge-studio.ts`, the read side) and
  * `handleStudioWriteRoutes` (`cli/bridge-studio-writes.ts`, the write side) —
@@ -66,9 +66,19 @@
  * count with the reason attached, so a later reader cannot read the single
  * row as an oversight.
  *
+ * `POST /api/studio/projects/:id/contract-reset` and `.../contract-reset/
+ * apply` are NOT part of the original if-chain carve — they are the S3
+ * (1.0.md §3) "Rebuild contract" capability, new at M4, carved straight into
+ * this table from day one (their handlers, `bridge-studio-project-reset.ts`,
+ * never lived in `cli/bridge-studio-writes.ts`). Neither collides with the
+ * `create`/`:id` ambiguity above: both require a literal `/contract-reset`
+ * (or `/contract-reset/apply`) suffix the `:id` pattern's `[^/]+` cannot
+ * match (no further `/`), so their table position is unconstrained by the
+ * ordering rule this header otherwise devotes most of its space to.
+ *
  * `dryClassification` — TWO provenances, same distinction `knowledge`'s table
  * draws for the same reason:
- *   · The seven MUTATING rows (`save-repo`, `preflight/fix-auto`,
+ *   · The seven ORIGINAL MUTATING rows (`save-repo`, `preflight/fix-auto`,
  *     `preflight/fix-agent`, `create`, onboard-POST, and the two
  *     `:id` PUT+POST rows) are carried from `cli/dry-bridge.ts`'s
  *     `BRIDGE_ROUTE_CLASSIFICATION` VERBATIM — see each row's own comment for
@@ -78,7 +88,12 @@
  *     noticed as a live method on this handler) — the POST row below copies
  *     that SAME row's classification and reason because it dispatches to the
  *     exact same handler through the exact same unconditional `isDryBridge()`
- *     check at the top of `handleProjectPut`, not a re-derived judgement.
+ *     check at the top of `handleProjectPut`, not a re-derived judgement. The
+ *     two new contract-reset rows are classified the SAME way — a verbatim
+ *     `dry-bridge.ts` row each, added alongside them in the same PR that adds
+ *     this table's own rows — for exactly the reason `BRIDGE_ROUTE_
+ *     CLASSIFICATION`'s own coverage guard exists: a table row with no
+ *     dry-bridge counterpart is a route that spawns/writes unclassified.
  *   · The seven GET rows are NOT in that table and never were — it is a
  *     mutating-route table. They are `exempt-local` here by CONSTRUCTION, not
  *     by lookup: each reads on-disk state (or, for the two starters routes
@@ -104,6 +119,7 @@ import {
 import { handleProjectContractStages } from './project-roadmap.ts';
 import { makeOnboardHandlers } from './bridge-studio-project-onboard.ts';
 import { makePreflightWriteHandlers } from './bridge-studio-project-preflight-write.ts';
+import { handleProjectContractResetDryRun, handleProjectContractResetApply } from './bridge-studio-project-reset.ts';
 
 /**
  * Structural mirror of `@forge/knowledge/project-brain-seed.ts`'s
@@ -187,6 +203,8 @@ const m = {
   saveRepo: new RegExp(`^${PROJECTS}/([^/]+)/save-repo$`),
   preflightFixAuto: new RegExp(`^${PROJECTS}/([^/]+)/preflight/fix-auto$`),
   preflightFixAgent: new RegExp(`^${PROJECTS}/([^/]+)/preflight/fix-agent$`),
+  contractReset: new RegExp(`^${PROJECTS}/([^/]+)/contract-reset$`),
+  contractResetApply: new RegExp(`^${PROJECTS}/([^/]+)/contract-reset/apply$`),
   create: new RegExp(`^${PROJECTS}/create$`),
   // Same pattern as `create` above — genuinely ambiguous on the URL alone,
   // which is exactly why `create`'s row MUST precede these two (see header).
@@ -299,6 +317,29 @@ export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext
       // `bridge-studio-project-preflight-write.ts`'s (T1 rulings 27/29).
       dryClassification: 'stub-actions',
       handler: handleProjectPreflightFixAgent,
+    },
+    {
+      method: 'POST',
+      path: '/api/studio/projects/:id/contract-reset',
+      matches: (url) => m.contractReset.test(pathOnly(url)),
+      // dry-bridge.ts (added alongside this row) — computes the drift report
+      // from the request body's optional appType; writes nothing at all, no
+      // spawn, no remote (a POST only because the app-type override arrives
+      // as a body — the same shape /api/studio/agents/:slug/
+      // instructions-draft already carries this classification for).
+      dryClassification: 'exempt-local',
+      handler: handleProjectContractResetDryRun,
+    },
+    {
+      method: 'POST',
+      path: '/api/studio/projects/:id/contract-reset/apply',
+      matches: (url) => m.contractResetApply.test(pathOnly(url)),
+      // dry-bridge.ts (added alongside this row) — applyContractReset commits
+      // ONLY to the local forge-studio branch via withStudioWrite /
+      // commitStudioChange (no push) — the same shape preflight/fix-auto
+      // above already carries this classification for.
+      dryClassification: 'exempt-local',
+      handler: handleProjectContractResetApply,
     },
     {
       method: 'POST',

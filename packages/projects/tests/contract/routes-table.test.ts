@@ -200,6 +200,8 @@ const EXPECTED_INVENTORY: readonly string[] = [
   'GET /api/studio/starters',
   'POST /api/studio/projects',
   'POST /api/studio/projects/:id',
+  'POST /api/studio/projects/:id/contract-reset',
+  'POST /api/studio/projects/:id/contract-reset/apply',
   'POST /api/studio/projects/:id/preflight/fix-agent',
   'POST /api/studio/projects/:id/preflight/fix-auto',
   'POST /api/studio/projects/:id/save-repo',

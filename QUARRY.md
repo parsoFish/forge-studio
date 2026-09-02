@@ -170,13 +170,15 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/metrics.ts | flows | verbatim | 142 |
 | packages/projects/preflight-fix-auto.ts | projects | verbatim | 171 |
 | packages/projects/preflight-resolve.ts | projects | verbatim | 67 |
-| packages/projects/preflight.ts | projects | pruned | 257 |
+| packages/projects/preflight.ts | projects | pruned | 281 |
 | packages/projects/preflight-build.ts | projects | verbatim | 142 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 159 |
-| packages/projects/preflight-gate.ts | projects | verbatim | 268 |
+| packages/projects/preflight-gate.ts | projects | verbatim | 278 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 138 |
 | packages/projects/preflight-release.ts | projects | verbatim | 74 |
 | packages/projects/preflight-repo.ts | projects | verbatim | 218 |
+| packages/projects/preflight-skills.ts | projects | verbatim | 76 |
+| packages/projects/preflight-deps.ts | projects | verbatim | 158 |
 | packages/projects/project-migrate.ts | projects | verbatim | 197 |
 | packages/factory/reflect-reconcile.ts | factory | verbatim | 167 |
 | packages/factory/reflection-doc.ts | factory | verbatim | 354 |
@@ -408,5 +410,6 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 620 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 298 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 596 |
-| packages/projects/routes.ts | projects | verbatim | 344 |
+| packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 225 |
+| packages/projects/routes.ts | projects | verbatim | 385 |
 | packages/sessions/index.ts | sessions | verbatim | 11 |

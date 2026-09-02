@@ -967,7 +967,7 @@ async function studioPut(
   return studioSend('PUT', path, body);
 }
 
-async function studioPost(
+export async function studioPost(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {

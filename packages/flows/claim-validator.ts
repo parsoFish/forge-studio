@@ -195,7 +195,14 @@ export function validateClaimable(
   if (process.env.FORGE_SKIP_CONTRACT_CHECK !== '1' && existsSync(projectDir)) {
     let report;
     try {
-      report = runPreflight(projectDir, { forgeRoot });
+      // `requireRunnableGate` (bead 5.21): THIS is the moment an
+      // unprovisioned ground must be refused. `linkProjectDeps` used to skip
+      // it silently, so the run died three minutes and $1.61 later as
+      // `dev-loop.baseline-red` "Cannot find package tsx". Creation does not
+      // set this — a project is born contract-green before anyone has run an
+      // install (R1-03-F1), and judging runnability there would break that
+      // acceptance to satisfy this one.
+      report = runPreflight(projectDir, { forgeRoot, requireRunnableGate: true });
     } catch {
       // Preflight itself threw (e.g. git not available, malformed project).
       // Treat as non-blocking: the cycle will likely fail on its own, and

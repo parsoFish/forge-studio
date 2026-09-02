@@ -480,6 +480,8 @@ packages/projects/gate-recipes.ts existsSync 1
 packages/projects/preflight-build.ts existsSync 3
 packages/projects/preflight-build.ts readFileSync 2
 packages/projects/preflight-demo.ts existsSync 2
+packages/projects/preflight-deps.ts existsSync 2
+packages/projects/preflight-deps.ts readFileSync 1
 packages/projects/preflight-fix-auto.ts existsSync 3
 packages/projects/preflight-fix-auto.ts mkdirSync 1
 packages/projects/preflight-fix-auto.ts readFileSync 1
@@ -515,6 +517,10 @@ packages/projects/project-preflight-read.ts readFileSync 1
 packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
 packages/projects/project-repo-tx.ts realpathSync 2
+packages/projects/reset.ts mkdirSync 2
+packages/projects/reset.ts readFileSync 1
+packages/projects/reset.ts statSync 1
+packages/projects/reset.ts writeFileSync 1
 packages/sessions/architect-runner.ts existsSync 9
 packages/sessions/architect-runner.ts mkdirSync 4
 packages/sessions/architect-runner.ts readdirSync 4

@@ -92,6 +92,32 @@ for (const appType of ['typescript-cli', 'typescript-api']) {
   });
 }
 
+for (const appType of ['typescript-cli', 'typescript-api', 'typescript-web']) {
+  test(`forge-8vfn.5.8: "${appType}" declares >=1 skill that actually RESOLVES — the starter FILLS the contract element rather than leaving it for the operator to repair (S2's operator ruling)`, () => {
+    const forgeRoot = isolatedForgeRoot();
+    try {
+      const out = scaffoldGreenfieldProject({ manifest: manifest({ appType }), forgeRoot });
+      const cfg = loadProjectConfig(out.projectDir);
+      assert.ok(cfg, 'the scaffolded .forge/project.json must load');
+      assert.ok((cfg!.skills ?? []).length > 0, `"${appType}" must declare >=1 skill — a created project promising contract-green with zero skills bound is exactly the declared-data-fails-open shape this bead closes`);
+      // Not just declared — RESOLVED: a real SKILL.md at the project-local
+      // path every declared id is checked against (forge-8vfn.5.13's SKILLS
+      // clause, packages/projects/preflight-skills.ts).
+      for (const id of cfg!.skills!) {
+        assert.ok(
+          existsSync(join(out.projectDir, '.forge', 'skills', id, 'SKILL.md')),
+          `"${appType}" declares skill "${id}" but ships no .forge/skills/${id}/SKILL.md — a declared binding that does not resolve is the exact bug this bead closes`,
+        );
+      }
+      // The SKILLS preflight clause itself must be a genuine PASS, not merely
+      // absent from failingClauses by coincidence.
+      assert.equal(out.failingClauses.some((c) => c.clause === 'SKILLS'), false, 'SKILLS must not be a failing clause for a starter-created project');
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+}
+
 test('ruling 38 fix (c): appType is persisted into .forge/project.json and survives loadProjectConfig — the root fix for PR #289 (reset.ts used to GUESS appType because none was ever recorded)', () => {
   const forgeRoot = isolatedForgeRoot();
   try {
