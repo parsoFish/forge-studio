@@ -514,6 +514,9 @@ function KnowledgePageInner() {
       data-fetch-status={kbsError || kbDetailError ? 'error' : kbListReady ? 'ok' : 'loading'}
       {...(kbDetail?.health ? { 'data-health-ready': 'true' } : {})}
       {...(selectedNode ? { 'data-selected-node': selectedNode } : {})}
+      /* forge-8vfn.5.10: on the ROOT too, not only the banner below — the story
+         runner reads the root first (beats.mjs resolveExpectations). */
+      {...(seedSessionParam ? { 'data-seed-session-id': seedSessionParam } : {})}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
     >
       <StudioNav />
