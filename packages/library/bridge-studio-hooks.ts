@@ -2,18 +2,37 @@
  * Forge Studio hooks-library bridge routes (R3-03-F4).
  *
  * Owns EVERY `/api/studio/hooks*` route — one home, mirroring how
- * cli/bridge-studio-skills.ts owns every `/api/studio/skills*` route:
+ * bridge-studio-skills.ts owns every `/api/studio/skills*` route:
  *
- *   GET  /api/studio/hooks               → { hooks: HookLibraryEntry[] }
- *   GET  /api/studio/hooks/:id           → detail: entry fields + files + scan
- *   POST /api/studio/hooks               → author a new library hook
- *   POST /api/studio/hooks/:id/approve   → approve (refuses a blocked verdict)
- *   POST /api/studio/hooks/:id/override  → distinct recorded override
+ *   GET  /api/studio/hooks               → { hooks: HookLibraryEntry[] }         (handleHooksList)
+ *   GET  /api/studio/hooks/:id           → detail: entry fields + files + scan   (handleHookDetail)
+ *   POST /api/studio/hooks               → author a new library hook             (handleHookCreate)
+ *   POST /api/studio/hooks/:id/approve   → approve (refuses a blocked verdict)   (handleHookApprove)
+ *   POST /api/studio/hooks/:id/override  → distinct recorded override            (handleHookOverride)
+ *   POST /api/studio/hooks/:id/revoke-approval → drop a live approval            (handleHookRevokeApproval)
+ *   PUT  /api/studio/hooks/:id           → edit                                  (handleHookUpdate)
+ *   DELETE /api/studio/hooks/:id         → delete                                (handleHookDelete)
  *
  * Over the ALREADY-SHIPPED core (orchestrator/studio/hook-library.ts F1,
  * hook-scan.ts F2/F3). The bridge COMPOSES `listHookLibrary` (F1) with
  * `hookRunState` / `readHookApprovalLedger` (F2/F3) per entry — those stay
  * separate core modules; this composition is this bridge module's own job.
+ *
+ * M4 route-carve: each route above used to be one arm of a single dispatcher,
+ * `handleStudioHooksRoutes`, that `cli/ui-bridge.ts` called directly. That
+ * dispatcher is now gone — `packages/library/routes.ts` is what dispatches
+ * these, as a table. Each handler below keeps the SAME five-parameter
+ * contract the dispatcher's arms ran under —
+ * `(req, res, ctx, rawUrl, method): Promise<boolean>` — normalises its own
+ * url via `pathOnly` (a handler that skipped this would fail its own
+ * anchored regex against `/api/studio/hooks?x=1` and 404 silently), computes
+ * its own `origin` via `allowedOrigin`, and returns `false` on a non-match so
+ * it still composes as a passthrough. `sendJson`/`allowedOrigin`/
+ * `sanitizeError`/`pathOnly`/`StudioContext`/`RouteContext` come from
+ * `@forge/kernel` — never the legacy host module, which would be a
+ * `package-to-legacy` boundary violation. The old body reader import is gone
+ * entirely; every route that reads a body now calls `ctx.readBody()` (the
+ * host-supplied reader `RouteContext` carries) instead.
  *
  * ---------------------------------------------------------------------------
  * CONTRACT DECISIONS (mirrored from cli/bridge-studio-hooks.test.ts's own
@@ -73,10 +92,10 @@ import {
   sendJson,
   allowedOrigin,
   sanitizeError,
-  readJson,
   pathOnly,
   type StudioContext,
-} from '../../cli/bridge-studio.ts';
+  type RouteContext,
+} from '@forge/kernel';
 import { assertSkillSlug, isReservedId } from '@forge/kernel/ids.ts';
 import {
   hookDir,
@@ -255,23 +274,21 @@ function parseCreatePermissions(raw: unknown): HookPermissionManifest | { error:
 }
 
 // ---------------------------------------------------------------------------
-// Route handler
+// Route handlers
 // ---------------------------------------------------------------------------
 
-export async function handleStudioHooksRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: StudioContext,
-  rawUrl: string,
-  method: string,
-): Promise<boolean> {
-  // PUT/DELETE joined in W7-B4 (library-08): the edit/delete half of CRUD.
-  if (method !== 'GET' && method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return false;
+/** GET /api/studio/hooks — the library listing. */
+/** Route matchers, hoisted so `routes.ts` and the handler share ONE source per
+ *  route — see `bridge-studio-skills.ts` for the silent drift this prevents. */
+export const HOOK_APPROVE_RE = /^\/api\/studio\/hooks\/([^/]+)\/approve$/;
+export const HOOK_OVERRIDE_RE = /^\/api\/studio\/hooks\/([^/]+)\/override$/;
+export const HOOK_REVOKE_RE = /^\/api\/studio\/hooks\/([^/]+)\/revoke-approval$/;
+export const HOOK_ID_RE = /^\/api\/studio\/hooks\/([^/]+)$/;
 
+export async function handleHooksList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // ---- GET /api/studio/hooks — the library listing -----------------------
   if (method === 'GET' && url === '/api/studio/hooks') {
     try {
       const hooks = listHookLibrary(ctx.forgeRoot).map((entry) => toClientListEntry(ctx.forgeRoot, entry));
@@ -282,11 +299,18 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/hooks — author a new library hook (D-5, D-6) ------
+  return false;
+}
+
+/** POST /api/studio/hooks — author a new library hook (D-5, D-6). */
+export async function handleHookCreate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
   if (method === 'POST' && url === '/api/studio/hooks') {
     try {
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       if (b === null || typeof b !== 'object' || Array.isArray(b)) {
         sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
@@ -385,8 +409,15 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/hooks/:id/approve — refuses a blocked verdict (D-7) --
-  const approveMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)\/approve$/);
+  return false;
+}
+
+/** POST /api/studio/hooks/:id/approve — refuses a blocked verdict (D-7). */
+export async function handleHookApprove(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const approveMatch = url.match(HOOK_APPROVE_RE);
   if (approveMatch && method === 'POST') {
     try {
       let id: string;
@@ -426,8 +457,15 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/hooks/:id/override — distinct recorded act --------
-  const overrideMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)\/override$/);
+  return false;
+}
+
+/** POST /api/studio/hooks/:id/override — distinct recorded act. */
+export async function handleHookOverride(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const overrideMatch = url.match(HOOK_OVERRIDE_RE);
   if (overrideMatch && method === 'POST') {
     try {
       let id: string;
@@ -452,7 +490,7 @@ export async function handleStudioHooksRoutes(
       if (!hookScriptIsContained(ctx.forgeRoot, id)) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
 
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       const reason = typeof b['reason'] === 'string' ? b['reason'] : '';
       if (!reason.trim()) {
@@ -468,11 +506,21 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/hooks/:id/revoke-approval (W7-B4, library-08) ------
-  // The inverse of approve/override that never existed: drops the LIVE ledger
-  // entry (hookRunState honestly reads needs-review again) and RECORDS the
-  // revocation in the ledger's `revoked` list. 409 when nothing is approved.
-  const revokeMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)\/revoke-approval$/);
+  return false;
+}
+
+/**
+ * POST /api/studio/hooks/:id/revoke-approval (W7-B4, library-08).
+ *
+ * The inverse of approve/override that never existed: drops the LIVE ledger
+ * entry (hookRunState honestly reads needs-review again) and RECORDS the
+ * revocation in the ledger's `revoked` list. 409 when nothing is approved.
+ */
+export async function handleHookRevokeApproval(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const revokeMatch = url.match(HOOK_REVOKE_RE);
   if (revokeMatch && method === 'POST') {
     try {
       let id: string;
@@ -492,12 +540,22 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- PUT /api/studio/hooks/:id — edit (W7-B4, library-08) ----------------
-  // Edits the definition fields and/or the script. An edit to an APPROVED
-  // hook is legitimate — the pinned hashes no longer match, so hookRunState
-  // honestly reads needs-review again; nothing here launders trust. The same
-  // D-5/D-6 rules as create: no client script path, no binding keys.
-  const putMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)$/);
+  return false;
+}
+
+/**
+ * PUT /api/studio/hooks/:id — edit (W7-B4, library-08).
+ *
+ * Edits the definition fields and/or the script. An edit to an APPROVED
+ * hook is legitimate — the pinned hashes no longer match, so hookRunState
+ * honestly reads needs-review again; nothing here launders trust. The same
+ * D-5/D-6 rules as create: no client script path, no binding keys.
+ */
+export async function handleHookUpdate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const putMatch = url.match(HOOK_ID_RE);
   if (putMatch && method === 'PUT') {
     try {
       let id: string;
@@ -506,7 +564,7 @@ export async function handleStudioHooksRoutes(
       if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
 
       let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      try { body = await ctx.readBody(); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
       if (b === null || typeof b !== 'object' || Array.isArray(b)) {
         sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
@@ -590,8 +648,19 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- DELETE /api/studio/hooks/:id (W7-B4, library-08) --------------------
-  // Refuses (409, naming them) while any agent still carries the hook.
+  return false;
+}
+
+/**
+ * DELETE /api/studio/hooks/:id (W7-B4, library-08).
+ *
+ * Refuses (409, naming them) while any agent still carries the hook.
+ */
+export async function handleHookDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const putMatch = url.match(HOOK_ID_RE);
   if (putMatch && method === 'DELETE') {
     try {
       let id: string;
@@ -626,8 +695,15 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
-  // ---- GET /api/studio/hooks/:id — detail (D-4: malformed reads as absent) --
-  const detailMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)$/);
+  return false;
+}
+
+/** GET /api/studio/hooks/:id — detail (D-4: malformed reads as absent). */
+export async function handleHookDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  const detailMatch = url.match(HOOK_ID_RE);
   if (detailMatch && method === 'GET') {
     try {
       let id: string;

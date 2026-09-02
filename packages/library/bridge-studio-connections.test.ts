@@ -78,7 +78,7 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { startBridge } from '../../cli/ui-bridge.ts';
-import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -525,13 +525,13 @@ test('POST /api/studio/connections (bare collection, no sub-path) is refused —
 // Handler contract — direct invocation (mirrors bridge-studio-hooks.test.ts)
 // ---------------------------------------------------------------------------
 
-test('handleStudioConnectionsRoutes returns false for a non-matching URL (passthrough contract)', async () => {
+test('the library route table declines a non-matching URL (passthrough contract)', async () => {
   const mockRes = {
     writeHead: () => { throw new Error('must not write a response for a non-matching URL'); },
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
   } as unknown as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
-  const handled = await handleStudioConnectionsRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-connections URL must return false');
 });
