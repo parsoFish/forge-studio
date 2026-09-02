@@ -45,7 +45,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, CANCELLED_PHASE, type StudioContext } from '../../cli/bridge-studio.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { CANCELLED_PHASE } from './interactive-session.ts';
+// `readJson` stays with the host: body policy is the host's (T1 ruling 30).
+// This import dies when the route takes its body from `ctx.readBody` in the
+// routes carve — it is the last thing holding this file's legacy row open.
+import { readJson } from '../../cli/bridge-studio.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';

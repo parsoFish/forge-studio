@@ -85,7 +85,7 @@ import { loadProjectsWithMeta } from '@forge/projects/project-roster.ts';
 export type { StudioContext } from '@forge/kernel';
 // …and imported for this module's own use: a re-export does not bind the name
 // locally, and several handlers below still call these directly.
-import { allowedOrigin, sendJson, sanitizeError, pathOnly, SAFE_ID_RE, type StudioContext } from '@forge/kernel';
+import { allowedOrigin, sendJson, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from '@forge/kernel';
 
 /**
  * W8-F6 (bead forge-6gv.27) — "can this bridge actually serve
@@ -118,29 +118,19 @@ export type StudioRunsContext = StudioContext & { sessionIsReadable: SessionRead
 // `packages/sessions/bridge-studio-sessions.ts`) still reaches it at this path.
 export { SAFE_ID_RE };
 
-/** W6-B2 review fix (MEDIUM 2) — terminal-phase sets for the four legacy
- *  session kinds that predate `studio/session-kinds.yaml`'s `turnSpec`
- *  table (architect/instructions/demo/project-brain never declare a
- *  `turnSpec`, so there is no `step: terminal` row to derive a terminal set
- *  from for them, unlike kb-cleanup/authoring). This is the SAME
- *  terminal-phase knowledge cli/ui-bridge.ts's four per-kind list routes
- *  already gate `ensureSessionTail` on — extracted here, into ONE named
- *  constant BOTH cli/ui-bridge.ts (those four routes) and
- *  cli/bridge-studio-sessions.ts (the generic `/api/studio/sessions/:kind/
- *  :id` route) import, so neither hand-writes its own copy. Lives in this
- *  shared, dependency-free module (not cli/ui-bridge.ts) specifically to
- *  avoid a cli/bridge-studio-sessions.ts → cli/ui-bridge.ts → cli/
- *  bridge-studio-sessions.ts import cycle (ui-bridge.ts already imports
- *  handleStudioSessionsRoutes FROM bridge-studio-sessions.ts). Keyed by
- *  session-kind id — the SAME string SPAWN_AGENT_SPECS's `logPrefix` uses
- *  (cli/ui-bridge.ts's `ensureSessionTail` doc comment), so `descriptor.id`
- *  indexes directly with no translation. */
-export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
-  architect: new Set(['committed', 'rejected']),
-  instructions: new Set(['committed', 'rejected']),
-  demo: new Set(['locked', 'abandoned']),
-  'project-brain': new Set(['committed', 'abandoned']),
-};
+/** The session phase vocabulary of the four kinds whose runners predate the
+ *  ADR-043 phase table now LIVES with the sessions seam
+ *  (`packages/sessions/session-phases.ts`) — it is session vocabulary, and the
+ *  import cycle that once kept it in this host module ended when the generic
+ *  session route moved into that package. Re-exported here so this module's
+ *  own consumers keep their single import, exactly as `CANCELLED_PHASE`
+ *  below already does. */
+export {
+  LEGACY_SESSION_TERMINAL_PHASES,
+  LEGACY_SESSION_AWAITS_PHASES,
+  LEGACY_SESSION_WORKING_PHASES,
+} from '@forge/sessions/session-phases.ts';
+
 
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
@@ -161,34 +151,9 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
  *  bridge modules keep their one import. */
 export { CANCELLED_PHASE } from '@forge/sessions/interactive-session.ts';
 
-/** W7-A2 — operator-gate phases for the two kinds that carry NEITHER a
- *  `turnSpec` nor a `panel` table (architect — permanently bespoke per
- *  ADR-043 amendment §4 — and project-brain): which phases WAIT ON THE
- *  OPERATOR, and for what (`questions` | `verdict`, the SAME AWAITS_KINDS
- *  vocabulary the yaml rows use). The lifecycle derivation
- *  (cli/bridge-studio-lifecycle.ts) reads a table-bearing kind's `awaits:`
- *  from its own phase row and falls back to THIS table for the two legacy
- *  kinds — mirroring how `isTerminalPhase` falls back to
- *  `LEGACY_SESSION_TERMINAL_PHASES` immediately above. Sourced from the
- *  runners' own phase vocabularies: `ArchitectPhase`
- *  (orchestrator/architect-runner.ts) and `ProjectBrainPhase`
- *  (orchestrator/project-brain-builder-runner.ts) + the two bespoke panels
- *  (SessionArchitectPanel / SessionProjectBrainPanel), which render an
- *  operator control at exactly these phases and nowhere else. */
-export const LEGACY_SESSION_AWAITS_PHASES: Readonly<Record<string, Readonly<Record<string, 'questions' | 'verdict'>>>> = {
-  architect: { 'awaiting-answers': 'questions', 'awaiting-verdict': 'verdict' },
-  'project-brain': { briefing: 'questions', 'awaiting-review': 'verdict' },
-};
 
-/** W7-A2 — the AGENT-WORKING phases for the same two legacy kinds (the
- *  twin of a table-bearing kind's `step: agent | finalize` rows): a session
- *  sitting here is the runner's to advance, so silence past the stall
- *  ceiling means "stalled", never "needs you". Same sourcing as
- *  LEGACY_SESSION_AWAITS_PHASES above. */
-export const LEGACY_SESSION_WORKING_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
-  architect: new Set(['interviewing', 'exploring', 'drafting', 'finalizing']),
-  'project-brain': new Set(['analyzing', 'committing']),
-};
+
+
 
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
@@ -202,13 +167,7 @@ export const CSRF_HEADER = 'x-forge-csrf';
 /** Regex matching the forge-ui dev origin (any port on localhost/127.0.0.1). */
 export { allowedOrigin, sendJson, sanitizeError };
 
-/** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle'). */
-export function parseQuery(rawUrl: string): URLSearchParams {
-  const idx = rawUrl.indexOf('?');
-  return new URLSearchParams(idx >= 0 ? rawUrl.slice(idx + 1) : '');
-}
-
-export { pathOnly };
+export { pathOnly, parseQuery };
 
 const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
 
