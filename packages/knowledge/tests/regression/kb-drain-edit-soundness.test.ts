@@ -31,7 +31,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, relative } from 'node:path';
 
-import { classifyKbEdit, type KbEditChange } from './kb-drain-structural.ts';
+import { classifyKbEdit, type KbEditChange } from '../../kb-drain-structural.ts';
 import {
   auditKbEdit,
   auditKbEdits,
@@ -42,9 +42,9 @@ import {
   guardAgentKbEdits,
   snapshotBrainTree,
   type KbEditSoundnessCtx,
-} from './kb-drain-edit-soundness.ts';
-import { collectThemeSlugTargets } from './brain-lint.ts';
-import { parseThemeRaw } from './theme-frontmatter.ts';
+} from '../../kb-drain-edit-soundness.ts';
+import { collectThemeSlugTargets } from '../../brain-lint.ts';
+import { parseThemeRaw } from '../../theme-frontmatter.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

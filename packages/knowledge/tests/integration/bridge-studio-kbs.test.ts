@@ -20,15 +20,15 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
-import { loadKbDescriptors } from './bridge-studio-kbs.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
+import { loadKbDescriptors } from '../../bridge-studio-kbs.ts';
 // R6-08 4on (F3 hardening) — CHECK_NAMES is the real, single-source-of-truth
 // export (cli/brain-lint.ts); the hand-duplicated `FULL_SCOPE_CHECK_NAMES`
 // literal this file used to carry is exactly the drift risk F3 fixes, so the
 // health-itemization pins below import the real thing instead. checkReflectorLoss
 // is imported directly for the F2 pin's fixture precondition (the GLOBAL advisory
 // is never kb-scoped, so there is no per-kb HTTP route to verify it through).
-import { CHECK_NAMES, checkReflectorLoss } from './brain-lint.ts';
+import { CHECK_NAMES, checkReflectorLoss } from '../../brain-lint.ts';
 // AT-4on-9 (SEC-05 4on REOPEN #1) needs existsSync for a fixture precondition —
 // added as a second scoped node:fs import so the existing import stays untouched.
 // R1-06 WI-3 review pins (M1/M2/MINOR1) additionally need readFileSync for the

@@ -24,7 +24,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { loadKbDescriptor, serializeKbDescriptor, deriveKbUsageDefaults } from './kb-descriptor.ts';
+import { loadKbDescriptor, serializeKbDescriptor, deriveKbUsageDefaults } from '../../studio/kb-descriptor.ts';
 import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

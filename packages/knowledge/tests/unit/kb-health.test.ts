@@ -14,9 +14,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runPostReflectionKbHealth, type KbHealthDeps } from './kb-health.ts';
+import { runPostReflectionKbHealth, type KbHealthDeps } from '../../kb-health.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
-import type { Finding } from './brain-lint.ts';
+import type { Finding } from '../../brain-lint.ts';
 
 function kbYaml(id: string, binding: string): string {
   return [`id: ${id}`, `name: ${id} KB`, `binding:`, `  ${binding}`, `desc: test kb`, ''].join('\n');

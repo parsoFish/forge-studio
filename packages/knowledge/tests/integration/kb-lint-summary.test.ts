@@ -41,13 +41,13 @@ import {
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
-import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
+import { CHECK_NAMES, runBrainLint } from '../../brain-lint.ts';
 // The module under test. This import throws at load time (module not found)
 // until cli/kb-lint-summary.ts exists — the intended "module missing" RED
 // for the WHOLE file, not a syntax error.
-import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from './kb-lint-summary.ts';
-import type { KbLintSummary } from './kb-lint-summary.ts';
+import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from '../../kb-lint-summary.ts';
+import type { KbLintSummary } from '../../kb-lint-summary.ts';
 
 // Depth-INDEPENDENT — see the note in kb-backend.test.ts.
 import { FORGE_ROOT as ROOT } from '@forge/kernel/ids.ts';

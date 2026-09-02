@@ -9,8 +9,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runBrainLint, applyAutoFixesUntilStable, lintThemeFiles, classify } from './brain-lint.ts';
-import { applyAutoFixes } from './brain-fix-auto.ts';
+import { runBrainLint, applyAutoFixesUntilStable, lintThemeFiles, classify } from '../../brain-lint.ts';
+import { applyAutoFixes } from '../../brain-fix-auto.ts';
 
 function brain(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-fix-auto-'));

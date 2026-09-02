@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
+import { loadBrainIndex, regenerateBrainIndex } from '../../brain-index.ts';
 
 function scaffoldBrain(): string {
   const root = mkdtempSync(join(tmpdir(), 'brain-index-test-'));

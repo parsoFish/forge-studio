@@ -37,8 +37,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, existsSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { runBrainLint } from './brain-lint.ts';
-import { statWalkFingerprint, runBrainLintFullMemoized, runBrainLintFullFresh } from './kb-lint-summary.ts';
+import { runBrainLint } from '../../brain-lint.ts';
+import { statWalkFingerprint, runBrainLintFullMemoized, runBrainLintFullFresh } from '../../kb-lint-summary.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

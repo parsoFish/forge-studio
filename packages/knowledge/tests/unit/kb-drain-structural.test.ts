@@ -22,12 +22,12 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { classifyKbEdit, buildUnifiedDiff, snapshotKbFiles, diffKbSnapshot } from './kb-drain-structural.ts';
-import { runKbDrain } from './bridge-studio-kb-drain.ts';
-import { noKbEdits } from './kb-drain-edit-soundness.ts';
-import { approveKbCleanup } from './bridge-studio-kbs.ts';
-import { deriveKbActiveJob } from './kb-job-state.ts';
-import type { Finding } from './brain-lint.ts';
+import { classifyKbEdit, buildUnifiedDiff, snapshotKbFiles, diffKbSnapshot } from '../../kb-drain-structural.ts';
+import { runKbDrain } from '../../bridge-studio-kb-drain.ts';
+import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
+import { approveKbCleanup } from '../../bridge-studio-kbs.ts';
+import { deriveKbActiveJob } from '../../kb-job-state.ts';
+import type { Finding } from '../../brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // classifyKbEdit matrix
