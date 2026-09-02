@@ -19,10 +19,12 @@
  * are policy about a *request*, not the shape of a *response*, and the host is
  * the single place that policy is applied.
  *
- * `parseQuery` is deliberately NOT here. The ruling named five symbols and it
- * is not one of them, and no carved route needs it today. It is the obvious
- * sixth — it is `pathOnly`'s two-line twin — so the first carved route that
- * reads a query string should move it rather than import `cli/`.
+ * `parseQuery` IS here, on this file's own standing instruction. The ruling
+ * that created this module named five symbols and left a sixth pending: "it is
+ * `pathOnly`'s two-line twin — so the first carved route that reads a query
+ * string should move it rather than import `cli/`." The sessions lane's
+ * `/api/studio/sessions` index route is that route (M4, `additive: kernel`).
+ * `cli/bridge-studio.ts` re-exports it so the host's callers are unchanged.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -70,3 +72,11 @@ export function pathOnly(rawUrl: string): string {
   const idx = rawUrl.indexOf('?');
   return idx >= 0 ? rawUrl.slice(0, idx) : rawUrl;
 }
+
+/** Parse the query-string from a URL string (e.g. '/api/runs?flow=forge-cycle').
+ *  `pathOnly`'s twin: same split, the other half. */
+export function parseQuery(rawUrl: string): URLSearchParams {
+  const idx = rawUrl.indexOf('?');
+  return new URLSearchParams(idx >= 0 ? rawUrl.slice(idx + 1) : '');
+}
+
