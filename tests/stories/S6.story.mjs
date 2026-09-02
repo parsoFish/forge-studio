@@ -224,9 +224,18 @@ export default {
     {
       // Fully expressible as an assertion. `theme-node` and `theme-active` are
       // the same button in the right-rail theme list, so one element answers
-      // both. A `<seedTheme>` placeholder takes any non-empty value, which is
-      // the honest claim: SOMETHING real landed, named by the product, not by
-      // this story. Today the list reads "THEMES (0)".
+      // both, and `<seedTheme>` takes any non-empty value — the product names
+      // the theme, not this story.
+      //
+      // `kb-id` is what makes that claim mean anything, and it was missing until
+      // amend-2. S6 run 3 scored this beat GREEN on
+      // `2026-06-05-forge-demo-render-cwd-sensitivity` — a `cycles` theme —
+      // while `brain/story-s6/themes/` was EMPTY, because no seeding agent had
+      // run. Unscoped, "SOMETHING real landed" was answered by a theme from
+      // ANOTHER knowledge base: a bare `/knowledge` lands on `cycles`, which
+      // beat 12 reports honestly and this beat was calling success. Pinning
+      // `kb-id` ties the right-rail to the KB beat 3 created, so the beat now
+      // stays red until a theme lands in THIS one.
       act: 'Back on the knowledge base, find a real theme in the graph',
       expect: {
         route: '/knowledge',
