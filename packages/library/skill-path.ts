@@ -26,10 +26,11 @@
  * `listSkillDirs` never discovers (`'sub/evil'`). The guard is kernel's ONE
  * definition, composed here — never re-implemented.
  */
-import { existsSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { FORGE_ROOT, assertSkillSlug } from '@forge/kernel/ids.ts';
+import { guardedFile } from '@forge/kernel';
 
 /** The `skills/` directory under a given root (default: the real repo root).
  *  The one place the literal `skills` directory name is constructed. */
@@ -65,9 +66,41 @@ export function skillPathRelative(name: string): string {
 }
 
 /**
+ * The CONTAINED form of `skillPath` — the one every READ should use.
+ *
+ * `skillPath` above composes a LAYOUT: it answers "where would this skill's
+ * SKILL.md live", and `assertSkillSlug` makes that answer well-formed. It is
+ * not, and never was, a containment check — it validates the id's CHARSET and
+ * nothing about the filesystem, so a symlink planted at `skills/<id>`, or a
+ * symlinked `SKILL.md` leaf inside an ordinary `skills/<id>/`, is lexically
+ * inside `skills/` and resolves anywhere. Several call sites read through
+ * `skillPath` and were redirected by exactly that (COMMON §15.19).
+ *
+ * Returns the guard's own `realPath`, or `null` when the file is missing OR
+ * the path escapes — `guardedFile` collapses those two deliberately, so this
+ * cannot become an existence oracle across the root.
+ *
+ * The two live side by side ON PURPOSE: a reader reaching for `skillPath` to
+ * open a file meets this one immediately below it.
+ */
+export function guardedSkillMdPath(name: string, root: string = FORGE_ROOT): string | null {
+  assertSkillSlug(name);
+  return guardedFile(skillsDir(root), [name, 'SKILL.md'], 'read');
+}
+
+/**
  * The generic SKILL.md-bearing-subdirectory walk of ANY directory (used for both
  * the live `skills/` tree and the `studio/starters/agents/` template tree).
  * Returns absolute directory paths, sorted. Absent/unreadable dir ⇒ [].
+ *
+ * The `SKILL.md` probe rides the containment guard, LEAF INCLUDED.
+ * `Dirent.isDirectory()` above already excludes a symlinked DIRECTORY, but
+ * `existsSync` FOLLOWS a symlinked LEAF — so an ordinary `skills/<id>/` holding
+ * a symlinked `SKILL.md` passed discovery, and every consumer then read the
+ * link's target. That is wire-reachable through `GET /api/studio/skills`, which
+ * enumerates ids FROM this walk and therefore cannot pre-guard them: the check
+ * has to live here. Found by the independent security review of the
+ * approve/repin fix, which is why it ships in that fix's own PR.
  */
 export function listSkillMdDirs(dir: string): string[] {
   let names: string[];
@@ -79,8 +112,8 @@ export function listSkillMdDirs(dir: string): string[] {
     return [];
   }
   return names
+    .filter((n) => guardedFile(dir, [n, 'SKILL.md'], 'read') !== null)
     .map((n) => join(dir, n))
-    .filter((d) => existsSync(join(d, 'SKILL.md')))
     .sort();
 }
 
