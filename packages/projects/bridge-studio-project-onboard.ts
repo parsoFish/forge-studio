@@ -238,9 +238,17 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
 
 
       // Reject a duplicate id by disk scan (B1: projects are discovered, not
-      // registered). Resolve + guard the repo path under the projects root.
+      // registered) — but ONLY when that id already carries a real contract
+      // (`hasConfig`). Discovery also reports a bare, unonboarded directory
+      // (no `.forge/project.json`) under the same id, and that shape is
+      // exactly what this route exists to close (forge-8vfn.5.3, S1 beat 3):
+      // Studio's own disk scan tells the operator a project is discovered
+      // but unfinished, so onboarding a repo the scan already found must not
+      // 409 as a conflict with itself. A genuine collision — an id that
+      // already has a `.forge/project.json` — still refuses below. Resolve +
+      // guard the repo path under the projects root.
       const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      if (discoverProjects(projectsDir, ctx.forgeRoot).some((p) => p.id === id)) {
+      if (discoverProjects(projectsDir, ctx.forgeRoot).some((p) => p.id === id && p.hasConfig)) {
         sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;

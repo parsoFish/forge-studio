@@ -2708,6 +2708,19 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
+  **A rejected submit carries its own error sentinel (`forge-8vfn.5.3`):**
+  `[data-section="project-onboard"]` itself carries
+  `data-fetch-status="ok"|"error"` + `data-load-error="true"|"false"` —
+  scoped to the onboard door's own submit, deliberately SEPARATE from the
+  page root's `data-fetch-status` two paragraphs up, which reports the
+  unrelated curated-starter-template read. Before this, a rejected onboard
+  (409 id-collision, 400 validation, …) rendered as bare text with no
+  `data-*` at all, so a story beat could only observe the failure as a
+  missing route. The message itself renders `[role="alert"]
+  [data-fetch-error-text]` beneath the section — not the full shared
+  `[data-component="fetch-error"]` contract (`components/FetchErrorState.tsx`),
+  since a rejected SUBMIT has no bridge-reachable/HTTP-status distinction to
+  carry the way a READ failure does.
   Alongside it, the R4-03 greenfield **create-from-template** form:
   `[data-section="project-create"][data-app-type-count]` (the count is the
   root's fetched roster, so it is present exactly when the page says ready) with

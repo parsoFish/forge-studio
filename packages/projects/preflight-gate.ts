@@ -173,6 +173,12 @@ function resolveScriptName(cmd: string): string | null {
 
 // --- helpers ---
 
+// Already exported below (`export { checkC1, checkC1b, checkC7,
+// readQualityGateCmd }`) — reused by preflight-deps.ts (forge-8vfn.5.21):
+// the DEPS clause shares this SAME single-sourced "what is the declared
+// local gate command" fact C1 already computes, rather than re-deriving it
+// (JSON testProcess.local.cmd → package.json "test" → .forge/quality_gate_cmd
+// sidecar, in that order).
 function readQualityGateCmd(dir: string, cfg: ProjectConfig | null): { source: string; cmd: string } | null {
   // R1-03-F1: the typed contract object is the primary source (the loader
   // already single-sourced the sidecar into it, so a loaded config always
@@ -265,4 +271,8 @@ function checkC7(cfg: ProjectConfig | null): ClauseResult {
   };
 }
 
-export { checkC1, checkC1b, checkC7, readQualityGateCmd };
+// isPackageManagerShaped/resolveScriptName also reused by preflight-deps.ts
+// (forge-8vfn.5.21): the DEPS clause resolves `npm test` → its package.json
+// script BODY the same way C1's own package-manager-shape check does, rather
+// than re-deriving that resolution.
+export { checkC1, checkC1b, checkC7, readQualityGateCmd, isPackageManagerShaped, resolveScriptName };

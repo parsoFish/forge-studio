@@ -7,5 +7,6 @@
     { "kind": "verify", "text": "GET the endpoint (e.g. /health) and assert the JSON response." }
   ],
   "testProcess": { "local": { "cmd": ["npm", "test"] } },
+  "skills": ["api-conventions"],
   "kb": "{{NAME}}"
 }
