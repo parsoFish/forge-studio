@@ -4021,8 +4021,18 @@ is what this contract reads — but it cannot be the only distinguisher.
     added M4, bead `forge-8vfn.5.10`).** After `POST /api/studio/kbs` the
     create form navigates to
     `/knowledge?id=<kb>&seedSession=<sid>&seedProject=.kb-<kb>`, and the page
-    renders `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`
-    wrapping `a[data-action="open-seed-session"]`
+    renders the id in TWO places: on the page root
+    (`main[data-page="knowledge"][data-seed-session-id="<sid>"]`) and on
+    `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`, which
+    wraps `a[data-action="open-seed-session"]`. Both are present deliberately.
+    The banner carries it because that is the control it belongs to; the ROOT
+    carries it because `scripts/stories/beats.mjs`'s `resolveExpectations`
+    reads the page root FIRST and only searches descendants for the keys the
+    root does not answer — and S6 run 2 (2026-09-02) reported this key "absent
+    from the page" on a fully settled page whose own captured frame shows the
+    banner rendered. Publishing it where the root is read removes that question
+    rather than answering it. Absent rather than empty when there is no seeding
+    session, like the root's other conditional attributes
     (`href="/sessions/project-brain/<sid>?project=<seedProject>"`). The banner
     and the link have been there since W7-B2; what did NOT exist was the id as
     a `data-*` VALUE — it lived only inside the href and the query string, so
