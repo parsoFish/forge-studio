@@ -58,7 +58,7 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
+import { guardedSkillMdPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
 import { communitySkillsFromRegistry, isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 import type { AgentDefinition, CommunitySkill } from '@forge/contracts/studio/types.ts';
@@ -210,7 +210,13 @@ export interface SkillTrustDetail {
  *  reached — `skillTrustState` below is the thin `.trust`-only wrapper most
  *  callers use; `lintSkillTrust` needs the reason to pick the right finding. */
 export function skillTrustDetail(forgeRoot: string, id: string): SkillTrustDetail {
-  const mdPath = skillPath(id, forgeRoot);
+  // COMMON §15.19 — through the containment guard, not `skillPath`'s bare
+  // layout join. This is a READ whose result feeds a TRUST verdict, so a
+  // redirected read is a trust verdict computed from someone else's file.
+  const mdPath = guardedSkillMdPath(id, forgeRoot);
+  if (mdPath === null) {
+    throw new Error(`skillTrustDetail: skill "${id}" has no readable SKILL.md inside the library (missing, or the path escapes skills/)`);
+  }
   const { data } = matter(readFileSync(mdPath, 'utf8'), {});
   const d = (data ?? {}) as Record<string, unknown>;
   if (d['status'] === 'draft') return { trust: 'draft' };
@@ -259,7 +265,13 @@ export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
 
   for (const dir of listSkillDirs(forgeRoot)) {
     const id = basename(dir);
-    const mdPath = skillPath(id, forgeRoot);
+    // Guarded, LEAF INCLUDED (COMMON §15.19). `GET /api/studio/skills` reaches
+    // this loop with ids ENUMERATED from the tree, so no route-level pre-guard
+    // is even possible — the check has to be here. `listSkillMdDirs` now
+    // refuses a symlinked leaf at discovery too; this is the second half of
+    // that pair, and either alone would leave the other's gap open.
+    const mdPath = guardedSkillMdPath(id, forgeRoot);
+    if (mdPath === null) continue; // not readable inside the library — never read through the link
     if (isStudioAgent(mdPath)) continue; // studio agents are not skill-library entries (AT-5)
 
     let data: Record<string, unknown>;
@@ -357,9 +369,15 @@ function findInstalledAgentShapeViolations(forgeRoot: string): Finding[] {
   const findings: Finding[] = [];
   for (const dir of listSkillDirs(forgeRoot)) {
     const id = basename(dir);
+    // Guarded (COMMON §15.19). Found while fixing the two sites the security
+    // review named — the same shape, one function further down the same file,
+    // which is the argument for fixing the CLASS at `guardedSkillMdPath`
+    // rather than patching the reported call sites one at a time.
+    const mdPath = guardedSkillMdPath(id, forgeRoot);
+    if (mdPath === null) continue;
     let data: Record<string, unknown>;
     try {
-      data = (matter(readFileSync(skillPath(id, forgeRoot), 'utf8'), {}).data ?? {}) as Record<string, unknown>;
+      data = (matter(readFileSync(mdPath, 'utf8'), {}).data ?? {}) as Record<string, unknown>;
     } catch {
       continue; // malformed — already surfaced elsewhere (listSkillLibrary's AT-7 error field)
     }

@@ -11,7 +11,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 
@@ -23,7 +23,8 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillDir } from '../skill-path.ts';
+import { skillsDir } from '../skill-path.ts';
+import { guardedFile } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)
@@ -86,9 +87,37 @@ export function extractProvenance(data: Record<string, unknown>): SkillProvenanc
 /** Read every file under an installed skill's directory — SKILL.md first,
  *  then the rest sorted lexicographically by relative POSIX path (AT-11). */
 export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
-  const dir = skillDir(id, forgeRoot);
-  if (!existsSync(join(dir, 'SKILL.md'))) {
-    throw new Error(`readSkillPackage: no SKILL.md found for skill "${id}" under "${dir}"`);
+  // COMMON §15.19, the same fix as `skill-install.ts`'s `guardedSkillMd`: this
+  // walk's root used to be `skillDir(id, forgeRoot)` — a bare `join()` — so a
+  // symlink planted at `skills/<id>` sent the whole read, and the hash computed
+  // from it, somewhere outside the library. Every caller today sits behind a
+  // route-level guard, which is exactly why it was easy to miss; a read that is
+  // safe only because of what its callers happen to do is a landmine, and this
+  // one feeds `repinSkillPackage`'s `contentHash`.
+  //
+  // RESIDUAL, and the consequence named rather than left as a mechanism: this
+  // guards the walk's ROOT. Entries INSIDE the package are classified with
+  // `Dirent`, which does not follow symlinks, so a symlinked leaf is neither
+  // file nor directory and is skipped. It cannot redirect a read — but it drops
+  // out of `contentHash`, and `contentHash` is a TRUST GATE: `skill-trust.ts`
+  // defines `needs-review` as "recomputed hash differs (someone edited the
+  // package after approval)". So a symlink added to an approved package evades
+  // the one mechanism built to catch post-approval tampering, and the skill
+  // stays `ready` with the extra content sitting beside it on disk. That is
+  // worse than "a file is missing from a hash", which is why it is written out
+  // here. `installSkillPackage`'s `walkPackageDir` realpaths every entry and
+  // REFUSES; bringing this walk to that standard is bead `forge-8vfn.5.35`,
+  // filed rather than folded in because it changes what a package hash means.
+  //
+  // The SKILL.md probe rides the guard too, LEAF INCLUDED. The first version of
+  // this fix kept `existsSync(join(dir, 'SKILL.md'))` on the guarded dir, and
+  // `check-raw-fs-guarded` caught it in the same commit — appending a leaf below
+  // a guarded value re-opens the class one segment lower, which is the whole
+  // lesson. The guard found the residual inside the containment fix itself.
+  const dir = guardedFile(skillsDir(forgeRoot), [id], 'readdir');
+  const md = dir === null ? null : guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read');
+  if (dir === null || md === null) {
+    throw new Error(`readSkillPackage: no SKILL.md found for skill "${id}" inside the library (missing, or the path escapes skills/)`);
   }
   const files: PackageFile[] = [];
   const walk = (absDir: string, relDir: string): void => {
