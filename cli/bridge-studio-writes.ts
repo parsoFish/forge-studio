@@ -37,8 +37,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync, renameSync, unlinkSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
@@ -46,13 +45,10 @@ import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, loadFlowD
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
-import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry, COMMUNITY_REGISTRY_SCHEMA_VERSION } from '@forge/library/studio/community-registry.ts';
-import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
-import { skillsDir as toSkillsDir, assertSkillSlug } from '@forge/agents/skill-path.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
-import { CommunityRegistryLockError, lockCommunityRegistry } from '@forge/library/community-registry-lock.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '@forge/agents/studio/materials.ts';
@@ -68,11 +64,6 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
-// W7-B3 review F8: ONE decode-and-slug-validate helper for community-item URL
-// ids — the community routes' own, not a local re-implementation (its
-// malformed-%-encoding branch answers a distinct, friendlier 400).
-import { decodeIdOrRespond } from '@forge/library/bridge-studio-community.ts';
-
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3) — MOVED to
 // @forge/projects/project-contract-scaffold.ts (M4-projects carve, worker B).
@@ -338,215 +329,6 @@ function applyStarterAgentMaterialisation(
   return materialized;
 }
 
-// W7-B3 (community-23) — community-registry CRUD helpers. The registry
-// (studio/community/registry.yaml) had exactly one writer, an agent commit
-// path — Studio itself had no add/edit/remove. These helpers give the
-// routes below the SAME structural discipline commitRegistryDraft holds:
-// parse the body against the loader's own field rules, serialize through
-// the ONE shared serializer, write temp-then-rename, and RE-PARSE the temp
-// file through loadCommunityRegistry before it replaces the real one (a
-// write this module cannot re-load must never land).
-//
-// Honesty stamps: an operator-written row is hand-curated — `fetchedAt:
-// null` / `fetchedBy: 'operator'` are FORCED server-side regardless of what
-// the body claims (never a fabricated verification timestamp; the freshness
-// badge reads such a row as never-verified, which is the truth).
-// ---------------------------------------------------------------------------
-
-// W7-B3 review F1 (confirmed by live probe): the community index projects ONLY
-// kind:'skill' rows out of the registry (hooks come from vendored packages,
-// mcp/tool from studio/catalog.yaml), so a hand-added hook/mcp/tool row would
-// write successfully and then be invisible and un-curatable — the detail page
-// the form redirects to 404s and the edit/remove controls live there. The CRUD
-// surface therefore admits ONLY 'skill'.
-const COMMUNITY_REGISTRY_ITEM_KINDS = ['skill'] as const;
-
-function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistryItem } | { ok: false; error: string } {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'body must be a JSON object with an "item" field' };
-  const itemRaw = (raw as Record<string, unknown>)['item'];
-  if (itemRaw === null || typeof itemRaw !== 'object' || Array.isArray(itemRaw)) return { ok: false, error: '"item" must be an object' };
-  const e = itemRaw as Record<string, unknown>;
-
-  const requireString = (field: string): string | { error: string } => {
-    const v = e[field];
-    if (typeof v !== 'string' || v.trim() === '') return { error: `item.${field} is required and must be a non-empty string` };
-    return v;
-  };
-
-  const id = requireString('id');
-  if (typeof id !== 'string') return { ok: false, error: id.error };
-  try {
-    assertSkillSlug(id, 'community item');
-  } catch (err) {
-    return { ok: false, error: sanitizeError(err) };
-  }
-
-  const kindRaw = e['kind'];
-  if (typeof kindRaw !== 'string' || !(COMMUNITY_REGISTRY_ITEM_KINDS as readonly string[]).includes(kindRaw)) {
-    return {
-      ok: false,
-      error: `item.kind must be "skill" — the community index surfaces only skill rows from the registry (hooks are vendored packages under studio/community/hooks/; mcp/tool connections live in studio/catalog.yaml)`,
-    };
-  }
-
-  const name = requireString('name');
-  if (typeof name !== 'string') return { ok: false, error: name.error };
-  const category = requireString('category');
-  if (typeof category !== 'string') return { ok: false, error: category.error };
-  const sourceUrl = requireString('sourceUrl');
-  if (typeof sourceUrl !== 'string') return { ok: false, error: sourceUrl.error };
-  if (!/^https?:\/\//.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
-  const provenance = requireString('provenance');
-  if (typeof provenance !== 'string') return { ok: false, error: provenance.error };
-
-  const desc = e['desc'];
-  if (desc !== undefined && typeof desc !== 'string') return { ok: false, error: 'item.desc must be a string when present' };
-  const tier = e['tier'];
-  if (tier !== undefined && typeof tier !== 'string') return { ok: false, error: 'item.tier must be a string when present' };
-  // W8-B5 (schema v2, exit row E5): stars / starsDisplay / upstreamUpdatedAt /
-  // fetchedAt / fetchedBy are REPO facts and no longer exist on an item at
-  // all — they live in the registry's top-level `sources` map, keyed by
-  // sourceUrl, and are written only by a refresh that actually got a 200.
-  // A body that carries one with a REAL value is refused, naming where the
-  // fact belongs: silently ignoring it is the declared-data-fails-open shape
-  // (the operator would see their number accepted and never rendered).
-  // An explicit `null` carries no information, so it is accepted-and-dropped
-  // rather than refused. That is ordinary input tolerance, NOT a back-compat
-  // path: forge's own client does not send these keys at all any more
-  // (apps/studio/app/community/new/page.tsx's `toInput`, changed alongside this),
-  // so nothing in this repo depends on the tolerance. It survives only so a
-  // scripted or third-party caller that spells "I have no star count" as an
-  // explicit null is not punished for it.
-  const retiredRepoFields: Array<[string, unknown]> = [
-    ['upstreamUpdatedAt', e['upstreamUpdatedAt']],
-    ['fetchedAt', e['fetchedAt']],
-    ['fetchedBy', e['fetchedBy']],
-  ];
-
-  const signalsRaw = e['signals'];
-  let attributedTo: string | null = null;
-  if (signalsRaw !== undefined && signalsRaw !== null) {
-    if (typeof signalsRaw !== 'object' || Array.isArray(signalsRaw)) return { ok: false, error: 'item.signals must be an object when present' };
-    const s = signalsRaw as Record<string, unknown>;
-    retiredRepoFields.push(['signals.stars', s['stars']], ['signals.starsDisplay', s['starsDisplay']]);
-    if (s['attributedTo'] !== undefined && s['attributedTo'] !== null && typeof s['attributedTo'] !== 'string') return { ok: false, error: 'item.signals.attributedTo must be a string or null' };
-    attributedTo = (s['attributedTo'] as string | null | undefined) ?? null;
-  }
-
-  for (const [field, value] of retiredRepoFields) {
-    if (value !== undefined && value !== null) {
-      return {
-        ok: false,
-        error: `item.${field} is a REPO-level fact and is not a property of an item — it lives in the registry's "sources" map, keyed by this item's sourceUrl, and is written only by "forge community refresh". Remove it from the body.`,
-      };
-    }
-  }
-
-  return {
-    ok: true,
-    item: {
-      id,
-      kind: kindRaw as CommunityRegistryItem['kind'],
-      name,
-      ...(desc !== undefined ? { desc } : {}),
-      category,
-      sourceUrl,
-      provenance,
-      ...(tier !== undefined ? { tier } : {}),
-      // `attributedTo` is the ONLY signal an item carries in v2: it is a
-      // curation note ("who to credit for THIS skill"), not a fetched
-      // repo-level fact. W7-B3 review F4/F5 protected stars/starsDisplay/
-      // upstreamUpdatedAt by forcing them server-side; v2 protects them
-      // structurally instead — an item has no such field to force.
-      signals: { attributedTo },
-    },
-  };
-}
-
-/** Load the live registry tolerantly (missing file = the fresh-root empty
- *  baseline), apply `mutate`, then temp-write → re-parse → rename. A `null`
- *  from `mutate` means "refused, write NOTHING" — the file stays
- *  byte-identical (a 409/404 must never reformat the registry as a side
- *  effect). Throws on a malformed EXISTING registry (never half-trusts a
- *  corrupt file) and on a produced document the loader itself refuses.
- *
- *  W8-B5 security review, FINDING 1: the WHOLE read-modify-write runs under
- *  the shared registry mutex (cli/community-registry-lock.ts), and the load
- *  below happens INSIDE it — the same lock, on the same path, that
- *  `runCommunityRefresh` and `commitRegistryDraft` take. A lock only one of
- *  three writers honours is not a lock, which is why there is exactly one
- *  helper and all three call it. Contention throws
- *  `CommunityRegistryLockError`, which every arm below renders as a 503;
- *  nothing is written on that path. The critical section is fs-only and
- *  sub-millisecond — no caller of this function does network I/O while
- *  holding it. */
-async function mutateCommunityRegistry(
-  forgeRoot: string,
-  mutate: (items: CommunityRegistryItem[]) => CommunityRegistryItem[] | null,
-): Promise<void> {
-  const destPath = communityRegistryPath(forgeRoot);
-  // Ahead of the lock, not after the mutate: the mutex is taken on
-  // studio/community/ itself, so on a fresh forge root the directory has to
-  // exist before two concurrent creators have anything to serialise on.
-  mkdirSync(dirname(destPath), { recursive: true });
-  const release = await lockCommunityRegistry(forgeRoot);
-  try {
-    const existing = existsSync(destPath)
-      ? loadCommunityRegistry(destPath)
-      : {
-          schemaVersion: COMMUNITY_REGISTRY_SCHEMA_VERSION as number,
-          lastRefresh: null as string | null,
-          sources: {} as Record<string, CommunityRegistrySource>,
-          items: [] as CommunityRegistryItem[],
-          leadingComments: '',
-        };
-    const nextItems = mutate([...existing.items]);
-    if (nextItems === null) return;
-    // W8-B5 (exit row E4): `leadingComments` threads the file's curation header
-    // through the ONE shared serializer, so a CRUD write no longer destroys it.
-    // `sources` is carried forward untouched — a CRUD edit is curation, never a
-    // refresh, and must not disturb a repo fact (nor prune a source row a
-    // re-added item would want back). That split is also what makes the
-    // refresh's re-load-under-lock merge safe: CRUD owns `items`, a refresh
-    // owns `sources` + `lastRefresh`, and neither writes the other's half.
-    const serialized = serializeCommunityRegistry({
-      schemaVersion: existing.schemaVersion,
-      lastRefresh: existing.lastRefresh,
-      sources: existing.sources,
-      items: nextItems,
-      leadingComments: existing.leadingComments,
-    });
-
-    const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
-    writeFileSync(tempPath, serialized, 'utf8');
-    try {
-      loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
-      renameSync(tempPath, destPath);
-    } catch (err) {
-      try {
-        unlinkSync(tempPath);
-      } catch {
-        /* best-effort cleanup */
-      }
-      throw err;
-    }
-  } finally {
-    await release();
-  }
-}
-
-/** W8-B5 security review, FINDING 1: lock contention is a 503 ("another
- *  writer holds the registry, retry"), never the 500 every other failure in
- *  these arms renders. Kept as one helper so the three CRUD arms cannot drift
- *  into answering the same condition three different ways. */
-function sendRegistryWriteFailure(res: ServerResponse, err: unknown, origin: string): void {
-  if (err instanceof CommunityRegistryLockError) {
-    sendJson(res, 503, { error: err.message, reason: 'registry-locked' }, origin);
-    return;
-  }
-  sendJson(res, 500, { error: sanitizeError(err) }, origin);
-}
-
 export async function handleStudioWriteRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -560,13 +342,16 @@ export async function handleStudioWriteRoutes(
   const origin = allowedOrigin(req);
 
   // W7-B3 review F3 (guard-symmetry), WIDENED at the W7-B4 merge: DELETE is
-  // admitted into this function ONLY for the three routes that actually
-  // implement it — the community registry item (W7-B3) and the agent/flow
-  // deletes (W7-B4). Every OTHER write arm (projects/:id, save-repo,
-  // preflight/*, ...) dispatches on its URL match alone with no `method ===`
-  // test, so an unscoped DELETE would fall into a PUT handler and act; those
-  // still fall through here (404), exactly as before W7-B3 added the method
-  // to the top gate.
+  // admitted into this function ONLY for the routes that actually implement
+  // it — the agent/flow deletes (W7-B4). (The community registry item's
+  // POST/PUT/DELETE — W7-B3 — MOVED to `packages/library/
+  // bridge-studio-community-crud.ts` in the M4 §4 step 2 residue carve; this
+  // function no longer sees that URL at all, `libraryRoutes` claims it first.)
+  // Every OTHER write arm (projects/:id, save-repo, preflight/*, ...)
+  // dispatches on its URL match alone with no `method ===` test, so an
+  // unscoped DELETE would fall into a PUT handler and act; those still fall
+  // through here (404), exactly as before W7-B3 added the method to the top
+  // gate.
   //
   // This list is load-bearing and must grow with every new DELETE arm: W7-B3
   // wrote it as `!registryItemMatch` when the registry item was the only
@@ -574,108 +359,9 @@ export async function handleStudioWriteRoutes(
   // BOTH of them — the auto-merge was clean, and only the acceptance suite
   // caught it. Adding a DELETE arm below without adding its match here is a
   // route that answers 404 forever.
-  const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
   const agentDeleteMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);
   const flowDeleteMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
-  if (method === 'DELETE' && !registryItemMatch && !agentDeleteMatch && !flowDeleteMatch) return false;
-
-  // ---- W7-B3 (community-23): community registry CRUD ----------------------
-  if (method === 'POST' && url === '/api/studio/community/registry/items') {
-    try {
-      const parsed = parseRegistryItemBody(await readJson(req));
-      if (!parsed.ok) {
-        sendJson(res, 400, { error: parsed.error }, origin);
-        return true;
-      }
-      let conflict = false;
-      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
-        if (items.some((i) => i.id === parsed.item.id)) {
-          conflict = true;
-          return null; // refused — the file stays byte-identical
-        }
-        return [...items, parsed.item];
-      });
-      if (conflict) {
-        sendJson(res, 409, { error: `a registry item with id "${parsed.item.id}" already exists — edit it instead` }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, id: parsed.item.id }, origin);
-    } catch (err) {
-      sendRegistryWriteFailure(res, err, origin);
-    }
-    return true;
-  }
-
-  // (PUT and DELETE are two separate dispatch lines, each with its own
-  // explicit `method ===` test, so cli/dry-bridge-coverage.test.ts's route
-  // derivation sees BOTH — a combined `(PUT || DELETE)` arm derives only the
-  // first method and leaves the DELETE invisible to the coverage gate.
-  // `registryItemMatch` itself is hoisted to the top of this function: the
-  // DELETE-scoping guard there needs it.)
-  if (registryItemMatch && method === 'PUT') {
-    try {
-      const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
-      if (id === null) return true;
-      const parsed = parseRegistryItemBody(await readJson(req));
-      if (!parsed.ok) {
-        sendJson(res, 400, { error: parsed.error }, origin);
-        return true;
-      }
-      if (parsed.item.id !== id) {
-        sendJson(res, 400, { error: `item.id "${parsed.item.id}" does not match the URL id "${id}" — a rename is delete + add` }, origin);
-        return true;
-      }
-      let found = false;
-      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
-        const next = items.map((i) => {
-          if (i.id !== id) return i;
-          found = true;
-          // W8-B5 (schema v2): W7-B3 review F4's "carry the existing row's
-          // agent-fetched facts forward" is now unnecessary by construction —
-          // an item HAS no fetched facts to wipe. They live on the shared
-          // `sources` row, which `mutateCommunityRegistry` carries forward
-          // untouched, so an operator edit cannot disturb another item's data
-          // either. `attributedTo` remains operator-editable curation.
-          return { ...parsed.item };
-        });
-        return found ? next : null; // 404 path writes nothing
-      });
-      if (!found) {
-        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, id }, origin);
-    } catch (err) {
-      sendRegistryWriteFailure(res, err, origin);
-    }
-    return true;
-  }
-
-  if (registryItemMatch && method === 'DELETE') {
-    try {
-      const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
-      if (id === null) return true;
-      let found = false;
-      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
-        const next = items.filter((i) => {
-          if (i.id === id) {
-            found = true;
-            return false;
-          }
-          return true;
-        });
-        return found ? next : null; // 404 path writes nothing
-      });
-      if (!found) {
-        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, id }, origin);
-    } catch (err) {
-      sendRegistryWriteFailure(res, err, origin);
-    }
-    return true;
-  }
+  if (method === 'DELETE' && !agentDeleteMatch && !flowDeleteMatch) return false;
 
   // ---- PUT /api/studio/agents/:slug ----------------------------------------
   const agentMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);

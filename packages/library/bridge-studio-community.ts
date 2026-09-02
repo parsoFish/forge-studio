@@ -142,8 +142,8 @@ function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; re
 // ---------------------------------------------------------------------------
 // Id resolution — decode + slug-validate. Writes its own 400 and returns null
 // on failure, mirroring bridge-studio-connections.ts's
-// resolveConnectionOrRespond. Exported: cli/bridge-studio-writes.ts's own
-// registry-item routes reuse it directly.
+// resolveConnectionOrRespond. Exported: bridge-studio-community-crud.ts's
+// registry-item POST/PUT/DELETE routes reuse it directly.
 // ---------------------------------------------------------------------------
 
 export function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
