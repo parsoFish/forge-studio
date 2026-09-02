@@ -42,7 +42,7 @@ import { resolveKbBrainDir } from './brain-paths.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { type ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
+
 import { classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
 import {
@@ -660,6 +660,34 @@ function newProjectBrainSessionId(): string {
  * competing path. Throws — never returns a half-made session — when the write
  * fails containment.
  */
+/**
+ * Exactly the fields THIS function writes — not the legacy runner's
+ * `ProjectBrainStatus`, which is deliberately not imported.
+ *
+ * That type carries `modelTier?: ModelTier` from `@forge/agents` (rank 3), and
+ * `check-boundaries` cruises with `tsPreCompilationDeps: true` and no
+ * type/value distinction: importing it — even type-only — is a
+ * `package-layer-order` violation from a rank-2 package, and MOVING it here
+ * would drag `ModelTier` down with it. So knowledge states its own writer's
+ * shape instead, the way `packages/projects/project-roster.ts:79` already
+ * states its own provenance constant rather than importing `cli/`'s.
+ *
+ * `phase` is the literal this function always writes, not the full
+ * `ProjectBrainPhase` union: a seeding hand-off session is born briefing, and
+ * a type that admits more than its writer produces is a weaker claim. The
+ * runner owns every later transition and keeps its own wider type.
+ */
+type ProjectBrainSeedingSessionStatus = {
+  session_id: string;
+  project: string;
+  project_repo_path: string;
+  phase: 'briefing';
+  prompt: string;
+  updated_at: string;
+  kb_id: string;
+  kb_binding: KbBinding;
+};
+
 export function mintProjectBrainSeedingSession(
   projectsRoot: string,
   sessionProject: string,
@@ -667,7 +695,7 @@ export function mintProjectBrainSeedingSession(
   binding: KbBinding,
 ): string {
   const sessionId = newProjectBrainSessionId();
-  const written = guardedWriteSessionStatus<ProjectBrainStatus>(
+  const written = guardedWriteSessionStatus<ProjectBrainSeedingSessionStatus>(
     projectsRoot,
     [sessionProject, '_project-brain', sessionId],
     {
