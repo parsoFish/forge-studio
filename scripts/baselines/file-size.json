@@ -4,7 +4,7 @@
   "apps/studio/app/artifact/page.tsx": 1419,
   "apps/studio/app/flows/[id]/page.tsx": 992,
   "apps/studio/app/knowledge/page.tsx": 838,
-  "apps/studio/app/projects/[id]/page.tsx": 1443,
+  "apps/studio/app/projects/[id]/page.tsx": 1446,
   "apps/studio/components/studio/PhaseDrawer.tsx": 950,
   "apps/studio/components/studio/RoadmapCanvas.tsx": 870,
   "apps/studio/components/studio/flow-builder/FlowBuilderCanvas.tsx": 851,

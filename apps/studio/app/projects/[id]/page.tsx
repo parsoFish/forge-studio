@@ -44,6 +44,7 @@ import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+import { RebuildContractPanel } from '@/components/studio/project-builder/RebuildContractPanel';
 import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
 import { OpenSessionsPanel } from '@/components/studio/project-builder/OpenSessionsPanel';
 import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
@@ -658,6 +659,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                 onChanged={() => void loadPreflight({ cancelled: false })}
               />
             )}
+
+            <RebuildContractPanel projectId={id} onApplied={reload} />
 
             {/* R4-12-F1: permanent contract-buildout panel (async server
                 component; ContractPanelMount resolves it client-side since this
