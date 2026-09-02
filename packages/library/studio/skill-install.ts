@@ -29,7 +29,7 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillsDir } from '../skill-path.ts';
+import { guardedSkillMdPath, skillsDir } from '../skill-path.ts';
 import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
 import { assertSkillSlug, guardedFile } from '@forge/kernel';
 import {
@@ -302,7 +302,7 @@ export function installSkillPackage(input: InstallInput): InstallResult {
  * proven RED against the pre-fix code.
  */
 function guardedSkillMd(forgeRoot: string, id: string, caller: string): string {
-  const realPath = guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read');
+  const realPath = guardedSkillMdPath(id, forgeRoot);
   if (realPath === null) {
     throw new Error(`${caller}: skill "${id}" has no readable SKILL.md inside the library (missing, or the path escapes skills/)`);
   }

@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { skillPath } from '../skill-path.ts';
+import { guardedSkillMdPath } from '../skill-path.ts';
 import { hooksDir } from './hook-library.ts';
 import { guardedFile } from '@forge/kernel';
 import { listConnections } from './connection-library.ts';
@@ -94,7 +94,7 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
       // the old detection ('not-installed' while the path exists) is kept as
       // a belt-and-braces alternate so a future state-mapping change can
       // only widen, never silently disable, this refusal.
-      if (existsSync(skillPath(id, forgeRoot))) {
+      if (guardedSkillMdPath(id, forgeRoot) !== null) {
         const state = communityInstallState(forgeRoot, 'skill', id);
         if (state === 'present-unmanaged' || state === 'not-installed') {
           return { pipeline: 'none', reason: collisionReason(id) };

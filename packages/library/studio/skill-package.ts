@@ -95,12 +95,19 @@ export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
   // safe only because of what its callers happen to do is a landmine, and this
   // one feeds `repinSkillPackage`'s `contentHash`.
   //
-  // RESIDUAL, stated rather than implied: this guards the walk's ROOT. Entries
-  // INSIDE the package are classified with `Dirent`, which does not follow
-  // symlinks, so a symlinked leaf is neither file nor directory and is skipped
-  // — it cannot redirect a read, but it drops out of the hash silently.
-  // `installSkillPackage`'s `walkPackageDir` realpaths every entry and refuses
-  // instead; bringing this walk up to that standard is bead `forge-8vfn.5.35`.
+  // RESIDUAL, and the consequence named rather than left as a mechanism: this
+  // guards the walk's ROOT. Entries INSIDE the package are classified with
+  // `Dirent`, which does not follow symlinks, so a symlinked leaf is neither
+  // file nor directory and is skipped. It cannot redirect a read — but it drops
+  // out of `contentHash`, and `contentHash` is a TRUST GATE: `skill-trust.ts`
+  // defines `needs-review` as "recomputed hash differs (someone edited the
+  // package after approval)". So a symlink added to an approved package evades
+  // the one mechanism built to catch post-approval tampering, and the skill
+  // stays `ready` with the extra content sitting beside it on disk. That is
+  // worse than "a file is missing from a hash", which is why it is written out
+  // here. `installSkillPackage`'s `walkPackageDir` realpaths every entry and
+  // REFUSES; bringing this walk to that standard is bead `forge-8vfn.5.35`,
+  // filed rather than folded in because it changes what a package hash means.
   //
   // The SKILL.md probe rides the guard too, LEAF INCLUDED. The first version of
   // this fix kept `existsSync(join(dir, 'SKILL.md'))` on the guarded dir, and

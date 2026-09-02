@@ -53,7 +53,7 @@ import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { skillPath } from '../skill-path.ts';
+import { guardedSkillMdPath } from '../skill-path.ts';
 import { skillTrustState } from './skill-trust.ts';
 import type { SkillTrust } from './skill-trust.ts';
 import { extractProvenance } from './skill-package.ts';
@@ -338,13 +338,20 @@ function installStateFromProbe(state: ProbeState): CommunityInstallState {
  *  "this id is merely occupied" — its absence means not-installed, regardless
  *  of what trust the (unrelated) file on disk would otherwise compute to. */
 function skillHasProvenanceBlock(forgeRoot: string, id: string): boolean {
-  const { data } = matter(readFileSync(skillPath(id, forgeRoot), 'utf8'), {});
+  // COMMON §15.19 — guarded read. A path that escapes `skills/` has no
+  // provenance block BY DEFINITION: whatever the link points at did not go
+  // through the community pipeline. Answering `false` here is the same
+  // not-installed verdict this function already gives an unmanaged file, and
+  // it is the safe direction — it refuses the install rather than blessing it.
+  const mdPath = guardedSkillMdPath(id, forgeRoot);
+  if (mdPath === null) return false;
+  const { data } = matter(readFileSync(mdPath, 'utf8'), {});
   return extractProvenance((data ?? {}) as Record<string, unknown>) !== null;
 }
 
 export function communityInstallState(forgeRoot: string, kind: CommunityKind, id: string): CommunityInstallState {
   if (kind === 'skill') {
-    if (!existsSync(skillPath(id, forgeRoot))) return 'not-installed';
+    if (guardedSkillMdPath(id, forgeRoot) === null) return 'not-installed';
     // W7-B3 (library-31): occupied WITHOUT a provenance block used to read
     // 'not-installed' — which made this surface offer an Install that the
     // pipeline (correctly) refuses, forever. The honest state has its own
