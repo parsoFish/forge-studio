@@ -233,6 +233,7 @@ export default {
         data: {
           page: 'knowledge',
           'page-ready': 'true',
+          'kb-id': 'story-s6',
           'theme-node': '<seedTheme>',
           'theme-active': 'false',
         },
