@@ -12,15 +12,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { getKbBackend, FilesystemKbBackend, type KbBackend } from './kb-backend.ts';
 import { buildKbGraph } from './kb-graph.ts';
 import { loadKbDescriptor, resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const FORGE_ROOT = resolve(__dirname, '..', '..');
+// Depth-INDEPENDENT. A hand-counted `resolve(__dirname, '..', '..')` is
+// calibrated to this file's current directory, so moving the file two levels
+// deeper into tests/<bucket>/ would silently resolve two directories short.
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 // ---------------------------------------------------------------------------
 // Contract §1: getKbBackend resolves a backend bound to the kbId
