@@ -20,7 +20,7 @@
  * `{ ...status, phase: 'cancelled', cancelled_at, cancelled_from }` — through
  * `guardedWriteSessionStatus` (the SAME primitive every affordance write
  * uses), after signalling the session's tracked turn process if one is
- * alive (`killTrackedTurn`, cli/bridge-studio-lifecycle.ts — SIGTERM to the
+ * alive (`killTrackedTurn`, packages/sessions/bridge-studio-lifecycle.ts — SIGTERM to the
  * detached runner's process group, so the SDK's `claude` child dies too).
  * `cancelled_from` is the transition's own fact (the phase the operator
  * gave up at), not a mirror of anything derivable — every DERIVED signal
@@ -30,7 +30,7 @@
  * this handler BEFORE `handleStudioAffordanceRoutes` — that route's regex
  * (`/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/`) would otherwise
  * swallow the literal `cancel` segment as an affordance id and 409 it as
- * "not available". Pinned by cli/bridge-studio-lifecycle.test.ts.
+ * "not available". Pinned by packages/sessions/bridge-studio-lifecycle.test.ts.
  *
  * Security mirrors cli/bridge-studio-affordances.ts's own chain: kind →
  * registry (never a switch); sessionId → `invalidSessionIdReason` before any

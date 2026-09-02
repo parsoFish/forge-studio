@@ -15,11 +15,11 @@
  *
  * ---------------------------------------------------------------------------
  * CONTAINMENT (the whole point of this WI — see the
- * `adversarial-containment-review` skill and `cli/studio-path-guard.ts`'s own
+ * `adversarial-containment-review` skill and `packages/kernel/path-guard.ts`'s own
  * header before touching this file)
  * ---------------------------------------------------------------------------
  *
- * Reuses the EXISTING guard (`resolveGuardedPath`, `cli/studio-path-guard.ts`)
+ * Reuses the EXISTING guard (`resolveGuardedPath`, `packages/kernel/path-guard.ts`)
  * on BOTH sides of the copy — no hand-rolled containment logic anywhere here:
  *
  *   - DESTINATION: `resolveGuardedPath(libraryRoot, [packageId, ...relParts])`.
@@ -74,7 +74,7 @@
  * library, with every `resolveGuardedPath` call along the way having
  * reported `{ok:true}` (this exact race was reproduced, twice, before this
  * sentence was written). This is a *widening* of the residual TOCTOU gap
- * `cli/studio-path-guard.ts`'s own header already discloses as un-closed by
+ * `packages/kernel/path-guard.ts`'s own header already discloses as un-closed by
  * that module alone ("between this function's realpathSync/lstatSync calls
  * and a caller's later readFileSync/writeFileSync"): a caller that turns a
  * two-phase check into a two-phase check-then-USE makes that caller's own
@@ -402,7 +402,7 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 // array — Object.freeze is SHALLOW, so freezing only the outer container
 // would leave each row object mutable). Copied verbatim from
 // SESSION_ARTIFACT_KINDS's own pattern/reasoning in
-// `orchestrator/studio/session-kinds.ts`: freezing only the outer array
+// `packages/sessions/studio/session-kinds.ts`: freezing only the outer array
 // would let `FINALIZERS[0].id = 'HACKED'` silently succeed, and since
 // `resolveFinalizer` reads straight off these rows, an in-process mutation
 // could flip which function an id resolves to for the rest of the process.

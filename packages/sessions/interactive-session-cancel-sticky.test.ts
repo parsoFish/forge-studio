@@ -10,7 +10,7 @@
  * Nothing on the write path re-read the on-disk phase.
  *
  * Pins (RED at branch base):
- *   1. `guardedWriteSessionStatus` (orchestrator/interactive-session.ts —
+ *   1. `guardedWriteSessionStatus` (packages/sessions/interactive-session.ts —
  *      the primitive EVERY status write rides) refuses to overwrite an
  *      on-disk `cancelled` phase with any other phase: returns null and the
  *      file is byte-unchanged. It still allows cancelled→cancelled (a
@@ -24,7 +24,7 @@
  *   3. `CANCELLED_PHASE` lives at the seam (orchestrator) and
  *      cli/bridge-studio.ts re-exports the SAME value — one constant.
  *
- * RUN: node --test --experimental-strip-types orchestrator/interactive-session-cancel-sticky.test.ts
+ * RUN: node --test --experimental-strip-types packages/sessions/interactive-session-cancel-sticky.test.ts
  */
 
 import { test } from 'node:test';

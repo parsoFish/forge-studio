@@ -547,7 +547,7 @@ function runFinalizeStep(args: {
   // produced by 40% of its producers is declared-data-fails-open. What an
   // instructions session produces is the project's own AGENTS.md, so the
   // pointer names the PROJECT (the shell route derives whether the file is
-  // still there — `finalizedObjectExists`, cli/bridge-studio-sessions.ts —
+  // still there — `finalizedObjectExists`, packages/sessions/bridge-studio-sessions.ts —
   // rather than trusting the pointer's mere presence).
   writeInstructionsStatus(input.projectRoot, input.sessionId, {
     ...status,

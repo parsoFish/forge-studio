@@ -2,16 +2,16 @@
  * Acceptance tests for `resolveReadableSession` / `sessionIsReadable`
  * (wave-8 F6 — "a linked session must be readable").
  *
- * T2 module-split course-correction (2026-08-28): `cli/session-readability.ts`
+ * T2 module-split course-correction (2026-08-28): `packages/sessions/session-readability.ts`
  * must stay an import LEAF (node:*, `./studio-path-guard.ts`,
  * `../orchestrator/**` only — see that file's own test header). But
  * `resolveReadableSession`'s legacy arm needs to VALIDATE a log-derived
  * project string, which is `invalidProjectReason`'s job — and that function
- * lives on cli/bridge-studio-sessions.ts and itself pulls `SAFE_ID_RE` from
+ * lives on packages/sessions/bridge-studio-sessions.ts and itself pulls `SAFE_ID_RE` from
  * cli/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX` from
- * cli/bridge-studio-kbs.ts. Importing any of that into the leaf would create
+ * packages/knowledge/bridge-studio-kbs.ts. Importing any of that into the leaf would create
  * the bridge module graph's first import cycle, so `resolveReadableSession`
- * and `sessionIsReadable` are exported from cli/bridge-studio-sessions.ts
+ * and `sessionIsReadable` are exported from packages/sessions/bridge-studio-sessions.ts
  * instead, composing `findSessionProject` + `resolveSafeSessionDir` +
  * `safeReadFileInSession` (all already in that file) with the new leaf's
  * `resolveLegacySession` — THIS file covers that composition.
@@ -21,7 +21,7 @@
  *   - `./session-readability.ts` does not exist yet (ERR_MODULE_NOT_FOUND) —
  *     this file imports `sessionLogDirName` from it purely to build fixture
  *     paths the same way a real caller would.
- *   - `cli/bridge-studio-sessions.ts` exists today but does not yet export
+ *   - `packages/sessions/bridge-studio-sessions.ts` exists today but does not yet export
  *     `resolveReadableSession`/`sessionIsReadable` — once the leaf import
  *     above is satisfied, this becomes a SyntaxError ("does not provide an
  *     export named ...").
@@ -50,7 +50,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -347,7 +347,21 @@ test('AT-F6-RR-17: the two shapes of "cannot evidence a project" are INDISTINGUI
 
 test('AT-F6-RR-18: no REGISTERED session-kind id is a prefix of another id + "-" — the invariant that makes `_<kind>-<sessionId>` unambiguous', () => {
   const ids = loadSessionKinds(REPO_ROOT).map((d) => d.id);
-  assert.ok(ids.length >= 5, `expected the real registry, got ${JSON.stringify(ids)}`);
+  // Prove the loader read the REAL registry by comparing against the file's own
+  // rows, not by counting them. `ids.length >= 5` was a proxy for "this is not
+  // an empty list": it kills the vacuous pass, but it also goes red the day the
+  // registry legitimately shrinks below five — a guard failing because the work
+  // succeeded. The yaml's `- id:` rows are the thing itself, so this is strictly
+  // stronger (a loader returning four of seven ids now fails too) and carries no
+  // floor on a number that is allowed to move.
+  const authored = readFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), 'utf8')
+    .split('\n')
+    .flatMap((l) => {
+      const m = /^- id:\s*(\S+)\s*$/.exec(l);
+      return m === null ? [] : [m[1]];
+    });
+  assert.ok(authored.length > 0, 'fixture precondition: studio/session-kinds.yaml must declare at least one kind');
+  assert.deepEqual(ids, authored, 'the loader must return exactly the kinds studio/session-kinds.yaml declares, in order');
   const collisions: string[] = [];
   for (const a of ids) {
     for (const b of ids) {

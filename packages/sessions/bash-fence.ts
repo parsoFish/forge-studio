@@ -2,7 +2,7 @@
  * W7-FIX-A2 (W7A2-03, SECURITY — closes bead forge-w08): a static, FAIL-CLOSED
  * inspector for `Bash` tool calls on a write-root-fenced interactive turn.
  *
- * `makeWriteRootCanUseTool` (orchestrator/interactive-session.ts) fences
+ * `makeWriteRootCanUseTool` (packages/sessions/interactive-session.ts) fences
  * Write/Edit/MultiEdit/NotebookEdit by resolving the ONE path each names.
  * Bash has no single path — its input is a shell script — so a fenced kind
  * that opts in (`turnSpec.bashFence: inspect`) gets THIS inspection instead:
@@ -28,7 +28,7 @@
  * runs against the SET {old cwds ∪ X} — the cd may have failed — and every
  * possible cwd must keep the write in-root.
  *
- * Pinned by orchestrator/bash-fence.test.ts.
+ * Pinned by packages/sessions/bash-fence.test.ts.
  */
 
 import { realpathSync } from 'node:fs';

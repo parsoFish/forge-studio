@@ -1,6 +1,6 @@
 /**
  * R4-22 WI-3 (T3, acceptance tests) — pins the contract for the generic
- * interactive-turn runner, `orchestrator/interactive-runner.ts`, BEFORE it
+ * interactive-turn runner, `packages/sessions/interactive-runner.ts`, BEFORE it
  * exists (ADR-043 §2: docs/decisions/043-generic-interactive-surface.md).
  *
  * `runInteractiveTurn(descriptor, ctx)` is the ONE spine every future
@@ -1133,7 +1133,7 @@ test('Finding 5(a)+(b): finalize lands the package under <forgeRoot>/_interactiv
 // verbatim. Uses the shared fixture's own ISO-shaped sessionId
 // ('2026-08-10T00-00-00') as the deliberately-invalid packageId: it starts
 // with a digit and contains uppercase 'T', both illegal under SLUG_RE
-// (orchestrator/skill-path.ts:43, `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/` — a
+// (packages/agents/skill-path.ts:43, `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/` — a
 // leading lowercase letter is required), while still passing today's looser
 // isSafeSegment check — exactly the gap the finding names.
 test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refused, not silently accepted into an oddly-named library directory', async () => {
@@ -1183,7 +1183,7 @@ test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refuse
 // forgeRoot is still an ISOLATED tmp dir (never the real repo root) — see
 // interactive-runner.ts's own header note: `deriveAgentSpec`/`skillPath`
 // resolve the agent's SKILL.md against the REAL forge install
-// (`orchestrator/skill-path.ts`'s `FORGE_ROOT`, computed from
+// (`packages/agents/skill-path.ts`'s `FORGE_ROOT`, computed from
 // `import.meta.dirname` — i.e. THIS repo checkout) regardless of
 // `ctx.forgeRoot`, so `descriptor.agent: creation-agent` resolves against the
 // real, already-shipped `skills/creation-agent/SKILL.md` for free; only the

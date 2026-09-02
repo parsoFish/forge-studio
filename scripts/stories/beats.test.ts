@@ -339,12 +339,21 @@ test('the verdict carries the NESTED values it judged, so the generated doc docu
 // moment AFTER the click that starts it, which is the whole of the defect. The
 // pure verdict above cannot see it: the bug lives in the browser choreography.
 
-/** One element: a tag, its attributes, and the route clicking it navigates to. */
-const el = (tag: string, attrs: Record<string, string>, navigatesTo: string | null = null) => ({
-  tag,
-  attrs,
-  navigatesTo,
-});
+/**
+ * One element: a tag, its attributes, the route clicking it navigates to, and
+ * — for the label-wrapping-an-input shape the model-tier picker renders — its
+ * children and its own text. `children`/`text` exist so the fake can answer
+ * `evaluate` with a node whose `querySelector('input')` and `textContent` are
+ * real, which is the only way a test of the radio path can drive the SAME
+ * evaluate callback production ships rather than a stand-in for it.
+ */
+const el = (
+  tag: string,
+  attrs: Record<string, string>,
+  navigatesTo: string | null = null,
+  children: Array<{ tag: string; attrs: Record<string, string> }> = [],
+  text = '',
+) => ({ tag, attrs, navigatesTo, children, text });
 
 const READY_MAIN = (page: string) => el('main', { 'data-page': page, 'data-page-ready': 'true' });
 
@@ -388,15 +397,87 @@ function fakeStudio(spec: {
   let route = spec.start;
   let committingTo: string | null = null;
   const clicks: string[] = [];
+  const filled: Array<{ handle: string; value: string }> = [];
+  const selected: Array<{ handle: string; value: string }> = [];
+  const checked: Array<{ handle: string; value: string; state: boolean }> = [];
   const here = () => spec.pages[route] ?? { elements: [] };
-  const find = (sel: string) =>
-    here().elements.find((n) => sel.split(',').some((c) => matchesClause(n, c.trim()))) ?? null;
+  const findAll = (sel: string) =>
+    here().elements.filter((n) => sel.split(',').some((c) => matchesClause(n, c.trim())));
+  const find = (sel: string) => findAll(sel)[0] ?? null;
 
-  const locator = (sel: string): any => ({
-    first: () => locator(sel),
-    count: async () => (find(sel) === null ? 0 : 1),
+  /**
+   * A DOM-ish stand-in for ONE node, passed to the real `evaluate` callback
+   * `performSteps` ships. It answers exactly the four things that callback
+   * asks — `tagName`, `querySelector('input')`, the input's `type`/`value`,
+   * and `textContent` — so the production callback is executed here, not
+   * re-implemented. `evaluate` that ignored its argument (the shape this fake
+   * had before ruling 52) can only ever test a stand-in.
+   */
+  const domish = (node: ReturnType<typeof el>): any => {
+    const child = node.children[0] ?? null;
+    const self = node.tag.toLowerCase() === 'input' ? node : null;
+    const input = self ?? child;
+    return {
+      tagName: node.tag.toUpperCase(),
+      textContent: node.text,
+      type: self?.attrs.type ?? '',
+      value: self?.attrs.value ?? '',
+      querySelector: (q: string) =>
+        input !== null && q.includes('input') && input.tag.toLowerCase() === 'input'
+          ? { type: input.attrs.type ?? '', value: input.attrs.value ?? '', tagName: 'INPUT' }
+          : null,
+    };
+  };
+
+  /**
+   * The INPUT inside a matched node — `label.locator('input')`. playwright's
+   * `check()` refuses anything that is not the input itself, and the
+   * model-tier picker puts `data-field` on the LABEL, so resolving the child
+   * is not a convenience: it is the only shape that can act on that control.
+   * Recorded under the PARENT handle, because that is the handle the story
+   * named.
+   */
+  const childInput = (sel: string, index: number): any => {
+    const owner = () => findAll(sel)[index] ?? null;
+    // DESCENDANTS ONLY — playwright's `locator.locator()` never matches the
+    // node itself. The fake used to fall back to the owner, which made a
+    // checkbox carrying `data-field` on the INPUT look reachable by descending
+    // into it; real chromium timed out after 30 s on exactly that call. A fake
+    // more forgiving than the thing it stands for cannot fail the way
+    // production does.
+    const input = () => {
+      const n = owner();
+      if (n === null) return null;
+      return n.children[0] ?? null;
+    };
+    const must = (verb: string) => {
+      const i = input();
+      if (i === null || i.tag.toLowerCase() !== 'input') {
+        throw new Error(`locator.${verb}: Error: Not a checkbox or radio button`);
+      }
+      return i;
+    };
+    return {
+      first: () => childInput(sel, index),
+      count: async () => (input() === null ? 0 : 1),
+      async check() {
+        const i = must('check');
+        checked.push({ handle: sel, value: i.attrs.value ?? '', state: true });
+      },
+      async uncheck() {
+        const i = must('uncheck');
+        checked.push({ handle: sel, value: i.attrs.value ?? '', state: false });
+      },
+    };
+  };
+
+  const locator = (sel: string, index = 0): any => ({
+    first: () => locator(sel, 0),
+    nth: (i: number) => locator(sel, i),
+    locator: () => childInput(sel, index),
+    count: async () => findAll(sel).length,
     async click() {
-      const node = find(sel);
+      const node = findAll(sel)[index] ?? null;
       if (node === null) throw new Error(`locator.click: Timeout 5000ms exceeded waiting for ${sel}`);
       if (committingTo !== null) throw new Error('locator.click: element was detached from the DOM, retrying');
       clicks.push(sel);
@@ -410,15 +491,44 @@ function fakeStudio(spec: {
       }
     },
     waitFor: ({ timeout }: { timeout: number }) => until(() => find(sel) !== null, timeout, sel),
-    evaluate: async () => find(sel)?.tag.toUpperCase() ?? 'INPUT',
-    async fill() {
-      if (find(sel) === null) throw new Error(`locator.fill: Timeout 5000ms exceeded waiting for ${sel}`);
+    async evaluate(fn: (n: any) => unknown) {
+      const node = findAll(sel)[index] ?? null;
+      if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
+      return fn(domish(node));
     },
-    selectOption: async () => {},
+    async fill(value: string) {
+      const node = findAll(sel)[index] ?? null;
+      if (node === null) throw new Error(`locator.fill: Timeout 5000ms exceeded waiting for ${sel}`);
+      // playwright's own refusal, verbatim — the defect ruling 52 removes.
+      const t = node.tag.toLowerCase() === 'input' ? (node.attrs.type ?? '') : '';
+      if (t === 'radio' || t === 'checkbox') {
+        throw new Error(`locator.fill: Error: Input of type "${t}" cannot be filled`);
+      }
+      filled.push({ handle: sel, value });
+    },
+    async selectOption(value: string) {
+      selected.push({ handle: sel, value });
+    },
+    async check() {
+      const node = findAll(sel)[index] ?? null;
+      if (node === null) throw new Error(`locator.check: Timeout 5000ms exceeded waiting for ${sel}`);
+      // playwright refuses check() on anything that is not the input itself.
+      if (node.tag.toLowerCase() !== 'input') throw new Error('locator.check: Error: Not a checkbox or radio button');
+      checked.push({ handle: sel, value: node.attrs.value ?? '', state: true });
+    },
+    async uncheck() {
+      const node = findAll(sel)[index] ?? null;
+      if (node === null) throw new Error(`locator.uncheck: Timeout 5000ms exceeded waiting for ${sel}`);
+      if (node.tag.toLowerCase() !== 'input') throw new Error('locator.uncheck: Error: Not a checkbox or radio button');
+      checked.push({ handle: sel, value: node.attrs.value ?? '', state: false });
+    },
   });
 
   return {
     clicks,
+    filled,
+    selected,
+    checked,
     url: () => `http://localhost:4124${route}`,
     goto: async (u: string) => {
       route = new URL(u).pathname;
@@ -534,4 +644,138 @@ test('a route nothing links to and no press reaches is still RED, naming where i
   const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
   assert.equal(v.status, 'red');
   assert.match(v.failures.join(' | '), /no real-nav path to "\/nowhere" from "\/agents"/);
+});
+
+// ---------------------------------------------------------------------------
+// Ruling 52 (operator, wave-2 open) — `fill` learns radios and checkboxes.
+//
+// THE DEFECT, measured three times: `performSteps` calls `locator.fill` on
+// whatever the handle resolves to, and playwright refuses a radio or a
+// checkbox outright — `Input of type "radio" cannot be filled`. So the beat
+// dies before the product is ever asked a question, and the red is the
+// HARNESS's, not the product's. S9 beat 5 hit it on the model-tier radios
+// (`_1.0/stories/S9.md`), S7 beat 7 on the network-egress checkbox.
+//
+// The two live DOM shapes, read off the product and reproduced verbatim below:
+//
+//   radio     <label data-field="kickoff-model-tier-option">
+//               <input type="radio" name="modelTier" value="opus"> opus
+//             </label>                          × one per allowed tier
+//             (apps/studio/components/studio/session/KickoffModelTierPicker.tsx:57)
+//
+//   checkbox  <input type="checkbox" data-field="hook-permissions-network">
+//             (apps/studio/app/hooks/new/page.tsx:130)
+//
+// The radio shape carries TWO consequences the naive fix misses: the handle is
+// on the LABEL (so `check()` on it throws "Not a checkbox or radio button"),
+// and it matches N times (so `.first()` picks a tier at random — a green beat
+// that set the wrong model is worse than the red one it replaced). `with` must
+// therefore SELECT among the matches, never index into them.
+//
+// Kills, taken together: (1) fill-on-a-radio throwing; (2) a fix that checks
+// `.first()` regardless of `with`; (3) a fix that treats `with: ''` on a
+// checkbox as "type nothing" instead of "leave it unticked"; (4) a fix that
+// silently picks something when `with` names no option; (5) a fix that changes
+// what `fill` does to a text input or a `<select>`.
+
+/** The model-tier picker as `KickoffModelTierPicker.tsx` renders it, both tiers. */
+const tierRadio = (tier: string, checked = false) =>
+  el('label', { 'data-field': 'kickoff-model-tier-option' }, null, [
+    el('input', { type: 'radio', name: 'modelTier', value: tier, ...(checked ? { checked: 'true' } : {}) }),
+  ], tier);
+
+const kickoffPages = {
+  '/sessions/authoring/new': {
+    elements: [
+      READY_MAIN('session-kickoff'),
+      el('textarea', { 'data-field': 'kickoff-prompt' }),
+      el('select', { 'data-field': 'kickoff-project' }),
+      tierRadio('sonnet', true),
+      tierRadio('opus'),
+      el('input', { type: 'checkbox', 'data-field': 'hook-permissions-network', checked: 'true' }),
+    ],
+    data: { page: 'session-kickoff', 'page-ready': 'true' },
+  },
+};
+
+const kickoffBeat = (steps: unknown[]) => ({
+  act: 'Set the model this session will run on',
+  do: steps,
+  expect: { route: '/sessions/authoring/new', data: { page: 'session-kickoff', 'page-ready': 'true' } },
+  say: 'The operator picks the tier.',
+});
+
+test('fill on a RADIO checks the option whose value is `with`, not the first one on the page', async () => {
+  // THE DEFECT (S9 beat 5) and its subtler twin: `.first()` is `sonnet` here,
+  // so a fix that checks the first match would go green having set the wrong
+  // model — the story would report a knob as working while proving nothing.
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(page, kickoffBeat([{ fill: 'kickoff-model-tier-option', with: 'opus' }]), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.checked, [{ handle: '[data-field="kickoff-model-tier-option"]', value: 'opus', state: true }]);
+});
+
+test('fill on a radio whose `with` names NO option is RED, naming the value and every option there was', async () => {
+  // Fail-CLOSED, with the closed-vocabulary error contract SPEC §5 requires:
+  // name the offending value AND the allowed set. Kills a fix that falls back
+  // to the first match, and one that reports a bare playwright timeout.
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(page, kickoffBeat([{ fill: 'kickoff-model-tier-option', with: 'haiku' }]), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  const text = v.failures.join(' | ');
+  assert.match(text, /"haiku"/);
+  assert.match(text, /sonnet/);
+  assert.match(text, /opus/);
+  assert.deepEqual(page.checked, []);
+});
+
+test('fill on a CHECKBOX with "" UNTICKS it — S7 beat 7\'s "leave it unticked"', async () => {
+  // Kills a fix that maps `with: ''` onto `fill('')` (playwright refuses) and
+  // one that maps any string onto check() (which would ARM network egress in
+  // the very beat that exists to prove it stays off).
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(page, kickoffBeat([{ fill: 'hook-permissions-network', with: '' }]), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.checked, [{ handle: '[data-field="hook-permissions-network"]', value: '', state: false }]);
+});
+
+test('fill on a checkbox with "true" TICKS it', async () => {
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(page, kickoffBeat([{ fill: 'hook-permissions-network', with: 'true' }]), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  // `value` is the input's own `value` attribute — this checkbox carries none,
+  // so it reads '' in BOTH directions. The state is the assertion.
+  assert.deepEqual(page.checked, [{ handle: '[data-field="hook-permissions-network"]', value: '', state: true }]);
+});
+
+test('fill on a checkbox with a value in NEITHER half of the vocabulary is RED, naming the allowed set', async () => {
+  // A checkbox has two states and `with` is a free string; an unknown value
+  // must be refused, not guessed. Same contract as the radio above.
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(page, kickoffBeat([{ fill: 'hook-permissions-network', with: 'maybe' }]), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  const text = v.failures.join(' | ');
+  assert.match(text, /"maybe"/);
+  assert.match(text, /true/);
+  assert.match(text, /false/);
+  assert.deepEqual(page.checked, []);
+});
+
+test('THE NEGATIVE CONTROL: fill on a text control and on a <select> is byte-for-byte what it was', async () => {
+  // The whole point of a one-concern harness PR. If this moves, the change
+  // reached past the two input types ruling 52 scopes it to.
+  const page = fakeStudio({ start: '/sessions/authoring/new', commitMs: 0, pages: kickoffPages });
+  const v = await driveBeat(
+    page,
+    kickoffBeat([
+      { fill: 'kickoff-prompt', with: 'build me a thing' },
+      { fill: 'kickoff-project', with: 'mdtoc' },
+    ]),
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.filled, [{ handle: '[data-field="kickoff-prompt"]', value: 'build me a thing' }]);
+  assert.deepEqual(page.selected, [{ handle: '[data-field="kickoff-project"]', value: 'mdtoc' }]);
+  assert.deepEqual(page.checked, []);
 });
