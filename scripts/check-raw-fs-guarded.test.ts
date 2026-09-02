@@ -934,7 +934,7 @@ test('G5: the derived scope is a SUPERSET of the charter list and of every cli/b
   ]) {
     assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
   }
-  assert.ok(mods.filter((m) => m.split('/').pop().startsWith('bridge-studio')).length >= 10, 'every bridge-studio route module stays in scope');
+  assert.ok(mods.filter((m) => m.split('/').pop().startsWith('bridge-studio')).length >= 14, 'every bridge-studio route module stays in scope');
   assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
 });
 

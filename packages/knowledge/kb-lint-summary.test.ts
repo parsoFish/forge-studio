@@ -392,6 +392,16 @@ function extractFunctionBody(src: string, fnName: string, fileLabel: string): st
 describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => {
   const KB_LINT_SUMMARY_FILE = join(ROOT, 'packages', 'knowledge', 'kb-lint-summary.ts');
   const BRIDGE_KBS_FILE = join(ROOT, 'packages', 'knowledge', 'bridge-studio-kbs.ts');
+  // The KB SURFACE, which M4 PR 4b split five ways. This guard asserts a
+  // property OF THE SURFACE, so it must read all of it: pointed at the base
+  // file alone it would keep passing while checking a fifth of what it claims,
+  // because four of the five call sites it counts moved out.
+  const BRIDGE_KBS_SURFACE = ['bridge-studio-kbs.ts', 'bridge-studio-kb-consolidate.ts',
+    'bridge-studio-kb-routes-read.ts', 'bridge-studio-kb-routes-lifecycle.ts',
+    'bridge-studio-kb-routes-maintenance.ts'].map((f) => join(ROOT, 'packages', 'knowledge', f));
+  const readSurface = (): string => BRIDGE_KBS_SURFACE
+    .map((f) => (assert.ok(existsSync(f), `the KB surface must include ${f} — a renamed heir silently shrinks this guard`),
+      stripComments(readFileSync(f, 'utf8')))).join('\n');
 
   test('AT-4a: cli/kb-lint-summary.ts contains exactly TWO literal runBrainLint( call sites — one inside runBrainLintFullMemoized, one inside runBrainLintFullFresh — never inside computeKbLintChecks or attachKbLintSummaries', () => {
     assert.ok(
@@ -452,7 +462,7 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
   test("AT-4b: cli/bridge-studio-kbs.ts's loadKbDescriptors body still has NO runBrainLint( call (the other 4 call sites stay cheap)", () => {
     assert.ok(existsSync(BRIDGE_KBS_FILE), `cli/bridge-studio-kbs.ts must exist at ${BRIDGE_KBS_FILE}`);
     const src = stripComments(readFileSync(BRIDGE_KBS_FILE, 'utf8'));
-    const body = extractFunctionBody(src, 'loadKbDescriptors', 'cli/bridge-studio-kbs.ts');
+    const body = extractFunctionBody(src, 'loadKbDescriptors', 'packages/knowledge/bridge-studio-kbs.ts');
     assert.ok(
       !/\brunBrainLint\s*\(/.test(body),
       'loadKbDescriptors must stay cheap — the resolve-node route, the node-article route, the create-KB flow, and the guidance route all call it and must not pay the full lint cost',
@@ -467,13 +477,13 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
   // graph.
   test('AT-4c: cli/bridge-studio-kbs.ts contains ZERO direct runBrainLint( calls, and at least 5 runBrainLintFullMemoized(/runBrainLintFullFresh( call sites', () => {
     assert.ok(existsSync(BRIDGE_KBS_FILE), `cli/bridge-studio-kbs.ts must exist at ${BRIDGE_KBS_FILE}`);
-    const src = stripComments(readFileSync(BRIDGE_KBS_FILE, 'utf8'));
+    const src = readSurface();
 
     const directCallSites = src.match(/\brunBrainLint\s*\(/g) ?? [];
     assert.equal(
       directCallSites.length,
       0,
-      `cli/bridge-studio-kbs.ts must never call runBrainLint( directly — every full-scope read must go through runBrainLintFullMemoized (pre-mutation / no-write reads) or runBrainLintFullFresh (post-mutation reads), found ${directCallSites.length} direct call(s)`,
+      `the KB surface (bridge-studio-kbs.ts + its four PR-4b heirs) must never call runBrainLint( directly — every full-scope read must go through runBrainLintFullMemoized (pre-mutation / no-write reads) or runBrainLintFullFresh (post-mutation reads), found ${directCallSites.length} direct call(s)`,
     );
 
     const memoizedSites = src.match(/\brunBrainLintFullMemoized\s*\(/g) ?? [];
@@ -481,12 +491,12 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
     const total = memoizedSites.length + freshSites.length;
     assert.ok(
       total >= 5,
-      `expected at least 5 combined runBrainLintFullMemoized(/runBrainLintFullFresh( call sites in cli/bridge-studio-kbs.ts (attachKbLintSummaries's caller aside, this file's own known sites: runBrainConsolidateNow x2, buildKbHealth, computeAgentCleanupFindings, the maintenance op:'lint' route), found memoized=${memoizedSites.length} fresh=${freshSites.length} total=${total}`,
+      `expected at least 5 combined runBrainLintFullMemoized(/runBrainLintFullFresh( call sites across the KB surface (attachKbLintSummaries's caller aside, this file's own known sites: runBrainConsolidateNow x2, buildKbHealth, computeAgentCleanupFindings, the maintenance op:'lint' route), found memoized=${memoizedSites.length} fresh=${freshSites.length} total=${total}`,
     );
 
     // The post-mutation re-lint inside runBrainConsolidateNow specifically
     // MUST be the fresh path — this is the exact site the reviewer flagged.
-    const consolidateBody = extractFunctionBody(src, 'runBrainConsolidateNow', 'cli/bridge-studio-kbs.ts');
+    const consolidateBody = extractFunctionBody(src, 'runBrainConsolidateNow', 'packages/knowledge/bridge-studio-kb-consolidate.ts');
     const consolidateMemoized = consolidateBody.match(/\brunBrainLintFullMemoized\s*\(/g) ?? [];
     const consolidateFresh = consolidateBody.match(/\brunBrainLintFullFresh\s*\(/g) ?? [];
     assert.equal(

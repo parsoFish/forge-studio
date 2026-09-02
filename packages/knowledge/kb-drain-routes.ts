@@ -15,7 +15,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { createLogger } from '@forge/kernel';
 import { KB_ID_RE } from '@forge/kernel';
-import { enqueueConsolidate } from './bridge-studio-kbs.ts';
+import { enqueueConsolidate } from './bridge-studio-kb-consolidate.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import {

@@ -34,6 +34,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { knowledgeRoutes } from '../../routes.ts';
 
@@ -64,19 +65,33 @@ const PINNED: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
- * Carved SO FAR. The seam lands in two PRs, deliberately: the mechanism plus
- * `bridge-studio-kb-drain.ts`'s 6 routes first (it carries the sharpest
- * ordering collision, `drain/cancel` vs `drain/:runId`, so it proves the
- * table end-to-end), then `bridge-studio-kbs.ts`'s 11 in the PR that splits
- * that 2,068-line file under the 800-line cap — extracting 11 arms from a
- * file that is simultaneously being broken up is one rewrite, not two.
+ * CARVED — now all seventeen. The seam landed in two PRs, deliberately: the
+ * mechanism plus `bridge-studio-kb-drain.ts`'s 6 routes first (they carry the
+ * sharpest ordering collision, `drain/cancel` vs `drain/:runId`, so they
+ * proved the table end-to-end), then `bridge-studio-kbs.ts`'s 11 in the PR
+ * that split that 2,068-line file five ways under the 800-line cap —
+ * extracting 11 arms from a file that is simultaneously being broken up is
+ * one rewrite, not two.
  *
- * This list GROWS to equal PINNED. It exists so that "carved" and "lost"
- * can never be confused: the table must equal CARVED exactly, and CARVED
- * must be a subset of the 17 the if-chains dispatched at the pin. A route
- * that leaves the if-chain without arriving in the table fails both.
+ * This list GREW to equal PINNED, which is the point: the table must equal
+ * CARVED exactly, and CARVED must be a subset of the 17 the if-chains
+ * dispatched at the pin. A route that leaves the if-chain without arriving in
+ * the table fails both. Now that the two sets are equal, a future route that
+ * is added to one and not the other still fails — the assertions are not
+ * weakened by having converged.
  */
 const CARVED: ReadonlySet<string> = new Set([
+  'GET /api/studio/kbs',
+  'GET /api/studio/kbs/resolve-node/:nodeId',
+  'GET /api/studio/kbs/:id/nodes/:nodeId',
+  'GET /api/studio/kbs/:id',
+  'POST /api/studio/kbs',
+  'DELETE /api/studio/kbs/:id',
+  'POST /api/studio/kbs/:id/guidance',
+  'GET /api/studio/kbs/:id/fix-agent/:runId',
+  'GET /api/studio/kbs/:id/consolidate/active',
+  'GET /api/studio/kbs/:id/ingest-activity',
+  'POST /api/studio/kbs/:id/maintenance',
   'POST /api/studio/kbs/:id/drain/cancel',
   'GET /api/studio/kbs/:id/active-job',
   'GET /api/studio/kbs/:id/runs',
@@ -114,6 +129,50 @@ test('routes-table: every entry carries a dryClassification — a carved route t
   assert.deepEqual(missing, [], `entries with no dryClassification: ${missing.join(', ')}`);
 });
 
+/**
+ * The ONE classification in this table that is a judgement rather than a copy.
+ *
+ * `POST …/maintenance` carries five ops behind one URL, discriminated by a
+ * BODY field. T1 ruling 29 scoped the two-row split to MATCHER-VISIBLE
+ * discriminators (path · method · query) and left this route ONE row, valued
+ * `stub-actions` — the manifest's own word (`cli/dry-bridge.ts:44`) for a
+ * route that proceeds with its local bookkeeping and skips the real-acting
+ * steps.
+ *
+ * Asserting the string alone would be worth nothing: it is a claim ABOUT the
+ * handler, and a claim about a handler that the handler cannot falsify is the
+ * declared-data-fails-open shape this campaign exists to kill. The claim's
+ * POSITIVE CONTROL lives in `tests/integration/routes-dispatch.test.ts`
+ * ('dry-bridge positive control'), which drives the real handler under
+ * `FORGE_DRY_BRIDGE=1` and proves BOTH directions: `op=fix-agent` refused 409,
+ * `op=lint` not refused. This assertion pins the string; that one pins the
+ * behaviour the string describes. Neither is sufficient alone.
+ */
+test('routes-table: the maintenance route is ONE row valued stub-actions — five ops behind one URL, discriminated by a body field a url matcher cannot read (ruling 29)', () => {
+  const rows = knowledgeRoutes.filter((r) => r.path === '/api/studio/kbs/:id/maintenance');
+  assert.equal(rows.length, 1,
+    `the maintenance route must be ONE table entry, not one per op: \`RouteEntry.matches\` is ` +
+    `(url) => boolean and \`op\` arrives in the request body, which is a consumable stream. ` +
+    `Got ${rows.length} rows: ${rows.map((r) => key(r.method, r.path)).join(', ')}`);
+  assert.equal(rows[0].dryClassification, 'stub-actions',
+    `the maintenance row must be classified stub-actions, not refuse: under FORGE_DRY_BRIDGE=1 the ` +
+    `handler refuses only \`op=fix-agent\` (the one op that spawns) and lets lint | fix-auto | index ` +
+    `proceed, with consolidate's agent turn suppressed through the same seam. \`refuse\` would cost ` +
+    `harness runs three ops they have today; \`exempt-local\` would mis-describe the spawn case.`);
+});
+
+test('routes-table: cli/dry-bridge.ts KEEPS its two op-scoped maintenance rows — it classifies, it does not dispatch, so the finer grain is not the table\'s to flatten', () => {
+  const manifest = readFileSync(new URL('../../../../cli/dry-bridge.ts', import.meta.url), 'utf8');
+  for (const row of ['/api/studio/kbs/:id/maintenance (op=fix-agent)',
+                     '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)']) {
+    assert.ok(manifest.includes(row),
+      `cli/dry-bridge.ts lost its \`${row}\` row. Ruling 29 (ii): the ONE table row and the TWO ` +
+      `manifest rows are not in tension — the manifest classifies per op, the table dispatches per ` +
+      `URL, and \`dry-bridge-coverage.test.ts\` pairs the one to both. Flattening the manifest to ` +
+      `match the table would throw away the finer classification for nothing.`);
+  }
+});
+
 test('routes-table: every entry has a callable handler — a table of metadata with a missing handler 500s at request time, not at load time', () => {
   const bad = knowledgeRoutes.filter((r) => typeof r.handler !== 'function').map((r) => key(r.method, r.path));
   assert.deepEqual(bad, [], `entries with no callable handler: ${bad.join(', ')}`);
@@ -133,6 +192,18 @@ const COLLISIONS: ReadonlyArray<readonly [string, string, string]> = [
   // `resolve-node/:nodeId` sits under the `kbs/` prefix the `:id` arms own;
   // bridge-studio-kbs.ts:1177 records the hazard in the source itself.
   ['/api/studio/kbs/resolve-node/some-node', 'GET', '/api/studio/kbs/resolve-node/:nodeId'],
+  // THE COLLISION NOTHING PINNED UNTIL PR 4b. `isReservedId` blocks only
+  // 'new', so a KB can legally be created with the id `resolve-node`. Its own
+  // node article URL — `/api/studio/kbs/resolve-node/nodes/<x>` — then matches
+  // BOTH the `resolve-node/:nodeId` arm (whose tail is `(.+)`, so it swallows
+  // `nodes/<x>` slash and all) AND the `:id/nodes/:nodeId` arm. `resolve-node`
+  // wins, exactly as it did in the if-chain, and answers 400 because its
+  // `NODE_ID_RE` rejects the `/`. So the STATUS is defensible and the CLAIMANT
+  // is wrong-by-design — which is why an assertion is the only thing that can
+  // hold it: the pre-existing entry below covers only the 2-segment shape, and
+  // a table reordered to put `:id/nodes/:nodeId` first would turn this 400
+  // into a 200 from a different handler with nothing red.
+  ['/api/studio/kbs/resolve-node/nodes/some-node', 'GET', '/api/studio/kbs/resolve-node/:nodeId'],
   // `consolidate/active` must not be read as a node/run tail.
   ['/api/studio/kbs/cycles/consolidate/active', 'GET', '/api/studio/kbs/:id/consolidate/active'],
   // the bare `:id` arms must still claim a plain id.

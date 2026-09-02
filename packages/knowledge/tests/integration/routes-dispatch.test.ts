@@ -30,6 +30,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
+import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -117,4 +118,83 @@ test('routes-dispatch: a method no entry declares returns false — DELETE on a 
   );
   assert.equal(answered, false, 'no entry declares DELETE on /drain');
   assert.equal(captured.status, null, 'nothing should have been sent');
+});
+
+// ---------------------------------------------------------------------------
+// DRY-BRIDGE POSITIVE CONTROL — the falsifier for the table's one judgement
+// ---------------------------------------------------------------------------
+
+/**
+ * `routes.ts` classifies `POST /api/studio/kbs/:id/maintenance` as ONE row
+ * valued `stub-actions` (T1 ruling 29: `op` is a BODY field, and a
+ * discriminator `matches: (url) => boolean` cannot read is not one the table
+ * can split on). `routes-table.test.ts` asserts that string.
+ *
+ * A string is not a guarantee. `stub-actions` is a claim about what the
+ * HANDLER does under `FORGE_DRY_BRIDGE=1`, and a claim about a handler that
+ * the handler cannot falsify is exactly the declared-data-fails-open shape
+ * this campaign exists to kill — the same shape H8 spent a PR removing from
+ * the KB seam. These two tests are the control, and they are a PAIR on
+ * purpose: one direction alone proves nothing.
+ *
+ *   · If the inline `isDryBridge()` guard were DELETED, the first test fails —
+ *     `op=fix-agent` would spawn under a dry bridge, which is the incident the
+ *     whole dry-bridge seam exists to prevent.
+ *   · If the row were widened to `refuse` (or the guard hoisted to cover every
+ *     op), the second test fails — the three harmless ops would lose an
+ *     exemption harness runs have today, and `stub-actions` would be the wrong
+ *     word for a route that refuses everything.
+ *
+ * They boot no bridge (ruling 5): `dispatchRoute` against the real table with
+ * a mock req/res, which is the whole point of carving dispatch out of the host.
+ */
+function mockJsonReq(body: unknown): IncomingMessage {
+  const req = Readable.from([Buffer.from(JSON.stringify(body), 'utf8')]) as unknown as IncomingMessage;
+  (req as unknown as { headers: Record<string, string> }).headers = {};
+  return req;
+}
+
+/** Set `FORGE_DRY_BRIDGE=1` for one call and restore whatever was there —
+ *  including the `undefined` case, which a naive save/restore turns into the
+ *  literal string 'undefined' and leaks into every later test in the file. */
+async function underDryBridge<T>(fn: () => Promise<T>): Promise<T> {
+  const had = Object.prototype.hasOwnProperty.call(process.env, 'FORGE_DRY_BRIDGE');
+  const prev = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    return await fn();
+  } finally {
+    if (had) process.env.FORGE_DRY_BRIDGE = prev;
+    else delete process.env.FORGE_DRY_BRIDGE;
+  }
+}
+
+test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the maintenance route REFUSES op=fix-agent — the one op that spawns', async () => {
+  const { res, captured } = mockRes();
+  const answered = await underDryBridge(() => dispatchRoute(
+    knowledgeRoutes, mockJsonReq({ op: 'fix-agent', file: 'brain/forge-dev/themes/x.md', check: 'frontmatter', kind: 'agent', message: 'x' }),
+    res, ctx(), '/api/studio/kbs/cycles/maintenance', 'POST',
+  ));
+  assert.equal(answered, true, 'no entry claimed POST /api/studio/kbs/cycles/maintenance');
+  assert.equal(captured.status, 409,
+    'op=fix-agent must be REFUSED under a dry bridge. This is the branch that spawns a real ' +
+    '`forge brain fix` child process; the inline isDryBridge() guard is the only thing stopping it, ' +
+    'and the route table\'s `stub-actions` classification is a claim that the guard is there. ' +
+    `Got status ${captured.status}.`);
+  assert.equal(JSON.parse(captured.body).error, 'dry-bridge',
+    'a 409 from somewhere else is not the refusal — the body must carry the typed dry-bridge shape');
+});
+
+test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the SAME route lets op=lint proceed — which is why the row is stub-actions and not refuse', async () => {
+  const { res, captured } = mockRes();
+  const answered = await underDryBridge(() => dispatchRoute(
+    knowledgeRoutes, mockJsonReq({ op: 'lint' }), res, ctx(), '/api/studio/kbs/cycles/maintenance', 'POST',
+  ));
+  assert.equal(answered, true, 'no entry claimed POST /api/studio/kbs/cycles/maintenance');
+  assert.notEqual(captured.status, 409,
+    'op=lint must NOT be refused under a dry bridge — it reads and lints local files and spawns ' +
+    'nothing. If this now 409s, the guard was hoisted above the op switch and three harmless ops ' +
+    'lost an exemption harness runs depend on; the row would have to become `refuse`, and ruling 29 ' +
+    'chose `stub-actions` precisely to avoid that cost.');
+  assert.equal(captured.status, 200, `op=lint should answer 200; got ${captured.status} body=${captured.body}`);
 });

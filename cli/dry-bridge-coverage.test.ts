@@ -141,6 +141,14 @@ function discoverDispatchFiles(): readonly string[] {
 const KNOWN_DISPATCH_FILES = [
   'packages/flows/bridge-recovery.ts',
   'packages/knowledge/bridge-studio-kbs.ts',
+  // M4 PR 4b split the 2,068-line KB module five ways. All four heirs match the
+  // `bridge-*.ts` discovery glob, so they are DISCOVERED automatically; they are
+  // pinned here for the same reason the rest of this list exists — so a file
+  // that stops being discovered fails loudly instead of shrinking the scan.
+  'packages/knowledge/bridge-studio-kb-consolidate.ts',
+  'packages/knowledge/bridge-studio-kb-routes-read.ts',
+  'packages/knowledge/bridge-studio-kb-routes-lifecycle.ts',
+  'packages/knowledge/bridge-studio-kb-routes-maintenance.ts',
   'packages/flows/bridge-studio-runs.ts',
   'cli/bridge-studio-writes.ts',
   'cli/bridge-studio.ts',

@@ -71,7 +71,6 @@ import {
 } from './bridge-studio.ts';
 import { KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import {
-  handleStudioKbRoutes,
   loadKbDescriptors,
   computeAgentCleanupFindings,
   KB_SEEDING_ANCHOR_PREFIX,
@@ -2364,7 +2363,6 @@ async function handleHttp(
     }),
   }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioAuthoringRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;

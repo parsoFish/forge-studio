@@ -332,15 +332,32 @@ packages/knowledge/bridge-studio-kb-drain.ts readdirSync 3
 packages/knowledge/bridge-studio-kb-drain.ts renameSync 1
 packages/knowledge/bridge-studio-kb-drain.ts rmSync 1
 packages/knowledge/bridge-studio-kb-drain.ts writeFileSync 3
-packages/knowledge/bridge-studio-kbs.ts appendFileSync 2
-packages/knowledge/bridge-studio-kbs.ts existsSync 5
-packages/knowledge/bridge-studio-kbs.ts mkdirSync 9
-packages/knowledge/bridge-studio-kbs.ts openSync 1
-packages/knowledge/bridge-studio-kbs.ts readFileSync 4
-packages/knowledge/bridge-studio-kbs.ts readdirSync 5
-packages/knowledge/bridge-studio-kbs.ts rmSync 2
-packages/knowledge/bridge-studio-kbs.ts spawn 1
-packages/knowledge/bridge-studio-kbs.ts writeFileSync 3
+# --- M4 PR 4b: bridge-studio-kbs.ts split five ways --------------------------
+# A RELOCATION, not growth. Every sink kind conserves EXACTLY across the split:
+# appendFileSync 2->2, existsSync 5->2+2+1, mkdirSync 9->2+2+3+2, openSync 1->1,
+# readFileSync 4->1+1+1+1, readdirSync 5->2+2+1, rmSync 2->2, spawn 1->1,
+# writeFileSync 3->1+2. Total sink calls repo-wide unchanged at 1,340.
+packages/knowledge/bridge-studio-kb-consolidate.ts appendFileSync 2
+packages/knowledge/bridge-studio-kb-consolidate.ts mkdirSync 2
+packages/knowledge/bridge-studio-kb-consolidate.ts readFileSync 1
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts existsSync 2
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts mkdirSync 3
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts readFileSync 1
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts readdirSync 2
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts rmSync 2
+packages/knowledge/bridge-studio-kb-routes-lifecycle.ts writeFileSync 2
+packages/knowledge/bridge-studio-kb-routes-maintenance.ts mkdirSync 2
+packages/knowledge/bridge-studio-kb-routes-maintenance.ts openSync 1
+packages/knowledge/bridge-studio-kb-routes-maintenance.ts readFileSync 1
+packages/knowledge/bridge-studio-kb-routes-maintenance.ts spawn 1
+packages/knowledge/bridge-studio-kb-routes-read.ts existsSync 1
+packages/knowledge/bridge-studio-kb-routes-read.ts readdirSync 1
+packages/knowledge/bridge-studio-kbs.ts existsSync 2
+packages/knowledge/bridge-studio-kbs.ts mkdirSync 2
+packages/knowledge/bridge-studio-kbs.ts readFileSync 1
+packages/knowledge/bridge-studio-kbs.ts readdirSync 2
+packages/knowledge/bridge-studio-kbs.ts writeFileSync 1
+# -----------------------------------------------------------------------------
 packages/knowledge/cycle-retention.ts existsSync 2
 packages/knowledge/cycle-retention.ts readFileSync 2
 packages/knowledge/cycle-retention.ts readdirSync 1
