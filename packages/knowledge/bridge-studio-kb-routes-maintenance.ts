@@ -21,9 +21,9 @@ import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts'
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { type KbDescriptor } from '@forge/contracts/studio/types.ts';
 import { resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
-import { listCycles } from '@forge/flows/metrics.ts';
+import { listCycles } from '@forge/kernel';
 import { regenerateBrainIndex } from './brain-index.ts';
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import {
   findingUnderDir,

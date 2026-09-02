@@ -4,8 +4,6 @@
  * monitor.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { EventLogEntry, Phase } from '@forge/kernel';
 import { isAuthoritativeCostEvent, phasesWithIterationEvents } from '@forge/kernel';
 import { guardedReadFile } from '@forge/kernel';
@@ -66,14 +64,10 @@ export function summariseCycle(cycleId: string, logsDir = '_logs'): CycleMetrics
   return aggregate(cycleId, events);
 }
 
-export function listCycles(logsDir = '_logs'): string[] {
-  const dir = resolve(logsDir);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort();
-}
+// `listCycles` moved to `@forge/kernel` (M4-knowledge s5, ruling 57): a rank-2
+// package needed it and may not import flows. Re-exported so this module's
+// public surface is unchanged.
+export { listCycles } from '@forge/kernel';
 
 export function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
   const m = emptyCycle(cycleId);

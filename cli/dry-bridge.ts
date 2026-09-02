@@ -29,28 +29,24 @@
  * `createLogger` pattern rather than inventing a new logging path.
  */
 
-import type { ServerResponse } from 'node:http';
+import { createLogger, type EventLogger, isDryBridge, DRY_BRIDGE_ENV, DRY_BRIDGE_LOG_BUCKET } from '@forge/kernel';
 
-import { createLogger, type EventLogger } from '@forge/kernel';
-import { sendJson } from './bridge-studio.ts';
-
-/** The env var that activates dry-bridge mode. Single source of truth — no
- *  string literals scattered at call sites. */
-export const DRY_BRIDGE_ENV = 'FORGE_DRY_BRIDGE';
-
-/** Shared JSONL bucket for refusal events and the spawn families' agent-turn
- *  skip events (no natural per-cycle id exists at those points — e.g.
- *  scheduler start/stop, an architect session). The verdict-approve
- *  stub-actions skips log into the cycle's OWN events.jsonl instead, via
- *  `emitDryBridgeSkip` with the cycle's logger, since a real cycleId is in
- *  hand there and the skip is genuinely part of that cycle's narrative. */
-export const DRY_BRIDGE_LOG_BUCKET = '_dry-bridge';
-
-/** True iff dry-bridge mode is active. Reads `process.env` by default;
- *  callers (and tests) may pass an explicit env map. */
-export function isDryBridge(env: Record<string, string | undefined> = process.env): boolean {
-  return env[DRY_BRIDGE_ENV] === '1';
-}
+// The env gate and the typed refusal moved to `@forge/kernel` (M4-knowledge
+// s5): five packages consumed them and could only reach them by importing
+// `cli/`. Re-exported here so this file's own callers, and the classification
+// table below, are untouched. The rest of the dry-bridge model — the route
+// table, the per-skip events, the agent-turn marker — stays here, because it
+// is a table ABOUT this bridge's routes and the coverage guard reads it here.
+export {
+  DRY_BRIDGE_ENV,
+  DRY_BRIDGE_LOG_BUCKET,
+  isDryBridge,
+  emitDryBridgeRefusal,
+  refuseDryBridge,
+  type DryBridgeAction,
+  type DryBridgeRefusalInput,
+} from '@forge/kernel';
+import type { DryBridgeAction } from '@forge/kernel';
 
 /** The real-acting sub-steps a `stub-actions` route can individually skip in
  *  dry-bridge mode. The first three are `applyReviewVerdict`'s approve chain —
@@ -58,19 +54,6 @@ export function isDryBridge(env: Record<string, string | undefined> = process.en
  *  the spawn families' suppressed SDK-agent/runner turn (architect,
  *  instructions, project-brain, demo-builder, preflight-fix). */
 export type DryBridgeStubAction = 'release-finalize' | 'merge-pr' | 'finalize-after-merge' | 'agent-turn';
-
-/** The action kind a `refuse` route's real-acting call falls into — carried
- *  in the typed 409 body so a caller can tell WHY without parsing prose.
- *
- *  `network` was added by W8-B5: forge had never made an outbound call to a
- *  THIRD-PARTY API from any route before the community registry's
- *  deterministic refresh (the only pre-existing outbound `fetch` in the tree,
- *  orchestrator/notify.ts, targets an operator-configured webhook; the other
- *  two are localhost port probes). The vocabulary predates the capability, so
- *  it grows rather than being stretched: classifying a real GitHub call with
- *  the operator's PAT as `daemon` or as `exempt-local` would have been a lie
- *  in the one table that exists to keep this honest. */
-export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon' | 'network';
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
 
@@ -325,52 +308,6 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },
 ] as const;
-
-// ---------------------------------------------------------------------------
-// refuseDryBridge — the typed 409 response + JSONL event for `refuse` routes
-// ---------------------------------------------------------------------------
-
-export type DryBridgeRefusalInput = {
-  /** For HTTP routes the route path; for non-HTTP spawn paths a stable
-   *  identifier (e.g. `startup:reflect-reconcile`). */
-  route: string;
-  /** HTTP method, or a non-HTTP trigger label (e.g. `BOOT`). */
-  method: string;
-  action: DryBridgeAction;
-  logsRoot: string;
-};
-
-/**
- * Emit the JSONL refusal event (into the shared DRY_BRIDGE_LOG_BUCKET — most
- * refuse points have no natural per-resource cycleId). Standalone so non-HTTP
- * suppression points (the boot-time reflect-reconcile) can emit the SAME
- * typed refusal without an HTTP response. Never throws — best-effort.
- */
-export function emitDryBridgeRefusal(input: DryBridgeRefusalInput): void {
-  try {
-    const logger = createLogger(DRY_BRIDGE_LOG_BUCKET, input.logsRoot);
-    logger.emit({
-      initiative_id: DRY_BRIDGE_LOG_BUCKET,
-      phase: 'orchestrator',
-      skill: 'dry-bridge',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: 'dry-bridge.refuse',
-      metadata: { route: input.route, method: input.method, action: input.action },
-    });
-  } catch { /* best-effort — never break the caller on a logging failure */ }
-}
-
-/**
- * Write the typed 409 refusal AND emit a JSONL event. Never silent success.
- * Never throws — a logging failure must not prevent the HTTP response (the
- * response is written FIRST, the event emit is best-effort after).
- */
-export function refuseDryBridge(res: ServerResponse, origin: string, input: DryBridgeRefusalInput): void {
-  sendJson(res, 409, { error: 'dry-bridge', route: input.route, method: input.method, action: input.action }, origin);
-  emitDryBridgeRefusal(input);
-}
 
 // ---------------------------------------------------------------------------
 // emitDryBridgeSkip — the stub-actions per-skip JSONL event (verdict-approve)
