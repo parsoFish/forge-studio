@@ -2092,7 +2092,7 @@ async function handleHttp(
     }
   }
 
-  if (await dispatchRoute(routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW (apps/forge/routes.ts)
+  if (await dispatchRoute(routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => readJson(req) }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW; `readBody` hands down the RESULT of the host's body policy (CSRF checked just above), never the policy itself (ruling 30)
   if (method === 'GET' && url === '/api/health') {
     // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
     // healthy forge bridge from a stale/foreign listener and attach instead of

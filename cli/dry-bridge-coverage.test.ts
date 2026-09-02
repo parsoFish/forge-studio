@@ -58,13 +58,14 @@
 //     rows legitimately collapse onto one derived candidate. Both are
 //     many-to-one matches, which the existential (some()) matching below
 //     supports natively without extra bookkeeping.
-//   - `RouteClassification.method` cannot express DELETE (its union is
-//     'GET' | 'POST' | 'PUT' | '*'); the one DELETE route is instead encoded as
-//     a `(delete)`-suffixed route string with `method: 'POST'`. This guard
-//     detects that suffix and overrides the effective method to DELETE for
-//     matching purposes — a real modelling gap in the table worth tightening
-//     separately, not fixed here to keep this change minimal and behaviour-
-//     preserving.
+//   - `RouteClassification.method` DOES express DELETE (the union has carried
+//     it since W7-B4). Two rows nonetheless encoded a delete as a
+//     `(delete)`-suffixed route string with `method: 'POST'`, and this guard
+//     canonicalized the suffix back to DELETE for matching. Both were re-keyed
+//     and the canonicalization removed (T1 ruling 28) — a row's method is now
+//     its `method` field and nothing else. The comment this replaces asserted
+//     the union was 'GET' | 'POST' | 'PUT' | '*' — stale documentation sitting
+//     four lines from a type that already contradicted it.
 //
 // Task A-finalfix FIX 4: direction 1/2 above only prove a route STRING is
 // classified and that classification corresponds to SOME real dispatch line
@@ -292,12 +293,10 @@ function extractDispatchCandidates(source: string, fileLabel: string): DerivedCa
 type TableCanonical = { route: string; method: string };
 
 function canonicalizeTableRow(row: RouteClassification): TableCanonical {
-  const isDeleteSuffixed = / \(delete\)$/.test(row.route);
   const route = row.route
-    .replace(/ \(delete\)$/, '')
     .replace(/ \(op=[^)]*\)$/, '')
     .replace(/:[A-Za-z][A-Za-z0-9]*/g, ':id');
-  return { route, method: isDeleteSuffixed ? 'DELETE' : row.method };
+  return { route, method: row.method };
 }
 
 const GATES_DOUBLE_ID_ROUTE = '/api/runs/:id/gates/:id';
