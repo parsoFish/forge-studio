@@ -31,6 +31,7 @@ import { runInit, ensureLayout, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
+import { cmdProjectReset } from '@forge/projects/reset.ts';
 import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 
@@ -123,12 +124,11 @@ process.chdir(FORGE_ROOT);
       process.exit(await cmdCommunity(args.slice(1), FORGE_ROOT));
       break;
     case 'project':
-      // W7-B6 (projects-01): `forge project migrate <id>` — the one-shot
-      // flat-gate-keys → testProcess config migration the contract-stages
-      // 409 names as its remedy. Hidden from help (operator runs it once,
-      // pointed there by the Studio error text).
+      // Both hidden from help — one-shot repairs Studio's error text points the operator
+      // at: `migrate` is W7-B6's flat-keys→testProcess fix, `reset` is S3's contract rebuild.
       if (args[1] === 'migrate') process.exit(cmdProjectMigrate(args.slice(2)));
-      console.error('forge project: subcommands: migrate <project-id>');
+      if (args[1] === 'reset') process.exit(cmdProjectReset(args.slice(2)));
+      console.error('forge project: subcommands: migrate <project-id>, reset <project-id> [--dry-run|--apply]');
       process.exit(2);
       break;
     case '--help':

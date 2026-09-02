@@ -114,7 +114,7 @@
  */
 
 import { join, relative, sep, dirname } from 'node:path';
-import { lstatSync, realpathSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync } from 'node:fs';
 
 export interface PathGuardOk {
   ok: true;
@@ -604,4 +604,104 @@ export function guardedReadDir(root: string, segments: readonly string[]): strin
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// guardedRename — the containment guard for MOVING an already-guarded path to
+// a new location under the SAME trusted root. Added for the project-contract
+// reset, which relocates directories inside a managed project's repo from a
+// request-supplied project id (every path this function is handed traces back
+// to that id).
+// ---------------------------------------------------------------------------
+
+/**
+ * Rename `<root>/<fromSegments...>` to `<root>/<toSegments...>`, with BOTH
+ * endpoints resolved INDEPENDENTLY through `resolveGuardedPath` — never the
+ * defect this repo has closed five times, where a guard verifies one side
+ * and then builds the other with a plain `join()`/`resolve()` off it (or off
+ * `root`) instead of running it through its OWN per-segment identity walk.
+ * Every `..`, symlink, cross-object-alias and nested-segment check
+ * `resolveGuardedPath` performs for a read/write applies here, separately,
+ * to `fromSegments` AND `toSegments`.
+ *
+ * CHECK-THEN-ACT (the same two-phase shape `seedProjectBrain` was fixed into
+ * — `docs/reference/request-path-sinks.md`): both endpoints are resolved and
+ * validated FIRST, with zero filesystem writes; `renameSync` runs only after
+ * BOTH have passed every check below. On any rejection this throws
+ * `PathGuardContainmentError` naming which endpoint failed and why (internal
+ * diagnostics only — never forward verbatim to an untrusted client, same
+ * rule as `PathGuardReject.reason`), and nothing is written, removed or
+ * moved at either endpoint.
+ *
+ * Checks, in order:
+ *   1. `resolveGuardedPath(root, fromSegments)` must succeed AND the source
+ *      must already `exist` — renaming a path that is not there yet is not
+ *      a legitimate call; unlike `guardedFile`'s `'write'` mode, there is no
+ *      create-mode for a rename's SOURCE.
+ *   2. `resolveGuardedPath(root, toSegments)` must succeed.
+ *   3. The destination must NOT already exist. Unlike `guardedWriteFile`
+ *      (which overwrites a leaf on every call — that is its whole
+ *      contract), silently clobbering an existing directory on rename would
+ *      destroy whatever was there with no record of what it was. This
+ *      refuses rather than clobbers, mirroring the skip/refuse (never
+ *      overwrite) stance `seedProjectBrain` already takes for its own
+ *      files; a caller that needs to replace something removes the stale
+ *      target itself, through its own guarded call, before renaming onto it.
+ *
+ * DESTINATION PARENT — NOT created here; the caller's responsibility. This
+ * function requires the destination's immediate parent directory to already
+ * exist, and lets the plain Node `ENOENT` `renameSync` raises when it does
+ * not propagate uncaught — a containment PASS (both endpoints resolved and
+ * validated cleanly) meeting an ordinary OS-level precondition failure, not
+ * a containment rejection, so it is deliberately not wrapped as
+ * `PathGuardContainmentError`. Every existing `renameSync` call site in this
+ * codebase (`packages/projects/project-create.ts`,
+ * `packages/knowledge/kb-drain-store.ts`, `packages/flows/queue.ts`, ...)
+ * already assumes this: the destination's parent is either the trusted root
+ * itself or a directory a prior step created, and none of them mkdir the
+ * destination side at rename time. Building that here would add a second,
+ * freshly-written piece of mkdir-under-containment logic for a case this
+ * function's actual callers do not need; a future caller that DOES need a
+ * fresh destination parent creates it through its own
+ * `resolveGuardedPath`/`guardedFile` call first — so the created directory
+ * is itself guarded — rather than this function creating one implicitly.
+ *
+ * CROSS-FILESYSTEM — Node's `renameSync` fails (`EXDEV`) across filesystem
+ * boundaries. Both endpoints here resolve under the SAME `root` via
+ * `realpathSync`, and this function exists specifically for moves INSIDE a
+ * single managed project's repo tree, so there is no cross-filesystem case
+ * in its intended use unless `root` itself spans a mount point (a bind
+ * mount or separate volume grafted inside the tree) — a deployment concern
+ * outside this module's contract, not something a path guard can detect. No
+ * copy-then-delete fallback is added for `EXDEV`: that would be a SECOND,
+ * unguarded write path (a copy loop has to walk and write every file under
+ * the source with none of the atomic identity guarantee a straight rename
+ * gets from the OS) — exactly the class of defect this module exists to
+ * prevent, not something to reintroduce for convenience. An `EXDEV` failure
+ * surfaces as `renameSync`'s own raw error, same as `ENOENT` above.
+ */
+export function guardedRename(root: string, fromSegments: readonly string[], toSegments: readonly string[]): void {
+  const fromLabel = fromSegments.join('/');
+  const toLabel = toSegments.join('/');
+
+  const source = resolveGuardedPath(root, fromSegments);
+  if (!source.ok) {
+    throw new PathGuardContainmentError(`guardedRename: source containment check failed for "${fromLabel}": ${source.reason}`);
+  }
+  if (!source.exists) {
+    throw new PathGuardContainmentError(`guardedRename: source "${fromLabel}" does not exist`);
+  }
+
+  const dest = resolveGuardedPath(root, toSegments);
+  if (!dest.ok) {
+    throw new PathGuardContainmentError(`guardedRename: destination containment check failed for "${toLabel}": ${dest.reason}`);
+  }
+  if (dest.exists) {
+    throw new PathGuardContainmentError(`guardedRename: destination "${toLabel}" already exists — refusing to overwrite`);
+  }
+
+  // Both endpoints independently resolved and validated above with ZERO side
+  // effects — only now that both checks have passed does the actual move
+  // happen.
+  renameSync(source.realPath, dest.realPath);
 }

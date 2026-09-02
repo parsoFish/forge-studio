@@ -160,6 +160,35 @@ demo runners, `bridge-studio*`, `metrics`, `contract-stages`, and `project-confi
 were routed onto it. Guarded leaf siblings (`guardedReadSessionStatus`,
 `guardedReadStatus`, …) carry the shared readers.
 
+**A fourth primitive, M4: `guardedRename(root, fromSegments, toSegments)`**
+(`packages/kernel/path-guard.ts`), added for the project-contract reset, which
+relocates a managed project's skill directories to the layout the resolver
+actually reads — every path derived from a request-supplied project id. It
+resolves **both endpoints independently** through `resolveGuardedPath`, each
+component its own segment: the destination is never built by `join()`ing off
+the verified source or off `root`, which is the shape this document names five
+times as the recurring defect. Check-then-act, the two-phase ordering
+`seedProjectBrain` was fixed into — both endpoints validated with zero writes,
+`renameSync` only after both pass, so a rejection leaves nothing moved at
+either end. It **refuses** an existing destination rather than clobbering it
+(unlike `guardedWriteFile`, whose contract is to overwrite a leaf), does not
+create the destination's parent (a caller needing one creates it through its
+own guarded call, so that directory is itself guarded), and adds no
+copy-then-delete `EXDEV` fallback — a copy loop would be a second, unguarded
+write path with none of a rename's atomicity. Its `renameSync` call takes
+`resolveGuardedPath`'s own blessed output on both sides, the same shape
+`guardedWriteFile`'s `writeFileSync` already has, and is classified **guarded**
+(`scripts/request-path-sinks.baseline.txt`, `packages/kernel/path-guard.ts
+renameSync 1` — the ratchet flagged it on introduction, in the PR that
+introduced it, which is the ratchet working). Pinned by 13 containment cases in
+`packages/kernel/path-guard-rename.test.ts`, every one written RED first:
+`..` on each side, an absolute-shaped segment on each side, a symlinked source
+dir, a symlinked destination parent, a symlinked intermediate on each side, a
+dangling destination leaf, the clobber refusal with a source-survives
+assertion, a percent-encoded segment proved to stay literal, and a recursive
+before/after filesystem snapshot proving a rejection changes nothing anywhere
+under `root`.
+
 **The rows this closes** (all reproduced then re-confirmed contained by execution):
 the session-route family (`architectSessionDir`/`instructionsSessionDir`/
 `projectBrainSessionDir` bare joins; the `/start` unconditioned writes; the
