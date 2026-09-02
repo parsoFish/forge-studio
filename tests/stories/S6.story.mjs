@@ -50,15 +50,9 @@
  * `/knowledge?id=story-s6&seedSession=<sid>&seedProject=.kb-story-s6` with the
  * graph already showing the new KB's single index node.
  *
- * WHERE A BEAT CANNOT BE EXPRESSED it says so and stands anyway. Three places:
- *
- *   - Beat 4 routes to `/sessions/project-brain/<seedSessionId>`, and that
- *     segment cannot be bound. The product DOES carry the seeding session
- *     forward now — `[data-component="kb-seed-banner"]` wraps
- *     `a[data-action="open-seed-session"]` — but the id lives only in that
- *     href and in the query string, never as a `data-*` VALUE an earlier beat
- *     could observe. Bead `forge-8vfn.5.10` (the six surviving mint-then-
- *     navigate sites), cited, not re-diagnosed here.
+ * WHERE A BEAT CANNOT BE EXPRESSED it says so and stands anyway. TWO places
+ * remain after amend-1 (see below); the seeding-session and Health-tab entries
+ * that used to head this list are closed.
  *
  * AMENDED after this story's first run (2026-08-30, same authoring session,
  * re-pinned). The first draft stepped straight from `/knowledge` to
@@ -67,13 +61,30 @@
  * take. Three beats now carry the real path — Projects, mdtoc, "Architect →" —
  * and NOT ONE ASSERTION CHANGED. The amendment made the story truer about the
  * operator's journey; it did not make it easier to pass.
- *   - Beats 14 and 15 need the Health tab, and the three tabs are
- *     `[data-tab="explore"|"health"|"ingest-activity"]` with NO `data-action`
- *     anywhere on them. The drain — the entire second half of §3's row — has
- *     no reachable door. The same page's KB picker (`#kb-select`) carries
- *     `data-kb-select-empty` and no `data-field`, so the operator also cannot
- *     say WHICH knowledge base they are working on.
- *   - Beat 13, as above, has no attribute at all.
+ *   - Beat 11 routes to `/sessions/architect/<architectSessionId>`, and this
+ *     beat's OWN press is what mints that id. The runner resolves a route
+ *     before performing any `do` step, so binding it is a two-beat act. That
+ *     is an authoring change, not a product gap — the product has published
+ *     `data-architect-session-id` since M1-G.
+ *   - Beat 12's real subject is a planner's READ of this KB (§3 asks for a
+ *     visible `brain-index` event). `brain-index` appears nowhere in
+ *     forge-ui: every brain-related attribute the UI declares renders the
+ *     reflector's WRITE. Asserting one of those would report a write as a
+ *     read — the fail-open shape this story exists to catch — so the
+ *     read-proof stays named in the narration. Bead `forge-8vfn.5.16`.
+ *
+ * AMEND-1 (M4, operator-authorised; `_1.0/gate-manifests/M1-C-S6.amend-1.md`).
+ * `forge-8vfn.5.10` and `forge-8vfn.5.14` shipped the four handles this story
+ * had been red against: `data-seed-session-id` on the seed banner, and
+ * `data-action` on the Explore and Health tabs plus `data-field` on
+ * `#kb-select`. Two strictly additive edits then let the story use them —
+ * beat 3 ASKS for `seed-session-id`, and beat 13 presses the Health tab before
+ * the drain, which its own `act` text always claimed it did. One added expect
+ * key and one added press; nothing removed, nothing relaxed. The Ingest
+ * Activity tab is still unnameable ON PURPOSE:
+ * `scripts/check-kb-ingest-affordance.mjs` rule 1 bans any forge-ui
+ * `data-action` naming ingest (operator decision 3), and a name picked to slip
+ * past that guard would be gaming it.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
  * `brain/projects/story-<id>`. A flow-bound KB writes `brain/story-s6` and
@@ -151,20 +162,19 @@ export default {
           'page-ready': 'true',
           'kb-id': 'story-s6',
           'node-count': '1',
+          'seed-session-id': '<seedSessionId>',
         },
       },
       say: `Binding is the act. A band scope says WHICH readers on that Flow this knowledge is for — ${BOUND_BAND} means the reviewer, not the planner and not the developer — so the knowledge lands in front of the agent it was written for and nowhere else. Forge writes the graph with one index node and nothing in it.`,
     },
     {
-      // NOT expressible, and left so deliberately. `open-seed-session` IS a
-      // real `data-action` on the seed banner, so the PRESS is honest — but
-      // the session id it navigates to is never published as a `data-*` value,
-      // so no earlier beat can bind `<seedSessionId>` and the runner (which
-      // resolves a route before performing any `do` step) can never get here.
-      // Bead `forge-8vfn.5.10`. The `do` step is written out regardless: it is
-      // the operator's real action, and dropping it would make the generated
-      // how-to claim the seeding session is unreachable when the link is right
-      // there on the page.
+      // Expressible since amend-1. `open-seed-session` was always a real
+      // `data-action` on the seed banner, so the PRESS was always honest; what
+      // was missing was the session id as a `data-*` VALUE, so nothing could
+      // bind `<seedSessionId>` and the runner — which resolves a route before
+      // performing any `do` step — could never arrive. `forge-8vfn.5.10`
+      // published `data-seed-session-id` beside that control and beat 3 now
+      // asks for it.
       act: 'Follow the seeding session forge started for it',
       do: [{ press: 'open-seed-session' }],
       expect: {
@@ -179,10 +189,10 @@ export default {
       say: 'Creating a knowledge base starts an agent that fills it. Forge does not leave the operator with an empty graph and a shrug — it offers the session it already started, and the operator goes and watches it.',
     },
     {
-      // NOT expressible — the same unbound segment as beat 4. The phase name
-      // is transcribed from `docs/forge-ui-dom-and-harness.md` (a real
-      // briefing POST flips `phase → analyzing` on disk), NOT observed live:
-      // observing it costs a real seeding spawn.
+      // Reachable since amend-1 (the same segment beat 4 now binds). The phase
+      // name is still transcribed from `docs/forge-ui-dom-and-harness.md` (a
+      // real briefing POST flips `phase → analyzing` on disk) rather than
+      // observed live: observing it costs a real seeding spawn.
       act: 'Brief the seeding agent on what this knowledge base is for, and let it read',
       expect: {
         route: '/sessions/project-brain/<seedSessionId>',
@@ -195,9 +205,10 @@ export default {
       say: 'A band-scoped knowledge base has no project repo to read — it reads the Flow’s own archived cycles, and synthesises what review kept finding. The operator’s brief is the only thing that tells it which of those findings are worth keeping.',
     },
     {
-      // NOT expressible — same cause. `verdict-approve` is the generic
-      // interactive panel's real action; the `committing` phase is likewise
-      // transcribed from the DOM contract rather than observed.
+      // Reachable since amend-1 — same segment as beats 4 and 5.
+      // `verdict-approve` is the generic interactive panel's real action; the
+      // `committing` phase is likewise transcribed from the DOM contract
+      // rather than observed.
       act: 'Read the themes it drafted and approve them into the knowledge base',
       do: [{ press: 'verdict-approve' }],
       expect: {
@@ -325,14 +336,16 @@ export default {
       say: 'This is the beat the whole product rests on. Forge’s claim is that it compounds — that what one run learned changes what the next one plans — and the only honest evidence for that is the planner’s own read, on the record, naming this knowledge base. Until that is on the page, compounding is something forge asserts about itself rather than something the operator can check.',
     },
     {
-      // NOT expressible. The Health tab, where the drain lives, is
-      // `button[data-tab="health"]` with no `data-action`, so the operator's
-      // act of switching to it cannot be named — and neither `drain-to-green`
-      // nor anything else in the KB action group can be reached until it is.
+      // Expressible since amend-1. The Health tab, where the drain lives, had
+      // `data-tab="health"` and no `data-action`, so the operator's act of
+      // switching to it could not be named and nothing in the KB action group
+      // could be reached. `forge-8vfn.5.14` added
+      // `data-action="open-kb-tab-health"`, and this beat now presses it
+      // before the drain — the step its `act` text always described.
       // `drain-state` and `drain-run-id` are both on the drain panel root, so
       // one element answers both.
       act: 'Open the knowledge base’s Health tab and drain it to green',
-      do: [{ press: 'drain-to-green' }],
+      do: [{ press: 'open-kb-tab-health' }, { press: 'drain-to-green' }],
       expect: {
         route: '/knowledge',
         data: {

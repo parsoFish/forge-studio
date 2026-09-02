@@ -521,7 +521,7 @@ function KnowledgePageInner() {
       {/* W7-B2 (knowledge-23): the just-created KB's seeding session, named
           instead of silently spawned. */}
       {seedSessionParam && (
-        <div data-component="kb-seed-banner" style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
+        <div data-component="kb-seed-banner" data-seed-session-id={seedSessionParam} style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
           This knowledge base was created and a seeding session is running for it —{' '}
           <Link
             data-action="open-seed-session"
@@ -604,6 +604,7 @@ function KnowledgePageInner() {
       }}>
         <button
           data-tab="explore"
+          data-action="open-kb-tab-explore"
           data-tab-active={tab === 'explore' ? 'true' : 'false'}
           onClick={() => setTab('explore')}
           style={tabButtonStyle(tab === 'explore')}
@@ -612,6 +613,7 @@ function KnowledgePageInner() {
         </button>
         <button
           data-tab="health"
+          data-action="open-kb-tab-health"
           data-tab-active={tab === 'health' ? 'true' : 'false'}
           onClick={() => setTab('health')}
           style={tabButtonStyle(tab === 'health')}
