@@ -89,6 +89,18 @@ export default function ConnectionDetailPage() {
   }, []);
 
   useEffect(() => {
+    // The install review state is reset with the id, not just the connection.
+    // Next reuses this client component across a route-PARAM-only navigation,
+    // so a preview fetched for A would otherwise still be on screen while the
+    // confirm button read the now-current id — the operator would agree to B's
+    // install while reading A's command. Not reachable today (every entry point
+    // is a different route template, so navigation forces a remount) which is
+    // exactly why it is worth closing now: the day someone adds a
+    // connection-to-connection link, the bug is already there and silent.
+    // Found by the independent security review of forge-6gv.8.2.
+    setInstallPreview(null);
+    setInstallOutcome(null);
+    setActionError(null);
     if (id) void load(id);
   }, [id, load]);
 

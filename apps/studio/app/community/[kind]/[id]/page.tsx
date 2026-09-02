@@ -119,6 +119,11 @@ export default function CommunityDetailPage() {
   }, []);
 
   useEffect(() => {
+    // Same reset as /connections/[id] — see its comment. A preview belongs to
+    // the id it was fetched for; carrying one across a param-only navigation
+    // would show A's command above a confirm that installs B.
+    setInstallOutcome(null);
+    setActionError(null);
     if (kindParam && id) void load(kindParam, id);
   }, [kindParam, id, load]);
 
