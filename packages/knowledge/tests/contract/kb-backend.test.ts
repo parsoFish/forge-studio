@@ -16,7 +16,7 @@ import { resolve } from 'node:path';
 
 import { getKbBackend, FilesystemKbBackend, type KbBackend } from '../../kb-backend.ts';
 import { buildKbGraph } from '../../kb-graph.ts';
-import { loadKbDescriptor, resolveKbProcesses } from '../../../../orchestrator/studio/registry.ts';
+import { loadKbDescriptor, resolveKbProcesses } from '../../studio/kb-descriptor.ts';
 
 // Depth-INDEPENDENT. A hand-counted `resolve(__dirname, '..', '..')` is
 // calibrated to this file's current directory, so moving the file two levels
