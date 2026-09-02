@@ -127,6 +127,21 @@ test('5.24 `projects/` stays out: a managed-project clone is absent on a cold ch
   }
 });
 
+test('5.43 the two PRODUCT-CREATED roots stay out: `_interactive-library/` and `_skill-staging/` exist only where forge has been RUN, so a citation there would flag on an operator machine and not in CI', () => {
+  for (const cited of ['_interactive-library/auth-skill/SKILL.md', '_skill-staging/auth-skill/SKILL.md']) {
+    const { root, cleanup } = seedThemeCiting(cited);
+    try {
+      assert.deepEqual(staleCitations(root), [], `${cited} must not be staleness-checked`);
+    } finally {
+      cleanup();
+    }
+  }
+  // …and the exclusion is NAMED, not an accident of the prefix set: §2's
+  // coverage test can only pass because these two are on the excusal list.
+  const excluded = new Set<string>(STALENESS_PREFIX_EXCLUSIONS);
+  assert.ok(excluded.has('_interactive-library') && excluded.has('_skill-staging'));
+});
+
 // ---------------------------------------------------------------------------
 // §2 COVERAGE — the set follows the tree, enforced rather than asserted in a
 // comment. This is the assertion that would have caught the original defect at
