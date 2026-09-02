@@ -31,6 +31,9 @@ export * from './ports.ts';
 
 /** The id vocabulary and the ONE slug guard every studio object id passes. */
 export * from './ids.ts';
+/** Project-layout SSOT: id normalisation, on-disk discovery, and the
+ *  per-project brain dirs (ADR 035) shared by projects/knowledge/library. */
+export * from './project-layout.ts';
 /** The child-process env allowlist seam: deny-by-default, one composer. */
 export * from './spawn-env.ts';
 /** The route-table shape every package's `routes.ts` declares, and the

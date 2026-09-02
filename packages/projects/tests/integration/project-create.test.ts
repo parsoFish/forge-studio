@@ -26,7 +26,7 @@ import {
   projectStartersDir,
   type CreationManifest,
 } from '../../project-create.ts';
-import { discoverProjects } from '../../../../orchestrator/studio/registry.ts';
+import { discoverProjects } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */

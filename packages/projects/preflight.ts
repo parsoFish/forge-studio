@@ -31,22 +31,32 @@
  * `preflight-demo.ts` (DEMO family), `preflight-release.ts` (C10),
  * `preflight-build.ts` (BUILD/ARTIFACTS), `preflight-repo.ts` (C2/C6).
  * C4 and BRAIN stay here rather than moving to `preflight-repo.ts` with the
- * rest of the "repo" family — both import `@forge/knowledge/brain-paths.ts`,
- * the one already-baselined cross-package edge this file carries
- * (`scripts/baselines/boundaries.json`), and this worker was told not to
- * touch `scripts/baselines/`; keeping them here preserves that edge exactly
- * instead of trading it for a same-count rename. See `preflight-repo.ts`'s
- * header and this split's report for the full reasoning.
+ * rest of the "repo" family — they were the two clauses that carried this
+ * file's one baselined cross-package edge into `@forge/knowledge`, so the
+ * split kept them together rather than trading the edge for a same-count
+ * rename. That edge is now GONE: M4's layout PR moved `projectBrainDir` and
+ * `projectThemesDir` into `@forge/kernel` (ruling 18 — a symbol two rank-2
+ * siblings need goes to kernel, it never travels sideways) and deleted the
+ * row from `scripts/baselines/boundaries.json`. The grouping stays because
+ * it is the right grouping, not because a boundary row forces it. See
+ * `preflight-repo.ts`'s header for the rest of the reasoning.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { loadProjectConfig, type ProjectConfig } from './project-config.ts';
-import { projectBrainDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
 
 export type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
-import type { ClauseId, ClauseResult, PreflightReport, PreflightOptions } from '@forge/kernel';
+import {
+  type ClauseId,
+  type ClauseResult,
+  type PreflightReport,
+  type PreflightOptions,
+  projectBrainDir,
+  projectThemesDir,
+  FORGE_ROOT,
+} from '@forge/kernel';
 
 import { checkC1, checkC1b, checkC7 } from './preflight-gate.ts';
 import { checkC5, checkC8 } from './preflight-instructions.ts';
@@ -68,7 +78,7 @@ export function runPreflight(
 ): PreflightReport {
   const dir = resolve(projectDir);
   const projectName = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
-  const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..', '..');
+  const forgeRoot = opts.forgeRoot ?? FORGE_ROOT;
 
   // R1-03-F1: load the typed config ONCE for the testProcess-sourced clauses
   // (C1/C1b/C7). A load failure (e.g. an un-migrated flat-key config) is
