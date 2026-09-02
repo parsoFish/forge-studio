@@ -21,21 +21,21 @@
  * This module holds the primitives for reading (2) SAFELY, so the session read
  * route can serve such a session read-only instead of 404ing it. The composite
  * predicate that decides between (1) and (2) — `resolveReadableSession` — lives
- * in `cli/bridge-studio-sessions.ts`, next to the project/session-id validation
+ * in `packages/sessions/bridge-studio-sessions.ts`, next to the project/session-id validation
  * rules it must reuse (`invalidProjectReason`, `findSessionProject`).
  *
  * WHY THIS MODULE IS AN IMPORT LEAF. `cli/bridge-studio.ts` imports no
- * `bridge-studio-*` sibling today, and `cli/bridge-studio-lifecycle.ts` /
- * `cli/bridge-studio-sessions.ts` both import FROM it. `invalidProjectReason`
+ * `bridge-studio-*` sibling today, and `packages/sessions/bridge-studio-lifecycle.ts` /
+ * `packages/sessions/bridge-studio-sessions.ts` both import FROM it. `invalidProjectReason`
  * transitively needs `SAFE_ID_RE` (cli/bridge-studio.ts) and
- * `KB_SEEDING_ANCHOR_PREFIX` (cli/bridge-studio-kbs.ts), so pulling it in here
+ * `KB_SEEDING_ANCHOR_PREFIX` (packages/knowledge/bridge-studio-kbs.ts), so pulling it in here
  * would create the first cycle in that graph. Everything in this file therefore
  * imports only `node:*`, `./studio-path-guard.ts`, and `../orchestrator/**`.
  *
  * CONTAINMENT. `kind` is always a live-registry descriptor id and `sessionId`
  * is SAFE_ID_RE-validated by the route before it ever reaches here, but nothing
  * in this module trusts either: every filesystem touch goes through
- * `resolveGuardedPath` (cli/studio-path-guard.ts) with the log-dir name and the
+ * `resolveGuardedPath` (packages/kernel/path-guard.ts) with the log-dir name and the
  * `events.jsonl` leaf as their OWN segments under the fixed, config-derived
  * `logsRoot` — never folded into the root (the root-folding shape that made an
  * earlier guard tautological, R6-06 round 6). That gives, in one choke point:
@@ -51,13 +51,13 @@ import { resolveGuardedPath } from '@forge/kernel';
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template `spawnAgentTurn`
  *  (cli/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
- *  (orchestrator/interactive-runner.ts) writes events.jsonl/.heartbeat into
+ *  (packages/sessions/interactive-runner.ts) writes events.jsonl/.heartbeat into
  *  (`SPAWN_AGENT_SPECS[..].logPrefix === descriptor.id`, pinned by
- *  cli/session-tail-kind-parity.test.ts). ONE directory-entry name: the hyphen
+ *  packages/sessions/session-tail-kind-parity.test.ts). ONE directory-entry name: the hyphen
  *  is a literal character in the name, never a path separator, so the whole
  *  string is a single `resolveGuardedPath` segment.
  *
- *  Re-exported by cli/bridge-studio-lifecycle.ts, which is where it used to
+ *  Re-exported by packages/sessions/bridge-studio-lifecycle.ts, which is where it used to
  *  live — moved here so this leaf module can use it without importing the
  *  lifecycle module (which imports cli/bridge-studio.ts). */
 export function sessionLogDirName(kind: string, sessionId: string): string {
@@ -137,7 +137,7 @@ export function deriveLegacySessionPhase(events: readonly Record<string, unknown
  * UNVALIDATED — `''` when the log records none.
  *
  * Validation deliberately does NOT happen here: `invalidProjectReason`
- * (cli/bridge-studio-sessions.ts) is the ONE rule for what a project id may be,
+ * (packages/sessions/bridge-studio-sessions.ts) is the ONE rule for what a project id may be,
  * including the `.kb-<id>` / `.community-registry` dot-anchor carve-outs, and a
  * second copy of it in this leaf module would drift. The caller
  * (`resolveReadableSession`) runs the raw candidate through that one rule and

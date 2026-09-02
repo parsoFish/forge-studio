@@ -32,7 +32,7 @@
  *       instructions-draft route's security posture).
  *
  * Security — the SAME guarded-path choke point (`resolveGuardedPath`,
- * cli/studio-path-guard.ts) as the sibling PUT /api/studio/agents/:slug and
+ * packages/kernel/path-guard.ts) as the sibling PUT /api/studio/agents/:slug and
  * POST .../instructions-draft routes: `slug` is SLUG_RE-gated before any fs
  * call, and the SKILL.md path is resolved via `realpathSync` at the shared
  * guard rather than a lexical prefix check.

@@ -3,7 +3,7 @@
  *
  * Pins the EXACT `{prompt, options}` object each runner hands its injected
  * `queryFn` today, plus the turn's returned result and the `status.json` it
- * leaves behind, so an upcoming dispatch fork in `cli/agent-run.ts` (routing
+ * leaves behind, so an upcoming dispatch fork in `packages/agents/agent-run.ts` (routing
  * these four session kinds onto a shared entry point) can prove byte-level
  * no-behavioural-delta against this pin. This is a GREEN-ON-ARRIVAL
  * characterization test — no production code changes for it — so it proves
@@ -50,7 +50,7 @@
  * the first place.
  *
  * What each fixture KILLS (the wrong implementations this pin must catch —
- * primarily aimed at the R4-22 dispatch fork in `cli/agent-run.ts` this WI-0
+ * primarily aimed at the R4-22 dispatch fork in `packages/agents/agent-run.ts` this WI-0
  * baseline exists to gate, but equally any accidental runner-internals
  * regression):
  *   - interactive-architect.json: a fork that routes an `_architect` session
@@ -90,7 +90,7 @@
  *     guessed literal).
  *
  * Bootstrap / regenerate (per fixture, or the whole file):
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/interactive-runners-golden.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/sessions/interactive-runners-golden.test.ts
  * (or delete a fixture) rewrites it from the current code.
  */
 

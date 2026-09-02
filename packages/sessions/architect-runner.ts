@@ -1451,7 +1451,7 @@ async function runStructured<T>(args: {
 //
 // Per-turn prose now lives in `skills/architect/SKILL.md` as `<!-- turn: id -->`
 // sections, loaded through the shared, fail-loud `loadSkillTurnPrompt`
-// (`orchestrator/skill-path.ts`, R4-23) at each of the three call sites above
+// (`packages/agents/skill-path.ts`, R4-23) at each of the three call sites above
 // — no runner-private fallback survives.
 
 /**

@@ -3,7 +3,7 @@
  * generate-step prompt onto `skills/demo-builder/SKILL.md` turn sections
  * (see the authoritative design at `_wave5/.../R4-23-design.md`: the
  * `<!-- turn: <id> -->` SKILL.md convention + the `loadSkillTurnPrompt` /
- * `splitSkillTurnSections` loader contract landing in `orchestrator/skill-path.ts`
+ * `splitSkillTurnSections` loader contract landing in `packages/agents/skill-path.ts`
  * via WI-1). WI-2 moves the generate-step's INSTRUCTION PROSE (the three
  * branch bodies — per-element / composed / legacy — plus the update-mode
  * guidance) out of `packages/sessions/demo-builder-runner.ts` and into the skill.
@@ -42,9 +42,9 @@
  *                              `demoTaskLines` or breaks its ordering
  *                              contract, silently breaking the R4-07
  *                              descriptor-parity test
- *                              (`orchestrator/demo-descriptor-parity.test.ts`).
+ *                              (`packages/projects/tests/contract/demo-descriptor-parity.test.ts`).
  *
- * Harness idiom mirrors `orchestrator/demo-builder-runner.test.ts`: seed
+ * Harness idiom mirrors `packages/sessions/demo-builder-runner.test.ts`: seed
  * `projectRoot/_demo/<sid>/status.json` via `writeSessionStatus`, inject a
  * stub `queryFn` that simulates the agent's file writes, and (new to this
  * file) inject `skillPromptPath` fixtures to drive/observe turn selection.
@@ -83,7 +83,7 @@ function norm(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Shared scaffolding — mirrors orchestrator/demo-builder-runner.test.ts's setup().
+// Shared scaffolding — mirrors packages/sessions/demo-builder-runner.test.ts's setup().
 // ---------------------------------------------------------------------------
 
 const OPERATOR_GUIDANCE_SENTINEL = 'OPERATOR-GUIDANCE-SENTINEL-4471: keep it dark and minimal.';
@@ -236,7 +236,7 @@ test('AT-2: no fail-open remains — the generic fallback prompt string and the 
   );
   assert.ok(
     !tsText.includes('loadSkillPrompt('),
-    'the runner-private loadSkillPrompt function/call must be deleted — the runner must route through the shared loadSkillTurnPrompt loader (orchestrator/skill-path.ts) instead',
+    'the runner-private loadSkillPrompt function/call must be deleted — the runner must route through the shared loadSkillTurnPrompt loader (packages/agents/skill-path.ts) instead',
   );
 });
 
@@ -436,7 +436,7 @@ test('AT-5: the composed prompt still carries the runner-injected DATA half — 
 // ---------------------------------------------------------------------------
 
 test('AT-6: the demoTaskLines export contract survives — composed-branch output lists every element id in descriptor order, both directly and via the runner-composed prompt', async () => {
-  // Mirrors orchestrator/demo-descriptor-parity.test.ts's shared fixture
+  // Mirrors packages/projects/tests/contract/demo-descriptor-parity.test.ts's shared fixture
   // (deliberately NOT alphabetical, so order-preservation is actually
   // asserted, not accidentally true because of a sort).
   const FIXTURE_STEPS: Array<DemoStep & { element: string }> = [
@@ -743,7 +743,7 @@ function gitLine(dir: string, args: string[]): string {
 test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent already wrote into the repo must not leave forge-studio dirty/uncommitted', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating' });
 
-  // Turn repoPath into a REAL git repo (mirrors orchestrator/project-repo-tx.test.ts's setupRepo()).
+  // Turn repoPath into a REAL git repo (mirrors packages/projects/tests/regression/project-repo-tx.test.ts's setupRepo()).
   execFileSync('git', ['-C', repoPath, 'init', '-b', 'main'], { stdio: 'ignore' });
   gitLine(repoPath, ['config', 'user.email', 'test@forge.dev']);
   gitLine(repoPath, ['config', 'user.name', 'Forge Test']);

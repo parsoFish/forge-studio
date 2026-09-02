@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for orchestrator/studio/session-transcript.ts (R2-10,
+ * Acceptance tests for packages/sessions/studio/session-transcript.ts (R2-10,
  * PR1: the session-shell backend contract).
  *
  * The module under test does not exist yet — this file is RED at branch base
@@ -7,16 +7,16 @@
  * expected red).
  *
  * AT numbers continue the flat R2-10 sequence started in
- * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
+ * packages/sessions/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
  * the AT-amendment-2 round, +AT-61..AT-67 in AT-amendment-3). This file
  * covers AT-19..AT-37, +AT-57..AT-58 (AT-amendment-2), +AT-68..AT-69
  * (AT-amendment-3), +AT-75..AT-76 (R4-15), +AT-78 (R4-15 adversarial-review
- * amendment). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
+ * amendment). packages/sessions/bridge-studio-sessions.test.ts covers AT-38..AT-48,
  * +AT-59..AT-60, +AT-70..AT-74, +AT-77 (R4-15).
  *
  * R4-15 (AT-75..78): `RoadmapDraftRow` gains a fifth field, `dependsOn:
  * string[]`, sourced from the manifest's `depends_on_initiatives` (already
- * parsed by `parseManifest`, orchestrator/manifest.ts, but dropped on the
+ * parsed by `parseManifest`, packages/flows/manifest.ts, but dropped on the
  * floor by `deriveRoadmapDraft` before this round). See the dedicated
  * describe block below for the full rationale. AT-78 (adversarial-review
  * amendment, 2026-08-06) is a GREEN characterization pin, not a defect pin
@@ -47,7 +47,7 @@
  * the caller's real `phase` and a `questions.json` entry is a pending agent
  * turn IFF `phase === 'awaiting-answers'` (the same string both
  * architect-runner.ts and instructions-runner.ts write to status.json while
- * blocked on the operator — orchestrator/interactive-session.ts's
+ * blocked on the operator — packages/sessions/interactive-session.ts's
  * questions/answers handoff). Any other phase ⇒ questions.json (if present)
  * is stale leftover and contributes no turn, regardless of its text. AT-57/58
  * pin the two directions; every pre-existing call site below was amended to
@@ -71,7 +71,7 @@
  *     question) and the OPERATOR turn (the round's answer) share the SAME
  *     `source` string, `answers.json#round-N` — both come from literally the
  *     same round object in the same file.
- *   - `AnswerRound` (orchestrator/interactive-session.ts:303) carries no
+ *   - `AnswerRound` (packages/sessions/interactive-session.ts:303) carries no
  *     `stage` field in its documented shape today (every shipped kind is
  *     single-stage, so it never needs one). This module reads an OPTIONAL
  *     `stage` key on the round object when present — a forward-compatible
@@ -132,7 +132,7 @@ const LIVE_CAPTURE_DIR = join(REPO_ROOT, 'scripts', 'journeys', 'fixtures', 'r4-
 const REAL_CLEANUP_PLAN_MD = readFileSync(join(LIVE_CAPTURE_DIR, 'cleanup-plan.md'), 'utf8');
 
 /** The real captured session status.json, parsed once. `findings[].file` is
- *  ABSOLUTE by contract (cli/brain-lint.ts:54, `file: string; // absolute
+ *  ABSOLUTE by contract (packages/knowledge/brain-lint.ts:54, `file: string; // absolute
  *  path`) — exactly the shape that broke the naive literal-string join this
  *  defect pins. */
 type RealFinding = { readonly kind: string; readonly file: string; readonly category: string; readonly message: string; readonly check: string; readonly resolution: string };
@@ -271,9 +271,9 @@ function authoringDescriptor(overrides: Partial<SessionKindDescriptor> = {}): Se
 }
 
 /** A minimal, hand-fixtured `ContractStageRow[]` — deliberately NOT imported
- *  from cli/contract-stages.ts (this module stays a pure, fs-only
+ *  from packages/projects/contract-stages.ts (this module stays a pure, fs-only
  *  derivation with no business importing the derivation module that
- *  computes these rows; the route (cli/bridge-studio-sessions.ts) is the
+ *  computes these rows; the route (packages/sessions/bridge-studio-sessions.ts) is the
  *  layer that wires the real deriveContractStages output in). Mirrors this
  *  file's existing convention of hand-fixturing rather than cross-importing
  *  (see e.g. writeGeneration's own header note). */
@@ -345,7 +345,7 @@ function writeGeneration(
  *  RENAMED from `package/` (R4-21 phase 1) to `staging/` (R4-21 phase 2, D2,
  *  `_wave5/unit-specs/R4-21-phase2.md`): ADR-043 §1's ratified turnSpec row
  *  declares `writes: [staging]` for the `analyzing` phase, and
- *  `copyStagingToLibrary` (orchestrator/interactive-finalizers.ts) sources
+ *  `copyStagingToLibrary` (packages/sessions/interactive-finalizers.ts) sources
  *  `<sessionDir>/staging/` — `package/` predates the ADR and has zero
  *  production users, so it is renamed to match the ratified data rather than
  *  parameterising the finalizer. The rename is COMPLETE, not additive — see
@@ -596,7 +596,7 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
 // dependency edges (R4-15, AT-75, AT-76). `RoadmapDraftRow` gains a fifth
 // field, `dependsOn: string[]`, sourced from the manifest's
 // `depends_on_initiatives` (already parsed by `parseManifest`,
-// orchestrator/manifest.ts:73, but dropped on the floor by
+// packages/flows/manifest.ts:73, but dropped on the floor by
 // `deriveRoadmapDraft` today). Absent key ⇒ []. This layer never filters
 // against the draft's own row set, never sorts, never de-duplicates — that
 // is `dependencyDagView`'s (apps/studio/lib/dependency-dag.ts) job, a layer up.
@@ -1296,7 +1296,7 @@ describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)
 // ===========================================================================
 // R4-17 — deriveSessionArtifact — contract-buildout. D4: `contract-buildout`
 // consumes ALREADY-DERIVED, already-guarded `contractStages` rows passed in
-// by the caller (the route derives them via cli/contract-stages.ts's
+// by the caller (the route derives them via packages/projects/contract-stages.ts's
 // deriveContractStages, which lives OUTSIDE this module's containment
 // contract — it reads the PROJECT tree, not sessionDir). This module's own
 // "may not read outside sessionDir" invariant is NOT relaxed: it does zero
@@ -1425,11 +1425,11 @@ function writeCleanupPlanFile(sessionDir: string, body: string): void {
 
 /** A minimal caller-supplied finding, shaped like skills/brain-maintenance/
  *  SKILL.md's own documented input contract (`check`, `kind`, `file`,
- *  `message`) — deliberately NOT imported from cli/brain-lint.ts's real
+ *  `message`) — deliberately NOT imported from packages/knowledge/brain-lint.ts's real
  *  `Finding` type: this module stays a pure, fs-only derivation with no
  *  business importing the lint engine (mirrors `fixtureContractStages`'s own
  *  header rationale, above, for hand-fixturing rather than cross-importing —
- *  the route, cli/bridge-studio-sessions.ts, is the layer that wires the
+ *  the route, packages/sessions/bridge-studio-sessions.ts, is the layer that wires the
  *  real `runBrainLint`/`lintThemeFiles` output in). */
 function fixtureFinding(kind: string, file: string, message = 'fixture finding'): { check: string; kind: string; file: string; message: string } {
   return { check: kind, kind, file, message };
@@ -1690,7 +1690,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
   // caught the live P1: the REAL captured plan text (scripts/journeys/
   // fixtures/r4-19-f2-live-capture/cleanup-plan.md) driven against the REAL
   // captured findings (.../status.json's findings[], absolute `.file` per
-  // cli/brain-lint.ts's contract). The live bug reported openFindingCount:0
+  // packages/knowledge/brain-lint.ts's contract). The live bug reported openFindingCount:0
   // with BOTH actions 'cleared'; both findings were genuinely still live.
   // Kills: the exact defect — comparing an absolute Finding.file directly
   // against a repo-relative parsed target with no normalization.
@@ -2252,7 +2252,7 @@ describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
 // W8-B3 (operator note ON-5) — `sourcesFound`, and the blank-opener rule.
 //
 // The wire used to carry `transcript: descriptor.turnSpec === undefined`
-// (cli/bridge-studio-sessions.ts) as a per-kind proxy for "does this kind
+// (packages/sessions/bridge-studio-sessions.ts) as a per-kind proxy for "does this kind
 // record turns". It was a stored copy of a fact this module already knows, and
 // it was WRONG for `authoring` — that kind declares a `turnSpec`, yet its start
 // route (`writeAuthoringSession`, cli/ui-bridge.ts) writes `prompt.md` before

@@ -5,7 +5,7 @@
  * `orchestrator/*-runner.ts` (architect-runner.ts / instructions-runner.ts /
  * demo-builder-runner.ts / project-brain-builder-runner.ts — all four stay
  * byte-for-byte untouched; ADR-043 §3's dispatch fork lives in
- * `cli/agent-run.ts`, NOT here).
+ * `packages/agents/agent-run.ts`, NOT here).
  *
  * Owns, ONCE, everything those four duplicate:
  *   - the SEC-04 containment preamble: `resolveGuardedPath(projectRoot,
@@ -25,8 +25,8 @@
  *     `terminal`) -> advance to `next`.
  *
  * Modeled on `orchestrator/project-brain-builder-runner.ts` and
- * `orchestrator/instructions-runner.ts` (the closest analogues); reuses their
- * shared helpers in `orchestrator/interactive-session.ts` rather than
+ * `packages/sessions/instructions-runner.ts` (the closest analogues); reuses their
+ * shared helpers in `packages/sessions/interactive-session.ts` rather than
  * re-implementing them.
  *
  * ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ export class InteractiveRunnerError extends Error {
 const INTERACTIVE_LIBRARY_DIRNAME = '_interactive-library';
 
 /** No dedicated `interactive`/`session` Phase value exists in the closed
- *  `Phase` union (`orchestrator/logging.ts`) — adding one is out of this
+ *  `Phase` union (`packages/kernel/logging.ts`) — adding one is out of this
  *  file's scope (logging.ts is not one of this WI's two files). `orchestrator`
  *  is the generic, non-committal bucket for cross-cutting spine plumbing. */
 const RUNNER_PHASE: Phase = 'orchestrator';
@@ -274,8 +274,8 @@ export async function runInteractiveTurn(
   // have one) — tracked separately, deliberately not fixed here. `costUsd` also
   // stays `null`: this spine emits no `cost_usd` on any event, tracked separately.
   // Pinned by AT-a/AT-b
-  // (`cli/agent-run.test.ts`) and by the co-location ratchet
-  // (`cli/agent-run-log-dir-colocation.test.ts`), which fails if this template
+  // (`packages/agents/agent-run.test.ts`) and by the co-location ratchet
+  // (`packages/agents/agent-run-log-dir-colocation.test.ts`), which fails if this template
   // and the bridge's `logDir` template ever resolve differently again.
   //
   // Consequence, deliberate: for a kind id that also names a legacy runner, this
@@ -532,7 +532,7 @@ async function runAgentStyleStep(args: {
     if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else if (turnSpec.style === 'structured') {
     // No schema registry exists yet — SCHEMA_IDS ships empty (R4-22 WI-1's
-    // own deliberately-green gap-pin, orchestrator/studio/session-kinds.ts).
+    // own deliberately-green gap-pin, packages/sessions/studio/session-kinds.ts).
     // Fail LOUD rather than fabricate a schema or silently fall back to the
     // agent primitive — the declared-data-fails-open shape this campaign
     // guards against.
