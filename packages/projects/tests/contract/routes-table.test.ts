@@ -39,6 +39,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { FORGE_ROOT } from '@forge/kernel';
 import { projectsRoutes, type ProjectsRouteDeps } from '../../routes.ts';
 
 /**
@@ -232,4 +233,53 @@ test('routes-table: every entry carries a dryClassification and a callable handl
   assert.deepEqual(missingClassification, [], `entries with no dryClassification: ${missingClassification.join(', ')}`);
   const missingHandler = table.filter((r) => typeof r.handler !== 'function').map((r) => key(r.method, r.path));
   assert.deepEqual(missingHandler, [], `entries with no callable handler: ${missingHandler.join(', ')}`);
+});
+
+// ---------------------------------------------------------------------------
+// R4-17 AT-3, MOVED HERE WITH ITS SUBJECT (M4 projects routes carve).
+//
+// It lived in `cli/bridge-studio-contract-stages.test.ts` and drove
+// `handleStudioRoutes` directly. The contract-stages route left that if-chain
+// for this table, so the legacy dispatcher stopped claiming the URL and the
+// case went red — correctly: it was reporting that its subject had moved, not
+// a defect. The assertion it makes is load-bearing and is kept verbatim in
+// meaning: a LITERAL ".." segment, which a real `fetch()` client normalises
+// away before the request is sent but a raw wire-level request does not, must
+// be CLAIMED by the route and rejected by the SERVER-SIDE slug check — never
+// left unmatched to 404, which would look identical to "no such route" while
+// the guard never ran.
+//
+// `pathOnly` strips only the query string (it does not normalise), so `[^/]+`
+// sees the raw ".." and the entry claims it. That is the property under test.
+// ---------------------------------------------------------------------------
+
+test('R4-17 AT-3 (raw wire-level ".."): the contract-stages entry CLAIMS a literal ".." id segment rather than falling through unmatched', () => {
+  const entry = table.find((r) => r.method === 'GET' && r.path === '/api/studio/projects/:id/contract-stages');
+  assert.ok(entry, 'the contract-stages entry must exist');
+  assert.equal(
+    entry.matches('/api/studio/projects/../contract-stages'),
+    true,
+    'the route must claim this URL (matching [^/]+ literally on the raw ".." segment) rather than falling through unmatched — an unmatched raw traversal 404s and the server-side slug check never runs',
+  );
+});
+
+test('R4-17 AT-3 (raw wire-level ".."): and the handler REJECTS it 400 — the guard does not rely on client-side normalisation', async () => {
+  const entry = table.find((r) => r.method === 'GET' && r.path === '/api/studio/projects/:id/contract-stages');
+  assert.ok(entry);
+  let status = 0;
+  const res = {
+    statusCode: 0,
+    writeHead(code: number) { status = code; return this; },
+    end() { /* only the status is inspected */ },
+    setHeader() { /* no-op */ },
+  };
+  const handled = await entry.handler(
+    { headers: {} } as never,
+    res as never,
+    { forgeRoot: FORGE_ROOT, logsRoot: `${FORGE_ROOT}/_logs`, readBody: async () => ({}) } as never,
+    '/api/studio/projects/../contract-stages',
+    'GET',
+  );
+  assert.equal(handled, true, 'the handler must claim the request');
+  assert.equal(status, 400, 'the raw ".." segment must be rejected by the slug check — never treated as a real project id');
 });
