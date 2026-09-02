@@ -38,16 +38,22 @@ import {
 } from '@forge/kernel/studio/yaml-fields.ts';
 
 // The KB descriptor's load / serialize / process-resolution live in
-// ./kb-descriptor.ts (extracted to keep this file under the 800-line cap).
-// Re-exported here so existing importers keep resolving them from './registry.ts'.
+// `@forge/knowledge/studio/kb-descriptor.ts`. Re-exported here so the legacy
+// importers inside `orchestrator/` and `cli/` keep resolving them from
+// './registry.ts' — repointing those at the package specifier would trade this
+// one row for one per importer.
+//
+// Culled 2026-09-03 (M4-knowledge s5, ruling 54): `deriveKbUsageDefaults`,
+// `DEFAULT_KB_LINT`, `DEFAULT_KB_INGEST` and `DEFAULT_KB_CONSOLIDATE` were
+// re-exported here with ZERO importers taking them by this path — checked
+// against all 73 files that import this module, not inferred. The one live
+// consumer of `deriveKbUsageDefaults` already imports it from the package
+// directly. The residual row for the three names below closes with the
+// registry split (M4-agents), not here.
 export {
   loadKbDescriptor,
   serializeKbDescriptor,
   resolveKbProcesses,
-  deriveKbUsageDefaults,
-  DEFAULT_KB_LINT,
-  DEFAULT_KB_INGEST,
-  DEFAULT_KB_CONSOLIDATE,
 } from '@forge/knowledge/studio/kb-descriptor.ts';
 
 // The Skill / Template / Catalog / Community kinds moved to
