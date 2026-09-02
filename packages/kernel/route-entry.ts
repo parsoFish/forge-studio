@@ -31,6 +31,8 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import type { StudioContext } from './http-envelope.ts';
+
 /**
  * How `cli/dry-bridge.ts` treats this route when `FORGE_DRY_BRIDGE=1`.
  *
@@ -59,6 +61,38 @@ export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * names, and both are caught by driving the handler directly in a package
  * test rather than through a booted bridge.
  */
+/**
+ * The context a carved route handler receives, plus the one thing the envelope
+ * deliberately does not provide.
+ *
+ * `http-envelope.ts` states its scope: "Body parsing, CSRF and the route
+ * dispatch stay with the host: they are policy about a *request*, not the
+ * shape of a *response*, and the host is the single place that policy is
+ * applied." That is right, and it left `RouteEntry` unable to express a
+ * MUTATING carved route: a handler needing a body had to import `readJson`
+ * from `cli/bridge-studio.ts`, re-adding the exact `package-to-legacy` row the
+ * envelope move existed to remove. The knowledge lane did not meet this — both
+ * its carved POSTs take everything from the URL — and the library lane, whose
+ * routes are almost entirely writes, met it immediately.
+ *
+ * `readBody` resolves it WITHOUT widening the envelope's scope: the host still
+ * owns the policy — it applies the CSRF check before dispatch and decides how
+ * a body is read and bounded — and hands the RESULT down. The handler consumes
+ * a value; it does not acquire a policy.
+ *
+ * T1 ruling 30 (M4). Additive: a table whose handlers ignore `readBody` is
+ * unaffected, which is why `knowledgeRoutes` slots into the assembled table
+ * unchanged — a handler accepting the narrower `StudioContext` is assignable
+ * where one accepting `RouteContext` is expected.
+ */
+export type RouteContext = StudioContext & {
+  /** Read and parse this request's body. Supplied by the host, which has
+   *  already applied the CSRF and transport policy the envelope's scope note
+   *  keeps there. Called at most once per request by convention; a handler
+   *  that does not need a body never calls it. */
+  readonly readBody: () => Promise<unknown>;
+};
+
 export type RouteEntry<Ctx = unknown> = {
   readonly method: RouteMethod;
   /**

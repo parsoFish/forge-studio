@@ -19,7 +19,7 @@
  * `packages/knowledge/tests/contract/routes-table.test.ts`, which pins the
  * `drain/cancel` vs `drain/:runId` collision.
  */
-import type { RouteTable } from '@forge/kernel';
+import type { RouteContext, RouteTable } from '@forge/kernel';
 import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 
 /**
@@ -33,6 +33,12 @@ import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 export { dispatchRoute } from '@forge/kernel';
 
 /** Every carved route, in package order. */
-export const routeTable: RouteTable<{ forgeRoot: string; logsRoot: string }> = [
+/**
+ * Typed on `RouteContext` — `StudioContext` plus the host-supplied `readBody`
+ * (kernel, T1 ruling 30). A package table whose handlers accept the narrower
+ * `StudioContext` slots in unchanged: a handler taking a supertype is
+ * assignable where one taking the subtype is expected.
+ */
+export const routeTable: RouteTable<RouteContext> = [
   ...knowledgeRoutes,
 ];

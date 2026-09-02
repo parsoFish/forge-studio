@@ -75,9 +75,11 @@ export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon' | 'network
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
 
 export type RouteClassification = {
-  // 'DELETE' added W7-B4: the library-authoring surface is the first to use
-  // true DELETE methods (earlier deletes multiplexed over POST, kept as the
-  // ` (delete)`-suffixed rows the coverage test canonicalizes).
+  // 'DELETE' added W7-B4. The two rows that still multiplexed a delete over
+  // POST — carrying a ` (delete)` suffix the coverage test canonicalized —
+  // were re-keyed to this method in M4-library's route carve (T1 ruling 28),
+  // and that canonicalization is gone with them. A delete is declared here as
+  // DELETE; no route string encodes a method.
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | '*';
   /** Route path. `:id`-style segments are literal placeholders (documentation,
    *  not a router pattern). A `(op=...)` suffix distinguishes routes that
@@ -263,14 +265,14 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/hooks/:id/override', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (overridden:true) — no spawn/remote' },
   { method: 'POST', route: '/api/studio/connections/:id/probe', classification: 'exempt-local', reason: 'R3-04 D3/D11 — spawns a declared, credential-stripped local presence/version check only; deliberately NEVER suppressed by dry-bridge (readiness must stay real, D3) — no git-remote/daemon/agent-turn' },
   { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
-  { method: 'POST', route: '/api/studio/kbs/:id (delete)', classification: 'exempt-local', reason: 'removes a local KB directory' },
+  { method: 'DELETE', route: '/api/studio/kbs/:id', classification: 'exempt-local', reason: 'removes a local KB directory' },
   // W7-B3 (community-23) — registry CRUD: all three write ONLY the local
   // repo-tracked studio/community/registry.yaml (fixed path, temp+rename,
   // re-parsed through loadCommunityRegistry before the rename); no spawn,
   // no network, no git action — the operator commits via their own flow.
   { method: 'POST', route: '/api/studio/community/registry/items', classification: 'exempt-local', reason: 'adds a row to the local community registry file' },
   { method: 'PUT', route: '/api/studio/community/registry/items/:id', classification: 'exempt-local', reason: 'edits a local community registry row in place' },
-  { method: 'POST', route: '/api/studio/community/registry/items/:id (delete)', classification: 'exempt-local', reason: 'removes a local community registry row' },
+  { method: 'DELETE', route: '/api/studio/community/registry/items/:id', classification: 'exempt-local', reason: 'removes a local community registry row' },
   { method: 'POST', route: '/api/studio/kbs/:id/guidance', classification: 'exempt-local', reason: 'writes a local guidance markdown file' },
   { method: 'POST', route: '/api/initiatives', classification: 'exempt-local', reason: 'writeManifest — local queue write only' },
   { method: 'POST', route: '/api/instructions/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/answer/verdict' },
