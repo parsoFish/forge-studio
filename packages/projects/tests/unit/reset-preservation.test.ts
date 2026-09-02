@@ -133,14 +133,38 @@ test('reset.ts source never spells "secrets.env" in executable code — the stru
   );
 });
 
-test('applyContractReset preserves northStar/instructions/secret-name byte-identical; regenerates testProcess/demoProcess/releaseProcess from the starter; never leaks the secret VALUE', () => {
+test('applyContractReset preserves northStar/instructions/secret-name byte-identical; regenerates testProcess.local/demoProcess from the starter; PRESERVES releaseProcess (the starter has no opinion); never leaks the secret VALUE', () => {
   const forgeRoot = isolatedForgeRoot();
   const projectDir = betteradoShapedProject();
   try {
     const secretsEnvBefore = readFileSync(join(projectDir, 'secrets.env'), 'utf8');
 
-    const drift = computeContractDrift(projectDir, { forgeRoot });
-    assert.equal(drift.appType, 'typescript-cli', 'the fallback appType resolution (typescript-cli preferred)');
+    // RULING 38 fix (a), M4-projects-reset: this fixture (deliberately shaped
+    // like terraform-provider-betterado — a Go/Terraform provider) has no
+    // persisted `appType`, and NONE of the three shipped starters is actually
+    // a Go template. Before the fix, `computeContractDrift` GUESSED
+    // 'typescript-cli' here and silently rewrote the Go contract into a
+    // TypeScript one — the exact shipped PR #289 defect. It now throws
+    // (`AppTypeUnresolvedError`, see reset-app-type-required.test.ts) unless
+    // the operator explicitly says so via `--app-type` / `opts.appType` — so
+    // this test supplies that explicit, informed choice itself, then asserts
+    // what a CORRECT reset does even so: it must never silently clear a
+    // hand-authored value the matched starter simply has no opinion on
+    // (ruling 38 fix b, below).
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
+    assert.equal(drift.appType, 'typescript-cli', 'the explicitly requested appType is used — never guessed');
+
+    // RULING 38 fix (b) — row-level invariant: no DriftReport row may carry
+    // action:'regenerate' with an `after` of `undefined` (a delete wearing a
+    // regenerate label). Asserted generically over every row so a FUTURE
+    // section added to the regenerate set is covered automatically, not just
+    // the three fields this fixture happens to exercise today.
+    for (const row of drift.rows) {
+      assert.ok(
+        !(row.action === 'regenerate' && row.after === undefined),
+        `row "${row.section}" carries action:'regenerate' with after:undefined — a delete wearing a regenerate label`,
+      );
+    }
 
     // The canary must never appear in the drift report itself.
     assert.equal(JSON.stringify(drift).includes(SECRET_CANARY), false, 'the drift report must never carry the secret VALUE');
@@ -158,7 +182,7 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
       'the secret NAME must survive byte-identical in testProcess.acceptance.requiresEnv',
     );
 
-    // --- Regeneration: testProcess.local / demoProcess / releaseProcess ---
+    // --- Regeneration: testProcess.local / demoProcess ---------------------
     assert.deepEqual(tp.local, { cmd: ['npm', 'test'] }, 'testProcess.local must regenerate to the typescript-cli starter value');
     assert.deepEqual(
       rawAfter.demoProcess,
@@ -168,10 +192,19 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
       ],
       'demoProcess must regenerate to the typescript-cli starter steps',
     );
-    assert.equal(
-      'releaseProcess' in rawAfter,
-      false,
-      'releaseProcess must regenerate to the starter state (typescript-cli declares none) — the stale value is cleared',
+
+    // --- PRESERVATION (ruling 38 fix b): releaseProcess ---------------------
+    // typescript-cli declares no releaseProcess at all — the starter has NO
+    // OPINION here, so the project's own hand-authored value must survive
+    // verbatim, never be cleared for want of a template section. This is
+    // exactly the S3-beat scenario the shipped defect broke.
+    const releaseRow = drift.rows.find((r) => r.section === 'releaseProcess');
+    assert.ok(releaseRow, 'expected a releaseProcess row');
+    assert.equal(releaseRow!.action, 'preserve', 'a section the matched starter simply lacks degrades to preserve, not regenerate');
+    assert.deepEqual(
+      rawAfter.releaseProcess,
+      { steps: [{ kind: 'docs', phase: 'pre-merge', text: 'a stale release step' }] },
+      'releaseProcess must survive byte-identical — the starter has no opinion, so its silence must never clear a hand-authored value',
     );
 
     // --- The secret VALUE never leaked anywhere the reset writes/returns --

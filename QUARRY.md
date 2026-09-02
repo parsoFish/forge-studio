@@ -395,4 +395,11 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/index.ts | knowledge | verbatim | 11 |
 | packages/library/index.ts | library | verbatim | 8 |
 | packages/projects/index.ts | projects | verbatim | 11 |
+| packages/projects/project-roster.ts | projects | verbatim | 468 |
+| packages/projects/project-preflight-read.ts | projects | verbatim | 192 |
+| packages/projects/project-roadmap.ts | projects | verbatim | 145 |
+| packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 620 |
+| packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 298 |
+| packages/projects/project-contract-scaffold.ts | projects | verbatim | 596 |
+| packages/projects/routes.ts | projects | verbatim | 344 |
 | packages/sessions/index.ts | sessions | verbatim | 11 |

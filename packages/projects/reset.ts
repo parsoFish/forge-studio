@@ -90,12 +90,16 @@ export type ContractSection =
   | 'buildProcess';
 
 /**
- * Q5 proposes all four; this module only ever emits 'add' / 'unchanged' /
- * 'regenerate'. 'preserve' is kept in the union for forward-compat (a future
- * section might need "field exists, value untouched, but for a REASON
- * distinct from before===after") but is currently unreachable — every
- * ContractSection row's action is decided purely by before/after equality
- * (see `driftRow` / `computeSkillsDrift`).
+ * Q5 proposes all four. 'preserve' was unreachable at first ship (every row's
+ * action was decided purely by before/after equality) — RULING 38 fix (b),
+ * M4-projects-reset, activates it for exactly the case its own doc
+ * anticipated: a row whose value is untouched NOT because the starter agrees
+ * with the project, but because the starter has no opinion at all and
+ * `driftRow`'s invariant guard (below) refused to let that read as a
+ * "regenerate to nothing". See `driftRow` for the structural guarantee this
+ * backs: no row may ever carry `action: 'regenerate'` with an `after` of
+ * `undefined` (a delete wearing a regenerate label — the shipped PR #289
+ * `releaseProcess`-clearing defect).
  */
 export type DriftAction = 'regenerate' | 'preserve' | 'add' | 'unchanged';
 
@@ -124,14 +128,24 @@ export type DriftReport = {
   projectId: string;
   /**
    * The app-type starter this drift was computed against, or `null` when
-   * none could be resolved (no `studio/starters/projects/` entries under
-   * `forgeRoot` — a bare/test forgeRoot). SPEC DEVIATION: Q5 types this as a
-   * required `string`. There is genuinely no on-disk record of which
-   * scaffold produced an EXISTING project (confirmed independently:
-   * `packages/library/…project-scaffold-usage…` — "appType is validated at
-   * creation but is never persisted in .forge/project.json"), so
-   * `computeContractDrift` cannot always produce one; `null` is the honest
-   * value for that case, not a fabricated derivation.
+   * NO starters exist at all under `forgeRoot` (a bare/test forgeRoot — there
+   * is nothing to compare against). SPEC DEVIATION: Q5 types this as a
+   * required `string`; `null` is kept for that one genuinely-nothing-to-
+   * compare-against case.
+   *
+   * Every OTHER "can't resolve" case (starters exist, but neither an explicit
+   * `--app-type` nor a persisted `config.appType` names one — the shipped PR
+   * #289 defect) no longer produces a `DriftReport` with a fabricated/guessed
+   * value here; `computeContractDrift` THROWS `AppTypeUnresolvedError`
+   * instead (ruling 38 fix a) — see that class's doc for why a throw, not a
+   * report state.
+   *
+   * `appType` IS now persisted at creation (`scaffoldGreenfieldProject` →
+   * `stampAppType`, ruling 38 fix c) and read here off `config.appType` — so a
+   * project created after this fix always has one on disk. An ONBOARDED
+   * project (never scaffolded by forge), or one created before this fix,
+   * legitimately has none; that is the case an explicit `--app-type` exists
+   * for.
    */
   appType: string | null;
   /** The `forgeRoot` the drift was resolved against — carried so
@@ -157,25 +171,81 @@ export type ResetResult = {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the app-type starter to diff against. An EXPLICIT `requested`
- * appType that isn't a real starter throws (an "unresolvable projectDir/
- * appType" per this module's own contract); an omitted one degrades
- * gracefully to `null` (no starters at all under `forgeRoot`) or the
- * deterministic default `'typescript-cli'` when available, else the first
- * starter alphabetically (`listProjectStarters` already sorts) — never a
- * throw, since "no appType known" is an ordinary, expected outcome for an
- * existing project (see the `DriftReport.appType` doc above).
+ * Ruling 38 fix (a), M4-projects-reset — thrown by `resolveAppType` (and so by
+ * `computeContractDrift`) whenever this project's app type cannot be pinned
+ * to a real starter: either an EXPLICIT `--app-type`/`opts.appType` (or a
+ * PERSISTED `config.appType`, fix c) names something `listProjectStarters`
+ * doesn't have, or — the shipped PR #289 defect this closes — NEITHER was
+ * given at all while starters DO exist, which used to fall back to a guessed
+ * default (`typescript-cli`, or the first one alphabetically) instead of
+ * refusing.
+ *
+ * SHAPE CHOSEN: a thrown, exported, typed `Error` subclass — not a
+ * `DriftReport` field/state. Reasoning (stated once here, not re-litigated at
+ * each call site): `computeContractDrift`'s ordinary return type IS a
+ * `DriftReport`; overloading that same return type to ALSO mean "unresolved,
+ * do not trust the rows" (e.g. a sentinel `appType: 'unresolved'`, or a
+ * `rows: []`) would make it possible for a careless caller to read `.rows`
+ * off a report that was never actually computed — precisely the false-green
+ * shape fix (a) exists to prevent. A thrown, named class makes that
+ * impossible: a caller either gets a real `DriftReport` or an exception,
+ * never a report-shaped placeholder. `availableAppTypes` is carried as a
+ * field (not just interpolated into `.message`) so a programmatic caller —
+ * the Studio "Rebuild contract" route this module's header anticipates — can
+ * render the real starter list without parsing prose out of an error string.
+ * `instanceof AppTypeUnresolvedError` also lets a caller (or the CLI) treat
+ * this ONE condition distinctly from every other throw in this module (a
+ * malformed config, a containment rejection, an unresolvable projectDir) —
+ * all of which stay plain `Error`s, since only this one has a concrete,
+ * actionable remedy (`--app-type <one of these>`) worth surfacing structured.
  */
-function resolveAppType(forgeRoot: string, requested: string | undefined): string | null {
+export class AppTypeUnresolvedError extends Error {
+  readonly availableAppTypes: string[];
+  constructor(message: string, availableAppTypes: string[]) {
+    super(message);
+    this.name = 'AppTypeUnresolvedError';
+    this.availableAppTypes = availableAppTypes;
+  }
+}
+
+/**
+ * Resolve the app-type starter to diff against. `requested` is the explicit
+ * `--app-type`/`opts.appType`; `persisted` is `config.appType` (ruling 38 fix
+ * c) — `requested` wins when both are given (an operator override beats a
+ * stale on-disk declaration, e.g. after a language migration).
+ *
+ *   - EITHER is given and isn't a real starter ⇒ throws `AppTypeUnresolvedError`
+ *     (unchanged shape for the explicit case; now also covers a persisted-but-
+ *     stale value).
+ *   - Neither is given, and NO starters exist at all under `forgeRoot` (a
+ *     bare/test forgeRoot) ⇒ `null`. Unaffected by this fix — there is
+ *     nothing to compare against, so nothing to guess wrong; see
+ *     `reset-containment.test.ts`'s own note on this case.
+ *   - Neither is given, and starters DO exist ⇒ throws
+ *     `AppTypeUnresolvedError`. THIS is fix (a): guessing a default here was
+ *     the shipped defect (PR #289) — a Go/Terraform project silently treated
+ *     as `typescript-cli`, its whole test/release contract rewritten into
+ *     another language's. "No appType known" is no longer an ordinary,
+ *     silently-resolved outcome; the operator must say so explicitly.
+ */
+function resolveAppType(forgeRoot: string, requested: string | undefined, persisted: string | undefined): string | null {
   const available = listProjectStarters(forgeRoot);
-  if (requested !== undefined) {
-    if (!available.includes(requested)) {
-      throw new Error(`reset: unknown appType "${requested}" — available: ${available.join(', ') || '(none)'}`);
+  const explicit = requested ?? persisted;
+  if (explicit !== undefined) {
+    if (!available.includes(explicit)) {
+      throw new AppTypeUnresolvedError(
+        `reset: unknown appType "${explicit}" — available: ${available.join(', ') || '(none)'}`,
+        available,
+      );
     }
-    return requested;
+    return explicit;
   }
   if (available.length === 0) return null;
-  return available.includes('typescript-cli') ? 'typescript-cli' : available[0];
+  throw new AppTypeUnresolvedError(
+    `reset: cannot determine this project's app type — .forge/project.json has no persisted appType and none was given. ` +
+      `Pass --app-type explicitly (available: ${available.join(', ')})`,
+    available,
+  );
 }
 
 /**
@@ -211,19 +281,31 @@ function jsonEqual(a: unknown, b: unknown): boolean {
  * per-field prose, because a flat reading is unsafe: Q2 (literally) makes
  * every conditional field's regenerated value TRACK the starter exactly,
  * "else absent" — which means a project's own `testProcess.ci`/
- * `standing_work_item_acs`/`buildProcess` would be silently WIPED by any
- * reset, since none of the three shipped starters declare any of them. That
- * is real, disclosed-in-the-drift-report-first destructive behaviour for
- * fields no test in this suite requires "regenerated" — so this module only
- * takes the starter's word UNCONDITIONALLY for the three fields Q2 AND this
- * package's own tests actually exercise as regenerated
- * (`testProcess.local`/`demoProcess`/`releaseProcess`); everything else the
- * starter has no opinion on is a FILL — the starter wins only when it
- * declares something and the project doesn't, never a clear of an existing
- * declaration the current template simply doesn't mention.
+ * `standing_work_item_acs`/`buildProcess`/`releaseProcess`/`demoProcess`/
+ * `testProcess.local` would be silently WIPED by any reset whose matched
+ * starter doesn't happen to declare that section (true of ALL THREE shipped
+ * starters for `standing_work_item_acs`/`testProcess.ci`/`buildProcess`
+ * always, and of `typescript-cli`/`typescript-api`/`typescript-web` for
+ * `releaseProcess` specifically — the shipped PR #289 defect this file's own
+ * tests now pin, `reset-preservation.test.ts`). RULING 38 fix (b),
+ * M4-projects-reset: `driftRow`'s row-level invariant (below) closes this for
+ * EVERY section, not per-field — `'fillOnly'` never had the bug (it already
+ * falls back to `current`); `'unconditional'` now degrades to the same
+ * "starter silent ⇒ keep the real value, reported as `'preserve'`" behaviour
+ * rather than clearing, and only actually regenerates when the starter
+ * declares something concrete to regenerate TO. The three-mode split below
+ * still matters for its own reason (readability + `'protected'`'s never-
+ * consult-the-starter carve-out for secrets), but no longer as the
+ * anti-wipe mechanism — that is now `driftRow`'s own structural guard.
  *
- *   - `'unconditional'` — `after = starterValue`, even `undefined` (clears a
- *     stale declaration the current template no longer wants).
+ *   - `'unconditional'` — `after = starterValue` — INCLUDING when the matched
+ *     starter simply doesn't declare this section, EXCEPT for the one case
+ *     the row-level invariant below refuses: a real, current value with
+ *     nothing from the starter to replace it with. A stale declaration DOES
+ *     still get cleared when the starter explicitly says something different
+ *     (or explicitly says nothing was ever real to begin with — `current`
+ *     also `undefined`); what it can never do is clear a REAL value into
+ *     `undefined` merely because the current template is silent on it.
  *   - `'fillOnly'`       — `after = starterValue ?? current` (starter fills
  *     an absence; never clears an existing declaration).
  *   - `'protected'`      — `after = current`, always; the starter is never
@@ -234,7 +316,25 @@ function jsonEqual(a: unknown, b: unknown): boolean {
 type RegenMode = 'unconditional' | 'fillOnly' | 'protected';
 
 function driftRow(section: ContractSection, current: unknown, starterValue: unknown, mode: RegenMode): DriftRow {
-  const after = mode === 'protected' ? current : mode === 'unconditional' ? starterValue : (starterValue !== undefined ? starterValue : current);
+  const proposed = mode === 'protected' ? current : mode === 'unconditional' ? starterValue : (starterValue !== undefined ? starterValue : current);
+
+  // RULING 38 fix (b), M4-projects-reset — ROW-LEVEL INVARIANT: no row may
+  // ever carry `action: 'regenerate'` with an `after` of `undefined` — that
+  // is a delete wearing a regenerate label (the shipped PR #289 defect: a
+  // hand-authored `releaseProcess` silently cleared because the matched
+  // starter simply doesn't declare one). Structural, not per-mode: this guard
+  // fires whenever the computed `after` would be `undefined` against a REAL
+  // `current`, regardless of which `RegenMode` produced it — so a future mode
+  // or a future regenerated section is covered automatically, not just
+  // `'unconditional'`'s three fields today. The starter has no opinion here;
+  // the project's own value is kept verbatim and reported as such —
+  // `'preserve'`, not `'unchanged'`, so a caller can tell "the starter agreed"
+  // apart from "the starter was silent and this was protected".
+  if (proposed === undefined && current !== undefined) {
+    return { section, before: current, after: current, action: 'preserve' };
+  }
+
+  const after = proposed;
   const action: DriftAction =
     current === undefined && after !== undefined
       ? 'add'
@@ -299,8 +399,10 @@ function computeSkillsDrift(
  * in this package; `forge project migrate` is the remedy for the latter —
  * Q6, this module never re-implements that mapping), the matched starter's
  * own `.forge/project.json`, and `.forge/skills/**`. Writes nothing, spawns
- * nothing. Throws on an unresolvable `projectDir` or an explicitly-requested
- * unknown `appType`; never on a merely-drifted config.
+ * nothing. Throws on an unresolvable `projectDir`, an `AppTypeUnresolvedError`
+ * when the app type cannot be pinned to a real starter (fix a — see that
+ * class's doc), and on a malformed on-disk config; never on a merely-drifted
+ * one.
  */
 export function computeContractDrift(
   projectDir: string,
@@ -320,7 +422,7 @@ export function computeContractDrift(
 
   const config = loadProjectConfig(dir); // ProjectConfig | null; propagates a malformed-config throw
 
-  const appType = resolveAppType(forgeRoot, opts.appType);
+  const appType = resolveAppType(forgeRoot, opts.appType, config?.appType);
   const starter = appType ? loadStarterConfig(forgeRoot, appType) : null;
   // When NO starter resolves at all (no `studio/starters/projects/` entries
   // under `forgeRoot`), there is no template to regenerate from — every
@@ -547,15 +649,23 @@ function printDriftReport(drift: DriftReport): void {
 }
 
 /**
- * `forge project reset <id> [--apply]`. Dry-run is the DEFAULT and needs no
- * confirmation — it only computes + prints the drift report; `--dry-run` is
- * also accepted explicitly (same behaviour) for callers that want to name it.
- * Only `--apply` writes.
+ * `forge project reset <id> [--apply] [--app-type <type>]`. Dry-run is the
+ * DEFAULT and needs no confirmation — it only computes + prints the drift
+ * report; `--dry-run` is also accepted explicitly (same behaviour) for
+ * callers that want to name it. Only `--apply` writes.
+ *
+ * `--app-type` (ruling 38 fix a) is the operator's explicit override/answer
+ * when `computeContractDrift` can't otherwise pin an app type — no persisted
+ * `config.appType` (an onboarded project, or one created before fix c) and
+ * none given here throws `AppTypeUnresolvedError`, caught below like any
+ * other `computeContractDrift` throw: non-zero exit, the report is never
+ * printed, and `--apply` never reaches `applyContractReset` — nothing is
+ * written.
  */
 export function cmdProjectReset(args: string[]): number {
   const id = args[0];
   if (!id || id.startsWith('-')) {
-    console.error('usage: forge project reset <project-id> [--dry-run|--apply]');
+    console.error('usage: forge project reset <project-id> [--dry-run|--apply] [--app-type <type>]');
     return 2;
   }
   if (!PROJECT_ID_RE.test(id)) {
@@ -563,6 +673,14 @@ export function cmdProjectReset(args: string[]): number {
     return 2;
   }
   const apply = args.includes('--apply');
+  const appTypeFlagIndex = args.indexOf('--app-type');
+  const appTypeFlagValue = appTypeFlagIndex >= 0 ? args[appTypeFlagIndex + 1] : undefined;
+  // An EMPTY `--app-type ''` must not read as "not given": the flag was
+  // passed, so the operator meant something by it, and silently falling back
+  // to the unresolved path would report "pass --app-type explicitly" to
+  // someone who just did. Kept as the empty string so it reaches the
+  // allowlist check and is refused by name.
+  const appTypeFlag = appTypeFlagValue !== undefined && !appTypeFlagValue.startsWith('--') ? appTypeFlagValue : undefined;
 
   // NOT `resolve('.')`. That reads the process cwd, and it is correct today
   // only by accident: `apps/forge/cli.ts:51` does `process.chdir(FORGE_ROOT)`
@@ -599,7 +717,7 @@ export function cmdProjectReset(args: string[]): number {
 
   let drift: DriftReport;
   try {
-    drift = computeContractDrift(projectRoot, { forgeRoot });
+    drift = computeContractDrift(projectRoot, { forgeRoot, ...(appTypeFlag !== undefined ? { appType: appTypeFlag } : {}) });
   } catch (err) {
     console.error(`forge project reset: ${err instanceof Error ? err.message : String(err)}`);
     return 1;

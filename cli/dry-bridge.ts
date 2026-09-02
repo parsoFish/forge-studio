@@ -132,6 +132,14 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'saveProjectRepo merges + pushes the project default branch' },
   { method: 'PUT', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'the durable save merges + pushes via saveProjectRepo after the local .forge/project.json write' },
+  // The SAME handler has always answered POST on this URL — its legacy entry
+  // gate was `method !== 'DELETE'`, not `method === 'PUT'` — but only the PUT
+  // row was ever classified here, so the POST path reached the same
+  // push-to-remote code with no dry-bridge row governing it. The M4 route
+  // carve surfaced it: a table's `method` is singular, so the two methods
+  // became two rows, and this guard immediately reported the missing one.
+  { method: 'POST', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
+    reason: 'identical code path to the PUT row above — same handler, same saveProjectRepo merge + push' },
 
   // ---- stub-actions: the spawn-route families ----------------------------
   // Session bookkeeping (status/prompt/answers files) proceeds exactly as
