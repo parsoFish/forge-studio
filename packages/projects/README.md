@@ -54,9 +54,12 @@ these are hidden — `design.md` names every one and why.
 
 ## What it owns
 
-`routes.ts` is the package's HTTP surface: fourteen carved routes as an ordered,
+`routes.ts` is the package's HTTP surface: sixteen carved routes as an ordered,
 first-match-wins table `apps/forge/routes.ts` assembles, matching
-[`@forge/knowledge`](../knowledge/README.md)'s pattern.
+[`@forge/knowledge`](../knowledge/README.md)'s pattern. The reset row — `cmdProjectReset` ·
+`computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` — is the same
+capability behind two of those routes, `POST .../contract-reset` (dry-run) and
+`POST .../contract-reset/apply` (S3, 1.0.md §3, "Rebuild contract").
 
 ## What it does not own
 

@@ -225,6 +225,17 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/scheduler/pause', classification: 'exempt-local', reason: 'flag file only, no process action' },
   { method: 'POST', route: '/api/scheduler/resume', classification: 'exempt-local', reason: 'flag file only, no process action' },
   { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-auto', classification: 'exempt-local', reason: 'local git commit to forge-studio branch, no push' },
+  // S3 (1.0.md §3) — "Rebuild contract" (M4-projects, packages/projects/
+  // bridge-studio-project-reset.ts). Dry-run computes computeContractDrift
+  // from the request body's optional appType and writes NOTHING — a POST
+  // only because the app-type override arrives as a body, same shape as
+  // /api/studio/agents/:slug/instructions-draft below.
+  { method: 'POST', route: '/api/studio/projects/:id/contract-reset', classification: 'exempt-local', reason: 'computes the drift report (computeContractDrift) from the request body\'s optional appType override — writes nothing at all, no spawn, no remote (a POST only because the app-type override arrives as a body)' },
+  // applyContractReset writes ONLY via withStudioWrite/commitStudioChange —
+  // a local commit to the project's own forge-studio branch, never a push
+  // (saveProjectRepo, refused above, is the only route that pushes) — same
+  // shape as preflight/fix-auto directly above.
+  { method: 'POST', route: '/api/studio/projects/:id/contract-reset/apply', classification: 'exempt-local', reason: 'applyContractReset commits locally to the project\'s forge-studio branch (withStudioWrite/commitStudioChange) — no push, no spawn, no remote' },
   { method: 'POST', route: '/api/studio/projects', classification: 'exempt-local', reason: 'onboard: local git init + file scaffolds only' },
   { method: 'POST', route: '/api/studio/projects/create', classification: 'exempt-local', reason: 'greenfield create (R4-03): local template scaffold + brain seed, no spawn/remote' },
   { method: 'POST', route: '/api/develop/start', classification: 'exempt-local', reason: 'manifest move only' },

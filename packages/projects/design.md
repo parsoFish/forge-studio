@@ -62,7 +62,7 @@ ever re-imports it directly.
 ## Routes: the same injected-dependency shape, for the same reason
 
 `routes.ts`'s `ProjectsRouteDeps` repeats this pattern for HTTP. Nine of this
-package's fourteen carved routes need `seedProjectBrain` (`@forge/knowledge`),
+package's sixteen carved routes need `seedProjectBrain` (`@forge/knowledge`),
 `isContainedProjectRepoPath` (`@forge/flows`), `agentCapabilityDescriptor`
 (`@forge/agents`), and legacy registry/spawn helpers — every one of them a
 package `projects` (rank 2) may not import. The allow-graph

@@ -19,8 +19,9 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 58 |
+| Classified rows below | 59 |
 | — `guarded` | 16 |
+| — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
 | — fixed in this sweep (all were `unguarded`) | 12 |
 | — fixed later in SEC-02 (`forge-d1f`) | 3 |
 | — fixed later in R4-16 (the four `/start` routes' `projectRepoPath`) | 1 |
@@ -1759,3 +1760,39 @@ remedy that script documents for exactly this case, and the same one the drain
 carve needed one PR earlier), which restores 92, and all 24 re-keyed allowlist
 rows were paired to findings by sink kind and order from a real
 `node scripts/check-raw-fs-guarded.mjs --json` run — never by arithmetic.
+
+### M4-projects — "Rebuild contract" becomes bridge-reachable (`packages/projects/reset.ts`, four sink pairs, all guard-terminal, no new mechanism)
+
+S3 (1.0.md §3): `packages/projects/routes.ts` gained two new rows, `POST
+/api/studio/projects/:id/contract-reset` (dry-run) and `.../contract-reset/apply`
+(apply), both dispatching into a new `packages/projects/bridge-studio-project-reset.ts`,
+which calls `reset.ts`'s `computeContractDrift`/`applyContractReset` — code that
+already existed (a prior PR) and was already exercised only via `forge project
+reset` (`apps/forge/cli.ts` → `cmdProjectReset`), never via an HTTP route. Wiring
+it into the route table makes `reset.ts` reachable from a bridge route for the
+FIRST time, so `check-request-path-sinks.mjs` reports four (file, sink) pairs
+as NEW rather than grown: `mkdirSync` (0→2), `readFileSync` (0→1), `statSync`
+(0→1), `writeFileSync` (0→1). **No new write mechanism was introduced by this
+carve** — `reset.ts` itself is unchanged; only its reachability grew, exactly
+the "M2 — the `@forge/kernel` move" and "M4 PR 4b" precedent above (a module
+becoming visible to the scan is not the same finding as a module growing a
+new sink).
+
+All four are **guarded `[read]`** — classified by reading `reset.ts`, not a
+live repro (the mechanism is the SAME `resolveGuardedPath` choke point this
+document already covers at dozens of other sites):
+
+| sink | site | request-derived component | guard |
+|---|---|---|---|
+| `statSync` | `computeContractDrift` (`reset.ts:414`), `statSync(dir)` where `dir = resolve(projectDir)` | `projectDir` | The route handler (`bridge-studio-project-reset.ts`'s `resolveProjectRootForReset`) resolves the URL's `:id` segment via `resolveGuardedPath(projectsDir, [id])` FIRST — mirroring `cmdProjectReset`'s own resolution exactly (reset.ts's header explains why: `resolveGuardedPath`, never a lexical `startsWith` check) — and hands `computeContractDrift` the guard's `.realPath`, never the raw `id`. `statSync` here only confirms the ALREADY-GUARDED path is a directory; the CLI entry point (`cmdProjectReset`) does the identical resolve-then-stat. |
+| `mkdirSync` ×2 | `ensureForgeSkillsDir` (`reset.ts:525`) and `applyContractReset`'s `.forge` ensure (`reset.ts:602`) | the project root (from the same guarded `:id` resolution above) | Both calls run on `guarded.realPath` / `forgeDirGuard.realPath` — `resolveGuardedPath(dir, ['.forge','skills'])` / `resolveGuardedPath(dir, ['.forge'])`, `dir` already the guard-terminal project root. Guard-terminal on its face (nothing but a `PathGuardOk` carries `.realPath` here). |
+| `readFileSync` | `applyContractReset` (`reset.ts:584`), reading the existing `.forge/project.json` before merging | the project root | `guarded.realPath` from `resolveGuardedPath(dir, PROJECT_CONFIG_REL_PATH.split('/'))` — same pattern. |
+| `writeFileSync` | `applyContractReset` (`reset.ts:608`), writing the merged `.forge/project.json` | the project root | Same `guarded.realPath` the read above validated; the write never re-derives a path from the request. |
+
+`check-raw-fs-guarded.mjs` (the dataflow-aware sibling this ratchet explicitly
+defers to — see this doc's own intro) already reported **0 unguarded** with
+these four sites in scope, confirming the classification rather than
+substituting for it. `scripts/request-path-sinks.baseline.txt` accepts the new
+counts via `--write` in the same PR that adds this section, per this
+document's own rule ("When `check-request-path-sinks.mjs` reports a new sink
+or a new caller, add its row here").

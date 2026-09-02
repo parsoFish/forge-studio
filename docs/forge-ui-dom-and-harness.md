@@ -2845,6 +2845,53 @@ is what this contract reads — but it cannot be the only distinguisher.
   log yields an empty summary — stays the honest em dash, never `$0.00`. An
   empty ledger honestly renders
   `[data-component="history-ledger-empty"]`, never a fabricated row.
+- **`/projects/[id]` — "Rebuild contract" + the drift report (S3, 1.0.md §3,
+  M4-projects; `RebuildContractPanel.tsx`, mounted in the editor aside right
+  below `ContractResolutionPanel`).** `_1.0/stories/S3.md` recorded that "the
+  drift report has no surface at all" — a project can drift away from the
+  contract every project onboarded since is built to (bound skills the
+  resolver cannot find, `testProcess`/`demoProcess`/`releaseProcess` regen
+  targets going stale) WITHOUT failing a single preflight clause; nothing on
+  the page said so, and nothing let the operator regenerate the mechanisms
+  forge owns. The whole panel is `[data-section="rebuild-contract"]`, three
+  stages, progressive disclosure (mirrors `ContractResolutionPanel`'s own
+  stage shape one level simpler):
+  1. `[data-action="rebuild-contract"]` computes the drift report
+     (`POST /api/studio/projects/:id/contract-reset`, PURE — writes nothing at
+     all) and shows it.
+  2. A project with no persisted `appType` (an ONBOARDED project —
+     `terraform-provider-betterado`, S3's own ground — predates the field)
+     cannot be diffed against a starter template; `computeContractDrift`
+     (`packages/projects/reset.ts`) throws `AppTypeUnresolvedError` and the
+     route answers 400 with `availableAppTypes` rather than a bare 500 (the
+     typed-catch-then-4xx convention `packages/flows/bridge-studio-runs.ts`'s
+     `FixConcernInvalidError` already uses). This renders
+     `[data-field="rebuild-app-type"]`, a `<select>` populated from EXACTLY
+     that list, plus `[data-action="preview-contract-reset"]` to re-run the
+     dry-run with the operator's choice — the CONTROL supplies the app type a
+     project with a persisted one never needs to give. `[data-section=
+     "rebuild-contract-error"]` renders any other dry-run failure's message.
+  3. A real report renders `[data-section="contract-drift"]
+     [data-drift-row-count][data-drift-skill-move-count]`: one
+     `[data-drift-row="<section>"][data-drift-action="regenerate"|"preserve"|
+     "add"|"unchanged"]` per `DriftReport` row — `section` and `action` are
+     the same `<div>`, so a beat reads both together — so the operator reads
+     every section that WOULD change, and every one that would not, before
+     committing to anything.
+  4. `[data-action="apply-contract-reset"]` applies it
+     (`POST .../contract-reset/apply`) — the SAME `appType`, but a FRESH
+     `computeContractDrift` call server-side, never the previewed report
+     round-tripped back as the thing that gets written (a client-supplied
+     `DriftReport` would let a request body dictate exactly what lands in
+     `.forge/project.json`, bypassing every invariant the pure compute
+     enforces). Success renders `[data-section="contract-drift-applied"]
+     [data-applied-count][data-skill-moves-applied-count]
+     [data-preflight-ok="true"|"false"]` and fires `onApplied` — the project
+     page's own `reload()` (the same one a page Retry uses), so `SkillsBind`'s
+     chips and `ContractResolutionPanel`'s counts refresh off a REAL
+     `fetchStudioProjects()`/`fetchPreflight()` re-read, never a locally
+     patched copy. Both buttons carry `data-disabled-reason` while a
+     computation/apply is in flight (`disabledAttrs`, crosscut-25).
 - **`/projects/[id]/showcase` — the demo showcase (R4-14, 2026-08-10).** A
   per-project **standing** demo page — "show someone the project" — distinct
   from the per-run `/artifact?type=demo` evidence view above: it always
