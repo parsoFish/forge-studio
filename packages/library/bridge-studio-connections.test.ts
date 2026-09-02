@@ -45,6 +45,10 @@
  *         — the installed argv is derived from the catalog pin ONLY, proven
  *         by comparing the response's `wouldInstall`/executed argv across an
  *         empty body vs. a body carrying those three fields: byte-identical.
+ *       - forge-6gv.8.2: NO confirm (absent body, or a body without
+ *         `confirm: true`) → 200 `{ok: true, preview}` and ZERO network/
+ *         executor calls — `installConnection` is never reached. ONLY a body
+ *         carrying `confirm: true` reaches the rest of D-4 below.
  *       - REUSES the ALREADY-SHIPPED dry-bridge / no-spawn suppression
  *         convention (`FORGE_ARCHITECT_NO_SPAWN=1`, set in `before()` below,
  *         exactly as bridge-studio-hooks.test.ts already does to keep bridge
@@ -309,12 +313,12 @@ test('POST /api/studio/connections/<unknown>/install: 404', async () => {
   assert.equal(res.status, 404);
 });
 
-test('POST /api/studio/connections/<installable>/install: the argv is derived from the catalog pin ONLY — a body carrying package/version/registry changes NOTHING (D6 security core)', async () => {
+test('POST /api/studio/connections/<installable>/install, CONFIRMED: the argv is derived from the catalog pin ONLY — a body carrying package/version/registry changes NOTHING (D6 security core)', async () => {
   writeCatalog({
     mcps: [{ id: 'installable-mcp', install: { method: 'npm', package: '@forge-test/installable-mcp', version: '2.3.4' } }],
   });
 
-  const withEmptyBody = await postJson(`${bridgeUrl}/api/studio/connections/installable-mcp/install`, {});
+  const withEmptyBody = await postJson(`${bridgeUrl}/api/studio/connections/installable-mcp/install`, { confirm: true });
   assert.equal(withEmptyBody.status, 200);
   const emptyBodyResult = (await withEmptyBody.json()) as {
     ok: boolean;
@@ -335,6 +339,7 @@ test('POST /api/studio/connections/<installable>/install: the argv is derived fr
   assert.equal(args[7], '@forge-test/installable-mcp@2.3.4');
 
   const withHostileBody = await postJson(`${bridgeUrl}/api/studio/connections/installable-mcp/install`, {
+    confirm: true,
     package: 'evil-package',
     version: '99.99.99',
     registry: 'https://evil.example.com',
@@ -350,12 +355,94 @@ test('POST /api/studio/connections/<installable>/install: the argv is derived fr
   assert.ok(!hostileResult.wouldInstall.args.some((a) => a.includes('evil')), 'the hostile body must never leak into the argv');
 });
 
-// T2 ruling (round 2, item 3): three pinned constraints on the suppressed
-// install response.
+// ---------------------------------------------------------------------------
+// forge-6gv.8.2 — the confirm gate. NO confirm → preview only, zero network/
+// executor calls; ONLY confirm:true reaches the pre-existing suppressed/real
+// behaviour pinned above and below.
+// ---------------------------------------------------------------------------
 
-test('POST /api/studio/connections/<installable>/install (suppressed): the response is STRUCTURALLY DISTINCT — exactly {ok, suppressed, wouldInstall}, never a shape mistakable for a completed install', async () => {
+test('POST /api/studio/connections/<installable>/install, NO confirm: 200 {ok, preview} — package/version/registry/command/args/willRunLifecycleScripts, ignoring a hostile body exactly like the confirmed path', async () => {
+  writeCatalog({
+    mcps: [{ id: 'preview-mcp', install: { method: 'npm', package: '@forge-test/preview-mcp', version: '5.6.7' } }],
+  });
+
+  const noBody = await fetch(`${bridgeUrl}/api/studio/connections/preview-mcp/install`, {
+    method: 'POST',
+    headers: { 'x-forge-csrf': '1' }, // deliberately NO body at all — "absent body" half of the contract
+  });
+  assert.equal(noBody.status, 200);
+  const previewFromNoBody = (await noBody.json()) as Record<string, unknown>;
+  assert.deepEqual(
+    Object.keys(previewFromNoBody).sort(),
+    ['ok', 'preview'],
+    `an unconfirmed install response must carry EXACTLY {ok, preview} — no "suppressed"/"installed" key that could read as a completed or dry-run install; got: ${JSON.stringify(Object.keys(previewFromNoBody))}`,
+  );
+  assert.equal(previewFromNoBody['ok'], true);
+  const preview = previewFromNoBody['preview'] as Record<string, unknown>;
+  assert.equal(preview['package'], '@forge-test/preview-mcp');
+  assert.equal(preview['version'], '5.6.7');
+  assert.ok(typeof preview['registry'] === 'string' && (preview['registry'] as string).length > 0, 'registry must be a real, non-empty string');
+  assert.equal(preview['command'], 'npm');
+  assert.equal(preview['willRunLifecycleScripts'], false, '--ignore-scripts is always in the argv (D7) — the preview must say so honestly');
+  assert.ok(Array.isArray(preview['args']) && (preview['args'] as string[]).includes('--ignore-scripts'));
+
+  const hostileBody = await postJson(`${bridgeUrl}/api/studio/connections/preview-mcp/install`, {
+    package: 'evil-package',
+    version: '99.99.99',
+    registry: 'https://evil.example.com',
+  });
+  const previewFromHostileBody = (await hostileBody.json()) as { preview: Record<string, unknown> };
+  assert.deepEqual(previewFromHostileBody.preview, preview, 'a body naming package/version/registry (without confirm:true) must produce the IDENTICAL preview — those fields never reach the preview either');
+});
+
+test('POST /api/studio/connections/<installable>/install: NO confirm makes ZERO network/executor calls; confirm:true is the ONLY path that actually installs (proven against a REAL shadowed npm child, not FORGE_ARCHITECT_NO_SPAWN)', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'bridge-install-confirm-gate-'));
+  const markerPath = join(scratchRoot, 'ran.marker');
+  const fakeNpmPath = join(scratchRoot, 'npm');
+  writeFileSync(fakeNpmPath, `#!/usr/bin/env bash\necho ran > "${markerPath}"\nexit 0\n`, 'utf8');
+  chmodSync(fakeNpmPath, 0o755);
+
+  const priorPath = process.env.PATH;
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  try {
+    // Turn OFF every suppression seam — if the confirm gate did not exist (or
+    // did not gate the executor), THIS is what would let a no-confirm request
+    // reach the real spawnSync call below.
+    delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    delete process.env.FORGE_DRY_BRIDGE;
+    process.env.PATH = `${scratchRoot}${process.env.PATH ? delimiter + process.env.PATH : ''}`;
+
+    writeCatalog({
+      mcps: [{ id: 'confirm-gate-mcp', install: { method: 'npm', package: '@forge-test/confirm-gate-mcp', version: '1.0.0' } }],
+    });
+
+    const unconfirmed = await postJson(`${bridgeUrl}/api/studio/connections/confirm-gate-mcp/install`, {});
+    assert.equal(unconfirmed.status, 200);
+    const unconfirmedBody = (await unconfirmed.json()) as Record<string, unknown>;
+    assert.ok('preview' in unconfirmedBody, 'expected a preview response for the unconfirmed request');
+    assert.equal(existsSync(markerPath), false, 'the real npm child must NEVER have run for an unconfirmed request — installConnection must be unreached on this path');
+
+    const confirmed = await postJson(`${bridgeUrl}/api/studio/connections/confirm-gate-mcp/install`, { confirm: true });
+    assert.equal(confirmed.status, 200);
+    const confirmedBody = (await confirmed.json()) as { suppressed?: boolean };
+    assert.notEqual(confirmedBody.suppressed, true, 'sanity: with both suppression env vars deleted, confirm:true must reach the REAL executor');
+    assert.equal(existsSync(markerPath), true, 'confirm:true is the ONLY path that installs — the real npm child must have run exactly now, not before');
+  } finally {
+    if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath;
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN; else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE; else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+// T2 ruling (round 2, item 3): three pinned constraints on the suppressed
+// install response. All three now require confirm:true to reach this branch
+// at all (forge-6gv.8.2) — an empty/no-confirm body no longer does.
+
+test('POST /api/studio/connections/<installable>/install (confirmed, suppressed): the response is STRUCTURALLY DISTINCT — exactly {ok, suppressed, wouldInstall}, never a shape mistakable for a completed install', async () => {
   writeCatalog({ mcps: [{ id: 'shape-check-mcp', install: { method: 'npm', package: '@forge-test/shape-check-mcp', version: '1.0.0' } }] });
-  const res = await postJson(`${bridgeUrl}/api/studio/connections/shape-check-mcp/install`, {});
+  const res = await postJson(`${bridgeUrl}/api/studio/connections/shape-check-mcp/install`, { confirm: true });
   assert.equal(res.status, 200);
   const body = (await res.json()) as Record<string, unknown>;
   assert.deepEqual(
@@ -367,14 +454,14 @@ test('POST /api/studio/connections/<installable>/install (suppressed): the respo
   assert.notEqual(body['ok'], 'installed', 'ok must be the boolean true (request succeeded), never a string that could be misread as a completed-install status');
 });
 
-test('POST /api/studio/connections/<installable>/install: honours FORGE_DRY_BRIDGE=1 independently of FORGE_ARCHITECT_NO_SPAWN (T2 ruling: both seams, same as run-agent.ts)', async () => {
+test('POST /api/studio/connections/<installable>/install (confirmed): honours FORGE_DRY_BRIDGE=1 independently of FORGE_ARCHITECT_NO_SPAWN (T2 ruling: both seams, same as run-agent.ts)', async () => {
   writeCatalog({ mcps: [{ id: 'dry-bridge-only-mcp', install: { method: 'npm', package: '@forge-test/dry-bridge-only-mcp', version: '1.0.0' } }] });
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
   try {
     delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     process.env.FORGE_DRY_BRIDGE = '1';
-    const res = await postJson(`${bridgeUrl}/api/studio/connections/dry-bridge-only-mcp/install`, {});
+    const res = await postJson(`${bridgeUrl}/api/studio/connections/dry-bridge-only-mcp/install`, { confirm: true });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { ok: boolean; suppressed: boolean; wouldInstall: { command: string; args: string[] } };
     assert.equal(body.suppressed, true, 'FORGE_DRY_BRIDGE=1 alone (without FORGE_ARCHITECT_NO_SPAWN) must ALSO suppress real execution');
@@ -387,11 +474,11 @@ test('POST /api/studio/connections/<installable>/install: honours FORGE_DRY_BRID
   }
 });
 
-test('POST /api/studio/connections/<installable>/install (suppressed): a SUBSEQUENT probe of the same connection still reports not-installed — the suppressed path changes NOTHING about real state', async () => {
+test('POST /api/studio/connections/<installable>/install (confirmed, suppressed): a SUBSEQUENT probe of the same connection still reports not-installed — the suppressed path changes NOTHING about real state', async () => {
   writeCatalog({
     mcps: [{ id: 'suppressed-no-state-change-mcp', install: { method: 'npm', package: '@forge-test/suppressed-no-state-change-mcp', version: '1.0.0' } }],
   });
-  const installRes = await postJson(`${bridgeUrl}/api/studio/connections/suppressed-no-state-change-mcp/install`, {});
+  const installRes = await postJson(`${bridgeUrl}/api/studio/connections/suppressed-no-state-change-mcp/install`, { confirm: true });
   const installBody = (await installRes.json()) as { suppressed: boolean };
   assert.equal(installBody.suppressed, true, 'sanity: this test\'s whole premise is that the install was suppressed, not real');
 
@@ -459,7 +546,7 @@ test('POST /api/studio/connections/<installable>/install (REAL, non-suppressed):
     writeCatalog({
       mcps: [{ id: 'env-leak-install-mcp', install: { method: 'npm', package: '@forge-test/env-leak-install-mcp', version: '1.0.0' } }],
     });
-    const res = await postJson(`${bridgeUrl}/api/studio/connections/env-leak-install-mcp/install`, {});
+    const res = await postJson(`${bridgeUrl}/api/studio/connections/env-leak-install-mcp/install`, { confirm: true });
     const body = (await res.json()) as { suppressed?: boolean; error?: string };
     assert.equal(res.status, 200, `expected the real (fake-npm) install to report success, got ${res.status}: ${JSON.stringify(body)}`);
     assert.notEqual(body.suppressed, true, 'sanity: this test\'s whole premise is that the install is REAL, not suppressed — a suppressed response here means the env vars above did not actually take effect');

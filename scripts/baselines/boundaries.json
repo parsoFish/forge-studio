@@ -430,6 +430,7 @@
   "package-to-legacy|packages/library/bridge-studio-community.ts|cli/dry-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-connections.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-connections.ts|cli/dry-bridge.ts",
+  "package-to-legacy|packages/library/bridge-studio-hooks-decline.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-hooks.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-instructions-draft.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-skills.test.ts|cli/ui-bridge.ts",

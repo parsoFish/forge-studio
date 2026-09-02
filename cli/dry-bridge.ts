@@ -189,13 +189,16 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/onboarding-start rows above' },
 
 
-  // ---- stub-actions: connections install (R3-04, D6/D7) -----------------
+  // ---- stub-actions: connections install (R3-04, D6/D7; forge-6gv.8.2) ---
   // installArgvFor derives the real `npm install` argv from the catalog pin
-  // ONLY (D6 — the request body is never even read); the suppression check
-  // is inline in the route (mirrors verdict-approve/reflect-answer below,
-  // not a named spawn-helper), so this row carries no `guard`.
+  // ONLY — the request body is read for the `confirm` flag alone and never
+  // for package/version/registry (D6). The suppression check is inline in
+  // the route (mirrors verdict-approve/reflect-answer below, not a named
+  // spawn-helper), so this row carries no `guard`. An UNCONFIRMED request
+  // (forge-6gv.8.2) never reaches the suppression check at all — it returns
+  // a preview and executes nothing, confirmed or not.
   { method: 'POST', route: '/api/studio/connections/:id/install', classification: 'stub-actions',
-    reason: 'a real `npm install` (network + child process) would run; FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1 suppress it and return {suppressed:true, wouldInstall} instead (D7, mirrors run-agent.ts\'s own double env check)' },
+    reason: 'a CONFIRMED request runs a real `npm install` (network + child process); FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1 suppress it and return {suppressed:true, wouldInstall} instead (D7, mirrors run-agent.ts\'s own double env check). An unconfirmed request never reaches this at all — it returns {ok:true, preview} (forge-6gv.8.2)' },
 
   // ---- stub-actions: community install (R3-07, D2/D9) --------------------
   // For a mcp/tool item this route delegates to the SAME connection-install
@@ -282,6 +285,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/hooks', classification: 'exempt-local', reason: 'writes a local hook.yaml + scripts/run.sh package — no spawn/remote' },
   { method: 'POST', route: '/api/studio/hooks/:id/approve', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry — no spawn/remote' },
   { method: 'POST', route: '/api/studio/hooks/:id/override', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (overridden:true) — no spawn/remote' },
+  { method: 'POST', route: '/api/studio/hooks/:id/decline', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (declined) — no spawn/remote (forge-8vfn.5.2)' },
   { method: 'POST', route: '/api/studio/connections/:id/probe', classification: 'exempt-local', reason: 'R3-04 D3/D11 — spawns a declared, credential-stripped local presence/version check only; deliberately NEVER suppressed by dry-bridge (readiness must stay real, D3) — no git-remote/daemon/agent-turn' },
   // M4 §4 step 2 — TWO ROUTES THIS TABLE HAD NEVER SEEN. Both already existed
   // and both are non-GET; neither was ever classified, because

@@ -24,7 +24,7 @@
  */
 
 import { bridgeFetch } from './bridge-client.ts';
-import { parseProbeResult, type ConnectionProbeResult } from './connection-client.ts';
+import { parseProbeResult, parseInstallPreview, type ConnectionProbeResult, type InstallPreview } from './connection-client.ts';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (orchestrator/studio/community-index.ts,
@@ -489,11 +489,18 @@ export async function fetchCommunityItemDetail(
   }
 }
 
-/** The F3 install round trip, client side: called with NO body — this route
- *  takes an item id only (D9: the server decides what is installed). */
+/** The F3 install round trip, client side: called with NO body except the
+ *  `confirm` flag itself — this route takes an item id only (D9: the server
+ *  decides what is installed).
+ *
+ * forge-6gv.8.2 — the mcp/tool arm is byte-identical to
+ * `installConnection`'s route, confirm gate included: unconfirmed returns
+ * `preview` with zero side effects. The skill-draft/hook arms ignore
+ * `confirm` server-side; defaulting them to unconfirmed is harmless. */
 export type CommunityInstallOutcome =
   | { routedTo: 'skill-draft'; alreadyInstalled: boolean }
   | { routedTo: 'hook-needs-approval'; alreadyInstalled: boolean }
+  | { routedTo: 'connection-install'; preview: InstallPreview }
   | { routedTo: 'connection-install'; suppressed: true; wouldInstall: { command: string; args: string[] } }
   | { routedTo: 'connection-install'; suppressed: false; installed: boolean; probe: ConnectionProbeResult };
 
@@ -510,13 +517,15 @@ function parseWouldInstall(raw: unknown): { command: string; args: string[] } {
 export async function installCommunityItem(
   kind: CommunityKind,
   id: string,
+  opts?: { confirm?: boolean },
 ): Promise<{ ok: boolean; result?: CommunityInstallOutcome; error?: string }> {
+  const confirmed = opts?.confirm === true;
   let res: Response;
   try {
     res = await bridgeFetch(`/api/studio/community/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/install`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({}),
+      body: JSON.stringify(confirmed ? { confirm: true } : {}),
     });
   } catch (err) {
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
@@ -532,6 +541,11 @@ export async function installCommunityItem(
       return { ok: true, result: { routedTo, alreadyInstalled: requireBoolean(r, 'alreadyInstalled') } };
     }
     if (routedTo === 'connection-install') {
+      // Disjoint-key discrimination, order and reasoning as in
+      // connection-client.ts's `installConnection` — see its comment.
+      if (r['preview'] !== undefined) {
+        return { ok: true, result: { routedTo, preview: parseInstallPreview(r['preview']) } };
+      }
       if (r['suppressed'] === true) {
         return { ok: true, result: { routedTo, suppressed: true, wouldInstall: parseWouldInstall(r['wouldInstall']) } };
       }

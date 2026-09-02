@@ -19,9 +19,10 @@
  * table has four ways to go quietly wrong, and every assertion here exists
  * for one of them:
  *
- *  1. A ROUTE IS DROPPED. Thirty-four arms spread over eight files are only
- *     visible by reading all of them; a lost route 404s where it used to work
- *     with nothing red. `everyRouteIsTabled` pins the exact 34.
+ *  1. A ROUTE IS DROPPED. Thirty-four arms spread over eight files (plus one
+ *     genuinely new route, forge-8vfn.5.2 — see below) are only visible by
+ *     reading all of them; a lost route 404s where it used to work with
+ *     nothing red. `everyRouteIsTabled` pins the exact 35.
  *  2. TWO ENTRIES CONTEND FOR ONE URL. `dispatchRoute` is first-match-wins,
  *     so an overlapping pair dispatches by POSITION — and dispatching the
  *     wrong handler still returns 200, which no status-code assertion catches.
@@ -73,6 +74,11 @@ import { libraryRoutes } from '../../routes.ts';
  *   bridge-studio-community.ts    :406 :440 :469 :533 :539
  *   bridge-studio-writes.ts       :583 :615 :654 (residue — see this table's
  *                                  own trailing group, and the file header)
+ *
+ * PLUS ONE: `POST /api/studio/hooks/:id/decline` (bridge-studio-hooks-
+ * decline.ts, forge-8vfn.5.2) — a genuinely NEW route, not carved from an
+ * if-chain (bridge-studio-hooks.ts sits at the 800-line hard cap, so the
+ * route lives in a sibling file from birth; see that file's own header).
  */
 const PINNED: ReadonlyArray<readonly [string, string]> = [
   // ---- bridge-studio-skills.ts (7) ----
@@ -83,12 +89,13 @@ const PINNED: ReadonlyArray<readonly [string, string]> = [
   ['PUT', '/api/studio/skills/:id'],
   ['DELETE', '/api/studio/skills/:id'],
   ['GET', '/api/studio/skills/:id'],
-  // ---- bridge-studio-hooks.ts (8) ----
+  // ---- bridge-studio-hooks.ts (8) + bridge-studio-hooks-decline.ts (1) ----
   ['GET', '/api/studio/hooks'],
   ['POST', '/api/studio/hooks'],
   ['POST', '/api/studio/hooks/:id/approve'],
   ['POST', '/api/studio/hooks/:id/override'],
   ['POST', '/api/studio/hooks/:id/revoke-approval'],
+  ['POST', '/api/studio/hooks/:id/decline'],
   ['PUT', '/api/studio/hooks/:id'],
   ['DELETE', '/api/studio/hooks/:id'],
   ['GET', '/api/studio/hooks/:id'],
@@ -138,7 +145,7 @@ test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains
 
   assert.deepEqual(missing, [], `routes that left an if-chain without arriving in the table:\n${missing.join('\n')}`);
   assert.deepEqual(extra, [], `table entries with no if-chain arm behind them:\n${extra.join('\n')}`);
-  assert.equal(libraryRoutes.length, PINNED.length, 'the table must carry exactly 34 entries — a duplicate is as wrong as a gap');
+  assert.equal(libraryRoutes.length, PINNED.length, 'the table must carry exactly 35 entries — a duplicate is as wrong as a gap');
 });
 
 test('theProbeIsNotVacuous: every entry matches the concrete URL built from its own path', () => {

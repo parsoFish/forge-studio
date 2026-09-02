@@ -443,9 +443,9 @@ packages/library/studio/connection-probe.ts existsSync 3
 packages/library/studio/connection-probe.ts readFileSync 1
 packages/library/studio/connection-probe.ts spawnSync 1
 packages/library/studio/connection-probe.ts statSync 2
-packages/library/studio/hook-approval-ledger.ts existsSync 2
+packages/library/studio/hook-approval-ledger.ts existsSync 1
 packages/library/studio/hook-approval-ledger.ts mkdirSync 1
-packages/library/studio/hook-approval-ledger.ts readFileSync 2
+packages/library/studio/hook-approval-ledger.ts readFileSync 1
 packages/library/studio/hook-approval-ledger.ts writeFileSync 1
 packages/library/studio/hook-library.ts existsSync 2
 packages/library/studio/hook-library.ts readdirSync 1

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-// (useState is also used by InstallSection's npm-confirm arm state.)
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
@@ -63,6 +62,15 @@ function isConnectionDetail(item: CommunityItemDetail): item is CommunityConnect
   return 'install' in item;
 }
 
+// forge-6gv.8.2 — the confirm gate's PREVIEW arm of `CommunityInstallOutcome`
+// (`routedTo:'connection-install'` with a `preview` field, never `suppressed`/
+// `installed`): a real, never-executed-yet install still to be confirmed.
+function isConnectionInstallPreview(
+  outcome: CommunityInstallOutcome,
+): outcome is Extract<CommunityInstallOutcome, { preview: unknown }> {
+  return 'preview' in outcome;
+}
+
 function owningHrefFor(item: CommunityItemDetail): string {
   if (item.kind === 'skill') return `/skills/${encodeURIComponent(item.id)}`;
   if (item.kind === 'hook') return `/hooks/${encodeURIComponent(item.id)}`;
@@ -111,22 +119,37 @@ export default function CommunityDetailPage() {
   }, []);
 
   useEffect(() => {
+    // Same reset as /connections/[id] — see its comment. A preview belongs to
+    // the id it was fetched for; carrying one across a param-only navigation
+    // would show A's command above a confirm that installs B.
+    setInstallOutcome(null);
+    setActionError(null);
     if (kindParam && id) void load(kindParam, id);
   }, [kindParam, id, load]);
 
-  async function handleInstall() {
+  // forge-6gv.8.2 — the two-step confirm gate for the mcp/tool (npm) arm:
+  // `confirm:false` (the default) fetches the real server PREVIEW and stops
+  // there (ZERO network/executor side effects) — only `confirm:true` runs
+  // the actual install. skill/hook installs never gate on this (their
+  // pipelines don't read `confirm`) so they still complete in one call.
+  async function handleInstall(confirm: boolean) {
     if (!item) return;
     setInstalling(true);
     setActionError(null);
     setInstallOutcome(null);
-    const r = await installCommunityItem(item.kind, item.id);
+    const r = await installCommunityItem(item.kind, item.id, { confirm });
     setInstalling(false);
     if (!r.ok || !r.result) {
       setActionError(r.error ?? 'install failed');
       return;
     }
     setInstallOutcome(r.result);
-    void load(item.kind, item.id); // refresh so installState reflects the real post-install fact
+    // A preview changed NOTHING server-side — only a genuine routed
+    // outcome (skill-draft / hook-needs-approval / a confirmed or
+    // suppressed connection-install) can have altered installState.
+    if (!('preview' in r.result)) {
+      void load(item.kind, item.id); // refresh so installState reflects the real post-install fact
+    }
   }
 
   // W7-C3 review (A-H4): per-route tab title, before the early returns.
@@ -172,7 +195,8 @@ export default function CommunityDetailPage() {
             installing={installing}
             actionError={actionError}
             installOutcome={installOutcome}
-            onInstall={() => void handleInstall()}
+            onInstall={(confirm) => void handleInstall(confirm)}
+            onCancelPreview={() => setInstallOutcome(null)}
           />
         )}
       </div>
@@ -190,12 +214,14 @@ function CommunityDetailBody({
   actionError,
   installOutcome,
   onInstall,
+  onCancelPreview,
 }: {
   item: CommunityItemDetail;
   installing: boolean;
   actionError: string | null;
   installOutcome: CommunityInstallOutcome | null;
-  onInstall: () => void;
+  onInstall: (confirm: boolean) => void;
+  onCancelPreview: () => void;
 }) {
   return (
     <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -233,7 +259,13 @@ function CommunityDetailBody({
 
       {isConnectionDetail(item) && item.capabilities !== undefined && <CapabilitiesSection item={item} />}
 
-      <InstallSection item={item} installing={installing} installOutcome={installOutcome} onInstall={onInstall} />
+      <InstallSection
+        item={item}
+        installing={installing}
+        installOutcome={installOutcome}
+        onInstall={onInstall}
+        onCancelPreview={onCancelPreview}
+      />
 
       {actionError && (
         <p style={{ fontSize: 12, color: '#f87171', margin: 0 }} data-component="community-action-error">
@@ -391,16 +423,21 @@ function InstallSection({
   installing,
   installOutcome,
   onInstall,
+  onCancelPreview,
 }: {
   item: CommunityItemDetail;
   installing: boolean;
   installOutcome: CommunityInstallOutcome | null;
-  onInstall: () => void;
+  onInstall: (confirm: boolean) => void;
+  onCancelPreview: () => void;
 }) {
-  // W7-B3 (community-19): a REAL npm install (network, up to 120s, a child
-  // process) never fires on one click — the first click arms an explicit
-  // confirm naming exactly what will run; the second fires it.
-  const [confirmingInstall, setConfirmingInstall] = useState(false);
+  // W7-B3 (community-19) + forge-6gv.8.2: a REAL npm install (network, up to
+  // 120s, a child process) never fires on one click — the first click fetches
+  // the real server PREVIEW (ZERO network/executor side effects on the
+  // bridge) and stops there; the second click, now armed with that preview,
+  // confirms it. "Armed" is real server state (`installOutcome` carrying a
+  // `preview`), never a client-only guess.
+  const preview = installOutcome !== null && isConnectionInstallPreview(installOutcome) ? installOutcome.preview : null;
   // W7-B3 (community-09/-18, library-31): the ONE pure decision — every item
   // installs, routes to its owning page, or says exactly why not.
   const action = installActionForItem({
@@ -515,7 +552,7 @@ function InstallSection({
             className="btn btn-primary"
             data-action="install-community-item"
             data-install-routed-to={routedTo}
-            onClick={onInstall}
+            onClick={() => onInstall(true)}
             {...disabledAttrs(installing ? 'Installing…' : null)}
           >
             {installing ? 'Installing…' : 'Install'}
@@ -525,11 +562,29 @@ function InstallSection({
 
       {action.action === 'install-confirm' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {confirmingInstall && isConnectionDetail(item) && item.install.method === 'npm' && (
-            <p data-component="install-confirm-notice" style={{ fontSize: 12.5, color: 'var(--ember)', margin: 0 }}>
-              This runs a real <code>npm install {item.install.package}@{item.install.version}</code> child
-              process on the bridge host (network, up to 120s). Confirm to proceed.
-            </p>
+          {/* forge-6gv.8.2 — the confirm gate's PREVIEW, fetched by the
+              first click and rendered before a second click can run
+              anything: package, version, registry, the exact argv, and
+              whether lifecycle scripts run — an operator must be able to
+              SEE what will be fetched and run before agreeing to it. */}
+          {preview && (
+            <div data-component="install-confirm-notice" style={{ fontSize: 12.5, color: 'var(--ember)' }}>
+              <p style={{ margin: 0 }}>
+                This runs a real <code>npm install</code> child process on the bridge host (network, up to 120s),
+                fetching <code>{preview.package}@{preview.version}</code> from{' '}
+                <code data-install-preview-registry={preview.registry}>{preview.registry}</code>. Lifecycle scripts{' '}
+                <strong data-will-run-lifecycle-scripts={preview.willRunLifecycleScripts ? 'true' : 'false'}>
+                  {preview.willRunLifecycleScripts ? 'WILL run' : 'will NOT run'}
+                </strong>
+                . Confirm to proceed.
+              </p>
+              <pre
+                data-install-preview-argv
+                style={{ margin: '6px 0 0', fontFamily: 'var(--font-mono, monospace)', fontSize: 11.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+              >
+                {preview.command} {preview.args.join(' ')}
+              </pre>
+            </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -537,25 +592,18 @@ function InstallSection({
               className="btn btn-primary"
               data-action="install-community-item"
               data-install-routed-to={routedTo}
-              data-confirming={confirmingInstall ? 'true' : 'false'}
-              onClick={() => {
-                if (!confirmingInstall) {
-                  setConfirmingInstall(true);
-                  return;
-                }
-                setConfirmingInstall(false);
-                onInstall();
-              }}
+              data-confirming={preview ? 'true' : 'false'}
+              onClick={() => onInstall(preview !== null)}
               {...disabledAttrs(installing ? 'Installing…' : null)}
             >
-              {installing ? 'Installing…' : confirmingInstall ? 'Yes, run npm install' : 'Install…'}
+              {installing ? 'Installing…' : preview ? 'Yes, run npm install' : 'Install…'}
             </button>
-            {confirmingInstall && !installing && (
+            {preview && !installing && (
               <button
                 type="button"
                 data-action="install-community-item-abort"
                 className="btn"
-                onClick={() => setConfirmingInstall(false)}
+                onClick={onCancelPreview}
               >
                 Cancel
               </button>
@@ -564,7 +612,7 @@ function InstallSection({
         </div>
       )}
 
-      {installOutcome && (
+      {installOutcome && !isConnectionInstallPreview(installOutcome) && (
         <div
           data-component="install-outcome"
           style={{ fontSize: 12.5, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', background: 'var(--bg-2)' }}

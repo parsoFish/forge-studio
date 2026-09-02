@@ -311,7 +311,29 @@ export const journey = defineJourney({
           'CONN-2: MEMORY_FILE_PATH (optional) reads data-config-status="unchecked" — never a guessed set/unset');
         await frame(page, 'conn-2-memory-detail', 'Part 2 (connections) — memory\'s detail page: npm install, curated capabilities, config by NAME', { key: true });
 
-        // ── THE SUPPRESSED INSTALL (D7) — never rendered as success ─────────────
+        // ── THE REVIEW STEP (forge-6gv.8.2) — the first click INSTALLS NOTHING ──
+        // The install used to fire on one click. It now previews first: the
+        // operator reads the exact package, version, registry and argv, and
+        // whether npm lifecycle scripts will run, BEFORE agreeing to any of it.
+        // A confirm the operator cannot read is not a confirm, which is why
+        // this beat asserts the preview's CONTENT and not merely its presence.
+        await page.locator('[data-action="install-connection"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-component="install-preview"]') !== null,
+          null, { timeout: 15000 }).catch(() => {});
+        check(await page.locator('[data-component="install-preview"]').count() === 1,
+          'CONN-2: the FIRST click renders the install preview — nothing is fetched or run yet');
+        check(await page.locator('[data-component="install-outcome"]').count() === 0,
+          'CONN-2: no outcome exists between preview and confirm — the first click cannot be mistaken for an install');
+        const previewArgv = (await page.evaluate(() => document.querySelector('[data-install-preview-argv]')?.textContent ?? '')).trim();
+        check(previewArgv === expectedMemoryInstallArgvText(),
+          `CONN-2: the PREVIEW's argv is byte-exact vs this script's own reconstruction from the catalog pin (got "${previewArgv}", want "${expectedMemoryInstallArgvText()}") — the operator reads the real command, not a paraphrase`);
+        check((await page.evaluate(() => document.querySelector('[data-will-run-lifecycle-scripts]')?.getAttribute('data-will-run-lifecycle-scripts'))) === 'false',
+          'CONN-2: the preview states npm lifecycle scripts will NOT run (--ignore-scripts, D7) — stated, never assumed');
+        await caption(page, 'One click previews. Nothing has been fetched or run — the operator reads the exact command first.');
+        await frame(page, 'conn-3-install-preview', 'Part 2 (connections) — the REVIEW step: the exact npm child process, read before anything runs', { key: true });
+
+        // ── THE CONFIRMED, SUPPRESSED INSTALL (D7) — never rendered as success ──
         await page.locator('[data-action="install-connection"]').click().catch(() => {});
         await page.waitForFunction(
           () => document.querySelector('[data-component="install-outcome"]') !== null,

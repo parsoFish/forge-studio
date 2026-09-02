@@ -1,8 +1,8 @@
 /**
  * Forge Studio hooks-library bridge routes (R3-03-F4).
  *
- * Owns EVERY `/api/studio/hooks*` route — one home, mirroring how
- * bridge-studio-skills.ts owns every `/api/studio/skills*` route:
+ * Owns every `/api/studio/hooks*` route except `POST .../:id/decline` (this
+ * file sits at the 800-line cap — see bridge-studio-hooks-decline.ts), mirroring how bridge-studio-skills.ts owns every `/api/studio/skills*` route:
  *
  *   GET  /api/studio/hooks               → { hooks: HookLibraryEntry[] }         (handleHooksList)
  *   GET  /api/studio/hooks/:id           → detail: entry fields + files + scan   (handleHookDetail)
@@ -110,7 +110,7 @@ import {
   hookTriggerError,
 } from './studio/hook-library.ts';
 import { scanHookPackage } from './studio/hook-scan.ts';
-import { hookRunState, readHookApprovalLedger, approveHook, overrideHookBlock, revokeHookApproval, revokeHookApprovalIfPresent, type HookApprovalLedgerEntry, type HookRunState } from './studio/hook-approval-ledger.ts';
+import { hookRunState, readHookApprovalLedger, readHookDeclinedLedger, approveHook, overrideHookBlock, revokeHookApproval, revokeHookApprovalIfPresent, type HookApprovalLedgerEntry, type HookDeclinedLedgerEntry, type HookRunState } from './studio/hook-approval-ledger.ts';
 // PIN E (2026-08-28 hostile review): the whole-package read/hash primitives
 // the detail route's `files`/`packageHash` are now built from — the SAME
 // primitives the approval ledger's `packageHash` pin is computed from (see
@@ -125,10 +125,11 @@ import { readHookPackage, hashHookPackage, hashHookScript } from './studio/hook-
 // in hook-scan.ts; only the label mapping lives here.
 // ---------------------------------------------------------------------------
 
-export type HookTrust = 'needs-review' | 'approved' | 'overridden';
+export type HookTrust = 'needs-review' | 'approved' | 'overridden' | 'declined';
 
-function computeTrust(runState: HookRunState, ledgerEntry: HookApprovalLedgerEntry | undefined): HookTrust {
-  if (runState.needsReview) return 'needs-review';
+// `declined` (forge-8vfn.5.2) is reachable ONLY inside `needsReview` — a display label, it never widens what runState already grants.
+function computeTrust(runState: HookRunState, ledgerEntry: HookApprovalLedgerEntry | undefined, declinedEntry?: HookDeclinedLedgerEntry): HookTrust {
+  if (runState.needsReview) return declinedEntry ? 'declined' : 'needs-review';
   return ledgerEntry?.overridden === true ? 'overridden' : 'approved';
 }
 
@@ -154,11 +155,11 @@ function toClientListEntry(forgeRoot: string, entry: ReturnType<typeof listHookL
   // made the whole map throw and the operator's ENTIRE hook library vanished
   // behind a 500. An element-level fault must never become a collection-level
   // claim; degrade this one entry exactly as listHookLibrary already does.
-  let runState;
-  let ledgerEntry;
+  let runState, ledgerEntry, declinedEntry;
   try {
     runState = hookRunState(forgeRoot, entry.id);
     ledgerEntry = readHookApprovalLedger(forgeRoot).get(entry.id);
+    declinedEntry = readHookDeclinedLedger(forgeRoot).get(entry.id);
   } catch (err) {
     return {
       ok: false,
@@ -179,7 +180,7 @@ function toClientListEntry(forgeRoot: string, entry: ReturnType<typeof listHookL
     carriedBy: entry.carriedBy,
     carriedByDerivation: entry.carriedByDerivation,
     scanVerdict: runState.verdict,
-    trust: computeTrust(runState, ledgerEntry),
+    trust: computeTrust(runState, ledgerEntry, declinedEntry),
     runnable: runState.runnable,
   };
 }
@@ -207,8 +208,9 @@ function hookScriptIsContained(forgeRoot: string, id: string): boolean {
 }
 
 /** Decode a URL path segment; throws (never silently passes through a raw,
- *  still-encoded id) on malformed percent-encoding. */
-function decodeIdSegment(raw: string): string {
+ *  still-encoded id) on malformed percent-encoding. Exported: bridge-studio-
+ *  hooks-decline.ts reuses this rather than duplicating it. */
+export function decodeIdSegment(raw: string): string {
   return decodeURIComponent(raw);
 }
 
@@ -217,8 +219,9 @@ function decodeIdSegment(raw: string): string {
  * shape (assertSkillSlug via hookYamlPath → 400), containment (the realpath
  * identity guard → 404), and the script-leaf containment oracle-closer
  * (→ the SAME 404). Returns the verified hook.yaml real path on success.
+ * Exported for the same reason as `decodeIdSegment` above.
  */
-function locateHook(
+export function locateHook(
   forgeRoot: string,
   id: string,
   opts: { requireScript?: boolean } = {},
@@ -754,6 +757,7 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const scan = scanHookPackage(ctx.forgeRoot, id);
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
+      const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
 
       sendJson(res, 200, {
         ok: true,
@@ -766,7 +770,7 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
         carriedBy: entry.carriedBy,
         carriedByDerivation: entry.carriedByDerivation,
         scanVerdict: runState.verdict,
-        trust: computeTrust(runState, ledgerEntry),
+        trust: computeTrust(runState, ledgerEntry, declinedEntry),
         runnable: runState.runnable,
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
@@ -780,6 +784,8 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
               },
             }
           : {}),
+        // Same "present iff a live entry exists, never fabricated" discipline as `approval` above.
+        ...(declinedEntry ? { declined: { declinedAt: declinedEntry.declinedAt, ...(declinedEntry.reason ? { reason: declinedEntry.reason } : {}) } } : {}),
         files,
         packageHash,
         scan,
