@@ -151,6 +151,7 @@ export default {
           'page-ready': 'true',
           'kb-id': 'story-s6',
           'node-count': '1',
+          'seed-session-id': '<seedSessionId>',
         },
       },
       say: `Binding is the act. A band scope says WHICH readers on that Flow this knowledge is for — ${BOUND_BAND} means the reviewer, not the planner and not the developer — so the knowledge lands in front of the agent it was written for and nowhere else. Forge writes the graph with one index node and nothing in it.`,
@@ -332,7 +333,7 @@ export default {
       // `drain-state` and `drain-run-id` are both on the drain panel root, so
       // one element answers both.
       act: 'Open the knowledge base’s Health tab and drain it to green',
-      do: [{ press: 'drain-to-green' }],
+      do: [{ press: 'open-kb-tab-health' }, { press: 'drain-to-green' }],
       expect: {
         route: '/knowledge',
         data: {
