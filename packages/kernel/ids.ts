@@ -51,6 +51,25 @@ export const KB_ID_RE = EXACT_ID_RE;
 export const MAX_EXACT_ID_LENGTH = 128;
 
 /**
+ * M4 §4 (projects routes carve, T1 ruling) — the charset guard for run/gate/
+ * session-style ids (`runId`, `gateId`, `sessionId`, …): alphanumeric plus
+ * `_`/`-`, no `/`, `.`, `..`, whitespace or null bytes. HOISTED VERBATIM from
+ * `cli/bridge-studio.ts` ("Safe-ID guard: blocks path traversal in run/gate
+ * IDs"), which re-exports this binding rather than defining it, so its many
+ * existing importers (`cli/ui-bridge.ts`, `packages/flows/bridge-studio-runs.ts`,
+ * `packages/sessions/bridge-studio-sessions.ts`) are unaffected.
+ *
+ * Same source pattern as `EXACT_ID_RE` above (both are
+ * `/^[A-Za-z0-9][A-Za-z0-9_-]*$/`) but a DIFFERENT concept — `EXACT_ID_RE`
+ * names a project/KB's on-disk directory identity, `SAFE_ID_RE` is a generic
+ * traversal-safety charset for opaque ids (run/gate/session) that carry no
+ * directory-identity meaning of their own. Kept as two named bindings rather
+ * than merged: a carve is not the place to fold two concepts that happen to
+ * share a regex source into one.
+ */
+export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
  * Ids the UI reserves as static route segments (`/projects/new`, `/agents/new`,
  * `/flows/new`, `/skills/new`, `/hooks/new`, `/knowledge/new`). An object
  * literally named `new` would be permanently shadowed by the builder that lives

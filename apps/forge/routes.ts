@@ -22,13 +22,36 @@
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
+// M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
+// `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
+// these nine dependencies STRUCTURALLY rather than importing their real
+// types — a rank-2 `projects` package may not import `@forge/knowledge`
+// (same rank), `@forge/flows`/`@forge/agents` (strictly higher) or
+// `orchestrator/` (legacy) at all, not even for a type
+// (`scripts/check-boundaries.mjs` runs with `tsPreCompilationDeps: true`).
+// THIS file is where the real implementations are supplied: `classify()`
+// gives `apps/forge/` no rule at all, so this assembly point may import every
+// package and the legacy tree freely — verified by running
+// `node scripts/check-boundaries.mjs` after this wiring landed (see the M4
+// projects-routes PR notes).
+import {
+  seedProjectBrain,
+  checkProjectBrainSeedContainment,
+} from '@forge/knowledge/project-brain-seed.ts';
+import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
+import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
+import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { listStarterAgents, loadStarterFlow } from '../../orchestrator/studio/registry.ts';
+import { spawnPreflightFix } from '../../cli/bridge-studio-writes.ts';
+import { projectsRoutes } from '@forge/projects/routes.ts';
 
 /**
  * Re-exported so the host imports its whole routing surface from one module:
  * `import { routeTable, dispatchRoute } from '../apps/forge/routes.ts'`. The
  * table and the function that consumes it are one API, and keeping them
  * together costs `cli/ui-bridge.ts` exactly one import line — which matters,
- * because that file is 6,600 lines against an 800-line cap and `check-file-size`
+ * because that file is 6,602 lines against an 800-line cap and `check-file-size`
  * treats its baseline as a ceiling, not a licence. The carve must not grow it.
  */
 export { dispatchRoute } from '@forge/kernel';
@@ -43,4 +66,15 @@ export { dispatchRoute } from '@forge/kernel';
 export const routeTable: RouteTable<RouteContext> = [
   ...knowledgeRoutes,
   ...libraryRoutes,
+  ...projectsRoutes({
+    seedBrain: seedProjectBrain,
+    checkBrainSeedContainment: checkProjectBrainSeedContainment,
+    readArtifactRoot,
+    isContainedProjectRepoPath,
+    spawnPreflightFix,
+    projectKbBindings,
+    listStarterAgents,
+    loadStarterFlow,
+    agentCapabilityDescriptor,
+  }),
 ];
