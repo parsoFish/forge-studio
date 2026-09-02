@@ -64,6 +64,7 @@ Onboarding asks for the few things a Factory needs before it can build a repo: w
 - `data-page-ready` is `true`
 - `data-fetch-status` is `ok`
 - `data-section` is `project-onboard`
+- `data-load-error` is `false`
 
 </details>
 

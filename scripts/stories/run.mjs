@@ -38,6 +38,7 @@ import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './b
 import { driveBeat } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
+import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STORY_DIR = join(ROOT, 'tests', 'stories');
@@ -65,6 +66,9 @@ function storyFiles() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // Stamped before anything runs: the reaper only claims sessions THIS run
+  // created, so a previous run's residue is never signalled (reap.mjs header).
+  const startedMs = Date.now();
 
   let stories = [];
   for (const file of storyFiles()) {
@@ -145,9 +149,22 @@ async function main() {
     }
 
     for (const story of stories) {
-      exitCode = (await runStory(story, uiUrl)) || exitCode;
+      exitCode = (await runStory(story, uiUrl, startedMs)) || exitCode;
     }
   } finally {
+    // The abort backstop. `runStory` reaps into each story's own verdict
+    // record; this catches the paths that never reach one — a throw, a
+    // refusal after the bridge booted, a Ctrl-C between stories. Idempotent:
+    // a pid already reaped is simply not alive, and is reported as skipped.
+    // It runs BEFORE the bridge is taken down, so no agent is orphaned by the
+    // very teardown that is supposed to be ending it.
+    try {
+      const report = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
+      for (const line of describeReap(report)) console.log(line);
+    } catch (err) {
+      // A teardown that throws loses the verdict the run just produced.
+      console.warn(`[stories] run-end reap failed: ${err?.message ?? err}`);
+    }
     if (bridgeProc !== null) {
       try {
         process.kill(-bridgeProc.pid, 'SIGTERM');
@@ -160,7 +177,7 @@ async function main() {
   return exitCode;
 }
 
-async function runStory(story, uiUrl) {
+async function runStory(story, uiUrl, startedMs) {
   const outDir = join(ROOT, 'demos', 'stories', story.id);
   const framesDir = join(outDir, 'frames');
   const clipTmp = join(outDir, '_clip');
@@ -207,7 +224,14 @@ async function runStory(story, uiUrl) {
   // The recording scratch dir is ours and must not survive into the gallery.
   rmSync(clipTmp, { recursive: true, force: true });
 
-  const result = { story, beats };
+  // Every agent this story dispatched dies with the story, and the kills go
+  // INTO the verdict record — an orphan that outlives its run is unobserved
+  // by the gate that started it, and a kill nobody can read afterwards is a
+  // side effect rather than evidence (`forge-8vfn.5.37`, reap.mjs header).
+  const reap = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
+  for (const line of describeReap(reap)) console.log(line);
+
+  const result = { story, beats, reap };
   writeStoryJson(result, ROOT);
 
   const docPath = docPathFor(story, ROOT);
