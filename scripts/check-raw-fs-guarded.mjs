@@ -872,6 +872,19 @@ export function analyzeModule(text, relFile, model = {}) {
 // four tests across two suites before it was noticed. The remap is mechanical
 // and safe; the key design is not.
 export const ALLOWLIST = [
+  // ---- shared TEST FIXTURE modules (M4) ----
+  // The only non-production rows here. The sweep skips `*.test.ts` by filename,
+  // so these helpers were invisible inside a test file; M4's split under the
+  // 800-line cap moved them to `tests/<bucket>/test-fixtures/*.ts` — the
+  // directory `check-owner.mjs:49` calls NOT_PRODUCTION and this scan has never
+  // been taught. Byte-identical code, unchanged containment posture. Teaching
+  // `allSourceModules` that regex would drop SIX modules, three of them
+  // long-standing `orchestrator/test-fixtures/*`: a wave decision, not a lane's.
+  { file: 'packages/knowledge/tests/integration/test-fixtures/bridge-studio-kbs.ts', line: 196, sink: 'writeFileSync',
+    reason: 'TEST FIXTURE, TRUSTED-AT-CONSTRUCTION: seedProjectBrain(root, id, themeSlugs) — `slug` matches the sweep\'s bare taint-name list, but it is a fixture-authored literal from the test\'s own array (\'a-one\', \'alpha\', \'t-one\', ...), never request-derived, and `root` is the mkdtempSync tmpdir the fixture itself just created (makeIsolatedForge / setupSharedForge). No HTTP value reaches this join. Byte-identical to the code that lived at bridge-studio-kbs.test.ts:446 before the M4 split; it became visible only because a shared fixture module cannot be named *.test.ts.' },
+  { file: 'packages/knowledge/tests/unit/test-fixtures/brain-lint.ts', line: 122, sink: 'writeFileSync',
+    reason: 'TEST FIXTURE, TRUSTED-AT-CONSTRUCTION: writeProjectTheme(root, project, slug, category) — same shape as the row above. `slug` is a fixture literal chosen by the calling test; `root` is buildBrainFixture\'s own mkdtempSync tmpdir. Byte-identical to the code at brain-lint.test.ts:627 before the M4 split.' },
+
   // ---- cli/agent-run.ts — CLI subcommand handler (non-HTTP) ----
   { file: 'packages/agents/agent-run.ts', line: 928, sink: 'existsSync',
     reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 695 — SEC-07 added the cmdAgentDispatch --project resolveGuardedPath segment-guard, the isSafeRunId import, and the findSessionProject defensive bound earlier in the file, +23 lines; same function, same probe, byte-for-byte unchanged — verified by sed -n "718p" cli/agent-run.ts.) (Line-drift remap to 725 -- W7-FIX-A2 (W7A2-01): writeSessionTerminalPhase now rides guardedWriteSessionStatus (sticky-cancel seam) — a new import line + the seam comment block earlier in the file, +7 lines; same function, same probe, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run.) (Line-drift remap from 838 -- W8-A2 (ON-7): cli/ui-bridge.ts gained servedFileHeaders (7 served-file routes hardened), the four bespoke session-list routes wired to deriveSessionLifecycleFor, the sessionStaleMs helper, and the standalone-run stalled derivation; cli/agent-run.ts gained the turn-throw catch. Same function, same sink expression, byte-for-byte unchanged. Re-paired by SINK IDENTITY (file+sink+path-expression), not arithmetic: base-vs-current runLint with an EMPTY allowlist reports 70 residual sinks on BOTH sides, ZERO new and ZERO removed identities, so all 65 rows matched 1:1.)' },
