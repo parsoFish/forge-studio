@@ -26,6 +26,10 @@ export * from './path-guard.ts';
 
 /** The project-contract report shape the `ProjectGate` port carries (SPEC.md §6). */
 export * from './project-contract.ts';
+/** The `Finding` shape every studio validator returns, plus its `err`/`flag`
+ *  constructors — moved from `orchestrator/studio/validate.ts` (M4
+ *  library-by-kind carve, Part 1). NOT `ClauseResult` above — different shape. */
+export * from './findings.ts';
 /** The ports M2-B cuts, and the closed band registry (SPEC.md §2 Station). */
 export * from './ports.ts';
 

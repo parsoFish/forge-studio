@@ -42,26 +42,11 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
-import {
-  listAgentDefinitions,
-  listStarterAgents,
-  loadAgentDefinition,
-  loadCatalog,
-  loadFlowDefinition,
-  discoverProjects,
-  serializeAgentDefinition,
-  serializeFlowDefinition,
-  listFlowIds,
-  isStudioAgent,
-} from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, loadFlowDefinition, discoverProjects, serializeAgentDefinition, serializeFlowDefinition, listFlowIds, isStudioAgent } from '../orchestrator/studio/registry.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
-import {
-  communityRegistryPath,
-  loadCommunityRegistry,
-  serializeCommunityRegistry,
-  COMMUNITY_REGISTRY_SCHEMA_VERSION,
-} from '../orchestrator/studio/registry.ts';
+import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry, COMMUNITY_REGISTRY_SCHEMA_VERSION } from '@forge/library/studio/community-registry.ts';
 import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
 import { skillsDir as toSkillsDir, assertSkillSlug } from '@forge/agents/skill-path.ts';

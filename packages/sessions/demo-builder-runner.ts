@@ -62,7 +62,7 @@ import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
-import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep, DemoElementDefinition } from '@forge/contracts/studio/types.ts';
 import { skillPathRelative, loadSkillTurnPrompt, SLUG_RE } from '@forge/agents/skill-path.ts';
 

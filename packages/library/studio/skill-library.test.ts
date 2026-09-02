@@ -29,7 +29,8 @@ import yaml from 'js-yaml';
 import { communitySourceKey } from './community-source-url.ts';
 
 import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
-import { isStudioAgent, listPlainSkills, listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
+import { isStudioAgent, listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
+import { listPlainSkills } from './skill-registry.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 

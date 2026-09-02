@@ -90,7 +90,7 @@ import { routeCommunityInstall, installCommunityHookPackage } from './studio/com
 import { installSkillPackage } from './studio/skill-install.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection } from './studio/connection-install.ts';
-import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../../orchestrator/studio/registry.ts';
+import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from './studio/community-registry.ts';
 import { type WireCtx, buildWireCtx, toWireItemSafe } from './bridge-studio-community-wire.ts';
 import { scanVendoredHookPackage, vendoredHookTriggerError } from './bridge-studio-community-hook-preinstall.ts';
 import {

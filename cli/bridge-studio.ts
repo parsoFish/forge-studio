@@ -34,15 +34,11 @@ import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
 import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
-import {
-  listAgentDefinitions,
-  loadFlowDefinition,
-  listFlowIds,
-  loadCatalog,
-  communitySkillsFromRegistry,
-  listDemoElements,
-  listPlainSkills,
-} from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, loadFlowDefinition, listFlowIds } from '../orchestrator/studio/registry.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { communitySkillsFromRegistry } from '@forge/library/studio/community-registry.ts';
+import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
+import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
 import { listHookLibrary } from '@forge/library/studio/hook-library.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';

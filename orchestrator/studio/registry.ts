@@ -4,43 +4,25 @@
  * definitions from disk. Validation lives in a separate module (Task 2).
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { listSkillMdDirs, listSkillDirs } from '@forge/agents/skill-path.ts';
-import { skillTrustState } from '@forge/library/studio/skill-trust.ts';
+import { listSkillMdDirs } from '@forge/agents/skill-path.ts';
 import { parseMaterials } from '@forge/agents/studio/materials.ts';
-import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts/studio/types.ts';
-import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
-import { parseConnectionEntries } from '@forge/library/studio/connection-catalog.ts';
-import { communitySourceKey } from '@forge/library/studio/community-source-url.ts';
-import { extractLeadingCommentBlock, findCommentLinesInBlock } from '@forge/library/studio/yaml-comments.ts';
 import type {
   AgentBudgets,
   AgentComposition,
   AgentDefinition,
   AgentFanout,
   AgentRuntime,
-  ArtifactTemplate,
-  Catalog,
-  CatalogGuardEntry,
-  CommunitySkill,
-  CommunityRegistry,
-  CommunityRegistryItem,
-  CommunityRegistrySource,
-  CommunityRegistrySignals,
-  CatalogModel,
-  CatalogSdk,
-  DemoElementDefinition,
   FlowDefinition,
   FlowEdge,
   FlowKickoff,
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
-  InstructionSeed,
 } from '@forge/contracts/studio/types.ts';
 
 import {
@@ -53,7 +35,6 @@ import {
   reqObject,
   oneOf,
   loadYaml,
-  loadYamlWithRaw,
 } from '@forge/kernel/studio/yaml-fields.ts';
 
 // The KB descriptor's load / serialize / process-resolution live in
@@ -68,6 +49,34 @@ export {
   DEFAULT_KB_INGEST,
   DEFAULT_KB_CONSOLIDATE,
 } from '@forge/knowledge/studio/kb-descriptor.ts';
+
+// The Skill / Template / Catalog / Community kinds moved to
+// `packages/library/studio/{skill,artifact,catalog,community}-registry.ts`
+// (M4 library-by-kind carve, PR 3 / Part 2) — library's own object kinds
+// (spec §3.1). Re-exported here so the small set of remaining importers
+// INSIDE this legacy tree (orchestrator/'s own test suites, which use a
+// short relative path rather than the package specifier and so were not
+// individually repointed — see the carve spec's §C) keep resolving them from
+// './registry.ts'; every other importer was repointed directly to the new
+// files and does not go through this re-export.
+export { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
+export {
+  loadArtifactTemplate,
+  listArtifactTemplates,
+  loadDemoElement,
+  listDemoElements,
+  loadInstructionSeed,
+  listInstructionSeeds,
+} from '@forge/library/studio/artifact-registry.ts';
+export { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+export {
+  communityRegistryPath,
+  loadCommunityRegistry,
+  serializeCommunityRegistry,
+  resolveCommunitySource,
+  communitySkillsFromRegistry,
+  COMMUNITY_REGISTRY_SCHEMA_VERSION,
+} from '@forge/library/studio/community-registry.ts';
 
 // ---------------------------------------------------------------------------
 // Union-field guard helpers live in ./yaml-fields.ts (oneOf, loadYaml)
@@ -297,31 +306,8 @@ export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
   return defs.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
-/** Plain composable skills (skills/<slug>/SKILL.md with NO runtime block AND not
- *  library:false) — the filesystem half of the unified skill library (R3-01-F2).
- *  Studio agents (runtime-bearing) are the agent roster, not palette skill chips;
- *  a plain skill opting out with library:false is hidden from the palette too.
- *  R3-01-F3/F4: a `draft` or `needs-review` skill is ALSO excluded — this is the
- *  palette enforcement point for the trust pipeline (skillTrustState); do not
- *  add a second, divergent copy of this rule anywhere else. */
-export function listPlainSkills(forgeRoot: string): { id: string; name: string; desc?: string }[] {
-  const out: { id: string; name: string; desc?: string }[] = [];
-  for (const dir of listSkillDirs(forgeRoot)) {
-    const skillMdPath = join(dir, 'SKILL.md');
-    try {
-      const { data } = matter(readFileSync(skillMdPath, 'utf8'));
-      const d = (data ?? {}) as Record<string, unknown>;
-      if ('runtime' in d) continue;                     // runtime block ⇒ a studio agent, not a plain skill
-      if (d['library'] === false) continue;             // library:false ⇒ plain skill opted out of the palette (R3-01-F2)
-      const id = basename(dir);
-      if (skillTrustState(forgeRoot, id) !== 'ready') continue; // draft/needs-review ⇒ not palette-visible (R3-01-F3/F4)
-      const name = typeof d['name'] === 'string' && d['name'] ? d['name'] as string : id;
-      const desc = typeof d['description'] === 'string' ? d['description'] as string : undefined;
-      out.push({ id, name, desc });
-    } catch { /* unreadable/malformed ⇒ skip */ }
-  }
-  return out.sort((a, b) => a.id.localeCompare(b.id));
-}
+// listPlainSkills moved to `packages/library/studio/skill-registry.ts` (M4
+// library-by-kind carve, PR 3 / Part 2) — library's own Skill kind.
 
 /**
  * The curated "out of the box" starter agents (ADR-033) under
@@ -590,504 +576,11 @@ export function listFlowIds(forgeRoot: string): string[] {
   }
 }
 
-// Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).
-export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {
-  let raw: string;
-  try {
-    raw = readFileSync(mdPath, 'utf8');
-  } catch (err) {
-    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
-  }
-  const { data, content } = matter(raw);
-  const d = data as Record<string, unknown>;
-  const schemaRaw =
-    d['schema'] && typeof d['schema'] === 'object' && !Array.isArray(d['schema'])
-      ? (d['schema'] as Record<string, unknown>)
-      : {};
-  return {
-    id: reqString(d, 'id', mdPath),
-    name: reqString(d, 'name', mdPath),
-    kind: oneOf(reqString(d, 'kind', mdPath), ARTIFACT_KINDS, mdPath, 'kind'),
-    producer: optString(d, 'producer'),
-    consumer: optString(d, 'consumer'),
-    schema: {
-      requiredFiles: stringArray(schemaRaw, 'requiredFiles', mdPath),
-      requiredFields: stringArray(schemaRaw, 'requiredFields', mdPath),
-      gitInvariants: stringArray(schemaRaw, 'gitInvariants', mdPath),
-    },
-    body: content.trim(),
-    path: mdPath,
-  };
-}
-
-export function listArtifactTemplates(studioRoot: string): ArtifactTemplate[] {
-  const dir = join(studioRoot, 'studio', 'artifact-templates');
-  let files: string[];
-  try {
-    // README.md documents the directory (R3-06) — it is not a template
-    // definition and carries no gray-matter frontmatter, so it is excluded
-    // by name rather than treated as a malformed entry. Matched
-    // case-insensitively (a readme.md/Readme.md variant would otherwise slip
-    // this check and, if it ever carried valid frontmatter, become a
-    // phantom template) — mirrors the identical exclusion in
-    // template-library.ts's listPlanningEntries; the two must stay identical.
-    files = readdirSync(dir).filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f));
-  } catch {
-    return []; // absent dir → no templates (tolerated)
-  }
-  return files.map((f) => loadArtifactTemplate(join(dir, f)));
-}
-
-/**
- * Load one demo-element definition (`studio/demo-elements/<id>.md`) — a member of
- * the forge demo-element library (a skill-creating skill). Throws on a malformed
- * file so `forge studio lint` surfaces it.
- */
-export function loadDemoElement(mdPath: string): DemoElementDefinition {
-  let raw: string;
-  try {
-    raw = readFileSync(mdPath, 'utf8');
-  } catch (err) {
-    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
-  }
-  const { data, content } = matter(raw);
-  const d = data as Record<string, unknown>;
-  return {
-    id: reqString(d, 'id', mdPath),
-    name: reqString(d, 'name', mdPath),
-    phase: oneOf(reqString(d, 'phase', mdPath), DEMO_STEP_KINDS, mdPath, 'phase'),
-    description: reqString(d, 'description', mdPath),
-    configHint: optString(d, 'configHint') ?? '',
-    body: content.trim(),
-    path: mdPath,
-  };
-}
-
-/** List the forge demo-element library (`studio/demo-elements/*.md`). Absent ⇒ []. */
-export function listDemoElements(studioRoot: string): DemoElementDefinition[] {
-  const dir = join(studioRoot, 'studio', 'demo-elements');
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
-  } catch {
-    return [];
-  }
-  return files.map((f) => loadDemoElement(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-// ---------------------------------------------------------------------------
-// Instruction seeds (R3-05) — studio/instruction-seeds/<id>.md (gray-matter).
-// A vetted, composable AGENTS.md building block. Lenient-parse-then-lint: a
-// malformed seed throws here so `forge studio lint` surfaces it, and the enum
-// fields are checked at load (kind/scope) mirroring artifact-template `kind`.
-// ---------------------------------------------------------------------------
-
-/** Load one instruction seed (`studio/instruction-seeds/<id>.md`). Throws on a malformed file. */
-export function loadInstructionSeed(mdPath: string): InstructionSeed {
-  let raw: string;
-  try {
-    raw = readFileSync(mdPath, 'utf8');
-  } catch (err) {
-    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
-  }
-  const { data, content } = matter(raw);
-  const d = data as Record<string, unknown>;
-  return {
-    id: reqString(d, 'id', mdPath),
-    title: reqString(d, 'title', mdPath),
-    kind: oneOf(reqString(d, 'kind', mdPath), INSTRUCTION_SEED_KINDS, mdPath, 'kind'),
-    appliesTo: stringArray(d, 'appliesTo', mdPath),
-    scope: oneOf(reqString(d, 'scope', mdPath), INSTRUCTION_SEED_SCOPES, mdPath, 'scope'),
-    provenance: reqString(d, 'provenance', mdPath),
-    body: content.trim(),
-    path: mdPath,
-  };
-}
-
-/** List the forge instruction-seed library (`studio/instruction-seeds/*.md`). Absent ⇒ []. */
-export function listInstructionSeeds(studioRoot: string): InstructionSeed[] {
-  const dir = join(studioRoot, 'studio', 'instruction-seeds');
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
-  } catch {
-    return []; // absent dir → no seeds (tolerated)
-  }
-  return files.map((f) => loadInstructionSeed(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-// ---------------------------------------------------------------------------
-// Catalog
-// ---------------------------------------------------------------------------
-
-function parseCatalogSdks(raw: unknown, file: string): CatalogSdk[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${file}: sdks[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    return {
-      id: reqString(e, 'id', file),
-      name: reqString(e, 'name', file),
-      available: typeof e['available'] === 'boolean' ? e['available'] : false,
-    };
-  });
-}
-
-function parseCatalogModels(raw: unknown, file: string): CatalogModel[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${file}: models[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    return {
-      id: reqString(e, 'id', file),
-      name: reqString(e, 'name', file),
-      sdk: reqString(e, 'sdk', file),
-      tier: reqString(e, 'tier', file),
-      costIn: optNumber(e, 'costIn'),
-      costOut: optNumber(e, 'costOut'),
-    };
-  });
-}
-
-/**
- * Parse `catalog.yaml`'s `guards:` section. `kind` is DERIVED from
- * `BAND_GUARD_IDS`, never read from the file — a declared `kind:` value in the
- * YAML (if present) is parsed and then discarded, never merged or trusted
- * (ADR-027 R3-03 amendment).
- */
-function parseCatalogGuards(raw: unknown, file: string): CatalogGuardEntry[] {
-  if (!Array.isArray(raw)) return [];
-  const bandIds = new Set<string>(BAND_GUARD_IDS as readonly string[]);
-  return raw.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${file}: guards[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    const id = reqString(e, 'id', file);
-    return {
-      id,
-      name: reqString(e, 'name', file),
-      desc: optString(e, 'desc'),
-      kind: bandIds.has(id) ? 'band' : 'toggle',
-    };
-  });
-}
-
-// catalog.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
-export function loadCatalog(catalogYamlPath: string): Catalog {
-  const d = loadYaml(catalogYamlPath);
-  return {
-    sdks: parseCatalogSdks(d['sdks'], catalogYamlPath),
-    models: parseCatalogModels(d['models'], catalogYamlPath),
-    tools: parseConnectionEntries(d['tools'], catalogYamlPath, 'tools', { readCapabilities: false }),
-    mcps: parseConnectionEntries(d['mcps'], catalogYamlPath, 'mcps', { readCapabilities: true }),
-    guards: parseCatalogGuards(d['guards'], catalogYamlPath),
-    path: catalogYamlPath,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Community registry (W6-CR-1) — studio/community/registry.yaml, the
-// declared-list source of truth for community items, superseding
-// catalog.yaml's former `community-skills:` section (parseCommunitySkills
-// above, removed by this migration).
-// ---------------------------------------------------------------------------
-
-/** Mirrors community-index.ts's COMMUNITY_KINDS / types.ts's
- *  COMMUNITY_REGISTRY_KINDS exactly — kept as an independent literal here too
- *  (registry.ts sits BELOW community-index.ts in the import graph) so `oneOf`
- *  can validate the field without introducing a new cross-module edge for one
- *  four-string list. */
-const COMMUNITY_REGISTRY_KIND_VALUES = ['skill', 'hook', 'mcp', 'tool'] as const;
-
-/** Schema v2 (W8-B5 exit row E5) — the ONE version this loader accepts. There
- *  is no v1 compatibility arm: forge has no legacy users and CLAUDE.md forbids
- *  a "for backwards compatibility" path, so a v1 file fails loud with the
- *  remedy named. */
-export const COMMUNITY_REGISTRY_SCHEMA_VERSION = 2 as const;
-
-/** Repo-scoped fields v1 kept on the ITEM. Refused by name at load so a stale
- *  mis-scoped copy cannot survive in the file unnoticed — the structural half
- *  of E5's cure (the type having no such property is only the compile-time
- *  half; hand-edited YAML never passes through the type). */
-const RETIRED_ITEM_FIELDS = ['upstreamUpdatedAt', 'fetchedAt', 'fetchedBy'] as const;
-const RETIRED_SIGNAL_FIELDS = ['stars', 'starsDisplay'] as const;
-
-function parseCommunityRegistrySignals(raw: unknown, file: string, itemId: string): CommunityRegistrySignals {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: items "${itemId}".signals must be a mapping`);
-  }
-  const s = raw as Record<string, unknown>;
-  for (const retired of RETIRED_SIGNAL_FIELDS) {
-    if (s[retired] !== undefined) {
-      throw new Error(
-        `${file}: items "${itemId}".signals.${retired} is a REPO-level fact and was removed from the item in schema v${COMMUNITY_REGISTRY_SCHEMA_VERSION} — it belongs in the top-level "sources" map, keyed by this item's sourceUrl. Delete it from the item.`,
-      );
-    }
-  }
-  const attributedTo = s['attributedTo'];
-  if (attributedTo !== undefined && attributedTo !== null && typeof attributedTo !== 'string') {
-    throw new Error(`${file}: items "${itemId}".signals.attributedTo must be a string or null`);
-  }
-  return { attributedTo: (attributedTo as string | null | undefined) ?? null };
-}
-
-function parseCommunityRegistrySource(raw: unknown, key: string, file: string): CommunityRegistrySource {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: sources "${key}" must be a mapping`);
-  }
-  const s = raw as Record<string, unknown>;
-  const stars = s['stars'] ?? null;
-  if (stars !== null && typeof stars !== 'number') {
-    throw new Error(`${file}: sources "${key}".stars must be a number or null`);
-  }
-  const starsDisplay = s['starsDisplay'] ?? null;
-  if (starsDisplay !== null && typeof starsDisplay !== 'string') {
-    throw new Error(`${file}: sources "${key}".starsDisplay must be a string or null`);
-  }
-  const archived = s['archived'];
-  if (archived !== undefined && typeof archived !== 'boolean') {
-    throw new Error(`${file}: sources "${key}".archived must be a boolean when present`);
-  }
-  const version = s['version'];
-  if (version !== undefined && typeof version !== 'string') {
-    throw new Error(`${file}: sources "${key}".version must be a string when present`);
-  }
-  const topicsRaw = s['topics'];
-  let topics: string[] | undefined;
-  if (topicsRaw !== undefined) {
-    if (!Array.isArray(topicsRaw) || topicsRaw.some((t) => typeof t !== 'string')) {
-      throw new Error(`${file}: sources "${key}".topics must be an array of strings when present`);
-    }
-    topics = topicsRaw as string[];
-  }
-  return {
-    stars: stars as number | null,
-    starsDisplay: starsDisplay as string | null,
-    upstreamUpdatedAt: parseNullableString(s['upstreamUpdatedAt'] ?? null, file, `sources "${key}".upstreamUpdatedAt`),
-    fetchedAt: parseNullableString(s['fetchedAt'] ?? null, file, `sources "${key}".fetchedAt`),
-    fetchedBy: reqString(s, 'fetchedBy', file),
-    ...(archived !== undefined ? { archived } : {}),
-    ...(topics !== undefined ? { topics } : {}),
-    ...(version !== undefined ? { version } : {}),
-  };
-}
-
-function parseCommunityRegistrySources(raw: unknown, file: string): Record<string, CommunityRegistrySource> {
-  if (raw === undefined || raw === null) return {};
-  if (typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: "sources" must be a mapping of source key -> repo facts`);
-  }
-  const out: Record<string, CommunityRegistrySource> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    out[key] = parseCommunityRegistrySource(value, key, file);
-  }
-  return out;
-}
-
-function parseNullableString(raw: unknown, file: string, field: string): string | null {
-  if (raw !== null && typeof raw !== 'string') {
-    throw new Error(`${file}: field "${field}" must be a string or null`);
-  }
-  return raw;
-}
-
-function parseCommunityRegistryItem(raw: unknown, i: number, file: string): CommunityRegistryItem {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: items[${i}] must be a mapping`);
-  }
-  const e = raw as Record<string, unknown>;
-  const id = reqString(e, 'id', file);
-  const kind = oneOf(reqString(e, 'kind', file), COMMUNITY_REGISTRY_KIND_VALUES, file, 'kind');
-  for (const retired of RETIRED_ITEM_FIELDS) {
-    if (e[retired] !== undefined) {
-      throw new Error(
-        `${file}: items[${i}] ("${id}").${retired} is a REPO-level fact and was removed from the item in schema v${COMMUNITY_REGISTRY_SCHEMA_VERSION} — it belongs in the top-level "sources" map, keyed by this item's sourceUrl. Delete it from the item.`,
-      );
-    }
-  }
-  return {
-    id,
-    kind,
-    name: reqString(e, 'name', file),
-    desc: optString(e, 'desc'),
-    category: reqString(e, 'category', file),
-    sourceUrl: reqString(e, 'sourceUrl', file),
-    provenance: reqString(e, 'provenance', file),
-    tier: optString(e, 'tier'),
-    signals: parseCommunityRegistrySignals(e['signals'], file, id),
-  };
-}
-
-export function communityRegistryPath(forgeRoot: string): string {
-  return join(forgeRoot, 'studio', 'community', 'registry.yaml');
-}
-
-/** Throws on ANY structural violation (missing/malformed meta, non-array
- *  items, a malformed item) — callers that want to TOLERATE a missing file
- *  check existsSync first (mirrors loadCatalog's own bare-throw contract;
- *  `communitySkillsFromRegistry` below is the tolerant-to-missing wrapper
- *  most callers actually want). */
-export function loadCommunityRegistry(registryYamlPath: string): CommunityRegistry {
-  const { data: d, raw } = loadYamlWithRaw(registryYamlPath);
-  const meta = reqObject(d, 'meta', registryYamlPath);
-  const schemaVersion = reqNumber(meta, 'schemaVersion', registryYamlPath);
-  if (schemaVersion !== COMMUNITY_REGISTRY_SCHEMA_VERSION) {
-    throw new Error(
-      `${registryYamlPath}: meta.schemaVersion is ${schemaVersion} but this forge reads only v${COMMUNITY_REGISTRY_SCHEMA_VERSION}. v${COMMUNITY_REGISTRY_SCHEMA_VERSION} moves the repo-level facts (stars, upstreamUpdatedAt, fetchedAt, fetchedBy) off each item into a top-level "sources" map keyed by source URL. There is no compatibility path: re-shape the file, then run "forge community refresh" to populate the source rows.`,
-    );
-  }
-  const lastRefresh = parseNullableString(meta['lastRefresh'], registryYamlPath, 'meta.lastRefresh');
-  const rawItems = d['items'];
-  if (!Array.isArray(rawItems)) {
-    throw new Error(`${registryYamlPath}: "items" must be an array`);
-  }
-  return {
-    schemaVersion,
-    lastRefresh,
-    sources: parseCommunityRegistrySources(d['sources'], registryYamlPath),
-    items: rawItems.map((item, i) => parseCommunityRegistryItem(item, i, registryYamlPath)),
-    leadingComments: extractLeadingCommentBlock(raw),
-    itemsCommentLines: findCommentLinesInBlock(raw, 'items'),
-    path: registryYamlPath,
-  };
-}
-
-/** Renders one `CommunityRegistryItem` back to the plain-object shape
- *  `js-yaml` dumps — optional fields (`desc`/`tier`) are OMITTED (never
- *  written as `null`/`undefined`) when absent, mirroring
- *  `serializeFlowDefinition`'s own "spread in only when defined" discipline
- *  rather than trusting `yaml.dump` to drop `undefined` values on its own. */
-function serializeCommunityRegistryItem(item: CommunityRegistryItem): Record<string, unknown> {
-  const out: Record<string, unknown> = { id: item.id, kind: item.kind, name: item.name };
-  if (item.desc !== undefined) out.desc = item.desc;
-  out.category = item.category;
-  out.sourceUrl = item.sourceUrl;
-  out.provenance = item.provenance;
-  if (item.tier !== undefined) out.tier = item.tier;
-  // Schema v2: curation only. stars / starsDisplay / upstreamUpdatedAt /
-  // fetchedAt / fetchedBy are repo facts and live under `sources` — the item
-  // is deliberately given no key to hold a mis-scoped copy in (exit row E5).
-  out.signals = { attributedTo: item.signals.attributedTo };
-  return out;
-}
-
-function serializeCommunityRegistrySource(src: CommunityRegistrySource): Record<string, unknown> {
-  return {
-    stars: src.stars,
-    starsDisplay: src.starsDisplay,
-    upstreamUpdatedAt: src.upstreamUpdatedAt,
-    ...(src.archived !== undefined ? { archived: src.archived } : {}),
-    ...(src.topics !== undefined ? { topics: src.topics } : {}),
-    ...(src.version !== undefined ? { version: src.version } : {}),
-    fetchedAt: src.fetchedAt,
-    fetchedBy: src.fetchedBy,
-  };
-}
-
-/**
- * W7-B3 — the ONE serializer for the whole registry document, shared by
- * `commitRegistryDraft` (orchestrator/interactive-finalizers.ts) and the
- * Studio CRUD routes (cli/bridge-studio-writes.ts). Pure: takes the parsed
- * shape, returns the YAML text; the CALLER owns the temp-then-rename write.
- * Symmetric with `loadCommunityRegistry` above so a round-trip
- * (serialize → load) is the natural structural validation.
- */
-export function serializeCommunityRegistry(doc: {
-  schemaVersion: number;
-  lastRefresh: string | null;
-  sources: Readonly<Record<string, CommunityRegistrySource>>;
-  items: readonly CommunityRegistryItem[];
-  leadingComments: string;
-}): string {
-  // Source keys sorted so a write is deterministic regardless of insertion
-  // order (two refreshes of the same tree must produce byte-identical output).
-  const sources: Record<string, unknown> = {};
-  for (const key of Object.keys(doc.sources).sort()) {
-    sources[key] = serializeCommunityRegistrySource(doc.sources[key]);
-  }
-  const body = yaml.dump(
-    {
-      meta: { schemaVersion: doc.schemaVersion, lastRefresh: doc.lastRefresh },
-      sources,
-      items: doc.items.map(serializeCommunityRegistryItem),
-    },
-    { lineWidth: 100, quotingType: '"', forceQuotes: false },
-  );
-  return `${doc.leadingComments}${body}`;
-}
-
-/**
- * The repo-level facts for `item`, or `null` when its `sourceUrl` names no
- * recognised upstream (a blog post, a docs page) or names one the registry has
- * no `sources` row for yet.
- *
- * This is the whole of E5's cure at read time: two items sharing a `sourceUrl`
- * resolve to the SAME object, so they cannot report different star counts. A
- * `null` here is the honest "never verified" state — never a fabricated zero.
- */
-export function resolveCommunitySource(
-  registry: Pick<CommunityRegistry, 'sources'>,
-  item: Pick<CommunityRegistryItem, 'sourceUrl'>,
-): CommunityRegistrySource | null {
-  const key = communitySourceKey(item.sourceUrl);
-  if (key === null) return null;
-  return registry.sources[key] ?? null;
-}
-
-/** Projects a registry item down onto the LEGACY `CommunitySkill` shape every
- *  existing consumer already depends on (skill-library.ts, validate.ts,
- *  community-index.ts, community-install.ts, the bridge routes) — `stars`
- *  here is always the curated DISPLAY string, never the parsed numeric
- *  `signals.stars` (types.ts's CommunitySkill doc).
- *
- *  W6-CR-2: `item.fetchedAt`/`item.fetchedBy`/`item.upstreamUpdatedAt`/
- *  `item.signals.stars` (the numeric figure) now thread straight through —
- *  every registry-sourced item genuinely HAS these facts (required fields on
- *  `CommunityRegistryItem`), so there is nothing to fabricate here; a
- *  vendored-only skill/hook or a connection (no registry row at all) is
- *  built directly as a `CommunityItem` in community-index.ts, never through
- *  this function, and gets its own honest fetchedAt:null/fetchedBy:'local'
- *  treatment there. */
-function toCommunitySkill(item: CommunityRegistryItem, source: CommunityRegistrySource | null): CommunitySkill {
-  return {
-    id: item.id,
-    name: item.name,
-    provenance: item.provenance,
-    source: item.sourceUrl,
-    category: item.category,
-    tier: item.tier,
-    stars: source?.starsDisplay ?? undefined,
-    starsNumeric: source?.stars ?? null,
-    desc: item.desc,
-    upstreamUpdatedAt: source?.upstreamUpdatedAt ?? null,
-    fetchedAt: source?.fetchedAt ?? null,
-    // No resolvable source row ⇒ the row is hand-curated and has never been
-    // fetched from anywhere. "seed" is the literal truth for such a row (it is
-    // what the shipped file says), never a fabricated verification provenance.
-    fetchedBy: source?.fetchedBy ?? 'seed',
-  };
-}
-
-/** Every `kind: skill` row of studio/community/registry.yaml, in the LEGACY
- *  `CommunitySkill` shape. Tolerant of a MISSING file (returns `[]` — the
- *  fresh/half-onboarded shape every other studio/community/*.yaml reader
- *  already tolerates, see community-index.ts's listCommunityHubs); a file
- *  that EXISTS but fails to parse (missing required field, bad kind vocab,
- *  malformed signals, ...) throws loud, naming the file + the real error —
- *  a corrupt registry must never render identically to an honest empty one. */
-export function communitySkillsFromRegistry(forgeRoot: string): CommunitySkill[] {
-  const registryPath = communityRegistryPath(forgeRoot);
-  if (!existsSync(registryPath)) return [];
-  const registry = loadCommunityRegistry(registryPath);
-  return registry.items
-    .filter((item) => item.kind === 'skill')
-    .map((item) => toCommunitySkill(item, resolveCommunitySource(registry, item)));
-}
+// Artifact templates / demo elements / instruction seeds moved to
+// `packages/library/studio/artifact-registry.ts`; Catalog moved to
+// `packages/library/studio/catalog-registry.ts`; the whole Community block
+// moved to `packages/library/studio/community-registry.ts` (M4
+// library-by-kind carve, PR 3 / Part 2) — all three are library's own kinds.
 
 // Project discovery (id normalisation + disk scan) — kernel owns these now
 // (M4 ruling 18); this re-export keeps the ~30 legacy call sites unchanged

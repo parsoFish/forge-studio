@@ -59,10 +59,11 @@ import matter from 'gray-matter';
 // empty-data success. Passing {} opts out of the cache entirely.
 
 import { guardedSkillMdPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
-import { communitySkillsFromRegistry, isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { communitySkillsFromRegistry } from './community-registry.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 import type { AgentDefinition, CommunitySkill } from '@forge/contracts/studio/types.ts';
-import type { Finding } from '../../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 import { extractProvenance, readSkillPackage, hashSkillPackage, type SkillProvenance } from './skill-package.ts';
 
 // ---------------------------------------------------------------------------

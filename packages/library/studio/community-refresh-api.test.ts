@@ -22,7 +22,7 @@ import {
   fetchAllowedApiUrl,
   type FetchLike,
 } from './community-refresh-api.ts';
-import { serializeCommunityRegistry } from '../../../orchestrator/studio/registry.ts';
+import { serializeCommunityRegistry } from './community-registry.ts';
 import type { CommunityRegistry } from '@forge/contracts/studio/types.ts';
 
 const NOW = new Date('2026-08-23T12:00:00.000Z');

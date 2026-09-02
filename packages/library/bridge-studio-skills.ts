@@ -56,7 +56,7 @@ import {
 import { resolveGuardedPath } from '@forge/kernel';
 import { skillPath, skillsDir } from './skill-path.ts';
 import { stageSkillPackage } from './skill-staging.ts';
-import { SLUG_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
+import { SLUG_RE, isReservedId } from '@forge/kernel';
 import { isStudioAgent } from '../../orchestrator/studio/registry.ts';
 import { listSkillLibrary, skillTrustDetail, type SkillLibraryEntry } from './studio/skill-trust.ts';
 import { readSkillPackage, scanSkillPackage } from './studio/skill-package.ts';
