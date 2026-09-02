@@ -41,8 +41,7 @@
 import { join, resolve } from 'node:path';
 import { guardedReadFile } from '@forge/kernel';
 import { REPO_RE } from '@forge/flows/trigger-payload.ts';
-import { discoverProjects } from '../../orchestrator/studio/registry.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { defaultConfigPath, discoverProjects, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type { DemoStep, DemoStepKind } from '@forge/contracts/studio/types.ts';
 export { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';

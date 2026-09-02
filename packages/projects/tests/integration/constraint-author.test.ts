@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { authorConstraintBlocks, extractConstraintsSource } from '../../constraint-author.ts';
-import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { projectBrainDir } from '@forge/kernel';
 import { loadProjectConstraintBlocks } from '../../constraint-blocks.ts';
 
 const PROJECT = 'demoproj';

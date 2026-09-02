@@ -47,19 +47,9 @@ export function cycleArchiveRelPath(cycleId: string): string {
   return `brain/cycles/_raw/${cycleId}.md`;
 }
 
-/**
- * Brain 3 (project) — the project's brain root, CENTRAL in the forge brain wiki
- * at `brain/projects/<name>/` (ADR 035, reversing ADR 018's in-repo location so
- * the reflector can write it post-merge without an open project worktree).
- */
-export function projectBrainDir(forgeRoot: string, projectName: string): string {
-  return resolve(forgeRoot, 'brain', 'projects', projectName);
-}
-
-/** Brain 3 (project) — a managed project's theme dir, central (ADR 035). */
-export function projectThemesDir(forgeRoot: string, projectName: string): string {
-  return resolve(projectBrainDir(forgeRoot, projectName), 'themes');
-}
+// Brain 3 (project) dirs — kernel owns these now (M4 ruling 18); this
+// re-export keeps this module the one brain-path door (ADR 035).
+export { projectBrainDir, projectThemesDir } from '@forge/kernel';
 
 /**
  * Resolve a kbId to its on-disk brain directory, supporting BOTH top-level

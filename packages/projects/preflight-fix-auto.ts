@@ -19,7 +19,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 import { detectProjectLanguage } from './gate-recipes.ts';
-import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { projectBrainDir } from '@forge/kernel';
 import { runPreflight, SCRATCH_PATHS, BUILD_ARTIFACT_HINTS, type ClauseId, type ClauseResult } from './preflight.ts';
 
 export type PreflightAutoFixResult = {
