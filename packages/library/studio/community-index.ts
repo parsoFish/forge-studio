@@ -64,11 +64,11 @@ import { listConnections } from './connection-library.ts';
 import type { ConnectionDefinition } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
-import { communityRegistryPath, communitySkillsFromRegistry } from '../../../orchestrator/studio/registry.ts';
+import { communityRegistryPath, communitySkillsFromRegistry } from './community-registry.ts';
 import { reqString, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
-import type { Finding } from '../../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Constants / types

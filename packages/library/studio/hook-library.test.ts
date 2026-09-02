@@ -92,9 +92,10 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { loadAgentDefinition, loadCatalog } from '../../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { loadCatalog } from './catalog-registry.ts';
 import { PLATFORM_GUARD_IDS } from '@forge/contracts';
-import type { Finding } from '../../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 
 import {
   HOOK_LIFECYCLE_EVENTS,

@@ -63,17 +63,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 import { listProjectStarters } from '@forge/kernel';
-import {
-  discoverProjects,
-  listFlowIds,
-  loadArtifactTemplate,
-  loadDemoElement,
-  loadFlowDefinition,
-  type DiscoveredProject,
-} from '../../../orchestrator/studio/registry.ts';
+import { discoverProjects, listFlowIds, loadFlowDefinition, type DiscoveredProject } from '../../../orchestrator/studio/registry.ts';
+import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
 import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
-import type { Finding } from '../../../orchestrator/studio/validate.ts';
+import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Public types (BINDING shapes — orchestrator/studio/template-library.test.ts)

@@ -62,9 +62,9 @@ import {
   type RouteContext,
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
-import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
+import { SLUG_RE } from '@forge/kernel';
 import { listTemplateLibrary, templateDetail, type TemplateCategory } from './studio/template-library.ts';
-import { loadArtifactTemplate, loadDemoElement } from '../../orchestrator/studio/registry.ts';
+import { loadArtifactTemplate, loadDemoElement } from './studio/artifact-registry.ts';
 import { MAX_SKILL_ID_LENGTH, isReservedId } from '@forge/kernel/ids.ts';
 
 /** Hard cap on a template id's length — the same value and rationale as

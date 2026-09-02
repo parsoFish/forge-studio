@@ -24,7 +24,7 @@ import {
   composedSeedsFooter,
   stripComposedSeedsFooter,
 } from '@forge/library/instruction-seed-match.ts';
-import { listInstructionSeeds } from '../../orchestrator/studio/registry.ts';
+import { listInstructionSeeds } from '@forge/library/studio/artifact-registry.ts';
 import { loadProjectConfig } from './project-config.ts';
 import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 

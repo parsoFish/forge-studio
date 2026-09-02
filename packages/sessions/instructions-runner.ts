@@ -51,7 +51,7 @@ import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
-import { listInstructionSeeds } from '../../orchestrator/studio/registry.ts';
+import { listInstructionSeeds } from '@forge/library/studio/artifact-registry.ts';
 import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 import {
   detectProjectTags,

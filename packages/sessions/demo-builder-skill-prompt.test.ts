@@ -67,7 +67,7 @@ import {
 } from './demo-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { listDemoElements } from '../../orchestrator/studio/registry.ts';
+import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 

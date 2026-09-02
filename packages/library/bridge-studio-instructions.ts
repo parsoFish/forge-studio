@@ -56,7 +56,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { SLUG_RE } from '../../orchestrator/studio/validate.ts';
+import { SLUG_RE } from '@forge/kernel';
 import { composeInstructionsDraft } from './studio/instructions-draft.ts';
 import {
   resolveGuardedPath,
