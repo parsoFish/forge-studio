@@ -40,3 +40,23 @@ export function sessionDirPreview(kind: string, selector: 'project' | 'kb' | 'no
   if (selector === 'kb') return `projects/<kb-project>/_${kind}/<sessionId>`;
   return `projects/${project.trim() || '<project>'}/_${kind}/<sessionId>`;
 }
+
+/**
+ * The kickoff page's `main` data attributes.
+ *
+ * `data-minted-session-id` closes the sessions-owned half of bead
+ * `forge-8vfn.5.10`: the page POSTs to its kind's `/start` route and
+ * `router.push`es straight into the new session, so the id it just minted
+ * appeared nowhere an observer could read — not to a story, not to a journey,
+ * not to an operator whose navigation failed. The value is published on the
+ * page that MINTED it, before it navigates away.
+ *
+ * It is the empty string until a session is minted, and empty is meaningful:
+ * "this page has started nothing". A caller must not read absence and presence
+ * as the same thing, which is why the key is always present rather than
+ * conditionally spread — an attribute that appears only on success cannot be
+ * distinguished from a page that never rendered it.
+ */
+export function kickoffMainData(kind: string, mintedSessionId: string): Record<string, string> {
+  return { 'data-kickoff-kind': kind, 'data-minted-session-id': mintedSessionId };
+}

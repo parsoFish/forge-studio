@@ -23,7 +23,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { defaultKickoffTier, sessionDirPreview } from './kickoff-view';
+import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from './kickoff-view';
 
 // ---- defaultKickoffTier -----------------------------------------------------
 
@@ -55,4 +55,32 @@ test('selector:project previews the typed project (placeholder until typed)', ()
 
 test('selector:kb previews the kb-project placeholder', () => {
   expect(sessionDirPreview('kb-cleanup', 'kb', '')).toBe('projects/<kb-project>/_kb-cleanup/<sessionId>');
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.10 (sessions-owned site) — the kickoff page publishes the id it
+// mints, on the page that minted it, before navigating away.
+// ---------------------------------------------------------------------------
+
+test('kickoffMainData carries the kind and the minted session id', () => {
+  expect(kickoffMainData('authoring', 's-123')).toEqual({
+    'data-kickoff-kind': 'authoring',
+    'data-minted-session-id': 's-123',
+  });
+});
+
+test('the minted-id key is ALWAYS present — empty means "started nothing", not "not rendered"', () => {
+  // Kills a conditional spread. An attribute that appears only on success is
+  // indistinguishable from a page that never published one, so an observer
+  // cannot tell "no session yet" from "this build lacks the fix".
+  const before = kickoffMainData('authoring', '');
+  expect(Object.hasOwn(before, 'data-minted-session-id')).toBe(true);
+  expect(before['data-minted-session-id']).toBe('');
+});
+
+test('the kind is unchanged by the addition', () => {
+  // The page shipped `{'data-kickoff-kind': kind}`; that contract is untouched.
+  for (const k of ['authoring', 'onboarding', 'demo', 'kb-cleanup']) {
+    expect(kickoffMainData(k, '')['data-kickoff-kind']).toBe(k);
+  }
 });
