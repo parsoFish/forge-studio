@@ -320,7 +320,7 @@ test('REPRODUCTION: cmdAgentDispatch SIGTERMed mid-dispatch writes a terminus (r
   const childPath = join(forgeRoot, 'child.ts');
   writeFileSync(
     childPath,
-    `import { cmdAgentDispatch } from ${JSON.stringify(join(HERE, 'agent-run.ts'))};
+    `import { cmdAgentDispatch } from ${JSON.stringify(join(HERE, 'agent-dispatch-cmd.ts'))};
      // Node exits on an unsettled top-level await unless something holds the
      // loop open — without this the child dies before the signal arrives and
      // the test would pass for the wrong reason (no terminus because no run).

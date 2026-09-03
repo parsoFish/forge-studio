@@ -39,7 +39,7 @@ import {
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { cmdAgentDispatch } from './agent-run.ts';
+import { cmdAgentDispatch } from './agent-dispatch-cmd.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';

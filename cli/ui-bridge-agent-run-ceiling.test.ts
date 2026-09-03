@@ -183,7 +183,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge, buildAgentDispatchArgs } from './ui-bridge.ts';
-import { cmdAgentDispatch, parseAgentDispatchArgs } from '@forge/agents/agent-run.ts';
+import { cmdAgentDispatch, parseAgentDispatchArgs } from '@forge/agents/agent-dispatch-cmd.ts';
 import { DRY_BRIDGE_LOG_BUCKET } from './dry-bridge.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '@forge/kernel';

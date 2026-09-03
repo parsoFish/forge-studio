@@ -98,7 +98,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | disposition | loc |
 |---|---|---|---|
-| packages/agents/agent-run.ts | agents | verbatim | 890 |
+| packages/agents/agent-run.ts | agents | verbatim | 386 |
 | packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 862 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 255 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
@@ -227,6 +227,8 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/bridge-agents-runs.ts | agents | rewritten | 243 |
 | packages/agents/bridge-agents-slug.ts | agents | rewritten | 564 |
 | packages/agents/bridge-agents-studio.ts | agents | rewritten | 614 |
+| packages/agents/agent-dispatch-cmd.ts | agents | rewritten | 497 |
+| packages/agents/find-session-project.ts | agents | verbatim | 52 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 39 |
 | packages/sessions/kinds/architect.ts | sessions | verbatim | 1584 |
