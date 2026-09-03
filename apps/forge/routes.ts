@@ -65,7 +65,13 @@ export { dispatchRoute } from '@forge/kernel';
  * needs instance state adds its `XRouteDeps` to this intersection and nothing
  * else in the repository moves.
  */
-export type RouteTableDeps = SessionsRouteDeps;
+/**
+ * What the HOST must supply. `isContainedProjectRepoPath` is deliberately not
+ * here: it ships in `@forge/flows` and this assembly module already imports it
+ * for `projectsRoutes`, so the host never names a symbol from a package above
+ * the one it is wiring.
+ */
+export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath'>;
 
 /**
  * Build the assembled table for ONE bridge instance.
@@ -106,6 +112,24 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
     ...sessionsRoutes({
       ensureSessionTail: deps.ensureSessionTail,
       broadcastKindChanged: deps.broadcastKindChanged,
+      broadcastArchitectChanged: deps.broadcastArchitectChanged,
+      broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
+      broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
+      spawnAgentDispatch: deps.spawnAgentDispatch,
+      newRunStamp: deps.newRunStamp,
+      safeInputKeyRe: deps.safeInputKeyRe,
+      broadcastDemoChanged: deps.broadcastDemoChanged,
+      projectsRoot: deps.projectsRoot,
+      // The host's spawn/serve surface. It stays in `cli/ui-bridge.ts` because
+      // host code that does not carve still calls it (see the sessions helper
+      // module's header); injecting it here is what keeps the carve at zero new
+      // boundary rows in either direction.
+      spawnAgentTurn: deps.spawnAgentTurn,
+      spawnAgentSpecs: deps.spawnAgentSpecs,
+      safeParseJson: deps.safeParseJson,
+      servedFileHeaders: deps.servedFileHeaders,
+      dryBridgeAgentTurnMarker: deps.dryBridgeAgentTurnMarker,
+      isContainedProjectRepoPath,
     }),
   ];
 }

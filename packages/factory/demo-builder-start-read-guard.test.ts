@@ -61,7 +61,14 @@ import { startBridge } from '../../cli/ui-bridge.ts';
 // Part 1 — source-ordering pin (RED at base).
 // ===========================================================================
 
-const SRC = readFileSync(join(import.meta.dirname, '..', '..', 'cli', 'ui-bridge.ts'), 'utf8');
+// M4 session-routes carve: POST /api/demo-builder/start moved verbatim out of
+// cli/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING gate, so it
+// has to read the file the handler now lives in — left pointing at the host it
+// would pass vacuously against a file the code is no longer in.
+const SRC = readFileSync(
+  join(import.meta.dirname, '..', 'sessions', 'bridge-studio-demo.ts'),
+  'utf8',
+);
 
 /** Extract the POST /api/demo-builder/start handler block: from its route
  *  match to the next handler (POST /api/demo-builder/brief). */

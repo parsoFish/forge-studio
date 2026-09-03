@@ -35,7 +35,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge, sortAndCapSessionIndexRows, SESSION_INDEX_MAX_ROWS, type SessionIndexRow } from './ui-bridge.ts';
+import { startBridge } from './ui-bridge.ts';
+// Carved with the session index (M4 routes carve): the index, its cap and its
+// row type are the package's now. Like the other two host integration tests
+// that exercise carved routes, this import is a disclosed transitional row that
+// closes when these files convert to handler level under exit row 5.
+import {
+  sortAndCapSessionIndexRows,
+  SESSION_INDEX_MAX_ROWS,
+  type SessionIndexRow,
+} from '@forge/sessions/bridge-studio-session-index.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

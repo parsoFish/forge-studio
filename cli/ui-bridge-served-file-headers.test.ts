@@ -368,14 +368,47 @@ test('enumeration ratchet: contentTypeFor has NO direct callers in cli/ui-bridge
   );
 });
 
-test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites reference the hardening helper (no eighth route silently added, none silently dropped)', () => {
-  const src = readFileSync(join(import.meta.dirname, 'ui-bridge.ts'), 'utf8');
-  const matches = [...src.matchAll(/res\.writeHead\(200, servedFileHeaders\(/g)];
-  assert.equal(
-    matches.length,
-    7,
-    `expected exactly 7 call sites of the form res.writeHead(200, servedFileHeaders(...)) — found ${matches.length} at lines ` +
-      `${matches.map((mm) => lineOf(src, mm.index ?? 0)).join(', ')}. If this is intentionally 8 (a new route added) or 6 (a route ` +
-      'removed), update this pin\'s expected count deliberately — do not just silence it.',
-  );
+test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites reference the hardening helper, across the host AND the carved session routes', () => {
+  // This pin is defense-in-depth for a security invariant: every file served on
+  // the bridge origin must get its content-type through `servedFileHeaders`, so
+  // the CSP / x-content-type-options / content-disposition hardening rides along.
+  //
+  // M4's session-routes carve moved one of the seven call sites out of
+  // `cli/ui-bridge.ts` and into `@forge/sessions`, where the helper arrives
+  // injected and so reads `ctx.servedFileHeaders(`. Decrementing this count to 6
+  // would have kept the test green while the guard went BLIND to the route that
+  // moved — a defense-in-depth lint has to follow the dispatch it backstops.
+  // So the pin now spans both files and states the split.
+  const FILES = [
+    { path: join(import.meta.dirname, 'ui-bridge.ts'), rel: 'cli/ui-bridge.ts', expected: 1 },
+    {
+      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-architect.ts'),
+      rel: 'packages/sessions/bridge-studio-architect.ts',
+      expected: 1,
+    },
+    {
+      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
+      rel: 'packages/sessions/bridge-studio-instructions.ts',
+      expected: 1,
+    },
+    {
+      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-demo.ts'),
+      rel: 'packages/sessions/bridge-studio-demo.ts',
+      expected: 4,
+    },
+  ];
+  let total = 0;
+  for (const f of FILES) {
+    const src = readFileSync(f.path, 'utf8');
+    const matches = [...src.matchAll(/res\.writeHead\(200, (?:ctx\.)?servedFileHeaders\(/g)];
+    assert.equal(
+      matches.length,
+      f.expected,
+      `${f.rel}: expected ${f.expected} call site(s) of res.writeHead(200, servedFileHeaders(...)) — found ${matches.length} at lines ` +
+        `${matches.map((mm) => lineOf(src, mm.index ?? 0)).join(', ')}. If a route was added, removed or CARVED, update this pin ` +
+        'deliberately — and if it was carved, add its new home to FILES rather than lowering a count, or this guard stops watching it.',
+    );
+    total += matches.length;
+  }
+  assert.equal(total, 7, `the invariant is about the seven served-file routes as a whole, wherever they live — found ${total}`);
 });
