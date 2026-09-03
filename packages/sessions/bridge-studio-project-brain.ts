@@ -70,6 +70,29 @@ export type ProjectBrainRouteContext = SessionRootsContext & {
   readonly broadcastProjectBrainChanged: () => void;
 } & SessionHostSurface;
 
+/**
+ * A PRE-EXISTING ASYMMETRY RECORDED ON THE WAY PAST, NOT FIXED HERE.
+ *
+ * This route's DEFAULT `project_repo_path` (used when the request omits the
+ * field) is `body.projectRepoPath || join(ctx.projectsRoot, body.project)` —
+ * built raw. The instructions and demo kinds compute the same default but route
+ * it through `resolveGuardedPath(ctx.projectsRoot, [body.project])` first, fixes
+ * tagged `forge-osz` and `forge-4vt` whose own comments say the containment
+ * they replaced was "an accident of SOURCE ORDER". That back-port never reached
+ * this kind or project-brain.
+ *
+ * It is not exploitable today: `guardedSessionDir(...)` runs earlier in this arm
+ * and performs an equivalent per-segment identity check on `body.project`. But
+ * that is coincidence — `guardedSessionDir` exists to validate the SESSION dir,
+ * not this field — and it is exactly the shape those two beads were filed
+ * against. It matters because nothing downstream re-validates:
+ * `instructions-runner.ts` calls `mkdirSync(status.project_repo_path)` with no
+ * second check, so this is the only gate before a real filesystem write.
+ *
+ * Found by the adversarial containment review OF this carve. A carve changes no
+ * guard — fixing it here would hide a security change inside a move — so it is
+ * recorded here, in the PR body, and handed to T1 for a bead.
+ */
 export async function handleProjectBrainRoutes(
   req: IncomingMessage,
   res: ServerResponse,

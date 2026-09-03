@@ -335,12 +335,21 @@ function invalidProjectRepoPath(
  * The carve could not honour that literally — measured, its four callers are the
  * four `/start` routes and they live in three different family modules, so no
  * one module can hold it privately. Exporting the raw predicate would have
- * widened exactly the value space the comment protects. So the invariant is kept
- * STRUCTURALLY instead of by convention: this function takes the parsed request
- * BODY and reads the field off it itself, so the call shape the comment fears —
- * handing the predicate a value from somewhere that is not a request body — does
- * not exist in the exported surface. `bridge-studio-session-helpers.test.ts`
- * pins that this module's exports do not include the raw predicate.
+ * widened exactly the value space the comment protects. So this function takes
+ * the parsed request BODY and reads the field off it itself, and
+ * `bridge-studio-session-helpers.test.ts` pins that the raw predicate is not in
+ * this module's exports.
+ *
+ * BE PRECISE ABOUT WHAT THAT BUYS, because an earlier draft of this comment
+ * overclaimed and a containment review caught it. `unknown` cannot express
+ * "originated from `JSON.parse`", so this NARROWS the call shape — a caller must
+ * now wrap the value in an object under the right key — it does not structurally
+ * close it. An in-package caller can still hand it a BigInt, a Symbol, a
+ * circular object or a hostile `toJSON`. What makes that harmless is not this
+ * signature but `describeRejectedValue` below, which try/catches every render
+ * path and collapses anything unrenderable to a fixed string. The narrowing and
+ * that defensive helper are two separate protections; neither should be
+ * described as doing the other's job.
  *
  * All four call sites were byte-identical before the carve; they were one shared
  * guard already, written out four times.
