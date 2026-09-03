@@ -100,7 +100,22 @@ test('the real tree is at its baseline', () => {
 test('it inspects a real dependency graph, not an empty one', () => {
   const json = JSON.parse(execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }));
   assert.ok(json.edges >= 3000, `expected the real graph, got ${json.edges} edges`);
-  assert.ok(json.violations >= 1, 'the live rule has a real population to ratchet down');
+  // Bead forge-8vfn.5.49. This used to also assert `json.violations >= 1`,
+  // "the live rule has a real population to ratchet down" — a FLOOR on the very
+  // debt the ratchet exists to remove, so it goes red at the moment the
+  // campaign succeeds and `violations` reaches 0.
+  //
+  // It is removed rather than replaced, because everything it protected is
+  // already asserted here and nothing was left uncovered:
+  //   - "the graph is real, not empty" is `edges >= 3000`, above;
+  //   - "the baseline was actually applied" is `stale === []` — a checker that
+  //     stopped finding violations leaves every on-disk row unmatched, so
+  //     `stale` becomes the whole baseline and this test fails loudly;
+  //   - "nothing new slipped in" is `introduced === []`.
+  // A derived restatement (`baselined === <rows on disk>`) was considered and
+  // rejected as tautological: the checker reports `baselined` AS the on-disk
+  // set's size (`check-boundaries.mjs:199`), so such an assertion compares the
+  // baseline file to itself.
   assert.deepEqual(json.introduced, []);
   assert.deepEqual(json.stale, []);
 });

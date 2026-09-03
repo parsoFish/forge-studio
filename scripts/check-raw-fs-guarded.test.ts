@@ -19,7 +19,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
 import {
@@ -37,6 +38,30 @@ import {
 // Namespace import so probing a not-yet-built export yields `undefined` rather
 // than an ESM link-time crash that takes the whole file down.
 import * as lint from './check-raw-fs-guarded.mjs';
+// The scanner's TIER-1 seed. Imported here so the scope assertions below are
+// derived from the same source the scanner walks, never from a hardcoded tree
+// name that a package move silently invalidates (bead forge-8vfn.5.49).
+import { listEntryModules } from './check-request-path-sinks.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** The pre-W8-F5 hand list the derivation must never silently drop. */
+const CHARTER_MODULES = [
+  'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
+  'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
+  'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
+  'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
+  'packages/projects/project-config.ts', // SEC-04 blind-spot #b: the delegated config loader
+  'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
+  'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',
+];
+
+/** Bead 5.49: the TIER-1 seed is non-empty and wholly in scope (was two hardcoded `cli/` assertions the host carve would have made vacuous). */
+function assertEntrySeedInScope(mods: string[]): void {
+  const entries = listEntryModules(ROOT);
+  assert.ok(entries.length > 0, 'the bridge entry derivation yielded no modules — the lint is blind');
+  for (const e of entries) assert.ok(mods.includes(e), `bridge entry module ${e} must stay in scope`);
+}
 
 const fn = (...lines: string[]) => lines.join('\n');
 
@@ -442,38 +467,22 @@ test('C1: the real repository passes the raw-fs-guarded lint clean', () => {
   assert.equal(r.findings.length, 0, `expected 0 unguarded request-derived raw fs sinks, got ${r.findings.length}`);
 });
 
-test('C2: clean FOR THE RIGHT REASON — the scanner is live and residuals are actually suppressed', () => {
-  // False-negative discipline: if the scanner were gutted (total → 0) or the
-  // allowlist stopped matching (suppressed → 0), this fails even though C1's
-  // "findings === 0" would still trivially hold.
+test('C2: clean FOR THE RIGHT REASON — the scanner is live and every audited row was applied', () => {
+  // False-negative discipline: a gutted scanner still satisfies C1. `r.total`
+  // is SCAN LIVENESS, kept. `r.suppressed.length > 0` was a floor on the debt
+  // (bead 5.49): unused rows land in `stale` — 83 of 83 with the scan gutted.
   const r = runLint({});
   assert.ok(r.total > 0, 'the scan must inspect >0 raw-fs sink candidates (not a dead lint)');
-  assert.ok(r.suppressed.length > 0, 'residuals must exist and be cleared by reasoned allowlist rows (not "found nothing")');
   assert.equal(r.stale.length, 0, `no stale allowlist rows (a rotted row means the audited sink moved): ${r.stale.map((s) => `${s.file}:${s.line}`).join(', ')}`);
   assert.equal(r.mistargeted.length, 0, 'no mistargeted allowlist rows');
-});
-
-test('C3: the real handling-module set is present and includes the charter modules + the bridge-studio glob', () => {
-  const mods = targetModules();
-  for (const m of [
-    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
-    'packages/sessions/interactive-session.ts', 'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
-    'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
-  ]) {
-    assert.ok(mods.includes(m), `charter module ${m} must be in scope`);
-  }
-  assert.ok(mods.some((m) => m.startsWith('cli/bridge-studio')), 'the cli/bridge-studio*.ts glob must be in scope');
-  assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
-  // SEC-04 blind-spot #b: the delegated config-loader helper is now in scope so
-  // its interprocedural leaf-append (loadProjectConfig -> join(projectRoot,
-  // ".forge/project.json")) is visible to the ratchet.
-  assert.ok(mods.includes('packages/projects/project-config.ts'), 'the config-loader helper must be in scope');
 });
 
 test('C4: every real allowlist row is well-formed (file, line, a reason, and an audited sink)', () => {
   // A structural integrity gate on the allowlist itself — a row with no reason
   // or no sink identity is not an audited residual, it is a silent skip.
-  assert.ok(Array.isArray(ALLOWLIST) && ALLOWLIST.length > 0);
+  //
+  // Bead 5.49: `&& ALLOWLIST.length > 0` forbade ever emptying the audited list.
+  assert.ok(Array.isArray(ALLOWLIST));
   for (const a of ALLOWLIST) {
     assert.equal(typeof a.file, 'string');
     assert.equal(typeof a.line, 'number');
@@ -920,21 +929,12 @@ test('G4 (CALIBRATION): outside the declared request-handling surface only the U
   assert.equal(loud.findings[0].kind, 'tainted', 'inside the declared surface the curated bare-id rule still fires');
 });
 
-test('G5: the derived scope is a SUPERSET of the charter list and of every cli/bridge-studio*.ts (a derivation must never silently drop coverage)', () => {
+test('G5 (was also C3): the derived scope is a SUPERSET of the charter list and of the bridge entry seed — a derivation must never silently drop coverage', () => {
   // Kills: replacing the hand list with a walk that happens to miss a module —
   // coverage loss reads as "no findings", the same green a clean tree gives.
   const mods = targetModules();
-  for (const m of [
-    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
-    'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
-    'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
-    'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
-    'packages/projects/project-config.ts', 'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
-    'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',
-  ]) {
-    assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
-  }
-  assert.ok(mods.filter((m) => m.split('/').pop().startsWith('bridge-studio')).length >= 14, 'every bridge-studio route module stays in scope');
+  for (const m of CHARTER_MODULES) assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
+  assertEntrySeedInScope(mods);
   assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
 });
 
