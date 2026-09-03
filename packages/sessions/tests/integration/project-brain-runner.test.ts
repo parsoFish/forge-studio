@@ -10,9 +10,12 @@ import {
   projectBrainAgentSpec,
   PROJECT_BRAIN_MODEL,
   type ProjectBrainStatus,
-} from './project-brain-builder-runner.ts';
-import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from '@forge/sessions/interactive-session.ts';
-import { loadKbDescriptor } from './studio/registry.ts';
+} from '../../kinds/project-brain.ts';
+import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from '../../interactive-session.ts';
+// COMMON §15.43: the legacy `orchestrator/studio/registry.ts` only
+// re-exports this — the real owner is `@forge/knowledge`, which sessions
+// (rank 4) may import directly, so the move costs no boundary row.
+import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 
 function setup(
   phase: ProjectBrainStatus['phase'],
@@ -231,7 +234,7 @@ test('committing copies staged themes into the central project brain + kb.yaml',
 // R1-06 WI-2 group B (2): the runner's commit step must honor a
 // DESCRIPTOR-DERIVED binding (T1 ruling Q4 option (a)) instead of always
 // hardcoding `binding: { kind: 'project', ref: status.project }`
-// (project-brain-builder-runner.ts ~279) and always writing under
+// (the kind module's guarded status write) and always writing under
 // `brain/projects/<status.project>/` (~246). When the session was started as
 // the R1-06-F2 hand-off for a KB created via POST /api/studio/kbs (arbitrary
 // id, arbitrary binding — e.g. a flow/band-scoped KB), the commit must write

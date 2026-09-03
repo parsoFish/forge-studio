@@ -8,7 +8,7 @@
  * lands in `orchestrator/skill-path.ts`).
  *
  * Today (base `c45e3892`), `runAnalyzeStep` in
- * `orchestrator/project-brain-builder-runner.ts` loads the ENTIRE
+ * `packages/sessions/kinds/project-brain.ts` loads the ENTIRE
  * `skills/project-brain-builder/SKILL.md` verbatim via a private, fail-open
  * `loadSkillPrompt()` and then hand-composes the real task instructions
  * (headers, the write contract, the evidence-source sentence) as TypeScript
@@ -43,7 +43,7 @@
  *
  * These are IMMUTABLE acceptance tests for WI-3 — an implementer may not
  * weaken, skip, or delete any assertion here to make the suite pass; the
- * fix belongs in `orchestrator/project-brain-builder-runner.ts` and
+ * fix belongs in `packages/sessions/kinds/project-brain.ts` and
  * `skills/project-brain-builder/SKILL.md`.
  */
 import { test } from 'node:test';
@@ -51,18 +51,26 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import {
   runProjectBrainTurn,
   projectBrainSessionDir,
   type ProjectBrainStatus,
-} from './project-brain-builder-runner.ts';
+} from '../../kinds/project-brain.ts';
 import { writeSessionStatus, type QueryFn } from '@forge/sessions/interactive-session.ts';
 import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
-const RUNNER_TS_PATH = resolve(import.meta.dirname, 'project-brain-builder-runner.ts');
-const SKILL_MD_PATH = resolve(import.meta.dirname, '..', 'skills', 'project-brain-builder', 'SKILL.md');
+// M4 sessions s3: re-anchored on `FORGE_ROOT` when this file moved into the
+// package's `tests/unit/` bucket (COMMON §15.14 — a move breaks the files that
+// were already right). A hand-counted `..` chain from `import.meta.dirname` is
+// depth-coupled to wherever the test happens to sit; `FORGE_ROOT` is the repo
+// root by construction, so a later re-bucket cannot silently re-point these at
+// a file that does not exist. The runner it reads is now the ported kind
+// module (`packages/sessions/kinds/project-brain.ts`).
+const RUNNER_TS_PATH = resolve(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'project-brain.ts');
+const SKILL_MD_PATH = resolve(FORGE_ROOT, 'skills', 'project-brain-builder', 'SKILL.md');
 
 function normalizeWs(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -147,7 +155,7 @@ function writeTwoTurnFixture(dir: string): string {
 
 /**
  * Each entry's `text` is verified present in
- * orchestrator/project-brain-builder-runner.ts TODAY (grep evidence in the
+ * packages/sessions/kinds/project-brain.ts TODAY (grep evidence in the
  * WI-3 handoff report — every line number cited was checked with
  * `grep -nF` against base `c45e3892` before this file was written). After
  * WI-3, each must have MOVED: gone from the .ts, present in SKILL.md.
@@ -206,7 +214,7 @@ test('AT-1: moved instruction prose is present in SKILL.md and absent from the r
     const needle = normalizeWs(text);
     assert.ok(
       !runnerSrc.includes(needle),
-      `${label}: instruction prose "${text}" must have LEFT orchestrator/project-brain-builder-runner.ts (still found there — it must live in SKILL.md only)`,
+      `${label}: instruction prose "${text}" must have LEFT packages/sessions/kinds/project-brain.ts (still found there — it must live in SKILL.md only)`,
     );
     assert.ok(
       skillMd.includes(needle),
@@ -223,7 +231,7 @@ test('AT-2: no fail-open remains — the private loadSkillPrompt() and its hardc
   const runnerSrc = readRunnerSource();
   assert.ok(
     !/function\s+loadSkillPrompt\s*\(/.test(runnerSrc),
-    'a private loadSkillPrompt(...) function must no longer exist in project-brain-builder-runner.ts — the analyze-step prompt must load through the shared skill-turn loader instead',
+    'a private loadSkillPrompt(...) function must no longer exist in kinds/project-brain.ts — the analyze-step prompt must load through the shared skill-turn loader instead',
   );
   assert.ok(
     !runnerSrc.includes('You are the forge project-brain builder.'),

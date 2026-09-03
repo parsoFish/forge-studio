@@ -3,7 +3,7 @@
  * `runInteractiveTurn(descriptor, ctx)` is the ONE spine every future
  * `turnSpec`-bearing session kind runs through instead of a bespoke
  * `orchestrator/*-runner.ts` (architect-runner.ts / instructions-runner.ts /
- * demo-builder-runner.ts / project-brain-builder-runner.ts — all four stay
+ * demo-builder-runner.ts / kinds/project-brain.ts — all four stay
  * byte-for-byte untouched; ADR-043 §3's dispatch fork lives in
  * `packages/agents/agent-run.ts`, NOT here).
  *
@@ -24,7 +24,7 @@
  *     `style: structured`; `noop`; `finalize` via the named finalizer;
  *     `terminal`) -> advance to `next`.
  *
- * Modeled on `orchestrator/project-brain-builder-runner.ts` and
+ * Modeled on `packages/sessions/kinds/project-brain.ts` and
  * `packages/sessions/instructions-runner.ts` (the closest analogues); reuses their
  * shared helpers in `packages/sessions/interactive-session.ts` rather than
  * re-implementing them.
@@ -779,7 +779,7 @@ function listWrittenFiles(sessionDir: string, writesDirs: readonly string[]): st
 
 /** Read `skills/<agentId>/SKILL.md` from the real forge install (default
  *  root — see header note). Falls back to a generic prompt if unreadable,
- *  matching `project-brain-builder-runner.ts`'s own `loadSkillPrompt`. */
+ *  matching `kinds/project-brain.ts`'s own skill-prompt load. */
 function readSkillPrompt(agentId: string): string {
   const path = skillPath(agentId);
   try {
