@@ -1,4 +1,5 @@
 {
+  "apps/forge/architect-runner-integration.test.ts": 1442,
   "apps/forge/cli.ts": 999,
   "apps/studio/app/agents/[id]/page.tsx": 929,
   "apps/studio/app/artifact/page.tsx": 1419,
@@ -78,7 +79,6 @@
   "packages/sessions/studio/session-kinds.ts": 1389,
   "packages/sessions/studio/session-transcript.test.ts": 2400,
   "packages/sessions/studio/session-transcript.ts": 1298,
-  "packages/sessions/tests/integration/architect-runner.test.ts": 1427,
   "scripts/check-raw-fs-guarded.mjs": 1790,
   "scripts/check-raw-fs-guarded.test.ts": 1036,
   "scripts/journeys/agents.mjs": 2230,

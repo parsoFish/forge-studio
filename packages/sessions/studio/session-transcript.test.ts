@@ -95,7 +95,28 @@ import { fileURLToPath } from 'node:url';
 import { deriveSessionTranscript, deriveSessionArtifact } from './session-transcript.ts';
 import type { CleanupPlanAction } from './session-transcript.ts';
 import type { SessionKindDescriptor } from './session-kinds.ts';
-import { serializeManifest, parseManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+
+/**
+ * The injected manifest parser, as a REFUSING stub (M4 ruling 83 / 91).
+ *
+ * This file used to pass the real `parseManifest` from `@forge/flows` — a
+ * `package-layer-order` row, since flows is rank 5 and this package rank 4 —
+ * even though the artifact kinds exercised here (instructions, project-brain,
+ * authoring, cleanup-plan, …) never parse a manifest. The six cases that DID
+ * need the real functions moved to `apps/forge/roadmap-draft-integration.test.ts`,
+ * where the assembly may import both.
+ *
+ * A throwing stub is strictly better than the real function here: it ASSERTS
+ * that these kinds never reach the parser, where passing the real one merely
+ * failed to notice.
+ */
+const parseManifest = (): InitiativeManifest => {
+  throw new Error(
+    'parseManifest must not be reached by this artifact kind — the roadmap-draft cases that ' +
+      'legitimately parse manifests live in apps/forge/roadmap-draft-integration.test.ts',
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -535,50 +556,8 @@ describe('deriveSessionTranscript — project-brain has no interview', () => {
 // deriveSessionArtifact — roadmap-draft (AT-29, AT-30)
 // ===========================================================================
 
-function realManifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManifest {
-  return {
-    initiative_id: 'INIT-2026-01-01-fixture-a',
-    project: 'demoproj',
-    project_repo_path: '/tmp/demoproj',
-    created_at: '2026-01-01T00:00:00.000Z',
-    iteration_budget: 10,
-    cost_budget_usd: 5,
-    phase: 'pending',
-    origin: 'architect',
-    body: '# Fixture initiative\n\nDo the thing.\n',
-    ...overrides,
-  } as InitiativeManifest;
-}
 
 describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtures)', () => {
-  it('AT-29: rows are derived from real manifests/*.md files, sorted by filename, fields pinned exactly', () => {
-    const sessionDir = makeTmpDir('artifact-roadmap-');
-    const manifestsDir = join(sessionDir, 'manifests');
-    mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
-    writeFileSync(
-      join(manifestsDir, 'INIT-2026-01-02-fixture-b.md'),
-      serializeManifest(realManifest({ initiative_id: 'INIT-2026-01-02-fixture-b', phase: 'in-flight', origin: 'human-directed' })),
-      'utf8',
-    );
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
-      kind: string;
-      rows: Array<{ initiativeId: string; project: string; phase: string; origin: string }>;
-      sourcesScanned: string[];
-    };
-    assert.equal(artifact.kind, 'roadmap-draft');
-    assert.deepEqual(
-      artifact.rows.map((r) => r.initiativeId),
-      ['INIT-2026-01-01-fixture-a', 'INIT-2026-01-02-fixture-b'],
-    );
-    assert.equal(artifact.rows[0].project, 'demoproj');
-    assert.equal(artifact.rows[0].phase, 'pending');
-    assert.equal(artifact.rows[0].origin, 'architect');
-    assert.equal(artifact.rows[1].phase, 'in-flight');
-    assert.equal(artifact.rows[1].origin, 'human-directed');
-  });
-
   it('AT-30: zero manifests → an honest empty payload naming what was scanned, never a fabricated row', () => {
     const sessionDir = makeTmpDir('artifact-roadmap-empty-');
     const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
@@ -603,99 +582,6 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
 // ===========================================================================
 
 describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)', () => {
-  it('AT-75: a manifest with no depends_on_initiatives yields dependsOn: [] — never undefined, never dropped from the row entirely (today\'s defect)', () => {
-    const sessionDir = makeTmpDir('artifact-roadmap-deps-absent-');
-    const manifestsDir = join(sessionDir, 'manifests');
-    mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
-      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
-    };
-    assert.equal(artifact.rows.length, 1);
-    assert.deepEqual(artifact.rows[0].dependsOn, [], 'an absent depends_on_initiatives must default to [], never undefined or dropped');
-  });
-
-  it('AT-76: depends_on_initiatives round-trips VERBATIM — declared order preserved, and an entry pointing OUTSIDE this session\'s manifest set is never filtered out', () => {
-    const sessionDir = makeTmpDir('artifact-roadmap-deps-present-');
-    const manifestsDir = join(sessionDir, 'manifests');
-    mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
-    writeFileSync(
-      join(manifestsDir, 'INIT-2026-01-02-fixture-b.md'),
-      serializeManifest(
-        realManifest({
-          initiative_id: 'INIT-2026-01-02-fixture-b',
-          // Deliberately NOT alphabetically sorted (2026 before 2025) — pins
-          // that the deriver preserves DECLARED order, never re-sorts.
-          depends_on_initiatives: ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
-        }),
-      ),
-      'utf8',
-    );
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
-      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
-    };
-    const rowA = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-01-fixture-a')!;
-    const rowB = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-02-fixture-b')!;
-    assert.ok(rowA, 'row A must be present');
-    assert.ok(rowB, 'row B must be present');
-    assert.deepEqual(rowA.dependsOn, []);
-    assert.deepEqual(
-      rowB.dependsOn,
-      ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
-      'dependsOn must round-trip verbatim: declared order preserved (never sorted), and the outside-set entry ' +
-        '(INIT-2025-06-01-already-merged, not present under manifests/) must never be filtered out — an ' +
-        'architect draft may legitimately depend on an already-merged initiative outside the draft set',
-    );
-  });
-
-  // Adversarial-review amendment (2026-08-06), Amendment 2: the fix ruled
-  // that de-duplication happens EXACTLY ONCE, in the view model
-  // (dependency-dag.ts's DependencyDagNode.deps) — never at this layer. A
-  // manifest declaring the SAME dependency twice must still round-trip with
-  // the duplicate INTACT: this is the regression guard against the wrong
-  // fix (deduping here, at the file-parsing layer, instead of only in the
-  // view) — checked and confirmed NOT already covered by AT-75/76 above
-  // (neither uses a duplicate entry). GREEN today (session-transcript.ts:484
-  // already does a bare passthrough, `dependsOn: manifest.depends_on_initiatives
-  // ?? []`, with no dedup) — a characterization pin, not a defect pin: it
-  // earns its place because Amendment 2's fix touches a SIBLING module
-  // (dependency-dag.ts) implementing the OPPOSITE behaviour (dedup), and a
-  // careless implementer "fixing the table" by deduping at the wrong layer
-  // instead would silently break this exact invariant.
-  it('AT-78: a manifest declaring the SAME dependency twice round-trips with the duplicate INTACT — dependsOn is never de-duplicated at this layer (dedup is the view model\'s job, one layer up)', () => {
-    const sessionDir = makeTmpDir('artifact-roadmap-deps-duplicate-');
-    const manifestsDir = join(sessionDir, 'manifests');
-    mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(
-      join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'),
-      serializeManifest(
-        realManifest({
-          depends_on_initiatives: ['INIT-2025-06-01-already-merged', 'INIT-2025-06-01-already-merged'],
-        }),
-      ),
-      'utf8',
-    );
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
-      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
-    };
-    assert.equal(artifact.rows.length, 1);
-    assert.deepEqual(
-      artifact.rows[0].dependsOn,
-      ['INIT-2025-06-01-already-merged', 'INIT-2025-06-01-already-merged'],
-      'a duplicate entry must survive verbatim at this layer — de-duplicating here would be the WRONG fix for the table/DAG disagreement',
-    );
-  });
-});
-
-// ===========================================================================
-// deriveSessionArtifact — markdown-draft (AT-31, AT-32)
-// ===========================================================================
-
-describe('deriveSessionArtifact — markdown-draft (byte-faithful AGENTS.draft.md)', () => {
   it('AT-31: returns the real AGENTS.draft.md body byte-for-byte, including trailing newline', () => {
     const sessionDir = makeTmpDir('artifact-md-');
     const body = '# AGENTS.md\n\nSome instructions.\n\n- a\n- b\n';
@@ -957,27 +843,6 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     assert.ok(resultText.includes(REAL_MARKER), 'a plain, non-symlinked sibling file\'s content MUST still appear — the guard must discriminate, not just refuse to read anything');
   });
 
-  it('AT-36: deriveSessionArtifact (roadmap-draft) — a manifests/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned, but a real sibling manifest IS (positive control)', () => {
-    const outsideDir = makeTmpDir('artifact-escape-outside-');
-    const SECRET_MARKER = 'TOP-SECRET-MANIFEST-MARKER-5533';
-    const secretManifestPath = join(outsideDir, 'secret-manifest.md');
-    writeFileSync(secretManifestPath, serializeManifest(realManifest({ initiative_id: SECRET_MARKER })), 'utf8');
-
-    const sessionDir = makeTmpDir('artifact-escape-session-');
-    const manifestsDir = join(sessionDir, 'manifests');
-    mkdirSync(manifestsDir, { recursive: true });
-    symlinkSync(secretManifestPath, join(manifestsDir, 'evil.md'));
-    // Positive control: a plain, non-symlinked sibling manifest — MUST
-    // surface as a real row.
-    const REAL_MARKER = 'INIT-2026-01-03-real-sibling-manifest';
-    writeFileSync(join(manifestsDir, 'real-sibling.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir });
-    const artifactText = JSON.stringify(artifact);
-    assert.ok(!artifactText.includes(SECRET_MARKER), 'the escaped manifest\'s content must never surface as a row');
-    assert.ok(artifactText.includes(REAL_MARKER), 'a plain, non-symlinked sibling manifest MUST still surface as a row — the guard must discriminate, not just refuse to read anything');
-  });
-
   it('AT-37: deriveSessionArtifact (brain-structure) — a themes/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned, but a real sibling theme IS (positive control)', () => {
     const outsideDir = makeTmpDir('brain-escape-outside-');
     const SECRET_MARKER = 'TOP-SECRET-THEME-MARKER-9042';
@@ -1080,56 +945,6 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     assert.ok(cleanArtifact.files.some((f) => f.path.includes('real-theme.md')));
   });
 
-  it('AT-69: manifests/ is a symlink to an outside dir → roadmap-draft reports rows:[] AND sourcesScanned reports "0 file(s) found" (NOT the escaped directory\'s real file count — this is the part that currently fails); a real (non-symlinked) manifests/ in a separate session still enumerates correctly (positive control)', () => {
-    const outsideManifestsDir = makeTmpDir('roadmap-dirsymlink-outside-');
-    const OUTSIDE_MARKER = 'INIT-OUTSIDE-DIRSYMLINK-LEAK-9042';
-    writeFileSync(join(outsideManifestsDir, 'outside-manifest.md'), serializeManifest(realManifest({ initiative_id: OUTSIDE_MARKER })), 'utf8');
-
-    const escapedSessionDir = makeTmpDir('roadmap-dirsymlink-session-');
-    symlinkSync(outsideManifestsDir, join(escapedSessionDir, 'manifests'));
-
-    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir: escapedSessionDir }) as {
-      rows: unknown[];
-      sourcesScanned: string[];
-    };
-    assert.deepEqual(artifact.rows, [], 'an escaping manifests/ dir-symlink must never contribute a row');
-    const serialized = JSON.stringify(artifact);
-    assert.ok(!serialized.includes(OUTSIDE_MARKER), 'the escaped manifest\'s content must never surface');
-    assert.ok(!serialized.includes('outside-manifest.md'), 'the outside directory\'s real FILENAME must never appear anywhere in the result');
-    // The count leak: sourcesScanned must report the dir as EMPTY (treated as
-    // absent), not the escaped directory's real file count.
-    assert.ok(
-      artifact.sourcesScanned.some((s) => s.includes('0 file(s) found')),
-      `sourcesScanned must report "0 file(s) found" (the escaping dir treated as absent), got: ${JSON.stringify(artifact.sourcesScanned)}`,
-    );
-
-    // Positive control: a real, non-symlinked manifests/ in a SEPARATE
-    // session still enumerates correctly.
-    const cleanSessionDir = makeTmpDir('roadmap-dirsymlink-clean-');
-    const cleanManifestsDir = join(cleanSessionDir, 'manifests');
-    mkdirSync(cleanManifestsDir, { recursive: true });
-    const REAL_MARKER = 'INIT-2026-01-09-real-manifest';
-    writeFileSync(join(cleanManifestsDir, 'real.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
-    const cleanArtifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir: cleanSessionDir }) as {
-      rows: Array<{ initiativeId: string }>;
-      sourcesScanned: string[];
-    };
-    assert.deepEqual(cleanArtifact.rows.map((r) => r.initiativeId), [REAL_MARKER]);
-    assert.ok(cleanArtifact.sourcesScanned.some((s) => s.includes('1 file(s) found')));
-  });
-});
-
-// ===========================================================================
-// R4-16 — deriveSessionArtifact — generation-gallery (a new LIVE artifact
-// kind). TEST-FIRST PIN: `deriveGenerationGallery` does not exist yet, and
-// `generation-gallery` is still `reserved` in the real, unmodified
-// session-kinds.ts (SESSION_ARTIFACT_KINDS) — every test below currently
-// throws inside `deriveSessionArtifact`'s own `state === 'reserved'` gate
-// (session-kinds.ts:531), before ever reaching a derivation. That is the
-// correct RED: the reserved-kind guard IS the thing R4-16 must flip.
-// ===========================================================================
-
-describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
   it('R4-16 AT-10: number comes from meta.json.iteration, never array/directory position — generations sort ascending by number', () => {
     const sessionDir = makeTmpDir('gengallery-order-');
     writeGeneration(sessionDir, 5, { iteration: 5 });
