@@ -1867,3 +1867,38 @@ substituting for it. `scripts/request-path-sinks.baseline.txt` accepts the new
 counts via `--write` in the same PR that adds this section, per this
 document's own rule ("When `check-request-path-sinks.mjs` reports a new sink
 or a new caller, add its row here").
+
+### M4-agents — bead `forge-8vfn.5.22`: the eleven agent-adapter rows, classified
+
+**Why these eleven were never classified.** The adapters (`packages/agents/_adapters/*`) and the Ralph
+runtime (`packages/agents/ralph/*`) entered this ratchet's scope only at M3, when the per-spawn runtime
+was carved into `packages/agents` and became reachable from a bridge route. They arrived as eleven
+`(file, sink, count)` rows with no verdict beside them — a baseline that records a shape and asserts
+nothing about it. This section is the missing verdict, read at each call site on 2026-09-04.
+
+**The finding that shapes every row: none of these eleven sinks takes a path from a request.** They take
+a path from the RUN — the worktree the dispatch created — or from a closed set of literals. The
+containment question at this seam is therefore not "is the URL segment guarded" (there is no URL segment)
+but "is the run's own root the one the dispatch chose", which is bead `5.37`'s question and was closed in
+s1 by pinning cwd and re-anchoring `FORGE_ROOT` on kernel's.
+
+| # | row | site(s) | what actually reaches the sink | verdict |
+|---|---|---|---|---|
+| 1 | `_adapters/aider/index.ts execFile 1` | `:158` | `AIDER_BIN` + `AIDER_BASE_FLAGS` (module constants), `--model <model>`, `--message <message>` — `message` is prompt TEXT already read into memory. `cwd: worktreePath` | **`[exec]` argv form, no shell.** No path occupies an argv position at all; the only path is the `cwd`, which is the run's own worktree. |
+| 2 | `_adapters/aider/index.ts execFileSync 4` | `:205` `--version`; `:291` `git rev-parse --verify <candidate>`; `:312` `git diff --name-only <baseBranch>...HEAD`; `:323` `git status --porcelain` | `candidate` iterates the literal `['main','master']`; `baseBranch` is `resolveBaseBranch`'s return, which is one of those same two literals or a throw | **`[safe-const]`.** A closed literal set — no external value reaches argv. |
+| 3 | `_adapters/aider/index.ts readFileSync 1` | `:345` | `promptPath` from the `AgentInvocation` contract, built by the Ralph runner as `join(input.worktreePath, 'PROMPT.md')` | **`[read]` run-derived root, FIXED leaf.** |
+| 4 | `_adapters/gemini/index.ts readFileSync 1` | `:409` | same `promptPath` contract | **`[read]`** — same as #3. |
+| 5 | `ralph/claude-agent.ts readFileSync 1` | `:223` | same `promptPath` contract | **`[read]`** — same as #3. |
+| 6 | `ralph/claude-agent.ts existsSync 1` | `:510` | `extractPath(input)` where `input` is **the agent's own tool-use payload** | **`[unver]` — the one row here that is not run-derived, and it is stated rather than absorbed.** This is the only sink in the eleven whose path comes from the AGENT. It is an existence probe and nothing else: the boolean picks the label `'modify'` vs `'add'` for a `file_change` event. No content is read, nothing is written, and the path is not re-used downstream. The exposure is therefore a mislabelled history row, not a filesystem reach — but it is agent-controlled input reaching `existsSync`, and a future edit that used `filePath` for anything more would change that without touching this line. |
+| 7 | `ralph/runner.ts existsSync 3` | `:373`, `:386`, `:395` | `join(input.worktreePath, 'PROMPT.md' \| 'AGENT.md' \| 'fix_plan.md')` (`runner.ts:191-193`) | **`[safe-const]` leaf, run-derived root.** Each leaf is a hardcoded literal. |
+| 8 | `ralph/runner.ts readFileSync 3` | `:374`, `:387` co-located `*.tmpl`; `:383` `input.workItemSpecPath` | the two templates resolve through `join(import.meta.dirname, …)` — reading files that ship BESIDE the module, which is correct usage and not root arithmetic; `workItemSpecPath` is manifest-declared | **`[read]`**, and the `import.meta.dirname` use here is deliberately distinguished from the depth-coupled `'..'` chains bead 5.37 removed: it never walks upward. |
+| 9 | `ralph/runner.ts writeFileSync 3` | `:375`, `:388`, `:396` | the same three fixed leaves under the run's worktree | **`[write]` run-derived root, FIXED leaf.** |
+| 10 | `ralph/stop-conditions.ts execFileSync 9` | `:292` `git -C <worktreePath> rev-parse`; `:436` `execFileSync(head, rest, { cwd: worktreePath })`; `:572`/`:574`/`:577` status/add/commit; `:597` diff; `:623` rev-parse; `:665`/`:671` count/diff | `head`/`rest` are `const [head, ...rest] = cmd` where `cmd: readonly string[]` — an **already-tokenised** gate command from the work item | **`[exec]` argv form, no shell.** The gate command is declared data, split before it arrives; nothing is interpolated into a shell string, so there is no injection position. |
+| 11 | `ralph/stop-conditions.ts readFileSync 2` | `:289` `resolve(worktreePath, 'secrets.env')`; `:296` `resolve(mainRoot, 'secrets.env')` | a FIXED leaf under a run-derived root, and under the main checkout root discovered via `git rev-parse --git-common-dir` | **`[read]`, and the most sensitive row of the eleven** because the file is credentials. Both roots are run/repo-derived and the leaf is constant, so no caller can redirect the read; the row is recorded here so that a future change making either root caller-supplied is visibly a change to a credential read. |
+
+**What this section does NOT claim.** It is a reading of eleven call sites, not a dataflow proof — the
+same limit this document's own intro states for every table in it. `check-raw-fs-guarded.mjs`, the
+dataflow-aware sibling, reports these files' residual unchanged and **0 unguarded**; that corroborates
+the classification rather than substituting for it. Row 6 is left `[unver]` on purpose: "an existence
+probe is harmless" is an argument about today's use of the boolean, not about the input, and this
+document's job is to record the input.
