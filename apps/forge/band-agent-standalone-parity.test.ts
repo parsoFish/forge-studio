@@ -141,6 +141,16 @@ test('ASSEMBLY: cli.ts hands the production band deps to cmdAgent — without th
   const src = readFileSync(new URL('./cli.ts', import.meta.url), 'utf8');
   assert.match(src, /import \{ bandAgentDeps \} from '\.\/band-agent-deps\.ts';/,
     'cli.ts must import the production band binding');
-  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{ band: bandAgentDeps \}\)/,
-    'cli.ts must pass it to cmdAgent — the `agent` case is the only production entry to `forge agent dispatch`');
+  // Asserts the BINDING is on the path, not that it is the only key in the bag:
+  // M4 ruling 81 added `sessionKind` (architect's manifest ports) to the same
+  // literal, and an exact-shape regex would have failed for a reason that has
+  // nothing to do with the band binding this test exists to protect.
+  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{[^}]*band: bandAgentDeps/,
+    'cli.ts must pass the band deps to cmdAgent — the `agent` case is the only production entry to `forge agent dispatch`');
+  // The sibling binding, pinned the same way and for the same reason: without
+  // it every architect turn refuses at its manifest work (M4 ruling 77/81).
+  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{[^}]*sessionKind: \{ manifestPorts: architectManifestPorts \}/,
+    'cli.ts must pass the architect manifest ports to cmdAgent');
+  assert.match(src, /import \{ architectManifestPorts \} from '\.\/session-kind-deps\.ts';/,
+    'cli.ts must import the production manifest-ports binding');
 });

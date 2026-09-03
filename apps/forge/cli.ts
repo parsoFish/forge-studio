@@ -31,6 +31,7 @@ import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir, runInit,
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { bandAgentDeps } from './band-agent-deps.ts';
+import { architectManifestPorts } from './session-kind-deps.ts';
 import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
 import { cmdProjectReset } from '@forge/projects/reset.ts';
 import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
@@ -103,7 +104,7 @@ process.chdir(FORGE_ROOT);
     case 'demo-builder':
       return await cmdDemoBuilder(args.slice(1));
     case 'agent':
-      return await cmdAgent(args.slice(1), FORGE_ROOT, { band: bandAgentDeps });
+      return await cmdAgent(args.slice(1), FORGE_ROOT, { band: bandAgentDeps, sessionKind: { manifestPorts: architectManifestPorts } });
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'demo':

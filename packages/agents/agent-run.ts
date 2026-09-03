@@ -95,7 +95,7 @@ const knownAgentIds = (): string[] => [...Object.keys(AGENT_RUNNERS), ...Object.
 // registries `cmdAgentRun` looks up.
 export async function cmdAgent(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   const sub = rest[0];
-  if (sub === 'run') return await cmdAgentRun(rest.slice(1), forgeRoot);
+  if (sub === 'run') return await cmdAgentRun(rest.slice(1), forgeRoot, deps);
   if (sub === 'dispatch') return await cmdAgentDispatch(rest.slice(1), forgeRoot, deps);
   console.error('forge agent: subcommands: run <agent-id> <session-id> | dispatch <slug>');
   console.error('  forge agent run <agent-id> <session-id> [--project <name>]');
@@ -401,7 +401,21 @@ function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok
   return { ok: true, realRoot };
 }
 
-export type AgentDispatchDeps = { dispatch?: typeof dispatchAgentRun; band?: BandAgentDeps };
+export type AgentDispatchDeps = {
+  dispatch?: typeof dispatchAgentRun;
+  band?: BandAgentDeps;
+  /**
+   * Ports a ported session kind needs that this package may not import
+   * (M4 ruling 79/81): architect reads and writes initiative manifests, whose
+   * FUNCTIONS live in `packages/flows` — rank 5, above both agents and
+   * sessions. `apps/forge` is the one place that may import them, so it binds
+   * them here and they ride down to the kind untouched. Deliberately OPAQUE:
+   * this package never inspects or constructs the value, so it needs no import
+   * of the shape, and a kind that receives nothing REFUSES rather than
+   * defaulting (the no-fallback rule).
+   */
+  sessionKind?: Record<string, unknown>;
+};
 
 /**
  * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
@@ -711,7 +725,7 @@ async function runTurnSpecAgent(
  * legacy `<verb> run <sid>` commands in `apps/forge/cli.ts`, which delegate
  * here as `cmdAgentRun(['<agent-id>', ...rest], forgeRoot)`.
  */
-export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<void> {
+export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   const agentId = rest[0];
 
   // ADR-043 §3 dispatch fork (R4-22 WI-5) — evaluated BEFORE the
@@ -823,6 +837,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
       sessionId,
       projectRoot,
       ...(entry.needsForgeRoot ? { forgeRoot } : {}),
+      ...(deps?.sessionKind ?? {}),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

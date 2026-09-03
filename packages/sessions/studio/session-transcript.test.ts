@@ -95,7 +95,7 @@ import { fileURLToPath } from 'node:url';
 import { deriveSessionTranscript, deriveSessionArtifact } from './session-transcript.ts';
 import type { CleanupPlanAction } from './session-transcript.ts';
 import type { SessionKindDescriptor } from './session-kinds.ts';
-import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { serializeManifest, parseManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -562,7 +562,7 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
       'utf8',
     );
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
       kind: string;
       rows: Array<{ initiativeId: string; project: string; phase: string; origin: string }>;
       sourcesScanned: string[];
@@ -581,7 +581,7 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
 
   it('AT-30: zero manifests → an honest empty payload naming what was scanned, never a fabricated row', () => {
     const sessionDir = makeTmpDir('artifact-roadmap-empty-');
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
       rows: unknown[];
       sourcesScanned: string[];
     };
@@ -609,7 +609,7 @@ describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)',
     mkdirSync(manifestsDir, { recursive: true });
     writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
       rows: Array<{ initiativeId: string; dependsOn: string[] }>;
     };
     assert.equal(artifact.rows.length, 1);
@@ -634,7 +634,7 @@ describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)',
       'utf8',
     );
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
       rows: Array<{ initiativeId: string; dependsOn: string[] }>;
     };
     const rowA = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-01-fixture-a')!;
@@ -679,7 +679,7 @@ describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)',
       'utf8',
     );
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir }) as {
       rows: Array<{ initiativeId: string; dependsOn: string[] }>;
     };
     assert.equal(artifact.rows.length, 1);
@@ -700,20 +700,20 @@ describe('deriveSessionArtifact — markdown-draft (byte-faithful AGENTS.draft.m
     const sessionDir = makeTmpDir('artifact-md-');
     const body = '# AGENTS.md\n\nSome instructions.\n\n- a\n- b\n';
     writeFileSync(join(sessionDir, 'AGENTS.draft.md'), body, 'utf8');
-    const artifact = deriveSessionArtifact({ descriptor: instructionsDescriptor(), sessionDir }) as { body: string | null; hasDraft: boolean };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: instructionsDescriptor(), sessionDir }) as { body: string | null; hasDraft: boolean };
     assert.equal(artifact.body, body, 'body must be byte-identical, including the trailing newline');
     assert.equal(artifact.hasDraft, true);
   });
 
   it('AT-32: distinguishes "no draft yet" (missing file, body: null) from an "empty draft" (file exists, empty, body: "")', () => {
     const missingDir = makeTmpDir('artifact-md-missing-');
-    const missing = deriveSessionArtifact({ descriptor: instructionsDescriptor(), sessionDir: missingDir }) as { body: string | null; hasDraft: boolean };
+    const missing = deriveSessionArtifact({ parseManifest, descriptor: instructionsDescriptor(), sessionDir: missingDir }) as { body: string | null; hasDraft: boolean };
     assert.equal(missing.body, null, 'no draft file at all must be null, never "" masquerading as content');
     assert.equal(missing.hasDraft, false);
 
     const emptyDir = makeTmpDir('artifact-md-empty-');
     writeFileSync(join(emptyDir, 'AGENTS.draft.md'), '', 'utf8');
-    const empty = deriveSessionArtifact({ descriptor: instructionsDescriptor(), sessionDir: emptyDir }) as { body: string | null; hasDraft: boolean };
+    const empty = deriveSessionArtifact({ parseManifest, descriptor: instructionsDescriptor(), sessionDir: emptyDir }) as { body: string | null; hasDraft: boolean };
     assert.equal(empty.body, '');
     assert.equal(empty.hasDraft, true, 'an existing-but-empty draft must be distinguishable from "no draft yet"');
   });
@@ -732,7 +732,7 @@ describe('deriveSessionArtifact — brain-structure (shared PackageFile shape)',
     writeFileSync(join(themesDir, 'beta.md'), '# Beta theme\n', 'utf8');
     writeFileSync(join(themesDir, 'notes.txt'), 'not a theme', 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: projectBrainDescriptor(), sessionDir }) as {
       themeCount: number;
       files: Array<{ path: string; body: string }>;
     };
@@ -769,7 +769,7 @@ describe('deriveSessionArtifact — an unrecognised artifact kind is never a stu
     const sessionDir = makeTmpDir('artifact-reserved-');
     const descriptor = architectDescriptor({ artifact: { kind: 'no-such-artifact-kind-at-all-9911' as SessionKindDescriptor['artifact']['kind'], label: 'Unrecognised' } });
     assert.throws(
-      () => deriveSessionArtifact({ descriptor, sessionDir }),
+      () => deriveSessionArtifact({ parseManifest, descriptor, sessionDir }),
       (err: unknown) => { assert.ok(err instanceof Error); assert.match(err.message, /no-such-artifact-kind-at-all-9911/); return true; },
     );
   });
@@ -791,7 +791,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     writeStagingFile(sessionDir, 'SKILL.md', '# Authored Skill\n\nBody.\n');
     writeStagingFile(sessionDir, 'reference.md', 'Supporting reference content.\n');
 
-    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: authoringDescriptor(), sessionDir }) as {
       kind: string;
       label: string;
       files: Array<{ path: string; body: string }>;
@@ -818,7 +818,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     const REAL_MARKER = 'REAL-NON-ESCAPED-PACKAGE-CONTENT-2207';
     writeFileSync(join(stagingDir, 'SKILL.md'), REAL_MARKER, 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: authoringDescriptor(), sessionDir });
     const serialized = JSON.stringify(artifact);
     assert.ok(!serialized.includes(SECRET_MARKER), 'the escaped file\'s content must never appear in the derived file-package artifact');
     assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling staged file MUST still surface — the guard must discriminate, not just refuse to read anything');
@@ -829,7 +829,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     writeStagingFile(sessionDir, 'SKILL.md', '# x\n');
     const descriptor = authoringDescriptor({ artifact: { kind: 'file-package', label: 'Totally Custom Draft Label 8827' } });
 
-    const artifact = deriveSessionArtifact({ descriptor, sessionDir }) as { label: string };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor, sessionDir }) as { label: string };
     assert.equal(artifact.label, 'Totally Custom Draft Label 8827', 'label must come from descriptor.artifact.label — never a hardcoded/re-derived string');
   });
 
@@ -852,7 +852,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     writeStagingFile(sessionDir, 'hook.yaml', 'name: test-hook\ndescription: a draft hook\n');
     writeStagingFile(sessionDir, 'scripts/run.sh', '#!/bin/sh\necho hi\n');
 
-    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: authoringDescriptor(), sessionDir }) as {
       kind: string;
       files: Array<{ path: string; body: string }>;
     };
@@ -880,7 +880,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     const REAL_MARKER = 'REAL-NESTED-NON-ESCAPED-SCRIPT-9013';
     writeFileSync(join(scriptsDir, 'run.sh'), REAL_MARKER, 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: authoringDescriptor(), sessionDir });
     const serialized = JSON.stringify(artifact);
     assert.ok(!serialized.includes(SECRET_MARKER), 'the nested escaped file\'s content must never appear in the derived file-package artifact');
     assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling file in the same nested subdirectory MUST still surface');
@@ -906,7 +906,7 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     // really there on disk.
     assert.ok(existsSync(join(leftoverDir, 'SKILL.md')), 'arrange: the leftover package/SKILL.md must exist before deriving');
 
-    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: authoringDescriptor(), sessionDir }) as {
       kind: string;
       files: Array<{ path: string; body: string }>;
     };
@@ -972,7 +972,7 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     const REAL_MARKER = 'INIT-2026-01-03-real-sibling-manifest';
     writeFileSync(join(manifestsDir, 'real-sibling.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir });
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir });
     const artifactText = JSON.stringify(artifact);
     assert.ok(!artifactText.includes(SECRET_MARKER), 'the escaped manifest\'s content must never surface as a row');
     assert.ok(artifactText.includes(REAL_MARKER), 'a plain, non-symlinked sibling manifest MUST still surface as a row — the guard must discriminate, not just refuse to read anything');
@@ -993,7 +993,7 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     const REAL_MARKER = 'REAL-NON-ESCAPED-THEME-CONTENT-7714';
     writeFileSync(join(themesDir, 'real-sibling.md'), `# ${REAL_MARKER}\n`, 'utf8');
 
-    const artifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir });
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: projectBrainDescriptor(), sessionDir });
     const artifactText = JSON.stringify(artifact);
     assert.ok(!artifactText.includes(SECRET_MARKER), 'the escaped theme file\'s content must never surface in files[]');
     assert.ok(artifactText.includes(REAL_MARKER), 'a plain, non-symlinked sibling theme file MUST still surface in files[] — the guard must discriminate, not just refuse to read anything');
@@ -1057,7 +1057,7 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     const escapedSessionDir = makeTmpDir('brain-dirsymlink-session-');
     symlinkSync(outsideThemesDir, join(escapedSessionDir, 'themes'));
 
-    const artifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir: escapedSessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: projectBrainDescriptor(), sessionDir: escapedSessionDir }) as {
       themeCount: number;
       files: Array<{ path: string; body: string }>;
     };
@@ -1072,7 +1072,7 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     const cleanSessionDir = makeTmpDir('brain-dirsymlink-clean-');
     mkdirSync(join(cleanSessionDir, 'themes'), { recursive: true });
     writeFileSync(join(cleanSessionDir, 'themes', 'real-theme.md'), '# a real theme\n', 'utf8');
-    const cleanArtifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir: cleanSessionDir }) as {
+    const cleanArtifact = deriveSessionArtifact({ parseManifest, descriptor: projectBrainDescriptor(), sessionDir: cleanSessionDir }) as {
       themeCount: number;
       files: Array<{ path: string; body: string }>;
     };
@@ -1088,7 +1088,7 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     const escapedSessionDir = makeTmpDir('roadmap-dirsymlink-session-');
     symlinkSync(outsideManifestsDir, join(escapedSessionDir, 'manifests'));
 
-    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir: escapedSessionDir }) as {
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir: escapedSessionDir }) as {
       rows: unknown[];
       sourcesScanned: string[];
     };
@@ -1110,7 +1110,7 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     mkdirSync(cleanManifestsDir, { recursive: true });
     const REAL_MARKER = 'INIT-2026-01-09-real-manifest';
     writeFileSync(join(cleanManifestsDir, 'real.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
-    const cleanArtifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir: cleanSessionDir }) as {
+    const cleanArtifact = deriveSessionArtifact({ parseManifest, descriptor: architectDescriptor(), sessionDir: cleanSessionDir }) as {
       rows: Array<{ initiativeId: string }>;
       sourcesScanned: string[];
     };
@@ -1134,7 +1134,7 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
     const sessionDir = makeTmpDir('gengallery-order-');
     writeGeneration(sessionDir, 5, { iteration: 5 });
     writeGeneration(sessionDir, 2, { iteration: 2 });
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
     assert.deepEqual(
       artifact.generations.map((g) => g.number),
       [2, 5],
@@ -1147,7 +1147,7 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
     writeGeneration(sessionDir, 1, { iteration: 1 });
     writeGeneration(sessionDir, 2, { metaRaw: 'not valid json {{{' });
     writeGeneration(sessionDir, 3, { iteration: 3 });
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
     assert.deepEqual(
       artifact.generations.map((g) => g.number),
       [1, 3],
@@ -1164,14 +1164,14 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
     writeGeneration(sessionDir, 3, {
       metaRaw: JSON.stringify({ iteration: 'three', createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x' }),
     });
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
     assert.deepEqual(artifact.generations.map((g) => g.number), [1], 'a missing or non-numeric "iteration" must never fabricate a generation row');
   });
 
   it('R4-16 AT-13: items are the real files present in the generation dir, EXCLUDING meta.json, sorted by filename', () => {
     const sessionDir = makeTmpDir('gengallery-items-');
     writeGeneration(sessionDir, 1, { iteration: 1, files: { 'SKILL.md': '# s', 'DEMO.html': '<html/>', 'notes.txt': 'stray file' } });
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; kind: string }> }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; kind: string }> }> };
     const paths = artifact.generations[0].items.map((i) => i.path);
     assert.deepEqual(paths, ['DEMO.html', 'SKILL.md', 'notes.txt'], 'sorted by filename; a non-html/md file is still a real item (kind "file"), never dropped');
     assert.ok(!paths.includes('meta.json'), 'meta.json must never appear as an item — it is metadata, not gallery content');
@@ -1192,7 +1192,7 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
       JSON.stringify({ iteration: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x', bytes: 999999, sizeHint: 999999 }),
       'utf8',
     );
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; bytes: number }> }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; bytes: number }> }> };
     const demoItem = artifact.generations[0].items.find((i) => i.path === 'DEMO.html')!;
     const realBytes = Buffer.byteLength(demoBody, 'utf8');
     assert.equal(demoItem.bytes, realBytes, `bytes must be the REAL file length (${realBytes}), not the fabricated metadata hint (999999)`);
@@ -1200,7 +1200,7 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
 
   it('R4-16 AT-15: an empty/absent generations/ dir yields an honest empty payload naming what was scanned (including the found count) — never a bare pane', () => {
     const sessionDir = makeTmpDir('gengallery-empty-');
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
     assert.deepEqual(artifact.generations, []);
     assert.ok(Array.isArray(artifact.sourcesScanned) && artifact.sourcesScanned.length > 0, 'sourcesScanned must never be silently empty');
     assert.ok(artifact.sourcesScanned.some((s) => s.includes('generations')), 'sourcesScanned must name "generations"');
@@ -1210,7 +1210,7 @@ describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
   it('R4-16 AT-16: deriveSessionArtifact dispatches "generation-gallery" to a real derivation carrying the descriptor\'s declared label — mirrors the label-threading contract every other live kind already honours', () => {
     const sessionDir = makeTmpDir('gengallery-dispatch-');
     writeGeneration(sessionDir, 1, { iteration: 1 });
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { kind: string; label: string };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { kind: string; label: string };
     assert.equal(artifact.kind, 'generation-gallery');
     assert.equal(artifact.label, 'Demo generations');
   });
@@ -1236,7 +1236,7 @@ describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)
     const sessionDir = makeTmpDir('gengallery-escape-session-');
     symlinkSync(outsideDir, join(sessionDir, 'generations'));
 
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
     assert.deepEqual(artifact.generations, [], 'an escaping generations/ dir-symlink must be treated as absent, exactly like manifests/themes (AT-68/69)');
     const serialized = JSON.stringify(artifact);
     assert.ok(!serialized.includes(OUTSIDE_MARKER), 'outside content must never surface anywhere in the result');
@@ -1257,7 +1257,7 @@ describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)
     writeGeneration(sessionDir, 1, { iteration: 1 }); // real, non-symlinked sibling
     symlinkSync(outsideDir, join(sessionDir, 'generations', '2'));
 
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
     assert.deepEqual(
       artifact.generations.map((g) => g.number),
       [1],
@@ -1284,7 +1284,7 @@ describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)
     );
     symlinkSync(secretPath, join(gdir, 'evil.html'));
 
-    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string }> }> };
+    const artifact = deriveSessionArtifact({ parseManifest, descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string }> }> };
     const paths = artifact.generations[0].items.map((i) => i.path);
     assert.ok(paths.includes('DEMO.html'), 'a real, non-symlinked sibling item MUST still surface — the guard must discriminate, not just refuse to read the whole generation');
     assert.ok(!paths.includes('evil.html'), 'the symlinked item must not be surfaced at all, under any name');
@@ -1314,7 +1314,7 @@ describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
   it('R4-17 AT-1: contractStages supplied → returns {kind, label, stages, sourcesScanned} — label from descriptor.artifact.label (never re-derived), stages threaded VERBATIM (not re-sorted, not filtered)', () => {
     const sessionDir = makeTmpDir('contractbuildout-supplied-');
     const stages = fixtureContractStages();
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: onboardingDescriptor(),
       sessionDir,
       contractStages: stages,
@@ -1332,7 +1332,7 @@ describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
   it('R4-17 AT-2: contractStages ABSENT → THROWS a named error, never returns an empty/defaulted artifact (D4\'s binding rule)', () => {
     const sessionDir = makeTmpDir('contractbuildout-missing-');
     assert.throws(
-      () => deriveSessionArtifact({ descriptor: onboardingDescriptor(), sessionDir }),
+      () => deriveSessionArtifact({ parseManifest, descriptor: onboardingDescriptor(), sessionDir }),
       (err: unknown) => {
         assert.ok(err instanceof Error);
         assert.match(err.message, /contractStages/i, `error must name the missing input, got: ${err.message}`);
@@ -1345,7 +1345,7 @@ describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
   it('R4-17 AT-3 (D4 — no fs read outside sessionDir, or ANYWHERE, for this kind): a sessionDir that does not even EXIST on disk still succeeds and returns the supplied rows unchanged — proves the module performs ZERO filesystem work for contract-buildout', () => {
     const nonExistentSessionDir = join(tmpdir(), 'contract-buildout-does-not-exist-on-disk-8827');
     const stages = fixtureContractStages();
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: onboardingDescriptor(),
       sessionDir: nonExistentSessionDir,
       contractStages: stages,
@@ -1359,7 +1359,7 @@ describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
 
   it('R4-17 AT-4: an EMPTY contractStages array (all five stages genuinely absent) is a legitimate, distinct input from "absent altogether" — round-trips as an empty array, never conflated with the missing-input throw of AT-2', () => {
     const sessionDir = makeTmpDir('contractbuildout-empty-');
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: onboardingDescriptor(),
       sessionDir,
       contractStages: [],
@@ -1463,7 +1463,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
       fixtureFinding('theme.duplicate', 'brain/cycles/themes/bar.md'),
     ];
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: findings,
@@ -1499,7 +1499,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
     const sessionDir = makeTmpDir('cleanupplan-missing-findings-');
     writeCleanupPlanFile(sessionDir, PLAN_TWO_ACTIONS);
     assert.throws(
-      () => deriveSessionArtifact({ descriptor: kbCleanupDescriptor(), sessionDir }),
+      () => deriveSessionArtifact({ parseManifest, descriptor: kbCleanupDescriptor(), sessionDir }),
       (err: unknown) => {
         assert.ok(err instanceof Error);
         assert.match(err.message, /finding/i, `error must name the missing caller-supplied input, got: ${err.message}`);
@@ -1542,7 +1542,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
       fixtureFinding('theme.duplicate', 'brain/cycles/themes/bar.md'),
     ];
     type Artifact = { actions: Array<{ target: string; state: string }>; openFindingCount: number };
-    const before = deriveSessionArtifact({
+    const before = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: bothFindings,
@@ -1555,7 +1555,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
     // later lint pass) — the CALLER supplies a shorter list. The plan file
     // on disk is never touched between these two calls.
     const oneFindingLeft = [fixtureFinding('edge.dangling', 'brain/forge-dev/themes/foo.md')];
-    const after = deriveSessionArtifact({
+    const after = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: oneFindingLeft,
@@ -1585,7 +1585,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
     const RAW_PROSE = '# Cleanup plan\n\nI looked at the findings but none of them warrant a structured action yet — more investigation needed before I can propose anything concrete.\n';
     writeCleanupPlanFile(sessionDir, RAW_PROSE);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1604,7 +1604,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
   // first agent turn ran).
   it('R4-19-F2 AT-5: no plan file at all yields plan:null and actions:[] without throwing', () => {
     const sessionDir = makeTmpDir('cleanupplan-noplan-');
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1628,7 +1628,7 @@ describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB
     symlinkSync(outsideDir, join(sessionDir, 'plan'));
     assert.ok(existsSync(join(sessionDir, 'plan')), 'arrange: the symlinked plan/ must resolve to something');
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1698,7 +1698,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     const sessionDir = makeTmpDir('cleanupplan-live-capture-');
     writeCleanupPlanFile(sessionDir, REAL_CLEANUP_PLAN_MD);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: REAL_STATUS.findings,
@@ -1729,7 +1729,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     const sessionDir = makeTmpDir('cleanupplan-norm-relative-');
     writeCleanupPlanFile(sessionDir, `- [edge.dangling] ${REAL_DANGLING_TARGET_RELATIVE} — drop the dangling entry.\n`);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [REAL_FINDING_DANGLING!],
@@ -1754,7 +1754,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     const sessionDir = makeTmpDir('cleanupplan-norm-absolute-');
     writeCleanupPlanFile(sessionDir, `- [edge.dangling] ${REAL_FINDING_DANGLING!.file} — drop the dangling entry.\n`);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [REAL_FINDING_DANGLING!],
@@ -1775,7 +1775,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     const sessionDir = makeTmpDir('cleanupplan-norm-dotslash-');
     writeCleanupPlanFile(sessionDir, `- [edge.dangling] ./${REAL_DANGLING_TARGET_RELATIVE} — drop the dangling entry.\n`);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [REAL_FINDING_DANGLING!],
@@ -1812,7 +1812,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
       ].join('\n'),
     );
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [REAL_FINDING_DANGLING!], // only the FIRST action's finding is live
@@ -1849,7 +1849,7 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     const sessionDir = makeTmpDir('cleanupplan-failsafe-empty-');
     writeCleanupPlanFile(sessionDir, REAL_CLEANUP_PLAN_MD);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1928,7 +1928,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
 
   it('R4-19-F2 SCAN-1 (POSITIVE CONTROL — "cleared" IS reachable): a target inside brainDir, cleanupScan supplied, and NO matching finding reports "cleared"', () => {
     const { sessionDir, forgeRoot, brainDir } = buildClearedFixture();
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1949,7 +1949,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
 
   it('R4-19-F2 SCAN-2 ("cleared" requires coverage): byte-identical inputs to SCAN-1 but with cleanupScan OMITTED report "unknown", never "cleared"', () => {
     const { sessionDir } = buildClearedFixture();
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -1975,7 +1975,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
     const sessionDir = makeTmpDir('cleanupplan-scan3-session-');
     writeCleanupPlanFile(sessionDir, `- [theme.duplicate] ${otherKbTarget} — merge into baz.md, the richer survivor.\n`);
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
@@ -2016,7 +2016,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
       ].join('\n'),
     );
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [fixtureFinding('edge.dangling', join(forgeRoot, OPEN_TARGET))],
@@ -2040,7 +2040,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
 
   it('R4-19-F2 SCAN-5 ("cleared" never overrides a real match): an action inside brainDir WITH a matching live finding stays "open" even though cleanupScan is supplied', () => {
     const { sessionDir, forgeRoot, brainDir } = buildClearedFixture();
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [fixtureFinding('edge.dangling', join(forgeRoot, CLEARED_TARGET_RELATIVE))],
@@ -2103,7 +2103,7 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
       ].join('\n'),
     );
 
-    const artifact = deriveSessionArtifact({
+    const artifact = deriveSessionArtifact({ parseManifest,
       descriptor: kbCleanupDescriptor(),
       sessionDir,
       cleanupFindings: [],
