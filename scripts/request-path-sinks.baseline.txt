@@ -30,7 +30,6 @@ orchestrator/phases/executor-deps.ts readFileSync 1
 orchestrator/phases/executor-table.ts existsSync 1
 orchestrator/phases/executor-table.ts readFileSync 3
 orchestrator/studio/registry.ts readdirSync 1
-orchestrator/studio/registry.ts readFileSync 2
 packages/agents/_adapters/aider/index.ts execFile 1
 packages/agents/_adapters/aider/index.ts execFileSync 4
 packages/agents/_adapters/aider/index.ts readFileSync 1
@@ -306,6 +305,7 @@ packages/kernel/path-guard.ts renameSync 1
 packages/kernel/path-guard.ts writeFileSync 1
 packages/kernel/project-layout.ts existsSync 1
 packages/kernel/project-layout.ts readdirSync 1
+packages/kernel/studio-object.ts readFileSync 2
 packages/kernel/studio/yaml-fields.ts readFileSync 1
 packages/knowledge/brain-fix-auto.ts execFileSync 2
 packages/knowledge/brain-fix-auto.ts existsSync 4

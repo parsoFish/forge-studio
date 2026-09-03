@@ -60,7 +60,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runAgent } from './run-agent.ts';
-import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions } from './studio/agent-registry.ts';
 import { skillsDir } from './skill-path.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
