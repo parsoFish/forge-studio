@@ -29,7 +29,10 @@ import {
 import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
 import type { RunBrainFixInput, RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
 // ---------------------------------------------------------------------------
 // Part A fixtures/helpers
@@ -393,14 +396,58 @@ test('writeKbDrainStatus is atomic (temp+rename): no leftover .tmp file after a 
 // Part B — HTTP routes
 // ---------------------------------------------------------------------------
 
-async function makeIsolatedBridge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+/**
+ * Part B drives the CARVED HANDLERS directly — no bridge (COMMON §5). Same seam
+ * as `tests/integration/routes-dispatch.test.ts`; the `{status, json}` shape is
+ * preserved so every assertion below is byte-for-byte what it was over HTTP.
+ *
+ * The two `Promise.all` concurrency tests keep their meaning: the per-kb
+ * active-job lock they exercise is a check-then-write that is ENTIRELY
+ * synchronous (`findActiveKbDrainRun` -> `writeKbDrainStatus`, no `await`
+ * between), so under run-to-completion the first caller into that span wins
+ * outright — over sockets or over a direct dispatch alike.
+ *
+ * Not tested here any more, deliberately: origin/CSRF/404-fallthrough, which
+ * are the host's policy and live in `cli/*.test.ts`.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+async function dispatch(root: string, path: string, method: string, body: unknown = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    // T1 ruling 30: the HOST parses the body and hands the RESULT down, so a
+    // handler-level test supplies the result rather than faking a request
+    // stream — which would re-test the host's body policy from inside a package.
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  assert.ok(matched, `no carved route claimed ${method} ${path}`);
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+function makeIsolatedBridge(): { root: string } {
   const root = mkdtempSync(join(tmpdir(), 'kb-drain-http-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(root, '_queue', state), { recursive: true });
   }
   mkdirSync(join(root, '_logs'), { recursive: true });
-  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
-  return { root, url, close };
+  return { root };
 }
 
 /** A clean (zero-finding) KB — the default fix-turn path never needs to spawn
@@ -411,15 +458,8 @@ function seedCleanKb(root: string, kbId: string): void {
   writeFileSync(join(dir, 'kb.yaml'), `id: ${kbId}\nname: ${kbId}\nbinding: { kind: unique }\ndesc: clean http-route fixture.\n`);
 }
 
-async function postJson(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'x-forge-csrf': '1' } });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
-
-async function getJson(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
+const postJson = (root: string, path: string) => dispatch(root, path, 'POST');
+const getJson = (root: string, path: string) => dispatch(root, path, 'GET');
 
 async function pollDrainTerminal(base: string, kbId: string, runId: string, maxAttempts = 60): Promise<Record<string, unknown>> {
   for (let i = 0; i < maxAttempts; i++) {
@@ -431,24 +471,23 @@ async function pollDrainTerminal(base: string, kbId: string, runId: string, maxA
 }
 
 test('POST /api/studio/kbs/:id/drain — dispatches (200 + runId) and reaches GREEN for a clean kb', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
     seedCleanKb(iso.root, 'clean-alpha');
-    const dispatch = await postJson(iso.url, '/api/studio/kbs/clean-alpha/drain');
+    const dispatch = await postJson(iso.root, '/api/studio/kbs/clean-alpha/drain');
     assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
     assert.equal(dispatch.json['ok'], true);
     const runId = dispatch.json['runId'] as string;
     assert.ok(runId.startsWith('clean-alpha-drain-'), runId);
 
-    const terminal = await pollDrainTerminal(iso.url, 'clean-alpha', runId);
+    const terminal = await pollDrainTerminal(iso.root, 'clean-alpha', runId);
     assert.equal(terminal['state'], 'green', JSON.stringify(terminal));
     assert.equal(terminal['kbId'], 'clean-alpha');
     assert.deepEqual(terminal['counts'], { auto: 0, agent: 0, user: 0 });
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -463,14 +502,14 @@ test('POST /api/studio/kbs/:id/drain — genuine concurrent dispatch: exactly on
   // single-threaded event loop cannot interleave mid-synchronous-section.
   // Exactly one request is therefore guaranteed to see "no active run" and
   // win; the other always sees the winner's freshly-written status and 409s.
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
     seedCleanKb(iso.root, 'clean-concurrent');
     const [a, b] = await Promise.all([
-      postJson(iso.url, '/api/studio/kbs/clean-concurrent/drain'),
-      postJson(iso.url, '/api/studio/kbs/clean-concurrent/drain'),
+      postJson(iso.root, '/api/studio/kbs/clean-concurrent/drain'),
+      postJson(iso.root, '/api/studio/kbs/clean-concurrent/drain'),
     ]);
     const statuses = [a.status, b.status].sort((x, y) => x - y);
     assert.deepEqual(
@@ -486,102 +525,95 @@ test('POST /api/studio/kbs/:id/drain — genuine concurrent dispatch: exactly on
     const dirs = readdirSync(join(iso.root, '_logs')).filter((d) => d.startsWith('_kb-drain-clean-concurrent-drain-'));
     assert.equal(dirs.length, 1, `expected exactly one drain log dir, got ${JSON.stringify(dirs)}`);
 
-    await pollDrainTerminal(iso.url, 'clean-concurrent', winner.json['runId'] as string);
+    await pollDrainTerminal(iso.root, 'clean-concurrent', winner.json['runId'] as string);
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/drain/:runId — a corrupted status.json is read null-safe (404, not a 500 crash)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'corrupt-kb');
     const runId = 'corrupt-kb-drain-deadbeef';
     const dir = join(iso.root, '_logs', `_kb-drain-${runId}`);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'status.json'), '{ this is not valid json,,, ', 'utf8');
-    const res = await getJson(iso.url, `/api/studio/kbs/corrupt-kb/drain/${runId}`);
+    const res = await getJson(iso.root, `/api/studio/kbs/corrupt-kb/drain/${runId}`);
     assert.equal(res.status, 404, JSON.stringify(res.json));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('POST /api/studio/kbs/:id/drain — 404 for an unknown kb', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
-    const res = await postJson(iso.url, '/api/studio/kbs/does-not-exist/drain');
+    const res = await postJson(iso.root, '/api/studio/kbs/does-not-exist/drain');
     assert.equal(res.status, 404, JSON.stringify(res.json));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/drain/:runId — 404 for a traversal-shaped runId', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'clean-gamma');
     const traversal = encodeURIComponent('../../etc/passwd');
-    const res = await getJson(iso.url, `/api/studio/kbs/clean-gamma/drain/${traversal}`);
+    const res = await getJson(iso.root, `/api/studio/kbs/clean-gamma/drain/${traversal}`);
     assert.equal(res.status, 404, JSON.stringify(res.json));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/drain/:runId — 404 for a charset-safe but wrong-kb-prefixed runId', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'clean-delta');
     const foreign = 'some-other-kb-drain-abc123';
-    const res = await getJson(iso.url, `/api/studio/kbs/clean-delta/drain/${foreign}`);
+    const res = await getJson(iso.root, `/api/studio/kbs/clean-delta/drain/${foreign}`);
     assert.equal(res.status, 404, JSON.stringify(res.json));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/drain — active-or-latest reattach: running immediately after dispatch, terminal after completion', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
     seedCleanKb(iso.root, 'clean-epsilon');
-    const dispatch = await postJson(iso.url, '/api/studio/kbs/clean-epsilon/drain');
+    const dispatch = await postJson(iso.root, '/api/studio/kbs/clean-epsilon/drain');
     const runId = dispatch.json['runId'] as string;
 
     // Immediately after dispatch — the route wrote the initial snapshot
     // synchronously, so a same-turn reattach must see it (no navigation gap).
-    const immediate = await getJson(iso.url, '/api/studio/kbs/clean-epsilon/drain');
+    const immediate = await getJson(iso.root, '/api/studio/kbs/clean-epsilon/drain');
     assert.equal(immediate.json['runId'], runId, JSON.stringify(immediate.json));
 
-    await pollDrainTerminal(iso.url, 'clean-epsilon', runId);
+    await pollDrainTerminal(iso.root, 'clean-epsilon', runId);
 
-    const after = await getJson(iso.url, '/api/studio/kbs/clean-epsilon/drain');
+    const after = await getJson(iso.root, '/api/studio/kbs/clean-epsilon/drain');
     assert.equal(after.json['runId'], runId, JSON.stringify(after.json));
     assert.equal(after.json['state'], 'green', JSON.stringify(after.json));
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/drain — no runs yet returns runId:null, not an error', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'clean-zeta');
-    const res = await getJson(iso.url, '/api/studio/kbs/clean-zeta/drain');
+    const res = await getJson(iso.root, '/api/studio/kbs/clean-zeta/drain');
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['runId'], null);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -592,19 +624,15 @@ test('drain vs consolidate are mutually GATED per kb (W7-B2, knowledge-05): conc
   // "Consolidating…" for however long the drain took, with no signal that it
   // was queued. The contract now: the SECOND mutating dispatch is refused
   // with a 409 carrying the activeJobReason text the UI shows.
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
     seedCleanKb(iso.root, 'clean-shared');
 
     const [drainDispatch, consolidateDispatch] = await Promise.all([
-      postJson(iso.url, '/api/studio/kbs/clean-shared/drain'),
-      fetch(`${iso.url}/api/studio/kbs/clean-shared/maintenance`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-        body: JSON.stringify({ op: 'consolidate' }),
-      }).then(async (r) => ({ status: r.status, json: (await r.json()) as Record<string, unknown> })),
+      postJson(iso.root, '/api/studio/kbs/clean-shared/drain'),
+      dispatch(iso.root, '/api/studio/kbs/clean-shared/maintenance', 'POST', { op: 'consolidate' }),
     ]);
 
     const statuses = [drainDispatch.status, consolidateDispatch.status].sort((a, b) => a - b);
@@ -618,13 +646,13 @@ test('drain vs consolidate are mutually GATED per kb (W7-B2, knowledge-05): conc
 
     // The winner still reaches a real terminal state.
     if (drainDispatch.status === 200) {
-      const drainTerminal = await pollDrainTerminal(iso.url, 'clean-shared', drainDispatch.json['runId'] as string);
+      const drainTerminal = await pollDrainTerminal(iso.root, 'clean-shared', drainDispatch.json['runId'] as string);
       assert.equal(drainTerminal['state'], 'green', JSON.stringify(drainTerminal));
     } else {
       const consolidateRunId = consolidateDispatch.json['runId'] as string;
       let consolidateState = 'running';
       for (let i = 0; i < 60 && consolidateState === 'running'; i++) {
-        const { json } = await getJson(iso.url, `/api/studio/kbs/clean-shared/fix-agent/${consolidateRunId}`);
+        const { json } = await getJson(iso.root, `/api/studio/kbs/clean-shared/fix-agent/${consolidateRunId}`);
         consolidateState = json['state'] as string;
         if (consolidateState === 'running') await new Promise((r) => setTimeout(r, 100));
       }
@@ -632,7 +660,6 @@ test('drain vs consolidate are mutually GATED per kb (W7-B2, knowledge-05): conc
     }
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });

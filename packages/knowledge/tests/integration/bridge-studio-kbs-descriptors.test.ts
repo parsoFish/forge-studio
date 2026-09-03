@@ -13,6 +13,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
+
 import { loadKbDescriptors } from '../../bridge-studio-kbs.ts';
 
 import {
@@ -21,39 +26,57 @@ import {
 } from './test-fixtures/bridge-studio-kbs.ts';
 
 let forgeRoot: string;
-let bridgeUrl: string;
-let closeServer: () => Promise<void>;
 
 before(async () => {
   const shared = await setupSharedForge();
   forgeRoot = shared.root;
-  bridgeUrl = shared.url;
-  closeServer = shared.close;
 });
 
 after(async () => {
-  await closeServer();
   rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-async function post(
-  path: string,
-  body?: Record<string, unknown>,
-  nocsrf = false,
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (!nocsrf) headers['x-forge-csrf'] = '1';
-  const res = await fetch(`${bridgeUrl}${path}`, {
-    method: 'POST',
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+/**
+ * `post`/`get` drive the CARVED HANDLERS directly — no bridge (COMMON §5: a
+ * package test never boots one). The `{status, json}` shape is preserved so
+ * every assertion below is byte-for-byte what it was over HTTP. Not tested
+ * here any more, deliberately: origin/CSRF/404-fallthrough — the HOST's
+ * policy, tested in `cli/*.test.ts`.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+async function drive(path: string, method: string, body: unknown = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot,
+    logsRoot: join(forgeRoot, '_logs'),
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  if (!matched) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+async function post(path: string, body?: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  return drive(path, 'POST', body ?? {});
 }
 
 async function get(path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${bridgeUrl}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  return drive(path, 'GET');
 }
 
 test('POST /api/studio/kbs/:id/guidance: normal text → 200', async () => {

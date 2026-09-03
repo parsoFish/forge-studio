@@ -1,6 +1,6 @@
 /**
  * ACCEPTANCE TESTS (must be RED until fixed) — bd `forge-wze` (P0): KB
- * containment defects, driven through the REAL bridge routes (`startBridge`),
+ * containment defects, driven through the REAL carved route handlers,
  * mirroring the fixture idiom of cli/bridge-studio-write.test.ts and
  * cli/bridge-studio-flows.test.ts.
  *
@@ -40,7 +40,10 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -54,8 +57,6 @@ function tmp(prefix: string): string {
 // ---------------------------------------------------------------------------
 
 let forgeRoot: string;
-let bridgeUrl: string;
-let closeBridge: () => Promise<void>;
 const outsideDirs: string[] = [];
 let symlinksUnavailable = false;
 
@@ -68,7 +69,7 @@ function newOutsideDir(prefix: string): string {
 before(async () => {
   forgeRoot = tmp('bridge-kbs-containment-');
 
-  // Minimal _queue + _logs required by startBridge / listRuns
+  // Minimal _queue + _logs the handlers' listRuns path expects
   for (const state of ['in-flight', 'done', 'failed', 'pending', 'ready-for-review']) {
     mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
   }
@@ -154,13 +155,9 @@ before(async () => {
   }
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
-  const result = await startBridge({ forgeRoot, port: 0 });
-  bridgeUrl = result.url;
-  closeBridge = result.close;
 });
 
 after(async () => {
-  if (closeBridge) await closeBridge();
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
   for (const d of outsideDirs) rmSync(d, { recursive: true, force: true });
 });
@@ -169,19 +166,49 @@ after(async () => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function get(path: string): Promise<{ status: number; text: string }> {
-  const res = await fetch(`${bridgeUrl}${path}`);
-  return { status: res.status, text: await res.text() };
+/**
+ * These containment pins drive the CARVED HANDLERS directly — no bridge
+ * (COMMON §5). The subject is unchanged and is the whole point of the file: a
+ * symlinked KB dir, a symlinked leaf, a hardlink, a traversal id — every one
+ * of them must be refused by the GUARD, which lives in the handler, not in the
+ * HTTP layer. Driving the handler directly makes that stricter, not looser:
+ * there is no transport in front of the guard to accidentally take the credit.
+ *
+ * `{status, text}` is preserved so every assertion below is byte-for-byte what
+ * it was over HTTP.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; text: string }> {
-  const res = await fetch(`${bridgeUrl}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-    body: JSON.stringify(body),
-  });
-  return { status: res.status, text: await res.text() };
+async function drive(path: string, method: string, body: unknown = {}): Promise<{ status: number; text: string }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot,
+    logsRoot: join(forgeRoot, '_logs'),
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  // An unmatched path is the host's 404, not a handler verdict — say so rather
+  // than reporting a silent 0 that an assertion might read as a refusal.
+  if (!matched) return { status: 404, text: '' };
+  return { status: captured.status ?? 0, text: captured.body };
 }
+
+const get = (path: string) => drive(path, 'GET');
+const post = (path: string, body: unknown) => drive(path, 'POST', body);
 
 function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
   if (symlinksUnavailable) {
