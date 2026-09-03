@@ -139,6 +139,19 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '
 // here, unlike the guard-function alias this fix closes (which was live).
 const DESTROY_VERB_RE = /\b(rmSync|unlinkSync|rmdirSync|renameSync)\s*\(/;
 
+/**
+ * Files that trip the FILE-scoped census without destroying a skill package,
+ * mapped to the witness pattern for what they DO destroy. Each is re-derived
+ * every run by the loop in the enumeration test below — an entry here buys a
+ * file nothing if one of its destroy verbs ever names a skill path.
+ */
+const DESTROY_VERBS_NOT_SKILL_SCOPED = new Map<string, RegExp>([
+  // M4-agents routes carve: its agent-DELETE route moved to
+  // `packages/agents/bridge-agents-studio.ts` (registered in the census below,
+  // with its prune). What remains is the FLOW delete.
+  ['cli/bridge-studio-writes.ts', /rmSync\(dirname\(flowYamlPath\)/],
+]);
+
 const GUARD_CALL_NAMES = ['resolveGuardedPath', 'guardedFile'];
 
 /** Same crude, DOCUMENTED comment filter check-raw-fs-guarded.mjs's own
@@ -393,7 +406,15 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
   // W8-B4 FIX-2: cli/bridge-studio-writes.ts's agent-DELETE route joins the
   // census — it was ALWAYS a real skill-destroying site (skillsDir imported
   // as toSkillsDir); the old literal-spelling regex just never saw it.
-  const expected = ['packages/library/bridge-studio-skills.ts', 'cli/bridge-studio-writes.ts'].sort();
+  // M4-agents routes carve: the agent DELETE route MOVED out of
+  // `cli/bridge-studio-writes.ts` into `packages/agents/bridge-agents-studio.ts`,
+  // which is a real skill-destroying site and calls the prune. Registered here
+  // deliberately, as this guard's own message instructs.
+  const expected = [
+    'packages/library/bridge-studio-skills.ts',
+    'cli/bridge-studio-writes.ts',
+    'packages/agents/bridge-agents-studio.ts',
+  ].sort();
   assert.deepEqual(
     files,
     expected,
@@ -406,6 +427,35 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
       `skill-destroying site, add it here deliberately alongside its prune call.`,
   );
   for (const s of skillDestroyFiles) {
+    const notSkillScoped = DESTROY_VERBS_NOT_SKILL_SCOPED.get(s.file);
+    if (notSkillScoped !== undefined) {
+      // A FALSIFIABLE exemption, never a blanket one. The census is
+      // deliberately FILE-scoped — coarse is the safe direction for a guard
+      // about deletion — so a file can pair a destroy verb with an unrelated
+      // skills-dir idiom. That is now true of `cli/bridge-studio-writes.ts`:
+      // the M4-agents carve took its agent-DELETE route away, and every
+      // destroy verb it still has targets a FLOW directory, while its
+      // remaining `skillsDir(...)` uses are starter WRITES and a roster read.
+      // Rather than trust that, re-derive it on every run: the exemption holds
+      // only while no destroy verb in the file names a skill path, so the
+      // moment someone adds a real skill delete here it evaporates and the
+      // prune requirement comes back.
+      const src = readFileSync(join(REPO_ROOT, s.file), 'utf8');
+      const destroys = [...src.matchAll(/\b(?:rmSync|unlinkSync|rmdirSync|renameSync)\s*\(([^;\n]*)/g)]
+        .map((m) => m[1] ?? '');
+      assert.ok(destroys.length > 0, `${s.file}: exemption is stale — it no longer destroys anything at all`);
+      for (const arg of destroys) {
+        assert.ok(
+          !/skill/i.test(arg),
+          `${s.file} is exempted from the prune requirement because its destroy verbs were all ` +
+            `flow-scoped, but one now names a skill path: ${JSON.stringify(arg.trim())}. Either route ` +
+            `it through removeInstallLedgerEntry(...) or remove this file from ` +
+            `DESTROY_VERBS_NOT_SKILL_SCOPED — never both.`,
+        );
+      }
+      assert.ok(notSkillScoped.test(src), `${s.file}: the exemption's own witness pattern no longer matches`);
+      continue;
+    }
     assert.ok(
       s.hasSkillPrune,
       `${s.file} destroys a skill package (rmSync/unlinkSync/rmdirSync/renameSync) but never calls ` +

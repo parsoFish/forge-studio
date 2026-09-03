@@ -120,7 +120,7 @@ const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 // harmless (zero candidates) or visibly red (unclassified candidates) — never
 // silent. The containment test below pins the currently-known dispatch files
 // as a floor so an accidental narrowing of this filter also goes red.
-const DISPATCH_SCAN_DIRS = ['cli', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/projects', 'packages/sessions'];
+const DISPATCH_SCAN_DIRS = ['cli', 'packages/agents', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/projects', 'packages/sessions'];
 
 function discoverDispatchFiles(): readonly string[] {
   const out: string[] = [];
@@ -155,6 +155,18 @@ const KNOWN_DISPATCH_FILES = [
   'cli/bridge-studio.ts',
   'cli/ui-bridge.ts',
   'packages/knowledge/routes.ts',
+  // M4 §4 step 2 — agents' carved table and the two handler modules behind it.
+  // `packages/agents` had to be ADDED to DISPATCH_SCAN_DIRS above for any of
+  // them to be discovered at all: without it this file reported the two
+  // `/api/agents/*` rows in `cli/dry-bridge.ts` as STALE the moment their
+  // handlers left `cli/ui-bridge.ts`, and the obvious "fix" — deleting those
+  // rows — would have silently stopped enforcing the classification on a
+  // route that SPAWNS. Pinned here for the same reason as the rows above: a
+  // file that stops being discovered must fail loudly, not shrink the scan.
+  'packages/agents/routes.ts',
+  'packages/agents/bridge-agents-runs.ts',
+  'packages/agents/bridge-agents-slug.ts',
+  'packages/agents/bridge-agents-studio.ts',
   // M4 §4 step 2 — library's carved table. Pinned for the same reason as
   // knowledge's: `discoverDispatchFiles` finds any `routes.ts` automatically,
   // so this row does not widen the scan; it makes a table that stops being
