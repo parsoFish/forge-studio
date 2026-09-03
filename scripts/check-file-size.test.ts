@@ -105,3 +105,41 @@ test('it FAILS on a baseline entry whose file is gone', () => {
     assert.match(out, /stale baseline entry/);
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// known-flakes #6 — a file that vanishes between the glob and the read
+// ---------------------------------------------------------------------------
+
+test('lineCount SKIPS a path that vanished between glob and read (known-flakes #6)', async () => {
+  const { lineCount } = await import('./check-file-size.mjs');
+  const gone = join(ROOT, 'scripts', '__vanished_probe__.ts');
+  // POSITIVE CONTROL, deterministic rather than raced: the exact condition the
+  // audit hit on CI — a globbed path that is not there when it is read.
+  assert.equal(lineCount(gone), null, 'a vanished path has no size to check, so it is skipped, not a crash');
+});
+
+test('lineCount still COUNTS a real file, and still THROWS on any error but ENOENT', async () => {
+  const { lineCount } = await import('./check-file-size.mjs');
+  // NEGATIVE CONTROL 1 — the ordinary path is untouched.
+  const real = join(ROOT, 'package.json');
+  const n = lineCount(real);
+  assert.ok(typeof n === 'number' && n > 0, `expected a real line count, got ${String(n)}`);
+
+  // NEGATIVE CONTROL 2 — a DIRECTORY reads as EISDIR, not ENOENT, and must
+  // still throw. Swallowing every read error would turn this fix into a
+  // blanket tolerance, which is exactly what it must not be.
+  assert.throws(
+    () => lineCount(join(ROOT, 'scripts')),
+    (err: NodeJS.ErrnoException) => err.code !== 'ENOENT',
+    'only ENOENT is a skip — every other read failure still fails loud',
+  );
+});
+
+test('a baselined file that is genuinely GONE still reports stale — the fix changes no verdict', () => {
+  // NEGATIVE CONTROL 3 (the `audit` semantics ruling 84 names): the skip is in
+  // lineCount, not in the stale-row logic, so a baseline row whose file no
+  // longer exists is reported exactly as before.
+  const json = JSON.parse(execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }));
+  assert.deepEqual(json.stale, [], 'the live tree has no stale rows; the reporting path is unchanged by the ENOENT skip');
+});
