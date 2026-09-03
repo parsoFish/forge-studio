@@ -37,6 +37,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { dispatchAgentRun } from './agent-dispatch.ts';
+import { cmdAgentDispatch } from './agent-run.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
@@ -227,6 +228,52 @@ test('dispatchAgentRun does NOT report an unbound run when a project IS bound (f
       'a bound run must not claim it was unbound — the negative half, without which the assertion above would pass on an unconditional emit',
     );
   } finally {
+    restoreEnv();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The error path for an unsafe runId used that same runId to build a path.
+ *
+ * `dispatchAgentRun` refuses a traversing `runId` (`isSafeRunId`, throwing
+ * "unsafe runId (path-traversal risk)"). That throw lands in
+ * `cmdAgentDispatch`'s outer catch, which writes a terminal-failure marker
+ * with `createLogger(runId, ...)` — and `createLogger` does
+ * `resolve(logsDir, cycleId)` with no validation of its own. So the handler
+ * that had just identified the value as dangerous handed it straight to a
+ * path resolution: `resolve('<forgeRoot>/_logs', '../../../../tmp/x')` is
+ * `/tmp/x`, and mkdir+append there succeed silently.
+ *
+ * Found by the adversarial containment review of the fix itself, which is
+ * what that review is for.
+ */
+test('cmdAgentDispatch REFUSES to write the terminal marker with an unsafe runId — the error path must not use the value it just rejected (forge-8vfn.5.37)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const dir = mkdtempSync(join(tmpdir(), 'agent-dispatch-marker-traversal-'));
+  const escapeTarget = join(dir, 'ESCAPED');
+  const forgeRoot = join(dir, 'forge');
+  const origExit = process.exit;
+  const origErr = console.error;
+  const errs: string[] = [];
+  try {
+    // A runId that climbs out of <forgeRoot>/_logs and lands in `escapeTarget`.
+    const traversal = join('..', '..', 'ESCAPED');
+    process.exit = ((code?: number) => { throw new Error(`__exit__${code ?? 0}`); }) as typeof process.exit;
+    console.error = (...a: unknown[]) => { errs.push(a.join(' ')); };
+    try {
+      await cmdAgentDispatch(['project-scoped-review', '--run-id', traversal], forgeRoot);
+    } catch (e) {
+      if (!/^__exit__/.test((e as Error).message)) throw e;
+    }
+    assert.equal(
+      existsSync(escapeTarget),
+      false,
+      `the terminal-failure marker must never be written through an unsafe runId — found a directory at ${escapeTarget}, outside the logs root`,
+    );
+  } finally {
+    process.exit = origExit;
+    console.error = origErr;
     restoreEnv();
     rmSync(dir, { recursive: true, force: true });
   }

@@ -372,8 +372,8 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
     return i >= 0 ? flags[i + 1] : undefined;
   };
   const runId = flagValue('--run-id');
-  if (!runId) {
-    throw new Error('--run-id <id> is required');
+  if (!runId || !isSafeRunId(runId)) {
+    throw new Error(`--run-id <id> is required and must be a safe run id — letters, digits, dot, underscore, hyphen, no path separators or "..": ${JSON.stringify(runId)}`);
   }
   const project = flagValue('--project');
   // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header for
@@ -611,14 +611,7 @@ export async function cmdAgentDispatch(
         message: 'agent-dispatch.failed',
         metadata: { error: msg, agent_slug: slug },
       });
-    } catch (markerErr) {
-      // Best-effort for the EXIT CODE — never masks the original error — but
-      // not silent: this is the one write whose whole job is to stop the
-      // bridge reporting a perpetual `running`, so a failure to make it has
-      // to be visible to whoever is reading the terminal.
-      const markerMsg = markerErr instanceof Error ? markerErr.message : String(markerErr);
-      console.error(`forge agent dispatch: could not write the terminal-failure marker (${markerMsg}) — the run status may remain "running"`);
-    }
+    } catch { /* best-effort */ }
     // D7 — the run ended in failure: write the terminal phase before exiting.
     // bead forge-poc (ON-7): the error text rides along too, for the same
     // reason the sibling agent-dispatch.failed log event above already
