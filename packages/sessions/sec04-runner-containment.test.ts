@@ -50,9 +50,9 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runInstructionsTurn, instructionsSessionDir } from './instructions-runner.ts';
+import { runInstructionsTurn, instructionsSessionDir } from './kinds/instructions.ts';
 import { runProjectBrainTurn, projectBrainSessionDir } from './kinds/project-brain.ts';
-import { runDemoBuilderTurn, demoSessionDir } from './demo-builder-runner.ts';
+import { runDemoBuilderTurn, demoSessionDir } from './kinds/demo-builder.ts';
 import type { QueryFn } from './interactive-session.ts';
 
 // Belt-and-braces: these are only read by the bridge/SDK spawn path, which the

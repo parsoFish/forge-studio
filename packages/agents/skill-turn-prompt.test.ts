@@ -1,7 +1,7 @@
 /**
  * Lane R4-23, WI-1 — ACCEPTANCE TESTS for the shared skill-turn-section
  * loader (`orchestrator/skill-path.ts`: `splitSkillTurnSections` +
- * `loadSkillTurnPrompt`) and its first consumer, `instructions-runner.ts`
+ * `loadSkillTurnPrompt`) and its first consumer, the `instructions` kind
  * (turns: `interview`, `draft`).
  *
  * These are IMMUTABLE acceptance tests written BEFORE the WI-1 implementation
@@ -29,19 +29,17 @@
  *   AT-5  a cache keyed only by skill `name` (ignoring the explicit
  *         `skillPromptPath` override) would serve fixture A's content back
  *         for fixture B's read — breaking every runner test's DI seam.
- *   AT-6  instructions-runner.ts still concatenates the WHOLE skill file
+ *   AT-6  the instructions kind still concatenates the WHOLE skill file
  *         instead of selecting the `interview`/`draft` turn section — proven
  *         by a sentinel unique to the OTHER turn leaking into the prompt.
- *   AT-7  instructions-runner.ts keeps (or reintroduces) a fail-open default
+ *   AT-7  the instructions kind keeps (or reintroduces) a fail-open default
  *         prompt instead of propagating the loader's fail-loud throw.
  *   AT-8  the prose migration accidentally drops or renames a DATA label the
  *         runner injects (project, repo path, operator brief, prior Q&A) —
- *         this AT is expected to be GREEN already at base (see the base run
- *         notes in the WI-1 report); it stays green as a non-regression pin.
- *   AT-9  the instruction prose named here (verified present in
- *         instructions-runner.ts at base by direct grep before this file was
- *         written — see the inline note on MOVED_SENTENCES below) never
- *         actually leaves the .ts, or never actually lands in SKILL.md, i.e.
+ *         green at base; it stays as a non-regression pin.
+ *   AT-9  the instruction prose named here (see MOVED_SENTENCES below for its
+ *         base-commit provenance) never actually leaves the .ts, or never
+ *         actually lands in SKILL.md, i.e.
  *         intent stays duplicated/forked instead of SKILL.md becoming the
  *         single source (the ADR-024 thesis this whole lane exists to prove).
  *   AT-10 the private `loadSkillPrompt`'s fail-open literal
@@ -54,6 +52,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 // Namespace import (not a named import of the two new exports): at base,
 // `splitSkillTurnSections`/`loadSkillTurnPrompt` do not exist yet. A named
@@ -69,7 +68,7 @@ import {
   runInstructionsTurn,
   instructionsSessionDir,
   type InstructionsStatus,
-} from '@forge/sessions/instructions-runner.ts';
+} from '@forge/sessions/kinds/instructions.ts';
 import { writeSessionStatus, type QueryFn } from '@forge/sessions/interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 
@@ -310,6 +309,9 @@ test('AT-5: an explicit skillPromptPath is never served from a default-path cach
 });
 
 // ---------------------------------------------------------------------------
+/** Anchored on FORGE_ROOT, not a hand-counted `..` chain (COMMON §15.14). */
+const INSTRUCTIONS_KIND_TS = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'instructions.ts');
+
 // INSTRUCTIONS RUNNER — turn selection is loaded AND used (AT-6)
 // ---------------------------------------------------------------------------
 
@@ -457,13 +459,11 @@ test('AT-8: a drafting prompt (real production SKILL.md, no override) still carr
 
 /**
  * At least 3 distinctive instruction sentences the design doc's mechanism
- * moves from `instructions-runner.ts` into `skills/instructions-creator/SKILL.md`.
- * These are exact substrings copied from `orchestrator/instructions-runner.ts`
- * at base commit `c45e3892` — VERIFIED present there before this test was
- * written via:
- *   grep -n 'Return `{ "agents_md": ...' orchestrator/instructions-runner.ts   → line 420
- *   grep -n 'Inspect the repo with your read tools, ...'                      → line 347
- *   grep -n 'You are UPDATING the existing AGENTS.md ...'                     → line 344
+ * moves from the instructions kind into `skills/instructions-creator/SKILL.md`.
+ * These are exact substrings copied from the instructions runner at base
+ * commit `c45e3892` (then `orchestrator/instructions-runner.ts`, now
+ * `packages/sessions/kinds/instructions.ts`), verified present there by grep
+ * before this test was written.
  * (all three matched; see the WI-1 report for the exact commands run). Each
  * is a single, un-split JS string literal in the source today (no `+`
  * concatenation crosses the substring), so no source reconstruction is
@@ -491,8 +491,8 @@ function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-test('AT-9: the moved instruction prose has LEFT instructions-runner.ts and now lives in SKILL.md (private loadSkillPrompt is gone)', () => {
-  const runnerSrc = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'instructions-runner.ts'), 'utf8');
+test('AT-9: the moved instruction prose has LEFT kinds/instructions.ts and now lives in SKILL.md (private loadSkillPrompt is gone)', () => {
+  const runnerSrc = readFileSync(INSTRUCTIONS_KIND_TS, 'utf8');
   const skillMd = readFileSync(
     join(import.meta.dirname, '..', '..', 'skills', 'instructions-creator', 'SKILL.md'),
     'utf8',
@@ -518,8 +518,8 @@ test('AT-9: the moved instruction prose has LEFT instructions-runner.ts and now 
   );
 });
 
-test('AT-10: no fail-open default-prompt literal remains in instructions-runner.ts', () => {
-  const runnerSrc = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'instructions-runner.ts'), 'utf8');
+test('AT-10: no fail-open default-prompt literal remains in kinds/instructions.ts', () => {
+  const runnerSrc = readFileSync(INSTRUCTIONS_KIND_TS, 'utf8');
   assert.ok(
     !runnerSrc.includes('You are the forge instructions-creator agent.'),
     'the fail-open fallback literal must be deleted — loadSkillTurnPrompt fails loud instead',

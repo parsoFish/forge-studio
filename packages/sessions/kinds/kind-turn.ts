@@ -31,6 +31,8 @@
  *  11. `sink.flushIteration(1)` and the `end` event
  *  12. the guarded status WRITE, including the sticky-`cancelled` refusal
  *  13. `sdkHooksForAgent` wiring, so no kind can spawn hook-blind
+ *  14. `makeReasoningSink`
+ *  15. reading `feedback.md` and CONSUMING IT ONCE
  *
  * What stays with the kind (`packages/sessions/kinds/<id>.ts`) is its
  * IDENTITY: which phases exist, which of them do work, which skill and agent
@@ -42,22 +44,27 @@
  * That work is bead `forge-8vfn.6.6` (M5), which carries the five blockers as
  * its acceptance list.
  */
+import { rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import { createLogger, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
+import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
 import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   makeHeartbeatWriter,
+  makeReasoningSink,
   makeThinkingSink,
   runAgentTurn,
   statusWriteRefusalReason,
   type QueryFn,
 } from '../interactive-session.ts';
+
+/** The operator's revision notes, written beside status.json by a `revise` verdict. */
+const FEEDBACK_FILENAME = 'feedback.md';
 
 /** Every session status.json carries at least a phase; the rest is the kind's. */
 export type KindTurnStatus = { phase: string };
@@ -69,7 +76,10 @@ export type KindTurnResult = { phase: string; wrote: string[] };
  * The input shape shared by every ported runner. It is EXACTLY the union the
  * four bespoke `RunXTurnInput` types already had — the ports do not widen or
  * narrow the entry points, which is what lets the spawn-capture goldens stay
- * byte-identical across a port.
+ * byte-identical across a port. A kind carrying its own extra field (the
+ * instructions interview ceiling) extends this and passes the extended type as
+ * the variant's `I`, so the field stays the KIND's rather than becoming a
+ * shared knob every other kind must ignore.
  */
 export type KindTurnInput = {
   sessionId: string;
@@ -102,6 +112,31 @@ export type KindTurnPlumbing = {
   onHeartbeat: () => void;
   onThinking: (text: string) => void;
   /**
+   * Extended-REASONING text sink. Built for every variant (construction is
+   * inert — it only closes over the logger) and consumed by the kinds that had
+   * one before their port; a kind that passes it nowhere behaves exactly as it
+   * did, which is what lets one driver serve both shapes with no flag.
+   */
+  onText: (text: string) => void;
+  /**
+   * Run one step with the operator's `feedback.md`, CONSUMED ONCE.
+   *
+   * Every bespoke runner that reads `feedback.md` reads it and never clears
+   * it, so round 1's revision notes keep riding rounds 2 and 3 and silently
+   * steer turns the operator never aimed. The generic spine fixed exactly
+   * this (W7-C2 T1 review, P0-2 / finding A5, `interactive-runner.ts`) and no
+   * bespoke runner ever got the fix; ruling 60 said the ports collect it.
+   *
+   * A CLOSURE rather than a read/clear pair, deliberately: a kind cannot
+   * forget the clear, because there is nothing separate to forget. The note
+   * is deleted only after `run` RESOLVES — a turn that threw leaves it in
+   * place for the retry, which is the spine's own rule. A failed delete is
+   * REPORTED, never swallowed: the turn already ran, so it must not throw the
+   * session away, but a note that survives its own consumption WILL re-steer
+   * the next turn and the operator needs to be able to see why.
+   */
+  withOperatorFeedback: <T>(run: (feedback: string | null) => Promise<T>) => Promise<T>;
+  /**
    * W8-B6, hardened here: the hook-dispatch options for one skill, ALREADY
    * bound to this turn's logger and initiative id, ready to spread into a
    * `runAgentTurn` options bag (`...plumbing.hooksForSkill(spec.skill)`).
@@ -119,8 +154,12 @@ export type KindTurnPlumbing = {
   hooksForSkill: (skill: string) => Record<string, unknown>;
 };
 
-export type KindStepHandler<S extends KindTurnStatus, R extends KindTurnResult> = (args: {
-  input: KindTurnInput;
+export type KindStepHandler<
+  S extends KindTurnStatus,
+  R extends KindTurnResult,
+  I extends KindTurnInput = KindTurnInput,
+> = (args: {
+  input: I;
   status: S;
   plumbing: KindTurnPlumbing;
   /** Guarded status write for this session, with the kind's own refusal text. */
@@ -135,7 +174,11 @@ export type KindStepHandler<S extends KindTurnStatus, R extends KindTurnResult> 
  * went. That fall-through is load-bearing for containment: the SEC-04 tests
  * drive an unknown phase precisely so no spawning branch is reached.
  */
-export type SessionKindVariant<S extends KindTurnStatus, R extends KindTurnResult> = {
+export type SessionKindVariant<
+  S extends KindTurnStatus,
+  R extends KindTurnResult,
+  I extends KindTurnInput = KindTurnInput,
+> = {
   /** The session-kind id — also the `_logs` cycle-id segment. */
   id: string;
   /** The ONE on-disk segment this kind's session dirs live under. */
@@ -149,7 +192,7 @@ export type SessionKindVariant<S extends KindTurnStatus, R extends KindTurnResul
   eventSkill: string;
   /** The `initiative_id` this kind's events carry. */
   initiativeId: (sessionId: string) => string;
-  steps: Record<string, KindStepHandler<S, R>>;
+  steps: Record<string, KindStepHandler<S, R, I>>;
   /** Phases with no handler — the bespoke runners' trailing `else`. */
   otherwise: (status: S) => R;
   /** Extra `metadata` keys on the start event, beyond session_id + phase. */
@@ -165,9 +208,13 @@ export type SessionKindVariant<S extends KindTurnStatus, R extends KindTurnResul
  * exact `{prompt, options}` reaching `queryFn`, the returned result, and the
  * `status.json` left behind.
  */
-export async function runKindTurn<S extends KindTurnStatus, R extends KindTurnResult>(
-  variant: SessionKindVariant<S, R>,
-  input: KindTurnInput,
+export async function runKindTurn<
+  S extends KindTurnStatus,
+  R extends KindTurnResult,
+  I extends KindTurnInput = KindTurnInput,
+>(
+  variant: SessionKindVariant<S, R, I>,
+  input: I,
 ): Promise<R> {
   // SEC-04 runner leg: contain the session dir before the first read.
   // `kindDir` and `sessionId` each ride as their OWN segment against the
@@ -230,6 +277,33 @@ export async function runKindTurn<S extends KindTurnStatus, R extends KindTurnRe
     idMeta: { session_id: input.sessionId },
   });
 
+  const onText = makeReasoningSink(logger, {
+    initiativeId,
+    phase: variant.eventPhase,
+    skill: variant.eventSkill,
+    idMeta: { session_id: input.sessionId },
+  });
+
+  const withOperatorFeedback = async <T,>(run: (feedback: string | null) => Promise<T>): Promise<T> => {
+    const raw = guardedReadFile(input.projectRoot, [...dirSegments, FEEDBACK_FILENAME]);
+    const feedback = raw === null ? null : (raw.trim() || null);
+    const out = await run(feedback);
+    if (feedback !== null) {
+      const guarded = resolveGuardedPath(sessionDir, [FEEDBACK_FILENAME]);
+      if (guarded.ok && guarded.exists) {
+        try {
+          rmSync(guarded.realPath);
+        } catch (err) {
+          console.error(
+            `${variant.label}: failed to clear ${FEEDBACK_FILENAME} in ${sessionDir} after consuming it — the SAME operator feedback will be re-injected into the next turn's prompt:`,
+            err,
+          );
+        }
+      }
+    }
+    return out;
+  };
+
   const hooksForSkill = (skill: string): Record<string, unknown> => {
     const hooks = sdkHooksForAgent({ skill, logger, initiativeId });
     return hooks !== undefined ? { hooks } : {};
@@ -246,6 +320,8 @@ export async function runKindTurn<S extends KindTurnStatus, R extends KindTurnRe
     onToolUse: sink.onToolUse,
     onHeartbeat,
     onThinking,
+    onText,
+    withOperatorFeedback,
     hooksForSkill,
   };
 

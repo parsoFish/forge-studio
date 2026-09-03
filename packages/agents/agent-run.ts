@@ -27,8 +27,6 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { runArchitectTurn } from '@forge/sessions/architect-runner.ts';
-import { runInstructionsTurn } from '@forge/sessions/instructions-runner.ts';
-import { runDemoBuilderTurn } from '@forge/sessions/demo-builder-runner.ts';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
@@ -102,39 +100,6 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
         console.log(`  promoted ${result.promotedManifestPaths.length} manifest(s) to _queue/pending/:`);
         for (const p of result.promotedManifestPaths) console.log(`    ${p}`);
       }
-    },
-  },
-  instructions: {
-    verb: 'instructions run',
-    requiresProject: true,
-    // R3-05-F3 — the runner reads the studio/instruction-seeds/ library under
-    // forgeRoot to compose AGENTS.md from vetted blocks.
-    needsForgeRoot: true,
-    kindDir: '_instructions',
-    loadRunTurn: async () => runInstructionsTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runInstructionsTurn>>;
-      console.log(`instructions turn complete — phase=${result.phase}`);
-      if (result.questions?.length) {
-        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
-      }
-      if (result.draftPath) console.log(`  DRAFT: ${result.draftPath}`);
-      if (result.agentsPath) console.log(`  AGENTS.md: ${result.agentsPath}`);
-    },
-  },
-  'demo-builder': {
-    verb: 'demo-builder run',
-    requiresProject: true,
-    needsForgeRoot: true,
-    // NOTE the trap: the on-disk kind dir is '_demo', not '_demo-builder' —
-    // see the AgentRunnerEntry.kindDir doc above.
-    kindDir: '_demo',
-    loadRunTurn: async () => runDemoBuilderTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runDemoBuilderTurn>>;
-      console.log(`demo-builder turn complete — phase=${result.phase}`);
-      if (result.demoPath) console.log(`  DEMO: ${result.demoPath}`);
-      if (result.lockPath) console.log(`  LOCK: ${result.lockPath}`);
     },
   },
 };

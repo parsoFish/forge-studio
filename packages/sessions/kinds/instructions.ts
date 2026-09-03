@@ -1,52 +1,45 @@
 /**
- * In-UI instructions-creator runner (Stage A).
+ * The `instructions` session kind — a registered step-handler variant
+ * (ADR 043 as amended 2026-09-03, M4 ruling 60).
  *
- * Authors a managed project's **AGENTS.md** the way `claude init` does: an
- * operator-driven, file-checkpointed interview that explores the real repo,
- * asks the operator what only they can answer, drafts, and writes only after the
- * operator approves. AGENTS.md is the single source of agent instructions (the
- * Studio `instructions` field binds to it) — so this never auto-authors without
- * an explicit operator confirm-gate.
+ * Authors a project's AGENTS.md: an optional operator brief, then a bounded
+ * interview, then a structured draft the operator approves, then a
+ * deterministic commit of that draft to the project repo's root.
  *
- * Mirrors architect-runner.ts (ADR 020): a bounded **turn** reads the session
- * dir, advances ONE step via the `status.json` cursor, and exits. Operator
- * think-time happens between turns; the bridge re-spawns on each action. The LLM
- * sits behind the shared `runStructuredTurn` seam (interactive-session.ts) so
- * every turn is unit-testable without a live LLM.
+ * This file holds ONLY that identity — the phase set, the two structured
+ * schemas, seed matching with its provenance footer, the mode-conditional
+ * turn-id, the interview CEILING and the interview -> draft SAME-TURN
+ * fall-through. Those last four are precisely the behaviours ADR 043's own
+ * 2026-09-03 amendment records as having NO phase-table form, which is why
+ * this kind is a variant rather than data. Every piece of turn plumbing it
+ * used to carry (containment, status read/write, logger, tool-event sink,
+ * heartbeat, thinking and reasoning sinks, hook wiring, start/end events,
+ * feedback consumption) now lives once in `kind-turn.ts`.
  *
- * State machine (`status.json.phase`):
- *   interviewing ──(needs input)──▶ awaiting-answers ──(bridge: answer)──▶ interviewing
- *        │ (ready to draft)
- *        ▼
- *     drafting ──▶ awaiting-verdict ──(bridge: approve)──▶ finalizing ──▶ committed
- *                        │ (bridge: revise) ──▶ drafting
- *                        └ (bridge: reject)  ──▶ rejected
+ * Ported from `packages/sessions/instructions-runner.ts`. Byte-identical spawn
+ * behaviour is pinned by `interactive-runners-golden.test.ts` against
+ * `orchestrator/test-fixtures/spawn-capture/interactive-instructions.json`.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 
 import {
   runStructuredTurn,
-  guardedReadSessionStatus,
-  guardedWriteSessionStatus,
-  statusWriteRefusalReason,
   writeQuestions,
   readAnswerRounds,
-  makeHeartbeatWriter,
-  makeReasoningSink,
-  makeThinkingSink,
-  type QueryFn,
   type InterviewQuestion,
   type InterviewAnswer,
-} from './interactive-session.ts';
-import { createLogger, type EventLogger } from '@forge/kernel';
-import { sdkHooksForAgent, type SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+} from '../interactive-session.ts';
+import {
+  runKindTurn,
+  type KindTurnInput,
+  type KindTurnPlumbing,
+  type SessionKindVariant,
+} from './kind-turn.ts';
+import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
@@ -61,7 +54,7 @@ import {
   stripComposedSeedsFooter,
 } from '@forge/library/instruction-seed-match.ts';
 
-export { type InterviewQuestion } from './interactive-session.ts';
+export { type InterviewQuestion } from '../interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/instructions-creator/SKILL.md (single source)
@@ -126,26 +119,9 @@ export const DRAFT_FILENAME = 'AGENTS.draft.md';
 // Runner I/O
 // ---------------------------------------------------------------------------
 
-export type RunInstructionsTurnInput = {
-  sessionId: string;
-  /** The managed-project dir under forge `projects/` (holds the session dir). */
-  projectRoot: string;
-  /** Inject a fake `query` for tests. Defaults to the SDK. */
-  queryFn?: QueryFn;
-  /** `_logs/` root; defaults to `<cwd>/_logs`. */
-  logsRoot?: string;
-  /** Logger override (tests). */
-  logger?: EventLogger;
-  /** Path to the skill prompt (ADR 003). Defaults to the repo skill. */
-  skillPromptPath?: string;
+export type RunInstructionsTurnInput = KindTurnInput & {
   /** Safety cap on interview rounds before forcing a draft. Default 4. */
   maxInterviewRounds?: number;
-  /**
-   * R3-05-F3 — forge root holding the `studio/instruction-seeds/` library
-   * (threaded by `cmdAgentRun` via `needsForgeRoot`, mirroring demo-builder).
-   * Defaults to `cwd` (the forge process root); tests inject a fixture root.
-   */
-  forgeRoot?: string;
 };
 
 export type RunInstructionsTurnResult = {
@@ -168,140 +144,97 @@ export function instructionsSessionDir(projectRoot: string, sessionId: string): 
 }
 
 // ---------------------------------------------------------------------------
-// Turn entry point
+// The variant
 // ---------------------------------------------------------------------------
+
+/**
+ * R3-05-F3: match the library's instruction seeds to this project's detected
+ * shape/language (empty ⇒ from-scratch fallback). Best-effort — a broken or
+ * absent library must never block authoring AGENTS.md. Computed ONCE per turn
+ * even when the interview falls through to the draft in the same turn, so the
+ * fall-through costs no second scan of the seed library.
+ */
+function matchSeedsFor(status: InstructionsStatus, forgeRoot: string): InstructionSeed[] {
+  try {
+    return matchInstructionSeeds(listInstructionSeeds(forgeRoot), detectProjectTags(status.project_repo_path));
+  } catch {
+    return [];
+  }
+}
+
+export const instructionsKind: SessionKindVariant<
+  InstructionsStatus,
+  RunInstructionsTurnResult,
+  RunInstructionsTurnInput
+> = {
+  id: 'instructions',
+  kindDir: INSTRUCTIONS_KIND_DIR,
+  label: 'instructions runner',
+  eventLabel: 'instructions turn',
+  eventPhase: 'instructions',
+  eventSkill: 'instructions-runner',
+  initiativeId: (sessionId) => `instructions-${sessionId}`,
+
+  steps: {
+    // The interview, and its two exits. This is the fall-through ADR 043's
+    // amendment names as having no phase-table form: one turn either asks
+    // another round of questions OR runs the draft step itself, and which it
+    // does depends on the agent's own answer plus the round ceiling. A phase
+    // table can express "interviewing -> drafting"; it cannot express "…in the
+    // same turn, when the agent says it has enough".
+    interviewing: async ({ input, status, plumbing, writeStatus }) => {
+      const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
+      const seeds = matchSeedsFor(status, plumbing.forgeRoot);
+      // SEC-04 leaf: answers.json READ routed through the guard (leaf included) — a
+      // symlinked answers.json inside the real, contained session dir collapses to
+      // [] rather than leaking out-of-root content into the interview prompt.
+      const interview = readAnswerRounds(input.projectRoot, plumbing.dirSegments);
+      const decision = await runInterviewStep({ input, status, interview, plumbing, seeds });
+
+      if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
+        // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
+        // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
+        const questionsPath = writeQuestions(input.projectRoot, plumbing.dirSegments, decision.questions);
+        if (questionsPath === null) {
+          throw new Error(
+            'instructions runner: questions.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+          );
+        }
+        writeStatus({ ...status, phase: 'awaiting-answers' });
+        plumbing.logger.emit({
+          initiative_id: plumbing.initiativeId, phase: 'instructions', skill: 'instructions-runner',
+          event_type: 'log', input_refs: [], output_refs: [questionsPath],
+          message: `interview round ${status.round} — ${decision.questions.length} question(s) for the operator`,
+          metadata: { session_id: input.sessionId, round: status.round },
+        });
+        return { phase: 'awaiting-answers', wrote: [questionsPath], questions: decision.questions };
+      }
+
+      writeStatus({ ...status, phase: 'drafting' });
+      return await runDraftStep({ input, status, plumbing, writeStatus, seeds });
+    },
+
+    drafting: async ({ input, status, plumbing, writeStatus }) =>
+      await runDraftStep({ input, status, plumbing, writeStatus, seeds: matchSeedsFor(status, plumbing.forgeRoot) }),
+
+    finalizing: async ({ input, status, plumbing, writeStatus }) =>
+      runFinalizeStep({ input, status, plumbing, writeStatus }),
+
+    rejected: async ({ status, writeStatus }) => {
+      writeStatus({ ...status, phase: 'rejected' });
+      return { phase: 'rejected', wrote: [] };
+    },
+  },
+
+  // Waiting/terminal phases — no actionable work this turn.
+  otherwise: (status) => ({ phase: status.phase, wrote: [] }),
+  startMetadata: (status) => ({ round: status.round }),
+};
 
 export async function runInstructionsTurn(
   input: RunInstructionsTurnInput,
 ): Promise<RunInstructionsTurnResult> {
-  // SEC-04 runner leg: the session dir must be CONTAINED before the first read.
-  // `sessionId` (and the kind-dir) each arrive as their own guarded path segment
-  // against the projectRoot base — never folded into a bare `join` that
-  // `readSessionStatus` would then follow out of the project subtree. A traversal
-  // sessionId or a symlinked `_instructions` resolves to a containment reject,
-  // and the runner REFUSES rather than disclose out-of-root content.
-  const dirSegments = [INSTRUCTIONS_KIND_DIR, input.sessionId];
-  const guarded = resolveGuardedPath(input.projectRoot, dirSegments);
-  if (!guarded.ok) {
-    throw new Error(
-      `instructions runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
-    );
-  }
-  const sessionDir = guarded.realPath;
-  // SEC-04 leaf: route the status.json READ through the guarded sibling so a
-  // symlinked/hardlinked status.json leaf inside the (real, contained) session
-  // dir is refused too — not just a symlinked/traversing dir. `projectRoot` is
-  // the trusted root; the kind-dir + `sessionId` ride as their own guarded
-  // segments (see the guard's root-trust contract). A rejected leaf collapses
-  // to null and the runner refuses rather than read/act on out-of-root content.
-  const status = guardedReadSessionStatus<InstructionsStatus>(input.projectRoot, dirSegments);
-  if (!status) {
-    throw new Error(
-      `instructions runner: no status.json at ${sessionDir}. Has the session been started?`,
-    );
-  }
-
-  const logsRoot = input.logsRoot ?? resolve('_logs');
-  const cycleId = `_instructions-${input.sessionId}`;
-  const initiativeId = `instructions-${input.sessionId}`;
-  const logger = input.logger ?? createLogger(cycleId, logsRoot);
-  const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
-  const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
-
-  // R3-05-F3: match the library's instruction seeds to this project's detected
-  // shape/language (empty ⇒ from-scratch fallback). Best-effort — a broken/absent
-  // library must never block authoring AGENTS.md. Only computed for the phases
-  // that consume it (interview + draft); terminal/waiting turns skip the fs reads.
-  let matchedSeeds: InstructionSeed[] = [];
-  if (status.phase === 'interviewing' || status.phase === 'drafting') {
-    try {
-      const seedsRoot = input.forgeRoot ?? resolve('.');
-      matchedSeeds = matchInstructionSeeds(
-        listInstructionSeeds(seedsRoot),
-        detectProjectTags(status.project_repo_path),
-      );
-    } catch {
-      matchedSeeds = [];
-    }
-  }
-
-  const startEv = logger.emit({
-    initiative_id: initiativeId,
-    phase: 'instructions',
-    skill: 'instructions-runner',
-    event_type: 'start',
-    input_refs: [join(sessionDir, 'status.json')],
-    output_refs: [],
-    message: `instructions turn (phase=${status.phase}, round=${status.round})`,
-    metadata: { session_id: input.sessionId, phase: status.phase, round: status.round },
-  });
-
-  // W6-B1: interactive sessions are operator-attended, low-volume turns —
-  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
-  // other interactive runner (the unattended dev-loop/PM/reflector phases
-  // are unchanged and keep the sampler's defaults).
-  const sink = makeToolEventSink(
-    logger,
-    {
-      initiativeId,
-      parentEventId: startEv.event_id,
-      phase: 'instructions',
-      skill: 'instructions-runner',
-    },
-    { readOnlySampleRate: 1, cap: 200 },
-  );
-  const onToolUse = sink.onToolUse;
-  const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const sinkCtx = { initiativeId, phase: 'instructions' as const, skill: 'instructions-runner', idMeta: { session_id: input.sessionId } };
-  const onText = makeReasoningSink(logger, sinkCtx);
-  const onThinking = makeThinkingSink(logger, sinkCtx);
-
-  let result: RunInstructionsTurnResult;
-  let phase = status.phase;
-
-  if (phase === 'interviewing') {
-    // SEC-04 leaf: answers.json READ routed through the guard (leaf included) — a
-    // symlinked answers.json inside the real, contained session dir collapses to
-    // [] rather than leaking out-of-root content into the interview prompt.
-    const interview = readAnswerRounds(input.projectRoot, dirSegments);
-    const decision = await runInterviewStep({ status, interview, queryFn, logger, initiativeId, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
-    if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
-      // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
-      // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
-      const questionsPath = writeQuestions(input.projectRoot, dirSegments, decision.questions);
-      if (questionsPath === null) {
-        throw new Error(
-          'instructions runner: questions.json write failed containment (symlinked/escaping leaf) — refusing to write.',
-        );
-      }
-      writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
-      logger.emit({
-        initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
-        event_type: 'log', input_refs: [], output_refs: [questionsPath],
-        message: `interview round ${status.round} — ${decision.questions.length} question(s) for the operator`,
-        metadata: { session_id: input.sessionId, round: status.round },
-      });
-      sink.flushIteration(1);
-      return { phase: 'awaiting-answers', wrote: [questionsPath], questions: decision.questions };
-    }
-    phase = 'drafting';
-    writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'drafting' });
-  }
-
-  if (phase === 'drafting') {
-    result = await runDraftStep({ input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
-  } else if (phase === 'finalizing') {
-    result = runFinalizeStep({ input, sessionDir, status, logger, initiativeId });
-  } else if (phase === 'rejected') {
-    writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'rejected' });
-    result = { phase: 'rejected', wrote: [] };
-  } else {
-    // Waiting/terminal phase — no actionable work this turn.
-    result = { phase, wrote: [] };
-  }
-
-  sink.flushIteration(1);
-  return result;
+  return await runKindTurn(instructionsKind, input);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,28 +270,16 @@ const INTERVIEW_SCHEMA = {
   required: ['done'],
 };
 
-/** W8-B6 — instructions-creator's own bound library hooks, spread into the
- *  turn options. One helper so both steps derive it identically. */
-function instructionsHooks(logger: EventLogger, initiativeId: string): { hooks?: SdkHooksOption } {
-  const hooks = sdkHooksForAgent({ skill: instructionsAgentSpec.skill, logger, initiativeId });
-  return hooks !== undefined ? { hooks } : {};
-}
-
 async function runInterviewStep(args: {
+  input: RunInstructionsTurnInput;
   status: InstructionsStatus;
   interview: InterviewAnswer[];
-  queryFn: QueryFn;
-  /** W8-B6 — required, so this step cannot spawn hook-blind. */
-  logger: EventLogger;
-  initiativeId: string;
-  skillPromptPath?: string;
-  matchedSeeds?: readonly InstructionSeed[];
-  onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
-  onHeartbeat?: () => void;
-  onText?: (text: string) => void;
-  onThinking?: (text: string) => void;
+  plumbing: KindTurnPlumbing;
+  seeds: readonly InstructionSeed[];
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { input, status, interview, plumbing, seeds } = args;
+  const skillPromptPath = input.skillPromptPath;
+  const matchedSeeds = seeds;
   // R4-23 round 2 (R2-AT-3): the mode branches are two SEPARATE, self-contained
   // turn sections — the runner selects exactly one, mirroring the pre-refactor
   // TypeScript ternary this replaces, instead of showing the agent both
@@ -387,11 +308,14 @@ async function runInterviewStep(args: {
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
-    queryFn, prompt, schema: INTERVIEW_SCHEMA,
+    queryFn: plumbing.queryFn, prompt, schema: INTERVIEW_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
-    ...instructionsHooks(args.logger, args.initiativeId),
-    onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
+    // W8-B6 — hook dispatch comes from the driver already bound to this turn's
+    // logger and initiative id, so no kind can spawn hook-blind.
+    ...plumbing.hooksForSkill(instructionsAgentSpec.skill),
+    onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
+    onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
   return { done: output?.done === true, questions };
@@ -416,19 +340,18 @@ const DRAFT_SCHEMA = {
 async function runDraftStep(args: {
   input: RunInstructionsTurnInput;
   status: InstructionsStatus;
-  queryFn: QueryFn;
-  logger: EventLogger;
-  initiativeId: string;
-  matchedSeeds?: readonly InstructionSeed[];
-  onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
-  onHeartbeat?: () => void;
-  onText?: (text: string) => void;
-  onThinking?: (text: string) => void;
+  plumbing: KindTurnPlumbing;
+  writeStatus: (next: InstructionsStatus) => void;
+  seeds: readonly InstructionSeed[];
 }): Promise<RunInstructionsTurnResult> {
-  const { input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { input, status, plumbing, writeStatus, seeds: matchedSeeds } = args;
+  const { logger, initiativeId } = plumbing;
   // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
-  const interview = readAnswerRounds(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
-  const feedback = readFeedback(input.projectRoot, input.sessionId);
+  const interview = readAnswerRounds(input.projectRoot, plumbing.dirSegments);
+  // CONSUME-ONCE: the driver reads feedback.md, runs this step, and deletes the
+  // note only once the step RESOLVES. Before the port this runner read it and
+  // never cleared it, so one revise kept steering every later turn.
+  return await plumbing.withOperatorFeedback(async (feedback) => {
   // R4-23 round 2 (R2-AT-3): same mode-branch selection as the interview step.
   const turnId = status.mode === 'edit' ? 'draft-edit' : 'draft';
   const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId, skillPromptPath: input.skillPromptPath });
@@ -455,11 +378,12 @@ async function runDraftStep(args: {
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
-    queryFn, prompt, schema: DRAFT_SCHEMA,
+    queryFn: plumbing.queryFn, prompt, schema: DRAFT_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
-    ...instructionsHooks(args.logger, args.initiativeId),
-    onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
+    ...plumbing.hooksForSkill(instructionsAgentSpec.skill),
+    onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
+    onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });
 
   // Strip any prior composed-seeds footer the LLM echoed back (edit-mode
@@ -491,7 +415,7 @@ async function runDraftStep(args: {
       'instructions runner: AGENTS.draft.md write failed containment (symlinked/escaping leaf) — refusing to write.',
     );
   }
-  writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-verdict' });
+  writeStatus({ ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
@@ -501,6 +425,7 @@ async function runDraftStep(args: {
   });
 
   return { phase: 'awaiting-verdict', wrote: [draftPath], draftPath };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -509,12 +434,12 @@ async function runDraftStep(args: {
 
 function runFinalizeStep(args: {
   input: RunInstructionsTurnInput;
-  sessionDir: string;
   status: InstructionsStatus;
-  logger: EventLogger;
-  initiativeId: string;
+  plumbing: KindTurnPlumbing;
+  writeStatus: (next: InstructionsStatus) => void;
 }): RunInstructionsTurnResult {
-  const { sessionDir, status, logger, initiativeId, input } = args;
+  const { status, plumbing, writeStatus, input } = args;
+  const { logger, initiativeId, sessionDir } = plumbing;
   const draftPath = join(sessionDir, DRAFT_FILENAME);
   // SEC-04 leaf: route the draft READ through the guard (leaf included) — a
   // symlinked AGENTS.draft.md pointing out of root collapses to null (no
@@ -549,11 +474,7 @@ function runFinalizeStep(args: {
   // pointer names the PROJECT (the shell route derives whether the file is
   // still there — `finalizedObjectExists`, packages/sessions/bridge-studio-sessions.ts —
   // rather than trusting the pointer's mere presence).
-  writeInstructionsStatus(input.projectRoot, input.sessionId, {
-    ...status,
-    phase: 'committed',
-    finalized: { kind: 'agents-md', id: status.project },
-  });
+  writeStatus({ ...status, phase: 'committed', finalized: { kind: 'agents-md', id: status.project } });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
@@ -587,44 +508,7 @@ function editContextLines(status: InstructionsStatus): string[] {
   ];
 }
 
-/**
- * SEC-04 leaf: guarded status.json write. Routes the WHOLE
- * `<projectRoot>/<kind>/<sid>/status.json` path (leaf included) through the
- * containment guard and THROWS (fail closed — the runner contract, never a
- * silent skip) if the leaf escapes.
- */
-function writeInstructionsStatus(
-  projectRoot: string,
-  sessionId: string,
-  status: InstructionsStatus,
-): void {
-  const p = guardedWriteSessionStatus(projectRoot, [INSTRUCTIONS_KIND_DIR, sessionId], status);
-  if (p === null) {
-    // W7-FIX-A2 (W7A2-01): the seam ALSO refuses a write that would move an
-    // on-disk `cancelled` phase — a turn that finished after the operator
-    // cancelled. Name that honestly (the advance is discarded by design;
-    // lifecycle reads terminal, never crashed) instead of "containment".
-    if (statusWriteRefusalReason(projectRoot, [INSTRUCTIONS_KIND_DIR, sessionId], status.phase) === 'cancelled') {
-      throw new Error(
-        `instructions runner: the session was cancelled while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
-      );
-    }
-    throw new Error(
-      'instructions runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
-    );
-  }
-}
-
-/** Read `feedback.md` (operator revision notes) — trimmed content or null.
- *  SEC-04 leaf: routed through the guard (leaf included), so a symlinked
- *  feedback.md pointing out of root collapses to null. */
-function readFeedback(projectRoot: string, sessionId: string): string | null {
-  const fb = guardedReadFile(projectRoot, [INSTRUCTIONS_KIND_DIR, sessionId, 'feedback.md']);
-  if (fb === null) return null;
-  const trimmed = fb.trim();
-  return trimmed || null;
-}
-
-// W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates
-// were removed — this file now consumes the ONE shared pair exported from
-// interactive-session.ts (imported above).
+// W6-B1 review round 2 removed this file's local makeReasoningSink/
+// makeThinkingSink duplicates in favour of the shared pair. The M4 ruling-60
+// port took the next step: the sinks are BUILT by kind-turn.ts and arrive on
+// `plumbing`, so this file neither declares nor constructs them.

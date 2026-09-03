@@ -19,7 +19,7 @@ import {
   DEMO_SKILL_REL_PATH,
   DEMO_LOCK_REL_PATH,
   type DemoBuilderStatus,
-} from './demo-builder-runner.ts';
+} from './kinds/demo-builder.ts';
 import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 
