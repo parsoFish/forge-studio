@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { fixedTierForSessionKind } from './session-model-tier.ts';
 import { loadSessionKinds } from './studio/session-kinds.ts';
-import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 
 const FORGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const KINDS = loadSessionKinds(FORGE_ROOT);

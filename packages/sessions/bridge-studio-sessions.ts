@@ -201,7 +201,7 @@ export function invalidSessionIdReason(id: string): string | null {
 // PREFIX's own non-project carve-out immediately below, but unparameterized:
 // there was exactly ONE community registry, forge-wide, not N per-id KBs,
 // so a single literal constant was the honest shape rather than a prefix +
-// variable slug). `discoverProjects` (orchestrator/studio/registry.ts)
+// variable slug). `discoverProjects` (@forge/kernel/project-layout.ts)
 // already filters every dot-prefixed directory, so this anchor never
 // surfaced as a phantom project. The kickoff route and verdict dispatch that
 // used to import this are gone (W8-B5b), but the constant stays exported:
@@ -214,7 +214,7 @@ export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
 // carve-out comment (below) and W6-CR-3's comment (above) both already
-// state: `discoverProjects` (orchestrator/studio/registry.ts) filters EVERY
+// state: `discoverProjects` (@forge/kernel/project-layout.ts) filters EVERY
 // dot-prefixed directory out of the real project list, categorically — not
 // just `.kb-<id>` (KB_SEEDING_ANCHOR_PREFIX) or `.community-registry`
 // (COMMUNITY_REFRESH_PROJECT_ANCHOR, above). A project id starting with "."

@@ -42,7 +42,7 @@ import { runInteractiveTurn } from './interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 
 /** Two rows, both real-parsed through `loadSessionKinds`. The agents are real;
