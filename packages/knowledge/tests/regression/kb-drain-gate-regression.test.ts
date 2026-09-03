@@ -45,7 +45,7 @@ import { join } from 'node:path';
 
 import { runKbDrain } from '../../bridge-studio-kb-drain.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
-import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/brain-fix-runner.ts';
+import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/kinds/brain-fix.ts';
 import type { Finding } from '../../brain-lint.ts';
 
 // ---------------------------------------------------------------------------

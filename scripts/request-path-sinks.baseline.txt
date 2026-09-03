@@ -524,9 +524,6 @@ packages/projects/reset.ts readFileSync 1
 packages/projects/reset.ts statSync 1
 packages/projects/reset.ts writeFileSync 1
 packages/sessions/bash-fence.ts realpathSync 1
-packages/sessions/brain-fix-runner.ts mkdirSync 1
-packages/sessions/brain-fix-runner.ts readFileSync 1
-packages/sessions/brain-fix-runner.ts writeFileSync 1
 packages/sessions/bridge-studio-architect.ts readFileSync 1
 packages/sessions/bridge-studio-demo.ts existsSync 1
 packages/sessions/bridge-studio-demo.ts readFileSync 1
@@ -573,6 +570,8 @@ packages/sessions/kinds/demo-builder.ts mkdirSync 5
 packages/sessions/kinds/demo-builder.ts readFileSync 6
 packages/sessions/kinds/demo-builder.ts realpathSync 2
 packages/sessions/kinds/demo-builder.ts writeFileSync 8
+packages/sessions/kinds/fix-turn.ts mkdirSync 1
+packages/sessions/kinds/fix-turn.ts readFileSync 1
 packages/sessions/kinds/instructions.ts existsSync 1
 packages/sessions/kinds/instructions.ts mkdirSync 1
 packages/sessions/kinds/instructions.ts writeFileSync 1

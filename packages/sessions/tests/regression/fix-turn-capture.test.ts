@@ -88,8 +88,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runBrainFixTurn } from '../../brain-fix-runner.ts';
-import { runPreflightFixTurn } from '../../preflight-fix-runner.ts';
+import { runBrainFixTurn } from '../../kinds/brain-fix.ts';
+import { runPreflightFixTurn } from '../../kinds/preflight-fix.ts';
 
 /**
  * `test-fixtures/` is the repo's own marker for non-production test data:

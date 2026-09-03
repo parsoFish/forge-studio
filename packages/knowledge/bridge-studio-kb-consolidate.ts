@@ -22,7 +22,7 @@
 import { mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import matter from 'gray-matter';
-import { runBrainFixTurn } from '@forge/sessions/brain-fix-runner.ts';
+import { runBrainFixTurn } from '@forge/sessions/kinds/brain-fix.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { type Finding } from './brain-lint.ts';
 import { isDryBridge } from '@forge/kernel';
