@@ -98,7 +98,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | disposition | loc |
 |---|---|---|---|
-| packages/agents/agent-run.ts | agents | verbatim | 933 |
+| packages/agents/agent-run.ts | agents | verbatim | 926 |
 | packages/factory/architect-plan.ts | factory | verbatim | 862 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 255 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
