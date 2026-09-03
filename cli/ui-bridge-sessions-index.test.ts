@@ -57,6 +57,7 @@ type IndexRow = {
   project: string;
   kind: string;
   phase: string;
+  terminal: boolean;
   needsYou: boolean;
   state: string;
   error: string | null;
