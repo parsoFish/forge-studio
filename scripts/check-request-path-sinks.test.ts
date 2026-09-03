@@ -377,6 +377,23 @@ test('the real repository baseline passes clean (no new or grown request-path si
   assert.equal(code, 0);
 });
 
+test('the real repository census is LIVE — the walk reached modules AND found sinks', () => {
+  // Ruling 103. LIVENESS, not a floor on the debt this ratchet removes (bead
+  // 5.49's distinction): sink rows are a census of fs calls on the request
+  // path, and the product cannot serve a request without them, so unlike a
+  // violation baseline this can never legitimately reach zero.
+  //
+  // The gap it closes: `runCheck` fails on GROWTH only. If the WALK breaks
+  // while the seed survives — a resolver change, an import form the walker
+  // stops following, an existsSync filter that stops matching after a move —
+  // rows go to 0, the runtime reports PASS, and the test above still sees exit
+  // code 0. The seed-level assertion two tests up cannot see that, because the
+  // seed is exactly what is still fine.
+  const { reachable, rows } = analyze(REPO_ROOT);
+  assert.ok(reachable.length > 0, 'the walk reached no modules — this lint is scanning nothing');
+  assert.ok(rows.length > 0, 'the walk found no sinks — a broken walker reads exactly like a clean tree');
+});
+
 // =============================================================================
 // Group 3 — SEC-04 caller-count dimension (the systemic hole this ratchet has)
 //
