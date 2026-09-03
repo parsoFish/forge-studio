@@ -27,7 +27,7 @@
  * never to a thrown read route.
  */
 
-import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath } from '@forge/kernel';

@@ -107,7 +107,7 @@ import { resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
