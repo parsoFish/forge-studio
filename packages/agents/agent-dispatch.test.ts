@@ -32,8 +32,9 @@ import { listAgentDefinitions, loadAgentDefinition } from '../../orchestrator/st
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 const SKILLS = join(ROOT, 'skills');
 
 function getDef(slug: string): AgentDefinition {

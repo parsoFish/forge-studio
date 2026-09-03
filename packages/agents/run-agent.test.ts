@@ -19,8 +19,9 @@ import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 
 /** Build a fake SDK query() that yields a single `result` message reporting
  * the given cost — mirrors `fakeQuery` in loops/ralph/claude-agent.test.ts,

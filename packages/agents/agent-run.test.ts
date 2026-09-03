@@ -103,8 +103,9 @@ import { join } from 'node:path';
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import { writeSessionStatus, readSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 
 // ---------------------------------------------------------------------------
 // cmdAgentRun driver — mirrors cli/agent-run-dispatch.test.ts's own `run()`

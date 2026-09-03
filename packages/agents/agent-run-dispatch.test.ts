@@ -12,8 +12,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { cmdAgentDispatch } from './agent-run.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 
 // `forgeRoot` defaults to the real repo root (`ROOT`) — every pre-existing
 // call site in this file keeps passing it implicitly, byte-identical to

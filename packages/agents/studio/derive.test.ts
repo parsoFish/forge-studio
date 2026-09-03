@@ -118,7 +118,7 @@ test('deriveAgentSpec: strategy:range derives spec at cheapest tier (haiku < son
       .replace('model: claude-sonnet-4-6', 'range:\n  - claude-haiku-4-5-20251001\n  - claude-sonnet-4-6');
     const skillPath = writeTmpSkill(dir, fm);
     // Must NOT throw; spec.tier = cheapest in range = haiku
-    const spec = deriveAgentSpec(skillPath, process.cwd());
+    const spec = deriveAgentSpec(skillPath, FORGE_ROOT);
     assert.equal(spec.tier, 'haiku');
     assert.equal(spec.phase, 'test');
   } finally {
@@ -133,7 +133,7 @@ test('deriveAgentSpec: strategy:range with opus+haiku derives at haiku (cheapest
       .replace('strategy: fixed', 'strategy: range')
       .replace('model: claude-sonnet-4-6', 'range:\n  - claude-opus-4-8\n  - claude-haiku-4-5-20251001');
     const skillPath = writeTmpSkill(dir, fm);
-    const spec = deriveAgentSpec(skillPath, process.cwd());
+    const spec = deriveAgentSpec(skillPath, FORGE_ROOT);
     assert.equal(spec.tier, 'haiku');
   } finally {
     rmSync(dir, { recursive: true });
@@ -151,7 +151,7 @@ test('deriveAgentSpec: strategy:range populates allowedTiers cheapest-first', ()
       .replace('strategy: fixed', 'strategy: range')
       .replace('model: claude-sonnet-4-6', 'range:\n  - claude-opus-4-8\n  - claude-sonnet-4-6');
     const skillPath = writeTmpSkill(dir, fm);
-    const spec = deriveAgentSpec(skillPath, process.cwd());
+    const spec = deriveAgentSpec(skillPath, FORGE_ROOT);
     assert.deepEqual(spec.allowedTiers, ['sonnet', 'opus']);
   } finally {
     rmSync(dir, { recursive: true });
@@ -162,7 +162,7 @@ test('deriveAgentSpec: strategy:fixed omits allowedTiers entirely (not just unde
   const dir = mkdtempSync(join(tmpdir(), 'derive-fixed-'));
   try {
     const skillPath = writeTmpSkill(dir, VALID_BASE);
-    const spec = deriveAgentSpec(skillPath, process.cwd());
+    const spec = deriveAgentSpec(skillPath, FORGE_ROOT);
     assert.ok(!('allowedTiers' in spec), 'allowedTiers key must be entirely absent for strategy:fixed');
   } finally {
     rmSync(dir, { recursive: true });
@@ -177,7 +177,7 @@ test('deriveAgentSpec throws when strategy:range has no range field', () => {
     // model key is kept — should still fail because range is missing
     const skillPath = writeTmpSkill(dir, fm);
     assert.throws(
-      () => deriveAgentSpec(skillPath, process.cwd()),
+      () => deriveAgentSpec(skillPath, FORGE_ROOT),
       /strategy:range requires a non-empty range field/,
     );
   } finally {
