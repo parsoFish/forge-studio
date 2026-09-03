@@ -347,13 +347,7 @@ export const EXPLICIT_MODULES = [
   // boundary), so this list is the only mechanism that lints them. Session-
   // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
   // sinks in every one.
-  'packages/agents/agent-run.ts',
-  // M4-agents s3: `agent-run.ts` split three ways; the dispatch command and the
-  // session-project scan took its sinks with them, so both heirs join the scan.
-  // The original stays listed even though its sinks left: over-scanning a module
-  // that has none is free, while dropping one that still has them is a blind spot.
-  'packages/agents/agent-dispatch-cmd.ts',
-  'packages/agents/find-session-project.ts',
+  'packages/agents/agent-run.ts', 'packages/agents/agent-dispatch-cmd.ts', 'packages/agents/find-session-project.ts',
   'packages/sessions/interactive-session.ts',
   'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts',
@@ -1290,8 +1284,6 @@ export function applyAllowlist(findings, allowlist = ALLOWLIST) {
  *  entry points where a projects-root fold can slip past that scan because
  *  the sink call lives in a different function than the fold. */
 export const PROJECTS_ROOT_FOLD_MODULES = [
-  'packages/agents/agent-run.ts',
-  'packages/agents/agent-dispatch-cmd.ts',
   'packages/agents/find-session-project.ts',
   'apps/forge/cli.ts',
   'packages/agents/agent-dispatch.ts',
