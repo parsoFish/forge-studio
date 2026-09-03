@@ -49,6 +49,13 @@ after(async () => {
 const routes = knowledgeRoutes({
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
+  // M4 ruling 86: the real fix turn is injected by the assembly, so route
+  // tests declare one. It THROWS: no assertion in this file expects a fix turn
+  // to be dispatched, and a stub that returned a plausible result would let a
+  // future change dispatch one here unnoticed.
+  runFixTurn: async () => {
+    throw new Error('unexpected brain-fix dispatch in this test');
+  },
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;

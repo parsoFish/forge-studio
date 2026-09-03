@@ -106,6 +106,10 @@ before(async () => {
     forgeRoot,
     logsRoot: join(forgeRoot, '_logs'),
     spawnAgentTurn: () => { spawnCalls += 1; return spawnOutcome; },
+    // ruling 86: the port is required on the context. This test drives no
+    // consolidate path, so a THROWING stub is the honest value — one that
+    // returned a plausible result would hide a future dispatch from here.
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     broadcastKindChanged: () => {},
   };
   server = createServer((req, res) => {

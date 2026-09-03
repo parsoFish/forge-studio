@@ -207,6 +207,12 @@ export type AffordanceRouteContext = StudioContext & {
    *  SAME `spawnAgentTurn` every bespoke per-kind route already calls, not a
    *  reimplementation. */
   spawnAgentTurn: (forgeRoot: string, agentId: LegacySpawnableAgentId, project: string, sessionId: string) => SpawnTurnOutcome;
+  /** M4 ruling 86 — the real brain-fix turn, injected like `spawnAgentTurn`:
+   *  knowledge declares the port (rank 2), sessions implements it (rank 4),
+   *  the binding is at the assembly. DERIVED from `approveKbCleanup`'s own
+   *  parameter, not imported: naming the port type would mint a fresh
+   *  `cli/ -> packages/knowledge` row for a type this file already reaches. */
+  runFixTurn: NonNullable<Parameters<typeof approveKbCleanup>[3]>['runFixTurn'];
   /** W7-C2 T1 review (A12) — the ONE per-kind live-refresh seam, the SAME
    *  mapping `handleSessionCancelRoute` is already injected with
    *  (cli/ui-bridge.ts). Replaces the two hand-kept
@@ -838,7 +844,7 @@ async function handleKbCleanupVerdict(
   // adversarial-review fix — this used to be duplicated, non-atomic
   // choreography here; W6-B9 deleted the last other caller, the bespoke
   // `/cleanup/apply` route).
-  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs);
+  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, { runFixTurn: ctx.runFixTurn });
   if (!outcome.ok) {
     sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
     return;

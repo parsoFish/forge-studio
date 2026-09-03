@@ -311,6 +311,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/manifest-types.ts | contracts | rewritten | 221 |
 | packages/sessions/tests/architect-ports-stub.ts | sessions | rewritten | 44 |
 | apps/forge/session-kind-deps.ts | apps/forge | rewritten | 31 |
+| apps/forge/brain-fix-turn.ts | apps/forge | rewritten | 85 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |

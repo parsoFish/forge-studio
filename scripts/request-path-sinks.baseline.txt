@@ -1,3 +1,5 @@
+apps/forge/brain-fix-turn.ts existsSync 1
+apps/forge/brain-fix-turn.ts readFileSync 1
 apps/forge/forge-watch.ts execSync 4
 apps/forge/forge-watch.ts existsSync 1
 apps/forge/forge-watch.ts readdirSync 1
@@ -343,8 +345,6 @@ packages/knowledge/brain-paths.ts realpathSync 1
 packages/knowledge/bridge-studio-kb-consolidate.ts appendFileSync 2
 packages/knowledge/bridge-studio-kb-consolidate.ts mkdirSync 2
 packages/knowledge/bridge-studio-kb-consolidate.ts readFileSync 1
-packages/knowledge/bridge-studio-kb-drain.ts existsSync 1
-packages/knowledge/bridge-studio-kb-drain.ts readFileSync 1
 packages/knowledge/bridge-studio-kb-routes-lifecycle.ts existsSync 2
 packages/knowledge/bridge-studio-kb-routes-lifecycle.ts mkdirSync 3
 packages/knowledge/bridge-studio-kb-routes-lifecycle.ts readdirSync 2
