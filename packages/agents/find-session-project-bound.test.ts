@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { findSessionProject } from './agent-run.ts';
+import { findSessionProject } from './find-session-project.ts';
 
 /** chdir for the duration of `fn` (findSessionProject reads a cwd-relative
  *  `resolve('projects')`), always restoring. */

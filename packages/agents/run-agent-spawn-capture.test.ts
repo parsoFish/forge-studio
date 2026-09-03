@@ -64,9 +64,18 @@ import { listAgentDefinitions } from './studio/agent-registry.ts';
 import { skillsDir } from './skill-path.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { FORGE_ROOT as KERNEL_FORGE_ROOT } from '@forge/kernel';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
+// Anchored on kernel's FORGE_ROOT, never on this file's own depth. The old
+// form was `resolve(import.meta.dirname, '..', '..')`, correct only while this
+// file sat at `packages/agents/`. It feeds BOTH the spawn-capture fixture path
+// and `skillsDir(FORGE_ROOT)`, so a re-bucket one directory deeper would have
+// pointed the golden comparison and the agent roster at `packages/` — and a
+// depth-coupled anchor that resolves to the wrong tree is the shape that
+// passes vacuously forever (COMMON §15.14). Re-anchored BEFORE the move, not
+// with it.
+const FORGE_ROOT = KERNEL_FORGE_ROOT;
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'generic-one-shot.json');
 
 const AGENT_SLUG = 'project-scoped-review';
