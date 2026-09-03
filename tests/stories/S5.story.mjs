@@ -12,7 +12,7 @@
  * the agent page", and the word doing the work is HONEST. A page that renders
  * a ledger proves nothing; a page that renders `data-ledger-cost-usd="0.00"`
  * for a run that spent four dollars is worse than one that renders nothing.
- * So beat 12 asserts the recorded cost itself, on the row, beside the link
+ * So beat 13 asserts the recorded cost itself, on the row, beside the link
  * kind that says where the run happened — and `docs/forge-ui-dom-and-harness.md`
  * is explicit that the attribute is OMITTED rather than zeroed when no cost
  * exists, so "absent" and "0.00" are different facts and a `<runCost>`
@@ -24,7 +24,7 @@
  * green on a clean checkout. The agent is minted by beat 7. The flow ends at
  * a real standalone dispatch, so `realSpawn` is true and `budget_usd` is
  * declared: the runner refuses to start without `--approve-spend` (H2, $25
- * approved by the operator for the S5/S6/S7 batch on 2026-08-30). Beat 9 sets
+ * approved by the operator for the S5/S6/S7 batch on 2026-08-30). Beat 10 sets
  * a $2 per-run ceiling — deliberately SMALLER than the ground's budget, which
  * is the batch's cap, not this run's.
  *
@@ -35,29 +35,62 @@
  * named "story S5" mints the slug `story-s5` and lands on `/agents/story-s5`
  * (beat 7's route is the real slug rule, not an assumption), and that page
  * comes up `data-ready-count="5"` with `data-run-ceiling="10"` — the two
- * values beats 8 and 9 hold the product to different targets on.
+ * values beats 9 and 10 hold the product to different targets on.
  *
- * WHERE A BEAT CANNOT BE EXPRESSED it says so and stands anyway, per the
- * operator's 2026-08-29 ruling ("author the true flow"). Beats 3, 4, 5, 6 and
- * 9 carry NO `do` block, and that is this story's whole finding: `/agents/new`
- * and `/agents/<id>` declare ZERO `data-field` on any input and exactly FOUR
- * `data-action`s — `generate-instructions`, `toggle-advanced`, `save-agent`,
- * `run-agent`. Verified live: 10 inputs on the builder, 0 with `data-field`.
- * The four starter options carry `data-starter-option`; every catalog chip
- * carries `data-id`/`data-kind`; the SDK, model, loop-strategy and brain-access
- * pickers carry `data-sdk-id`/`data-model-id`/`data-loop-strategy`/`data-access`;
- * the run project, run inputs and cost ceiling carry bespoke boolean
- * attributes. `do`'s verbs resolve `[data-field="…"]` and `[data-action="…"]`
- * and nothing else, so NAMING the agent, COMPOSING its skills, FENCING its
- * tools and CAPPING its spend — the three acts §3's row actually names — have
- * no handle to name. Inventing one would be inventing the contract this story
- * exists to hold the product to. `_1.0/stories/S5.md` names every gap and its
- * owner.
+ * AMENDMENT 1 — what changed, and why (operator ruling 93, 2026-09-04). As
+ * authored, beats 3, 4, 5, 6 and 9 carried NO `do` block, and that was this
+ * story's whole finding: `/agents/new` and `/agents/<id>` declared ZERO
+ * `data-field` on any input and exactly FOUR `data-action`s —
+ * `generate-instructions`, `toggle-advanced`, `save-agent`, `run-agent`
+ * (verified live at authoring: 10 inputs on the builder, 0 with `data-field`).
+ * `do`'s verbs resolve `[data-field="…"]` and `[data-action="…"]` and nothing
+ * else, so NAMING the agent, COMPOSING its skills, FENCING its tools and
+ * CAPPING its spend — the acts §3's row actually names — had no handle to
+ * name, and inventing one would have been inventing the contract this story
+ * exists to hold the product to. Bead `forge-8vfn.5.15` shipped those handles:
+ * `[data-action="starter-<id>"]` on the four starters, `add-<kind>-<id>` on
+ * every catalog chip (the KIND is in the action name, so composing a skill and
+ * fencing a tool stay different acts on the same widget), and `data-field` on
+ * agent-name, purpose, instructions, interactivity, run-project and
+ * run-cost-ceiling. Each beat below therefore now carries the `do` its act
+ * ALREADY described. No act, no `say` and no `expect` was reworded; nothing
+ * was removed.
+ *
+ * ONE BEAT WAS ADDED — beat 4, writing the instructions body. Beat 9 asserts
+ * `data-ready-count="6"`, and the six checks are purpose / skill / guard /
+ * process / interactivity / runtime; `BLANK_STATE` already ships a guard, an
+ * interactivity sentence and a model, the beats below meet purpose and skill,
+ * and `process` — the instructions body — was the one check NO authored
+ * beat's act met. Measured against the real components, not reasoned:
+ * `apps/studio/components/studio/agent-builder/agent-builder-handles.test.ts`,
+ * the test named "S5 park measurement". The operator ruled the act belongs in
+ * a beat of its own rather than folded into beat 3, because an operator writes
+ * the instructions after saying what the agent is for and before deciding what
+ * it is made of. Beats 4–12 renumbered to 5–13.
+ *
+ * WHERE A BEAT STILL CANNOT BE EXPRESSED it says so and stands anyway, per the
+ * operator's 2026-08-29 ruling ("author the true flow"): beat 7 leaves the MCP
+ * zone empty, and leaving a zone empty has no control to press.
+ * `_1.0/stories/S5.md` names every gap and its owner.
  */
 
 /** What this agent exists to do — what the operator types into the builder. */
 const PURPOSE =
   'Read a project’s own docs and its live pages, and report every place the docs describe a page that no longer exists.';
+
+/**
+ * How it does it — the instructions body, typed into the builder's own
+ * Instructions field. `[data-field="instructions"]` binds to the agent's
+ * `process`, which is exactly what the readiness panel's `process` check reads
+ * (`apps/studio/lib/agent-readiness.ts`), so this text is what turns that check
+ * over. Three lines, because the field asks for steps rather than a restatement
+ * of the purpose — read, check, report.
+ */
+const INSTRUCTIONS = [
+  'Read every page under docs/ and list the routes each one claims exists.',
+  'Open each of those routes in the running app and record whether it resolves.',
+  'Report every doc line whose route no longer resolves, naming the file and the line.',
+].join('\n');
 
 /**
  * The skills it composes, read off the live catalog palette's own chips
@@ -115,15 +148,23 @@ export default {
       say: 'A new agent starts from a starter — a ready-made shape the operator edits — or from nothing at all. The empty `agent-id` is the page saying, honestly, that nothing has been minted yet.',
     },
     {
-      // NOT expressible, and deliberately left so. The four starters are
-      // `[data-starter-option="dev"|"plan"|"review"|"blank"]` — no
-      // `data-action` — and the name, purpose, instructions and interactivity
-      // fields are bare `<input>`/`<textarea>` with no `data-field` at all
-      // (verified live: 10 inputs, 0 with `data-field`). So the operator's
-      // first real act on this page cannot be named. The beat asserts the
-      // state that act produces: the readiness panel's purpose row ticking
-      // over. `check` and `ok` are the same <li>, so one element answers both.
+      // Expressible since bead `forge-8vfn.5.15`. Three acts in one sentence,
+      // three steps: the starter is `[data-action="starter-blank"]` (it used to
+      // carry `data-starter-option` alone, which no `do` verb resolves), and the
+      // name and purpose now carry `data-field`. ORDER IS LOAD-BEARING and it is
+      // measured, not assumed: `/agents/new` mounts the starter picker ALONE, so
+      // `[data-field="purpose"]` does not exist in the document until the starter
+      // is pressed — `agent-name` does, because it lives in the agent header
+      // above the picker branch. The beat still asserts the STATE the act
+      // produces rather than the typing: the readiness panel's purpose row
+      // ticking over. `check` and `ok` are the same <li>, so one element answers
+      // both.
       act: 'Start from the Blank agent starter, name it "story S5", and say what it exists to do',
+      do: [
+        { press: 'starter-blank' },
+        { fill: 'agent-name', with: 'story S5' },
+        { fill: 'purpose', with: PURPOSE },
+      ],
       expect: {
         route: '/agents/new',
         data: {
@@ -136,13 +177,46 @@ export default {
       say: `Every agent needs one sentence that says why it exists, because that sentence is what a planner reads when it decides which agent to put at a station. This one is: “${PURPOSE}”`,
     },
     {
-      // PARTIALLY expressible. `toggle-advanced` IS a real `data-action`, so
-      // opening the drawer is named. What is inside it is not: the catalog
-      // chips are `.catalog-chip[data-id][data-kind]`, click-to-add as well as
-      // draggable, and neither attribute is one `do` can resolve. `accepts`
-      // and `count` are the same drop zone, so one element answers both.
+      // ADDED BY AMENDMENT 1 (operator ruling 93). `[data-field="instructions"]`
+      // is the Instructions textarea, and it binds to the agent's `process` —
+      // which is what the readiness panel's `process` check reads. This beat
+      // exists because beat 9 asserts all six readiness checks pass and
+      // `process` is the one check no other beat's act meets: the story names
+      // naming, purposing, composing, fencing, saving, checking, capping and
+      // running, and none of those writes down HOW the agent works. It sits
+      // here, between saying what the agent is for and deciding what it is made
+      // of, because that is the order the operator does it in. `check` and `ok`
+      // are the same <li>, as on beat 3.
+      act: 'Write the instructions: what this agent does, step by step',
+      do: [{ fill: 'instructions', with: INSTRUCTIONS }],
+      expect: {
+        route: '/agents/new',
+        data: {
+          page: 'agents',
+          'agent-id': '',
+          check: 'process',
+          ok: 'true',
+        },
+      },
+      say: 'The purpose says why this agent exists; the instructions say how it works, and forge hands that body to the agent as its brief at dispatch time. An agent with no instructions is an agent told to improvise, which is why readiness refuses to pass without one — the Generate draft button beside the field is an offer, not a substitute.',
+    },
+    {
+      // Fully expressible since bead `forge-8vfn.5.15`. `toggle-advanced` was
+      // always a real `data-action`, but it is ABSENT until a starter is
+      // pressed — the M1-H run died on exactly that, timing out on a control
+      // that had not mounted rather than one that was slow, which is why beat 3
+      // presses the starter before this beat reaches the drawer. What is inside
+      // was the other half: the catalog chips carried `.catalog-chip[data-id]
+      // [data-kind]` — CSS identity, which no `do` verb resolves — and now carry
+      // `add-<kind>-<id>` as well. The two chip presses are the composition act
+      // itself; the drawer is opened first because the drop zone this beat
+      // asserts on lives inside it. `accepts` and `count` are the same drop
+      // zone, so one element answers both.
       act: 'Open Advanced and compose the two skills this agent needs',
-      do: [{ press: 'toggle-advanced' }],
+      do: [
+        { press: 'toggle-advanced' },
+        ...SKILLS.map((id) => ({ press: `add-skill-${id}` })),
+      ],
       expect: {
         route: '/agents/new',
         data: { page: 'agents', accepts: 'skill', count: String(SKILLS.length) },
@@ -150,12 +224,15 @@ export default {
       say: `Composing is the whole idea: an agent is not written, it is assembled out of skills the library already holds. This one takes ${SKILLS.join(' and ')} — one to look up what the project already knows, one to drive its pages.`,
     },
     {
-      // NOT expressible, same cause as beat 4 — the tool chips carry
-      // `data-id`/`data-kind`. A separate beat from 5 because
-      // `[data-accepts="tool"]` and `[data-accepts="skill"]` are different
-      // elements, and folding them together would assert a combination no
-      // single element makes.
+      // Expressible on the same handles as beat 5, and the KIND is in the
+      // action name on purpose: `add-tool-git` and `add-skill-git` are
+      // different presses, so no beat can fence a tool believing it composed a
+      // skill. Still a separate beat from 5 because `[data-accepts="tool"]` and
+      // `[data-accepts="skill"]` are different elements, and folding them
+      // together would assert a combination no single element makes. The drawer
+      // is already open from beat 5, so this beat is the two presses alone.
       act: 'Set the tool fence: this agent may invoke git and Node, and nothing else',
+      do: TOOLS.map((id) => ({ press: `add-tool-${id}` })),
       expect: {
         route: '/agents/new',
         data: { page: 'agents', accepts: 'tool', count: String(TOOLS.length) },
@@ -201,14 +278,18 @@ export default {
       say: 'Readiness is forge refusing to pretend. Six checks, each of which can genuinely fail, and an agent that misses one is an agent that will disappoint a station at three in the morning.',
     },
     {
-      // NOT expressible. The ceiling input is
-      // `input[data-run-cost-ceiling="true"]` — a bespoke boolean, not a
-      // `data-field` — so the operator's act of typing a cap cannot be named.
-      // The assertion is on the Run button, which STATES the ceiling that will
-      // be in force (`data-run-ceiling`), because a cap the operator cannot
-      // read before pressing Run is not a cap they consented to. Live today
-      // this reads "10", the policy default.
+      // Expressible since bead `forge-8vfn.5.15`: the ceiling input carried
+      // `data-run-cost-ceiling` alone — a bespoke boolean marker, which is
+      // identity and not a `fill` handle — and now carries `data-field` beside
+      // it. Both stay. The assertion is still on the RUN BUTTON rather than on
+      // the input, because a cap the operator cannot read before pressing Run
+      // is not a cap they consented to, and `data-run-ceiling` is the figure
+      // that will actually be dispatched: it resolves through
+      // `costCeilingEnforceable`, so a loop strategy that cannot enforce a cap
+      // reads back empty rather than echoing what was typed. Before this bead
+      // the value was "10", the policy default, because nothing could type one.
       act: `Cap what this run may spend at $${RUN_CEILING}`,
+      do: [{ fill: 'run-cost-ceiling', with: RUN_CEILING }],
       expect: {
         route: '/agents/story-s5',
         data: { page: 'agents', 'agent-id': 'story-s5', 'run-ceiling': RUN_CEILING },
@@ -216,13 +297,22 @@ export default {
       say: 'A real agent costs real money, so the operator sets the cap before starting the run rather than discovering the bill afterwards — and the button says the figure back to them.',
     },
     {
-      // PARTIALLY expressible. `run-agent` IS a real `data-action`, so the
-      // dispatch is named; the project picker (`[data-run-project]`) and the
-      // inputs box (`[data-run-inputs]`) are bespoke booleans and are not, so
-      // choosing mdtoc cannot be said. `run-id` and `run-status` are both on
-      // the run panel section, so one element answers both.
+      // Fully expressible since bead `forge-8vfn.5.15`. `run-agent` was always a
+      // real `data-action`, but the project picker was `[data-run-project]`
+      // alone — a bespoke boolean — so CHOOSING mdtoc could not be said, and a
+      // press on its own would have dispatched against "no project" while the
+      // act sentence claimed otherwise: green for the wrong reason. The picker
+      // now carries `data-field="run-project"`, and `fill` sets a <select> with
+      // `selectOption`, so the ground this story declares is the ground the run
+      // actually gets. The inputs box (`[data-run-inputs]`) is still a bespoke
+      // boolean, and this beat hands no inputs, so nothing is lost. `run-id` and
+      // `run-status` are both on the run panel section, so one element answers
+      // both.
       act: 'Run the agent standalone against mdtoc',
-      do: [{ press: 'run-agent' }],
+      do: [
+        { fill: 'run-project', with: 'mdtoc' },
+        { press: 'run-agent' },
+      ],
       expect: {
         route: '/agents/story-s5',
         data: {
@@ -236,7 +326,7 @@ export default {
     },
     {
       // Fully expressible. `ledger-count` is the history section's own root,
-      // and a SEPARATE beat from 12 on purpose: the count lives on the
+      // and a SEPARATE beat from 13 on purpose: the count lives on the
       // section and the cost lives on the row, so asserting both at once would
       // ask one element for a combination it does not make.
       act: 'Watch the run land in the agent’s own history',
