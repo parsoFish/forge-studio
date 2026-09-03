@@ -61,7 +61,7 @@ import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`
  * resolves it against `logsRoot` (`resolve(logsDir, cycleId)`,
- * `orchestrator/logging.ts`) with no validation of its own. Reject anything
+ * `packages/kernel/logging.ts`) with no validation of its own. Reject anything
  * that could escape `logsRoot` (a path separator, `..`, or an absolute
  * path) before any I/O happens. Single path segment of
  * `[A-Za-z0-9._-]` — deliberately permits a leading `_` (unlike
@@ -287,7 +287,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // agent" guard: the legacy invocation path now ENFORCES the ceiling for
   // real — `runInvocationSpawn` threads it to the adapter's
   // `maxBudgetUsdPerIteration`, which `createClaudeAgent` hands the SDK as
-  // `options.maxBudgetUsd` (loops/ralph/claude-agent.ts:228), and one
+  // `options.maxBudgetUsd` (packages/agents/ralph/claude-agent.ts:228), and one
   // invocation-path run is exactly ONE iteration, so a per-iteration cap IS
   // the run ceiling. 'ralph' needs no ceiling guard of its own here — the
   // loopStrategy check above already rejects a standalone ralph dispatch
@@ -516,7 +516,7 @@ async function runOneShotSpawn(
   // every one-shot run (reflector/adversarial-review/PM/demo-agent/
   // contract-check/release-finalizer) reported zero outputs even when it
   // really wrote files. Derive real refs the same way the sibling adapter
-  // path does (`loops/ralph/claude-agent.ts`'s `filesChanged`): accumulate
+  // path does (`packages/agents/ralph/claude-agent.ts`'s `filesChanged`): accumulate
   // file-modifying tool_use paths — via the SAME shared `extractLiveToolDetails`
   // helper the adapter path's `fileChangeForTool` backs — into an
   // order-preserving dedup Set.

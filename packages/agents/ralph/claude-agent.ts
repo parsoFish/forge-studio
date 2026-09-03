@@ -75,7 +75,7 @@ export type ClaudeAgentOptions = {
    * W8-B6 — the running agent's bound library hooks, as the SDK's
    * `options.hooks` shape. Built by the CALLER (which holds the agent's
    * `PhaseAgentSpec.skill` and the run's logger) via
-   * `orchestrator/studio/hook-dispatch.ts`'s `sdkHooksForAgent`; this adapter
+   * `packages/agents/studio/hook-dispatch.ts`'s `sdkHooksForAgent`; this adapter
    * only forwards it. Absent for every agent that binds none, which leaves
    * the SDK call byte-identical.
    */

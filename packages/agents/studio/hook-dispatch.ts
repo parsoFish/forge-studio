@@ -43,7 +43,7 @@
  * `HookCallbackMatcher.matcher` is a tool-NAME pattern. Forge's declared
  * `matcher` is the Claude Code permission-rule shape — the authoring form's
  * own placeholder is `Bash(gh pr create)`
- * (`apps/studio/app/hooks/new/page.tsx:109`) and the OOTB
+ * (`apps/studio/app/hooks/new/page.tsxx:109`) and the OOTB
  * `pre-pr-security-review` ships exactly that string. Handing it to the SDK
  * verbatim would produce a hook that is bound, displayed as carried, and can
  * never match — the same defect this module exists to close, in a new field.
@@ -132,7 +132,7 @@
  * literally typed is the safe direction, and `Bash(gh pr create)` obviously
  * means "a gh-pr-create command", not "that exact string and no flags".
  *
- * **4. Dispatch is claude-side.** `loops/_adapters/gemini/index.ts` has no
+ * **4. Dispatch is claude-side.** `packages/agents/_adapters/gemini/index.ts` has no
  * equivalent hook mechanism, so a hook bound to an agent whose `runtime.sdk` is
  * non-claude does not fire. Nothing pretends otherwise: the bag is only ever
  * built into a claude options record.

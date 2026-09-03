@@ -9,10 +9,10 @@ The RuntimeAdapter worked examples are the second implementations that shipped i
 ## 1. RuntimeAdapter — plug in a new LLM SDK or agentic coder
 
 **Interface:** `loops/_adapters/types.ts`
-**Conformance suite:** `loops/_adapters/conformance.ts`
-**Registry:** `loops/_adapters/registry.ts`
+**Conformance suite:** `packages/agents/_adapters/conformance.ts`
+**Registry:** `packages/agents/_adapters/registry.ts`
 **Catalog:** `studio/catalog.yaml` (`sdks:` list)
-**Worked examples:** `loops/_adapters/gemini/index.ts`, `loops/_adapters/aider/index.ts`
+**Worked examples:** `packages/agents/_adapters/gemini/index.ts`, `loops/_adapters/aider/index.ts`
 
 ### The interface
 
@@ -90,7 +90,7 @@ The Claude adapter does this; the Gemini and Aider adapters follow the same patt
 
 ### Step 2 — run the conformance suite
 
-The conformance suite in `loops/_adapters/conformance.ts` is the admission gate. Create `loops/_adapters/<sdk>/<sdk>.test.ts`:
+The conformance suite in `packages/agents/_adapters/conformance.ts` is the admission gate. Create `loops/_adapters/<sdk>/<sdk>.test.ts`:
 
 ```typescript
 import { describe } from 'node:test';
@@ -110,7 +110,7 @@ See `loops/_adapters/gemini/gemini.test.ts` and `aider/aider.test.ts` for comple
 
 ### Step 3 — register
 
-Add to `loops/_adapters/registry.ts`:
+Add to `packages/agents/_adapters/registry.ts`:
 
 ```typescript
 import { myAdapter } from './my-sdk/index.ts';
@@ -304,7 +304,7 @@ budgets: {}
 ...
 ```
 
-**`runtime.sdk`** must be a registered id in `studio/catalog.yaml` and `loops/_adapters/registry.ts`.
+**`runtime.sdk`** must be a registered id in `studio/catalog.yaml` and `packages/agents/_adapters/registry.ts`.
 
 **`strategy: fixed`** requires `model:` to be a model id in `catalog.yaml`. `strategy: range` requires `range: [haiku, sonnet, opus]` — the flow engine picks the cheapest available tier and escalates on failure.
 

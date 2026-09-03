@@ -178,9 +178,15 @@ test('CONTAINMENT: <runDir>/materials/notes.md pre-planted as a HARDLINK (nlink>
     const st = lstatSync(join(runDir, 'materials', 'notes.md'));
     assert.ok(st.nlink > 1, `arrange-step failed: expected nlink > 1 on the hardlinked leaf, got ${st.nlink} — linkSync may not have produced a genuine hardlink on this filesystem`);
 
+    // The matcher must be the ERROR CLASS, not a string: `assert.throws(fn,
+    // '<text>')` treats the string as the failure MESSAGE, so it asserts only
+    // "threw something" — which is exactly what this case must not settle for.
+    // A naive realpath-only containment check is structurally blind to a
+    // hardlink (there is no symlink anywhere to resolve), so this is the test
+    // that FORCES an nlink===1 check to exist; it has to hold the real error.
     assert.throws(
       () => stageMaterials(runDir, [{ filename: 'notes.md', bytes: Buffer.from('ATTACK-VIA-SHARED-INODE') }]),
-      'a naive realpath-only containment check is structurally blind to a hardlink (no symlink anywhere to resolve) — this is the test that FORCES an nlink===1 check to exist',
+      MaterialsStagingError,
     );
 
     assert.equal(readFileSync(outsideFile, 'utf8'), 'ORIGINAL-OUTSIDE-HARDLINK-CONTENT', 'the outside file (sharing an inode with the hardlinked leaf) must be byte-unchanged — a write through the leaf would corrupt it via the shared inode even without following any symlink');

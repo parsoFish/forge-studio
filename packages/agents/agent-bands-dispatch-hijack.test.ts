@@ -73,4 +73,20 @@ describe('dispatch-hijack proof: resolveBandGuard reads ONLY composition.guards'
     } as unknown as AgentDefinition;
     assert.equal(resolveBandGuard(hijacked), undefined);
   });
+
+  // Folded in from the retired `agent-bands-guards-migration.test.ts` (M4
+  // cull). That file's own header declared it "must be RED until the rename
+  // lands"; the `resolveBandHook` → `resolveBandGuard` rename HAS landed, so
+  // both its cases were permanently-green tripwires for a finished migration.
+  // Its D1 was input- and assertion-identical to the `legit` case above. Its
+  // D2 is this — the pure empty-guards input, with no `hooks` key at all, so
+  // it is not merely the negative half of a hijack case.
+  it('an empty composition.guards resolves no band (no hooks key present at all)', () => {
+    const def = makeAgentDef('guards-only-fixture', []);
+    assert.equal(
+      resolveBandGuard(def),
+      undefined,
+      'expected resolveBandGuard to handle an empty-guards def cleanly (no band declared)',
+    );
+  });
 });

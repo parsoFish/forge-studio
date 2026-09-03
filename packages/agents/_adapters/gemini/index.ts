@@ -2,7 +2,7 @@
  * Google Gemini RuntimeAdapter (M8-A, ADR 029 — flywheel adapter drop-in).
  *
  * A second runtime adapter behind the same `RuntimeAdapter` seam the Claude
- * reference adapter satisfies (loops/_adapters/claude/index.ts) — contract-
+ * reference adapter satisfies (packages/agents/_adapters/claude/index.ts) — contract-
  * complete (passes the conformance suite); it proves the runtime seam. Driving a
  * real Gemini dev-loop additionally needs a tool EXECUTOR that applies Gemini's
  * functionCall blocks to the worktree (see the liveGap note) — a follow-up. It maps

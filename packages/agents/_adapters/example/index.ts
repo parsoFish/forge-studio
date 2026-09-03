@@ -8,8 +8,8 @@
  * To add a real SDK adapter:
  *   1. Copy this file to loops/_adapters/<sdk>/index.ts.
  *   2. Replace the deterministic mock body with real SDK calls.
- *   3. Run loops/_adapters/conformance.ts against it — it must pass.
- *   4. Register it in loops/_adapters/registry.ts.
+ *   3. Run packages/agents/_adapters/conformance.ts against it — it must pass.
+ *   4. Register it in packages/agents/_adapters/registry.ts.
  *   5. Install the dep (ask-first event per PRINCIPLES.md).
  *
  * Contract satisfied:
