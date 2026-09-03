@@ -3832,6 +3832,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   verb worked and the claim had nothing to read. The `fixed` chip keeps its
   own `data-model-tier` (S9 beat 11 reads that one), so a fixed-tier page
   carries the value twice, on the root and on the chip, by design.
+  **M4 (bead `forge-8vfn.5.10`, sessions-owned site):** the kickoff `main` also
+  carries **`data-minted-session-id`** — the id this page minted, published on
+  the page that minted it, set BEFORE `router.push` navigates into the session.
+  Until this existed the POST's result went straight into the redirect and the
+  id appeared nowhere an observer could read: not to a story, not to a journey,
+  not to an operator whose navigation failed. It is the **empty string until a
+  session is minted**, and the key is ALWAYS present — an attribute that
+  appeared only on success would be indistinguishable from a page that never
+  published one, so "started nothing" and "this build lacks the attribute"
+  would read the same. Derived through `kickoffMainData` (`lib/kickoff-view.ts`)
+  so the contract is unit-pinned rather than asserted only through a page render.
+
   **W7-A2 duplicate guard:** the page also reads `GET /api/studio/sessions?active=1`
   (the SAME index /sessions and Home read); when a non-terminal session of
   THIS kind already exists on the chosen target (project id, `.kb-<id>` for
