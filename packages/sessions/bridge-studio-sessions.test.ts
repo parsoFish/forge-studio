@@ -89,7 +89,7 @@ import { startBridge } from '../../cli/ui-bridge.ts';
 import { handleStudioSessionsRoutes, isPseudoProjectAnchor, type SessionsRouteContext } from './bridge-studio-sessions.ts';
 import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
 import { guardedWriteSessionStatus } from './interactive-session.ts';
-import type { ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
+import type { ProjectBrainStatus } from './kinds/project-brain.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

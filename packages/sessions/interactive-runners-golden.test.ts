@@ -19,7 +19,7 @@
  *       (explicitly the phase named in the WI-0 brief).
  *   - demo-builder-runner.ts     runDemoBuilderTurn       phase: generating
  *       (explicitly the phase named in the WI-0 brief).
- *   - project-brain-builder-runner.ts  runProjectBrainTurn  phase: analyzing
+ *   - kinds/project-brain.ts       runProjectBrainTurn      phase: analyzing
  *       (explicitly the phase named in the WI-0 brief).
  *
  * Injection seam: `queryFn` + `skillPromptPath` (every runner's own
@@ -109,7 +109,7 @@ import {
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
-import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../orchestrator/project-brain-builder-runner.ts';
+import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from './kinds/project-brain.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
@@ -438,7 +438,7 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
 });
 
 // ---------------------------------------------------------------------------
-// project-brain-builder-runner.ts — runProjectBrainTurn, phase: analyzing
+// kinds/project-brain.ts — runProjectBrainTurn, phase: analyzing
 // ---------------------------------------------------------------------------
 
 test('runProjectBrainTurn (analyzing): pins the exact {prompt, options} spawn call + result + statusAfter (characterization)', async () => {

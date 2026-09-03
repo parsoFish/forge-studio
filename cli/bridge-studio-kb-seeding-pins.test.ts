@@ -40,7 +40,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { loadKbDescriptors } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
-import { runProjectBrainTurn, type ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
+import { runProjectBrainTurn, type ProjectBrainStatus } from '../packages/sessions/kinds/project-brain.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture (mirrors cli/bridge-studio-kb-create.test.ts's minimal forge root)

@@ -29,7 +29,6 @@ import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.t
 import { runArchitectTurn } from '@forge/sessions/architect-runner.ts';
 import { runInstructionsTurn } from '@forge/sessions/instructions-runner.ts';
 import { runDemoBuilderTurn } from '@forge/sessions/demo-builder-runner.ts';
-import type { runProjectBrainTurn } from '../../orchestrator/project-brain-builder-runner.ts';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
@@ -38,6 +37,7 @@ import { skillsDir } from './skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { runInteractiveTurn } from '@forge/sessions/interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
+import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
@@ -72,7 +72,8 @@ export interface AgentRunnerEntry {
    *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
    *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect'),
    *  `packages/sessions/instructions-runner.ts` ('_instructions'),
-   *  `orchestrator/project-brain-builder-runner.ts` ('_project-brain') — with
+   *  `packages/sessions/kinds/project-brain.ts` ('_project-brain', now a
+   *  `SESSION_KIND_RUNNERS` row) — with
    *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
    *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` and
    *  `studio/session-kinds.yaml`'s own "id is demo — NOT demo-builder" comment
@@ -136,25 +137,16 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
       if (result.lockPath) console.log(`  LOCK: ${result.lockPath}`);
     },
   },
-  'project-brain': {
-    verb: 'project-brain run',
-    requiresProject: true,
-    needsForgeRoot: true,
-    combinedArgCheck: true,
-    kindDir: '_project-brain',
-    loadRunTurn: async () => {
-      const { runProjectBrainTurn: run } = await import('../../orchestrator/project-brain-builder-runner.ts');
-      return run as unknown as AgentTurnFn;
-    },
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runProjectBrainTurn>>;
-      console.log(`project-brain turn complete — phase=${result.phase} (${result.themes?.length ?? 0} theme(s))`);
-    },
-  },
 };
 
-// R2-01-F3a: `AGENT_RUNNERS` (declared above) is the registry `cmdAgentRun`
-// looks up.
+/** Every agent-id `forge agent run` accepts — DERIVED from both dispatch
+ *  tables, never typed out: a usage line listing only half of them is how a
+ *  ported kind goes invisible to the operator while still working. */
+const knownAgentIds = (): string[] => [...Object.keys(AGENT_RUNNERS), ...Object.keys(SESSION_KIND_RUNNERS)];
+
+// R2-01-F3a: `AGENT_RUNNERS` (above) plus `SESSION_KIND_RUNNERS` (a PORTED
+// kind's row lives beside its kind module, M4 ruling 60) are the two
+// registries `cmdAgentRun` looks up.
 export async function cmdAgent(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   const sub = rest[0];
   if (sub === 'run') return await cmdAgentRun(rest.slice(1), forgeRoot);
@@ -162,7 +154,7 @@ export async function cmdAgent(rest: string[], forgeRoot: string, deps?: AgentDi
   console.error('forge agent: subcommands: run <agent-id> <session-id> | dispatch <slug>');
   console.error('  forge agent run <agent-id> <session-id> [--project <name>]');
   console.error('  forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
-  console.error(`  run <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
+  console.error(`  run <agent-id> is one of: ${knownAgentIds().join(', ')}`);
   process.exit(2);
 }
 
@@ -793,11 +785,14 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
     }
   }
 
-  const entry = agentId ? AGENT_RUNNERS[agentId] : undefined;
+  // `AGENT_RUNNERS` first, so an un-ported runner keeps its exact behaviour;
+  // the two tables hold structurally identical rows (SessionKindRunner's doc
+  // says why neither package imports the other's type).
+  const entry: AgentRunnerEntry | undefined = agentId ? (AGENT_RUNNERS[agentId] ?? SESSION_KIND_RUNNERS[agentId]) : undefined;
   if (!entry) {
     console.error(`forge agent run: unknown agent-id: ${agentId ?? '(missing)'}`);
     console.error('Usage: forge agent run <agent-id> <session-id> [--project <name>]');
-    console.error(`  <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
+    console.error(`  <agent-id> is one of: ${knownAgentIds().join(', ')}`);
     process.exit(2);
     return;
   }

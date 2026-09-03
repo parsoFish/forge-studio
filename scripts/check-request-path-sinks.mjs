@@ -232,15 +232,15 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
     why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId; folds untrusted segments into a path with no guard.',
   },
   instructionsSessionDir: {
-    defModule: 'orchestrator/instructions-runner.ts',
+    defModule: 'packages/sessions/instructions-runner.ts',
     why: 'Bare join of projectRoot + "_instructions" + request-derived sessionId; no per-segment containment.',
   },
   projectBrainSessionDir: {
-    defModule: 'orchestrator/project-brain-builder-runner.ts',
+    defModule: 'packages/sessions/kinds/project-brain.ts',
     why: 'Bare join of projectRoot + "_project-brain" + request-derived sessionId; no per-segment containment.',
   },
   demoSessionDir: {
-    defModule: 'orchestrator/demo-builder-runner.ts',
+    defModule: 'packages/sessions/demo-builder-runner.ts',
     why: 'Bare join of projectRoot + "_demo" + request-derived sessionId; no per-segment containment.',
   },
   // SEC-04 completeness (bd forge-arch): the architect module was systematically

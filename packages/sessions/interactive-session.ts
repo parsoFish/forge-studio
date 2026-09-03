@@ -66,7 +66,7 @@ export const REDACTED_THINKING_MARKER = '[thinking redacted]';
 //
 // Both sinks were duplicated across 7 runner files (interactive-runner.ts,
 // architect-runner.ts, instructions-runner.ts, demo-builder-runner.ts,
-// project-brain-builder-runner.ts, brain-fix-runner.ts,
+// kinds/project-brain.ts, brain-fix-runner.ts,
 // preflight-fix-runner.ts) — 7 copies of the same per-block-cap logic is 7
 // future desyncs, so it moves here, next to the REDACTED_THINKING_MARKER
 // literal it already needs to stay in sync with. Two bugs fixed in this one

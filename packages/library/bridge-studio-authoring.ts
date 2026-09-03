@@ -184,7 +184,7 @@ import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizer
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
 // DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
-// project-brain-builder-runner dynamic-import precedent).
+// project-brain kind's dynamic-import precedent).
 import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '@forge/sessions/interactive-runner.ts';
 import { finalizeSkillFromLanded } from './bridge-studio-authoring-skill.ts';
 import { finalizeHookFromLanded } from './bridge-studio-authoring-hook.ts';
@@ -352,7 +352,7 @@ export async function runFinalize(
       // Dynamically imported so a static import never pulls the Claude Agent
       // SDK into bridge start-up (cli/ui-bridge.ts does not import
       // cli/agent-run.ts today) — mirrors cli/agent-run.ts's own
-      // project-brain-builder-runner dynamic-import precedent.
+      // project-brain kind's dynamic-import precedent.
       const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
       if (!descriptor) {
         revert();

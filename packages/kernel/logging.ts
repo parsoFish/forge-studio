@@ -21,7 +21,7 @@ export type Phase =
   // W7-C3 (sessions-kinds-25/26) + the W7-C3 review (A-M9): interactive
   // session KINDS log under their OWN phase names, all three of them.
   // instructions-runner copy-pasted `architect`, demo-builder-runner
-  // inherited the retired `unifier`, and project-brain-builder-runner filed
+  // inherited the retired `unifier`, and the project-brain kind files
   // under `reflection` — the OOTB reflector's cycle-spine phase — so those
   // sessions' cost and activity were billed to phases that never ran them.
   // Each value matches the session KIND id (studio/session-kinds.yaml) and

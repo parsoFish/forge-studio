@@ -113,7 +113,7 @@ test('POST /api/project-brain/start with an out-of-envelope modelTier ("opus") 4
 // reuse `invalidProjectRepoPath` (cli/ui-bridge.ts, wrapping the shipped
 // SEC-02 guard `isContainedProjectRepoPath`). `project_repo_path` becomes the
 // `cwd` for a real agentic `runAgentTurn`
-// (orchestrator/project-brain-builder-runner.ts:190). ATs below mirror
+// (packages/sessions/kinds/project-brain.ts). ATs below mirror
 // EXACTLY the shape already pinned for the other three siblings (outside
 // path / symlinked-but-lexically-inside / relative / positive controls).
 //
