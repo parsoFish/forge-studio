@@ -477,6 +477,10 @@ export function RunPanel({
         <select
           className="input"
           data-run-project
+          // Bead `forge-8vfn.5.15`: `data-run-project` is a bespoke boolean
+          // marker (identity); `data-field` is what a story beat's `fill` verb
+          // resolves, and a <select> is set with `selectOption`. Both stay.
+          data-field="run-project"
           aria-label="Run against project"
           value={project}
           onChange={(e) => setProject(e.target.value)}
@@ -511,6 +515,11 @@ export function RunPanel({
               id="run-cost-ceiling"
               type="number"
               data-run-cost-ceiling
+              // Bead `forge-8vfn.5.15`: capping the run is the fourth act §3's
+              // S5 row names. The Run button already STATES the ceiling in
+              // force (`data-run-ceiling`); this is the handle that lets the
+              // ceiling be typed in the first place.
+              data-field="run-cost-ceiling"
               min={0}
               step="0.01"
               value={costCeiling}

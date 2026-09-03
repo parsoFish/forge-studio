@@ -17,7 +17,7 @@ import {
   //     already exercises for its own (different) session id.
   archDir, writeStatus, archEvent, PROJECT,
 } from '../lib/journey-fixtures.mjs';
-import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead, waitPageReady } from '../lib/journey-assertions.mjs';
 
 // ── A-scratch: compose a brand-new agent entirely from scratch ─────────────
 const SCRATCH_AGENT_SLUG = 'journey-scratch-agent';
@@ -460,10 +460,7 @@ export const journey = defineJourney({
               console.log('\n[W6-IA3] Browse the agents index — roster + recent runs');
 
               await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents-index', 15000);
               const pageReady = await page.evaluate(() =>
                 document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready'));
               check(pageReady === 'true', `W6-IA3: [data-page="agents-index"][data-page-ready="true"] (got "${pageReady}")`);
@@ -505,10 +502,7 @@ export const journey = defineJourney({
                 document.querySelector('[data-section="agent-roster"] [data-card-type="agent"]')?.getAttribute('href'));
               check(!!firstCardHref && firstCardHref.startsWith('/agents/'), `W6-IA3: the first roster card links into the builder (got "${firstCardHref}")`);
               await page.locator('[data-section="agent-roster"] [data-card-type="agent"]').first().click();
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               const landedOnBuilder = await page.evaluate(() => document.querySelector('[data-page="agents"]') !== null);
               check(landedOnBuilder, 'W6-IA3: clicking a roster card actually navigates into the agent builder ([data-page="agents"])');
         },
@@ -526,10 +520,7 @@ export const journey = defineJourney({
               console.log('\n[J2] Author plan/dev/review agents from the starter library');
               cleanStarterAgents(); // clear any prior-run residue first
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               const pickerPresent = await page.evaluate(() => document.querySelector('[data-section="starter-picker"]') !== null);
               check(pickerPresent, 'J2: new-agent shows the curated starter picker ([data-section="starter-picker"])');
               const advHiddenOnPicker = await page.evaluate(() => document.querySelector('[data-section="advanced"]') === null);
@@ -602,14 +593,30 @@ export const journey = defineJourney({
               }
 
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               const blankPresent = await page.evaluate(() => document.querySelector('[data-starter-option="blank"]') !== null);
               check(blankPresent, 'A-scratch: the starter picker offers a genuine "blank" option ([data-starter-option="blank"])');
+              // Bead forge-8vfn.5.15: the picker is the ONLY act on /agents/new
+              // (the purpose field and [data-action="toggle-advanced"] are not in
+              // the document yet), so the starter's own `data-action` is what
+              // makes the rest of this route reachable to a story beat at all.
+              // Checked BEFORE the click, where the picker is the live surface.
+              const starterPressable = await page.evaluate(() =>
+                document.querySelector('[data-starter-option="blank"][data-action="starter-blank"]') !== null);
+              check(starterPressable, 'A-scratch (5.15): the blank starter carries its story handle [data-action="starter-blank"] alongside [data-starter-option] — the handle S5 beat 4 needs to reach Advanced at all');
               await page.locator('[data-starter-option="blank"]').click();
               await page.waitForSelector('#purpose-input', { timeout: 10000 });
+
+              // Bead forge-8vfn.5.15, the enforcement half: the DOM contract
+              // names six `data-field` handles on this builder, and a contract
+              // enforced nowhere is this campaign's dominant defect class. The
+              // census reports the MISSING names, not a count — a check whose
+              // negative result reads as "nothing to report" is not a check.
+              const missingFields = await page.evaluate(() =>
+                ['agent-name', 'purpose', 'instructions', 'interactivity', 'run-project', 'run-cost-ceiling']
+                  .filter((f) => document.querySelector(`[data-field="${f}"]`) === null));
+              check(missingFields.length === 0,
+                `A-scratch (5.15): every named data-field handle resolves on the builder${missingFields.length ? ` — MISSING: ${missingFields.join(', ')}` : ''}`);
 
               // Compose from nothing: name, purpose, process.
               await page.locator('input.agent-name-input').fill(SCRATCH_AGENT_NAME);
@@ -632,6 +639,13 @@ export const journey = defineJourney({
                 document.querySelector(`[data-component="catalog-palette"] .catalog-chip[data-id="${id}"][data-kind="skill"]`) !== null,
                 DND_SKILL_ID);
               check(chipPresent, `A-scratch: "${DND_SKILL_ID}" (skills-create's own skill) is a real, draggable catalog chip — live filesystem discovery (R3-01-F2)`);
+              // Bead forge-8vfn.5.15: the same chip is also PRESSABLE by a story
+              // beat, and the kind is in the action name so composing a skill and
+              // fencing a tool never collapse into one act.
+              const chipPressable = await page.evaluate((id) =>
+                document.querySelector(`.catalog-chip[data-id="${id}"][data-kind="skill"][data-action="add-skill-${id}"]`) !== null,
+                DND_SKILL_ID);
+              check(chipPressable, `A-scratch (5.15): the "${DND_SKILL_ID}" chip carries [data-action="add-skill-${DND_SKILL_ID}"] — composing a skill is nameable by a story beat`);
               await dragSkillChipIntoZone(page, DND_SKILL_ID);
               const zoneCount = await page.evaluate(() =>
                 document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '0');
@@ -1039,10 +1053,7 @@ export const journey = defineJourney({
                 await caption(page, 'The develop flow\'s successor agents ship both ways — demo-agent + adversarial-review run standalone from their own pages, the same pipeline, in isolation.');
                 for (const bandSlug of ['demo-agent', 'adversarial-review']) {
                   await page.goto(watch.uiUrl + `/agents/${bandSlug}`, { waitUntil: 'domcontentloaded' });
-                  await page.waitForFunction(
-                    () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                    null, { timeout: 20000 },
-                  ).catch(() => {});
+                  await waitPageReady(page, 'agents', 20000);
                   const dispatchable = await page.evaluate(() =>
                     document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
                   check(dispatchable === 'true',
@@ -1062,10 +1073,7 @@ export const journey = defineJourney({
                   // the real index; Library dropped its projects/agents/flows/kb
                   // shelves down to shelves-only: skills/hooks/connections/templates/
                   // community.)
-                  await p.waitForFunction(
-                    () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
-                    null, { timeout: 8000 },
-                  ).catch(() => {});
+                  await waitPageReady(p, 'agents-index', 8000);
                   const agentsSection = p.locator('[data-section="agent-roster"]');
                   await agentsSection.scrollIntoViewIfNeeded().catch(() => {});
                   await caption(p, 'The OOTB agent roster — plan, dev, review, project-manager: curated, already shipped.');
@@ -1113,10 +1121,7 @@ export const journey = defineJourney({
               console.log('\n[R2-09] Edit-agent arc — open the builder on developer-ralph');
               stashDrSkill();
               await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               const agentId = await page.evaluate(() =>
                 document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
               check(agentId === 'developer-ralph',
@@ -1488,10 +1493,7 @@ export const journey = defineJourney({
               // the frontmatter block byte-identical").
               restoreDeveloperRalphSkill();
               await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               // Advanced starts collapsed again after a fresh navigation — open it
               // to read + confirm the restored, pristine composition.
               await ensureAdvancedOpen(page);
@@ -1556,10 +1558,7 @@ export const journey = defineJourney({
               console.log('\n[R2-09] Materials — declare allowed input materials');
               cleanMaterialsAgent();
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               await page.locator('[data-starter-option="blank"]').click();
               await page.waitForSelector('#purpose-input', { timeout: 10000 });
               await page.locator('input.agent-name-input').fill(MATERIALS_AGENT_NAME);
@@ -1604,10 +1603,7 @@ export const journey = defineJourney({
 
               // Reload — prove the toggles round-trip from disk, not just in-memory state.
               await page.goto(watch.uiUrl + `/agents/${MATERIALS_AGENT_SLUG}`, { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               const documentsAfterReload = await page.evaluate(() =>
                 document.querySelector('[data-material="documents"]')?.getAttribute('data-selected') ?? '');
               const audioAfterReload = await page.evaluate(() =>
@@ -1628,10 +1624,7 @@ export const journey = defineJourney({
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — ceiling disabled for a non-enforceable agent (developer-ralph)');
               await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               const dispatchable = await page.evaluate(() =>
                 document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
               check(dispatchable === 'true',
@@ -1659,10 +1652,7 @@ export const journey = defineJourney({
               console.log('\n[R6-04] Kickoff — build the fixture agent (materials + one-shot)');
               cleanKickoffAgent();
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 15000);
               await page.locator('[data-starter-option="blank"]').click();
               await page.waitForSelector('#purpose-input', { timeout: 10000 });
               await page.locator('input.agent-name-input').fill(KICKOFF_AGENT_NAME);
@@ -1704,10 +1694,7 @@ export const journey = defineJourney({
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — reopen the fixture agent via its agents-index card');
               await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents-index', 20000);
               const card = page.locator(`[data-card-type="agent"][data-card-id="${KICKOFF_AGENT_SLUG}"]`);
               const cardPresent = (await card.count()) > 0;
               check(cardPresent, `agents-kickoff: the freshly saved fixture agent has a real agents-index card (data-card-id="${KICKOFF_AGENT_SLUG}")`);
@@ -2005,10 +1992,7 @@ export const journey = defineJourney({
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-01] Kickoff — standing-triggers list on the reflector agent page');
               await page.goto(watch.uiUrl + '/agents/reflector', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               const agentId = await page.evaluate(() =>
                 document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
               check(agentId === 'reflector', `agents-kickoff-standing-triggers: landed on the real reflector agent page (data-agent-id="${agentId}")`);
@@ -2059,10 +2043,7 @@ export const journey = defineJourney({
               const { page, watch, check, frame } = ctx;
               console.log('\n[R4-B13] The reflector\'s real composition + a genuine brain-lint run');
               await page.goto(watch.uiUrl + '/agents/reflector', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               const agentId = await page.evaluate(() =>
                 document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
               check(agentId === 'reflector', `agents-run-reflector-detail: landed on the real reflector agent page (data-agent-id="${agentId}")`);
@@ -2106,10 +2087,7 @@ export const journey = defineJourney({
               const { page, watch, frame, check } = ctx;
               console.log('\n[R4-B13] The Developer\'s own page — generic run surface + real composition');
               await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
+              await waitPageReady(page, 'agents', 20000);
               const agentId = await page.evaluate(() =>
                 document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
               check(agentId === 'developer-ralph', `agents-run-developer-entry: landed on the real developer-ralph agent page (got "${agentId}")`);
