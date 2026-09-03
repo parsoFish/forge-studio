@@ -24,6 +24,7 @@
  * `orchestrator/test-fixtures/spawn-capture/interactive-demo-builder.json`.
  */
 
+import type { ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
@@ -35,7 +36,27 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
+import { guardedFile, guardedWriteFile, sendJson } from '@forge/kernel';
+import { guardedWriteSessionStatus } from '../interactive-session.ts';
+import {
+  DEMO_KIND_DIR,
+  GENERATIONS_DIRNAME,
+  GENERATION_DEMO_FILENAME,
+  GENERATION_META_FILENAME,
+  GENERATION_SKILL_FILENAME,
+  guardedGenerationWritePath,
+  listExistingGenerationNumbers,
+  readGenerationSnapshotMeta,
+} from './demo-session-store.ts';
+
+export function demoSessionDir(projectRoot: string, sessionId: string): string {
+  return join(projectRoot, DEMO_KIND_DIR, sessionId);
+}
+import {
+  affordanceDryBridgeMarker,
+  answersCapReason,
+  type AffordanceRouteContext,
+} from '../bridge-studio-sessions-affordance-shell.ts';
 import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -71,17 +92,6 @@ export const DEMO_FRAGMENTS_REL_DIR = '.forge/demo/fragments';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
 export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 
-/** R4-16 — session-dir-relative home for per-generation snapshots
- *  (`<sessionDir>/generations/<n>/`), NEVER the project repo (D4: the
- *  derivation may not read outside sessionDir, and project-repo history would
- *  commit intermediate generations onto the project's forge-studio branch). */
-export const GENERATIONS_DIRNAME = 'generations';
-/** The two files a generation snapshots — exactly the pair `runGenerateStep`
- *  already verifies (D5) — plus the metadata file recording how to restore
- *  them. */
-export const GENERATION_DEMO_FILENAME = 'DEMO.html';
-export const GENERATION_SKILL_FILENAME = 'SKILL.md';
-export const GENERATION_META_FILENAME = 'meta.json';
 
 // ---------------------------------------------------------------------------
 // Session-dir state contract
@@ -157,12 +167,6 @@ export type RunDemoBuilderTurnResult = {
   lockPath?: string;
 };
 
-/** The kind-dir under a project root that holds demo-builder sessions. */
-const DEMO_KIND_DIR = '_demo';
-
-export function demoSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, DEMO_KIND_DIR, sessionId);
-}
 
 // ---------------------------------------------------------------------------
 // The variant
@@ -507,61 +511,6 @@ function runLockStep(args: {
   return { phase: 'locked', wrote: [lockPath, join(histDir, 'DEMO.html')], lockPath };
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** R4-16 — the subset of a generation's meta.json the lock-step restore
- *  needs. Fails CLOSED (returns null) on ANY shape violation: missing file,
- *  unreadable, not JSON, or a missing/non-string `skillRelPath` (the field
- *  the restore writes the skill back to — load-bearing). */
-type GenerationSnapshotMeta = { readonly skillRelPath: string };
-
-function readGenerationSnapshotMeta(projectRoot: string, sessionId: string, n: number): GenerationSnapshotMeta | null {
-  // SEC-04 leaf: route the meta.json read through the guard (leaf included) so a
-  // symlinked meta.json under generations/<n>/ collapses to null.
-  const raw = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME, String(n), GENERATION_META_FILENAME]);
-  if (raw === null) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const rec = parsed as Record<string, unknown>;
-  if (typeof rec.skillRelPath !== 'string' || rec.skillRelPath.length === 0) return null;
-  return { skillRelPath: rec.skillRelPath };
-}
-
-/** The generation numbers that DO have a `generations/<n>/` dir on disk —
- *  used only to name what's available in the R4-16 fail-closed lock error.
- *  Best-effort: a missing/unreadable `generations/` dir yields []. */
-function listExistingGenerationNumbers(projectRoot: string, sessionId: string): number[] {
-  // SEC-04 leaf: the generations/ dir readdir routed through the guard.
-  const names = guardedReadDir(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME]);
-  if (names === null) return [];
-  return names
-    .map((n) => Number(n))
-    .filter((n) => Number.isInteger(n))
-    .sort((a, b) => a - b);
-}
-
-/**
- * SEC-04 leaf: resolve a guarded WRITE path for a session-dir leaf (leaf
- * included), mkdir its parent, and return it — throwing (fail closed, the
- * runner contract) if the leaf escapes. Returns the path (not the write) so the
- * caller keeps its Buffer/string write for byte-identical snapshots.
- */
-function guardedGenerationWritePath(projectRoot: string, segs: readonly string[], what: string): string {
-  const p = guardedFile(projectRoot, segs, 'write');
-  if (p === null) {
-    throw new Error(`demo-builder runner: ${what} write failed containment (symlinked/escaping leaf) — refusing to write.`);
-  }
-  mkdirSync(dirname(p), { recursive: true });
-  return p;
-}
-
 
 function describeDemoProcess(projectRepoPath: string): string {
   let steps;
@@ -709,3 +658,118 @@ function readBaseCss(forgeRoot: string): string {
 // makeThinkingSink duplicates in favour of the shared pair. The M4 ruling-60
 // port took the next step: the sinks are BUILT by kind-turn.ts and arrive on
 // `plumbing`, so this file neither declares nor constructs them.
+
+// ---------------------------------------------------------------------------
+// The generic session-affordance WRITE arms for this kind (M4 row 37 carve).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// question-form — demo (the briefing phase: operator brief -> generating).
+// Mirrors `POST /api/demo-builder/brief` (`cli/ui-bridge.ts:4623`). W6-B10 —
+// added alongside `studio/session-kinds.yaml`'s new `briefing` row (that
+// file's own comment explains why the row was missing until now: every demo
+// session is minted straight into `briefing`, so without this handler a
+// session opened on the dedicated `/sessions/demo/<sid>` screen could never
+// get the agent started). Reuses `answersCapReason`'s shape/size validation
+// (instructions' own guard, generic over any `answers[]` body) rather than a
+// second, hand-kept copy; a brief is a single free-text note, so only the
+// FIRST answer's `.answer` field is read — the client always sends one
+// (`SessionInteractivePanel`'s question-form box), and `question` is
+// discarded (there is no real "question" here, unlike an interview round).
+// ---------------------------------------------------------------------------
+export async function handleDemoBrief(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const answersRaw = body.answers;
+  if (
+    !Array.isArray(answersRaw) ||
+    answersRaw.length === 0 ||
+    !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
+  ) {
+    sendJson(res, 400, { error: 'body.answers must be a non-empty array of {question: string, answer: string}' }, origin);
+    return;
+  }
+  const answers = answersRaw as { question: string; answer: string }[];
+  const capReason = answersCapReason(answers);
+  if (capReason !== null) {
+    sendJson(res, 400, { error: capReason }, origin);
+    return;
+  }
+  const brief = answers[0].answer;
+
+  // SYNC INVARIANT: no await between the caller's status read and either
+  // write below — see this file's header note.
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: 1, prompt: brief }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+  ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+  ctx.broadcastKindChanged('demo');
+  sendJson(res, 200, { ok: true, phase: 'generating', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
+}
+
+// ---------------------------------------------------------------------------
+// verdict — demo (approve => lock; reject => abandon). Mirrors
+// `POST /api/demo-builder/lock` / `POST /api/demo-builder/abandon`
+// (`cli/ui-bridge.ts:4618`/`4661`).
+// ---------------------------------------------------------------------------
+
+export async function handleDemoVerdict(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  verdict: 'approve' | 'reject',
+  body: Record<string, unknown>,
+): Promise<void> {
+  // SYNC INVARIANT: no await between the caller's status read and either
+  // write below — an await here reopens the double-spawn race; see
+  // kb-cleanup's now-fixed `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
+  // this file's header note.
+  if (verdict === 'reject') {
+    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
+      sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+      return;
+    }
+    ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+    ctx.broadcastKindChanged('demo');
+    sendJson(res, 200, { ok: true, phase: 'abandoned', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
+    return;
+  }
+
+  // approve => lock. `generation` mirrors the bespoke lock route's own
+  // structural validation (integer >= 1) BEFORE any write.
+  const hasGeneration = Object.prototype.hasOwnProperty.call(body, 'generation') && body.generation !== undefined;
+  if (hasGeneration && !(typeof body.generation === 'number' && Number.isInteger(body.generation) && (body.generation as number) >= 1)) {
+    sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
+    return;
+  }
+  if (
+    guardedWriteSessionStatus(projectsRoot, dirSegs, {
+      ...status,
+      phase: 'locking',
+      ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
+    }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+  ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+  ctx.broadcastKindChanged('demo');
+  sendJson(res, 200, { ok: true, phase: 'locking', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
+}

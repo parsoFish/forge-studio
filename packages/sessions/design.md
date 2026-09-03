@@ -146,3 +146,72 @@ spend and lifetime are not in forge's ledger — S9 run 3's 17 calls / 369k inpu
 from the HOST's per-cwd usage records, not from forge. Until 5.38 closes, a session's transcript is
 the honest record of what happened and the event log is incomplete by construction. Containment of
 the spawn itself (every spawn passing an explicit cwd) is bead `forge-8vfn.5.37`'s, wave 3.
+
+## The generic affordance write endpoint
+
+`POST /api/studio/sessions/:kind/:sessionId/:affordance` is one route with four
+per-kind arms, carved out of `cli/bridge-studio-affordances.ts` by M4 row 37
+(ruling 87). Three modules, and the split is forced rather than stylistic:
+`bridge-studio-sessions-affordances.ts` dispatches, `kinds/<kind>.ts` holds the
+arms, and `bridge-studio-sessions-affordance-shell.ts` holds what more than one
+arm needs — the dispatch imports the kinds, so anything a kind imported back out
+of the dispatch would be a cycle.
+
+`authoring` and `kb-cleanup` had no `kinds/` module at all before this: they are
+session kinds by descriptor only, with no runner and no registry row. Ruling 87
+mints them as identity-only composition modules in `kinds/architect-critic.ts`'s
+shape, so per-kind logic sits with its kind rather than in a switch. Their WORK
+still belongs to the packages that own it — knowledge's `approveKbCleanup` and
+library's `runFinalize`, both imported downward, both sending their own response.
+
+### The resolution chain, and why every step fails the same way
+
+1. `kind` → `loadSessionKinds` lookup. Unknown → 404 naming the offending value
+   and the allowed set.
+2. `sessionId` → the `isSafeRunId` ratchet first (cheap, pre-fs), then
+   `resolveGuardedPath` containment. Both collapse to the SAME 404
+   `{error:'session not found'}`. "Malformed id", "well-formed but escaping" and
+   "well-formed, contained, absent" are indistinguishable from outside on
+   purpose: a distinguishing signal here makes the route a filesystem oracle.
+   The 404 never echoes the resolved path.
+3. `affordance` → must be one of `deriveSessionAffordances(descriptor,
+   status.phase)`'s derived ids, recomputed from the session's CURRENT on-disk
+   phase on every call. A stale id a client remembered from a PRIOR phase 409s
+   exactly as a phase-inappropriate one does; the 409 names the currently
+   available set, never the full registry.
+4. `body` → validated per the matched affordance's `kind`, then generically
+   against `affordance.meta.requires` (any field a row's `requires:` list names
+   must be a non-empty string — checked once, for every kind, never as a
+   hand-kept per-kind field list), then per session kind. Anything the switch
+   does not explicitly wire — an out-of-scope verdict value, or the read-only
+   `staged-review`/`next-turn` kinds, which describe what an `agent` step already
+   did — falls through to a 501 `UnhandledAffordanceBody` naming the affordance
+   kind, the session kind and the phase. Never a silent 200, never a misroute
+   into another kind's handler.
+
+### The SYNC INVARIANT the arms depend on
+
+`handleInstructionsAnswer`, `handleInstructionsVerdict` and `handleDemoVerdict`
+are race-safe TODAY only because none of them contains an `await` between the
+`status` read (done once, by the dispatch, before it routes) and its own
+`guardedWriteSessionStatus`. Two concurrent requests can only interleave at an
+`await`, so a handler with no internal await runs its whole read-derive-write
+atomically. **This is accidental safety, not a designed invariant** — it breaks
+the moment anyone adds an `await` between the read and the write, which is
+exactly how kb-cleanup's now-fixed double-approve race was introduced. Each such
+handler carries its own SYNC INVARIANT comment; do not add an await inside one
+without either preserving the invariant or restructuring it onto
+`approveKbCleanup`'s claim-then-await shape (a synchronous `phase:'applying'`
+claim written BEFORE the one await).
+
+`runFinalize` needed no such fix: it re-reads status.json itself and writes its
+own atomic `phase:'committing'` claim before its one await. It already had the
+shape `approveKbCleanup` was built to match.
+
+### Ordering is the contract
+
+`SESSION_AFFORDANCE_RE` is a bare three-segment matcher, so it also matches
+`…/:kind/:sessionId/cancel`. Its table entry therefore sits AFTER the cancel
+entry, and `tests/contract/routes-table.test.ts` proves that with a mutation —
+it rebuilds the table with the affordance entry moved above cancel and asserts
+the claim flips. A comment beside the row is not a control.

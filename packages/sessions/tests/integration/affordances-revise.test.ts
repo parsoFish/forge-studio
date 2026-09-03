@@ -25,8 +25,13 @@
  *     status.json (sessions-kinds-36 — the committed session keeps a
  *     permanent pointer at the object it produced).
  *
- * Harness mirrors cli/bridge-studio-affordances.test.ts exactly (real
- * bridge, real checked-in session-kinds.yaml, dry-bridge spawns).
+ * Harness: this package's own route TABLE against the REAL checked-in
+ * `studio/session-kinds.yaml`, with the spawn injected as a no-spawn — the
+ * handler-level shape rulings 30/49/50 describe. It drove a real bridge until
+ * the M4 row-37 carve; COMMON §5 forbids that inside a package, and every
+ * assertion below is about the handler's status and what it wrote to disk, not
+ * about the wire. The host's own request policy (origin, CSRF, the 404
+ * fallthrough) stays pinned in `cli/bridge-studio-affordances.test.ts`.
  */
 
 import { test, before, after } from 'node:test';
@@ -36,17 +41,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
-import { verdictWasAccepted } from './bridge-studio-affordances.ts';
-import { VERDICT_VALUES } from '@forge/sessions/studio/session-kinds.ts';
+import { verdictWasAccepted } from '../../bridge-studio-sessions-affordances.ts';
+import { VERDICT_VALUES } from '../../studio/session-kinds.ts';
+import type { SessionsRouteDeps } from '../../routes.ts';
+import { affordanceDeps, postAt, type HandlerResponse } from './test-fixtures/affordance-handler.ts';
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
-const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
+const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 
 let forgeRoot: string;
-let bridgeUrl: string;
-let closeBridge: () => Promise<void>;
+let deps: SessionsRouteDeps;
 
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-affordances-revise-'));
@@ -64,16 +68,13 @@ before(async () => {
   const realSessionKindsYaml = readFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), 'utf8');
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), realSessionKindsYaml);
 
-  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
-  process.env.FORGE_DRY_BRIDGE = '1';
-  const result = await startBridge({ forgeRoot, port: 0 });
-  bridgeUrl = result.url;
-  closeBridge = result.close;
+  // The deliberate no-spawn seam, injected rather than reached through
+  // `FORGE_DRY_BRIDGE`: every case below asserts the phase the route moved the
+  // session TO, and a spawn that ran for real would start an agent turn.
+  deps = affordanceDeps(forgeRoot);
 });
 
 after(async () => {
-  if (closeBridge) await closeBridge();
-  delete process.env.FORGE_DRY_BRIDGE;
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
@@ -103,11 +104,11 @@ function readVerdicts(sessionDir: string): Array<Record<string, unknown>> {
 }
 
 function affordanceUrl(kind: string, sessionId: string, affordance: string): string {
-  return `${bridgeUrl}/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(affordance)}`;
+  return `/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(affordance)}`;
 }
 
-async function postJson(url: string, body: unknown): Promise<Response> {
-  return fetch(url, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
+async function postJson(path: string, body: unknown): Promise<HandlerResponse> {
+  return postAt(forgeRoot, path, body, deps);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +123,7 @@ test('C2-REV-1: instructions revise at awaiting-verdict -> 200, feedback.md writ
   const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'revise', feedback: 'Tighten the build-commands section.',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'drafting');
   assert.equal(readFileSync(join(sessionDir, 'feedback.md'), 'utf8'), 'Tighten the build-commands section.');
@@ -138,7 +139,7 @@ test('C2-REV-2: revise with a MISSING/empty feedback -> 400 naming "feedback", n
   const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
   for (const body of [{ project, verdict: 'revise' }, { project, verdict: 'revise', feedback: '   ' }]) {
     const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), body);
-    const parsed = (await res.json()) as { error: string };
+    const parsed = res.json<{ error: string }>();
     assert.equal(res.status, 400, JSON.stringify(parsed));
     assert.match(parsed.error, /feedback/);
   }
@@ -154,7 +155,7 @@ test('C2-REV-3: revise with an over-cap feedback -> 400 naming the byte cap', as
   const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'revise', feedback: 'x'.repeat(9 * 1024),
   });
-  const body = (await res.json()) as { error: string };
+  const body = res.json<{ error: string }>();
   assert.equal(res.status, 400);
   assert.match(body.error, /byte|8192/i);
   assert.equal(readPhase(sessionDir), 'awaiting-verdict');
@@ -167,7 +168,7 @@ test('C2-REV-4: PARITY — generic revise reaches the SAME phase + feedback.md t
   const bespokeDir = seedSession(project, '_instructions', bespokeId, { session_id: bespokeId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
   const genericDir = seedSession(project, '_instructions', genericId, { session_id: genericId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
 
-  const bespokeRes = await postJson(`${bridgeUrl}/api/instructions/verdict`, { project, sessionId: bespokeId, kind: 'revise', feedback: 'Use pnpm.' });
+  const bespokeRes = await postJson('/api/instructions/verdict', { project, sessionId: bespokeId, kind: 'revise', feedback: 'Use pnpm.' });
   assert.equal(bespokeRes.status, 200);
   const genericRes = await postJson(affordanceUrl('instructions', genericId, 'awaiting-verdict-verdict'), { project, verdict: 'revise', feedback: 'Use pnpm.' });
   assert.equal(genericRes.status, 200);
@@ -189,7 +190,7 @@ test('C2-REV-5: demo revise at awaiting-review -> 200, feedback.md written, phas
   const res = await postJson(affordanceUrl('demo', sessionId, 'awaiting-review-verdict'), {
     project, verdict: 'revise', feedback: 'More contrast on the CLI capture.',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'generating');
   assert.equal(readStatus(sessionDir).iteration, 3);
@@ -209,7 +210,7 @@ test('C2-REV-6: authoring revise at awaiting-review -> 200, feedback.md written,
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
     project, verdict: 'revise', feedback: 'Rename the tool section and add an example.',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200 (requires:[id] is APPROVE-scoped — revise needs no id), got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'analyzing');
   assert.equal(readFileSync(join(sessionDir, 'feedback.md'), 'utf8'), 'Rename the tool section and add an example.');
@@ -224,7 +225,7 @@ test('C2-REV-7: authoring reject at awaiting-review -> 200, phase -> rejected (t
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
     project, verdict: 'reject', notes: 'Not needed after all.',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'rejected');
   const records = readVerdicts(sessionDir);
@@ -251,7 +252,7 @@ test('C2-REV-8: kb-cleanup revise at awaiting-approval -> 200, feedback.md writt
   const res = await postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), {
     project, verdict: 'revise', feedback: 'Merge the two dedupe actions into one.',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'drafting');
   assert.equal(readFileSync(join(sessionDir, 'feedback.md'), 'utf8'), 'Merge the two dedupe actions into one.');
@@ -299,7 +300,7 @@ test('C2-NOTES-2: notes over the byte cap -> 400, phase unchanged, nothing recor
   const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'reject', notes: 'x'.repeat(9 * 1024),
   });
-  const body = (await res.json()) as { error: string };
+  const body = res.json<{ error: string }>();
   assert.equal(res.status, 400);
   assert.match(body.error, /notes/);
   assert.equal(readPhase(sessionDir), 'awaiting-verdict');
@@ -329,7 +330,7 @@ test('C2-SLUG-1: authoring approve with a non-slug id -> 400 (never 500), an ope
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
     project, verdict: 'approve', id: 'W7 Throwaway Authored!!',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { error: string };
   assert.ok(!/InteractiveRunnerError|runInteractiveTurn/.test(body.error), `the internal error class must never reach the operator, got: ${body.error}`);
@@ -346,7 +347,7 @@ test('C2-FIN-1: a successful authoring finalize persists finalized {kind, id} on
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
     project, verdict: 'approve', id: 'c2-finalized-skill',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const status = readStatus(sessionDir);
   assert.deepEqual(status.finalized, { kind: 'skill', id: 'c2-finalized-skill' });
@@ -371,7 +372,7 @@ test('C2-FIX-A2-1: a verdicts.json this route cannot parse REFUSES the next verd
   const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'approve', notes: 'ship it',
   });
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 409, `expected the append to be REFUSED, got ${res.status}: ${text}`);
   assert.match(JSON.parse(text).error as string, /verdicts\.json/);
   assert.equal(readFileSync(join(sessionDir, 'verdicts.json'), 'utf8'), corrupt, 'the unreadable history must be left exactly as found');
@@ -386,13 +387,13 @@ test('C2-FIX-A5-1: TWO revise rounds each record their OWN feedback — round 1\
   const first = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'revise', feedback: 'Make the button blue.',
   });
-  assert.equal(first.status, 200, await first.text());
+  assert.equal(first.status, 200, first.text);
   // back to the gate for round 2 (the drafting turn would do this for real)
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-verdict', round: 3, prompt: '' }), 'utf8');
   const second = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
     project, verdict: 'revise', feedback: 'Actually make it red.',
   });
-  assert.equal(second.status, 200, await second.text());
+  assert.equal(second.status, 200, second.text);
 
   const records = readVerdicts(sessionDir);
   assert.equal(records.length, 2, 'both rounds are recorded');
@@ -422,7 +423,7 @@ test('C2-FIX-A8-1: the verdict vocabulary comes from VERDICT_VALUES — an out-o
   const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
   const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), { project, verdict: 'defer' });
   assert.equal(res.status, 400);
-  const { error } = (await res.json()) as { error: string };
+  const { error } = res.json<{ error: string }>();
   for (const value of VERDICT_VALUES) {
     assert.ok(error.includes(value.id), `the 400 must name every VERDICT_VALUES member (missing "${value.id}"): ${error}`);
   }
@@ -440,15 +441,15 @@ test('C2-FIX-A3-1: an answer is bound to its question by ID — a missing, unkno
   const url = affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form');
 
   const noId = await postJson(url, { project, answers: [{ question: 'Which gate?', answer: 'npm test' }] });
-  const noIdText = await noId.text();
+  const noIdText = noId.text;
   assert.equal(noId.status, 400, noIdText);
   assert.match((JSON.parse(noIdText) as { error: string }).error, /questionId/);
 
   const unknownId = await postJson(url, { project, answers: [{ questionId: 'q9', question: 'Which gate?', answer: 'npm test' }] });
-  assert.equal(unknownId.status, 400, await unknownId.text());
+  assert.equal(unknownId.status, 400, unknownId.text);
 
   const mismatch = await postJson(url, { project, answers: [{ questionId: 'q1', question: 'A different question', answer: 'npm test' }] });
-  assert.equal(mismatch.status, 400, await mismatch.text());
+  assert.equal(mismatch.status, 400, mismatch.text);
 
   const ok = await postJson(url, {
     project,
@@ -457,7 +458,7 @@ test('C2-FIX-A3-1: an answer is bound to its question by ID — a missing, unkno
       { questionId: 'q2', question: 'Which gate?', answer: 'npm run lint' },
     ],
   });
-  assert.equal(ok.status, 200, await ok.text());
+  assert.equal(ok.status, 200, ok.text);
   const rounds = JSON.parse(readFileSync(join(sessionDir, 'answers.json'), 'utf8')) as Array<{ answers: Array<{ questionId?: string; answer: string }> }>;
   assert.deepEqual(rounds[0].answers.map((a) => a.questionId), ['q1', 'q2'], 'the durable record binds by id — two identically-worded questions stay distinguishable');
   assert.deepEqual(rounds[0].answers.map((a) => a.answer), ['npm test', 'npm run lint']);
