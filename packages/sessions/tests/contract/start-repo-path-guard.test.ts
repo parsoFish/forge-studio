@@ -146,3 +146,95 @@ for (const route of START_ROUTES) {
     );
   });
 }
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.5.52 — a supplied projectRepoPath must belong to the project
+// the request NAMES, not merely live under projectsRoot.
+//
+// The containment guard's contract is "is this under projectsRoot", which lets a
+// request naming project A point at project B: the session is labelled A and
+// every write lands in B's real working tree, with nothing red. Measured before
+// the tightening was written: no project declares a repo path, and all 17
+// session status files on disk carry project_repo_path exactly
+// <projectsRoot>/<project>, every one matching its own project field.
+// ---------------------------------------------------------------------------
+
+for (const route of START_ROUTES) {
+  test(`POST ${route} refuses a repo path belonging to ANOTHER project`, async (t) => {
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'start-xproj-'));
+    const projectsRoot = join(forgeRoot, 'projects');
+    mkdirSync(join(projectsRoot, 'mdtoc'), { recursive: true });
+    mkdirSync(join(projectsRoot, 'othergitproj'), { recursive: true });
+    t.after(() => rmSync(forgeRoot, { recursive: true, force: true }));
+
+    const { status, payload } = await post(projectsRoot, forgeRoot, route, {
+      project: 'mdtoc',
+      projectRepoPath: join(projectsRoot, 'othergitproj'),
+      idea: 'x',
+      brief: 'x',
+    });
+    assert.equal(status, 400, `a cross-project repo path must be refused, got ${status}`);
+    const reason = String(payload['error'] ?? '');
+    // The refusal names BOTH, so an operator relying on the old looseness is told
+    // what changed rather than meeting a bare 400.
+    assert.match(reason, /othergitproj/, `the reason must name the offending path: ${reason}`);
+    assert.match(reason, /mdtoc/, `the reason must name the project it was checked against: ${reason}`);
+  });
+
+  test(`POST ${route} still ACCEPTS the project's own repo path`, async (t) => {
+    // The control that keeps the tightening honest: if it rejected everything,
+    // the test above would pass for the wrong reason.
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'start-ownproj-'));
+    const projectsRoot = join(forgeRoot, 'projects');
+    mkdirSync(join(projectsRoot, 'mdtoc'), { recursive: true });
+    t.after(() => rmSync(forgeRoot, { recursive: true, force: true }));
+
+    const { payload } = await post(projectsRoot, forgeRoot, route, {
+      project: 'mdtoc',
+      projectRepoPath: join(projectsRoot, 'mdtoc'),
+      idea: 'x',
+      brief: 'x',
+    });
+    assert.ok(
+      !/not inside project/.test(String(payload['error'] ?? '')),
+      `a project's own repo path must pass: ${JSON.stringify(payload)}`,
+    );
+  });
+
+  test(`POST ${route} accepts a path BENEATH the project's own root`, async (t) => {
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'start-subdir-'));
+    const projectsRoot = join(forgeRoot, 'projects');
+    mkdirSync(join(projectsRoot, 'mdtoc', 'nested'), { recursive: true });
+    t.after(() => rmSync(forgeRoot, { recursive: true, force: true }));
+
+    const { payload } = await post(projectsRoot, forgeRoot, route, {
+      project: 'mdtoc',
+      projectRepoPath: join(projectsRoot, 'mdtoc', 'nested'),
+      idea: 'x',
+      brief: 'x',
+    });
+    assert.ok(
+      !/not inside project/.test(String(payload['error'] ?? '')),
+      `a subdirectory of the project must pass: ${JSON.stringify(payload)}`,
+    );
+  });
+
+  test(`POST ${route} does NOT accept a sibling that merely shares the project's prefix`, async (t) => {
+    // `<projectsRoot>/mdtoc-evil` starts with `<projectsRoot>/mdtoc` as a STRING
+    // but is a different project. The same lexical trap the containment guard
+    // itself has a test for, one level down.
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'start-prefix-'));
+    const projectsRoot = join(forgeRoot, 'projects');
+    mkdirSync(join(projectsRoot, 'mdtoc'), { recursive: true });
+    mkdirSync(join(projectsRoot, 'mdtocevil'), { recursive: true });
+    t.after(() => rmSync(forgeRoot, { recursive: true, force: true }));
+
+    const { status, payload } = await post(projectsRoot, forgeRoot, route, {
+      project: 'mdtoc',
+      projectRepoPath: join(projectsRoot, 'mdtocevil'),
+      idea: 'x',
+      brief: 'x',
+    });
+    assert.equal(status, 400, `a prefix-sharing sibling must be refused, got ${status} ${JSON.stringify(payload)}`);
+  });
+}

@@ -24,6 +24,7 @@
  * list functions, so it sits ABOVE this layer, in `bridge-studio-session-index.ts`.
  */
 import { randomBytes } from 'node:crypto';
+import { join } from 'node:path';
 import type { OutgoingHttpHeaders } from 'node:http';
 
 import type { ModelTier } from '@forge/agents/phase-agent.ts';
@@ -360,11 +361,58 @@ function invalidProjectRepoPath(
  * would mint a row. The host supplies it at assembly (rulings 13/35/59).
  */
 export function rejectStartProjectRepoPath(
-  body: { readonly projectRepoPath?: unknown },
+  body: { readonly projectRepoPath?: unknown; readonly project?: unknown },
   roots: { forgeRoot: string; projectsRoot: string },
   isContained: ContainmentCheck,
 ): string | null {
-  return invalidProjectRepoPath(body.projectRepoPath, roots, isContained);
+  const contained = invalidProjectRepoPath(body.projectRepoPath, roots, isContained);
+  if (contained !== null) return contained;
+  return crossProjectRepoPath(body.projectRepoPath, body.project, roots);
+}
+
+/**
+ * Bead `forge-8vfn.5.52` — a supplied `projectRepoPath` must belong to the
+ * project the request NAMES, not merely live somewhere under `projectsRoot`.
+ *
+ * `isContainedProjectRepoPath` answers "is this under `projectsRoot`" and
+ * nothing more — that is its documented contract, not a defect in it. The
+ * consequence, found by the containment review of the routes carve: a request
+ * naming project A with a `projectRepoPath` pointing at project B passes
+ * cleanly, and every git and artifact write for that "A" session then lands in
+ * B's real working tree. The session is labelled with one project and edits
+ * another, with nothing red anywhere.
+ *
+ * THIS IS A TIGHTENING, so what it might break was measured before it was
+ * written rather than after (2026-09-03, on the real tree): no project declares
+ * a repo path — `DiscoveredProject` carries `absPath` and `hasConfig` only, and
+ * no `.forge/project.json` contains such a key — and all 17 session status
+ * files on disk carry `project_repo_path` exactly equal to
+ * `<projectsRoot>/<project>`, every one matching its own `project` field, 0
+ * mismatches. So this breaks nothing that exists.
+ *
+ * That is evidence, not proof: it says no CURRENT session relies on the loose
+ * rule, not that no operator could. Hence the reason names BOTH the project and
+ * the path, so an operator who WAS relying on it is told exactly what changed
+ * instead of meeting a bare 400.
+ *
+ * THE EXTENSION POINT, deliberately not built. If a project ever needs its repo
+ * outside `<projectsRoot>/<id>`, that is a project-config feature with its own
+ * bead, and the permitted value must be read from THAT CONFIG — never from the
+ * request body, because a request-supplied "declaration" of where a request may
+ * write is not a check at all. No config key is invented here to honour a case
+ * that does not exist; a branch with no config to read would make this guard
+ * look like it supports something it has never been tested against.
+ */
+function crossProjectRepoPath(
+  candidate: unknown,
+  project: unknown,
+  roots: { projectsRoot: string },
+): string | null {
+  if (typeof candidate !== 'string' || candidate === '') return null; // absent: the default is built elsewhere
+  if (typeof project !== 'string' || project === '') return null; // the project guard owns this case
+  const own = join(roots.projectsRoot, project);
+  if (candidate === own || candidate.startsWith(`${own}/`)) return null;
+  return `${candidate} is not inside project "${project}" (expected ${own} or a path beneath it)`;
 }
 /**
  * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15) — the
