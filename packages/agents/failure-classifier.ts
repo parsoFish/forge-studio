@@ -350,10 +350,31 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
     }
     // N9: the CLI's limit death surfaces in reasoning/log events while the
-    // crash is a generic exit-code-1 — scan EVERY event type for the
-    // high-specificity limit signatures, plus the structured `rate_limited`
-    // flag the dev-loop stamps on an environment-failed WI's `ralph.end`.
-    if (md.rate_limited === true || matchesRateLimitSignature(msg)) { rateLimited = true; ev(e); }
+    // crash is a generic exit-code-1, so the scan cannot be error-events-only.
+    // It was EVERY event type, which is bead `forge-rofi`: a `tool_use` message
+    // is agent-authored by construction, so an agent writing rate-limit
+    // handling code could stamp the cycle "rate-limited" and mask a real
+    // terminal failure behind a transient retry.
+    //
+    // Scoped to `log` on a measurement, not a guess: across the whole archived
+    // corpus (/home/parso/forge/_logs, 356 `events.jsonl`, 1,126,655 events)
+    // the four signatures appear FOURTEEN times and every one is
+    // `event_type: 'log'`. The other nine types — 36,578 `tool_use`, 6,117
+    // `file_change`, 1,024,605 `agent_heartbeat` among them — were being
+    // scanned for a string none of them has ever carried.
+    //
+    // The structured `rate_limited` flag stays UNSCOPED: the dev-loop stamps it
+    // on a `ralph.end` (an `end` event), and being structured it cannot be
+    // tripped by prose at all.
+    //
+    // RESIDUAL, stated rather than implied away: all fourteen real hits are
+    // `log` + `metadata.kind: 'reasoning'` — the CLI echoes its limit line into
+    // the SAME channel the agent thinks aloud in, so event-type scoping cannot
+    // separate the two. Narrowing further means tightening the SIGNATURES to
+    // the machine shapes ("hit your limit · resets …", the `"type":
+    // "overloaded_error"` JSON blob), which changes retry behaviour and is a
+    // ruling, not a refactor.
+    if (md.rate_limited === true || (e.event_type === 'log' && matchesRateLimitSignature(msg))) { rateLimited = true; ev(e); }
     if (e.phase === 'orchestrator' && e.event_type === 'error') {
       if (msg.includes('developer-loop') && msg.includes('total failure')) { devLoopTotalFailure = true; ev(e); }
       // R4-10-F1: the successor nodes' delivery-gate throws (flow-runner.ts
