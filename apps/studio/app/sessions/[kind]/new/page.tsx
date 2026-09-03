@@ -17,7 +17,7 @@ import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
 import { reconcileProjectPrefill, reconcileSelectPrefill } from '@/lib/kickoff-form';
 import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
-import { defaultKickoffTier, sessionDirPreview } from '@/lib/kickoff-view';
+import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/kickoff-view';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -112,6 +112,13 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [unknownKbPrefill, setUnknownKbPrefill] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
+  // forge-8vfn.5.10 (sessions-owned site) — the id this page mints, published
+  // on the page that minted it BEFORE it navigates away. Until this existed the
+  // POST's result went straight into `router.push` and the id appeared nowhere
+  // an observer could read: not to a story, not to a journey, not to an operator
+  // whose navigation failed. Empty means "started nothing", which is why the
+  // attribute is always rendered rather than conditionally added.
+  const [mintedSessionId, setMintedSessionId] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
@@ -331,6 +338,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         return;
       }
       const sessionProject = result.project ?? project.trim();
+      setMintedSessionId(result.sessionId);
       router.push(`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(result.sessionId)}?project=${encodeURIComponent(sessionProject)}`);
     } finally {
       setSubmitting(false);
@@ -392,7 +400,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       dataPage="session-kickoff"
       ready={ready}
       title={sessionKindTitle(kind)}
-      mainData={{ 'data-kickoff-kind': kind }}
+      mainData={kickoffMainData(kind, mintedSessionId)}
     >
       {/* W7-B1 (sessions-kinds-05): plain-English orientation first, the
           on-disk provenance demoted to one line, and a way back out —

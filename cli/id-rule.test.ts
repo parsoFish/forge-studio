@@ -36,8 +36,6 @@ import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/va
 import { invalidProjectReason } from '@forge/sessions/bridge-studio-sessions.ts';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 import { buildProjectSavePayload } from '../apps/studio/lib/project-save-payload.ts';
-import { unroutableKbReason, type UnroutableKb } from '@forge/knowledge/kb-sites.ts';
-import { loadKbDescriptors } from '@forge/knowledge/bridge-studio-kbs.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -309,23 +307,16 @@ test('generic session route: project=trafficGame is a valid project (404 unknown
   assert.notEqual(r.status, 400, `got 400: ${JSON.stringify(r.body)}`);
 });
 
-test('W7A4-04: unroutableKbReason is the ONE predicate — null iff id === dir AND id passes KB_ID_RE', () => {
-  assert.equal(unroutableKbReason('trafficGame', 'trafficGame'), null);
-  assert.equal(unroutableKbReason('gitpulse', 'gitpulse'), null);
-  assert.match(unroutableKbReason('gitpulse-brain', 'gitpulse') ?? '', /gitpulse-brain.*"gitpulse"/);
-  assert.match(unroutableKbReason('trafficgame', 'trafficGame') ?? '', /trafficgame/, 'case matters — exact match');
-  assert.notEqual(unroutableKbReason('bad id', 'bad id'), null, 'an id failing KB_ID_RE is unroutable even when it equals its dir');
-});
+// W7A4-04's PREDICATE half — `unroutableKbReason`'s own cases, and
+// `loadKbDescriptors`' unroutable-callback contract — moved to
+// `packages/knowledge/tests/unit/kb-sites.test.ts`, beside the two functions.
+// Neither needed the bridge this file boots. The ROUTE half stays below.
 
 test('W7A4-04 (RED on main): the roster DIAGNOSES a dropped descriptor — GET /api/studio/kbs returns `unroutable[]` naming dir + id + reason; the KB is neither listed nor bound', async () => {
-  const local: UnroutableKb[] = [];
-  const listed = loadKbDescriptors(forgeRoot, (u) => local.push(u));
-  assert.ok(!listed.some((k) => k.id === 'gitpulse-brain'), 'the loader drops the mismatched descriptor');
-  assert.equal(local.length, 1, `expected exactly the gitpulse fixture, got ${JSON.stringify(local)}`);
-  assert.equal(local[0].dir, 'gitpulse');
-  assert.equal(local[0].id, 'gitpulse-brain');
-  assert.match(local[0].reason, /gitpulse-brain/);
-
+  // The loader-level half of this pin (that `loadKbDescriptors` drops the
+  // descriptor and reports it) is now `packages/knowledge/tests/unit/kb-sites.test.ts`.
+  // What is asserted here is what only a live roster ROUTE can show: the
+  // diagnostic reaches the response, and the mismatched KB derives no binding.
   const list = await get('/api/studio/kbs');
   assert.equal(list.status, 200);
   const ids = list.body.kbs.map((k: any) => k.id);
