@@ -32,7 +32,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -158,6 +158,73 @@ test('dispatchAgentRun CONTAINMENT: an explicit project binding still wins — t
       captured.value!.options.cwd,
       repoPath,
       'a bound project is the agent\'s worktree and must remain the spawn cwd — the containment default applies only when nothing was bound',
+    );
+  } finally {
+    restoreEnv();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The containment default changes an unbound dispatch from "the forge
+ * checkout" to "an empty run directory". Both are silent to the operator
+ * unless the dispatcher says which branch it took — declared data that
+ * nothing surfaces is the class this campaign keeps finding, so the event is
+ * pinned in both directions.
+ */
+function eventMessages(logsRoot: string, runId: string): string[] {
+  const path = join(logsRoot, runId, 'events.jsonl');
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((l) => l.trim().length > 0)
+    .map((l) => JSON.parse(l).message as string);
+}
+
+test('dispatchAgentRun REPORTS an unbound run: no project and no workdir emits agent-dispatch.no-project-bound (forge-8vfn.5.37)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const dir = mkdtempSync(join(tmpdir(), 'agent-dispatch-unbound-event-'));
+  try {
+    const runId = 'CONTAINMENT-EVENT-TEST';
+    const logsRoot = join(dir, '_logs');
+    const captured: { value: { options: Record<string, unknown> } | null } = { value: null };
+    await dispatchAgentRun({
+      slug: 'project-scoped-review',
+      skillsDir: SKILLS,
+      runId,
+      logsRoot,
+      loadDefs: () => [oneShotDef('project-scoped-review')],
+      queryFn: capturingQueryFn(captured),
+    });
+    assert.ok(
+      eventMessages(logsRoot, runId).includes('agent-dispatch.no-project-bound'),
+      'an unbound dispatch must say so in the event log — otherwise the operator cannot tell an intentional scratch run from an agent that needed a checkout and silently got an empty directory',
+    );
+  } finally {
+    restoreEnv();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('dispatchAgentRun does NOT report an unbound run when a project IS bound (forge-8vfn.5.37)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const dir = mkdtempSync(join(tmpdir(), 'agent-dispatch-bound-event-'));
+  try {
+    const runId = 'CONTAINMENT-EVENT-BOUND-TEST';
+    const logsRoot = join(dir, '_logs');
+    const captured: { value: { options: Record<string, unknown> } | null } = { value: null };
+    await dispatchAgentRun({
+      slug: 'project-scoped-review',
+      skillsDir: SKILLS,
+      runId,
+      logsRoot,
+      project: { name: 'a-project', repoPath: join(dir, 'a-project-repo') },
+      loadDefs: () => [oneShotDef('project-scoped-review')],
+      queryFn: capturingQueryFn(captured),
+    });
+    assert.ok(
+      !eventMessages(logsRoot, runId).includes('agent-dispatch.no-project-bound'),
+      'a bound run must not claim it was unbound — the negative half, without which the assertion above would pass on an unconditional emit',
     );
   } finally {
     restoreEnv();

@@ -611,7 +611,14 @@ export async function cmdAgentDispatch(
         message: 'agent-dispatch.failed',
         metadata: { error: msg, agent_slug: slug },
       });
-    } catch { /* best-effort */ }
+    } catch (markerErr) {
+      // Best-effort for the EXIT CODE — never masks the original error — but
+      // not silent: this is the one write whose whole job is to stop the
+      // bridge reporting a perpetual `running`, so a failure to make it has
+      // to be visible to whoever is reading the terminal.
+      const markerMsg = markerErr instanceof Error ? markerErr.message : String(markerErr);
+      console.error(`forge agent dispatch: could not write the terminal-failure marker (${markerMsg}) — the run status may remain "running"`);
+    }
     // D7 — the run ended in failure: write the terminal phase before exiting.
     // bead forge-poc (ON-7): the error text rides along too, for the same
     // reason the sibling agent-dispatch.failed log event above already
