@@ -9,7 +9,7 @@ from their SKILL tiers" item in the W7-B5 lane brief.
 
 Forge never halts spend in-process — the Claude Agent SDK does, keyed off the
 options each spawn hands it. Since W7-B5 **both** standalone spawn shapes
-enforce a ceiling (`orchestrator/run-agent.ts`):
+enforce a ceiling (`packages/agents/run-agent.ts`):
 
 | Spawn shape | Options key | Mechanism |
 | --- | --- | --- |

@@ -23,7 +23,7 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
  * executor registered in flow-runner's band table. `onboard-preflight`
  * (R4-18) is the 5th band: it routes a `{gate:'contract'}` flow node to
  * `execOnboardPreflight`, which runs the REAL forge↔project contract
- * preflight (`runPreflight`, `cli/preflight.ts`) orchestrator-side — no
+ * preflight (`runPreflight`, `packages/projects/preflight.ts`) orchestrator-side — no
  * agent spawn (ADR-036: the orchestrator runs gates, the agent never
  * self-certifies).
  */

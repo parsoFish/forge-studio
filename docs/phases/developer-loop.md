@@ -26,7 +26,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## Loop runtime
 
-- [`loops/ralph/runner.ts`](../../loops/ralph/runner.ts) — driver.
+- [`packages/agents/ralph/runner.ts`](../../packages/agents/ralph/runner.ts) — driver.
 - [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) — quality-gates-pass | iteration-budget. The iteration budget is the only no-progress backstop.
 - [`loops/_adapters/`](../../loops/_adapters/) — RuntimeAdapter registry (ADR 029). The Claude adapter (`loops/_adapters/claude/`) is the reference implementation; Gemini and Aider adapters shipped in M8 as the second implementations (both `available: false` until provisioned). The flow engine's dev node calls `getAdapter(sdkId).createAgent(...)` — never `createClaudeAgent` directly. Adding a new runtime is one file + registry row, no orchestrator edit.
 

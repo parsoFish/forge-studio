@@ -1,9 +1,9 @@
 /**
  * Claude reference adapter (M6-1, ADR 029).
  *
- * Wraps `createClaudeAgent` (loops/ralph/claude-agent.ts) + the SDK's `query`
+ * Wraps `createClaudeAgent` (packages/agents/ralph/claude-agent.ts) + the SDK's `query`
  * function into the `RuntimeAdapter` interface. This is the new public seam;
- * the underlying implementation stays in place at loops/ralph/claude-agent.ts
+ * the underlying implementation stays in place at packages/agents/ralph/claude-agent.ts
  * to avoid import churn across the ~15 existing sites.
  *
  * Behaviour-identical: createClaudeAgent is called with the same options it
@@ -12,7 +12,7 @@
  *
  * Physical layout note (ADR 029 §Decision/M6-1):
  *   Logical home:   loops/_adapters/claude/  ← this file
- *   Implementation: loops/ralph/claude-agent.ts  ← unchanged
+ *   Implementation: packages/agents/ralph/claude-agent.ts  ← unchanged
  * A later refactor can move the implementation under _adapters/claude/ if
  * desired; the move would be purely mechanical at that point.
  */

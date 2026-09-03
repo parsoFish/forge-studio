@@ -13,20 +13,20 @@
  * `params.options?.env` — when a caller DOES set it — is treated as
  * deliberate OVERRIDES the caller composes itself (e.g. the git-identity SDK
  * overlay's four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` keys in
- * `loops/ralph/claude-agent.ts`), not an alternate ambient source to filter:
+ * `packages/agents/ralph/claude-agent.ts`), not an alternate ambient source to filter:
  * they always win, layered on top of an allowlist-filtered snapshot of the
  * REAL `process.env`. See spawn-env.ts's `buildChildEnv` doc for why this
  * split is safe (only forge's own code sets `options.env`, never ambient
  * host state).
  *
- * Placement: orchestrator/, not loops/. `loops/ralph/claude-agent.ts` (a
- * loops/ file) already imports `orchestrator/stream-deadline.ts` — so
+ * Placement: orchestrator/, not loops/. `packages/agents/ralph/claude-agent.ts` (a
+ * loops/ file) already imports `packages/agents/stream-deadline.ts` — so
  * orchestrator/ -> loops/ and loops/ -> orchestrator/ edges already coexist
  * in this codebase at the individual-file level without forming an import
  * cycle. This file adds one more loops/ -> orchestrator/ edge; `./spawn-env.ts`
  * has no dependency path back into loops/, so no cycle is introduced.
  *
- * `orchestrator/pinned-sdk-query.enforce.test.ts` is the structural lock:
+ * `packages/agents/pinned-sdk-query.enforce.test.ts` is the structural lock:
  * every other file under orchestrator/, loops/, cli/ that imports `query` as
  * a value (not a type) from '@anthropic-ai/claude-agent-sdk' fails that test.
  */

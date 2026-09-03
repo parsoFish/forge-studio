@@ -2,8 +2,8 @@
  * RuntimeAdapter interface — the named contract formalising the two existing
  * injectable seams in the Ralph loop:
  *
- *   QueryFn          (loops/ralph/claude-agent.ts:22) — the raw SDK-call boundary.
- *   AgentInvocation  (loops/ralph/runner.ts:133)      — one Ralph iteration.
+ *   QueryFn          (packages/agents/ralph/claude-agent.ts:22) — the raw SDK-call boundary.
+ *   AgentInvocation  (packages/agents/ralph/runner.ts:133)      — one Ralph iteration.
  *
  * M6-1 (ADR 029): extraction, not redesign. The Claude adapter wraps
  * createClaudeAgent + sdkQuery and is the reference implementation.
@@ -39,7 +39,7 @@ export type AdapterAgentOptions = ClaudeAgentOptions;
  * RuntimeAdapter — the pluggable SDK seam (ADR 029).
  *
  * Every adapter must satisfy this interface. The conformance suite
- * (loops/_adapters/conformance.ts, M6-2) is the admission gate.
+ * (packages/agents/_adapters/conformance.ts, M6-2) is the admission gate.
  *
  * Fields:
  *   id          — sdk id registered in the catalog ('claude', 'example', …).

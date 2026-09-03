@@ -158,7 +158,7 @@ export function splitSkillTurnSections(text: string): { base: string; turns: Map
  *  explicit `skillPromptPath` override (the runners' test/DI seam) is never
  *  read from or written into this cache — each override read must reflect
  *  exactly the fixture it names, independent of any other fixture read in
- *  the same process (see AT-5 in `orchestrator/skill-turn-prompt.test.ts`). */
+ *  the same process (see AT-5 in `packages/agents/skill-turn-prompt.test.ts`). */
 const defaultPathSkillCache = new Map<string, string>();
 
 /**

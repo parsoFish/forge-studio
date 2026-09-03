@@ -8,7 +8,7 @@
  *
  * Adding a real second adapter (Codex / Gemini / local) later:
  *   1. Implement RuntimeAdapter in loops/_adapters/<sdk>/index.ts.
- *   2. Run the conformance suite (loops/_adapters/conformance.ts) — must pass.
+ *   2. Run the conformance suite (packages/agents/_adapters/conformance.ts) — must pass.
  *   3. Import + register below.
  *   4. Install the npm dep (ask-first event per PRINCIPLES.md).
  */
