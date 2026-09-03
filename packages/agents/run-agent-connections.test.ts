@@ -88,8 +88,9 @@ import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 
 function withoutSpawnSuppressionEnv(): () => void {
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;

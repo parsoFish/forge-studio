@@ -320,7 +320,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');
   assertSafeRunId(ctx.runId);
 
-  const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs');
+  const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs'));
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
 
@@ -477,7 +477,7 @@ async function runOneShotSpawn(
   // none, which keeps the golden spawn-capture option bags byte-identical.
   const oneShotHooks = sdkHooksForAgent({
     skill: spec.skill,
-    logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs'),
+    logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs')),
     initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId,
   });
   if (oneShotHooks !== undefined) options['hooks'] = oneShotHooks;

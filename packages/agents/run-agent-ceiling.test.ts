@@ -73,8 +73,9 @@ import { dispatchAgentRun } from './agent-dispatch.ts';
 import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const ROOT = process.cwd();
+const ROOT = FORGE_ROOT;
 
 /**
  * Save + delete BOTH spawn-suppression env vars so a test that injects a

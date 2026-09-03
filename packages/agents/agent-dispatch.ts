@@ -25,6 +25,7 @@ import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
 import { createLogger } from '@forge/kernel';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 import { fireAgentCompleteTriggers } from '@forge/flows/flow-trigger.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
@@ -42,13 +43,13 @@ export type DispatchAgentRunOpts = {
   skillsDir: string;
   /** Used verbatim as the `_logs/` run directory name (guarded). */
   runId: string;
-  /** Log root; default `'_logs'`. */
+  /** Log root; default `<FORGE_ROOT>/_logs` (absolute — never cwd-relative). */
   logsRoot?: string;
   /** Optional project binding — the repo the agent runs against (also the default cwd). */
   project?: ProjectBinding;
   /** Freeform operator-supplied run inputs (e.g. `{ northStar, repo }`), surfaced as prompt DATA. */
   inputs?: Record<string, string>;
-  /** Spawn cwd; default `project.repoPath ?? process.cwd()`. */
+  /** Spawn cwd; default `project.repoPath ?? <logsRoot>/<runId>` (the run's own directory — never the parent process's cwd; bead forge-8vfn.5.37). */
   workdir?: string;
   /** Test-injection only (see `RunContext.queryFn`); one-shot path only. */
   queryFn?: StreamQueryFn;
@@ -244,6 +245,7 @@ export function discoverStagedMaterials(logsRoot: string, runId: string): Discov
  *  run proceeds regardless of either firing. */
 const MATERIAL_SKIPPED_MESSAGE = 'agent-dispatch.material-skipped';
 const MATERIALS_UNREADABLE_MESSAGE = 'agent-dispatch.materials-unreadable';
+const NO_PROJECT_BOUND_MESSAGE = 'agent-dispatch.no-project-bound';
 
 /**
  * Best-effort flow-roster load for the `fireAgentCompleteTriggers` scan
@@ -288,7 +290,7 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
   }
   const loadDefs = opts.loadDefs ?? listAgentDefinitions;
   const def = resolveDispatchableAgent(opts.slug, loadDefs(opts.skillsDir));
-  const logsRoot = opts.logsRoot ?? '_logs';
+  const logsRoot = opts.logsRoot ?? join(FORGE_ROOT, '_logs');
   const discovered = discoverStagedMaterials(logsRoot, opts.runId);
   // Report deviations (round 5 skip / round 6 errno discrimination) — but
   // ONLY when there is something to report. On the ordinary ENOENT path
@@ -330,7 +332,34 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
     }
   }
   const prompt = buildStandaloneRunPrompt(def, { project: opts.project, inputs: opts.inputs, materials: discovered.materials });
-  const workdir = opts.workdir ?? opts.project?.repoPath ?? process.cwd();
+  // `resolve`, not `join`, and deliberately the SAME computation `createLogger`
+  // performs on (logsRoot, runId) — that call is what actually creates this
+  // directory (kernel/logging.ts mkdirs it before the spawn), so the two must
+  // not drift apart. Written as one expression rather than two that happen to
+  // agree.
+  const runDir = resolve(logsRoot, opts.runId);
+  const workdir = opts.workdir ?? opts.project?.repoPath ?? runDir;
+  // Which branch fired is a fact about the run, so it goes in the event log.
+  // Without this the operator sees nothing: before the containment fix an
+  // unbound dispatch silently got the forge checkout as its cwd, and after it
+  // silently gets an empty scratch directory — two materially different
+  // outcomes, neither announced. An agent whose SKILL.md assumes a git
+  // checkout then fails deep inside its own transcript ("not a git
+  // repository") instead of anywhere an operator looks. Reported as a
+  // deviation, never an error: dispatching without a project is legal, and
+  // `cmdAgentDispatch` treats `--project` as optional.
+  if (!opts.workdir && !opts.project?.repoPath) {
+    createLogger(opts.runId, logsRoot).emit({
+      initiative_id: opts.runId,
+      phase: 'orchestrator',
+      skill: def.slug,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: NO_PROJECT_BOUND_MESSAGE,
+      metadata: { workdir, agent_slug: def.slug },
+    });
+  }
   // `logsRoot` is already resolved above (materials discovery needs it first) —
   // the rebase onto R6-04 brought two identical declarations together.
   const result = await runAgent(def, {

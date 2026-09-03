@@ -7,8 +7,7 @@
  * deep-equal assertion on every in-cycle agent.
  */
 
-import { dirname, resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve, join } from 'node:path';
 
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
@@ -18,14 +17,24 @@ import { MATERIAL_KINDS } from './materials.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
- * The forge install root (this file lives at orchestrator/studio/). Used as
+ * The forge install root, re-exported from `@forge/kernel/ids.ts` so the
+ * repository has exactly ONE definition of it (M4-agents). This module used
+ * to compute its own by counting `'..'` from its location, which was a second
+ * source of truth AND depth-coupled: any move of this file resolved it short,
+ * silently, and only kernel's copy carries the positive control that fails
+ * loudly when that happens (`ids.test.ts` checks the resolved value against
+ * `package.json` + `skills/`). Used as
  * the default resolution root for forge-root-relative skill paths: the phase
  * invocation modules call deriveAgentSpec at module load, and processes like
  * the orchestrated demo capture (`forge demo capture`) run with cwd set to a
  * PROJECT WORKTREE — a cwd default made every such spawn crash on import
  * (2026-07-11, INIT-2026-07-10-framework-auth-parity capture_ok:false).
  */
-export const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// Imported AND re-exported: a bare `export { X } from '...'` re-export
+// creates no local binding, and this module uses FORGE_ROOT itself as a
+// default parameter below.
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+export { FORGE_ROOT };
 
 const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
   (Object.entries(MODEL_BY_TIER) as [ModelTier, string][]).map(([t, m]) => [m, t]),
