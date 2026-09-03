@@ -25,7 +25,8 @@ import { join, sep } from 'node:path';
 import { allowedOrigin, sanitizeError, sendJson, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
-import { DEMO_HTML_REL_PATH, GENERATIONS_DIRNAME, type DemoBuilderStatus } from './kinds/demo-builder.ts';
+import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-builder.ts';
+import { GENERATIONS_DIRNAME } from './kinds/demo-session-store.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import { listDemoSessions } from './bridge-studio-session-index.ts';

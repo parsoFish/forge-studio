@@ -38,7 +38,7 @@ function stubDeps(over: Partial<RouteTableDeps> = {}): RouteTableDeps {
     broadcastProjectBrainChanged: () => {},
     broadcastDemoChanged: () => {},
     projectsRoot: '/tmp/projects',
-    spawnAgentTurn: () => ({ ok: true }),
+    spawnAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentDispatch: () => {},
     spawnAgentSpecs: {},
     safeParseJson: () => null,
@@ -97,7 +97,6 @@ test('no two entries in the assembled table claim the same URL with the same met
   const t = makeRouteTable(stubDeps());
   const probes = [
     ['GET', '/api/studio/sessions/authoring/s1'],
-    ['POST', '/api/studio/sessions/authoring/s1/cancel'],
     ['GET', '/api/studio/agents/creation-agent/capability'],
     ['GET', '/api/studio/kbs'],
   ] as const;
@@ -105,4 +104,21 @@ test('no two entries in the assembled table claim the same URL with the same met
     const claimants = t.filter((e) => e.method === method && e.matches(url));
     assert.equal(claimants.length, 1, `${method} ${url} claimed by ${claimants.length}: ${claimants.map((c) => c.path).join(', ')}`);
   }
+});
+
+// The ONE deliberate overlap in the assembled table (M4-sessions row 37): the
+// generic affordance route's matcher is a bare `:kind/:sessionId/:affordance`
+// and matches the cancel URL too. Disjointness is therefore the wrong property
+// for this URL — ORDER is the property, and asserting "exactly one claimant"
+// here would force the affordance route to re-specify cancel as a negative
+// lookahead, which is a second place for the two to drift apart. The first
+// claimant is what `dispatchRoute` uses, so that is what this pins.
+test('the cancel URL overlaps the affordance matcher by design — the FIRST claimant is cancel, and only these two claim it', () => {
+  const t = makeRouteTable(stubDeps());
+  const claimants = t.filter((e) => e.method === 'POST' && e.matches('/api/studio/sessions/authoring/s1/cancel'));
+  assert.deepEqual(
+    claimants.map((c) => c.path),
+    ['/api/studio/sessions/:kind/:sessionId/cancel', '/api/studio/sessions/:kind/:sessionId/:affordance'],
+    'cancel must be FIRST, and no third entry may join this URL',
+  );
 });

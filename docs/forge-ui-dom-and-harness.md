@@ -3381,7 +3381,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   /api/instructions/start` never spawns the agent) — gains a NEW panel row of
   the SAME reused `awaits: questions` shape (`studio/session-kinds.yaml`),
   dispatched server-side to `handleInstructionsBrief`
-  (`cli/bridge-studio-affordances.ts`) instead of `handleInstructionsAnswer`
+  (`packages/sessions/kinds/instructions.ts`) instead of `handleInstructionsAnswer`
   by `affordance.phase`; both write different files (`prompt.md` vs
   `answers.json`) but render through the identical `question-form` UI. The
   drafted AGENTS.md's own preview is unaffected — it already lived on
@@ -3555,7 +3555,7 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **The generic session-affordance WRITE endpoint (W6-B4; W6-B9 adds the
   generic `meta.requires` check) — the API side.**
   `POST /api/studio/sessions/:kind/:sessionId/:affordance`
-  (`cli/bridge-studio-affordances.ts`) — `:affordance` is always one of the
+  (`packages/sessions/bridge-studio-sessions-affordances.ts`) — `:affordance` is always one of the
   READ route's own `affordances[].id` values, re-validated against the
   session's CURRENT on-disk phase on every call (so a stale/forged affordance
   id 409s exactly as a phase-inappropriate one does). Body shape depends on
@@ -3642,7 +3642,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `handleInstructionsAnswer`) and `briefing` (every new session's actual
   starting phase — `POST /api/instructions/start` never spawns the agent —
   dispatched instead to `handleInstructionsBrief`, which writes `prompt.md`,
-  not `answers.json`; both `cli/bridge-studio-affordances.ts`, selected by
+  not `answers.json`; both `packages/sessions/kinds/instructions.ts`, selected by
   `affordance.phase`); demo derives it from its own `briefing` row the same
   way, via `handleDemoBrief`. The Send button no longer requires non-empty
   text (an earlier revision of this panel disabled it until text was
@@ -3713,7 +3713,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `providedFields` map — today just `{id: packageId}`) AND the file-package
   shape has resolved — honestly, never a button known in advance to 400.
   This REPLACES the batch's original hardcoded "file-package needs an id"
-  client assumption: the write route (`cli/bridge-studio-affordances.ts`)
+  client assumption: the write route (`packages/sessions/bridge-studio-sessions-affordances.ts`)
   validates the SAME `meta.requires` list generically, in the shared
   verdict-dispatch code (before any per-kind handler runs) — a missing/empty
   named field 400s naming it, e.g. `body.id is required for verdict
@@ -3997,7 +3997,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`POST /api/demo-builder/start`) — so a session opened here could never get
   the agent started; it gained `{phase: briefing, step: noop, awaits:
   questions}`, rendering as the generic question-form box, and
-  `cli/bridge-studio-affordances.ts` gained `handleDemoBrief`, mirroring
+  `packages/sessions/kinds/demo-builder.ts` gained `handleDemoBrief`, mirroring
   `POST /api/demo-builder/brief`. `ActivityLog` (the shared bottom drawer,
   `[data-component="activity-drawer"]`) is wired generically into
   `SessionInteractivePanel`, gated on `!terminal` (W6-B8) — W6-B10 originally

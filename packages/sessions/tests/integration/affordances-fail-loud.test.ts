@@ -11,31 +11,30 @@
  *                                  spawner.
  *   3. a failed spawn (A7)       — `spawnAgentTurn` reporting `{ok:false}`.
  *
- * All three are driven here against a SYNTHETIC registry and an INJECTED
- * `AffordanceRouteContext`, calling `handleStudioAffordanceRoutes` directly
- * over a bare http server — the same handler `cli/ui-bridge.ts` dispatches to,
- * with only the two things a real bridge cannot fake (the registry and the
- * spawner) substituted. Nothing here weakens or duplicates the real-bridge
- * suites: `cli/bridge-studio-affordances{,-revise}.test.ts` still own every
- * reachable path against the REAL checked-in yaml.
+ * All three are driven here against a SYNTHETIC registry and INJECTED deps,
+ * through this package's own route TABLE — the same table `apps/forge`
+ * assembles — with only the two things a real bridge cannot fake (the registry
+ * and the spawner) substituted. The bare http server this file used to stand up
+ * went with the M4 row-37 carve: COMMON §5 forbids a package test booting one,
+ * and nothing it added was asserted (rulings 30/49/50). Nothing here weakens
+ * the sibling suites: `affordances-revise.test.ts` owns every reachable path
+ * against the REAL checked-in yaml, and `cli/bridge-studio-affordances.test.ts`
+ * still drives a real bridge for the host's own request policy.
  */
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { AddressInfo } from 'node:net';
 import yaml from 'js-yaml';
 
-import { handleStudioAffordanceRoutes, type AffordanceRouteContext, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
-
-const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
+import type { SpawnTurnOutcome } from '../../bridge-studio-session-helpers.ts';
+import type { SessionsRouteDeps } from '../../routes.ts';
+import { affordanceDeps, postAt, type HandlerResponse } from './test-fixtures/affordance-handler.ts';
 
 let forgeRoot: string;
-let baseUrl: string;
-let server: Server;
+let deps: SessionsRouteDeps;
 /** What the injected spawner answers on the NEXT call — the one seam a real
  *  bridge cannot fake (a detached spawn either works or the machine is
  *  broken). */
@@ -102,27 +101,12 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), yaml.dump(SYNTHETIC_KINDS), 'utf8');
 
-  const ctx: AffordanceRouteContext = {
-    forgeRoot,
-    logsRoot: join(forgeRoot, '_logs'),
+  deps = affordanceDeps(forgeRoot, {
     spawnAgentTurn: () => { spawnCalls += 1; return spawnOutcome; },
-    // ruling 86: the port is required on the context. This test drives no
-    // consolidate path, so a THROWING stub is the honest value — one that
-    // returned a plausible result would hide a future dispatch from here.
-    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
-    broadcastKindChanged: () => {},
-  };
-  server = createServer((req, res) => {
-    void handleStudioAffordanceRoutes(req, res, ctx, req.url ?? '', req.method ?? 'GET').then((handled) => {
-      if (!handled) { res.statusCode = 404; res.end('unrouted'); }
-    });
   });
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
 after(async () => {
-  if (server) await new Promise<void>((r) => server.close(() => r()));
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
@@ -137,16 +121,14 @@ function readPhase(dir: string): string {
   return (JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8')) as { phase: string }).phase;
 }
 
-async function postRevise(kind: string, sessionId: string, project: string, feedback = 'change it'): Promise<Response> {
-  return fetch(`${baseUrl}/api/studio/sessions/${kind}/${sessionId}/awaiting-verdict-verdict`, {
-    method: 'POST', headers: CSRF, body: JSON.stringify({ project, verdict: 'revise', feedback }),
-  });
+async function postRevise(kind: string, sessionId: string, project: string, feedback = 'change it'): Promise<HandlerResponse> {
+  return postAt(forgeRoot, `/api/studio/sessions/${kind}/${sessionId}/awaiting-verdict-verdict`, { project, verdict: 'revise', feedback }, deps);
 }
 
 test('C2-FIX-501-1: a `revise` row with NO agent-step producer to re-run fails LOUD (501 naming the kind + phase) — never guessed around, nothing written', async () => {
   const dir = seed('failloud1', 'noproducer', '2026-08-21T00-00-001-fl', 'awaiting-verdict');
   const res = await postRevise('noproducer', '2026-08-21T00-00-001-fl', 'failloud1');
-  const body = (await res.json()) as { ok: boolean; kind: string; error: string };
+  const body = res.json<{ ok: boolean; kind: string; error: string }>();
   assert.equal(res.status, 501);
   assert.equal(body.ok, false);
   assert.equal(body.kind, 'verdict');
@@ -158,7 +140,7 @@ test('C2-FIX-501-1: a `revise` row with NO agent-step producer to re-run fails L
 test('C2-FIX-501-2: a kind with a real producer but NO wired turn spawner fails LOUD (501 naming the kind)', async () => {
   const dir = seed('failloud2', 'orphanspawner', '2026-08-21T00-00-002-fl', 'awaiting-verdict');
   const res = await postRevise('orphanspawner', '2026-08-21T00-00-002-fl', 'failloud2');
-  const body = (await res.json()) as { ok: boolean; error: string };
+  const body = res.json<{ ok: boolean; error: string }>();
   assert.equal(res.status, 501);
   assert.equal(body.ok, false);
   assert.match(body.error, /orphanspawner/);
@@ -171,7 +153,7 @@ test('C2-FIX-A7-1: a FAILED spawn is reported (500) and the session is put back 
   spawnOutcome = { ok: false, error: 'EMFILE: too many open files' };
   const before = spawnCalls;
   const res = await postRevise('instructions', sessionId, 'failloud3', 'tighten the intro');
-  const text = await res.text();
+  const text = res.text;
   assert.equal(res.status, 500, `expected an honest failure, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { error: string; phase: string };
   assert.match(body.error, /EMFILE/, 'the real cause reaches the operator, never a swallowed best-effort');
@@ -191,6 +173,6 @@ test('C2-FIX-A7-2: a DELIBERATE no-spawn (the dry bridge / FORGE_ARCHITECT_NO_SP
   const dir = seed('failloud4', 'instructions', sessionId, 'awaiting-verdict');
   spawnOutcome = { ok: true, spawned: false };
   const res = await postRevise('instructions', sessionId, 'failloud4');
-  assert.equal(res.status, 200, await res.text());
+  assert.equal(res.status, 200, res.text);
   assert.equal(readPhase(dir), 'drafting');
 });

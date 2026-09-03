@@ -39,7 +39,12 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
     broadcastDemoChanged: () => {},
     projectsRoot: '/home/parso/forge/projects',
-    spawnAgentTurn: () => ({ ok: true }),
+    // M4 ruling 86: the real fix turn is injected by the assembly, so a route
+    // test declares one. It THROWS — no case here expects a brain-fix dispatch,
+    // and a stub returning a plausible result would let a future change
+    // dispatch one unnoticed.
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    spawnAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentSpecs: {},
     safeParseJson: () => null,
     servedFileHeaders: () => ({}),
@@ -59,7 +64,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 36, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 37, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -70,10 +75,10 @@ test('the table is ordered, and every entry declares method, path, matcher and a
 // ---------------------------------------------------------------------------
 // The collision. `/api/studio/sessions/:kind/:sessionId/cancel` is three
 // segments; `/api/studio/sessions/:kind/:sessionId` is two. They do not overlap
-// each other — but the affordance route (still a host arm, joining this table
-// in a later PR) is a bare three-segment wildcard that WOULD swallow the
-// literal `cancel` as an affordance id. These cases pin the invariant now, so
-// the entry that must come first is already pinned when it arrives.
+// each other — but the affordance route, which joined this table in the M4
+// row-37 carve, is a bare three-segment wildcard that WOULD swallow the literal
+// `cancel` as an affordance id. The mutation below is what proves the order
+// holds; the cases around it pin who claims what.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -217,6 +222,41 @@ test('POST …/:kind/:sessionId/cancel is claimed by the cancel entry — not by
   assert.equal(claimant('POST', '/api/studio/sessions/authoring/abc123/cancel'), '/api/studio/sessions/:kind/:sessionId/cancel');
 });
 
+test('POST …/:kind/:sessionId/:affordance is claimed by the affordance entry', () => {
+  assert.equal(
+    claimant('POST', '/api/studio/sessions/authoring/abc123/awaiting-review-verdict'),
+    '/api/studio/sessions/:kind/:sessionId/:affordance',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// THE ORDERING MUTATION. The affordance matcher is a bare three-segment
+// wildcard, so it matches the cancel URL too. Order is what separates them, and
+// order is invisible to a test that only asserts both entries exist — so this
+// case reconstructs the table with the affordance entry moved ABOVE cancel and
+// asserts the claim FLIPS. If the two entries ever stop colliding, this goes
+// red as well: a mutation that changes nothing is not a control (§15.68).
+// ---------------------------------------------------------------------------
+
+test('MUTATION: the affordance entry placed above cancel CLAIMS the cancel URL — the order is the contract, not the comment beside it', () => {
+  const table = sessionsRoutes(noopDeps);
+  const cancelAt = table.findIndex((e) => e.path === '/api/studio/sessions/:kind/:sessionId/cancel');
+  const affordanceAt = table.findIndex((e) => e.path === '/api/studio/sessions/:kind/:sessionId/:affordance');
+  assert.ok(cancelAt >= 0 && affordanceAt >= 0, 'both entries are present');
+  assert.ok(affordanceAt > cancelAt, 'the shipped order puts cancel first');
+
+  const mutated = [...table];
+  const [affordance] = mutated.splice(affordanceAt, 1);
+  mutated.splice(cancelAt, 0, affordance);
+  const url = '/api/studio/sessions/authoring/abc123/cancel';
+  const claimed = mutated.find((e) => e.method === 'POST' && e.matches(url));
+  assert.equal(
+    claimed?.path,
+    '/api/studio/sessions/:kind/:sessionId/:affordance',
+    'the mutated order hands the cancel URL to the affordance dispatch, which would answer 409 with a 200-shaped body',
+  );
+});
+
 test('the session-READ entry does not claim the cancel URL — the segment counts are what separate them', () => {
   // Kills a matcher written as a prefix test (`startsWith`), which would claim
   // every deeper URL in the family including cancel and every affordance.
@@ -229,6 +269,7 @@ test('the session-READ entry does not claim the cancel URL — the segment count
 
 test('a GET is never claimed by the POST entry and vice versa', () => {
   assert.equal(claimant('GET', '/api/studio/sessions/authoring/abc123/cancel'), null);
+  assert.equal(claimant('GET', '/api/studio/sessions/authoring/abc123/awaiting-review-verdict'), null);
   assert.equal(claimant('POST', '/api/studio/sessions/authoring/abc123'), null);
 });
 
