@@ -46,9 +46,8 @@ import {
 } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 
-import { runStructuredTurn, makeReasoningSink, makeThinkingSink, type QueryFn } from './interactive-session.ts';
+import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 export type { QueryFn };
 
@@ -70,8 +69,7 @@ import {
   type InitiativeManifest,
 } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import { createLogger, type EventLogger } from '@forge/kernel';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import type { EventLogger } from '@forge/kernel';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -80,8 +78,13 @@ import {
   truncateWithMarker,
   CRITIC_MAX_MANIFEST_BODY_CHARS,
   type CompletenessCriticFinding,
-} from './completeness-critic-runner.ts';
+} from './architect-critic.ts';
 import { skillPath, skillPathRelative, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
+import {
+  runKindTurn,
+  type KindTurnPlumbing,
+  type SessionKindVariant,
+} from './kind-turn.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
@@ -224,305 +227,229 @@ const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 // out-of-cycle (ARCHITECTURE.md §2) — an interactive, file-checkpointed
 // runner invoked directly by the Studio bridge, not a flow DAG node — so it
 // is not, and should not become, an executor-enum consumer.
-export async function runArchitectTurn(
-  input: RunArchitectTurnInput,
-): Promise<RunArchitectTurnResult> {
-  const paths = sessionPaths(input.projectRoot, input.sessionId);
-  // SEC-04 runner leg: contain the session dir BEFORE the first read. The
-  // kind-dir (`_architect`) and `sessionId` each arrive as their OWN guarded
-  // segment against `projectRoot` — never folded into the bare
-  // `resolve(projectRoot, '_architect', sessionId)` that `sessionPaths`
-  // builds and `readStatus` would then follow out of the project subtree. A
-  // traversing `sessionId` (`../`) OR a symlinked `_architect` dir resolves to
-  // a containment reject, and the runner REFUSES rather than disclose (or
-  // mutate) an out-of-root `status.json`. The other three interactive runners
-  // (instructions / project-brain / demo) were contained in the SEC-04 fix;
-  // the architect's runner leg was missed — this closes it.
-  const architectDirSegments = ['_architect', input.sessionId];
-  const guarded = resolveGuardedPath(input.projectRoot, architectDirSegments);
-  if (!guarded.ok) {
-    throw new Error(
-      `architect runner: session dir failed containment (${guarded.reason}). Has the session been started?`,
-    );
-  }
-  // SEC-04 leaf: route the status.json READ through the guarded sibling (leaf
-  // included) so a symlinked/hardlinked status.json inside the real, contained
-  // `_architect/<sid>` dir is refused too — not just a symlinked/traversing dir.
-  const status = guardedReadStatus(input.projectRoot, architectDirSegments);
-  if (!status) {
-    // ARCH-6 idempotency: a rejected session is moved to _architect/_archived/.
-    // A repeat reject turn then finds no live status.json — if the archived copy
-    // was a rejected session, treat the turn as a no-op rather than throwing.
-    // The archived read is a SECOND request-derived path construction — contain
-    // it the same way (a symlinked `_archived` must not disclose out-of-root).
-    // SEC-04 leaf: route the archived status.json READ through the guarded
-    // sibling (leaf included) too — a symlinked archived status leaf is refused.
-    const archived = guardedReadStatus(input.projectRoot, ['_architect', '_archived', input.sessionId]);
-    if (archived?.phase === 'rejected') {
-      return { phase: 'rejected', wrote: [] };
-    }
-    throw new Error(
-      `architect runner: no status.json at ${paths.sessionDir}. Has the session been started?`,
-    );
-  }
+/**
+ * ARCH-6 idempotency: a rejected session is MOVED to `_architect/_archived/`,
+ * so a repeat reject turn finds no live `status.json`. That is not a refusal —
+ * it is a no-op. The archived read is a SECOND request-derived path
+ * construction, contained the same way the live one is (a symlinked
+ * `_archived` must not disclose out-of-root content).
+ */
+function architectMissingStatus(input: RunArchitectTurnInput): RunArchitectTurnResult | null {
+  const archived = guardedReadStatus(input.projectRoot, ['_architect', '_archived', input.sessionId]);
+  return archived?.phase === 'rejected' ? { phase: 'rejected', wrote: [] } : null;
+}
 
-  const logger =
-    input.logger ??
-    createLogger(`_architect-${input.sessionId}`, input.logsRoot ?? resolve('_logs'));
-  const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
-  const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
+/**
+ * Turn-boundary work that must run for EVERY phase, before the start event.
+ *
+ * W7-B6 (projects-14) — cost-ceiling enforcement. The operator's kickoff
+ * ceiling rides in status.json; the session's spend is DERIVED from its own
+ * event log (`readArchitectSessionStats`), never a stored copy. A turn that
+ * would START at or past the ceiling emits an `error` event and THROWS: the
+ * spawn wrapper's stderr.log and the A2 lifecycle derivation surface the
+ * reason on the session page, and the operator can cancel or start a fresh
+ * session with a higher ceiling.
+ *
+ * ARCH-1 — the `brain-query` event. The planner brain-first mandate has to be
+ * traceable, so every turn records which project scope was consulted and the
+ * event log can detect brain-gaps. It fires on every phase, which is why it
+ * lives here rather than in a step.
+ */
+function architectPreamble(args: {
+  input: RunArchitectTurnInput;
+  status: ArchitectStatus;
+  logger: EventLogger;
+  logsRoot: string;
+}): void {
+  const { input, status, logger, logsRoot } = args;
+  const initiativeId = `architect-session-${input.sessionId}`;
 
-  // W7-B6 (projects-14): cost-ceiling enforcement at the turn boundary. The
-  // operator's kickoff ceiling rides in status.json; the session's spend is
-  // DERIVED from its own event log (readArchitectSessionStats — never a
-  // stored copy). A turn that would START at/past the ceiling refuses with
-  // an `error` event + a throw: the spawn wrapper's stderr.log + the A2
-  // lifecycle derivation surface the reason on the session page, and the
-  // operator can cancel or start a fresh session with a higher ceiling.
   if (typeof status.costCeilingUsd === 'number' && Number.isFinite(status.costCeilingUsd) && status.costCeilingUsd > 0) {
-    const stats = readArchitectSessionStats(input.logsRoot ?? resolve('_logs'), input.sessionId);
+    const stats = readArchitectSessionStats(logsRoot, input.sessionId);
     if (stats !== null && stats.cost_usd >= status.costCeilingUsd) {
       const message =
         `architect session cost ceiling reached: $${stats.cost_usd.toFixed(4)} spent >= $${status.costCeilingUsd.toFixed(2)} ceiling — ` +
         `refusing to start another turn (cancel the session, or start a new one with a higher ceiling)`;
       logger.emit({
-        initiative_id: `architect-session-${input.sessionId}`,
-        phase: 'architect',
-        skill: 'architect-runner',
-        event_type: 'error',
-        input_refs: [],
-        output_refs: [],
-        message,
+        initiative_id: initiativeId, phase: 'architect', skill: 'architect-runner',
+        event_type: 'error', input_refs: [], output_refs: [], message,
         metadata: { session_id: input.sessionId, cost_usd: stats.cost_usd, cost_ceiling_usd: status.costCeilingUsd },
       });
       throw new Error(message);
     }
   }
 
-  // ARCH-1: load brain navigation index at turn start and inject into prompts.
-  // Mirrors the PM/reflector pattern (phases/pm-binding.ts, phases/reflector-binding.ts).
-  // The index is cheap to read (a few small markdown files); we don't cache it
-  // across turns because each turn is a fresh process invocation.
-  const brainCwd = input.brainCwd ?? resolve('.');
-  const brainIndex = loadBrainIndex({ cwd: brainCwd, scope: status.project });
-
-  const startEv = logger.emit({
-    initiative_id: `architect-session-${input.sessionId}`,
-    phase: 'architect',
-    skill: 'architect-runner',
-    event_type: 'start',
-    input_refs: [join(paths.sessionDir, 'status.json')],
-    output_refs: [],
-    message: `architect turn (phase=${status.phase}, round=${status.round})`,
-    metadata: { session_id: input.sessionId, phase: status.phase, round: status.round },
-  });
-
-  // ARCH-1: emit brain-query event so the planner brain-first mandate is
-  // traceable. The brain index is loaded above; the event records which
-  // project scope was consulted so the event log can detect brain-gaps.
   logger.emit({
-    initiative_id: `architect-session-${input.sessionId}`,
-    phase: 'architect',
-    skill: 'architect-runner',
-    event_type: 'brain-query',
-    input_refs: [],
-    output_refs: [],
+    initiative_id: initiativeId, phase: 'architect', skill: 'architect-runner',
+    event_type: 'brain-query', input_refs: [], output_refs: [],
     message: `brain-query (project=${status.project})`,
     metadata: { session_id: input.sessionId, project: status.project },
   });
+}
 
-  // Per-tool telemetry so the architect hex streams live bursts (ADR 020). The
-  // runner drives its own SDK stream (`runStructured`), so it feeds the sink
-  // the same way the PM does — `extractLiveToolDetails` → `sink.onToolUse`.
-  // W6-B1: interactive sessions are operator-attended, low-volume turns —
-  // unlike the unattended dev-loop/PM/reflector phases (unchanged, keep the
-  // sampler's defaults), pass the same {readOnlySampleRate:1, cap:200}
-  // "unsampled" opts as every other interactive runner.
-  const sink = makeToolEventSink(
-    logger,
-    {
-      initiativeId: `architect-session-${input.sessionId}`,
-      parentEventId: startEv.event_id,
-      phase: 'architect',
-      skill: 'architect-runner',
-    },
-    { readOnlySampleRate: 1, cap: 200 },
-  );
-  const onToolUse = sink.onToolUse;
+/** ARCH-1: the brain navigation index, loaded per turn by the steps that
+ *  inject it into prompts (PM/reflector pattern). Cheap — a few small markdown
+ *  files — and deliberately not cached across turns, since each turn is a
+ *  fresh process invocation. */
+function architectBrainIndex(input: RunArchitectTurnInput, status: ArchitectStatus): ReturnType<typeof loadBrainIndex> {
+  return loadBrainIndex({ cwd: input.brainCwd ?? resolve('.'), scope: status.project });
+}
 
-  // Heartbeat: write an ISO timestamp to <logsRoot>/_architect-<sid>/.heartbeat
-  // on each SDK stream message (throttled). The bridge reads this file's mtime
-  // to compute staleMs for the stuck-warning in the UI.
-  const heartbeatDir = join(input.logsRoot ?? resolve('_logs'), `_architect-${input.sessionId}`);
-  mkdirSync(heartbeatDir, { recursive: true });
-  const heartbeatPath = join(heartbeatDir, '.heartbeat');
-  const onHeartbeat = (): void => {
-    try { writeFileSync(heartbeatPath, new Date().toISOString()); } catch { /* best-effort */ }
-  };
+export const architectKind: SessionKindVariant<
+  ArchitectStatus,
+  RunArchitectTurnResult,
+  RunArchitectTurnInput
+> = {
+  id: 'architect',
+  kindDir: '_architect',
+  label: 'architect runner',
+  eventLabel: 'architect turn',
+  eventPhase: 'architect',
+  eventSkill: 'architect-runner',
+  initiativeId: (sessionId) => `architect-session-${sessionId}`,
+  onMissingStatus: architectMissingStatus,
+  preamble: architectPreamble,
 
-  // P3 / W6-B1: forward reasoning + thinking blocks from the agent stream to
-  // the event log so the operator's activity panel can show live architect
-  // reasoning — the ONE shared sink pair (interactive-session.ts), which owns
-  // the per-block char caps, the per-turn row ceiling, and (thinking only)
-  // raw-text coalescing.
-  const initiativeIdForLog = `architect-session-${input.sessionId}`;
-  const sinkCtx = {
-    initiativeId: initiativeIdForLog,
-    phase: 'architect' as const,
-    skill: 'architect-runner',
-    idMeta: { session_id: input.sessionId },
-  };
-  const onText = makeReasoningSink(logger, sinkCtx);
-  const onThinking = makeThinkingSink(logger, sinkCtx);
+  steps: {
+    // The interview and its two exits, then the explore -> draft chain. ADR 043
+    // reserved architect as the branching-control-flow case and this is why:
+    // one turn may run the interview, then exploration, then the draft, and
+    // which of those happen depends on the agent's own answer plus the round
+    // ceiling. No phase table expresses that.
+    interviewing: withPaths(async ({ input, status, plumbing, writeStatus, paths }) => {
+      const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
+      const interview = readInterview(input.projectRoot, input.sessionId);
+      const decision = await runInterviewStep({ input, status, interview, plumbing, writeStatus, paths });
 
-  let result: RunArchitectTurnResult;
-
-  // Interview phase — may flow straight through to drafting when ready.
-  let phase = status.phase;
-  if (phase === 'interviewing') {
-    const interview = readInterview(input.projectRoot, input.sessionId);
-    const decision = await runInterviewStep({
-      status,
-      interview,
-      queryFn,
-      logger,
-      initiativeId: `architect-session-${input.sessionId}`,
-      skillPromptPath: input.skillPromptPath,
-      brainIndex,
-      onToolUse,
-      onHeartbeat,
-      onText,
-      onThinking,
-    });
-    if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
-      const questionsPath = writeQuestions(input.projectRoot, input.sessionId, decision.questions);
-      writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
-      logger.emit({
-        initiative_id: `architect-session-${input.sessionId}`,
-        phase: 'architect',
-        skill: 'architect-runner',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [questionsPath],
-        message: `interview round ${status.round} — ${decision.questions.length} question(s) for the operator`,
-        metadata: { session_id: input.sessionId, round: status.round },
-      });
-      result = { phase: 'awaiting-answers', wrote: [questionsPath], questions: decision.questions };
-      sink.flushIteration(1);
-      return result;
-    }
-    // Ready — the explicit exploration stage runs before drafting (R4-04-F4).
-    phase = 'exploring';
-    writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'exploring' });
-  }
-
-  if (phase === 'exploring') {
-    // R4-04-F4: enumerate edge cases + brain constraints before drafting.
-    // Always a fresh run (a revise round changes the inputs; re-exploring is
-    // one cheap structured turn) — the previous round's findings are unlinked
-    // FIRST so a failed re-exploration can never silently feed stale edge
-    // cases into the new draft (review finding: the fail-open message must
-    // stay honest — no findings file means no explore block, ever).
-    // Fail-open covers BOTH the empty-output case and a thrown stream/SDK
-    // error: the stage is advisory enrichment and never bricks the session.
-    // SEC-04 leaf: resolve the stale `edge-cases.json` through the guard before
-    // removing it — never rm THROUGH a symlinked/escaping leaf (null ⇒ absent or
-    // out-of-root, both a safe no-op).
-    const staleEdge = guardedFile(input.projectRoot, ['_architect', input.sessionId, 'edge-cases.json'], 'read');
-    if (staleEdge) {
-      try {
-        rmSync(staleEdge, { force: true });
-      } catch {
-        /* best-effort — a stale file that survives is overwritten on success */
+      if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
+        const questionsPath = writeQuestions(input.projectRoot, input.sessionId, decision.questions);
+        writeStatus({ ...status, phase: 'awaiting-answers' });
+        plumbing.logger.emit({
+          initiative_id: plumbing.initiativeId, phase: 'architect', skill: 'architect-runner',
+          event_type: 'log', input_refs: [], output_refs: [questionsPath],
+          message: `interview round ${status.round} — ${decision.questions.length} question(s) for the operator`,
+          metadata: { session_id: input.sessionId, round: status.round },
+        });
+        return { phase: 'awaiting-answers', wrote: [questionsPath], questions: decision.questions };
       }
-    }
-    let findings: ExploreFindings | null = null;
-    let exploreCrash: string | null = null;
-    try {
-      findings = await runExploreStep({
-        status,
-        projectRoot: input.projectRoot,
-        sessionId: input.sessionId,
-        queryFn,
-        logger,
-        initiativeId: `architect-session-${input.sessionId}`,
-        skillPromptPath: input.skillPromptPath,
-        brainIndex,
-        onToolUse,
-        onHeartbeat,
-        onText,
-        onThinking,
-      });
-    } catch (err) {
-      exploreCrash = err instanceof Error ? err.message : String(err);
-    }
-    logger.emit({
-      initiative_id: `architect-session-${input.sessionId}`,
-      phase: 'architect',
-      skill: 'architect-runner',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: findings ? [edgeCasesPath(paths.sessionDir)] : [],
-      message: findings
-        ? `exploration stage — ${findings.edgeCases.length} edge case(s), ${findings.brainConstraints.length} brain constraint(s)`
-        : exploreCrash
-          ? `exploration stage crashed — proceeding to draft without an explore block (fail-open): ${exploreCrash}`
-          : 'exploration stage returned nothing — proceeding to draft without an explore block (fail-open)',
-      metadata: {
-        session_id: input.sessionId,
-        edge_cases: findings?.edgeCases.length ?? 0,
-        brain_constraints: findings?.brainConstraints.length ?? 0,
-        ...(exploreCrash ? { crashed: true } : {}),
-      },
-    });
-    phase = 'drafting';
-    writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'drafting' });
-  }
 
-  if (phase === 'drafting') {
-    result = await runDraftStep({
-      input,
-      paths,
-      status,
-      queryFn,
-      logger,
-      resolvedDecisions: null,
-      brainIndex,
-      onToolUse,
-      onHeartbeat,
-      onText,
-      onThinking,
-    });
-  } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat, onText, onThinking });
-  } else if (phase === 'rejected') {
-    // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
-    // phase=rejected before spawning this turn; we move the session dir to
-    // _architect/_archived/ so it no longer appears in listArchitectSessions.
-    // Best-effort — if the dir is already archived or missing, just return.
+      // Ready — the explicit exploration stage runs before drafting (R4-04-F4).
+      writeStatus({ ...status, phase: 'exploring' });
+      return await runExploreThenDraft({ input, status, plumbing, writeStatus, paths });
+    }),
+
+    exploring: withPaths(runExploreThenDraft),
+
+    drafting: withPaths(async (a) => await runDraftStep({ ...a, resolvedDecisions: null })),
+
+    finalizing: withPaths(runFinalizeStep),
+
+    rejected: async ({ input, plumbing }) => {
+      // ARCH-6: the bridge sets phase=rejected before spawning this turn; the
+      // session dir moves to _architect/_archived/ so it leaves
+      // listArchitectSessions. Best-effort — already archived or missing is fine.
+      try {
+        const archivedPath = archiveSessionDir(input.projectRoot, input.sessionId);
+        plumbing.logger.emit({
+          initiative_id: plumbing.initiativeId, phase: 'architect', skill: 'architect-runner',
+          event_type: 'log', input_refs: [], output_refs: [archivedPath],
+          message: 'plan-rejected — session archived',
+          metadata: { session_id: input.sessionId, action: 'plan-rejected', archived_path: archivedPath },
+        });
+      } catch {
+        // Already archived or session dir gone — silently accept.
+      }
+      return { phase: 'rejected', wrote: [] };
+    },
+  },
+
+  // No actionable work in a waiting/terminal phase.
+  otherwise: (status) => ({ phase: status.phase, wrote: [] }),
+  startMetadata: (status) => ({ round: status.round }),
+};
+
+export async function runArchitectTurn(
+  input: RunArchitectTurnInput,
+): Promise<RunArchitectTurnResult> {
+  return await runKindTurn(architectKind, input);
+}
+
+type ArchitectStepArgs = {
+  input: RunArchitectTurnInput;
+  status: ArchitectStatus;
+  plumbing: KindTurnPlumbing;
+  writeStatus: (next: ArchitectStatus) => void;
+  /** The session's derived paths — built ONCE per turn by `withPaths` below,
+   *  not per step. Recomputing it in each step is harmless at runtime (one
+   *  step runs per turn) but multiplies the request-derived path-construction
+   *  sites `check-request-path-sinks` counts, which is surface, not cost. */
+  paths: ReturnType<typeof sessionPaths>;
+};
+
+/** Adds this turn's `paths` to a step's args — the single `sessionPaths` call
+ *  site for the whole kind. */
+function withPaths<T>(
+  step: (args: ArchitectStepArgs) => Promise<T>,
+): (args: Omit<ArchitectStepArgs, 'paths'>) => Promise<T> {
+  return (args) => step({ ...args, paths: sessionPaths(args.input.projectRoot, args.input.sessionId) });
+}
+
+/**
+ * The exploration stage, then the draft — one turn, R4-04-F4.
+ *
+ * ALWAYS a fresh run: a revise round changes the inputs, and re-exploring is
+ * one cheap structured turn. The previous round's findings are unlinked FIRST,
+ * so a failed re-exploration can never silently feed stale edge cases into the
+ * new draft — the fail-open message has to stay honest, and no findings file
+ * means no explore block, ever. Fail-open covers BOTH an empty output and a
+ * thrown stream/SDK error: the stage is advisory enrichment and must never
+ * brick the session.
+ */
+async function runExploreThenDraft(args: ArchitectStepArgs): Promise<RunArchitectTurnResult> {
+  const { input, status, plumbing, writeStatus, paths } = args;
+  const { logger, initiativeId } = plumbing;
+
+  // SEC-04 leaf: resolve the stale `edge-cases.json` through the guard before
+  // removing it — never rm THROUGH a symlinked/escaping leaf (null ⇒ absent or
+  // out-of-root, both a safe no-op).
+  const staleEdge = guardedFile(input.projectRoot, ['_architect', input.sessionId, 'edge-cases.json'], 'read');
+  if (staleEdge) {
     try {
-      const archivedPath = archiveSessionDir(input.projectRoot, input.sessionId);
-      logger.emit({
-        initiative_id: `architect-session-${input.sessionId}`,
-        phase: 'architect',
-        skill: 'architect-runner',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [archivedPath],
-        message: 'plan-rejected — session archived',
-        metadata: { session_id: input.sessionId, action: 'plan-rejected', archived_path: archivedPath },
-      });
+      rmSync(staleEdge, { force: true });
     } catch {
-      // Already archived or session dir gone — silently accept.
+      /* best-effort — a stale file that survives is overwritten on success */
     }
-    result = { phase: 'rejected', wrote: [] };
-  } else {
-    // No actionable work in a waiting/terminal phase — return the phase unchanged.
-    result = { phase, wrote: [] };
   }
 
-  sink.flushIteration(1);
-  return result;
+  let findings: ExploreFindings | null = null;
+  let exploreCrash: string | null = null;
+  try {
+    findings = await runExploreStep(args);
+  } catch (err) {
+    exploreCrash = err instanceof Error ? err.message : String(err);
+  }
+  logger.emit({
+    initiative_id: initiativeId,
+    phase: 'architect',
+    skill: 'architect-runner',
+    event_type: 'log',
+    input_refs: [],
+    output_refs: findings ? [edgeCasesPath(paths.sessionDir)] : [],
+    message: findings
+      ? `exploration stage — ${findings.edgeCases.length} edge case(s), ${findings.brainConstraints.length} brain constraint(s)`
+      : exploreCrash
+        ? `exploration stage crashed — proceeding to draft without an explore block (fail-open): ${exploreCrash}`
+        : 'exploration stage returned nothing — proceeding to draft without an explore block (fail-open)',
+    metadata: {
+      session_id: input.sessionId,
+      edge_cases: findings?.edgeCases.length ?? 0,
+      brain_constraints: findings?.brainConstraints.length ?? 0,
+      ...(exploreCrash ? { crashed: true } : {}),
+    },
+  });
+
+  writeStatus({ ...status, phase: 'drafting' });
+  return await runDraftStep({ ...args, resolvedDecisions: null });
 }
 
 // ---------------------------------------------------------------------------
@@ -558,24 +485,13 @@ const INTERVIEW_SCHEMA = {
   required: ['done'],
 };
 
-async function runInterviewStep(args: {
-  status: ArchitectStatus;
-  interview: InterviewRound[];
-  queryFn: QueryFn;
-  /** W8-B6 — required, so this step cannot spawn hook-blind. */
-  logger: EventLogger;
-  initiativeId: string;
-  skillPromptPath?: string;
-  /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
-  brainIndex?: string;
-  onToolUse?: (d: ToolUseLiveDetail) => void;
-  onHeartbeat?: () => void;
-  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
-  onText?: (text: string) => void;
-  /** Forward extended-thinking blocks to the event log (W6-B1). */
-  onThinking?: (text: string) => void;
-}): Promise<InterviewDecision> {
-  const { status, interview, queryFn, logger, initiativeId, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+async function runInterviewStep(
+  args: ArchitectStepArgs & { interview: InterviewRound[] },
+): Promise<InterviewDecision> {
+  const { input, status, interview, plumbing } = args;
+  const { queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText, onThinking } = plumbing;
+  const skillPromptPath = input.skillPromptPath;
+  const brainIndex = architectBrainIndex(input, status);
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'interview', skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -697,22 +613,13 @@ export function readExploreFindings(projectsRoot: string, sessionId: string): Ex
  * recorded honestly and the session proceeds (never bricks on an advisory
  * enrichment step); the draft prompt then simply carries no explore block.
  */
-async function runExploreStep(args: {
-  status: ArchitectStatus;
-  projectRoot: string;
-  sessionId: string;
-  queryFn: QueryFn;
-  /** W8-B6 — required, so this step cannot spawn hook-blind. */
-  logger: EventLogger;
-  initiativeId: string;
-  skillPromptPath?: string;
-  brainIndex?: string;
-  onToolUse?: (d: ToolUseLiveDetail) => void;
-  onHeartbeat?: () => void;
-  onText?: (text: string) => void;
-  onThinking?: (text: string) => void;
-}): Promise<ExploreFindings | null> {
-  const { status, projectRoot, sessionId, queryFn, logger, initiativeId, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+async function runExploreStep(args: ArchitectStepArgs): Promise<ExploreFindings | null> {
+  const { input, status, plumbing } = args;
+  const { queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText, onThinking } = plumbing;
+  const projectRoot = input.projectRoot;
+  const sessionId = input.sessionId;
+  const skillPromptPath = input.skillPromptPath;
+  const brainIndex = architectBrainIndex(input, status);
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'explore', skillPromptPath });
   const interview = readInterview(projectRoot, sessionId);
   const priorQa = interview.length
@@ -863,23 +770,12 @@ function renderExploreBlock(findings: ExploreFindings | null): string[] {
   return lines;
 }
 
-async function runDraftStep(args: {
-  input: RunArchitectTurnInput;
-  paths: ReturnType<typeof sessionPaths>;
-  status: ArchitectStatus;
-  queryFn: QueryFn;
-  logger: EventLogger;
-  resolvedDecisions: string | null;
-  /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
-  brainIndex?: string;
-  onToolUse?: (d: ToolUseLiveDetail) => void;
-  onHeartbeat?: () => void;
-  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
-  onText?: (text: string) => void;
-  /** Forward extended-thinking blocks to the event log (W6-B1). */
-  onThinking?: (text: string) => void;
-}): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+async function runDraftStep(
+  args: ArchitectStepArgs & { resolvedDecisions: string | null },
+): Promise<RunArchitectTurnResult> {
+  const { input, status, plumbing, writeStatus, resolvedDecisions, paths } = args;
+  const { queryFn, logger, onToolUse, onHeartbeat, onText, onThinking } = plumbing;
+  const brainIndex = architectBrainIndex(input, status);
   // W8-B6 — the same initiative id every event in this session already uses.
   const initiativeId = `architect-session-${input.sessionId}`;
   const interview = readInterview(input.projectRoot, input.sessionId);
@@ -1031,7 +927,7 @@ async function runDraftStep(args: {
   };
 
   const planPath = writePlanDoc(session, input.projectRoot);
-  writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-verdict' });
+  writeStatus({ ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: `architect-session-${input.sessionId}`,
@@ -1189,22 +1085,9 @@ async function runFinalizeCompletenessCritic(args: {
 // Finalize step (approve → bake resolved decisions → promote to queue)
 // ---------------------------------------------------------------------------
 
-async function runFinalizeStep(args: {
-  input: RunArchitectTurnInput;
-  paths: ReturnType<typeof sessionPaths>;
-  status: ArchitectStatus;
-  queryFn: QueryFn;
-  logger: EventLogger;
-  /** Brain navigation index; passed through to fallback draft step (ARCH-1). */
-  brainIndex?: string;
-  onToolUse?: (d: ToolUseLiveDetail) => void;
-  onHeartbeat?: () => void;
-  /** Forward reasoning text blocks to the event log (P3 live activity panel). */
-  onText?: (text: string) => void;
-  /** Forward extended-thinking blocks to the event log (W6-B1). */
-  onThinking?: (text: string) => void;
-}): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, logger } = args;
+async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTurnResult> {
+  const { input, status, plumbing, writeStatus, paths } = args;
+  const { logger } = plumbing;
   const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);
 
   // DETERMINISTIC FINALIZE (#3, 2026-06-01). "Approve" must promote EXACTLY the
@@ -1269,13 +1152,13 @@ async function runFinalizeStep(args: {
       paths,
       status,
       logger,
-      queryFn: args.queryFn,
+      queryFn: plumbing.queryFn,
     });
     workingStatus = criticResult.status;
     // Persist the one-shot flag durably BEFORE promotion (all three outcomes:
     // findings, clean, crashed) — a crash inside promoteManifests below must
     // not re-arm the critic on the operator's retry turn.
-    writeArchitectStatus(input.projectRoot, input.sessionId, workingStatus);
+    writeStatus(workingStatus);
     if (criticResult.blockPromotion) {
       return { phase: 'awaiting-verdict', wrote: [] };
     }
@@ -1294,7 +1177,7 @@ async function runFinalizeStep(args: {
     if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
   }
 
-  writeArchitectStatus(input.projectRoot, input.sessionId, { ...workingStatus, phase: 'committed' });
+  writeStatus({ ...workingStatus, phase: 'committed' });
 
   logger.emit({
     initiative_id: writtenInitiativeIds[0] ?? `architect-session-${input.sessionId}`,
@@ -1552,20 +1435,6 @@ export function guardedWriteStatus(
   return p;
 }
 
-/**
- * SEC-04 leaf: the architect runner's own guarded status.json write. Routes the
- * WHOLE `<projectRoot>/_architect/<sid>/status.json` path (leaf included)
- * through the guard and THROWS (fail closed — the runner contract, never a
- * silent skip) if the leaf escapes.
- */
-function writeArchitectStatus(projectRoot: string, sessionId: string, status: ArchitectStatus): void {
-  const p = guardedWriteStatus(projectRoot, ['_architect', sessionId], status);
-  if (p === null) {
-    throw new Error(
-      'architect runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
-    );
-  }
-}
 
 // SEC-04 leaf: `questions.json`/`answers.json`/`edge-cases.json`/`feedback.md`
 // each ride the WHOLE `<projectsRoot>/_architect/<sessionId>/<leaf>` path

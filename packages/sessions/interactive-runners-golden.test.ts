@@ -100,7 +100,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runArchitectTurn, writeStatus, type ArchitectStatus } from './architect-runner.ts';
+import { runArchitectTurn, writeStatus, type ArchitectStatus } from './kinds/architect.ts';
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from './kinds/instructions.ts';
 import {
   runDemoBuilderTurn,

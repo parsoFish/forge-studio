@@ -16,7 +16,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runArchitectTurn, type ArchitectStatus } from './architect-runner.ts';
+import { runArchitectTurn, type ArchitectStatus } from './kinds/architect.ts';
 
 const MARKER = 'MARKER: past the ceiling guard';
 

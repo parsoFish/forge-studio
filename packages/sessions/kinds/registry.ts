@@ -18,6 +18,7 @@
  * `registry-entry-shape.test.ts` pins that compatibility so a field added on
  * either side cannot drift silently.
  */
+import { architectKind, runArchitectTurn } from './architect.ts';
 import { demoKind, runDemoBuilderTurn } from './demo-builder.ts';
 import { instructionsKind, runInstructionsTurn } from './instructions.ts';
 import { projectBrainKind, runProjectBrainTurn } from './project-brain.ts';
@@ -60,6 +61,26 @@ export interface SessionKindRunner {
  * held, not at the end.
  */
 export const SESSION_KIND_RUNNERS: Record<string, SessionKindRunner> = {
+  architect: {
+    verb: 'architect run',
+    // The only kind that does NOT require --project up front: `cmdAgentRun`
+    // falls back to `findSessionProject` auto-discovery when it is omitted.
+    requiresProject: false,
+    kindDir: architectKind.kindDir,
+    loadRunTurn: async () => runArchitectTurn,
+    printResult: (raw) => {
+      const result = raw as Awaited<ReturnType<typeof runArchitectTurn>>;
+      console.log(`architect turn complete — phase=${result.phase}`);
+      if (result.questions?.length) {
+        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
+      }
+      if (result.planPath) console.log(`  PLAN: ${result.planPath}`);
+      if (result.promotedManifestPaths?.length) {
+        console.log(`  promoted ${result.promotedManifestPaths.length} manifest(s) to _queue/pending/:`);
+        for (const p of result.promotedManifestPaths) console.log(`    ${p}`);
+      }
+    },
+  },
   instructions: {
     verb: 'instructions run',
     requiresProject: true,

@@ -35,7 +35,7 @@ import {
   listArchitectSessions,
   type ArchitectQuestion,
   type ArchitectStatus,
-} from './architect-runner.ts';
+} from './kinds/architect.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import {
   deriveRowLifecycle,

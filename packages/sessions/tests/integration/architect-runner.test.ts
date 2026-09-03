@@ -31,10 +31,10 @@ import {
   ARCHITECT_MODEL,
   type ArchitectStatus,
   type QueryFn,
-} from './architect-runner.ts';
+} from '../../kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
-import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
+import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // Fakes — async generators yielding SDK-shaped `result` messages.

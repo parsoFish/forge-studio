@@ -26,6 +26,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { SESSION_KIND_RUNNERS } from '../../kinds/registry.ts';
+import { architectKind } from '../../kinds/architect.ts';
 import { demoKind } from '../../kinds/demo-builder.ts';
 import { instructionsKind } from '../../kinds/instructions.ts';
 import { projectBrainKind } from '../../kinds/project-brain.ts';
@@ -33,6 +34,7 @@ import type { SessionKindVariant, KindTurnResult, KindTurnStatus } from '../../k
 
 /** The kind module whose variant backs each registry row, by registry key. */
 const VARIANT_BY_ID: Record<string, SessionKindVariant<KindTurnStatus, KindTurnResult>> = {
+  architect: architectKind as unknown as SessionKindVariant<KindTurnStatus, KindTurnResult>,
   'demo-builder': demoKind as unknown as SessionKindVariant<KindTurnStatus, KindTurnResult>,
   instructions: instructionsKind as unknown as SessionKindVariant<KindTurnStatus, KindTurnResult>,
   'project-brain': projectBrainKind as unknown as SessionKindVariant<KindTurnStatus, KindTurnResult>,

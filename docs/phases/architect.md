@@ -52,7 +52,7 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 
 ## Skills
 
-- [`skills/architect/SKILL.md`](../../skills/architect/SKILL.md) — primary interactive skill; it also carries the **LLM Council** chained-reviewer pattern (CEO/eng/design/DX critics) that auto-resolves mechanical questions and surfaces only taste decisions to the user (inspired by gstack's `/autoplan`). The council runs via [`orchestrator/architect-runner.ts`](../../orchestrator/architect-runner.ts); the council transcript type lives in [`cli/architect-plan.ts`](../../cli/architect-plan.ts).
+- [`skills/architect/SKILL.md`](../../skills/architect/SKILL.md) — primary interactive skill; it also carries the **LLM Council** chained-reviewer pattern (CEO/eng/design/DX critics) that auto-resolves mechanical questions and surfaces only taste decisions to the user (inspired by gstack's `/autoplan`). The council runs via [`packages/sessions/kinds/architect.ts`](../../packages/sessions/kinds/architect.ts); the council transcript type lives in [`packages/factory/architect-plan.ts`](../../packages/factory/architect-plan.ts).
 
 ## Success signals
 
@@ -70,9 +70,9 @@ Collaborate with the operator during ideation to emit one or more **initiatives*
 ## Status
 
 All phase infrastructure is live:
-- [x] In-UI architect runner (`orchestrator/architect-runner.ts`) — ADR 020.
+- [x] In-UI architect runner (`packages/sessions/kinds/architect.ts`) — ADR 020.
 - [x] Architect interview + PLAN gate rebuilt natively inside Studio (ADR 031): interview panel → PLAN gate via the unified `/artifact` viewer. The `/architect/[sessionId]` standalone route was replaced; `/review` and `/reflect` also redirect to `/artifact`.
-- [x] LLM Council critic chain — runs inside `skills/architect/` via `orchestrator/architect-runner.ts` (council transcript in `cli/architect-plan.ts`).
+- [x] LLM Council critic chain — runs inside `skills/architect/` via `packages/sessions/kinds/architect.ts` (council transcript in `packages/factory/architect-plan.ts`).
 - [x] Rich PLAN.html viewer — `cli/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels), embedded via `PlanRenderer` + `PlanGate` in the artifact viewer.
 - [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
 - [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.

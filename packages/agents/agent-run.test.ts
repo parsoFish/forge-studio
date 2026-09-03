@@ -510,12 +510,12 @@ test('R4-22 WI-5, AT-4 (positive control): an id that is neither an AGENT_RUNNER
 // than "the matching descriptor carries a turnSpec" — this fixture's
 // "architect" row exists precisely so that wrong condition would be truthy
 // here and misroute it.
-test('R4-22 WI-5, AT-5: a descriptor WITHOUT turnSpec ("architect" — a real AGENT_RUNNERS key AND a real session-kind id) still takes the legacy road', async () => {
+test('R4-22 WI-5, AT-5: a descriptor WITHOUT turnSpec ("architect" — a real dispatch id AND a real session-kind id) still takes the bespoke road', async () => {
   const fx = setupTurnspecFixture();
   try {
     const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === 'architect');
     assert.equal(descriptor?.turnSpec, undefined, 'fixture precondition: this row must carry NO turnSpec');
-    assert.notEqual(AGENT_RUNNERS.architect, undefined, 'fixture precondition: "architect" must be a real AGENT_RUNNERS key');
+    assert.ok(BESPOKE_DISPATCH_IDS.includes('architect'), 'fixture precondition: "architect" must be a real dispatch id in either table');
 
     const baseline = snapshotLogs(fx.forgeRoot);
     const r = await withCwd(fx.forgeRoot, () => run(['architect'], fx.forgeRoot)); // no session-id at all

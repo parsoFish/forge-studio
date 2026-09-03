@@ -33,6 +33,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
+import { runKindTurn, type SessionKindVariant } from '../../kinds/kind-turn.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 
 const SESSION_ID = '2026-09-03T00-00-00-deadbeef';
@@ -123,4 +124,80 @@ test('the _logs root is anchored on forgeRoot, never the process cwd (agents fin
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(elsewhere, { recursive: true, force: true });
   }
+});
+
+/**
+ * DEFECT 3 — architect resurrected a CANCELLED session.
+ *
+ * W7-FIX-A2 (W7A2-01) gave the interactive seam a sticky terminal `cancelled`
+ * phase: a turn that finishes AFTER the operator cancelled must have its
+ * advance DISCARDED. Three of the four bespoke runners got that through
+ * `guardedWriteSessionStatus`; architect wrote through its own
+ * `guardedWriteStatus`, which writes unconditionally and never reads the
+ * on-disk phase — so an architect turn completing after a cancel moved the
+ * session back out of its terminal phase and it reappeared as live.
+ *
+ * The M4 ruling-60 port routes architect's status writes through the shared
+ * driver, where the seam lives, so the divergence closes by construction.
+ *
+ * WHY THIS IS TWO ASSERTIONS AND NOT ONE END-TO-END TURN. My first attempt
+ * drove `runArchitectTurn` on a session already `cancelled` and asserted the
+ * phase survived. It passed against the UNFIXED code too — because
+ * `cancelled` has no step handler, the turn takes `otherwise` and writes
+ * nothing at all, so the assertion held for a reason that had nothing to do
+ * with the seam (COMMON §15.75: a control the fix cannot change is not a
+ * control; the mutation pass is what caught it). Staging a genuine
+ * write-after-cancel through the real entry point needs a phase whose step
+ * both writes status AND spawns, so the honest split is: prove the SEAM
+ * behaviourally at the driver, and prove architect REACHES it structurally.
+ */
+test('the driver refuses a status advance over a cancelled phase, naming the reason (W7A2-01)', async () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'kind-turn-cancel-'));
+  try {
+    const projectRoot = join(forgeRoot, 'projects', 'testproj');
+    const sessionDir = join(projectRoot, '_probe', SESSION_ID);
+    mkdirSync(sessionDir, { recursive: true });
+    writeSessionStatus(sessionDir, { session_id: SESSION_ID, phase: 'working' });
+
+    let refusal: Error | null = null;
+    const variant: SessionKindVariant<{ phase: string }, { phase: string; wrote: string[] }> = {
+      id: 'probe', kindDir: '_probe', label: 'probe runner', eventLabel: 'probe turn',
+      eventPhase: 'orchestrator', eventSkill: 'probe',
+      initiativeId: (sid) => `probe-${sid}`,
+      steps: {
+        // The operator cancels WHILE the turn runs, then the turn writes its advance.
+        working: async ({ status, writeStatus }) => {
+          writeSessionStatus(sessionDir, { session_id: SESSION_ID, phase: 'cancelled' });
+          try { writeStatus({ ...status, phase: 'committed' }); }
+          catch (err) { refusal = err as Error; }
+          return { phase: 'committed', wrote: [] };
+        },
+      },
+      otherwise: (st) => ({ phase: st.phase, wrote: [] }),
+    };
+
+    await runKindTurn(variant, { sessionId: SESSION_ID, projectRoot, forgeRoot });
+
+    const after = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(after.phase, 'cancelled', 'the terminal cancelled phase is sticky — the advance must be discarded');
+    assert.ok(refusal, 'the refusal must be raised, not swallowed — a silently dropped advance is indistinguishable from success');
+    assert.match(
+      String(refusal), /cancelled while this turn ran/,
+      `the refusal must name the CANCEL, not "containment" — they are different causes and the operator sees this text. Got: ${String(refusal)}`,
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('the architect kind declares no status writer of its own — it reaches the seam above', () => {
+  const src = readFileSync(new URL('../../kinds/architect.ts', import.meta.url), 'utf8');
+  assert.equal(
+    /function writeArchitectStatus\s*\(/.test(src), false,
+    'kinds/architect.ts must not re-declare a private status writer — that is how it missed the sticky-cancel seam for a whole wave',
+  );
+  assert.equal(
+    src.split('\n').filter((l) => /^\s*guardedWriteStatus\(/.test(l)).length, 0,
+    'no step may advance the phase through the unconditional guardedWriteStatus — advances go through the driver\'s writeStatus',
+  );
 });

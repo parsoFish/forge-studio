@@ -36,7 +36,7 @@ import { notify } from './notify.ts';
 const REVIEW_FIX_DEFAULT_ITERATIONS = 15;
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
-import type { ArchitectStatus } from '@forge/sessions/architect-runner.ts';
+import type { ArchitectStatus } from '@forge/sessions/kinds/architect.ts';
 import { getPaths } from './queue.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';

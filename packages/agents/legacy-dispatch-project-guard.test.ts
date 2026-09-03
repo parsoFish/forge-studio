@@ -32,7 +32,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
+import { cmdAgentRun } from './agent-run.ts';
+import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
 import { startBridge } from '../../cli/ui-bridge.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
@@ -116,7 +117,8 @@ const SID = '2026-08-11T00-00-00-sec06fixture';
 // ---------------------------------------------------------------------------
 
 test('rejects an absolute --project value on the legacy dispatch branch (parity with the interactive road)', async () => {
-  assert.equal(AGENT_RUNNERS.architect?.requiresProject, false, 'fixture precondition: architect must not require --project up front');
+  // M4 ruling 60: architect's dispatch row lives in the sessions registry now.
+  assert.equal(SESSION_KIND_RUNNERS.architect?.requiresProject, false, 'fixture precondition: architect must not require --project up front');
   const forgeRoot = setupForgeRoot();
   const outside = mkdtempSync(join(tmpdir(), 'sec06-abs-outside-'));
   try {

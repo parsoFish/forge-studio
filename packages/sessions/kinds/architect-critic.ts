@@ -1,4 +1,15 @@
 /**
+ * The architect kind's COMPLETENESS CRITIC — a composition detail, not a
+ * session kind (M4 ruling 62).
+ *
+ * It has no `run<X>Turn`, no session kind, no registry row and no operator
+ * surface: it is one structured sub-turn the architect's finalize step runs
+ * to check a drafted plan for gaps before promoting it. Ruling 62 folded it
+ * INTO architect rather than porting it as a seventh kind, and this file is
+ * where the fold put it — beside the kind that composes it, named for that
+ * kind, no longer named as a runner.
+ *
+
  * Architect completeness critic — a one-shot, advisory structured-output SDK
  * turn run at architect FINALIZE (after the operator approves the PLAN,
  * before manifests promote to `_queue/pending/`).
@@ -32,7 +43,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
+import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import type { EventLogger } from '@forge/kernel';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
