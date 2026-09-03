@@ -36,7 +36,6 @@ import yaml from 'js-yaml';
 import { WebSocket } from 'ws';
 
 import { startBridge } from './ui-bridge.ts';
-import { writeAuthoringSession } from '@forge/sessions/bridge-studio-kickoff.ts'; // carved with the four minting routes (M4)
 
 let forgeRoot: string;
 let url: string;
@@ -136,6 +135,39 @@ function writeResolvableKb(root: string, id: string): void {
  *  `phase` defaults to 'awaiting-approval' (non-terminal, per the turnSpec
  *  fixture above) — the terminal-phase gating test below plants a SECOND
  *  session at phase 'applied' (the turnSpec's own `step: 'terminal'` row). */
+/**
+ * An authoring session on disk, written locally rather than through the
+ * production `writeAuthoringSession`.
+ *
+ * WHY LOCAL. This is an HTTP/WS test of the HOST — it boots a real bridge, opens
+ * a real WS client and proves the tail reaches the wire — so COMMON §5 keeps it
+ * in `cli/`. Its boundary row came from IMPORTING the carved writer, not from
+ * the bridge boot, and a `cli/` test importing `@forge/sessions` is a
+ * legacy-to-package edge. The file already writes its kb-cleanup fixture this
+ * way (`writeCleanupSession` below), so this follows its own convention.
+ *
+ * DELIBERATELY MINIMAL: only the fields the tail derivation reads. It is a
+ * FIXTURE, not a second implementation — it does not reproduce the production
+ * writer's exclusive-create flag, id validation or model-tier resolution, and
+ * nothing here should be read as pinning that writer's format. The writer
+ * itself is exercised by the kickoff routes' own tests.
+ */
+function writeAuthoringFixture(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_authoring', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      phase: 'analyzing',
+      project,
+      runId: `_agent-creation-agent-${sessionId}`,
+      prompt: 'Build a fixture thing.',
+      startedAt: new Date().toISOString(),
+    }),
+    'utf8',
+  );
+}
+
 function writeCleanupSession(projectsRoot: string, project: string, sessionId: string, kbId: string, phase = 'awaiting-approval'): void {
   const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
@@ -209,9 +241,7 @@ before(async () => {
   writeCleanupSession(projectsRoot, PROJECT, KB_CLEANUP_TERMINAL_SESSION, KB_ID, 'applied');
   seedEventLog(forgeRoot, 'kb-cleanup', KB_CLEANUP_TERMINAL_SESSION);
 
-  const authoringParent = join(projectsRoot, PROJECT, '_authoring');
-  mkdirSync(authoringParent, { recursive: true });
-  writeAuthoringSession(authoringParent, AUTHORING_SESSION, PROJECT, `_agent-creation-agent-${AUTHORING_SESSION}`, 'Build a fixture thing.');
+  writeAuthoringFixture(projectsRoot, PROJECT, AUTHORING_SESSION);
   seedEventLog(forgeRoot, 'authoring', AUTHORING_SESSION);
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
