@@ -33,6 +33,7 @@
 
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { buildChildEnv } from '@forge/kernel/spawn-env.ts';
+import { markerEnvOverlay } from './spawn-marker.ts';
 
 /** The exact shape of the SDK's `query` function. */
 export type SdkQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
@@ -85,3 +86,54 @@ export const pinnedSdkQuery: SdkQueryFn = createPinnedSdkQuery(rawSdkQuery);
  * return IS an AsyncIterable.
  */
 export const pinnedStreamQuery: StreamQueryFn = pinnedSdkQuery as unknown as StreamQueryFn;
+
+/**
+ * Wrap a stream query so every spawn it makes carries `token` as one env
+ * OVERRIDE — bead `forge-8vfn.5.50`, "the runtime owns what it spawns".
+ *
+ * WHERE THIS SITS, AND WHY IT SITS HERE. The marker is an env concern, so it
+ * belongs at the env seam — the same one `createPinnedSdkQuery` already owns.
+ * The alternative (adding `env` to the option bag each phase builds) was
+ * measured and rejected: it puts a per-run UUID inside all FIVE spawn-capture
+ * goldens, which exist to pin "the exact `{prompt, options}` object each PHASE
+ * passes" and deliberately sit ABOVE this seam — the allowlist filtering below
+ * is invisible to them for exactly the same reason. A containment property of
+ * the runtime is not a phase's spawn decision, and recording it as one would
+ * mean re-pinning five characterization fixtures plus their normalizer every
+ * time the token shape changed.
+ *
+ * The caller's own `options.env` (the git-identity overlay's four keys) is
+ * PRESERVED and the marker layered on top: five keys, well inside
+ * `MAX_ENV_OVERRIDE_KEYS` (8) — a cap that throws by design, so the
+ * interaction is pinned in `./spawn-marker.test.ts` rather than assumed.
+ */
+export function withRunMarker(query: StreamQueryFn, token: string): StreamQueryFn {
+  return (params) =>
+    query({
+      ...params,
+      options: {
+        ...params.options,
+        env: { ...((params.options?.['env'] as Record<string, string> | undefined) ?? {}), ...markerEnvOverlay(token) },
+      },
+    });
+}
+
+/**
+ * The query a run actually spawns through: the marked production query, or a
+ * caller-injected one used verbatim.
+ *
+ * `injected` is TEST-INJECTION ONLY (`RunContext.queryFn`'s own contract, and
+ * every production phase leaves it undefined — `adversarial-review`,
+ * `demo-agent`, `band-agent-run` and `reflector` all declare it optional and
+ * pass nothing). Returning it UNWRAPPED is what keeps the five spawn-capture
+ * goldens byte-identical: a capturing stub records the phase's own option bag,
+ * not the runtime's env delta. `productionQuery` is a parameter with a real
+ * default so this branch is testable without spawning anything.
+ */
+export function resolveRunQuery(
+  injected: StreamQueryFn | undefined,
+  runMarker: string,
+  productionQuery: StreamQueryFn = pinnedStreamQuery,
+): StreamQueryFn {
+  return injected ?? withRunMarker(productionQuery, runMarker);
+}

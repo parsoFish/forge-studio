@@ -49,9 +49,10 @@ import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
-import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
+import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
+import { mintRunMarker, recordRunMarker } from './spawn-marker.ts';
 import type { AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
 import type { QueryFn } from './_adapters/types.ts';
@@ -260,6 +261,27 @@ export function resolveOneShotBudgetUsd(
 }
 
 /**
+ * Record this run's spawn marker, reporting a failure rather than failing the
+ * run (forge-8vfn.5.50).
+ *
+ * A deviation, not an error: an unrecordable marker costs the reaper one sweep
+ * rung, and refusing to run the agent over it would be a worse outcome than
+ * the leak it guards against. Reported through `console.error` — the module's
+ * own convention for a deviation with no logger yet — and never swallowed,
+ * because the whole point of 5.50 is that a leak leaves evidence. The message
+ * names the run and the consequence, not just the errno.
+ */
+function recordRunMarkerBestEffort(logsRoot: string, runId: string, token: string): void {
+  try {
+    recordRunMarker(logsRoot, runId, token);
+  } catch (err) {
+    console.error(
+      `runAgent: could not record the spawn marker for run "${runId}" — a leaked child of this run will not be sweepable by marker: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
  * Run one studio agent (a resolved `AgentDefinition`) against `ctx`,
  * single-shot. No project/initiative binding is required. In the default
  * 'self' lifecycle: emits a `start` event before the spawn attempt, then
@@ -297,6 +319,13 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // Step 1: derive the spec from the studio SKILL.md (ADR-027).
   const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));
 
+  // forge-8vfn.5.50 — this run's own spawn marker, minted before EITHER
+  // branch because both spawn. Per run, never a constant: a constant would
+  // let a later run's teardown sweep an earlier run's still-live process
+  // (./spawn-marker.ts).
+  const runMarker = mintRunMarker(ctx.runId);
+  const logsRoot = ctx.logsRoot ?? join(FORGE_ROOT, '_logs');
+
   if (lifecycle === 'caller') {
     if (loopStrategy !== 'one-shot') {
       throw new Error(
@@ -314,13 +343,17 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     // vars here would have skipped the check for a spawn that was about to
     // happen for real. The gate therefore always runs on this branch.
     assertConnectionsReady(def, ctx);
-    return runOneShotSpawn(def, ctx, spec);
+    // Recorded here, not at the top: a marker is a record of a child that
+    // exists, so it is written immediately before the spawn that creates one
+    // and never for a run that does not spawn. This branch always spawns.
+    recordRunMarkerBestEffort(logsRoot, ctx.runId, runMarker);
+    return runOneShotSpawn(def, ctx, spec, runMarker);
   }
 
   if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');
   assertSafeRunId(ctx.runId);
 
-  const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs'));
+  const logger = ctx.logger ?? createLogger(ctx.runId, logsRoot);
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
 
@@ -382,6 +415,20 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // never happens. "Pre-spawn" is exact — immediately before the real spawn.
   assertConnectionsReady(def, ctx);
 
+  // forge-8vfn.5.50 — the spawn marker, recorded AFTER the suppression
+  // early-return for the same reason the gate above sits there: a marker
+  // records a child that exists. Written for a suppressed rehearsal it would
+  // be a claim about a process nobody spawned, and — since `logsRoot` defaults
+  // to `<FORGE_ROOT>/_logs` — the test suite alone minted ten of them into the
+  // repository's own log tree before this was moved. Recorded on EVERY branch
+  // that does spawn, whoever owns the logger: the token is on the child either
+  // way, and a token no artifact of the run names is a token no reaper can
+  // sweep by, which left the four `lifecycle: 'caller'` phase pipelines and
+  // every flow-runner node marked but undiscoverable. Appended, so several
+  // `runAgent` calls sharing one run directory (a cycle's PM and reflector
+  // both pass `runId: cycleId`) each keep their own line.
+  recordRunMarkerBestEffort(logsRoot, ctx.runId, runMarker);
+
   // W7-B5 (agents-23): per-turn transcript events for the SELF lifecycle —
   // a standalone run used to leave only start+end lines, so an operator who
   // spent real money had no record of what the agent did. Both spawn shapes
@@ -411,10 +458,10 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
         toolSeq += details.length;
       },
     };
-    spawned = await runOneShotSpawn(def, observedCtx, spec);
+    spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker);
     turnSink.flushIteration(1);
   } else {
-    spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, turnSink);
+    spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, runMarker, turnSink);
     turnSink.flushIteration(1);
   }
 
@@ -461,6 +508,7 @@ async function runOneShotSpawn(
   def: AgentDefinition,
   ctx: RunContext,
   spec: PhaseAgentSpec,
+  runMarker: string,
 ): Promise<RunAgentResult> {
   const options: Record<string, unknown> = {
     cwd: ctx.cwd ?? ctx.workdir,
@@ -500,7 +548,7 @@ async function runOneShotSpawn(
     options['abortController'] = abortController;
   }
 
-  const queryFn = ctx.queryFn ?? pinnedStreamQuery;
+  const queryFn = resolveRunQuery(ctx.queryFn, runMarker);
 
   let stream: AsyncIterable<unknown> = queryFn({ prompt: ctx.prompt, options });
   if (ctx.streamGuard && abortController) {
@@ -579,6 +627,7 @@ async function runInvocationSpawn(
   logger: EventLogger,
   initiativeId: string,
   inputRefs: string[],
+  runMarker: string,
   turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
   // Resolve the adapter + build the agent invocation.
@@ -629,7 +678,10 @@ async function runInvocationSpawn(
     })(),
     // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
     // optional — the closure always supplies one, so the cast is sound.
-    queryFn: (ctx.queryFn ?? pinnedStreamQuery) as QueryFn,
+    // forge-8vfn.5.50: the invocation path spawns too — and it is the path
+    // the S3 escape took (`onboarding-agent` declares no `loopStrategy`) — so
+    // it resolves its query through the SAME marker-applying seam.
+    queryFn: resolveRunQuery(ctx.queryFn, runMarker) as QueryFn,
   });
 
   // Stamp the prompt + drive ONE iteration.

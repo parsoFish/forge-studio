@@ -312,6 +312,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/factory/review-comments.ts | factory | verbatim | 229 |
 | packages/agents/run-agent.ts | agents | verbatim | 665 |
+| packages/agents/spawn-marker.ts | agents | verbatim | 276 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 988 |
 | packages/flows/run-model.ts | flows | verbatim | 817 |
 | packages/flows/run-view-types.ts | flows | verbatim | 189 |

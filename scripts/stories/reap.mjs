@@ -68,16 +68,47 @@
  * N leads its own group; `-N` for a non-leader signals a STRANGER'S group,
  * which is COMMON §15.17's pattern kill through a numeric door.
  *
- * A RESIDUAL GAP THIS DOES NOT CLOSE, recorded rather than papered over. A
- * grandchild that BOTH calls `setsid` (leaving our group) AND loses its parent
- * before the snapshot is invisible to both walks: its ppid no longer leads
- * back to us and its pgid is its own. The only evidence left is its cwd — and
- * discovering processes by "cwd inside ownRoot" is not available here, because
- * `run.mjs` passes the REPO ROOT as `ownRoot`, so such a sweep would signal
- * the story runner itself, the Studio bridge and the operator's own shell.
- * Closing it needs the DISPATCH to record more than a pid (a cgroup, or a
- * subreaper so orphans re-parent to the run instead of to init) — product
- * work, not a harness change. Filed rather than half-built.
+ * THE THIRD INCIDENT SHAPE, and the rung that closes it (bead
+ * `forge-8vfn.5.50`, M4-agents). A grandchild that BOTH calls `setsid`
+ * (leaving our group) AND loses its parent before the snapshot is invisible to
+ * both walks above: its ppid no longer leads back to us and its pgid is its
+ * own. This module's own analysis said the only evidence left is its cwd, and
+ * that discovering processes by "cwd inside ownRoot" is NOT available here,
+ * because `run.mjs` passes the REPO ROOT as `ownRoot` — such a sweep would
+ * signal the story runner itself, the Studio bridge and the operator's own
+ * shell. That reasoning still stands and is why no cwd sweep was added.
+ *
+ * What changed is that the DISPATCH now records more than a pid. Every agent
+ * child `runAgent` spawns carries a per-RUN token in its environment
+ * (`packages/agents/spawn-marker.ts`), and the run writes that token beside
+ * its event log as `agent-run.marker`. Env is inherited across `fork`/`exec`
+ * — including by a `setsid`'d orphan — and `/proc/<pid>/environ` stays
+ * readable for same-uid processes long after the pid/ppid/pgid evidence is
+ * gone. So the fourth rung identifies OUR PROCESSES rather than a DIRECTORY,
+ * which is precisely what the cwd sweep could not do: the story runner, the
+ * bridge and the operator's shell were never spawned by a run, so they never
+ * had the token and cannot be swept by it.
+ *
+ *   - `marker`  — its environ carries THIS run's recorded token.
+ *
+ * THE MARKER IS A FOURTH RUNG, NOT A REPLACEMENT FOR THE OTHER THREE.
+ * `/proc/<pid>/environ` is the environment as it stood at EXEC, so a
+ * descendant that re-execs with a scrubbed environment carries no token and is
+ * invisible to it — and is then found, as before, by ancestry or by group. The
+ * token is also an IDENTIFIER, not an authorisation: any process of the same
+ * uid can read one out of `/proc` and could set it on itself, which costs
+ * nothing (such a process can already signal us directly) but means nothing
+ * here may ever be built on an assumption that it is unforgeable.
+ *
+ * ONE INVARIANT IS DELIBERATELY LOOSENED FOR THAT RUNG, and only for it. A
+ * marker-bearing process is claimed WITHOUT a cwd probe, so a process of ours
+ * that has walked out of the run worktree is now reaped rather than spared.
+ * That is the S3 incident itself: an agent that has `cd`'d into another
+ * checkout is the exact process this module exists to stop, and a cwd rule is
+ * what spared it. The rule is unchanged for every OTHER rung — a recorded pid
+ * with a readable cwd outside the worktree and NO marker is still never
+ * signalled, because there the only evidence is a pid file that could be
+ * stale, while a per-run token cannot be.
  *
  * SCOPE. This closes 5.37's LIFECYCLE half and 5.45's group/descendant gap. That an agent could `cd`
  * out of its worktree at all is 5.37's containment half (M4-agents), and that
@@ -88,6 +119,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readProcCwd } from './bridge.mjs';
+import { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from '@forge/agents/spawn-marker.ts';
 
 /** How long a dispatched agent gets to exit on SIGTERM before SIGKILL. */
 const DEFAULT_GRACE_MS = 5_000;
@@ -129,6 +161,10 @@ function readPidFile(path) {
 export function collectAgentRuns(root, sinceMs, deps = {}) {
   const listDirs = deps.listDirs ?? listSessionDirs;
   const readPid = deps.readPid ?? readPidFile;
+  // 5.50: the per-run spawn token, written by `runAgent` beside the event log.
+  // A dir may carry one, a pid, or both — a run whose turn.pid was never
+  // written still spawned children, and they still carry the token.
+  const readMarkers = deps.readMarkers ?? readRunMarkers;
   const logsDir = join(root, '_logs');
 
   let entries;
@@ -143,8 +179,15 @@ export function collectAgentRuns(root, sinceMs, deps = {}) {
     if (entry.mtimeMs < sinceMs) continue;
     const dir = join(logsDir, entry.name);
     const pid = readPid(join(dir, 'turn.pid'));
-    if (pid === null) continue;
-    runs.push({ dir, pid });
+    // A token counts only in the directory whose name it names. Without that
+    // bind, an escaped agent could read another run's live token (same uid,
+    // readable by design), plant it in a directory of its own making under
+    // `_logs/`, and have OUR teardown kill the OTHER run's healthy processes —
+    // with no cwd corroboration to catch it, because this rung waives that
+    // check on purpose. Adversarial containment review, 2026-09-03.
+    const markers = readMarkers(dir).filter((token) => tokenBelongsToRunDir(token, dir));
+    if (pid === null && markers.length === 0) continue;
+    runs.push({ dir, pid, markers });
   }
   return runs;
 }
@@ -341,6 +384,9 @@ export async function reapAgentRuns(runs, opts = {}) {
         return false;
       }
     });
+  // 5.50: injected so the marker rung is testable without planting processes;
+  // the real sweep reads `/proc/*/environ` by recorded uid.
+  const carryingMarker = opts.carryingMarker ?? processesCarryingMarker;
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
   const pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -376,7 +422,10 @@ export async function reapAgentRuns(runs, opts = {}) {
   const table = procTable();
 
   for (const { dir, pid } of runs) {
-    // (2) the recorded pid gates its whole subtree.
+    // (2) the recorded pid gates its whole subtree. A run may have recorded a
+    //     marker and no pid (5.50) — there is no root to gate, and its
+    //     children are reached by the marker rung below.
+    if (pid === null || pid === undefined) continue;
     if (claimed.has(pid)) continue; // already reaped as part of an earlier run's tree
     const decision = decideReap({ pid, cwd: cwdOf(pid), ownRoot, recorded: true, alive: isAlive(pid) });
     if (!decision.reap) {
@@ -413,6 +462,45 @@ export async function reapAgentRuns(runs, opts = {}) {
     }
     claimed.set(pid, { dir, via: decision.provenance });
     rootOrder.push(pid);
+  }
+
+  // (3b) the marker rung (5.50). Anything still carrying THIS run's token was
+  //      spawned by this run and is ours by construction — including the
+  //      `setsid`'d orphan that neither the ancestry walk nor the group sweep
+  //      can see, and including one that has left the run worktree, which is
+  //      the S3 escape itself. Deliberately no cwd probe here: see the module
+  //      header's note on the one loosened invariant. A pid the recorded-root
+  //      rules SKIPPED is re-claimed here only because the token is evidence a
+  //      stale pid file could never be — and it is removed from `skipped` so
+  //      the report never lists one pid as both reaped and refused.
+  const sweptTokens = new Set();
+  for (const { dir, markers } of runs) {
+    for (const marker of markers ?? []) {
+      if (sweptTokens.has(marker)) continue;
+      sweptTokens.add(marker);
+      let carriers;
+      try {
+        carriers = carryingMarker(marker);
+      } catch (err) {
+        // Never throws — this runs in a `finally` — but never silent either. A
+        // rung that fails and reports nothing is indistinguishable from a rung
+        // that ran and found nothing, and that reading is how a leaked agent
+        // gets recorded as "no agents to reap".
+        skipped.push({
+          pid: null,
+          dir,
+          reason: `marker sweep for ${dir} failed, so that rung did not run: ${err?.message ?? String(err)}`,
+        });
+        continue;
+      }
+      for (const target of carriers) {
+        if (claimed.has(target)) continue;
+        claimed.set(target, { dir, via: 'marker' });
+        strayOrder.push(target);
+        const priorSkip = skipped.findIndex((s) => s.pid === target);
+        if (priorSkip !== -1) skipped.splice(priorSkip, 1);
+      }
+    }
   }
 
   // (4) the group first — it is the half that reaches a member re-parented out

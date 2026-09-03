@@ -54,6 +54,11 @@ packages/agents/run-agent.ts existsSync 1
 packages/agents/run-agent.ts mkdirSync 1
 packages/agents/run-agent.ts writeFileSync 1
 packages/agents/skill-path.ts readFileSync 1
+packages/agents/spawn-marker.ts appendFileSync 1
+packages/agents/spawn-marker.ts mkdirSync 1
+packages/agents/spawn-marker.ts readdirSync 1
+packages/agents/spawn-marker.ts readFileSync 2
+packages/agents/spawn-marker.ts statSync 1
 packages/factory/architect-plan.ts existsSync 4
 packages/factory/architect-plan.ts mkdirSync 2
 packages/factory/architect-plan.ts renameSync 1
