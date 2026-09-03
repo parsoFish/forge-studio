@@ -38,9 +38,9 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runInteractiveTurn } from './interactive-runner.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+import { runInteractiveTurn } from '../../interactive-runner.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '../../studio/session-kinds.ts';
+import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';

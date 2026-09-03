@@ -17,8 +17,8 @@ import {
   INSTRUCTIONS_MODEL,
   DRAFT_FILENAME,
   type InstructionsStatus,
-} from './kinds/instructions.ts';
-import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
+} from '../../kinds/instructions.ts';
+import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 
 function makeQueryFn(spec: { interview?: unknown; draft?: unknown }): QueryFn {

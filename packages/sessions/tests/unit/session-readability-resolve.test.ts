@@ -54,14 +54,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { sessionLogDirName } from './session-readability.ts';
-import { resolveReadableSession, sessionIsReadable, invalidProjectReason } from './bridge-studio-sessions.ts';
-import { loadSessionKinds } from './studio/session-kinds.ts';
+import { sessionLogDirName } from '../../session-readability.ts';
+import { resolveReadableSession, sessionIsReadable, invalidProjectReason } from '../../bridge-studio-sessions.ts';
+import { loadSessionKinds } from '../../studio/session-kinds.ts';
 
 /** The REAL repo root — AT-F6-RR-18 runs its ratchet against the shipped
  *  `studio/session-kinds.yaml`, never a fixture copy, so ADDING a colliding
  *  kind id fails the gate rather than a hand-kept list going stale. */
-const REPO_ROOT = new URL('../..', import.meta.url).pathname;
+const REPO_ROOT = new URL('../../../..', import.meta.url).pathname;
 
 // ---------------------------------------------------------------------------
 // Fixtures

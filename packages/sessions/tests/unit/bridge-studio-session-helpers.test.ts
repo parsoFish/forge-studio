@@ -18,8 +18,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
-import * as helpers from './bridge-studio-session-helpers.ts';
-import { rejectStartProjectRepoPath } from './bridge-studio-session-helpers.ts';
+import * as helpers from '../../bridge-studio-session-helpers.ts';
+import { rejectStartProjectRepoPath } from '../../bridge-studio-session-helpers.ts';
 
 const ROOTS = { forgeRoot: '/home/parso/forge', projectsRoot: '/home/parso/forge/projects' };
 

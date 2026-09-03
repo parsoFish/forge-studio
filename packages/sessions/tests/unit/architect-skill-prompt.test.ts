@@ -34,7 +34,7 @@
  */
 
 import { test } from 'node:test';
-import { stubArchitectManifestPorts } from './tests/architect-ports-stub.ts';
+import { stubArchitectManifestPorts } from '../../tests/architect-ports-stub.ts';
 import assert from 'node:assert/strict';
 import {
   mkdirSync,
@@ -52,15 +52,17 @@ import {
   writeStatus,
   type ArchitectStatus,
   type QueryFn,
-} from './kinds/architect.ts';
+} from '../../kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
 
-const HERE = import.meta.dirname;
 /** Anchored on FORGE_ROOT, not a `..`/HERE chain (COMMON §15.14) — the fourth
  *  such anchor this wave. Was `architect-runner.ts` beside this file before the
- *  M4 ruling-60 port made it the architect KIND module. */
+ *  M4 ruling-60 port made it the architect KIND module. The SKILL.md path below
+ *  was a `HERE/../..` chain until the M4 row-5 re-bucket moved this file two
+ *  levels deeper; re-anchoring it on FORGE_ROOT removes the chain rather than
+ *  re-counting it, which is what §15.14 asks for. */
 const ARCHITECT_RUNNER_TS = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect.ts');
-const ARCHITECT_SKILL_MD = join(HERE, '..', '..', 'skills', 'architect', 'SKILL.md');
+const ARCHITECT_SKILL_MD = join(FORGE_ROOT, 'skills', 'architect', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
 // Shared test harness — mirrors architect-runner.test.ts's setupSession/logger

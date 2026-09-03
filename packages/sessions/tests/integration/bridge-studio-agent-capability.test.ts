@@ -29,7 +29,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../../../cli/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -268,7 +268,7 @@ test('a SYMLINKED SKILL.md FILE escaping the forge root → 404, no leak', async
 // ---------------------------------------------------------------------------
 
 test('REAL REPO: demo-builder (library:false, strategy:range) returns allowedTiers [sonnet, opus] off its real SKILL.md', async () => {
-  const realForgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const realForgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
   const realQueueDone = join(realForgeRoot, '_queue', 'done');
   const realLogs = join(realForgeRoot, '_logs');
   // Real repo checkouts always carry these (gitignored but present in dev/CI);
