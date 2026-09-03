@@ -13,6 +13,11 @@ import { FLOW_KICKOFF_KINDS } from '@forge/contracts/studio/types.ts';
 import { KB_BACKENDS } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH, RESERVED_OBJECT_IDS, isReservedId } from '@forge/agents/skill-path.ts';
 import { isSafeProjectName } from '@forge/flows/manifest-path-guard.ts';
+// G6's fan-out predicate now lives with the flow semantics it states
+// (packages/flows/flow-fanout.ts), so the lint and the runner still share ONE
+// copy without the runner importing orchestrator/. No re-export: measured, the
+// only consumers were this file and the runner.
+import { findFanOutViolations } from '@forge/flows/flow-fanout.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
@@ -124,33 +129,6 @@ function findDuplicates(ids: string[]): string[] {
     seen.add(id);
   }
   return [...dupes];
-}
-
-// ---------------------------------------------------------------------------
-// Fan-out predicate (G6) — shared by validateFlow (lint) and the flow engine
-// (orchestrator/flow-runner.ts, runtime enforcement). A node declaring
-// `fanOut` must have at least one inbound edge whose `artifact` matches the
-// declaration. A node with zero inbound edges (a flow's entry node) can never
-// satisfy this, so fanOut on an entry node is always a violation — this one
-// predicate is what makes that true for both lint and runtime. Extracted so
-// the two call sites can never drift from each other.
-// ---------------------------------------------------------------------------
-
-export type FanOutViolation = { nodeId: string; fanOut: string };
-
-export function findFanOutViolations(flow: FlowDefinition): FanOutViolation[] {
-  const violations: FanOutViolation[] = [];
-  for (const node of flow.nodes) {
-    if (node.fanOut) {
-      const hasMatchingInbound = flow.edges.some(
-        (e) => e.to === node.id && e.artifact === node.fanOut,
-      );
-      if (!hasMatchingInbound) {
-        violations.push({ nodeId: node.id, fanOut: node.fanOut });
-      }
-    }
-  }
-  return violations;
 }
 
 // ---------------------------------------------------------------------------

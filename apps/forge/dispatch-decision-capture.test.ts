@@ -90,14 +90,16 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, listAgentDefinitions, loadAgentDefinition, listFlowIds, loadFlowDefinition } from './studio/registry.ts';
+import { isStudioAgent, listAgentDefinitions, loadAgentDefinition, listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
-import { resolveNodeKind, flowPathForId } from './flow-runner.ts';
+import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
 import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { assertMatchesJsonSnapshot } from './test-fixtures/spawn-capture/normalize.ts';
+import { assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
+// §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one
+// level short. Taken from kernel, which owns the constant.
+import { FORGE_ROOT } from '@forge/kernel';
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'dispatch-decisions.json');
 
 /**

@@ -60,11 +60,31 @@ test('it accounts for a real population, not an empty set', () => {
   assert.deepEqual(json.duplicates, []);
 });
 
+/**
+ * The subject these four fixtures manipulate, DERIVED rather than named.
+ *
+ * §15.93: a guard self-test that hardcodes a real repo path is coupled to every
+ * carve — this file named `orchestrator/flow-runner.ts` and went red the moment
+ * that file moved into its package. Failing loudly was the good outcome; the
+ * bad one is a fixture that keeps passing while pointing at nothing. Taking the
+ * first `packages/` row out of the live QUARRY table means the next move cannot
+ * strand it, and the assertion below still names whatever it picked.
+ */
+function aQuarriedProductionFile(): string {
+  const row = readFileSync(QUARRY, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => /^\| packages\/[^|]+\.ts \|/.test(l));
+  assert.ok(row, 'QUARRY.md must carry at least one packages/ production row');
+  return row!.split('|')[1].trim();
+}
+
 test('it FAILS on an unowned file — a row removed (the defect it exists for)', () => {
-  withQuarry((rows) => rows.filter((l) => !l.includes('| orchestrator/flow-runner.ts |')), (q, b) => {
+  const subject = aQuarriedProductionFile();
+  withQuarry((rows) => rows.filter((l) => !l.includes(`| ${subject} |`)), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `a file with no row must fail — got exit 0:\n${out}`);
-    assert.match(out, /unowned: orchestrator\/flow-runner\.ts/);
+    assert.ok(out.includes(`unowned: ${subject}`), `the offending file must be named — got:\n${out}`);
   });
 });
 
@@ -77,26 +97,29 @@ test('it FAILS on an orphan row — the quarry describing a file that is not the
 });
 
 test('it FAILS on a duplicate row — a file has exactly one owner', () => {
-  withQuarry((rows) => [...rows, '| orchestrator/flow-runner.ts | flows | verbatim | 1 |'], (q, b) => {
+  const subj = aQuarriedProductionFile();
+  withQuarry((rows) => [...rows, `| ${subj} | flows | verbatim | 1 |`], (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `two rows for one file must fail — got exit 0:\n${out}`);
-    assert.match(out, /duplicate row: orchestrator\/flow-runner\.ts/);
+    assert.ok(out.includes(`duplicate row: ${subj}`), `the duplicate must be named — got:\n${out}`);
   });
 });
 
 test('it FAILS on an owner outside the eleven-package vocabulary', () => {
-  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/flow-runner.ts |') ? '| orchestrator/flow-runner.ts | kernal | verbatim | 1 |' : l)), (q, b) => {
+  const subj = aQuarriedProductionFile();
+  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernal | verbatim | 1 |` : l)), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `a typo'd owner must fail — got exit 0:\n${out}`);
-    assert.match(out, /unknown owner: orchestrator\/flow-runner\.ts \(owner "kernal"\)/);
+    assert.ok(out.includes(`unknown owner: ${subj} (owner "kernal")`), `the offending owner must be named — got:\n${out}`);
   });
 });
 
 test('it FAILS on a disposition outside verbatim|pruned|rewritten|deleted', () => {
-  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/flow-runner.ts |') ? '| orchestrator/flow-runner.ts | kernel | moved | 1 |' : l)), (q, b) => {
+  const subj = aQuarriedProductionFile();
+  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernel | moved | 1 |` : l)), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `an invented disposition must fail — got exit 0:\n${out}`);
-    assert.match(out, /unknown disposition: orchestrator\/flow-runner\.ts \(disposition "moved"\)/);
+    assert.ok(out.includes(`unknown disposition: ${subj} (disposition "moved")`), `the offending disposition must be named — got:\n${out}`);
   });
 });
 

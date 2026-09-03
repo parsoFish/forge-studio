@@ -20,13 +20,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
-import { resolveNodeKind } from './flow-runner.ts';
+import { resolveNodeKind } from '@forge/flows/flow-runner.ts';
 import { runFlowT, type TestDeps } from './test-fixtures/flow-runner-port.ts';
-import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from './studio/registry.ts';
-import { validateFlow, validateAgent } from './studio/validate.ts';
+import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from '../../orchestrator/studio/registry.ts';
+import { validateFlow, validateAgent } from '../../orchestrator/studio/validate.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';
 import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { runPreflight } from '@forge/projects/preflight.ts';
@@ -34,7 +34,9 @@ import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';
 import type { FlowNode } from '@forge/contracts/studio/types.ts';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// §15.14: this file moved from orchestrator/ to apps/forge/, so a hand-counted
+// '..' chain now lands in apps/. Anchored on kernel's FORGE_ROOT instead.
+const REPO_ROOT = FORGE_ROOT;
 const CATALOG_PATH = resolve(REPO_ROOT, 'studio', 'catalog.yaml');
 const CONTRACT_CHECK_SKILL_PATH = join(skillsDir(REPO_ROOT), 'contract-check', 'SKILL.md');
 

@@ -35,7 +35,7 @@ import { writeVerdictJson } from './flow-artifacts.ts';
 import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { loadFlowDefinition, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
-import { flowPathForId } from '../../orchestrator/flow-runner.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
