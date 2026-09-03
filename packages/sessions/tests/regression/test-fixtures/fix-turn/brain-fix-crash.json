@@ -1,0 +1,69 @@
+{
+  "result": {
+    "runId": "capture-brainfix-crash",
+    "cleared": false,
+    "editAudit": {
+      "changes": [],
+      "refused": [],
+      "repaired": [],
+      "unsound": [],
+      "errors": []
+    }
+  },
+  "events": [
+    {
+      "cycle_id": "_brainfix-capture-brainfix-crash",
+      "event_id": "<event_id>",
+      "event_type": "start",
+      "initiative_id": "_brainfix-capture-brainfix-crash",
+      "input_refs": [
+        "<THEME>"
+      ],
+      "message": "brain-fix.start (kind=frontmatter.missing-field, file=<THEME>)",
+      "metadata": {
+        "runId": "capture-brainfix-crash",
+        "kbId": "cycles",
+        "kind": "frontmatter.missing-field",
+        "check": "checkFrontmatter"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-crash",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_brainfix-capture-brainfix-crash",
+      "input_refs": [],
+      "message": "about to fail",
+      "metadata": {
+        "runId": "capture-brainfix-crash",
+        "kind": "reasoning"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-crash",
+      "event_id": "<event_id>",
+      "event_type": "error",
+      "initiative_id": "_brainfix-capture-brainfix-crash",
+      "input_refs": [
+        "<THEME>"
+      ],
+      "message": "brain-fix.crashed",
+      "metadata": {
+        "error": "pinned stream failure"
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    }
+  ]
+}
