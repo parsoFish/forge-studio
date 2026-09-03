@@ -47,20 +47,54 @@ import {
   handleAgentHistory, handleAgentRunStart,
   type AgentSlugRouteDeps,
 } from './bridge-agents-slug.ts';
+import {
+  handleStudioAgentsList, handleStudioAgentWrite,
+  type AgentStudioRouteDeps,
+} from './bridge-agents-studio.ts';
 
 /**
  * Everything above this package's rank, plus the bridge instance state, bound
  * once at `apps/forge/routes.ts`. Declared as the union of the two handler
  * modules' own deps so no third list can drift from them.
  */
-export type AgentsRouteDeps = AgentRunsDeps & AgentSlugRouteDeps;
+export type AgentsRouteDeps = AgentRunsDeps & AgentSlugRouteDeps & AgentStudioRouteDeps;
 
 /** Matching strips the query; handlers get the RAW url and normalise for
  *  themselves, so an arm that needs the query string still has it. */
 const pathOf = pathOnly;
 
+const AGENT_SLUG_PATH = /^\/api\/studio\/agents\/([^/]+)$/;
+
 export function agentsRoutes(deps: AgentsRouteDeps): RouteTable<RouteContext> {
+  const studioAgentWrite = handleStudioAgentWrite(deps);
   return [
+    {
+      method: 'GET',
+      path: '/api/studio/agents',
+      dryClassification: 'exempt-local',
+      matches: (url) => pathOf(url) === '/api/studio/agents',
+      handler: handleStudioAgentsList(),
+    },
+    // PUT and DELETE share ONE handler: in the host they were a single
+    // `if (agentMatch)` block whose first thirty lines are slug validation and
+    // the `resolveGuardedPath` containment check. Two entries because
+    // `dispatchRoute` filters on method; one function because duplicating a
+    // containment guard to split a route is a security-invariant breach
+    // (COMMON §15.47), not a smaller diff.
+    {
+      method: 'PUT',
+      path: '/api/studio/agents/:slug',
+      dryClassification: 'exempt-local',
+      matches: (url) => AGENT_SLUG_PATH.test(pathOf(url)),
+      handler: studioAgentWrite,
+    },
+    {
+      method: 'DELETE',
+      path: '/api/studio/agents/:slug',
+      dryClassification: 'exempt-local',
+      matches: (url) => AGENT_SLUG_PATH.test(pathOf(url)),
+      handler: studioAgentWrite,
+    },
     {
       method: 'GET',
       path: '/api/agents/runs/recent',

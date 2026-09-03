@@ -30,14 +30,37 @@ function claimedBy(method: string, url: string): string | null {
   return null;
 }
 
-test('contract: the table carries exactly the five carved routes, in the order the if-chain matched them', () => {
+test('contract: the table carries exactly the eight carved routes, each family in the order its if-chain matched them', () => {
   assert.deepEqual(table.map((e) => `${e.method} ${e.path}`), [
+    'GET /api/studio/agents',
+    'PUT /api/studio/agents/:slug',
+    'DELETE /api/studio/agents/:slug',
     'GET /api/agents/runs/recent',
     'POST /api/agents/runs/:runId/cancel',
     'GET /api/agents/runs/:runId',
     'GET /api/agents/:slug/history',
     'POST /api/agents/:slug/run',
   ]);
+});
+
+test('contract: the two families are PREFIX-DISJOINT — which is what makes the order BETWEEN them not load-bearing', () => {
+  // Within a family the order is a real contract (the four collisions below).
+  // Across families it is not, and this is the assertion that earns that claim
+  // rather than assuming it: no `/api/studio/agents*` URL is claimed by an
+  // `/api/agents/*` entry, and no `/api/agents/*` URL by a studio entry.
+  const studio = (p: string) => p.startsWith('/api/studio/agents');
+  for (const url of ['/api/studio/agents', '/api/studio/agents/demo-agent']) {
+    for (const m of ['GET', 'PUT', 'DELETE', 'POST']) {
+      const claimed = claimedBy(m, url);
+      assert.ok(claimed === null || studio(claimed), `${m} ${url} was claimed by ${claimed}`);
+    }
+  }
+  for (const url of ['/api/agents/runs/recent', '/api/agents/runs/_agent-1', '/api/agents/x/history', '/api/agents/x/run']) {
+    for (const m of ['GET', 'POST']) {
+      const claimed = claimedBy(m, url);
+      assert.ok(claimed === null || !studio(claimed), `${m} ${url} was claimed by ${claimed}`);
+    }
+  }
 });
 
 test('contract: COLLISION 1 — `runs/recent` is claimed by the recent route, never by the run-detail route', () => {
@@ -63,6 +86,26 @@ test('contract: COLLISION 4 — `:slug/history` and `:slug/run` are disjoint suf
   assert.equal(claimedBy('GET', '/api/agents/demo-agent/history'), '/api/agents/:slug/history');
   assert.equal(claimedBy('POST', '/api/agents/demo-agent/run'), '/api/agents/:slug/run');
   assert.equal(claimedBy('GET', '/api/agents/demo-agent/run'), null, 'the run route is POST-only');
+});
+
+test('contract: PUT and DELETE /api/studio/agents/:slug share ONE handler — the containment guard is not duplicated to split a route', () => {
+  const put = table.find((e) => e.method === 'PUT' && e.path === '/api/studio/agents/:slug');
+  const del = table.find((e) => e.method === 'DELETE' && e.path === '/api/studio/agents/:slug');
+  assert.ok(put && del, 'both entries must exist');
+  assert.equal(put.handler, del.handler,
+    'they must be the SAME function reference. In the host these were one `if (agentMatch)` block whose first thirty ' +
+    'lines are slug validation and the resolveGuardedPath containment check; two independent handlers would mean two ' +
+    'copies of that guard, which is a security-invariant breach (COMMON §15.47), not a smaller diff.');
+});
+
+test('contract: the roster list and the per-slug writes do not collide', () => {
+  assert.equal(claimedBy('GET', '/api/studio/agents'), '/api/studio/agents');
+  assert.equal(claimedBy('PUT', '/api/studio/agents/demo-agent'), '/api/studio/agents/:slug');
+  assert.equal(claimedBy('DELETE', '/api/studio/agents/demo-agent'), '/api/studio/agents/:slug');
+  assert.equal(claimedBy('PUT', '/api/studio/agents'), null,
+    'the write matcher requires a slug segment, so the bare roster path is never claimed by it');
+  assert.equal(claimedBy('GET', '/api/studio/agents/demo-agent'), null,
+    'there is no GET on a single agent — the roster serves the list and nothing claims the per-slug GET');
 });
 
 test('contract: every entry carries a dry classification — a carved route that lost one would SPAWN under FORGE_DRY_BRIDGE=1', () => {

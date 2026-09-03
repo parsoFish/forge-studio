@@ -26,7 +26,6 @@
   "cli/bridge-studio-project-create-containment.test.ts": 1204,
   "cli/bridge-studio-sibling-containment.test.ts": 943,
   "cli/bridge-studio-write.test.ts": 1664,
-  "cli/bridge-studio-writes.ts": 2482,
   "cli/bridge-studio.test.ts": 931,
   "cli/bridge-studio.ts": 1750,
   "cli/studio-lint.test.ts": 1111,

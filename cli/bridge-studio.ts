@@ -34,27 +34,24 @@ import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
 import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
-import { listAgentDefinitions, loadFlowDefinition, listFlowIds } from '../orchestrator/studio/registry.ts';
+import { loadFlowDefinition, listFlowIds } from '../orchestrator/studio/registry.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { communitySkillsFromRegistry } from '@forge/library/studio/community-registry.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
 import { listHookLibrary } from '@forge/library/studio/hook-library.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
-import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath } from '@forge/kernel';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
-import { defaultConfigPath, loadConfig, resolveDefaultKickoffCeilingUsd } from '@forge/kernel';
 import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
 import type { QueueState } from '@forge/flows/queue.ts';
 import { getPaths } from '@forge/flows/queue.ts';
-import { provenanceOfOrigin, AGENT_PROVENANCE, type Provenance } from '@forge/kernel';
+import { provenanceOfOrigin, type Provenance } from '@forge/kernel';
 // M4 §4 (projects routes carve): `GET /api/studio/projects`,
 // `/api/studio/starters`, `/api/studio/projects/starters`,
 // `/api/studio/projects/:id/preflight`, `/repo-status`,
@@ -666,38 +663,6 @@ export async function handleStudioRoutes(
     return true;
   }
 
-  // ---- /api/studio/agents -------------------------------------------------
-  if (url === '/api/studio/agents') {
-    try {
-      const skillsDir = toSkillsDir(resolve(ctx.forgeRoot));
-      const agents = listAgentDefinitions(skillsDir);
-      // R2-02-F1: thread the server-computed capability descriptor onto each
-      // agent's wire payload — no capability fact may exist only in UI code.
-      // R6-04 (WI-2): `defaultCostCeilingUsd` is RUN-LEVEL policy (read from
-      // forge.config.json's `runs.defaultCostCeilingUsd`, falling back to
-      // the named `DEFAULT_KICKOFF_COST_CEILING_USD` constant) — served as a
-      // TOP-LEVEL sibling of `agents`, never nested onto a per-agent object,
-      // which would falsely assert the default is agent-specific.
-      const defaultCostCeilingUsd = resolveDefaultKickoffCeilingUsd(
-        loadConfig(defaultConfigPath(ctx.forgeRoot)),
-      );
-      sendJson(
-        res,
-        200,
-        {
-          // forge-3oq: AGENT_PROVENANCE is the named 'unknown' constant —
-          // SKILL.md carries no origin field, so guessing would be exactly
-          // the fabricated badge this change exists to remove.
-          agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a), provenance: AGENT_PROVENANCE })),
-          defaultCostCeilingUsd,
-        },
-        origin,
-      );
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
 
   // `GET /api/studio/starters` and `GET /api/studio/projects/starters` moved
   // to `packages/projects/project-roster.ts` (M4 §4 projects routes carve).

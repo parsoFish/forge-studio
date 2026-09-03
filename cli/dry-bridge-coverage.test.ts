@@ -166,6 +166,7 @@ const KNOWN_DISPATCH_FILES = [
   'packages/agents/routes.ts',
   'packages/agents/bridge-agents-runs.ts',
   'packages/agents/bridge-agents-slug.ts',
+  'packages/agents/bridge-agents-studio.ts',
   // M4 §4 step 2 — library's carved table. Pinned for the same reason as
   // knowledge's: `discoverDispatchFiles` finds any `routes.ts` automatically,
   // so this row does not widen the scan; it makes a table that stops being
