@@ -95,7 +95,7 @@ export { dispatchRoute } from '@forge/kernel';
  * for `projectsRoutes`, so the host never names a symbol from a package above
  * the one it is wiring.
  */
-export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath'> & {
+export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath' | 'runFixTurn'> & {
   /** The bridge's OWN `ensureTailFor`/`stopTailFor` closures — the same pair
    *  that backs session and live-cycle tailing. The agent-run detail and start
    *  routes arm and release a tail on them; injecting rather than duplicating
@@ -186,6 +186,9 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       servedFileHeaders: deps.servedFileHeaders,
       dryBridgeAgentTurnMarker: deps.dryBridgeAgentTurnMarker,
       isContainedProjectRepoPath,
+      // ruling 86 — the same real turn `knowledgeRoutes` above is given. Bound
+      // here, at the assembly, so neither package names the other's function.
+      runFixTurn: realKbDrainFixTurn,
     }),
   ];
 }

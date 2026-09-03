@@ -43,6 +43,10 @@ import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
 import matter from 'gray-matter';
 
+// STRUCT-1 (the zero-raw-fs structural lock) moved with the dispatch to
+// `packages/sessions/tests/contract/affordance-no-raw-fs.test.ts` — it reads
+// package SOURCE, so it belongs beside the source, and it now covers all six
+// modules the carve spread that code across rather than the one file it used to.
 import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 
@@ -1078,34 +1082,3 @@ test('DRYBRIDGE-5: verdict reject at awaiting-review (demo, abandon path) — th
   assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
 });
 
-test('STRUCT-1: cli/bridge-studio-affordances.ts makes ZERO raw fs sink calls, and no such call (if one is ever added) may take "kind" or "affordanceId" directly — every read/write must go through a guarded primitive', () => {
-  const src = readFileSync(join(REPO_ROOT, 'cli', 'bridge-studio-affordances.ts'), 'utf8');
-  const RAW_FS_SINKS = [
-    'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rmdirSync', 'unlinkSync',
-    'renameSync', 'copyFileSync', 'cpSync', 'openSync', 'readFileSync', 'readdirSync',
-    'existsSync', 'statSync', 'lstatSync', 'realpathSync', 'symlinkSync',
-  ];
-  const sinkRe = new RegExp(`(?<![.\\w$])(${RAW_FS_SINKS.join('|')})\\s*\\(([^)]*)\\)`, 'g');
-  const lines = src.split('\n').filter((l) => {
-    const t = l.trimStart();
-    return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
-  });
-  const code = lines.join('\n');
-  let m: RegExpExecArray | null;
-  let sinkCallCount = 0;
-  while ((m = sinkRe.exec(code))) {
-    sinkCallCount += 1;
-    const args = m[2];
-    assert.doesNotMatch(args, /\bkind\b/, `raw fs sink "${m[1]}" call must never take "kind" directly as an argument: ${m[0]}`);
-    assert.doesNotMatch(args, /\baffordanceId\b/, `raw fs sink "${m[1]}" call must never take "affordanceId" directly as an argument: ${m[0]}`);
-  }
-  // The real backstop (robust to the regex's own naive paren-balancing,
-  // which would truncate a nested-paren argument list like `join(...)`):
-  // this file makes NO raw fs sink calls at all today — every read/write
-  // goes through guardedReadSessionStatus/guardedWriteSessionStatus
-  // (orchestrator/interactive-session.ts) or guardedReadFile/guardedWriteFile/
-  // resolveGuardedPath (cli/studio-path-guard.ts). A future raw sink
-  // addition must be a deliberate, reviewed decision — this assertion makes
-  // it one by forcing this test to be touched.
-  assert.equal(sinkCallCount, 0, `cli/bridge-studio-affordances.ts must make zero raw fs sink calls — every read/write must go through a guarded primitive; found ${sinkCallCount}`);
-});

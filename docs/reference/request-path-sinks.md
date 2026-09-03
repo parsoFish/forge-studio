@@ -1902,3 +1902,24 @@ dataflow-aware sibling, reports these files' residual unchanged and **0 unguarde
 the classification rather than substituting for it. Row 6 is left `[unver]` on purpose: "an existence
 probe is harmless" is an argument about today's use of the boolean, not about the input, and this
 document's job is to record the input.
+
+### Relocated in M4-sessions s5 — the demo generation snapshot store (one sink pair, no new surface)
+
+The row-37 affordance carve moved the demo kind's two generic-affordance arms
+into `packages/sessions/kinds/demo-builder.ts`, which would have crossed the
+800-line cap; the split it carries (ruling 87 clause 2) takes the on-disk
+generation layout — `DEMO_KIND_DIR`, the `generations/<n>/` filenames, and the
+three guarded readers/writers that walk them — into
+`packages/sessions/kinds/demo-session-store.ts`.
+
+**One pair moves, and the census is conserved**, which is the reading that
+matters here (§15.73): `packages/sessions/kinds/demo-builder.ts mkdirSync`
+falls **5 → 4** and `packages/sessions/kinds/demo-session-store.ts mkdirSync`
+rises **0 → 1**. Host-minus-package on this PR is **zero** — no sink was added,
+removed, or re-shaped.
+
+The site itself is unchanged and still guard-terminal:
+`guardedGenerationWritePath` resolves the leaf through `guardedFile(root, segs,
+'write')`, THROWS when the leaf escapes (fail closed, the runner contract), and
+only then `mkdirSync`s the parent of a path the guard has already accepted. The
+`mkdirSync` never sees a request-derived string the guard did not resolve.

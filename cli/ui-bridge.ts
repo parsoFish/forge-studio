@@ -64,13 +64,12 @@ import {
   CSRF_HEADER,
 } from './bridge-studio.ts';
 import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
-import { realKbDrainFixTurn } from '../apps/forge/brain-fix-turn.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
 import { sessionIsReadable } from '@forge/sessions/bridge-studio-sessions.ts';
-import { handleStudioAffordanceRoutes, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
+import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
 import {
   sessionLogDirName,
   // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
@@ -1264,20 +1263,10 @@ async function handleHttp(
   // `*-list-changed` message in the bridge's WS vocabulary (authoring /
   // kb-cleanup) honestly no-ops here; those surfaces refresh on the
   // session shell's own poll.
-  // M4 §4 step 2 — POST …/:id/cancel carved to packages/sessions/routes.ts (its entry precedes any three-segment matcher for this family).
-  // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
-  // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
-  // module's own function) rather than imported by bridge-studio-affordances.ts
-  // — see that file's own header for why (bridge-studio-*.ts modules never
-  // import FROM ui-bridge.ts).
-  if (await handleStudioAffordanceRoutes(req, res, {
-    forgeRoot: ctx.forgeRoot,
-    logsRoot: ctx.logsRoot,
-    spawnAgentTurn,
-    runFixTurn: realKbDrainFixTurn, // ruling 86 — bound at apps/forge, injected here
-    // W7-C2 (A12) — the SAME per-kind mapping the tabled cancel route gets.
-    broadcastKindChanged: ctx.broadcastKindChanged,
-  }, url, method)) return;
+  // M4 §4 step 2 — POST …/:id/cancel and the generic session-affordance WRITE
+  // endpoint (…/:kind/:sessionId/:affordance) are both carved to
+  // packages/sessions/routes.ts; cancel's entry precedes the affordance's,
+  // whose matcher would otherwise claim the cancel URL.
   // M4 §4 step 2 — carved to packages/library/routes.ts; the table dispatch above already claimed this route.
   // W6-B6 fix — the per-slug capability route, resolved against the
   // UNFILTERED agent defs (bypasses the library:false roster gate

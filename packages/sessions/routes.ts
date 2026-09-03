@@ -32,6 +32,8 @@ import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
+import { handleStudioAffordanceRoutes } from './bridge-studio-sessions-affordances.ts';
+import type { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
 
 /**
  * The bridge-instance state these routes need, declared HERE (ruling 59 §2) so
@@ -65,6 +67,12 @@ export type SessionsRouteDeps = {
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
+  /** M4 ruling 86 — the real brain-fix turn. Knowledge (rank 2) DECLARES the
+   *  port and this package implements it; the binding is made at `apps/forge`,
+   *  which is why the type is derived from `approveKbCleanup`'s own parameter
+   *  rather than imported by name. The kb-cleanup approve arm consolidates
+   *  through it, so dropping the thread breaks a live operator path. */
+  readonly runFixTurn: NonNullable<Parameters<typeof approveKbCleanup>[3]>['runFixTurn'];
 } & SessionHostSurface;
 
 /** Matching strips the query; handlers receive the RAW url and normalise for
@@ -80,6 +88,10 @@ const pathOf = pathOnly;
 const SESSION_READ_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
 const SESSION_CANCEL_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/;
 const AGENT_CAPABILITY_RE = /^\/api\/studio\/agents\/([^/]+)\/capability$/;
+/** Deliberately the same bare three-segment shape the host arm carried: it
+ *  also matches the cancel URL, so this entry sits AFTER cancel's and the
+ *  contract test's mutation proves the order is load-bearing. */
+const SESSION_AFFORDANCE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 /** The context the carved family handlers read: the shared `RouteContext`, the
  *  bridge closures this package declared above, and the host surface injected
@@ -111,6 +123,11 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     servedFileHeaders: deps.servedFileHeaders,
     dryBridgeAgentTurnMarker: deps.dryBridgeAgentTurnMarker,
     isContainedProjectRepoPath: deps.isContainedProjectRepoPath,
+    // The two the generic affordance dispatch reads that nothing else did.
+    // `broadcastKindChanged` was already declared on the deps and simply never
+    // spread; `runFixTurn` is new above.
+    broadcastKindChanged: deps.broadcastKindChanged,
+    runFixTurn: deps.runFixTurn,
   };
 }
 
@@ -428,6 +445,26 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
           url,
           method,
         ),
+    },
+    {
+      // MUST follow the cancel entry above: `SESSION_AFFORDANCE_RE` is a bare
+      // three-segment matcher and matches `…/:kind/:sessionId/cancel` too, so
+      // placed first it would claim the cancel URL and answer 409 with a
+      // 200-shaped body — the wrong handler returning a plausible answer.
+      // `tests/contract/routes-table.test.ts` proves the order with a mutation,
+      // not with this comment.
+      method: 'POST',
+      path: '/api/studio/sessions/:kind/:sessionId/:affordance',
+      matches: (url) => SESSION_AFFORDANCE_RE.test(pathOf(url)),
+      // The arms spawn the next agent turn; under the dry bridge the spawn is
+      // skipped and the 200 carries the `dryBridge:{skipped:['agent-turn']}`
+      // disclosure, which is `stub-actions`, not `exempt-local`. This is the
+      // route's FIRST classification anywhere: it was invisible to
+      // `dry-bridge-coverage`'s cli scan (its matcher is a named const, not an
+      // inline literal), which is exactly what exit duty #12 is about.
+      dryClassification: 'stub-actions',
+      handler: (req, res, ctx, url, method) =>
+        handleStudioAffordanceRoutes(req, res, { ...familyContext(ctx, deps) }, url, method),
     },
     {
       method: 'GET',

@@ -49,7 +49,12 @@ function deps(projectsRoot: string): SessionsRouteDeps {
     broadcastProjectBrainChanged: () => {},
     broadcastDemoChanged: () => {},
     projectsRoot,
-    spawnAgentTurn: () => ({ ok: true }),
+    // M4 ruling 86: the real fix turn is injected by the assembly, so a route
+    // test declares one. It THROWS — no case here expects a brain-fix dispatch,
+    // and a stub returning a plausible result would let a future change
+    // dispatch one unnoticed.
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    spawnAgentTurn: () => ({ ok: true, spawned: false }),
     spawnAgentDispatch: () => {},
     spawnAgentSpecs: {},
     safeParseJson: () => null,

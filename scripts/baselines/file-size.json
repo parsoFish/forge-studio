@@ -22,7 +22,6 @@
   "apps/studio/lib/studio-client.test.ts": 1373,
   "apps/studio/lib/studio-client.ts": 2540,
   "cli/bridge-studio-affordances.test.ts": 1111,
-  "cli/bridge-studio-affordances.ts": 1319,
   "cli/bridge-studio-flows.test.ts": 1060,
   "cli/bridge-studio-project-create-containment.test.ts": 1204,
   "cli/bridge-studio-sibling-containment.test.ts": 943,

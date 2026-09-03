@@ -178,6 +178,10 @@ const KNOWN_DISPATCH_FILES = [
   // included this package at all — the guard could not see a projects table
   // however loudly this list named one.
   'packages/projects/routes.ts',
+  // …and sessions'. §15.82: a package whose routes are carved is pinned as a
+  // floor in the same PR, so a table that stops being discovered fails loudly
+  // instead of silently un-enforcing its classifications.
+  'packages/sessions/routes.ts',
 ] as const;
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };

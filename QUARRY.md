@@ -41,7 +41,7 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 26 | 11,157 | **12,000** | seeded from the quarried total, rounded up to the next 500; **re-seeded 11,500 → 12,000 (M4, operator ruling: "knowledge cap RATIFIED at 12,000").** The cap was seeded before the 800-line per-file cap forced the package's three largest files apart (`brain-lint.ts` 1,744 → six, `bridge-studio-kbs.ts` 2,068 → five, `bridge-studio-kb-drain.ts` 1,456 → three); a split adds module headers, import blocks and re-exported signatures without adding behaviour, so the two caps are in tension by construction. The named cause of the breach that forced the ruling is the ruling-31 public-door `index.ts` (+62). This row's own rule applied to the measured total (11,538 on main at `c323dc04`) rounds up to 12,000. |
 | `projects` | 22 | 7,820 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **12,400** | **Re-seeded 11,548 → 12,400 (M4-agents s3, T1 ruling 88), priced on a measurement rather than a projection.** Line-items: **11,548** is the transfer-priced cap (9,000 + 233 registry + 242 band-agent-run + 109 agents-md-compose + the routes carve's 1,948 host delta — `cli/ui-bridge.ts` −1,430, `cli/bridge-studio-writes.ts` −483, `cli/bridge-studio.ts` −35). On top of it, **785** is boundary-forced: the `BandAgentDeps` / `AgentsRouteDeps` / `AgentHistoryDeps` / `AgentRunStateDeps` / `AgentStudioRouteDeps` declarations a rank-3 package must state rather than import, the eight `RouteEntry` rows, the seam headers recording each carve's findings, and the ruling-31 public door (`index.ts` 11 → 81). The s2 P0 fixes (`spawn-marker.ts`, `dispatch-terminal.ts`) sit inside the earlier 202 of that. **67 is margin for s4's 5.22 and rofi edits.** **The cull is why this is a raise and not a debt:** 215 exported names across the package's production files, **zero** with any reference beyond their own declaration — s1's cull (KEEP 94 / CUT 42) already took the dead code, so no cut exists that is not a port, a guard, or the door itself, which is the case ruling 76's residual rule anticipated. **Growth beyond 12,400 PARKS**; the operator may reverse this at the gate. Per-FILE discipline is unaffected and improved: two `check-file-size` exemptions were RETIRED this session (`cli/bridge-studio-writes.ts` 1,093 → 610 and `packages/agents/agent-run.ts` 886 → 386), deleted from the baseline rather than re-keyed. |
-| `sessions` | 20 | 13,078 | **17,340** | **Re-seeded 13,500 → 16,400 (M4-sessions s2, T1 ruling 72).** PURE RE-ATTRIBUTION, not a growth grant: the routes carve (#326) moved 34 route handlers out of `cli/ui-bridge.ts` (6,600 → 3,704, −2,896) into this package, so a cap set before that transfer measures a different package. 16,400 = 13,500 + the 2,896 transferred, rounded. The package's OWN growth over M4 entry (+1,110 — module headers carrying the carve's seam findings, per-family imports and structurally-declared context types, six new module docs) sits inside the headroom the entry cap already gave (13,500 − 11,758 = 1,742); no growth ruling was sought or granted. s3's runner ports are expected to take it well below this as the four legacy runners' duplicated turn/transcript/lifecycle plumbing dissolves. The M4 exit reports sessions prod against entry with the transfer as a named line-item, never as growth. **Re-seeded again 16,400 → 17,300 (M4-sessions s3, T1 ruling 77/80).** Also pure re-attribution, priced at factory's delta: `architect-plan.ts` (862) was MISQUARRIED to `factory` — measured by module specifier, its only importers were `packages/sessions/kinds/architect.ts` and its own test, and nothing in `packages/factory`, `packages/flows`, `apps/`, `cli/` or `orchestrator/` used it. A module whose only consumers are the architect kind belongs to the architect kind, so it re-homes here and the cap carries its lines across: 17,300 = 16,400 + 862, rounded. The four runner ports meanwhile took the package DOWN — 16,266 at s3 open to 16,204 after the architect port — so the only growth in this cell is the two transfers, each named with its exact line count.  **Raised 17,300 → 17,340 (M4-sessions s4, T1 ruling 90) — SPLIT OVERHEAD, a named line-item, not growth.** Ruling 90 prices the structural cost of creating a module once: a header, its imports and — when the split requires one — a port type, capped at 40 lines per new module and ratified per PR on the measured number. This raise is **1 module × 33 measured**: `studio/roadmap-draft.ts`, the split ruling 83 REQUIRED as the condition on `studio/session-transcript.ts`'s own +9 re-key (that condition is now discharged — the file is 1,298, below even its pre-3b 1,359). Prose is never overhead and was not charged here: 64 of the original 72 lines were my own commentary and were paid down before the raise was requested — the rationale moved into `packages/sessions/design.md`, the module header from ~60 lines to 10, the re-export note from 11 to 3. Each later row-5 split raises by its own measured structure the same way, and the ruling-87 affordance carve re-seeds the cap from its host delta with these allowances folded in as line-items. |
+| `sessions` | 20 | 13,078 | **18,689** | **Re-seeded 13,500 → 16,400 (M4-sessions s2, T1 ruling 72).** PURE RE-ATTRIBUTION, not a growth grant: the routes carve (#326) moved 34 route handlers out of `cli/ui-bridge.ts` (6,600 → 3,704, −2,896) into this package, so a cap set before that transfer measures a different package. 16,400 = 13,500 + the 2,896 transferred, rounded. The package's OWN growth over M4 entry (+1,110 — module headers carrying the carve's seam findings, per-family imports and structurally-declared context types, six new module docs) sits inside the headroom the entry cap already gave (13,500 − 11,758 = 1,742); no growth ruling was sought or granted. s3's runner ports are expected to take it well below this as the four legacy runners' duplicated turn/transcript/lifecycle plumbing dissolves. The M4 exit reports sessions prod against entry with the transfer as a named line-item, never as growth. **Re-seeded again 16,400 → 17,300 (M4-sessions s3, T1 ruling 77/80).** Also pure re-attribution, priced at factory's delta: `architect-plan.ts` (862) was MISQUARRIED to `factory` — measured by module specifier, its only importers were `packages/sessions/kinds/architect.ts` and its own test, and nothing in `packages/factory`, `packages/flows`, `apps/`, `cli/` or `orchestrator/` used it. A module whose only consumers are the architect kind belongs to the architect kind, so it re-homes here and the cap carries its lines across: 17,300 = 16,400 + 862, rounded. The four runner ports meanwhile took the package DOWN — 16,266 at s3 open to 16,204 after the architect port — so the only growth in this cell is the two transfers, each named with its exact line count.  **Raised 17,300 → 17,340 (M4-sessions s4, T1 ruling 90) — SPLIT OVERHEAD, a named line-item, not growth.** Ruling 90 prices the structural cost of creating a module once: a header, its imports and — when the split requires one — a port type, capped at 40 lines per new module and ratified per PR on the measured number. This raise is **1 module × 33 measured**: `studio/roadmap-draft.ts`, the split ruling 83 REQUIRED as the condition on `studio/session-transcript.ts`'s own +9 re-key (that condition is now discharged — the file is 1,298, below even its pre-3b 1,359). Prose is never overhead and was not charged here: 64 of the original 72 lines were my own commentary and were paid down before the raise was requested — the rationale moved into `packages/sessions/design.md`, the module header from ~60 lines to 10, the re-export note from 11 to 3. Each later row-5 split raises by its own measured structure the same way, and the ruling-87 affordance carve re-seeds the cap from its host delta with these allowances folded in as line-items. **Re-seeded 17,340 → 18,689 (M4-sessions s5, ruling 87 clause 3) — the affordance carve, priced on this PR's final head.** Pre-approved method: `17,340 + the exact host delta`. Measured with the ruled formula (`node _1.0/prod-lines.mjs`, ruling 94 = `check-owner.mjs:49` NOT_PRODUCTION): `cli` **6,514 → 5,185 = −1,329**, so re-attribution alone gives **18,669**. The package landed at **18,689 = 20 over that**, and the 20 is covered by ruling 90's split allowance — **4 new production modules × measured structure = 55** (`bridge-studio-sessions-affordance-shell.ts` 19 · `kinds/demo-session-store.ts` 15 · `kinds/authoring.ts` 11 · `kinds/kb-cleanup.ts` 10), each well under the 40-line ceiling. Only 20 of that 55 is asked for, because 35 was paid back in the same PR: the carved dispatch's header went **154 → 70 lines** with the resolution chain, the no-oracle 404 discipline and the SYNC INVARIANT moved into `design.md`, and the duplicated `MAX_ANSWER_FIELD_BYTES` (plus the source-reading test that existed only to keep the duplicate honest) is gone now that both enforcement points import `session-answer-limits.ts`. **Repo-net is +50 lines** (113,914 → 113,964) against a package-net of +1,376 — the difference is the transfer, file for file, in the PR body. |
 | `flows` | 62 | 21,327 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
 | `factory` | 37 | 13,004 | **13,500** | **Re-seeded 12,500 → 13,500 (M2-B, operator ruling).** Two effects landed together: M2-B quarried `orchestrator/phases/executor-{deps,table}.ts` (960 lines) here, where the six phases they wire already live — a `flows`-owned table importing those phases would be a `flows → factory` edge the allow-graph forbids; and the per-package columns in this table, hand-seeded and never recomputed, are now DERIVED from the rows below, which showed `factory` at 12,044 before those two files rather than the figure its cap was seeded from. The new cap applies this row's own stated rule — the measured total (13,004) rounded up to the next 500 — to a total that is now measured rather than asserted. The full column recomputation, and teaching `check-owner.mjs` to enforce it, is bead `forge-8vfn.5.18`. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
@@ -68,7 +68,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | LOC | why it cannot move as-is |
 |---|---|---|---|
-| `cli/bridge-studio-affordances.ts` | `sessions` | 1,313 | generic ADR-043 affordance dispatch with per-kind library/factory/agents logic inlined |
+| ~~`cli/bridge-studio-affordances.ts`~~ | `sessions` | 1,313 | **CARVED (M4-sessions s5, ruling 87).** The dispatch is `packages/sessions/bridge-studio-sessions-affordances.ts`; the per-kind arms it inlined went to their own kinds (`kinds/{instructions,demo-builder,kb-cleanup,authoring}.ts`, the last two minted identity-only by ruling 87) and the shared shell to `bridge-studio-sessions-affordance-shell.ts`. The route is table entry 37 in `packages/sessions/routes.ts`, after cancel. |
 | `cli/bridge-studio-writes.ts` | `projects` | 2,482 | one route file writing agent SKILL.md, community entries, project scaffolding and flow.yaml |
 | `cli/bridge-studio.ts` | `apps/forge` | 1,750 | generic CSRF/origin/JSON plumbing interleaved with flows and library GET routes |
 | `cli/dry-bridge.ts` | `kernel` | 453 | one static table classifying routes owned by flows, agents and library alike |
@@ -110,7 +110,8 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-lint.ts | knowledge | verbatim | 646 |
 | packages/flows/bridge-hooks.ts | flows | verbatim | 397 |
 | packages/flows/bridge-recovery.ts | flows | verbatim | 258 |
-| cli/bridge-studio-affordances.ts | sessions | rewritten | 1313 |
+| packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 272 |
+| packages/sessions/bridge-studio-sessions-affordances.ts | sessions | rewritten | 496 |
 | packages/sessions/bridge-studio-agent-capability.ts | sessions | verbatim | 117 |
 | packages/library/bridge-studio-authoring-hook.ts | library | verbatim | 275 |
 | packages/library/bridge-studio-authoring-skill.ts | library | verbatim | 64 |
@@ -151,7 +152,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/demo-runtime.ts | factory | verbatim | 184 |
 | packages/factory/demo-types.ts | factory | verbatim | 59 |
 | packages/factory/demo.ts | factory | verbatim | 232 |
-| cli/dry-bridge.ts | kernel | rewritten | 453 |
+| cli/dry-bridge.ts | kernel | rewritten | 428 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 67 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 782 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 273 |
@@ -187,14 +188,14 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/run-list-cache.ts | flows | verbatim | 397 |
 | packages/sessions/session-model-tier.ts | sessions | verbatim | 49 |
 | packages/sessions/bridge-studio-instructions.ts | sessions | verbatim | 444 |
-| packages/sessions/session-answer-limits.ts | sessions | verbatim | 17 |
+| packages/sessions/session-answer-limits.ts | sessions | verbatim | 12 |
 | packages/sessions/bridge-studio-project-brain.ts | sessions | verbatim | 238 |
 | packages/sessions/bridge-studio-kickoff.ts | sessions | verbatim | 702 |
-| packages/sessions/bridge-studio-demo.ts | sessions | verbatim | 796 |
+| packages/sessions/bridge-studio-demo.ts | sessions | verbatim | 795 |
 | packages/sessions/bridge-studio-session-index.ts | sessions | verbatim | 381 |
 | packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 394 |
-| packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 421 |
-| packages/sessions/routes.ts | sessions | verbatim | 104 |
+| packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 541 |
+| packages/sessions/routes.ts | sessions | verbatim | 478 |
 | packages/sessions/session-phases.ts | sessions | verbatim | 74 |
 | packages/sessions/session-readability.ts | sessions | verbatim | 207 |
 | packages/library/skill-path.ts | library | verbatim | 91 |
@@ -206,7 +207,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/dry-bridge.ts | kernel | rewritten | 86 |
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| cli/ui-bridge.ts | apps/forge | rewritten | 6602 |
+| cli/ui-bridge.ts | apps/forge | rewritten | 2265 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
 | packages/agents/_adapters/claude/index.ts | agents | verbatim | 29 |
 | packages/agents/_adapters/conformance.ts | agents | verbatim | 203 |
@@ -250,7 +251,10 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-report.ts | flows | verbatim | 29 |
 | packages/flows/cycle.ts | flows | verbatim | 484 |
 | packages/flows/daemon.ts | flows | verbatim | 248 |
-| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 711 |
+| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 775 |
+| packages/sessions/kinds/authoring.ts | sessions | rewritten | 142 |
+| packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 86 |
+| packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 72 |
 | packages/flows/demo-fix-loop.ts | flows | verbatim | 218 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
@@ -271,7 +275,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/gate-recipes.ts | projects | verbatim | 146 |
 | packages/flows/initiative-id.ts | flows | verbatim | 210 |
 | packages/library/instruction-seed-match.ts | library | verbatim | 152 |
-| packages/sessions/kinds/instructions.ts | sessions | verbatim | 514 |
+| packages/sessions/kinds/instructions.ts | sessions | verbatim | 706 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 422 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 883 |
 | packages/sessions/interactive-session.ts | sessions | verbatim | 993 |

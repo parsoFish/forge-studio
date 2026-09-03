@@ -63,6 +63,24 @@ export type ContainmentCheck = (
  * The types are written in THIS package's words so no rank above sessions is
  * named — structural typing does the rest.
  */
+/** W7-C2 T1 review (A7) — what `spawnAgentTurn` reports back. It used to
+ *  return void with its whole body inside a bare best-effort catch, so
+ *  a failed spawn left a 200 `{ok:true, phase:'analyzing'}` and a session
+ *  stuck in a working phase with NO turn: a session with no log dir has
+ *  `lastActivityMs === null`, which `bridge-studio-lifecycle.ts` says can
+ *  never be `stalled`, so the operator saw `working` forever with
+ *  `needsYou:false`. `spawned:false` with `ok:true` is the DELIBERATE
+ *  no-spawn (FORGE_ARCHITECT_NO_SPAWN / the dry bridge), not a failure.
+ *
+ *  It lives HERE, beside the surface that declares the function, because the
+ *  affordance carve made the first package-side consumer of the RESULT: this
+ *  member returned `unknown` while no carved route read it, and a route that
+ *  refuses to claim `{ok:true}` for a turn that never started has to see the
+ *  discriminant. */
+export type SpawnTurnOutcome =
+  | { readonly ok: true; readonly spawned: boolean }
+  | { readonly ok: false; readonly error: string };
+
 export type SessionHostSurface = {
   /** `spawnAgentTurn` — the detached per-kind runner spawn. */
   readonly spawnAgentTurn: (
@@ -70,7 +88,7 @@ export type SessionHostSurface = {
     agentId: 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup',
     project: string,
     sessionId: string,
-  ) => unknown;
+  ) => SpawnTurnOutcome;
   /** `SPAWN_AGENT_SPECS` — the kind to agent-id/logPrefix mapping whose other
    *  side is pinned by `session-tail-kind-parity.test.ts`. */
   /** `spawnAgentDispatch` — the generic studio-agent dispatch the onboarding

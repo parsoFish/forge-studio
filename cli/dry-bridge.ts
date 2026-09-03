@@ -303,6 +303,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // session's tracked turn pid IF one is alive and provably ours (a
   // journey/dry seed never has one). No spawn, no remote, no daemon.
   { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/cancel', classification: 'exempt-local', reason: 'writes local session status (phase=cancelled) + SIGTERMs an owned live turn pid when one is tracked — no spawn/remote/daemon' },
+  { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/:affordance', classification: 'stub-actions', reason: 'the generic session-affordance WRITE endpoint: its verdict/answer arms spawn the next agent turn, so the dry bridge skips the spawn and the 200 carries the dryBridge disclosure. First classified when M4 row 37 carved the dispatch into packages/sessions/routes.ts — while it was a host arm its matcher was a named const, which this table\'s cli scan cannot derive, so the route ran unclassified' },
   { method: 'POST', route: '/api/agents/runs/:runId/cancel', classification: 'exempt-local', reason: 'W7-B5 (agents-30): appends a local agent-dispatch.cancelled marker event + SIGTERMs an owned live dispatch pid when one is tracked (ownership proven via the runId in its argv) — no spawn/remote/daemon' },
 
   // ---- read-only ----------------------------------------------------------
