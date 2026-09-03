@@ -1,48 +1,47 @@
 /**
  * R4-22 F4 (T3, acceptance test) — pins the CO-LOCATION invariant between
  * the generic interactive spine's event-log directory
- * (`orchestrator/interactive-runner.ts`'s `cycleId`, L213) and the bridge's
- * per-turn stderr sink (`cli/ui-bridge.ts`'s `spawnAgentTurn`, driven by its
- * private `SPAWN_AGENT_SPECS` table) — the two writers that MUST agree on
- * ONE directory per turn, or a turn's events and its stderr split across two
- * directories and the live UI panel (`apps/studio/app/sessions/[kind]/
+ * (`packages/sessions/interactive-runner.ts`'s `cycleId`, L290) and the
+ * bridge's per-turn stderr sink (`cli/ui-bridge.ts`'s `spawnAgentTurn`,
+ * driven by its `SPAWN_AGENT_SPECS` table) — the two writers that MUST agree
+ * on ONE directory per turn, or a turn's events and its stderr split across
+ * two directories and the live UI panel (`apps/studio/app/sessions/[kind]/
  * [sessionId]/page.tsx:158`, `cycleId = \`_${kind}-${sessionId}\``) ends up
  * subscribed to neither.
  *
- * THE DEFECT (reproduced, not hypothetical — see the T3 brief; not
- * re-litigated here). Today:
- *   - `orchestrator/interactive-runner.ts:213` builds
- *     `cycleId = \`_interactive-${descriptor.id}-${ctx.sessionId}\``;
- *   - `cli/ui-bridge.ts`'s `spawnAgentTurn` writes stderr.log into
- *     `_logs/_${logPrefix}-${sessionId}/`, where
- *     `SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring'`.
- * For the real "authoring" kind these are TWO DIFFERENT directories:
- * `_interactive-authoring-<sid>` vs `_authoring-<sid>`.
+ * THE DEFECT IS FIXED; THIS RATCHET IS WHAT KEEPS IT FIXED (M4-agents cull,
+ * 2026-09-03 — the paragraph below previously described the defect in the
+ * present tense long after it had been closed, which made the file read as
+ * a standing red). What it used to be:
+ *   - `interactive-runner.ts` built `_interactive-${descriptor.id}-${sid}`;
+ *   - `spawnAgentTurn` wrote stderr.log into `_logs/_${logPrefix}-${sid}/`,
+ *     where `SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring'`;
+ *   - so for the real "authoring" kind those were TWO directories,
+ *     `_interactive-authoring-<sid>` vs `_authoring-<sid>`.
+ * Today `packages/sessions/interactive-runner.ts:290` builds
+ * `cycleId = \`_${descriptor.id}-${ctx.sessionId}\`` and the two agree.
  *
- * WHY A SOURCE-TEXT RATCHET (a documented T3 design call — SECOND-BEST):
- * `SPAWN_AGENT_SPECS` is a module-private `const` in `cli/ui-bridge.ts`
- * (verified: no `export` on its declaration) — exporting it would be a
- * PRODUCTION edit, out of scope for a T3 (acceptance-test-only) pass, and
- * this project's ADR-042 surface cap makes a new `cli/`/`orchestrator/`
- * export something a test-writer asks for, not grants itself for its own
- * convenience. Precedent for this exact technique already lives in this
- * repo: `orchestrator/interactive-finalizers.test.ts`'s "RATCHET: every
+ * WHY STILL A SOURCE-TEXT RATCHET. The original reason was that
+ * `SPAWN_AGENT_SPECS` was a module-private `const`. **That is no longer
+ * true** — `cli/ui-bridge.ts:3430` now reads `export const
+ * SPAWN_AGENT_SPECS`, so this file's own retirement clause (a) is satisfied
+ * on its face. It is deliberately NOT retired here: importing that symbol
+ * from `packages/agents` would mint a `package-to-legacy` boundary
+ * violation on a host helper that the sessions lane owns under M4 ruling 67
+ * (inject at assembly, never import across). Retiring a source-text ratchet
+ * by trading it for a new boundary violation on another lane's symbol is not
+ * a cull. Revisit at the routes carve, when the host-helper question is
+ * settled by assembly — clause (b), one shared exported helper both writers
+ * call, remains the better ending.
+ *
+ * Precedent for the technique lives in
+ * `packages/sessions/interactive-finalizers.test.ts`'s "RATCHET: every
  * staging-dirname literal ... is the IDENTICAL string" test (search
- * "R4-21 phase 2, pin round 4" in that file) reads BOTH production files'
- * real source text with anchored regexes rather than demanding a shared
- * export, for the identical class of defect (two hardcoded literals that
- * must agree, drifting apart with both modules' own suites green
- * throughout because neither suite reads the OTHER module's literal). This
- * test copies that shape.
- *
- * RETIRE THIS RATCHET when either (a) `SPAWN_AGENT_SPECS` (or an equivalent
- * per-kind log-dir-naming source of truth) is exported from `cli/
- * ui-bridge.ts` and this test can import + read it directly instead of
- * regex-scanning source text, or (b) the log-dir-naming convention itself is
- * extracted into one shared, exported helper that both `interactive-
- * runner.ts` and `ui-bridge.ts` call — at that point this test should import
- * and call the helper instead of re-deriving its output from two
- * independent regexes (mirroring the sibling ratchet's own retirement note).
+ * "R4-21 phase 2, pin round 4"): it reads BOTH production files' real source
+ * text with anchored regexes rather than demanding a shared export, for the
+ * identical class of defect — two hardcoded literals that must agree,
+ * drifting apart with both modules' own suites green throughout because
+ * neither suite reads the OTHER module's literal.
  */
 
 import { test } from 'node:test';

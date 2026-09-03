@@ -2,7 +2,7 @@
  * Shared pre-spawn connection-readiness gate (R3-04 D9, `_wave5/specs/R3-04.md`).
  * The ONE derivation both real enforcement points consume:
  *
- *   - `orchestrator/run-agent.ts`'s D9.1 pre-spawn block (the seam all six
+ *   - `packages/agents/run-agent.ts`'s D9.1 pre-spawn block (the seam all six
  *     `runAgent` callers pass through — flow-runner, agent-dispatch, and the
  *     four phase bindings).
  *   - `cli/ui-bridge.ts`'s D9.2 refusal on `POST /api/agents/:slug/run`.

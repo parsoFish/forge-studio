@@ -2,13 +2,13 @@
  * `stageMaterials` — the write-path for agent-kickoff `materials:` uploads
  * (R6-04-F2, WI-1 "materials contract enforcement + guarded staging"). This
  * is the ONLY place in this feature that touches the filesystem; the
- * vocabulary/gate/derivation live in `orchestrator/studio/materials.ts`
+ * vocabulary/gate/derivation live in `packages/agents/studio/materials.ts`
  * (kept `fs`-free) and every shape/kind/cap check happens in the route
  * BEFORE this function is ever called (see `cli/ui-bridge.ts`'s
  * `POST /api/agents/:slug/run`).
  *
  * PRECONDITION — load-bearing, mirrors `resolveGuardedPath`'s own CONTRACT
- * in `cli/studio-path-guard.ts` (read that module's docstring in full before
+ * in `packages/kernel/path-guard.ts` (read that module's docstring in full before
  * touching this one): `runDir` MUST be trusted / server-derived — built from
  * config `logsRoot` plus a server-minted `runId`, NEVER from any
  * caller-supplied value. Every entry's `filename` is the only untrusted

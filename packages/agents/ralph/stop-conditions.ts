@@ -242,7 +242,7 @@ export type GateTighteningOptions = {
    * Env var names to strip from the gate child process before it runs
    * (R5-02 F2). Wired from the project's declared `ci_gate_unset_env` in
    * `.forge/project.json` — mirrors the final-CI-gate "A3" strip
-   * (`orchestrator/cycle.ts:execCommandVector`'s `unsetEnv`), applied here to
+   * (`packages/flows/cycle.ts:execCommandVector`'s `unsetEnv`), applied here to
    * the PER-WI/unifier gate too. Closes the TF_ACC-inheritance leak: an
    * operator's shell (or a sibling live-acc cycle) exporting `TF_ACC=1`
    * used to reach every per-WI gate unfiltered whenever `requiredEnv` was

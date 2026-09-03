@@ -1990,7 +1990,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   case `[data-component="connection-run-block"]` renders the exact
   blocked-run message naming the component and its state and the Run button
   is disabled — the UI-layer mirror of the SAME block
-  `orchestrator/run-agent.ts` enforces pre-spawn and the bridge run route
+  `packages/agents/run-agent.ts` enforces pre-spawn and the bridge run route
   enforces server-side (D9.1/D9.2), never the UI's own invention. An
   **interactive** agent instead renders `[data-section="agent-run"]
   [data-run-dispatchable="false"]` with no run button — it keeps its bespoke
@@ -2224,7 +2224,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `kickoff_ceiling_usd` (the OPERATOR's explicit ceiling) then
   `effective_ceiling_usd` (the cap the run actually executed under — the
   agent's own declared `budgets.maxBudgetUsd` when nobody gave one, from
-  `orchestrator/run-agent.ts`'s single `effectiveCeilingUsd()` derivation, so
+  `packages/agents/run-agent.ts`'s single `effectiveCeilingUsd()` derivation, so
   what a run records is what the SDK was handed). Reading only the first made
   every declared-default dispatch — the whole onboarding route — claim "no
   ceiling was recorded" about a real cap. `data-ceiling-set="false"` now
@@ -3637,7 +3637,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   renders each record as an operator turn, ordered by `at`. **W7-C2 T1
   review (P0-2): a revise record carries its OWN `feedback` words** —
   feedback.md is transient (each revise overwrites it, and the consuming
-  agent turn deletes it, `orchestrator/interactive-runner.ts`), so it can
+  agent turn deletes it, `packages/sessions/interactive-runner.ts`), so it can
   only ever hold the newest round; the durable per-round rationale lives on
   the record. **W7-C2 T1 review (P0-3): an unparseable `verdicts.json`
   refuses the next verdict (409) rather than truncating the history**, and

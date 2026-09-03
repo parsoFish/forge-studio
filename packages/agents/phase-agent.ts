@@ -36,7 +36,7 @@ export type PhaseAgentSpec = {
   phase: string;
   /**
    * The skill it composes — the single source of phase intent. Path relative to
-   * the forge root (e.g. `skills/developer-unifier/SKILL.md`).
+   * the forge root (e.g. `skills/developer-ralph/SKILL.md`).
    */
   skill: string;
   /** Model tier the orchestrator spawns it at. */

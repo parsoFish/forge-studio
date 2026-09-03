@@ -3,7 +3,7 @@
  * path over the 4 interactive agent runners (architect / instructions /
  * demo-builder / project-brain).
  *
- * Extracted from `orchestrator/cli.ts` (R2-01 final-review cleanup — cli.ts
+ * Extracted from `apps/forge/cli.ts` (R2-01 final-review cleanup — cli.ts
  * had grown past the 800-line cap after R2-01-F3a added this machinery).
  * `cli/` is where subcommand handlers live (architect-plan.ts, brain-lint.ts,
  * bridge-recovery.ts, …); this file is the same kind of extraction.
@@ -12,12 +12,12 @@
  * (project-required-or-not, forgeRoot-needed-or-not, how its run-turn
  * function is loaded, its phase-specific console summary); `cmdAgentRun` is
  * the ONE parse/resolve/guard/call/print skeleton every legacy `cmd<X>Run` in
- * `orchestrator/cli.ts` delegates into, so the legacy `<verb> run <sid>
+ * `apps/forge/cli.ts` delegates into, so the legacy `<verb> run <sid>
  * [--project]` commands keep behaving byte-identically (same error text,
  * same exit codes, same printed summaries) while the boilerplate lives in
  * exactly one place.
  *
- * `forgeRoot` is threaded in from the caller (orchestrator/cli.ts's
+ * `forgeRoot` is threaded in from the caller (apps/forge/cli.ts's
  * already-resolved `FORGE_ROOT`) rather than recomputed here — one SSOT,
  * mirroring how `cmdStudioLauncher` threads `forgeRoot` into `runWatch`.
  */
@@ -70,11 +70,11 @@ export interface AgentRunnerEntry {
    *  session dir lives under (`<projectRoot>/<kindDir>/<sessionId>/status.json`),
    *  mirroring `TurnSpec.kindDir` for the new-road turnSpec kinds
    *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
-   *  `*_KIND_DIR` constant — `orchestrator/architect-runner.ts` ('_architect'),
-   *  `orchestrator/instructions-runner.ts` ('_instructions'),
+   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect'),
+   *  `packages/sessions/instructions-runner.ts` ('_instructions'),
    *  `orchestrator/project-brain-builder-runner.ts` ('_project-brain') — with
    *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
-   *  `orchestrator/demo-builder-runner.ts`'s `DEMO_KIND_DIR` and
+   *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` and
    *  `studio/session-kinds.yaml`'s own "id is demo — NOT demo-builder" comment
    *  on the "demo" descriptor — the AGENT_RUNNERS *key* `demo-builder` and the
    *  on-disk dir are intentionally different strings). Used ONLY by
@@ -176,7 +176,7 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
  *
  * D6: this is purely ADDITIVE — a dispatch invoked WITHOUT `--session-dir`
  * never calls this at all, so behaviour without the flag stays byte-
- * identical to before R4-17 (pinned by `cli/agent-run-dispatch.test.ts`'s
+ * identical to before R4-17 (pinned by `packages/agents/agent-run-dispatch.test.ts`'s
  * AT-D7-3).
  *
  * `sessionDir` is a CLI flag from our OWN spawning code
@@ -210,7 +210,7 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
  *
  * Both checks use the same realpath + `startsWith(root + sep)` boundary
  * shape used throughout this initiative (`resolveContainedProjectDir`,
- * `cli/contract-stages.ts`; `resolveSafeSessionDir`, `cli/bridge-studio-
+ * `packages/projects/contract-stages.ts`; `resolveSafeSessionDir`, `cli/bridge-studio-
  * sessions.ts`) — not reused verbatim, because both of those build their
  * candidate path by joining validated components onto a root, whereas
  * `sessionDir` here arrives as a single, already-composed absolute path (the
@@ -270,7 +270,7 @@ function writeSessionTerminalPhase(
       } else {
         // R4-17 round-3 BLOCKER (pin 5, item 2): forge-root-anchored config
         // path, not loadConfig()'s cwd-relative default — see
-        // defaultConfigPath's docstring (orchestrator/config.ts).
+        // defaultConfigPath's docstring (packages/kernel/config.ts).
         realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot))));
       }
     } catch {
@@ -307,7 +307,7 @@ function writeSessionTerminalPhase(
       }
     }
     // W7-FIX-A2 (W7A2-01): the write rides the ONE status-write seam
-    // (`guardedWriteSessionStatus`, orchestrator/interactive-session.ts) —
+    // (`guardedWriteSessionStatus`, packages/sessions/interactive-session.ts) —
     // the same guarded leaf semantics as before (a symlinked/hardlinked leaf
     // returns null and writes NOTHING) PLUS the sticky-cancel rule: if the
     // operator cancelled this session while the dispatch ran, `existing.phase`
@@ -481,7 +481,7 @@ function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok
  * `--cost-ceiling-usd <usd>` (R6-04, WI-2, optional) — the operator's
  * per-kickoff cost ceiling, threaded to `dispatchAgentRun`'s
  * `kickoffCeilingUsd` (which itself wins over the agent's own declared
- * budget — see `orchestrator/run-agent.ts`).
+ * budget — see `packages/agents/run-agent.ts`).
  *
  * `--projects-root <abs>` (bead forge-c6h, optional) — validated via
  * `checkProjectsRootFlag` (absolute, exists, contained in `forgeRoot`)
@@ -494,7 +494,7 @@ function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok
  *
  * `deps.dispatch` (R6-04, WI-2, round 4, optional) — test-injection only,
  * mirrors `RunContext.queryFn`/`ctx.probeConnection`'s existing seam
- * (`orchestrator/run-agent.ts`). Defaults to the real `dispatchAgentRun`;
+ * (`packages/agents/run-agent.ts`). Defaults to the real `dispatchAgentRun`;
  * every production call site omits it, so behaviour is unchanged.
  */
 export async function cmdAgentDispatch(
@@ -535,9 +535,9 @@ export async function cmdAgentDispatch(
   // CONTAINMENT (SEC-07): the untrusted `--project` value must ride as a guarded
   // SEGMENT under the config-derived projects root, never folded into the root
   // (`resolve('projects', projectArg)` gives `resolveGuardedPath` nothing to
-  // vet — see cli/studio-path-guard.ts's CONTRACT). Mirrors the already-guarded
+  // vet — see packages/kernel/path-guard.ts's CONTRACT). Mirrors the already-guarded
   // `cmdAgentRun` road in this same file. `project.repoPath` becomes the spawned
-  // agent's working directory (`orchestrator/agent-dispatch.ts`), so an escaping
+  // agent's working directory (`packages/agents/agent-dispatch.ts`), so an escaping
   // value here is an out-of-root spawn cwd.
   let project: { name: string; repoPath: string } | undefined;
   if (projectArg) {
@@ -651,7 +651,7 @@ function findSessionKindDescriptor(agentId: string, forgeRoot: string): SessionK
 /**
  * ADR-043 §3 (R4-22 WI-5) — the "new road": a `turnSpec`-bearing session-kind
  * descriptor (by construction, one with NO `AGENT_RUNNERS` entry) drives the
- * generic `runInteractiveTurn` spine (`orchestrator/interactive-runner.ts`,
+ * generic `runInteractiveTurn` spine (`packages/sessions/interactive-runner.ts`,
  * R4-22 WI-3) instead of one of the 4 bespoke runners below. `args` is
  * `cmdAgentRun`'s `rest.slice(1)` — `args[0]` is the session-id, the
  * remainder is flags — mirroring the legacy skeleton's own `rest[1]` /
@@ -694,7 +694,7 @@ async function runTurnSpecAgent(
   // bare `resolve('projects', projectArg)`, which folds an unvalidated CLI value
   // into the ROOT: `--project /etc` discards `projects/` entirely and `--project ..`
   // walks out of it, and `resolveGuardedPath` performs NO identity check on its
-  // `root` argument (see cli/studio-path-guard.ts's CONTRACT section, which names
+  // `root` argument (see packages/kernel/path-guard.ts's CONTRACT section, which names
   // this "root-folding" shape a total containment bypass — the spine's SEC-04
   // preamble then guards [kindDir, sessionId] RELATIVE to an already-escaped root,
   // making the comparison tautological). That gap is INHERITED and left untouched on
@@ -773,7 +773,7 @@ async function runTurnSpecAgent(
 /**
  * The shared parse/resolve/guard/call/print skeleton for ALL agent-id run
  * verbs — both the new `forge agent run <agent-id> <sid>` path and the 4
- * legacy `<verb> run <sid>` commands in `orchestrator/cli.ts`, which delegate
+ * legacy `<verb> run <sid>` commands in `apps/forge/cli.ts`, which delegate
  * here as `cmdAgentRun(['<agent-id>', ...rest], forgeRoot)`.
  */
 export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<void> {
@@ -839,7 +839,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
   if (projectArg) {
     // Parity with the interactive road (runTurnSpecAgent): guard the untrusted
     // --project value as a SEGMENT under the config-derived projects root,
-    // never folded into the root. See cli/studio-path-guard.ts's CONTRACT.
+    // never folded into the root. See packages/kernel/path-guard.ts's CONTRACT.
     const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
     const projectGuard = resolveGuardedPath(projectsRoot, [projectArg]);
     if (!projectGuard.ok) {
@@ -873,7 +873,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
   // bead forge-poc (defect 1) — same rationale as runTurnSpecAgent's own
   // catch above: a legacy runner throw (architect's cost-ceiling refusal,
   // any runner's "no status.json"/containment refusal, …) previously had
-  // NOTHING between it and the top-level `orchestrator/cli.ts` catch-all,
+  // NOTHING between it and the top-level `apps/forge/cli.ts` catch-all,
   // which only logs to stderr — invisible to the detached, unref'd spawn
   // `cli/ui-bridge.ts`'s `spawnAgentTurn` uses. `entry.kindDir` is each
   // runner's own on-disk session-dir segment (see AgentRunnerEntry.kindDir's

@@ -171,7 +171,7 @@ export type AgentCapabilityDescriptor = {
    * one-shot stream via `options.maxBudgetUsd` (runOneShotSpawn) and the
    * legacy invocation path via the adapter's `maxBudgetUsdPerIteration`
    * (one invocation run == one iteration, so the per-iteration cap IS the
-   * run ceiling — `orchestrator/run-agent.ts` runInvocationSpawn). 'ralph'
+   * run ceiling — `packages/agents/run-agent.ts` runInvocationSpawn). 'ralph'
    * stays false for a stronger reason than enforceability: `runAgent`
    * refuses a standalone ralph dispatch outright (loops are
    * orchestrator-band), so there is no run to cap at all; an UNKNOWN
