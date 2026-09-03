@@ -25,6 +25,7 @@ import { pathOnly } from '@forge/kernel';
 import { handleArchitectRoutes } from './bridge-studio-architect.ts';
 import { handleInstructionsRoutes } from './bridge-studio-instructions.ts';
 import type { InstructionsStatus } from './instructions-runner.ts';
+import { handleProjectBrainRoutes, type ProjectBrainRow } from './bridge-studio-project-brain.ts';
 import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
@@ -52,6 +53,10 @@ export type SessionsRouteDeps = {
   /** Injected only until the session index collector carves — see
    *  `bridge-studio-instructions.ts`'s own note. */
   readonly listInstructionsSessions: (projectsRoot: string) => InstructionsStatus[];
+  /** The project-brain kind's own list-changed broadcast. */
+  readonly broadcastProjectBrainChanged: () => void;
+  /** Injected only until the session index collector carves. */
+  readonly listProjectBrainSessions: (projectsRoot: string) => ProjectBrainRow[];
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
@@ -90,6 +95,8 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     broadcastArchitectChanged: deps.broadcastArchitectChanged,
     broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
     listInstructionsSessions: deps.listInstructionsSessions,
+    broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
+    listProjectBrainSessions: deps.listProjectBrainSessions,
     spawnAgentTurn: deps.spawnAgentTurn,
     spawnAgentSpecs: deps.spawnAgentSpecs,
     safeParseJson: deps.safeParseJson,
@@ -104,6 +111,7 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
  *  module, which holds the arms verbatim. */
 const ARCHITECT_FILE_RE = /^\/api\/architect\/file\//;
 const INSTRUCTIONS_FILE_RE = /^\/api\/instructions\/file\//;
+const PB_THEMES_RE = /^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/;
 
 export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext> {
   type Res = Parameters<RouteTable<RouteContext>[number]['handler']>[1];
@@ -111,6 +119,8 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
     handleArchitectRoutes(req, res, familyContext(ctx, deps), url, method);
   const instr = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
     handleInstructionsRoutes(req, res, familyContext(ctx, deps), url, method);
+  const pbrain = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
+    handleProjectBrainRoutes(req, res, familyContext(ctx, deps), url, method);
   return [
     {
       method: 'GET',
@@ -188,6 +198,52 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       matches: (url) => pathOf(url) === '/api/instructions/verdict',
       dryClassification: 'stub-actions',
       handler: instr,
+    },
+    {
+      method: 'GET',
+      path: '/api/project-brain/sessions',
+      matches: (url) => pathOf(url) === '/api/project-brain/sessions',
+      dryClassification: 'exempt-local',
+      handler: pbrain,
+    },
+    {
+      method: 'GET',
+      path: '/api/project-brain/themes/:project/:sessionId',
+      matches: (url) => PB_THEMES_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: pbrain,
+    },
+    {
+      method: 'POST',
+      path: '/api/project-brain/start',
+      matches: (url) => pathOf(url) === '/api/project-brain/start',
+      dryClassification: 'exempt-local',
+      handler: pbrain,
+    },
+    {
+      method: 'POST',
+      path: '/api/project-brain/brief',
+      matches: (url) => pathOf(url) === '/api/project-brain/brief',
+      dryClassification: 'stub-actions',
+      handler: pbrain,
+    },
+    {
+      // approve and abandon SHARE one host arm and therefore one handler, but
+      // they get their own entries: approve spawns (stub-actions), abandon does
+      // not (exempt-local). One entry would have to claim a single
+      // classification and lie about the other.
+      method: 'POST',
+      path: '/api/project-brain/approve',
+      matches: (url) => pathOf(url) === '/api/project-brain/approve',
+      dryClassification: 'stub-actions',
+      handler: pbrain,
+    },
+    {
+      method: 'POST',
+      path: '/api/project-brain/abandon',
+      matches: (url) => pathOf(url) === '/api/project-brain/abandon',
+      dryClassification: 'exempt-local',
+      handler: pbrain,
     },
     {
       method: 'GET',

@@ -115,6 +115,8 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       broadcastArchitectChanged: deps.broadcastArchitectChanged,
       broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
       listInstructionsSessions: deps.listInstructionsSessions,
+      broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
+      listProjectBrainSessions: deps.listProjectBrainSessions,
       projectsRoot: deps.projectsRoot,
       // The host's spawn/serve surface. It stays in `cli/ui-bridge.ts` because
       // host code that does not carve still calls it (see the sessions helper

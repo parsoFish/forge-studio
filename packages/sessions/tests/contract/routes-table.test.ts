@@ -34,6 +34,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     broadcastArchitectChanged: () => {},
     broadcastInstructionsChanged: () => {},
     listInstructionsSessions: () => [],
+    broadcastProjectBrainChanged: () => {},
+    listProjectBrainSessions: () => [],
     projectsRoot: '/home/parso/forge/projects',
     spawnAgentTurn: () => ({ ok: true }),
     spawnAgentSpecs: {},
@@ -55,7 +57,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 14, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 20, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -118,6 +120,38 @@ for (const [method, url, path] of INSTRUCTIONS_ROUTES) {
     assert.equal(claimant(method, `${url}?x=1`), path, 'a matcher that does not call pathOnly fails exactly here');
   });
 }
+
+const PROJECT_BRAIN_ROUTES = [
+  ['GET', '/api/project-brain/sessions', '/api/project-brain/sessions'],
+  ['GET', '/api/project-brain/themes/mdtoc/s1', '/api/project-brain/themes/:project/:sessionId'],
+  ['POST', '/api/project-brain/start', '/api/project-brain/start'],
+  ['POST', '/api/project-brain/brief', '/api/project-brain/brief'],
+  ['POST', '/api/project-brain/approve', '/api/project-brain/approve'],
+  ['POST', '/api/project-brain/abandon', '/api/project-brain/abandon'],
+] as const;
+
+for (const [method, url, path] of PROJECT_BRAIN_ROUTES) {
+  test(`${method} ${url} is claimed by ${path}`, () => {
+    assert.equal(claimant(method, url), path);
+  });
+
+  test(`${method} ${url} is still claimed WITH a query string`, () => {
+    assert.equal(claimant(method, `${url}?x=1`), path, 'a matcher that does not call pathOnly fails exactly here');
+  });
+}
+
+test('approve and abandon are SEPARATE entries with different dry classifications', () => {
+  // They share one host arm and one handler, but approve spawns and abandon
+  // does not. A single entry would have to claim one classification for both,
+  // and dry-bridge-coverage would then be wrong about one of them.
+  const table = sessionsRoutes(noopDeps);
+  const approve = table.find((e) => e.path === '/api/project-brain/approve');
+  const abandon = table.find((e) => e.path === '/api/project-brain/abandon');
+  assert.ok(approve && abandon, 'both entries exist');
+  assert.equal(approve.dryClassification, 'stub-actions', 'approve spawns a turn');
+  assert.equal(abandon.dryClassification, 'exempt-local', 'abandon does not spawn');
+  assert.notEqual(approve.dryClassification, abandon.dryClassification, 'the split exists BECAUSE they differ');
+});
 
 test('the architect and instructions families do not claim each other\'s URLs', () => {
   // Both families have a `/sessions` list, a `/file/` server and a `/start`.
