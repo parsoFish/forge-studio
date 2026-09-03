@@ -299,7 +299,11 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
     );
     for (const known of [
       'packages/agents/run-agent.ts',
-      'packages/sessions/architect-runner.ts',
+      // M4 ruling 60: the four ported kinds no longer value-import the pinned
+      // query — the shared driver does, for all of them, and wires the hooks
+      // there so a kind cannot spawn hook-blind. The census follows the
+      // capability rather than shrinking by one file per port (§15.70).
+      'packages/sessions/kinds/kind-turn.ts',
       'packages/sessions/brain-fix-runner.ts',
       'packages/sessions/preflight-fix-runner.ts',
       'packages/factory/phases/release-finalize.ts',

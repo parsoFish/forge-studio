@@ -28,7 +28,7 @@ import {
   type ArchitectSession,
   type ProposedInitiative,
   type CouncilTranscript,
-} from './architect-plan.ts';
+} from '../../kinds/architect-plan.ts';
 // Note: ExplorationFields, ProjectMetrics, InitiativeType removed (ARCH-4).
 // Note: ProposedFeature + features[] removed (no-feature model, 2026-06-04).
 

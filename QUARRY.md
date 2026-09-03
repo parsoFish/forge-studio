@@ -41,7 +41,7 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 26 | 11,157 | **12,000** | seeded from the quarried total, rounded up to the next 500; **re-seeded 11,500 → 12,000 (M4, operator ruling: "knowledge cap RATIFIED at 12,000").** The cap was seeded before the 800-line per-file cap forced the package's three largest files apart (`brain-lint.ts` 1,744 → six, `bridge-studio-kbs.ts` 2,068 → five, `bridge-studio-kb-drain.ts` 1,456 → three); a split adds module headers, import blocks and re-exported signatures without adding behaviour, so the two caps are in tension by construction. The named cause of the breach that forced the ruling is the ruling-31 public-door `index.ts` (+62). This row's own rule applied to the measured total (11,538 on main at `c323dc04`) rounds up to 12,000. |
 | `projects` | 22 | 7,820 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **11,548** | **Re-seeded 9,600 → 11,548 (M4-agents s3, T1 ruling 76's method applied to the routes carve).** A transfer is priced at what the HOST GAVE UP, and this carve took eight route handlers out of three host files: `cli/ui-bridge.ts` 3,704 → 2,274 (−1,430), `cli/bridge-studio-writes.ts` 1,093 → 610 (−483, and now UNDER the 800-line per-file cap, so its `check-file-size` baseline entry is deleted rather than re-keyed), `cli/bridge-studio.ts` 1,255 → 1,220 (−35) = **−1,948**. So 9,600 + 1,948. Measured on the carve PR's own tree: package prod 9,802 → **12,218**, i.e. **670 over** — being PR #337's 202 (carried, disclosed there) plus this carve's own **+468**: the four deps-type declarations the rank boundary forces the package to state, the eight `RouteEntry` rows, and the module headers recording the seam decisions. No duplicated logic, and the evidence is the request-path-sink census, conserved kind for kind in BOTH families (host −14 / package +14, then host −8 / package +8; host-minus-package = 0, COMMON §15.73). **No growth is granted; the payback obligation is 670**, due at Task 7 and reported line-for-line against the measured number rather than trimmed to fit this cell. Earlier history: seeded from the quarried total rounded up (9,000); re-seeded to 9,600 by rulings 75 + 76 for the band-agent-run and agents-md-compose carve-ins. |
-| `sessions` | 20 | 13,078 | **16,400** | **Re-seeded 13,500 → 16,400 (M4-sessions s2, T1 ruling 72).** PURE RE-ATTRIBUTION, not a growth grant: the routes carve (#326) moved 34 route handlers out of `cli/ui-bridge.ts` (6,600 → 3,704, −2,896) into this package, so a cap set before that transfer measures a different package. 16,400 = 13,500 + the 2,896 transferred, rounded. The package's OWN growth over M4 entry (+1,110 — module headers carrying the carve's seam findings, per-family imports and structurally-declared context types, six new module docs) sits inside the headroom the entry cap already gave (13,500 − 11,758 = 1,742); no growth ruling was sought or granted. s3's runner ports are expected to take it well below this as the four legacy runners' duplicated turn/transcript/lifecycle plumbing dissolves. The M4 exit reports sessions prod against entry with the transfer as a named line-item, never as growth. |
+| `sessions` | 20 | 13,078 | **17,300** | **Re-seeded 13,500 → 16,400 (M4-sessions s2, T1 ruling 72).** PURE RE-ATTRIBUTION, not a growth grant: the routes carve (#326) moved 34 route handlers out of `cli/ui-bridge.ts` (6,600 → 3,704, −2,896) into this package, so a cap set before that transfer measures a different package. 16,400 = 13,500 + the 2,896 transferred, rounded. The package's OWN growth over M4 entry (+1,110 — module headers carrying the carve's seam findings, per-family imports and structurally-declared context types, six new module docs) sits inside the headroom the entry cap already gave (13,500 − 11,758 = 1,742); no growth ruling was sought or granted. s3's runner ports are expected to take it well below this as the four legacy runners' duplicated turn/transcript/lifecycle plumbing dissolves. The M4 exit reports sessions prod against entry with the transfer as a named line-item, never as growth. **Re-seeded again 16,400 → 17,300 (M4-sessions s3, T1 ruling 77/80).** Also pure re-attribution, priced at factory's delta: `architect-plan.ts` (862) was MISQUARRIED to `factory` — measured by module specifier, its only importers were `packages/sessions/kinds/architect.ts` and its own test, and nothing in `packages/factory`, `packages/flows`, `apps/`, `cli/` or `orchestrator/` used it. A module whose only consumers are the architect kind belongs to the architect kind, so it re-homes here and the cap carries its lines across: 17,300 = 16,400 + 862, rounded. The four runner ports meanwhile took the package DOWN — 16,266 at s3 open to 16,204 after the architect port — so the only growth in this cell is the two transfers, each named with its exact line count. |
 | `flows` | 62 | 21,327 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
 | `factory` | 37 | 13,004 | **13,500** | **Re-seeded 12,500 → 13,500 (M2-B, operator ruling).** Two effects landed together: M2-B quarried `orchestrator/phases/executor-{deps,table}.ts` (960 lines) here, where the six phases they wire already live — a `flows`-owned table importing those phases would be a `flows → factory` edge the allow-graph forbids; and the per-package columns in this table, hand-seeded and never recomputed, are now DERIVED from the rows below, which showed `factory` at 12,044 before those two files rather than the figure its cap was seeded from. The new cap applies this row's own stated rule — the measured total (13,004) rounded up to the next 500 — to a total that is now measured rather than asserted. The full column recomputation, and teaching `check-owner.mjs` to enforce it, is bead `forge-8vfn.5.18`. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
@@ -99,7 +99,7 @@ operator-ratified new cap — never a silent raise.
 | path | owner | disposition | loc |
 |---|---|---|---|
 | packages/agents/agent-run.ts | agents | verbatim | 890 |
-| packages/factory/architect-plan.ts | factory | verbatim | 862 |
+| packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 862 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 255 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 326 |
@@ -229,14 +229,14 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/bridge-agents-studio.ts | agents | rewritten | 614 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 39 |
-| packages/sessions/architect-runner.ts | sessions | verbatim | 1715 |
+| packages/sessions/kinds/architect.ts | sessions | verbatim | 1584 |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/brain-fix-runner.ts | sessions | verbatim | 381 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 141 |
 | packages/flows/claim-validator.ts | flows | verbatim | 233 |
 | apps/forge/cli.ts | apps/forge | pruned | 998 |
 | apps/forge/routes.ts | apps/forge | verbatim | 38 |
-| packages/sessions/completeness-critic-runner.ts | sessions | verbatim | 286 |
+| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 297 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 242 |
@@ -246,7 +246,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-report.ts | flows | verbatim | 29 |
 | packages/flows/cycle.ts | flows | verbatim | 484 |
 | packages/flows/daemon.ts | flows | verbatim | 248 |
-| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 710 |
+| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 711 |
 | packages/flows/demo-fix-loop.ts | flows | verbatim | 218 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
@@ -267,7 +267,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/gate-recipes.ts | projects | verbatim | 146 |
 | packages/flows/initiative-id.ts | flows | verbatim | 210 |
 | packages/library/instruction-seed-match.ts | library | verbatim | 152 |
-| packages/sessions/kinds/instructions.ts | sessions | verbatim | 513 |
+| packages/sessions/kinds/instructions.ts | sessions | verbatim | 514 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 422 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 883 |
 | packages/sessions/interactive-session.ts | sessions | verbatim | 993 |
@@ -302,9 +302,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
 | packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
-| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 384 |
-| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 186 |
-| packages/sessions/kinds/registry.ts | sessions | rewritten | 66 |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 421 |
+| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 179 |
+| packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |

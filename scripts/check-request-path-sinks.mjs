@@ -251,7 +251,7 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
   // sessionId through resolveGuardedPath (per-segment identity + charset +
   // symlink; refuse/skip on ANY escape) and hands the GUARDED dir to the reader.
   readStatus: {
-    defModule: 'orchestrator/architect-runner.ts',
+    defModule: 'packages/sessions/kinds/architect.ts',
     why: 'Reads status.json from a caller-supplied architect sessionDir; no containment of its own — the dir it is handed must already be resolveGuardedPath-guarded (GET /api/architect/sessions disclosed an out-of-root status.json through this + a symlinked _architect).',
   },
   sessionPaths: {
