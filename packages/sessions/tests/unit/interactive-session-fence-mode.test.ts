@@ -45,7 +45,7 @@ import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runAgentTurn, type QueryFn } from './interactive-session.ts';
+import { runAgentTurn, type QueryFn } from '../../interactive-session.ts';
 
 const MODEL = 'claude-sonnet-4-6';
 /** The exact tool grant kb-cleanup's real agent, brain-maintenance

@@ -21,10 +21,18 @@
  *      runner reports the discard loudly (a named error, so stderr.log
  *      records that a turn finished after the cancel), never a silent
  *      resurrection.
- *   3. `CANCELLED_PHASE` lives at the seam (orchestrator) and
- *      cli/bridge-studio.ts re-exports the SAME value — one constant.
+ *   3. `CANCELLED_PHASE` is ONE constant.
  *
- * RUN: node --test --experimental-strip-types packages/sessions/interactive-session-cancel-sticky.test.ts
+ * Case 3 used to import the constant a SECOND time from `cli/bridge-studio.ts`
+ * and assert the two were equal. That assertion could not fail: the host line
+ * is `export { CANCELLED_PHASE } from '@forge/sessions/interactive-session.ts'`
+ * — a pure re-export, so both names were the same binding and the comparison
+ * was the value against itself (§15.68: a control that is green either way is
+ * not a control). A re-export cannot diverge, so there was never anything to
+ * pin; the value assertion below is the part that was ever real. Removing the
+ * second import also closes this file's `package-to-legacy` row.
+ *
+ * RUN: node --test --experimental-strip-types packages/sessions/tests/regression/interactive-session-cancel-sticky.test.ts
  */
 
 import { test } from 'node:test';
@@ -41,19 +49,17 @@ import {
   cancelledPhaseWins,
   CANCELLED_PHASE,
   type QueryFn,
-} from './interactive-session.ts';
-import { CANCELLED_PHASE as BRIDGE_CANCELLED_PHASE } from '../../cli/bridge-studio.ts';
-import { runInteractiveTurn } from './interactive-runner.ts';
-import { loadSessionKinds } from './studio/session-kinds.ts';
+} from '../../interactive-session.ts';
+import { runInteractiveTurn } from '../../interactive-runner.ts';
+import { loadSessionKinds } from '../../studio/session-kinds.ts';
 import { createLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // 3. ONE constant
 // ---------------------------------------------------------------------------
 
-test('sticky-cancel: CANCELLED_PHASE is defined at the orchestrator seam and cli/bridge-studio.ts re-exports the identical value', () => {
+test('sticky-cancel: CANCELLED_PHASE is the one constant this package declares', () => {
   assert.equal(CANCELLED_PHASE, 'cancelled');
-  assert.equal(BRIDGE_CANCELLED_PHASE, CANCELLED_PHASE);
 });
 
 test('sticky-cancel: cancelledPhaseWins is true ONLY for on-disk cancelled + a different incoming phase', () => {

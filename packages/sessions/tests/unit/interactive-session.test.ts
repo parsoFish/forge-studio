@@ -28,7 +28,7 @@ import {
   type TextSinkContext,
   type QueryFn,
   type WriteRootCanUseTool,
-} from './interactive-session.ts';
+} from '../../interactive-session.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 const MODEL = 'claude-sonnet-4-6';

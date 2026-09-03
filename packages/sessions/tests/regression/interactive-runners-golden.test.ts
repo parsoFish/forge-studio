@@ -100,21 +100,21 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runArchitectTurn, writeStatus, type ArchitectStatus } from './kinds/architect.ts';
-import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from './kinds/instructions.ts';
+import { runArchitectTurn, writeStatus, type ArchitectStatus } from '../../kinds/architect.ts';
+import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
 import {
   runDemoBuilderTurn,
   demoSessionDir,
   DEMO_SKILL_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
-} from './kinds/demo-builder.ts';
-import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from './kinds/project-brain.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+} from '../../kinds/demo-builder.ts';
+import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../kinds/project-brain.ts';
+import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 
-const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture');
+const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture');
 const FIXTURE_ARCHITECT = join(FIXTURES_DIR, 'interactive-architect.json');
 const FIXTURE_INSTRUCTIONS = join(FIXTURES_DIR, 'interactive-instructions.json');
 const FIXTURE_DEMO_BUILDER = join(FIXTURES_DIR, 'interactive-demo-builder.json');

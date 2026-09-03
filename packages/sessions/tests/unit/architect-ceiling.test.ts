@@ -11,13 +11,13 @@
  */
 
 import { test } from 'node:test';
-import { stubArchitectManifestPorts } from './tests/architect-ports-stub.ts';
+import { stubArchitectManifestPorts } from '../../tests/architect-ports-stub.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runArchitectTurn, type ArchitectStatus } from './kinds/architect.ts';
+import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
 
 const MARKER = 'MARKER: past the ceiling guard';
 

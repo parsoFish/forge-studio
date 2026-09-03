@@ -49,7 +49,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { runArchitectTurn, type QueryFn } from './kinds/architect.ts';
+import { runArchitectTurn, type QueryFn } from '../../kinds/architect.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 
 function tmp(prefix: string): string {

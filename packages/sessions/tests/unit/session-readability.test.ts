@@ -51,7 +51,7 @@ import {
   deriveLegacySessionPhase,
   deriveLegacySessionProject,
   resolveLegacySession,
-} from './session-readability.ts';
+} from '../../session-readability.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
