@@ -89,7 +89,7 @@ import { join } from 'node:path';
 import { aggregateRun, listRuns } from './run-model.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
-import { normalizeProjectId } from '../../orchestrator/studio/registry.ts';
+import { normalizeProjectId } from '@forge/kernel';
 import {
   buildCronFlowRunRequest,
   buildWebhookFlowRunRequest,
