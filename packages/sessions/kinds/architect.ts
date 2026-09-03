@@ -59,7 +59,7 @@ import {
   type ProposedInitiative,
   type CouncilTranscript,
   type InterviewRound,
-} from '@forge/factory/architect-plan.ts';
+} from './architect-plan.ts';
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import {

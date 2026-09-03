@@ -456,7 +456,7 @@ test('C2: clean FOR THE RIGHT REASON — the scanner is live and residuals are a
 test('C3: the real handling-module set is present and includes the charter modules + the bridge-studio glob', () => {
   const mods = targetModules();
   for (const m of [
-    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
+    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
     'packages/sessions/interactive-session.ts', 'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
     'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
   ]) {
@@ -925,7 +925,7 @@ test('G5: the derived scope is a SUPERSET of the charter list and of every cli/b
   // coverage loss reads as "no findings", the same green a clean tree gives.
   const mods = targetModules();
   for (const m of [
-    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
+    'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
     'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
     'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
     'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',

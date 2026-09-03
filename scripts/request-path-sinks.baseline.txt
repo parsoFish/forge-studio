@@ -58,9 +58,6 @@ packages/agents/spawn-marker.ts mkdirSync 1
 packages/agents/spawn-marker.ts readdirSync 1
 packages/agents/spawn-marker.ts readFileSync 2
 packages/agents/spawn-marker.ts statSync 1
-packages/factory/architect-plan.ts existsSync 4
-packages/factory/architect-plan.ts mkdirSync 2
-packages/factory/architect-plan.ts renameSync 1
 packages/factory/cycle-recap.ts existsSync 9
 packages/factory/cycle-recap.ts mkdirSync 1
 packages/factory/cycle-recap.ts readdirSync 1
@@ -561,6 +558,9 @@ packages/sessions/interactive-session.ts realpathSync 2
 packages/sessions/interactive-session.ts writeFileSync 4
 packages/sessions/kinds/architect-critic.ts existsSync 1
 packages/sessions/kinds/architect-critic.ts readFileSync 2
+packages/sessions/kinds/architect-plan.ts existsSync 4
+packages/sessions/kinds/architect-plan.ts mkdirSync 2
+packages/sessions/kinds/architect-plan.ts renameSync 1
 packages/sessions/kinds/architect.ts existsSync 9
 packages/sessions/kinds/architect.ts mkdirSync 3
 packages/sessions/kinds/architect.ts readdirSync 4
