@@ -38,8 +38,8 @@ import {
   guardedSessionDir,
   type SessionRootsContext,
 } from './bridge-studio-session-helpers.ts';
-import type { DemoBuilderStatus } from './demo-builder-runner.ts';
-import type { InstructionsStatus } from './instructions-runner.ts';
+import type { DemoBuilderStatus } from './kinds/demo-builder.ts';
+import type { InstructionsStatus } from './kinds/instructions.ts';
 import { guardedReadSessionStatus } from './interactive-session.ts';
 import type { ProjectBrainRow as ProjectBrainStatus } from './bridge-studio-project-brain.ts';
 import { fixedTierForSessionKind } from './session-model-tier.ts';

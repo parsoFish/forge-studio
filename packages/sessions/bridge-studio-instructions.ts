@@ -27,7 +27,7 @@ import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } fr
 
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 
-import { DRAFT_FILENAME, type InstructionsStatus } from './instructions-runner.ts';
+import { DRAFT_FILENAME, type InstructionsStatus } from './kinds/instructions.ts';
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';
 import {
   guardedReadSessionStatus,
