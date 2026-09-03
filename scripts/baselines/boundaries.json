@@ -365,7 +365,6 @@
   "package-to-legacy|packages/flows/mint-triggered-initiative.ts|orchestrator/studio/registry.ts",
   "package-to-legacy|packages/flows/run-model.ts|orchestrator/studio/registry.ts",
   "package-to-legacy|packages/flows/scheduler.ts|orchestrator/flow-runner.ts",
-  "package-to-legacy|packages/flows/trigger-provenance.test.ts|orchestrator/studio/registry.ts",
   "package-to-legacy|packages/flows/trigger-provenance.test.ts|orchestrator/test-fixtures/flow-run-request.ts",
   "package-to-legacy|packages/library/bridge-studio-authoring-finalize.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/library/bridge-studio-authoring.test.ts|cli/ui-bridge.ts",
