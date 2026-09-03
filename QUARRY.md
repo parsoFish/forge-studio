@@ -134,7 +134,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 424 |
 | packages/flows/bridge-studio-runs.ts | flows | verbatim | 947 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 206 |
-| packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 1096 |
+| packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 1096 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/library/bridge-studio-skills.ts | library | verbatim | 578 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 348 |
 | cli/bridge-studio-writes.ts | projects | rewritten | 2482 |
@@ -228,7 +228,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/brain-fix-runner.ts | sessions | verbatim | 381 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 141 |
 | packages/flows/claim-validator.ts | flows | verbatim | 233 |
-| apps/forge/cli.ts | apps/forge | pruned | 998 |
+| apps/forge/cli.ts | apps/forge | pruned | 998 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | apps/forge/routes.ts | apps/forge | verbatim | 38 |
 | packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 297 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
@@ -299,6 +299,10 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 421 |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 179 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
+| packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 44 |
+| packages/contracts/manifest-types.ts | contracts | rewritten | 221 |
+| packages/sessions/tests/architect-ports-stub.ts | sessions | rewritten | 44 |
+| apps/forge/session-kind-deps.ts | apps/forge | rewritten | 31 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |
@@ -353,7 +357,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
 | orchestrator/studio/registry.ts | kernel | rewritten | 588 |
 | packages/sessions/studio/session-kinds.ts | sessions | verbatim | 1389 |
-| packages/sessions/studio/session-transcript.ts | sessions | verbatim | 1359 |
+| packages/sessions/studio/session-transcript.ts | sessions | verbatim | 1359 **Ceiling re-keyed +9 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/library/studio/skill-install-ledger.ts | library | verbatim | 166 |
 | packages/library/studio/skill-install.ts | library | verbatim | 324 |
 | packages/library/studio/skill-package.ts | library | verbatim | 183 |
