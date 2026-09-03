@@ -86,7 +86,6 @@ export type { ConstraintBlock, ConstraintMatchContext } from './constraint-block
 export { deriveGateRecipe, renderGateRecipeBlock } from './gate-recipes.ts';
 
 // --- AGENTS.md composition --------------------------------------------------
-export { composeAgentsMd } from './agents-md-compose.ts';
 
 // --- contract scaffold, onboarding, roster ---------------------------------
 export { scaffoldContractArtifacts } from './project-contract-scaffold.ts';

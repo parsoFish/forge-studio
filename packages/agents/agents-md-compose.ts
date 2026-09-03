@@ -9,6 +9,13 @@
  * critically for the R1-04-F1 C8 coverage clause — name the declared quality
  * gate command at the top. No LLM, fully testable.
  *
+ * HOME (M4-agents, P6-P7/L11). This composes an AGENTS.md from `@forge/library`'s
+ * instruction seeds and the project's own `.forge/project.json`, so it needs
+ * library (rank 2) AND projects (rank 2) at once — two siblings, which the
+ * allow-graph forbids either of them from doing. Its lowest legal home is
+ * therefore `agents` (rank 3), and it moved here from `packages/projects/`; the
+ * only caller is `apps/forge/cli.ts`'s `instructions compose`, which repointed.
+ *
  * Ordering (the F4 constraint): the gate command must already be declared in
  * `.forge/project.json` before this runs, else the composed AGENTS.md can't
  * name it and C8 only ever passes on presence, not coverage. The onboarding
@@ -25,7 +32,7 @@ import {
   stripComposedSeedsFooter,
 } from '@forge/library/instruction-seed-match.ts';
 import { listInstructionSeeds } from '@forge/library/studio/artifact-registry.ts';
-import { loadProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 export type ComposeAgentsMdResult = {

@@ -29,7 +29,7 @@ import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.t
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
-import { isStandaloneBandAgent, runBandAgentStandalone } from '../../orchestrator/band-agent-run.ts';
+import { isStandaloneBandAgent, dispatchStandaloneBand, type BandAgentDeps } from './band-agent-run.ts';
 import { skillsDir } from './skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { runInteractiveTurn } from '@forge/sessions/interactive-runner.ts';
@@ -93,10 +93,10 @@ const knownAgentIds = (): string[] => [...Object.keys(AGENT_RUNNERS), ...Object.
 // R2-01-F3a: `AGENT_RUNNERS` (above) plus `SESSION_KIND_RUNNERS` (a PORTED
 // kind's row lives beside its kind module, M4 ruling 60) are the two
 // registries `cmdAgentRun` looks up.
-export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void> {
+export async function cmdAgent(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   const sub = rest[0];
   if (sub === 'run') return await cmdAgentRun(rest.slice(1), forgeRoot);
-  if (sub === 'dispatch') return await cmdAgentDispatch(rest.slice(1), forgeRoot);
+  if (sub === 'dispatch') return await cmdAgentDispatch(rest.slice(1), forgeRoot, deps);
   console.error('forge agent: subcommands: run <agent-id> <session-id> | dispatch <slug>');
   console.error('  forge agent run <agent-id> <session-id> [--project <name>]');
   console.error('  forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
@@ -401,6 +401,8 @@ function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok
   return { ok: true, realRoot };
 }
 
+export type AgentDispatchDeps = { dispatch?: typeof dispatchAgentRun; band?: BandAgentDeps };
+
 /**
  * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
  * [--session-dir <abs>] [--cost-ceiling-usd <usd>]` — the generic
@@ -434,12 +436,12 @@ function checkProjectsRootFlag(forgeRoot: string, rawProjectsRoot: string): { ok
  * mirrors `RunContext.queryFn`/`ctx.probeConnection`'s existing seam
  * (`packages/agents/run-agent.ts`). Defaults to the real `dispatchAgentRun`;
  * every production call site omits it, so behaviour is unchanged.
+ * `deps.band` — the band pipelines + queue/manifest readers, bound at
+ * `apps/forge/cli.ts` (all three live above this package's rank). Absent, the
+ * two band slugs are REFUSED, never downgraded to the bare spawn.
  */
-export async function cmdAgentDispatch(
-  rest: string[],
-  forgeRoot: string,
-  deps?: { dispatch?: typeof dispatchAgentRun },
-): Promise<void> {
+
+export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<void> {
   let parsed: ParsedAgentDispatchArgs;
   try {
     parsed = parseAgentDispatchArgs(rest);
@@ -509,15 +511,12 @@ export async function cmdAgentDispatch(
     // adversarial-review) run standalone through their FLOW pipeline (parity),
     // against an existing initiative's worktree — NOT the bare `runAgent` spawn
     // the generic dispatch uses (which would skip the pipeline bands entirely).
+    // Its policy (usage, the missing-binding refusal, the summary line) lives
+    // with the band module — see `dispatchStandaloneBand`.
     if (isStandaloneBandAgent(slug)) {
-      const initiativeId = inputs.initiative;
-      if (!initiativeId) {
-        console.error(`forge agent dispatch: standalone "${slug}" needs --input initiative=<id> (the post-develop initiative to run against)`);
-        process.exit(2);
-        return;
-      }
-      const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
-      console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
+      const band = await dispatchStandaloneBand({ slug, initiativeId: inputs.initiative, runId, forgeRoot }, deps?.band);
+      if (!band.ok) { console.error(`forge agent dispatch: ${band.usage}`); process.exit(2); return; }
+      console.log(band.summary);
       if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete', trustedProjectsRoot);
       return;
     }

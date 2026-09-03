@@ -1,10 +1,20 @@
 /**
- * Tests for orchestrator/band-agent-run.ts (R4-10-F3) — the standalone isolation
- * surface for the band-hook node agents. Proves resolution boundary errors, the
- * isolation invariants (runId-scoped events, in-flight refusal, input validation,
- * worktree bounds), and a real standalone demo pipeline run against a seeded
- * initiative worktree (parity with the flow band: same runDemoAgentPipeline, same
- * demo.json artifact).
+ * PARITY: the band pipelines the standalone surface actually runs.
+ *
+ * `packages/agents/band-agent-run.ts` runs the two band-guard node agents
+ * through their FLOW pipelines rather than the bare `runAgent` spawn — that
+ * parity IS the module's reason to exist (R4-10-F3, ADR-039). Proving it needs
+ * `runDemoAgentPipeline` itself, which is `@forge/factory` (rank 7) and may
+ * never be imported from `packages/agents` (rank 3). This is the layer that
+ * legally holds both sides, so the parity case lives here — carried over
+ * verbatim from `orchestrator/band-agent-run.test.ts` when that file was
+ * carved (M4-agents, exit row 4).
+ *
+ * The package's own `band-agent-run.test.ts` proves the surrounding logic
+ * against an injected runner; what it CANNOT prove is that the injected runner
+ * is the real thing. So this file drives the production binding —
+ * `bandAgentDeps` from `./band-agent-deps.ts`, the same object `cli.ts` passes
+ * in — and asserts `cli.ts` passes it. Neither half is sufficient alone.
  */
 
 import assert from 'node:assert/strict';
@@ -14,9 +24,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { runBandAgentStandalone, isStandaloneBandAgent } from './band-agent-run.ts';
+import { runBandAgentStandalone } from '@forge/agents/band-agent-run.ts';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { bandAgentDeps } from './band-agent-deps.ts';
 
 const INIT = 'INIT-2026-08-02-standalone-demo';
 const RUN = 'RUN-2026-08-02-band-standalone';
@@ -43,82 +54,7 @@ function writeManifest(stateDir: string, worktreePath: string): void {
   ].join('\n'));
 }
 
-test('isStandaloneBandAgent: only the two band-hook node agents', () => {
-  assert.equal(isStandaloneBandAgent('demo-agent'), true);
-  assert.equal(isStandaloneBandAgent('adversarial-review'), true);
-  assert.equal(isStandaloneBandAgent('developer-ralph'), false);
-  assert.equal(isStandaloneBandAgent('project-manager'), false);
-});
-
-test('runBandAgentStandalone: a non-band agent is refused', async () => {
-  await assert.rejects(
-    runBandAgentStandalone({ slug: 'project-manager', initiativeId: INIT, runId: RUN, forgeRoot: '/tmp/none' }),
-    /not a standalone-runnable band agent/,
-  );
-});
-
-test('runBandAgentStandalone: a missing runId is refused', async () => {
-  await assert.rejects(
-    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: '', forgeRoot: '/tmp/none' }),
-    /runId is required/,
-  );
-});
-
-test('runBandAgentStandalone: an unsafe initiative id is refused before any path is joined', async () => {
-  await assert.rejects(
-    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: '../../etc/passwd', runId: RUN, forgeRoot: '/tmp/none' }),
-    /invalid initiative id/,
-  );
-});
-
-test('runBandAgentStandalone: no manifest for the initiative → clear boundary error', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'band-run-nomanifest-'));
-  try {
-    mkdirSync(join(root, '_queue', 'ready-for-review'), { recursive: true });
-    await assert.rejects(
-      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
-      /no runnable manifest for initiative/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('runBandAgentStandalone: an in-flight initiative is refused (a live cycle owns the worktree)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'band-run-inflight-'));
-  try {
-    // A bounds-valid worktree so the refusal is proven to come from the state, not bounds.
-    const wt = join(root, '_worktrees', 'wt');
-    mkdirSync(wt, { recursive: true });
-    writeManifest(join(root, '_queue', 'in-flight'), wt);
-    await assert.rejects(
-      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
-      /is in-flight — a live scheduler cycle owns its worktree/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('runBandAgentStandalone: a worktree outside the forge roots is refused', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'band-run-oob-'));
-  try {
-    const outside = mkdtempSync(join(tmpdir(), 'band-run-oob-elsewhere-'));
-    try {
-      writeManifest(join(root, '_queue', 'ready-for-review'), outside);
-      await assert.rejects(
-        runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
-        /is outside the forge roots/,
-      );
-    } finally {
-      rmSync(outside, { recursive: true, force: true });
-    }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('runBandAgentStandalone: standalone demo pipeline runs against a seeded worktree → complete, same demo.json artifact, runId-scoped log', async () => {
+test('runBandAgentStandalone with the PRODUCTION deps: the standalone demo pipeline runs against a seeded worktree → complete, same demo.json artifact, runId-scoped log', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const root = mkdtempSync(join(tmpdir(), 'band-run-'));
   try {
@@ -149,7 +85,8 @@ test('runBandAgentStandalone: standalone demo pipeline runs against a seeded wor
     writeFileSync(join(wt, 'src.ts'), 'export const v = 2;\n');
     git(['add', 'src.ts']); git(['commit', '-q', '-m', 'feat: change']); git(['push', '-q', '-u', 'origin', `feat/${INIT}`]);
 
-    // The initiative's manifest in the queue (worktree_path points at wt).
+    // The initiative's manifest in the queue (worktree_path points at wt) —
+    // read here by the REAL `parseManifest`/`getPaths` the deps object binds.
     writeManifest(join(root, '_queue', 'ready-for-review'), wt);
 
     // A queryFn standing in for the demo agent: authors demo.json + the PR body,
@@ -172,10 +109,10 @@ test('runBandAgentStandalone: standalone demo pipeline runs against a seeded wor
       return gen();
     }) as unknown as StreamQueryFn;
 
-    const out = await runBandAgentStandalone({
-      slug: 'demo-agent', initiativeId: INIT, runId: RUN,
-      forgeRoot: root, queryFn: qf,
-    });
+    const out = await runBandAgentStandalone(
+      { slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root, queryFn: qf },
+      bandAgentDeps,
+    );
     assert.equal(out.kind, 'demo');
     assert.equal(out.runId, RUN);
     assert.equal(out.result.status, 'complete', 'the standalone demo pipeline completed against the seeded worktree');
@@ -193,4 +130,17 @@ test('runBandAgentStandalone: standalone demo pipeline runs against a seeded wor
     rmSync(root, { recursive: true, force: true });
     restore();
   }
+});
+
+test('ASSEMBLY: cli.ts hands the production band deps to cmdAgent — without this line every standalone band dispatch refuses', () => {
+  // The oracle is not observable through a spawn without writing a real run
+  // into this repo's own `_logs`, so the gate is structural (COMMON §15.75):
+  // assert the binding IS on the path. Its negative twin — a dispatch with no
+  // `deps.band` refusing rather than falling back — is in the package's
+  // `agent-run-band-deps.test.ts`.
+  const src = readFileSync(new URL('./cli.ts', import.meta.url), 'utf8');
+  assert.match(src, /import \{ bandAgentDeps \} from '\.\/band-agent-deps\.ts';/,
+    'cli.ts must import the production band binding');
+  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{ band: bandAgentDeps \}\)/,
+    'cli.ts must pass it to cmdAgent — the `agent` case is the only production entry to `forge agent dispatch`');
 });
