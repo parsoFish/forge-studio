@@ -64,6 +64,7 @@ import {
   CSRF_HEADER,
 } from './bridge-studio.ts';
 import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
+import { realKbDrainFixTurn } from '../apps/forge/brain-fix-turn.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
@@ -1273,6 +1274,7 @@ async function handleHttp(
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
     spawnAgentTurn,
+    runFixTurn: realKbDrainFixTurn, // ruling 86 — bound at apps/forge, injected here
     // W7-C2 (A12) — the SAME per-kind mapping the tabled cancel route gets.
     broadcastKindChanged: ctx.broadcastKindChanged,
   }, url, method)) return;

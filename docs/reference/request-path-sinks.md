@@ -321,6 +321,19 @@ and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
   `brain-fix-auto.ts` above) but are covered by the same trust argument and the
   sink-count ratchet, `--write`-accepted below.
 
+  **M4 ruling 86 moved the cost read-back OUT of this package, and again the
+  census is 1:1.** `readBrainFixTurnCostUsd` — which encodes the brain-fix
+  TURN's log layout, not the drain's — now lives at the assembly
+  (`apps/forge/brain-fix-turn.ts`) beside the turn's binding, because knowledge
+  (rank 2) may not import sessions (rank 4) and the drain takes the turn by
+  injection. `packages/knowledge/bridge-studio-kb-drain.ts` therefore loses its
+  `existsSync` and `readFileSync` rows (its `node:fs` import went with them)
+  and `apps/forge/brain-fix-turn.ts` gains exactly those two. The trust
+  argument is unchanged and travels with the function: `subRunId` is always
+  synthesized by the drain as `` `${runId}__r${round}__${i}` ``, never the
+  route's own `runId`, so no curated taint-list name reaches the sink.
+  Host-minus-package diffs to zero (§15.75).
+
   **M4 ports 5–6 (ruling 60) moved these, and the census is 1:1 with one
   genuine reduction.** `brain-fix-runner.ts` carried three sinks
   (`mkdirSync`/`readFileSync`/`writeFileSync` = 1 each);

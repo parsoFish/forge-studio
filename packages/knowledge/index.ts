@@ -71,3 +71,17 @@ export type { RetentionTag, ThemeMeta } from './cycle-retention.ts';
 
 // --- the HTTP route table ---------------------------------------------------
 export { knowledgeRoutes } from './routes.ts';
+export type { KnowledgeRouteDeps } from './routes.ts';
+
+// --- the fix-turn PORT (M4 ruling 86) ---------------------------------------
+// This package declares the shape of the brain-fix turn its drain and
+// consolidate loop dispatch; the real turn is supplied by the assembly
+// (`apps/forge/brain-fix-turn.ts`), because knowledge is rank 2 and
+// `@forge/sessions` is rank 4. The port belongs on the public door for the
+// same reason the route table does: the host has to name it to inject it, and
+// ruling 31's index IS that door.
+export type {
+  KbDrainFixTurnInput,
+  KbDrainFixTurnResult,
+  KbDrainRunFixTurnFn,
+} from './kb-drain-model.ts';

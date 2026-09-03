@@ -28,7 +28,9 @@ import {
 } from '../../bridge-studio-kb-drain.ts';
 import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
-import type { RunBrainFixInput, RunBrainFixResult } from '@forge/sessions/kinds/brain-fix.ts';
+// M4 ruling 86: the fix-turn port is THIS package's own declaration now —
+// the drain is the consumer, so the shape it needs is its own vocabulary.
+import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '../../bridge-studio-kb-drain.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { dispatchRoute } from '@forge/kernel';
@@ -77,7 +79,7 @@ function scriptedLint(sequence: Finding[][]): (forgeRoot: string) => { findings:
   };
 }
 
-function neverFixTurn(): (input: RunBrainFixInput) => Promise<RunBrainFixResult & { costUsd: number }> {
+function neverFixTurn(): (input: KbDrainFixTurnInput) => Promise<KbDrainFixTurnResult & { costUsd: number }> {
   return async (input) => {
     throw new Error(`unexpected runFixTurn call for ${JSON.stringify(input)}`);
   };
@@ -413,6 +415,13 @@ test('writeKbDrainStatus is atomic (temp+rename): no leftover .tmp file after a 
 const routes = knowledgeRoutes({
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
+  // M4 ruling 86: the real fix turn is injected by the assembly, so route
+  // tests declare one. It THROWS: no assertion in this file expects a fix turn
+  // to be dispatched, and a stub that returned a plausible result would let a
+  // future change dispatch one here unnoticed.
+  runFixTurn: async () => {
+    throw new Error('unexpected brain-fix dispatch in this test');
+  },
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;

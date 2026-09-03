@@ -45,7 +45,16 @@ import { join } from 'node:path';
 
 import { runKbDrain } from '../../bridge-studio-kb-drain.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
-import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '@forge/sessions/kinds/brain-fix.ts';
+import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '../../bridge-studio-kb-drain.ts';
+// M4 ruling 86 — THE ONE REMAINING knowledge -> sessions edge on the fix turn,
+// and it is deliberate. Every other importer took the turn by injection or
+// repointed to this package's own port type; this file cannot, because its
+// whole purpose is to drive the REAL turn through the seam and prove the edit
+// gate runs INSIDE it (see the block comment above `realTurn`). A hand-rolled
+// stand-in here would assert that a stand-in behaves, which is what the
+// 2026-08-22 defects already did. The row is recorded with this reason rather
+// than closed by weakening the test.
+import { runBrainFixTurn } from '@forge/sessions/kinds/brain-fix.ts';
 import type { Finding } from '../../brain-lint.ts';
 
 // ---------------------------------------------------------------------------
@@ -410,7 +419,7 @@ test('W8-F1 (was: adversarial round 1): a PROSE rewrite that also deletes a vali
 
 /** The drain seam, wired to the PRODUCTION runner: only the LLM is simulated.
  *  Everything past the agent turn — both gates included — is the real thing. */
-function realTurn(write: () => void): (input: RunBrainFixInput) => Promise<RunBrainFixResult & { costUsd: number }> {
+function realTurn(write: () => void): (input: KbDrainFixTurnInput) => Promise<KbDrainFixTurnResult & { costUsd: number }> {
   return async (input) => {
     const result = await runBrainFixTurn({
       ...input,

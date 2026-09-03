@@ -27,6 +27,7 @@ import {
   listKbRuns,
   requestKbDrainCancel,
   runKbDrain,
+  type KbDrainRunFixTurnFn,
 } from './bridge-studio-kb-drain.ts';
 
 // ---------------------------------------------------------------------------
@@ -264,12 +265,33 @@ export async function handleKbDrainRun(
   return false;
 }
 
+/**
+ * M4 ruling 86 — the drain-START route is reached through a FACTORY now,
+ * because the real brain-fix turn `runKbDrain` dispatches is supplied by the
+ * assembly (`apps/forge/routes.ts` via `knowledgeRoutes(deps)`) rather than
+ * imported by this package. Same shape and same reason as
+ * `createKbCreateHandler`. Only this handler needs it: the sibling
+ * `handleKbDrainRun` is the GET that READS a run and spawns nothing.
+ *
+ * `handleKbDrainStart` keeps its exported signature with an optional trailing
+ * parameter, because its other caller is `handleStudioKbDrainRoutes` — the
+ * pre-carve dispatcher this package no longer routes through (no live caller
+ * outside this file; checked, not assumed). A request arriving that way with
+ * no turn injected hits `runKbDrain`'s own named refusal, which is the right
+ * outcome for a path nothing is supposed to reach.
+ */
+export function createKbDrainStartHandler(deps: { runFixTurn: KbDrainRunFixTurnFn }) {
+  return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
+    handleKbDrainStart(req, res, ctx, rawUrl, method, deps.runFixTurn);
+}
+
 export async function handleKbDrainStart(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: StudioContext,
   rawUrl: string,
   method: string,
+  runFixTurn?: KbDrainRunFixTurnFn,
 ): Promise<boolean> {
   // Normalise here, not only in the caller: this function is reached BOTH
   // from `handleStudioKbDrainRoutes` (which already stripped) and from
@@ -340,7 +362,7 @@ export async function handleKbDrainStart(
       });
 
       enqueueConsolidate(kbId, async () => {
-        await runKbDrain(ctx.forgeRoot, kbId, runId);
+        await runKbDrain(ctx.forgeRoot, kbId, runId, runFixTurn ? { runFixTurn } : {});
       });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {

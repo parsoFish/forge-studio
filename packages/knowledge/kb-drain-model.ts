@@ -18,7 +18,7 @@
 import { join, relative } from 'node:path';
 import { type AutoFixStableResult, type Finding } from './brain-lint.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
-import { type KbEditUnsoundness } from './kb-drain-edit-soundness.ts';
+import { type KbEditUnsoundness, type KbEditGateResult } from './kb-drain-edit-soundness.ts';
 import { KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 
 // ---------------------------------------------------------------------------
@@ -379,3 +379,45 @@ export function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boole
   for (const k of a) if (!b.has(k)) return false;
   return true;
 }
+
+/** What the drain hands one fix turn. Every field is knowledge's own
+ *  vocabulary: the finding being repaired, plus where. */
+export type KbDrainFixTurnInput = {
+  /** Unique id for this sub-turn; always synthesized by us, never request text. */
+  runId: string;
+  /** Absolute path to the forge root. */
+  forgeRoot: string;
+  /** Root for event logs; the turn defaults it to `<forgeRoot>/_logs`. */
+  logsRoot?: string;
+  /** The KB whose brain this file belongs to. */
+  kbId: string;
+  /** Absolute path to the theme file to repair. */
+  file: string;
+  /** The finding's check slug. */
+  check: string;
+  /** The finding's kind slug. */
+  kind: string;
+  /** Optional concrete repair hint from `classifyFinding`. */
+  fixHint?: string;
+  /** The finding's human-readable message. */
+  message: string;
+};
+
+/** What the drain needs back. `editAudit` is OUR `KbEditGateResult` — the gate
+ *  runs inside the turn (W8-B2) and its verdict is folded into `cleared`. */
+export type KbDrainFixTurnResult = {
+  runId: string;
+  cleared: boolean;
+  editAudit: KbEditGateResult;
+};
+
+/** The injected fix turn. The result additionally carries `costUsd` — the turn
+ *  itself does not return cost (it only logs `cost_usd` on its own 'end'
+ *  event), so the real implementation reads it back out of that event log
+ *  after every turn; that read-back moved to the injection point with ruling
+ *  86, because it is knowledge of the turn's log layout, not of the drain.
+ *  Injectable so termination-matrix tests (esp. the cost-ceiling case) can
+ *  hand back a precise, deterministic cost per call without a real SDK turn. */
+export type KbDrainRunFixTurnFn = (
+  input: KbDrainFixTurnInput,
+) => Promise<KbDrainFixTurnResult & { costUsd: number }>;
