@@ -48,6 +48,26 @@ import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from '../../cli/bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects/routes.ts';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
+// M4 §4 step 2 (agents routes carve, assembly pass). `agentsRoutes`'s
+// `AgentsRouteDeps` declares its collaborators STRUCTURALLY for the same reason
+// `projectsRoutes` does: `packages/agents` is rank 3, so it may not import
+// `@forge/sessions` (4), `@forge/flows` (6) or `orchestrator/` at all, not even
+// for a type. THIS file supplies the real implementations. Note what is NOT
+// injected: `listAgentDefinitions`, `isStudioAgent`, `serializeAgentDefinition`,
+// `SLUG_RE`, `isReservedId` and `PROJECT_ID_RE` all turned out to be
+// `@forge/agents` or `@forge/kernel` exports reached through a legacy
+// re-export, so the package imports its own owners directly (COMMON §15.43) and
+// six would-be dependencies never became injections at all.
+import { agentsRoutes } from '@forge/agents/routes.ts';
+import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
+import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
+import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '../../orchestrator/studio/registry.ts';
+import { validateAgent } from '../../orchestrator/studio/validate.ts';
+import {
+  DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
+} from '@forge/sessions/bridge-studio-lifecycle.ts';
+import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
+import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 
 /**
  * Re-exported so the host imports its whole routing surface from one module:
@@ -72,7 +92,14 @@ export { dispatchRoute } from '@forge/kernel';
  * for `projectsRoutes`, so the host never names a symbol from a package above
  * the one it is wiring.
  */
-export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath'>;
+export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath'> & {
+  /** The bridge's OWN `ensureTailFor`/`stopTailFor` closures — the same pair
+   *  that backs session and live-cycle tailing. The agent-run detail and start
+   *  routes arm and release a tail on them; injecting rather than duplicating
+   *  is what keeps one tail registry instead of two that drift. */
+  ensureAgentRunTail(runId: string): void;
+  releaseAgentRunTail(runId: string): void;
+};
 
 /**
  * Build the assembled table for ONE bridge instance.
@@ -109,6 +136,30 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       listStarterAgents,
       loadStarterFlow,
       agentCapabilityDescriptor,
+    }),
+    ...agentsRoutes({
+      // Rank 4/5 reads the package may not import.
+      parseGuardedEventsJsonl,
+      isTurnAlive,
+      extractErrorMessage,
+      stallCeilingMs: DEFAULT_STALL_CEILING_MS,
+      killTrackedRun,
+      loadSessionKinds,
+      cachedListRuns,
+      buildAgentSlugToNodeId,
+      loadFlowDefinition,
+      // The Agent kind's VALIDATOR — the half of the registry split still in
+      // `orchestrator/studio/validate.ts`; it comes home when that lands.
+      validateAgent,
+      listFlowIds: listFlowIdsForAgents,
+      // Bridge-instance state, from the host's own closures.
+      projectsRoot: deps.projectsRoot,
+      safeInputKeyRe: deps.safeInputKeyRe,
+      newRunStamp: deps.newRunStamp,
+      spawnAgentDispatch: deps.spawnAgentDispatch,
+      dryBridgeAgentTurnMarker: deps.dryBridgeAgentTurnMarker,
+      ensureAgentRunTail: deps.ensureAgentRunTail,
+      releaseAgentRunTail: deps.releaseAgentRunTail,
     }),
     ...sessionsRoutes({
       parseManifest: parseManifestPort,

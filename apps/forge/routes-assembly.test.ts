@@ -23,7 +23,8 @@ import { makeRouteTable, type RouteTableDeps } from './routes.ts';
 /**
  * A complete inert deps object, as a factory taking overrides.
  *
- * The sessions routes carve grew `RouteTableDeps` from two members to fifteen.
+ * The sessions routes carve grew `RouteTableDeps` from two members to fifteen,
+ * and the agents carve added the two agent-run tail closures.
  * Spelling the whole shape out at each construction would make adding a dep mean
  * editing assertions that have nothing to do with it — and this file's point is
  * the per-instance closures, not the shape.
@@ -45,6 +46,8 @@ function stubDeps(over: Partial<RouteTableDeps> = {}): RouteTableDeps {
     dryBridgeAgentTurnMarker: () => ({}),
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
+    ensureAgentRunTail: () => {},
+    releaseAgentRunTail: () => {},
     ...over,
   };
 }
