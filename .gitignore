@@ -27,6 +27,14 @@ demos/verify/**/*.webm
 _logs/*
 !_logs/.gitkeep
 !_logs/README.md
+# A workspace-scoped run (`npm test --workspace=packages/<x>`) resolves a
+# cwd-relative `_logs` root under the PACKAGE, not the repo root (bead
+# forge-8vfn.5.53), and the root rows above are anchored to this directory —
+# so nested runtime state needs its own rows. `packages/**` and `apps/**` are
+# exactly the npm workspace globs; a scanner-style hand-list of one of them is
+# the next blind spot (COMMON §15.82).
+packages/**/_logs/
+apps/**/_logs/
 _queue/pending/*
 !_queue/pending/.gitkeep
 _queue/in-flight/*
