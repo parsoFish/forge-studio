@@ -41,7 +41,10 @@ import {
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 import { CHECK_NAMES, runBrainLint } from '../../brain-lint.ts';
 // The module under test. This import throws at load time (module not found)
 // until cli/kb-lint-summary.ts exists — the intended "module missing" RED
@@ -60,7 +63,7 @@ function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-/** Minimal _queue + _logs scaffolding startBridge/listRuns expect. */
+/** Minimal _queue + _logs scaffolding the handlers' listRuns path expects. */
 function initQueueDirs(forgeRoot: string): void {
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
@@ -68,9 +71,25 @@ function initQueueDirs(forgeRoot: string): void {
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
 }
 
-async function get(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+/**
+ * The three describe blocks drive the CARVED HANDLERS directly — no bridge
+ * (COMMON §5). `get` keeps its `(root, path) -> {status, json}` shape, so every
+ * assertion below is byte-for-byte what it was over HTTP; only the first
+ * argument changed meaning, from a base URL to the forge root. An unmatched
+ * path reports the host's 404, never a status of 0 (§15.50).
+ */
+const routes = knowledgeRoutes({ listFlowIds: () => ['forge-develop'], listFlowBandIds: () => ['review-band', 'demo-band'] });
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+async function get(root: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  const ctx: KnowledgeRouteContext = { forgeRoot: root, logsRoot: join(root, '_logs'), readBody: async () => ({}) };
+  if (!(await dispatchRoute(routes, mockReq(), res, ctx, path, 'GET'))) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
 }
 
 /** A theme file with valid, complete frontmatter by default. No links, no
@@ -128,8 +147,6 @@ function snapshotTree(dir: string): Record<string, string> {
 
 describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)', () => {
   let forgeRoot: string;
-  let bridgeUrl: string;
-  let closeBridge: () => Promise<void>;
 
   before(async () => {
     forgeRoot = tmp('kb-lint-summary-main-');
@@ -167,18 +184,14 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
       'id: alpha\nname: Alpha Project Brain\nbinding: { kind: project, ref: alpha }\ndesc: AT-1/AT-3 fixture (ADR 035 central project brain).\n',
     );
 
-    const started = await startBridge({ forgeRoot, port: 0 });
-    bridgeUrl = started.url;
-    closeBridge = started.close;
   });
 
   after(async () => {
-    await closeBridge?.();
     if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
   });
 
   test('AT-1: GET /api/studio/kbs — every kb carries a REAL lint summary matching its actual findings', async () => {
-    const { status, json } = await get(bridgeUrl, '/api/studio/kbs');
+    const { status, json } = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(status, 200, JSON.stringify(json));
     const kbs = json['kbs'] as Array<Record<string, unknown>>;
     const byId = new Map(kbs.map((k) => [k['id'], k]));
@@ -210,14 +223,14 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
   });
 
   test('AT-2: list.lint byte-matches the per-KB detail route health (ONE derivation, not two)', async () => {
-    const list = await get(bridgeUrl, '/api/studio/kbs');
+    const list = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(list.status, 200, JSON.stringify(list.json));
     const kbs = list.json['kbs'] as Array<{ id: string; lint?: KbLintSummary }>;
     assert.ok(kbs.length >= 2, 'fixture must carry both cycles + alpha');
 
     let sawNonzeroChecksRun = false;
     for (const kb of kbs) {
-      const detail = await get(bridgeUrl, `/api/studio/kbs/${kb.id}`);
+      const detail = await get(forgeRoot, `/api/studio/kbs/${kb.id}`);
       assert.equal(detail.status, 200, JSON.stringify(detail.json));
       const health = detail.json['health'] as {
         lintErrors: number;
@@ -249,7 +262,7 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
   });
 
   test('AT-3: the n/a honesty invariant survives into the summary — "alpha" (0 own theme files) reports checksRun < checksTotal', async () => {
-    const { status, json } = await get(bridgeUrl, '/api/studio/kbs');
+    const { status, json } = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(status, 200, JSON.stringify(json));
     const kbs = json['kbs'] as Array<{ id: string; lint?: KbLintSummary }>;
     const alpha = kbs.find((k) => k.id === 'alpha');
@@ -518,8 +531,6 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
 
 describe('kb-lint-summary — a throwing lint fails HONEST (AT-5)', () => {
   let forgeRoot: string;
-  let bridgeUrl: string;
-  let closeBridge: () => Promise<void>;
 
   before(async () => {
     forgeRoot = tmp('kb-lint-summary-throw-');
@@ -547,18 +558,14 @@ describe('kb-lint-summary — a throwing lint fails HONEST (AT-5)', () => {
     mkdirSync(join(throwDir, 'patterns.md'), { recursive: true }); // a DIRECTORY, not a file
     writeFileSync(join(throwDir, 'themes', 't-one.md'), themeMd({ title: 'T One', desc: 'AT-5 EISDIR trigger theme.' }));
 
-    const started = await startBridge({ forgeRoot, port: 0 });
-    bridgeUrl = started.url;
-    closeBridge = started.close;
   });
 
   after(async () => {
-    await closeBridge?.();
     if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
   });
 
   test('AT-5: GET /api/studio/kbs still 200s with the list, but every kb.lint degrades honestly (error set, checksRun=0) — never fail-open clean', async () => {
-    const { status, json } = await get(bridgeUrl, '/api/studio/kbs');
+    const { status, json } = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(
       status,
       200,
@@ -592,8 +599,6 @@ describe('kb-lint-summary — a throwing lint fails HONEST (AT-5)', () => {
 
 describe('kb-lint-summary — derived, not stored (AT-6)', () => {
   let forgeRoot: string;
-  let bridgeUrl: string;
-  let closeBridge: () => Promise<void>;
   let cyclesDir: string;
 
   before(async () => {
@@ -611,18 +616,14 @@ describe('kb-lint-summary — derived, not stored (AT-6)', () => {
       '# Cycles — Patterns\n\n## Theme pages\n\n- [Recompute Theme](./themes/theme-recompute.md)\n',
     );
 
-    const started = await startBridge({ forgeRoot, port: 0 });
-    bridgeUrl = started.url;
-    closeBridge = started.close;
   });
 
   after(async () => {
-    await closeBridge?.();
     if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
   });
 
   test('AT-6: the list summary is RECOMPUTED per call, not persisted or memoised', async () => {
-    const first = await get(bridgeUrl, '/api/studio/kbs');
+    const first = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(first.status, 200, JSON.stringify(first.json));
     const firstKbs = first.json['kbs'] as Array<{ id: string; lint?: KbLintSummary }>;
     const firstCycles = firstKbs.find((k) => k.id === 'cycles');
@@ -644,7 +645,7 @@ describe('kb-lint-summary — derived, not stored (AT-6)', () => {
     const snapAfterMutation = snapshotTree(join(forgeRoot, 'brain'));
     assert.notDeepEqual(snapAfterMutation, snapAfterFirstRead, 'fixture precondition: the mutation must actually touch the brain/ tree');
 
-    const second = await get(bridgeUrl, '/api/studio/kbs');
+    const second = await get(forgeRoot, '/api/studio/kbs');
     assert.equal(second.status, 200, JSON.stringify(second.json));
     const secondKbs = second.json['kbs'] as Array<{ id: string; lint?: KbLintSummary }>;
     const secondCycles = secondKbs.find((k) => k.id === 'cycles');

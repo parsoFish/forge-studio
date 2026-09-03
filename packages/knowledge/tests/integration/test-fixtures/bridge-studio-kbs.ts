@@ -12,9 +12,11 @@
  * `post`/`get`/`drainConsolidate` are per-file, so they stayed with their
  * owners — a helper used by one file belongs to it.
  *
- * COST, stated rather than hidden: three files each call `setupSharedForge`, so
- * the suite now boots THREE bridges where it booted one. Each is on port 0 and
- * torn down in its own `after()`.
+ * `setupSharedForge`/`makeIsolatedForge`/`postAt` drive the CARVED HANDLERS
+ * directly — no bridge (COMMON §5: a package test never boots one). They hand
+ * back a plain forge root, not a URL — there is nothing to close any more.
+ * Not exercised here, deliberately: origin/CSRF/404-fallthrough, which are the
+ * HOST's policy and live in `cli/*.test.ts`.
  */
 
 import {
@@ -25,7 +27,26 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../../routes.ts';
+
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
 
 export const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;
 
@@ -96,13 +117,14 @@ export function consolidateFixtureTheme(slug: string, n: number): string {
   );
 }
 
-/** The shared forge root + bridge the file-level `before()` used to build
- *  inline. Returned rather than assigned to module state so each output file
- *  owns its own instance and its own teardown. */
-export async function setupSharedForge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+/** The shared forge root the file-level `before()` used to build inline.
+ *  Returned rather than assigned to module state so each output file owns
+ *  its own instance and its own teardown (an `rmSync`, since there is no
+ *  bridge left to close). */
+export async function setupSharedForge(): Promise<{ root: string }> {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-kbs-'));
 
-  // Minimal _queue + _logs required by startBridge / listRuns
+  // Minimal _queue + _logs required by the carved handlers' listRuns path
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
   }
@@ -140,38 +162,43 @@ export async function setupSharedForge(): Promise<{ root: string; url: string; c
     writeFileSync(join(healthDir, 'themes', `${slug}.md`), consolidateFixtureTheme(slug, n));
   }
 
-  const result = await startBridge({ forgeRoot, port: 0 });
-  return { root: forgeRoot, url: result.url, close: result.close };
+  return { root: forgeRoot };
 }
 
 // ---------------------------------------------------------------------------
 // R1-06 WI-3 review pins (MAJOR 2 write-isolation, MINOR 1 poll-hang) need an
-// ISOLATED forge-root + bridge each: MAJOR 2 mutates on-disk brains, and
-// MINOR 1's directory-as-index makes runBrainLint(scope:'full') throw for the
-// WHOLE root — either would corrupt the shared bridge's other tests. Minimal
+// ISOLATED forge-root each: MAJOR 2 mutates on-disk brains, and MINOR 1's
+// directory-as-index makes runBrainLint(scope:'full') throw for the WHOLE
+// root — either would corrupt the shared fixture's other tests. Minimal
 // _queue/_logs scaffold mirrors the shared `before()`.
 // ---------------------------------------------------------------------------
-export async function makeIsolatedForge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+export async function makeIsolatedForge(): Promise<{ root: string }> {
   const root = mkdtempSync(join(tmpdir(), 'kbs-review-pin-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(root, '_queue', state), { recursive: true });
   }
   mkdirSync(join(root, '_logs'), { recursive: true });
-  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
-  return { root, url, close };
+  return { root };
 }
 
+/** Drives one carved route handler directly against `root` and hands back the
+ *  same `{status, json}` shape the old `fetch`-based `postAt` returned — T1
+ *  ruling 30: the host parses the body and hands the RESULT down, so this
+ *  supplies the result rather than faking a request stream. */
 export async function postAt(
-  base: string,
+  root: string,
   path: string,
   body?: Record<string, unknown>,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => body ?? {},
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, 'POST');
+  if (!matched) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
 }
 
 /** A synthetic project brain: kb.yaml (project binding) + a category index + N

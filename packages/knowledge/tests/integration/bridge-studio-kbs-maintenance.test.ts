@@ -12,6 +12,11 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
+
 import { enqueueConsolidate } from '../../bridge-studio-kb-consolidate.ts';
 
 import {
@@ -24,39 +29,57 @@ import {
 } from './test-fixtures/bridge-studio-kbs.ts';
 
 let forgeRoot: string;
-let bridgeUrl: string;
-let closeServer: () => Promise<void>;
 
 before(async () => {
   const shared = await setupSharedForge();
   forgeRoot = shared.root;
-  bridgeUrl = shared.url;
-  closeServer = shared.close;
 });
 
 after(async () => {
-  await closeServer();
   rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-async function post(
-  path: string,
-  body?: Record<string, unknown>,
-  nocsrf = false,
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (!nocsrf) headers['x-forge-csrf'] = '1';
-  const res = await fetch(`${bridgeUrl}${path}`, {
-    method: 'POST',
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+/**
+ * `post`/`get`/`terminalState` drive the CARVED HANDLERS directly — no bridge
+ * (COMMON §5: a package test never boots one). The `{status, json}` shape is
+ * preserved so every assertion below is byte-for-byte what it was over HTTP.
+ * Not tested here any more, deliberately: origin/CSRF/404-fallthrough — the
+ * HOST's policy, tested in `cli/*.test.ts`.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+async function drive(root: string, path: string, method: string, body: unknown = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  if (!matched) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+async function post(path: string, body?: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  return drive(forgeRoot, path, 'POST', body ?? {});
 }
 
 async function get(path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${bridgeUrl}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  return drive(forgeRoot, path, 'GET');
 }
 
 /** Wait for a dispatched consolidate to finish — deterministically.
@@ -73,9 +96,9 @@ async function drainConsolidate(kbId: string): Promise<void> {
 }
 
 /** The run's terminal state, read ONCE after `drainConsolidate` — never polled. */
-async function terminalState(base: string, kbId: string, runId: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${base}/api/studio/kbs/${kbId}/fix-agent/${runId}`);
-  return (await res.json()) as Record<string, unknown>;
+async function terminalState(root: string, kbId: string, runId: string): Promise<Record<string, unknown>> {
+  const { json } = await drive(root, `/api/studio/kbs/${kbId}/fix-agent/${runId}`, 'GET');
+  return json;
 }
 
 // The Knowledge "Lint" button POSTs op=lint; the response MUST carry ok:true so
@@ -200,7 +223,7 @@ test('R1-06 WI-3 group A ratchet: op=consolidate drains the FULL scoped finding 
   // Poll the existing fix-agent poll shape until the consolidate run reaches
   // a terminal state — 'running' forever is a fail.
   await drainConsolidate(CONSOLIDATE_KB_ID);
-  const terminal = await terminalState(bridgeUrl, CONSOLIDATE_KB_ID, runId as string);
+  const terminal = await terminalState(forgeRoot, CONSOLIDATE_KB_ID, runId as string);
   assert.notEqual(terminal['state'], 'running', 'consolidate run never reached a terminal state');
 
   // The obligation ran over the FULL scoped finding set, not a single
@@ -288,7 +311,7 @@ test('W6-B14: GET .../consolidate/active rediscovers the runId of a just-dispatc
   // identical fix-agent route the consolidate ratchet test above already
   // proves — never a dead end.
   await drainConsolidate(CONSOLIDATE_KB_ID);
-  const terminal = await terminalState(bridgeUrl, CONSOLIDATE_KB_ID, runId);
+  const terminal = await terminalState(forgeRoot, CONSOLIDATE_KB_ID, runId);
   assert.notEqual(terminal['state'], 'running');
 });
 
@@ -320,19 +343,19 @@ test('R1-06 WI-3 MAJOR 2 red-pin: consolidating "alpha" leaves sibling "alpha-tw
     // has its own unlisted-theme finding to be (wrongly) swept in.
     const before = readFileSync(alphaTwoIndex, 'utf8');
     assert.ok(!before.includes('b-one'), 'precondition: alpha-two index must not already link b-one');
-    const lintTwoBefore = await postAt(iso.url, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
+    const lintTwoBefore = await postAt(iso.root, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
     const twoFindingsBefore = (lintTwoBefore.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
     assert.equal(twoFindingsBefore.length, 1, `precondition: alpha-two must have exactly 1 project-index finding, got ${twoFindingsBefore.length}`);
 
     // Dispatch consolidate for ALPHA only, drain to terminal.
-    const dispatch = await postAt(iso.url, `/api/studio/kbs/alpha/maintenance`, { op: 'consolidate' });
+    const dispatch = await postAt(iso.root, `/api/studio/kbs/alpha/maintenance`, { op: 'consolidate' });
     assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
     const runId = dispatch.json['runId'] as string;
     assert.equal(typeof runId, 'string', `expected runId, got ${JSON.stringify(dispatch.json)}`);
     await drainConsolidate('alpha');
-    const terminal = await terminalState(iso.url, 'alpha', runId);
+    const terminal = await terminalState(iso.root, 'alpha', runId);
     assert.notEqual(terminal['state'], 'running', 'alpha consolidate never reached terminal');
 
     // Verdict 1 (write-isolation): alpha-two's index file is byte-identical.
@@ -341,20 +364,19 @@ test('R1-06 WI-3 MAJOR 2 red-pin: consolidating "alpha" leaves sibling "alpha-tw
 
     // Verdict 2 (count-isolation): alpha-two still reports its own unlisted
     // finding — alpha's run must not have cleared it.
-    const lintTwoAfter = await postAt(iso.url, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
+    const lintTwoAfter = await postAt(iso.root, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
     const twoFindingsAfter = (lintTwoAfter.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
     assert.equal(twoFindingsAfter.length, 1, `alpha's consolidate cleared alpha-two's finding (cross-KB), ${twoFindingsAfter.length} remain`);
 
     // Sanity: alpha's OWN findings did drain (the fix scopes, it does not disable).
-    const lintAlphaAfter = await postAt(iso.url, `/api/studio/kbs/alpha/maintenance`, { op: 'lint' });
+    const lintAlphaAfter = await postAt(iso.root, `/api/studio/kbs/alpha/maintenance`, { op: 'lint' });
     const alphaFindingsAfter = (lintAlphaAfter.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
     assert.equal(alphaFindingsAfter.length, 0, `alpha's own findings should be drained, ${alphaFindingsAfter.length} remain`);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -381,7 +403,7 @@ test('R1-06 WI-3 MINOR 1 red-pin: a consolidate whose repair phase throws still 
       'precondition: throwkb patterns.md (as a directory) must exist',
     );
 
-    const dispatch = await postAt(iso.url, `/api/studio/kbs/throwkb/maintenance`, { op: 'consolidate' });
+    const dispatch = await postAt(iso.root, `/api/studio/kbs/throwkb/maintenance`, { op: 'consolidate' });
     assert.equal(dispatch.status, 200, `dispatch must be accepted async, got ${JSON.stringify(dispatch.json)}`);
     const runId = dispatch.json['runId'] as string;
     assert.equal(typeof runId, 'string', `expected runId, got ${JSON.stringify(dispatch.json)}`);
@@ -392,14 +414,13 @@ test('R1-06 WI-3 MINOR 1 red-pin: a consolidate whose repair phase throws still 
     // honest 'running' this pin exists to catch, instead of "not terminal
     // within N seconds", which is a claim about the host.
     await drainConsolidate('throwkb');
-    const terminal = await terminalState(iso.url, 'throwkb', runId);
+    const terminal = await terminalState(iso.root, 'throwkb', runId);
     assert.notEqual(
       terminal['state'],
       'running',
       'a consolidate whose repair phase threw never reached a terminal state — the poll hung to budget',
     );
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -437,9 +458,8 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
     seedProjectBrain(iso.root, 'drybridge-consolidate', ['scratch-maintain-lesson']);
 
     const health = async (): Promise<number> => {
-      const res = await fetch(`${iso.url}/api/studio/kbs/drybridge-consolidate`);
-      const json = (await res.json()) as { health?: { lintFlags?: number } };
-      return json.health?.lintFlags ?? -1;
+      const { json } = await drive(iso.root, '/api/studio/kbs/drybridge-consolidate', 'GET');
+      return (json['health'] as { lintFlags?: number } | undefined)?.lintFlags ?? -1;
     };
 
     // Fixture precondition, asserted BEFORE the verdict: health reflects the
@@ -455,7 +475,7 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
       'precondition: health.lintFlags must be 2 for the seeded flagged KB (checkProjectBrainIndexes + checkIndexSync, R6-08 4on — under dry-bridge)',
     );
     // And op=lint (already dry-bridge-allowed) agrees the finding is real.
-    const baseline = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
+    const baseline = await postAt(iso.root, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
     const baselineFindings = (baseline.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
@@ -463,7 +483,7 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
 
     // Verdict 1: consolidate is DISPATCHED under dry-bridge (RED: 409), handing
     // back the async run handle rather than refusing.
-    const dispatch = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'consolidate' });
+    const dispatch = await postAt(iso.root, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'consolidate' });
     assert.equal(
       dispatch.status,
       200,
@@ -476,7 +496,7 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
     // Verdict 2: the deterministic in-process path drains to a 'cleared'
     // terminal — no spawn, no SDK turn (the CI-safe shipped shape).
     await drainConsolidate('drybridge-consolidate');
-    const terminal = await terminalState(iso.url, 'drybridge-consolidate', runId as string);
+    const terminal = await terminalState(iso.root, 'drybridge-consolidate', runId as string);
     assert.equal(
       terminal['state'],
       'cleared',
@@ -485,7 +505,7 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
 
     // Verdict 3: the seeded finding is actually gone — follow-up lint 0 AND
     // health lintFlags back to 0 (the reduction the beat observes).
-    const after = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
+    const after = await postAt(iso.root, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
     const afterFindings = (after.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
@@ -494,7 +514,6 @@ test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still dr
   } finally {
     if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
     else process.env.FORGE_DRY_BRIDGE = prior;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -507,7 +526,7 @@ test('W8-F1 (knowledge-42): a consolidate over ZERO findings does not report "cl
   const runId = dispatch.json['runId'] as string;
 
   await drainConsolidate('w8f1-noop-kb');
-  const body = await terminalState(bridgeUrl, 'w8f1-noop-kb', runId);
+  const body = await terminalState(forgeRoot, 'w8f1-noop-kb', runId);
   assert.notEqual(body['state'], 'running', 'the zero-findings consolidate never reached a terminal state');
   assert.equal(
     body['cleared'],
