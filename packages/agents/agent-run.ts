@@ -372,8 +372,8 @@ export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs 
     return i >= 0 ? flags[i + 1] : undefined;
   };
   const runId = flagValue('--run-id');
-  if (!runId) {
-    throw new Error('--run-id <id> is required');
+  if (!runId || !isSafeRunId(runId)) {
+    throw new Error(`--run-id <id> is required and must be a safe run id — letters, digits, dot, underscore, hyphen, no path separators or "..": ${JSON.stringify(runId)}`);
   }
   const project = flagValue('--project');
   // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header for
@@ -601,7 +601,7 @@ export async function cmdAgentDispatch(
     // endpoint reports `failed` instead of a perpetual `running` (the RunPanel
     // polls it). Best-effort — never masks the original error / exit code.
     try {
-      createLogger(runId, '_logs').emit({
+      createLogger(runId, join(forgeRoot, '_logs')).emit({
         initiative_id: runId,
         phase: 'orchestrator',
         skill: slug,
