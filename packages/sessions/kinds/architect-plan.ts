@@ -29,10 +29,10 @@
  * PLAN.md annotations.
  */
 
-import { mkdirSync, existsSync, renameSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { mkdirSync, renameSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
-import { guardedWriteFile } from '@forge/kernel';
+import { guardedWriteFile, resolveGuardedPath, PathGuardContainmentError, type PathGuardOk } from '@forge/kernel';
 
 
 // ---------------------------------------------------------------------------
@@ -828,6 +828,9 @@ export type SessionPaths = {
   manifestsDir: string;
 };
 
+const ARCHITECT_DIRNAME = '_architect';
+const ARCHIVED_DIRNAME = '_archived';
+
 export function sessionPaths(projectRoot: string, sessionId: string): SessionPaths {
   const sessionDir = resolve(projectRoot, '_architect', sessionId);
   return {
@@ -838,25 +841,38 @@ export function sessionPaths(projectRoot: string, sessionId: string): SessionPat
   };
 }
 
+/** `resolveGuardedPath`, with a rejection turned into a typed refusal. Never a
+ *  cast: the narrowing is what makes `.realPath` reachable at all (§15.66).
+ *  `r.reason` is NOT forwarded — `path-guard.ts` declares it an internal
+ *  diagnostic that must never reach an untrusted caller, and it can carry the
+ *  caller's own bytes (a newline in a segment is log-injection material). */
+function guardedOrRefuse(root: string, segments: readonly string[]): PathGuardOk {
+  const r = resolveGuardedPath(root, segments);
+  if (!r.ok) throw new PathGuardContainmentError('archiveSessionDir: refusing to archive — path containment rejected');
+  return r;
+}
+
 /**
  * Move a session dir to `_architect/_archived/<session-id>/`. Used by the
  * CLI on `reject`. Returns the archived path.
+ *
+ * `sessionId` rides as its OWN guarded segment, for the source AND the target.
+ * Containment a function inherits from its callers is not containment it can
+ * rely on: this one is exported, and the next caller need not be a runner.
  */
 export function archiveSessionDir(projectRoot: string, sessionId: string): string {
-  const { sessionDir } = sessionPaths(projectRoot, sessionId);
-  if (!existsSync(sessionDir)) {
-    throw new Error(`archiveSessionDir: session dir not found: ${sessionDir}`);
-  }
-  const archivedRoot = resolve(projectRoot, '_architect', '_archived');
-  if (!existsSync(archivedRoot)) mkdirSync(archivedRoot, { recursive: true });
-  const target = join(archivedRoot, sessionId);
-  // Use rename. node:fs renameSync requires same filesystem — within a
-  // project repo that's always satisfied.
-  if (existsSync(target)) {
-    throw new Error(`archiveSessionDir: target already exists: ${target}`);
-  }
-  // Ensure parent of target exists (it does — we just created it).
-  if (!existsSync(dirname(target))) mkdirSync(dirname(target), { recursive: true });
-  renameSync(sessionDir, target);
-  return target;
+  const source = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, sessionId]);
+  if (!source.exists) throw new Error(`archiveSessionDir: session dir not found: ${sessionId}`);
+  const archived = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, ARCHIVED_DIRNAME]);
+  if (!archived.exists) mkdirSync(archived.realPath, { recursive: true });
+  // The target walks from `projectRoot` with ALL THREE segments, not from
+  // `archived.realPath`. A derived root is trusted IMPLICITLY — the guard runs
+  // no identity check on its own root — so re-entering it would leave `_archived`
+  // verified before the mkdir and unverified after it, and a symlink planted in
+  // that window would be adopted as the trusted root. Re-walking is what the
+  // guard's own docstring calls the defect this repo has closed five times.
+  const target = guardedOrRefuse(projectRoot, [ARCHITECT_DIRNAME, ARCHIVED_DIRNAME, sessionId]);
+  if (target.exists) throw new Error(`archiveSessionDir: target already exists: ${sessionId}`);
+  renameSync(source.realPath, target.realPath);
+  return target.realPath;
 }
