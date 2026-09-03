@@ -101,11 +101,7 @@ import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
 
-/** Injected `parseManifest` (flows is rank 5, this package rank 4). The SHAPE
- *  is imported directly — it lives in contracts now (ruling 81). */
-export type ParseManifestPort = (content: string) => InitiativeManifest;
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library/studio/skill-package.ts';
 import type { PackageFile } from '@forge/library/studio/skill-package.ts';
 import { sessionArtifactKindState, type SessionKindDescriptor, type SessionStage } from './session-kinds.ts';
@@ -124,7 +120,6 @@ const FEEDBACK_FILENAME = 'feedback.md';
  *  module pulls the live SDK query chain in at load, and this one is a pure
  *  fs-only derivation with no business importing a runner for one string. */
 const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';
-const MANIFESTS_DIRNAME = 'manifests';
 const THEMES_DIRNAME = 'themes';
 
 /** The phase token the questions/answers interview handoff uses while
@@ -157,6 +152,13 @@ const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME
 // HARDLINKED file (no separate target to resolve away from) — accepted, not
 // fixed; see the module header for why.
 // ---------------------------------------------------------------------------
+
+// Ruling 83's row-5 split moved the roadmap-draft artifact to
+// `./roadmap-draft.ts`; the three types are RE-EXPORTED, not repointed, because
+// ten files name them (see `../design.md`).
+export type { ParseManifestPort, RoadmapDraftRow, RoadmapDraftArtifact } from './roadmap-draft.ts';
+import { deriveRoadmapDraft } from './roadmap-draft.ts';
+import type { ParseManifestPort, RoadmapDraftArtifact } from './roadmap-draft.ts';
 
 export function safeReadFileInSession(sessionDir: string, relPath: string): string | null {
   const abs = join(sessionDir, relPath);
@@ -577,50 +579,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
 // deriveSessionArtifact
 // ---------------------------------------------------------------------------
 
-export type RoadmapDraftRow = {
-  readonly initiativeId: string;
-  readonly project: string;
-  readonly phase: string;
-  readonly origin: string;
-  // Mutable element array (not `readonly string[]`) — same rationale as
-  // RoadmapDraftArtifact.rows below: the pinned AT idiom casts the derived
-  // artifact to a plain `{ rows: Array<{ ...; dependsOn: string[] }> }`
-  // shape, and a `readonly string[]` is never assignable to a mutable
-  // `string[]` target.
-  //
-  // Sourced verbatim from the manifest's `depends_on_initiatives`
-  // (packages/flows/manifest.ts:73, already parsed by `parseManifest`) —
-  // absent on the manifest ⇒ `[]`, never undefined and never dropped from
-  // the row. This field is DERIVED, never fabricated: it is exactly what
-  // the manifest declares, in declared order, with no filtering,
-  // de-duplication, or re-sorting at this layer.
-  //
-  // Resolving an edge against this session's OWN draft row set (which
-  // dependency ids are "real" vs. dangling) is deliberately NOT this
-  // layer's job — it is the VIEW layer's (apps/studio/lib/dependency-dag.ts's
-  // `dependencyDagView`). An edge pointing at an initiative outside the
-  // draft set (e.g. one that already merged before this architect session
-  // started) is real information the operator needs to see, not noise to
-  // be silently dropped here.
-  readonly dependsOn: string[];
-};
 
-export type RoadmapDraftArtifact = {
-  readonly kind: 'roadmap-draft';
-  /** The session-kind descriptor's declared `artifact.label`
-   *  (studio/session-kinds.yaml), threaded through verbatim — never
-   *  re-derived or defaulted here. See `deriveSessionArtifact`. */
-  readonly label: string;
-  // Mutable element arrays (not `readonly T[]`) — deliberately, so a direct
-  // `as { rows: Array<...>; sourcesScanned: string[] }` cast (the pinned AT
-  // idiom in session-transcript.test.ts) type-checks: a `readonly T[]` is
-  // never assignable to a mutable `T[]` target, which is a real TS
-  // constraint, not a laxness. The exported *properties* stay non-reassignable
-  // (no `readonly` array TYPE, but callers still get a fresh object per call —
-  // immutability is preserved by never mutating an already-returned array).
-  readonly rows: RoadmapDraftRow[];
-  readonly sourcesScanned: string[];
-};
 
 export type MarkdownDraftArtifact = {
   readonly kind: 'markdown-draft';
@@ -1126,35 +1085,6 @@ export type SessionArtifactPayload =
   | FilePackageArtifact
   | CleanupPlanArtifact;
 
-function deriveRoadmapDraft(sessionDir: string, label: string, parseManifest: ParseManifestPort): RoadmapDraftArtifact {
-  const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
-  const rows: RoadmapDraftRow[] = [];
-  for (const file of files) {
-    const body = safeReadFileInSession(sessionDir, join(MANIFESTS_DIRNAME, file));
-    if (body === null) continue; // missing/escaped entry — never surfaced
-    let manifest;
-    try {
-      manifest = parseManifest(body);
-    } catch {
-      continue; // an unparsable manifest contributes no row; never fabricated
-    }
-    rows.push({
-      initiativeId: manifest.initiative_id,
-      project: manifest.project,
-      phase: manifest.phase,
-      origin: manifest.origin,
-      // Verbatim, never filtered/sorted/de-duplicated here — see the field's
-      // doc comment on RoadmapDraftRow.
-      dependsOn: manifest.depends_on_initiatives ?? [],
-    });
-  }
-  return {
-    kind: 'roadmap-draft',
-    label,
-    rows,
-    sourcesScanned: [`${MANIFESTS_DIRNAME}/*.md (${files.length} file(s) found)`],
-  };
-}
 
 function deriveMarkdownDraft(sessionDir: string, label: string): MarkdownDraftArtifact {
   const body = safeReadFileInSession(sessionDir, AGENTS_DRAFT_FILENAME);
@@ -1320,7 +1250,7 @@ export function deriveSessionArtifact(input: {
       if (!parseManifest) {
         throw new Error('deriveSessionArtifact: the "roadmap-draft" kind needs the parseManifest port, bound at `apps/forge`; it was not injected.');
       }
-      return deriveRoadmapDraft(sessionDir, label, parseManifest);
+      return deriveRoadmapDraft(sessionDir, label, parseManifest, { listDirEntries, safeReadFileInSession });
     case 'markdown-draft':
       return deriveMarkdownDraft(sessionDir, label);
     case 'brain-structure':
