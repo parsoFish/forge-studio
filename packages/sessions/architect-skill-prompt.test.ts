@@ -527,7 +527,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
         message: {
           content: [
             { type: 'tool_use', name: 'Read', input: { file_path: 'brain/cycles/themes/at8-sentinel-theme.md' } },
-            { type: 'tool_use', name: 'Read', input: { file_path: 'packages/factory/architect-plan.ts' } },
+            { type: 'tool_use', name: 'Read', input: { file_path: 'packages/sessions/kinds/architect-plan.ts' } },
           ],
         },
       };
@@ -550,7 +550,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
     'the brain/ read must survive into the PLAN brain-context section',
   );
   assert.ok(
-    !planMd.includes('packages/factory/architect-plan.ts'),
+    !planMd.includes('packages/sessions/kinds/architect-plan.ts'),
     'a non-brain/ Read must be dropped from brainReads — this is the silent-drop hazard the park file flags ' +
       'as uncovered by any existing golden fixture',
   );

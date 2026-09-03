@@ -283,7 +283,6 @@
   "package-layer-order|packages/projects/tests/contract/demo-descriptor-parity.test.ts|packages/sessions/kinds/demo-builder.ts",
   "package-layer-order|packages/projects/tests/integration/project-config-repo.test.ts|packages/flows/trigger-payload.ts",
   "package-layer-order|packages/sessions/bridge-studio-sessions.test.ts|packages/flows/manifest.ts",
-  "package-layer-order|packages/sessions/kinds/architect.ts|packages/factory/architect-plan.ts",
   "package-layer-order|packages/sessions/kinds/architect.ts|packages/flows/manifest.ts",
   "package-layer-order|packages/sessions/kinds/architect.ts|packages/flows/promote-manifests.ts",
   "package-layer-order|packages/sessions/studio/session-transcript.test.ts|packages/flows/manifest.ts",

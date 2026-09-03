@@ -380,7 +380,7 @@ export const EXPLICIT_MODULES = [
   // routes do, reached by `forge <verb>` rather than by an HTTP dispatch.
   'packages/flows/metrics.ts',
   'packages/projects/contract-stages.ts',
-  'packages/factory/architect-plan.ts',
+  'packages/sessions/kinds/architect-plan.ts',
   // Not a request handler itself — the shared config-loader HELPER that
   // multiple request routes DELEGATE their `.forge/project.json` read to
   // (bridge-studio-runs verdict send-back -> loadProjectConfig(projectRepoPath),
