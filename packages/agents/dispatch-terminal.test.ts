@@ -18,8 +18,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import {
   DISPATCH_TERMINAL_SIGNALS,
@@ -29,8 +28,13 @@ import {
 } from './dispatch-terminal.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { createLogger } from '@forge/kernel';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+// §15.14 + §15.93: HERE is interpolated into SUBPROCESS IMPORT STRINGS, which
+// tsc cannot see — so a move that broke them would typecheck clean and fail
+// only at run time. Anchored on the package directory via kernel's FORGE_ROOT
+// so the value is the same from any depth this file is bucketed to.
+const HERE = join(FORGE_ROOT, 'packages', 'agents');
 
 function readEvents(forgeRoot: string, runId: string): Array<Record<string, unknown>> {
   const path = join(forgeRoot, '_logs', runId, 'events.jsonl');

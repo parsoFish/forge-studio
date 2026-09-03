@@ -57,11 +57,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..', '..');
+// §15.14 / bead `forge-8vfn.5.47`: anchored on kernel's FORGE_ROOT, never on
+// `'..'` arithmetic from this file's own location. The previous form was
+// correct ONLY at this file's current depth, and the re-bucket into
+// `tests/<bucket>/` moves it — at which point a scanner keyed on a wrong root
+// walks an EMPTY tree and reports zero findings, which reads as a pass.
+const ROOT = FORGE_ROOT;
 
 /** The one file allowed to hold a value import of the SDK's `query`. */
 const WRAPPER_RELATIVE_PATH = 'packages/agents/pinned-sdk-query.ts';

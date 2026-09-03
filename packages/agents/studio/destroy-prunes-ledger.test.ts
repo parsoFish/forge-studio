@@ -122,10 +122,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// §15.14 / bead `forge-8vfn.5.47`: anchored on kernel's FORGE_ROOT, never on
+// `'..'` arithmetic from this file's own location. The previous form was
+// correct ONLY at this file's current depth, and the re-bucket into
+// `tests/<bucket>/` moves it — at which point a scanner keyed on a wrong root
+// walks an EMPTY tree and reports zero findings, which reads as a pass.
+const REPO_ROOT = FORGE_ROOT;
 
 // Destroy-verb detection is intentionally left NAME-LITERAL, not alias-
 // resolved: every real destroy-verb call site in the tree today imports
