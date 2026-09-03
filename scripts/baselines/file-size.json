@@ -40,7 +40,7 @@
   "orchestrator/studio/validate.ts": 868,
   "packages/agents/agent-dispatch.test.ts": 863,
   "packages/agents/agent-run.test.ts": 1226,
-  "packages/agents/agent-run.ts": 933,
+  "packages/agents/agent-run.ts": 931,
   "packages/agents/failure-classifier.test.ts": 1235,
   "packages/agents/ralph/claude-agent.test.ts": 846,
   "packages/agents/skill-turn-prompt.test.ts": 1027,

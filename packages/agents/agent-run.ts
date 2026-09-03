@@ -32,10 +32,10 @@ import { runDemoBuilderTurn } from '@forge/sessions/demo-builder-runner.ts';
 import type { runProjectBrainTurn } from '../../orchestrator/project-brain-builder-runner.ts';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
+import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
 import { isStandaloneBandAgent, runBandAgentStandalone } from '../../orchestrator/band-agent-run.ts';
 import { skillsDir } from './skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { createLogger } from '@forge/kernel';
 import { runInteractiveTurn } from '@forge/sessions/interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
 
@@ -559,6 +559,13 @@ export async function cmdAgentDispatch(
 
   const dispatch = deps?.dispatch ?? dispatchAgentRun;
 
+  // forge-8vfn.5.38 — a SIGTERM ran neither the success path below nor its
+  // catch, so a run cut short ended with no terminus. See ./dispatch-terminal.ts.
+  const writePhase = sessionDir
+    ? (o: 'failed', d: string) => writeSessionTerminalPhase(forgeRoot, sessionDir, o, trustedProjectsRoot, d)
+    : undefined;
+  const uninstallSignalGuard = installDispatchSignalGuard({ runId, slug, forgeRoot, ...(writePhase ? { writePhase } : {}) });
+
   try {
     // R4-10-F3 isolation surface: the two band-guard node agents (demo-agent /
     // adversarial-review) run standalone through their FLOW pipeline (parity),
@@ -597,21 +604,10 @@ export async function cmdAgentDispatch(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
-    // Emit a terminal failure marker to the run log so the bridge's status
-    // endpoint reports `failed` instead of a perpetual `running` (the RunPanel
-    // polls it). Best-effort — never masks the original error / exit code.
-    try {
-      createLogger(runId, join(forgeRoot, '_logs')).emit({
-        initiative_id: runId,
-        phase: 'orchestrator',
-        skill: slug,
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'agent-dispatch.failed',
-        metadata: { error: msg, agent_slug: slug },
-      });
-    } catch { /* best-effort */ }
+    // The terminal failure marker (the bridge reports `failed` rather than a
+    // perpetual `running`). Moved to ./dispatch-terminal.ts with the signal
+    // path's terminus — and it no longer swallows its own write failure.
+    recordDispatchTerminal({ runId, slug, forgeRoot, outcome: 'failed', detail: msg });
     // D7 — the run ended in failure: write the terminal phase before exiting.
     // bead forge-poc (ON-7): the error text rides along too, for the same
     // reason the sibling agent-dispatch.failed log event above already
@@ -619,6 +615,8 @@ export async function cmdAgentDispatch(
     // operator back to stderr.log for the one thing they actually need.
     if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', trustedProjectsRoot, msg);
     process.exit(1);
+  } finally {
+    uninstallSignalGuard();
   }
 }
 
