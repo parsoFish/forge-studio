@@ -36,15 +36,41 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { startBridge } from './ui-bridge.ts';
+
+/**
+ * The row shape as it appears ON THE WIRE, declared here rather than imported
+ * from `@forge/sessions`.
+ *
+ * These are HTTP acceptance tests, and a `cli/` test importing the package is a
+ * `legacy-to-package` edge. Declaring the response shape locally is also the
+ * more honest assertion for this kind of test: it pins what the API actually
+ * returns to a client, not what the implementation's own type says it returns —
+ * a type imported from the implementation cannot disagree with it.
+ *
+ * The five pure tests of `sortAndCapSessionIndexRows` that used to live at the
+ * bottom of this file moved to
+ * `packages/sessions/tests/unit/session-index-sort.test.ts`, where their subject
+ * now lives; they import the real type, as a unit test should.
+ */
+type IndexRow = {
+  sessionId: string;
+  project: string;
+  kind: string;
+  phase: string;
+  needsYou: boolean;
+  state: string;
+  error: string | null;
+  idleMs: number | null;
+  modelTier: string | null;
+  updatedAt: string;
+  href: string;
+};
+
+/** The wire value of the index cap. Deliberately a LITERAL, not an import: this
+ *  is a contract test, so a change to the constant should turn it red and be
+ *  looked at, rather than following it silently. */
+const WIRE_CAP = 200;
 // Carved with the session index (M4 routes carve): the index, its cap and its
-// row type are the package's now. Like the other two host integration tests
-// that exercise carved routes, this import is a disclosed transitional row that
-// closes when these files convert to handler level under exit row 5.
-import {
-  sortAndCapSessionIndexRows,
-  SESSION_INDEX_MAX_ROWS,
-  type SessionIndexRow,
-} from '@forge/sessions/bridge-studio-session-index.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -299,7 +325,7 @@ after(async () => {
 test('GET /api/studio/sessions (no query) returns rows across every registry kind, including terminal ones', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { sessions: SessionIndexRow[]; cap: number };
+  const body = (await res.json()) as { sessions: IndexRow[]; cap: number };
   const kinds = new Set(body.sessions.map((s) => s.kind));
   assert.deepEqual(
     [...kinds].sort(),
@@ -313,13 +339,13 @@ test('GET /api/studio/sessions (no query) returns rows across every registry kin
   const onboardingTerminalRow = body.sessions.find((s) => s.sessionId === ONBOARDING_TERMINAL_SESSION);
   assert.ok(onboardingTerminalRow, 'expected the terminal onboarding session present when active filter is not requested');
   assert.equal(onboardingTerminalRow!.terminal, true, 'onboarding "complete" must be derived as terminal (the isTerminalPhase widening this WI ships)');
-  assert.equal(body.cap, SESSION_INDEX_MAX_ROWS);
+  assert.equal(body.cap, WIRE_CAP);
 });
 
 test('GET /api/studio/sessions?active=1 filters out every terminal row (instructions "committed" AND onboarding "complete")', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions?active=1`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { sessions: SessionIndexRow[] };
+  const body = (await res.json()) as { sessions: IndexRow[] };
   const ids = body.sessions.map((s) => s.sessionId);
   assert.ok(!ids.includes(INSTRUCTIONS_TERMINAL_SESSION), 'terminal instructions session must be filtered by ?active=1');
   assert.ok(!ids.includes(ONBOARDING_TERMINAL_SESSION), 'terminal onboarding session must be filtered by ?active=1');
@@ -330,8 +356,8 @@ test('GET /api/studio/sessions?active=1 filters out every terminal row (instruct
 
 test('needsYou is true only where deriveSessionAffordances derives a real affordance — architect (no turnSpec/panel) is always false; instructions "awaiting-verdict" and kb-cleanup "awaiting-approval" are true; onboarding "running" (an agent-step row) is false', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
-  const body = (await res.json()) as { sessions: SessionIndexRow[] };
-  const byId = (id: string): SessionIndexRow => {
+  const body = (await res.json()) as { sessions: IndexRow[] };
+  const byId = (id: string): IndexRow => {
     const row = body.sessions.find((s) => s.sessionId === id);
     assert.ok(row, `expected a row for session ${id}`);
     return row!;
@@ -344,7 +370,7 @@ test('needsYou is true only where deriveSessionAffordances derives a real afford
 
 test('modelTier threads through from status.json when present, and is null when absent', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
-  const body = (await res.json()) as { sessions: SessionIndexRow[] };
+  const body = (await res.json()) as { sessions: IndexRow[] };
   const withTier = body.sessions.find((s) => s.sessionId === INSTRUCTIONS_MODEL_TIER_SESSION);
   assert.ok(withTier);
   assert.equal(withTier!.modelTier, 'opus');
@@ -355,7 +381,7 @@ test('modelTier threads through from status.json when present, and is null when 
 
 test('href is the modern generic session-shell shape for every row', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
-  const body = (await res.json()) as { sessions: SessionIndexRow[] };
+  const body = (await res.json()) as { sessions: IndexRow[] };
   const row = body.sessions.find((s) => s.sessionId === KB_CLEANUP_SESSION);
   assert.ok(row);
   assert.equal(row!.href, `/sessions/kb-cleanup/${KB_CLEANUP_SESSION}?project=projc`);
@@ -363,7 +389,7 @@ test('href is the modern generic session-shell shape for every row', async () =>
 
 test('a symlinked session dir escaping to another project (the generic fallback branch, kb-cleanup) is never surfaced under the ATTACKER project — the victim\'s own legitimate row is unaffected', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
-  const body = (await res.json()) as { sessions: SessionIndexRow[] };
+  const body = (await res.json()) as { sessions: IndexRow[] };
   // The victim's OWN real session (a genuine dir under a genuine project)
   // legitimately appears exactly once, attributed to victimproj.
   const withSecret = body.sessions.filter((s) => s.phase === 'TOP-SECRET-AGGREGATE-ESCAPE-MARKER');
@@ -374,62 +400,4 @@ test('a symlinked session dir escaping to another project (the generic fallback 
   // into the same outcome as "session not found" (no oracle).
   const attackerRow = body.sessions.find((s) => s.project === 'attackerproj');
   assert.equal(attackerRow, undefined, 'the attacker project must contribute no row for the symlinked session');
-});
-
-// ---------------------------------------------------------------------------
-// Pure unit tests — sortAndCapSessionIndexRows (no I/O)
-// ---------------------------------------------------------------------------
-
-function row(overrides: Partial<SessionIndexRow>): SessionIndexRow {
-  return {
-    kind: 'instructions',
-    sessionId: 'fixture',
-    project: 'p',
-    phase: 'drafting',
-    terminal: false,
-    needsYou: false,
-    // W7-A2 — the three lifecycle fields every row carries.
-    state: 'working',
-    error: null,
-    idleMs: null,
-    modelTier: null,
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    href: '/sessions/instructions/fixture?project=p',
-    ...overrides,
-  };
-}
-
-test('sortAndCapSessionIndexRows: needsYou rows sort before non-needsYou rows regardless of updatedAt', () => {
-  const older = row({ sessionId: 'a', needsYou: true, updatedAt: '2020-01-01T00:00:00.000Z' });
-  const newer = row({ sessionId: 'b', needsYou: false, updatedAt: '2030-01-01T00:00:00.000Z' });
-  const sorted = sortAndCapSessionIndexRows([newer, older]);
-  assert.deepEqual(sorted.map((r) => r.sessionId), ['a', 'b']);
-});
-
-test('sortAndCapSessionIndexRows: within the same needsYou group, newest updatedAt sorts first', () => {
-  const oldest = row({ sessionId: 'a', updatedAt: '2020-01-01T00:00:00.000Z' });
-  const newest = row({ sessionId: 'b', updatedAt: '2030-01-01T00:00:00.000Z' });
-  const middle = row({ sessionId: 'c', updatedAt: '2025-01-01T00:00:00.000Z' });
-  const sorted = sortAndCapSessionIndexRows([oldest, newest, middle]);
-  assert.deepEqual(sorted.map((r) => r.sessionId), ['b', 'c', 'a']);
-});
-
-test('sortAndCapSessionIndexRows: an honest-absent ("") updatedAt sorts LAST within its needsYou group, never treated as newest', () => {
-  const absent = row({ sessionId: 'a', updatedAt: '' });
-  const real = row({ sessionId: 'b', updatedAt: '2020-01-01T00:00:00.000Z' });
-  const sorted = sortAndCapSessionIndexRows([absent, real]);
-  assert.deepEqual(sorted.map((r) => r.sessionId), ['b', 'a']);
-});
-
-test('sortAndCapSessionIndexRows: caps to the given bound', () => {
-  const rows = Array.from({ length: 10 }, (_, i) => row({ sessionId: `s${i}`, updatedAt: `2026-01-01T00:00:${String(i).padStart(2, '0')}.000Z` }));
-  const capped = sortAndCapSessionIndexRows(rows, 3);
-  assert.equal(capped.length, 3);
-  assert.deepEqual(capped.map((r) => r.sessionId), ['s9', 's8', 's7']);
-});
-
-test('sortAndCapSessionIndexRows: default cap is SESSION_INDEX_MAX_ROWS', () => {
-  const rows = Array.from({ length: SESSION_INDEX_MAX_ROWS + 5 }, (_, i) => row({ sessionId: `s${i}` }));
-  const capped = sortAndCapSessionIndexRows(rows);
-  assert.equal(capped.length, SESSION_INDEX_MAX_ROWS);
 });
