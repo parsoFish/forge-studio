@@ -50,8 +50,8 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-
-import { startBridge, writeOnboardingSession } from './ui-bridge.ts';
+import { startBridge } from './ui-bridge.ts';
+import { writeOnboardingSession } from '@forge/sessions/bridge-studio-kickoff.ts';
 import { cmdAgentDispatch } from '@forge/agents/agent-run.ts';
 import { SAFE_ID_RE } from './bridge-studio.ts';
 

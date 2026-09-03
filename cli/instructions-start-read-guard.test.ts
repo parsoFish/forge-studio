@@ -28,7 +28,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SRC = readFileSync(join(import.meta.dirname, 'ui-bridge.ts'), 'utf8');
+// M4 session-routes carve: the /api/instructions/start handler moved verbatim
+// out of cli/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING
+// gate, so it has to read the file the handler now lives in — repointing it is
+// the whole difference between a guard that still watches the ordering and one
+// that reads a file where the code no longer is and passes vacuously.
+const SRC = readFileSync(
+  join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
+  'utf8',
+);
 
 /** Extract the POST /api/instructions/start handler block: from its route match
  *  to the next handler (POST /api/instructions/brief). */

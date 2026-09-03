@@ -18,12 +18,41 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { makeRouteTable } from './routes.ts';
+import { makeRouteTable, type RouteTableDeps } from './routes.ts';
+
+/**
+ * A complete inert deps object, as a factory taking overrides.
+ *
+ * The sessions routes carve grew `RouteTableDeps` from two members to fifteen.
+ * Spelling the whole shape out at each construction would make adding a dep mean
+ * editing assertions that have nothing to do with it — and this file's point is
+ * the per-instance closures, not the shape.
+ */
+function stubDeps(over: Partial<RouteTableDeps> = {}): RouteTableDeps {
+  return {
+    ensureSessionTail: () => {},
+    broadcastKindChanged: () => {},
+    broadcastArchitectChanged: () => {},
+    broadcastInstructionsChanged: () => {},
+    broadcastProjectBrainChanged: () => {},
+    broadcastDemoChanged: () => {},
+    projectsRoot: '/tmp/projects',
+    spawnAgentTurn: () => ({ ok: true }),
+    spawnAgentDispatch: () => {},
+    spawnAgentSpecs: {},
+    safeParseJson: () => null,
+    servedFileHeaders: () => ({}),
+    dryBridgeAgentTurnMarker: () => ({}),
+    newRunStamp: () => 'stamp',
+    safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
+    ...over,
+  };
+}
 
 test('two tables built with distinct deps each call their OWN closures — two bridges never share', () => {
   const seen: string[] = [];
-  const a = makeRouteTable({ ensureSessionTail: () => seen.push('A'), broadcastKindChanged: () => seen.push('A-bc') });
-  const b = makeRouteTable({ ensureSessionTail: () => seen.push('B'), broadcastKindChanged: () => seen.push('B-bc') });
+  const a = makeRouteTable(stubDeps({ ensureSessionTail: () => void seen.push('A'), broadcastKindChanged: () => void seen.push('A-bc') }));
+  const b = makeRouteTable(stubDeps({ ensureSessionTail: () => void seen.push('B'), broadcastKindChanged: () => void seen.push('B-bc') }));
 
   assert.notEqual(a, b, 'each call must return its own table, not a shared singleton');
 
@@ -45,7 +74,7 @@ test('two tables built with distinct deps each call their OWN closures — two b
 });
 
 test('every package that needs no instance state is spread in unchanged — the tables still compose', () => {
-  const t = makeRouteTable({ ensureSessionTail: () => {}, broadcastKindChanged: () => {} });
+  const t = makeRouteTable(stubDeps());
   // One representative route per already-carved package. A drop here means the
   // constant→factory change lost a spread, which would 404 that package's whole
   // surface while every one of its own tests stayed green (§15.26: measure the
@@ -62,7 +91,7 @@ test('no two entries in the assembled table claim the same URL with the same met
   // any one package's — two of this lane's routes sit under other packages'
   // `/api/studio/{kbs,authoring}` prefixes, so "no collision" is a property of
   // the siblings' current patterns and has to be measured, not assumed.
-  const t = makeRouteTable({ ensureSessionTail: () => {}, broadcastKindChanged: () => {} });
+  const t = makeRouteTable(stubDeps());
   const probes = [
     ['GET', '/api/studio/sessions/authoring/s1'],
     ['POST', '/api/studio/sessions/authoring/s1/cancel'],

@@ -267,7 +267,7 @@ const MAX_ANSWERS_COUNT = 64;
  *  routes writing the identical `prompt.md`/`status.prompt` target with two
  *  different, hand-kept limits (one bounded, one not) is exactly the kind
  *  of quiet drift a single shared constant closes, one number, not two. */
-export const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
+export const MAX_ANSWER_FIELD_BYTES = 8 * 1024; // owned by @forge/sessions/session-answer-limits.ts; that file's test reds if these drift
 
 function answersCapReason(answers: readonly { question: string; answer: string }[]): string | null {
   if (answers.length > MAX_ANSWERS_COUNT) {
