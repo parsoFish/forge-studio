@@ -275,10 +275,28 @@ export async function handleArchitectRoutes(
         sendJson(res, 400, { error: 'invalid project' }, origin);
         return true;
       }
+      // forge-8vfn.5.51 — back-port of forge-osz / forge-4vt. The DEFAULT repo
+      // path is resolved through the containment guard rather than folded raw:
+      // `guardedSessionDir` above happens to reject a traversal `body.project`
+      // first, but it exists to validate the SESSION dir, not this field, and
+      // nothing downstream re-validates before `mkdirSync(project_repo_path)`.
+      // Relying on that ordering is what forge-osz's own comment calls "an
+      // accident of SOURCE ORDER".
+      let repoPath: string;
+      if (body.projectRepoPath) {
+        repoPath = body.projectRepoPath; // already contained by rejectStartProjectRepoPath above
+      } else {
+        const guardedProject = resolveGuardedPath(ctx.projectsRoot, [body.project]);
+        if (!guardedProject.ok) {
+          sendJson(res, 400, { error: 'invalid project' }, origin);
+          return true;
+        }
+        repoPath = guardedProject.realPath;
+      }
       const status: ArchitectStatus = {
         session_id: sessionId,
         project: body.project,
-        project_repo_path: body.projectRepoPath || join(ctx.projectsRoot, body.project),
+        project_repo_path: repoPath,
         phase: 'interviewing',
         round: 1,
         idea: body.idea,

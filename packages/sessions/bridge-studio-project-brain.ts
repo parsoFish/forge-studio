@@ -14,10 +14,9 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { join } from 'node:path';
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedReadDir, guardedReadFile, guardedWriteFile } from '@forge/kernel/path-guard.ts';
+import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
@@ -171,7 +170,24 @@ export async function handleProjectBrainRoutes(
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
-      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
+      // forge-8vfn.5.51 — back-port of forge-osz / forge-4vt. The DEFAULT repo
+      // path is resolved through the containment guard rather than folded raw:
+      // `guardedSessionDir` above happens to reject a traversal `body.project`
+      // first, but it exists to validate the SESSION dir, not this field, and
+      // nothing downstream re-validates before `mkdirSync(project_repo_path)`.
+      // Relying on that ordering is what forge-osz's own comment calls "an
+      // accident of SOURCE ORDER".
+      let repoPath: string;
+      if (body.projectRepoPath) {
+        repoPath = body.projectRepoPath; // already contained by rejectStartProjectRepoPath above
+      } else {
+        const guardedProject = resolveGuardedPath(ctx.projectsRoot, [body.project]);
+        if (!guardedProject.ok) {
+          sendJson(res, 400, { error: 'invalid project' }, origin);
+          return true;
+        }
+        repoPath = guardedProject.realPath;
+      }
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write.
       const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', sessionId);
