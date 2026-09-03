@@ -6,10 +6,13 @@
  * `lines` field, R6-04 WI-4 item 1, feeds this component directly) and
  * renders `<RunView .../>` with the resolved data — mirroring the RunPanel
  * precedent (`./RunPanel.tsx`) exactly. That client-side fetch wiring is
- * verified by `tsc` only (no jsdom / `@testing-library/react` in this repo
- * — see `../../../lib/run-panel-render.test.ts`'s header for the full
- * rationale); a real-browser journey beat (a later work item) proves it end
- * to end.
+ * verified by `tsc` only (this component has no DOM test — see
+ * `../../../lib/run-panel-render.test.ts`'s header for the full rationale);
+ * a real-browser journey beat (a later work item) proves it end to end.
+ * NOTE (M4): "no jsdom in this repo" was true when this was written and is
+ * not any more — `jsdom` is a devDependency as of the 5.10 completion PR, and
+ * `components/studio/session/kickoff-mint-before-navigate.test.ts` opts into
+ * it per-file. Nothing here changed; the parenthetical did.
  *
  * Renders the shared `RunLog` (composed, never reimplemented), the run's
  * cost, materials and ceiling provenance READ-ONLY (no editable control —
