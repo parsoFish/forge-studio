@@ -14,6 +14,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { buildCycleReport, type CycleReportInput } from './forge-metrics.ts';
 
@@ -21,7 +22,7 @@ export { buildCycleReport, type CycleReportInput };
 
 /** Build the report and write it to `_logs/<cycleId>/report.md`. */
 export function writeCycleReport(input: CycleReportInput): string {
-  const forgeRoot = resolve(input.forgeRoot ?? process.cwd());
+  const forgeRoot = resolve(input.forgeRoot ?? FORGE_ROOT);
   const md = buildCycleReport(input);
   const outPath = resolve(forgeRoot, '_logs', input.cycleId, 'report.md');
   writeFileSync(outPath, md);

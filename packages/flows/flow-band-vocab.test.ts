@@ -30,6 +30,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { FORGE_ROOT } from '@forge/kernel';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,7 +38,10 @@ import { join } from 'node:path';
 import { listFlowBandIds } from './flow-band-vocab.ts';
 
 test('listFlowBandIds(forgeRoot, "forge-develop") returns the real band vocabulary derived from node SKILL.md guards', () => {
-  const forgeRoot = process.cwd();
+  // Bead 5.53: FORGE_ROOT, not the process cwd — the band vocabulary is
+  // derived from `<root>/skills/*/SKILL.md`, so a cwd of packages/flows
+  // returned an empty vocabulary rather than failing loudly.
+  const forgeRoot = FORGE_ROOT;
   const bandIds = listFlowBandIds(forgeRoot, 'forge-develop');
   assert.deepEqual(
     [...bandIds].sort(),
