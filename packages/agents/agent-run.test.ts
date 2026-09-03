@@ -97,7 +97,6 @@ import {
   symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
@@ -590,7 +589,7 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
 // KILLS: an accidental `turnSpec:` added to a legacy row, which would bypass a
 // bespoke runner in production with every existing suite still green.
 test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the REAL session-kinds.yaml carries a turnSpec', () => {
-  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const repoRoot = FORGE_ROOT;
   const descriptors = loadSessionKinds(repoRoot);
 
   // Arrange-assert: prove the fixture premise before reading any verdict — if
@@ -642,7 +641,7 @@ test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the R
 // ===========================================================================
 
 test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reaches runInteractiveTurn and NOT AGENT_RUNNERS — driven by the REAL checked-in session-kinds.yaml through the REAL CLI entry point', async () => {
-  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const repoRoot = FORGE_ROOT;
   const realYaml = readFileSync(join(repoRoot, 'studio', 'session-kinds.yaml'), 'utf8');
   // Fixture precondition, asserted before reading any verdict.
   assert.ok(realYaml.includes('id: authoring'), 'arrange: the real, checked-in studio/session-kinds.yaml must declare an "authoring" row');
@@ -892,7 +891,7 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
 // catches that, which a must-exist-only assertion on the new directory alone
 // would miss entirely.
 test('R4-22 F4, AT-a: cmdAgentRun(["authoring", sid, "--project", p]) writes its event log to _logs/_authoring-<sid>/, NOT _logs/_interactive-authoring-<sid>/ — driven by the REAL checked-in session-kinds.yaml through the REAL CLI entry point', async () => {
-  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const repoRoot = FORGE_ROOT;
   const realYaml = readFileSync(join(repoRoot, 'studio', 'session-kinds.yaml'), 'utf8');
   // Fixture preconditions, asserted BEFORE reading any verdict.
   assert.ok(realYaml.includes('id: authoring'), 'arrange: the real, checked-in studio/session-kinds.yaml must declare an "authoring" row');

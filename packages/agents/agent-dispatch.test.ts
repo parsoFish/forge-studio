@@ -29,10 +29,9 @@ import {
   buildStandaloneRunPrompt,
 } from './agent-dispatch.ts';
 import { listAgentDefinitions, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
-import { agentCapabilityDescriptor } from './studio/derive.ts';
+import { agentCapabilityDescriptor, FORGE_ROOT } from './studio/derive.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 const ROOT = FORGE_ROOT;
 const SKILLS = join(ROOT, 'skills');
