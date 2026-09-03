@@ -100,6 +100,15 @@ export function CatalogPalette({ catalog, usedIds, onAddToZone }: Props) {
                 draggable={!isUsed}
                 data-id={item.id}
                 data-kind={g.kind}
+                // Bead `forge-8vfn.5.15`: composing a skill and fencing a tool
+                // are the two acts §3's S5 row names, and until now neither had
+                // a handle — `data-id`/`data-kind` are CSS identity, and a story
+                // beat's `press` verb resolves `[data-action=…]` and nothing
+                // else. The kind is IN the action name on purpose: adding a
+                // skill and adding a tool are different acts on the same widget,
+                // and a beat that could not tell them apart could not express
+                // the fence at all.
+                data-action={`add-${g.kind}-${item.id}`}
                 data-desc={String(item.desc ?? '')}
                 onDragStart={(e) => handleDragStart(e, item, g.kind)}
                 onDragEnd={handleDragEnd}

@@ -69,6 +69,10 @@ export function InstructionsField({ value, isDraft, pending, canGenerate, onGene
       <textarea
         id="process-input"
         className="input"
+        // Bead `forge-8vfn.5.15`: the instructions body is the third of the
+        // three required fields and, like the other two, had no `data-field` —
+        // so a story beat could press "Generate draft" but never type one.
+        data-field="instructions"
         rows={12}
         placeholder="What this agent does, step by step — what it reads, what it decides, and the artifact it produces."
         value={value}

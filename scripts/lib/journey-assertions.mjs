@@ -42,6 +42,32 @@ export const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd]';
  * @param {string} pageId  the root's `data-page` value
  * @param {string} label   the beat's check-label prefix (e.g. 'SESSIONS-IDX.2')
  */
+/**
+ * Wait for a route's own root to report `data-page-ready="true"`, swallowing
+ * the timeout so the beat proceeds and reports the real state itself.
+ *
+ * Extracted 2026-09-04 (M4-agents, bead `forge-8vfn.5.15`): this four-line
+ * `waitForFunction` was written out SEVENTEEN times in `journeys/agents.mjs`
+ * alone, each copy differing only in the page id and the timeout — an idiom
+ * repeated often enough to drift. Sixteen of the seventeen swallow the
+ * timeout; the one that deliberately THROWS (the run-view landing, which
+ * needs a hard failure) keeps its own inline form and is not converted, so
+ * this helper has exactly one behaviour and no flag.
+ *
+ * @param {import('playwright').Page} page
+ * @param {string} pageId     the root's `data-page` value
+ * @param {number} timeoutMs  the wait budget for this beat
+ */
+export async function waitPageReady(page, pageId, timeoutMs) {
+  await page
+    .waitForFunction(
+      (id) => document.querySelector(`[data-page="${id}"]`)?.getAttribute('data-page-ready') === 'true',
+      pageId,
+      { timeout: timeoutMs },
+    )
+    .catch(() => {});
+}
+
 export async function checkHonestPillarRead(page, check, pageId, label) {
   const r = await page.evaluate((id) => ({
     fetch: document.querySelector(`[data-page="${id}"]`)?.getAttribute('data-fetch-status') ?? '(absent)',

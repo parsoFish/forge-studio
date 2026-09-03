@@ -494,7 +494,7 @@ function collapseWhitespace(text: string): string {
 test('AT-9: the moved instruction prose has LEFT kinds/instructions.ts and now lives in SKILL.md (private loadSkillPrompt is gone)', () => {
   const runnerSrc = readFileSync(INSTRUCTIONS_KIND_TS, 'utf8');
   const skillMd = readFileSync(
-    join(import.meta.dirname, '..', '..', 'skills', 'instructions-creator', 'SKILL.md'),
+    join(FORGE_ROOT, 'skills', 'instructions-creator', 'SKILL.md'),
     'utf8',
   );
   const collapsedRunner = collapseWhitespace(runnerSrc);
@@ -789,7 +789,7 @@ const FROZEN_SENTENCES_BASE_C45E3892: FrozenSentence[] = [
 
 test("R2-AT-2: every distinct pre-refactor instruction sentence (SKILL.md + both instructions-runner.ts prompt arrays, base c45e3892) is still reachable in today's SKILL.md", () => {
   const skillMd = readFileSync(
-    join(import.meta.dirname, '..', '..', 'skills', 'instructions-creator', 'SKILL.md'),
+    join(FORGE_ROOT, 'skills', 'instructions-creator', 'SKILL.md'),
     'utf8',
   );
   const collapsedSkillMd = collapseWhitespace(skillMd);
