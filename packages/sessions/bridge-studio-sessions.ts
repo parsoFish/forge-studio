@@ -46,7 +46,7 @@
  * `<projectsRoot>/<project>/_<kind>/<sessionId>` — `_<kind>` built from
  * `descriptor.id`, the same shape `architectSessionDir` / `instructionsSessionDir`
  * / `projectBrainSessionDir` already use (cli/ui-bridge.ts:1416,
- * packages/sessions/instructions-runner.ts:142, packages/sessions/kinds/project-brain.ts:77).
+ * packages/sessions/kinds/instructions.ts, kinds/project-brain.ts).
  *
  * Security (the part reviewers attack hardest — a standing brief after 3
  * consecutive lexical-check failures in this campaign):
@@ -124,7 +124,7 @@ import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from '@forge/kn
 import { MAX_SKILL_ID_LENGTH } from '@forge/agents/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, deriveSessionAffordances, type SessionKindDescriptor } from './studio/session-kinds.ts';
-import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from './studio/session-transcript.ts';
+import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 import { resolveGuardedPath } from '@forge/kernel';
@@ -164,6 +164,10 @@ const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
  *  forge-2ee's "no consumer reads the authoring spine's events dir" half. */
 export type SessionsRouteContext = StudioContext & {
   ensureSessionTail: (kind: string, sessionId: string) => void;
+  /** Injected `parseManifest` (flows is rank 5). Only the `roadmap-draft`
+   *  artifact uses it, and REFUSES without it — an empty draft would read as
+   *  "produced nothing" rather than "could not be read" (ruling 79/81). */
+  parseManifest?: ParseManifestPort;
 };
 
 // ---------------------------------------------------------------------------
@@ -733,7 +737,7 @@ function finalizedObjectExists(
     // `agents-md`/`demo` name the PROJECT they landed in (instructions writes
     // AGENTS.md at the project repo root; demo's lock lands at
     // .forge/demo/demo.lock.json — DEMO_LOCK_REL_PATH,
-    // packages/sessions/demo-builder-runner.ts, hand-copied as segments here the
+    // packages/sessions/kinds/demo-builder.ts, hand-copied as segments here the
     // same way this module hand-copies AWAITING_ANSWERS_PHASE).
     case 'agents-md': return guarded(opts.projectsRoot, [id, 'AGENTS.md']);
     case 'demo': return guarded(opts.projectsRoot, [id, '.forge', 'demo', 'demo.lock.json']);
@@ -919,14 +923,14 @@ export async function handleStudioSessionsRoutes(
         // that REQUIRE caller-supplied data get honest empties: a legacy
         // onboarding/kb-cleanup session's stages and findings describe live
         // project/KB state that this dead session neither produced nor owns.
-        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: [], cleanupFindings: [] });
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: [], cleanupFindings: [], parseManifest: ctx.parseManifest });
       } else if (descriptor.artifact.kind === 'contract-buildout') {
         const contractResult = deriveContractStages({ forgeRoot: ctx.forgeRoot, projectsRoot, projectId: project });
         if (!contractResult.ok) {
           sendJson(res, 409, { ok: false, error: contractResult.error.message }, origin);
           return true;
         }
-        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: contractResult.rows });
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: contractResult.rows, parseManifest: ctx.parseManifest });
       } else if (descriptor.artifact.kind === 'cleanup-plan') {
         // R4-19-F2 — the kb-cleanup session needs a LIVE, KB-scoped
         // brain-lint pass (derive-don't-store: the plan file on disk only
@@ -962,9 +966,9 @@ export async function handleStudioSessionsRoutes(
         // read's own success.
         const brainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
         const cleanupScan = brainDir !== null ? { forgeRoot: ctx.forgeRoot, brainDir } : undefined;
-        artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings, cleanupScan });
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings, cleanupScan, parseManifest: ctx.parseManifest });
       } else {
-        artifact = deriveSessionArtifact({ descriptor, sessionDir });
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, parseManifest: ctx.parseManifest });
       }
     } catch (err) {
       // A reserved (or otherwise unrecognised) artifact kind — an explicit

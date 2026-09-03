@@ -40,6 +40,9 @@ import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capabili
  * deps type is `apps/forge/routes.ts`'s parameter.
  */
 export type SessionsRouteDeps = {
+  /** `parseManifest` from `packages/flows` (rank 5), bound at `apps/forge`.
+   *  The `roadmap-draft` artifact kind refuses without it (M4 ruling 79/81). */
+  parseManifest?: import('./studio/session-transcript.ts').ParseManifestPort;
   /** Idempotently start live-tailing a session kind's event log on this
    *  bridge's WS fan-out. A host effect: there is nothing to derive it from. */
   readonly ensureSessionTail: (kind: string, sessionId: string) => void;
@@ -93,6 +96,7 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     // It is per-bridge state, so it arrives the same way the closures do.
     projectsRoot: deps.projectsRoot,
     readBody: () => ctx.readBody(),
+    parseManifest: deps.parseManifest,
     ensureSessionTail: deps.ensureSessionTail,
     broadcastArchitectChanged: deps.broadcastArchitectChanged,
     broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
@@ -398,7 +402,7 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
         handleStudioSessionsRoutes(
           req,
           res,
-          { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: deps.ensureSessionTail },
+          { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: deps.ensureSessionTail, parseManifest: deps.parseManifest },
           url,
           method,
         ),

@@ -34,6 +34,7 @@
  */
 
 import { test } from 'node:test';
+import { stubArchitectManifestPorts } from './tests/architect-ports-stub.ts';
 import assert from 'node:assert/strict';
 import {
   mkdirSync,
@@ -262,7 +263,7 @@ test('AT-3 (loaded-AND-USED + per-turn selection): the interview prompt carries 
     const { queryFn, prompts } = makeOrderedQueryFn([
       { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
     ]);
-    await runArchitectTurn({
+    await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     });
@@ -277,7 +278,7 @@ test('AT-3 (loaded-AND-USED + per-turn selection): the interview prompt carries 
   {
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'drafting' });
     const { queryFn, prompts } = makeOrderedQueryFn([validDraftOutput()]);
-    await runArchitectTurn({
+    await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     });
@@ -313,7 +314,7 @@ test('AT-4 (fail-loud): a marker-less skill fixture makes the turn THROW, naming
   ]);
 
   await assert.rejects(
-    () => runArchitectTurn({
+    () => runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath,
       logger: logger(logsRoot, sessionId),
     }),
@@ -386,7 +387,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
     const { queryFn, prompts } = makeOrderedQueryFn([
       { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
     ]);
-    await runArchitectTurn({
+    await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
@@ -398,7 +399,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
   {
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'exploring' });
     const { queryFn, prompts } = makeOrderedQueryFn([validExploreOutput(), validDraftOutput()]);
-    await runArchitectTurn({
+    await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
@@ -409,7 +410,7 @@ test('AT-5 (HAZARD PIN — ADR-010 brain-first injection survives): the brain-na
   {
     const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({ phase: 'drafting' });
     const { queryFn, prompts } = makeOrderedQueryFn([validDraftOutput()]);
-    await runArchitectTurn({
+    await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn, skillPromptPath, brainCwd,
       logger: logger(logsRoot, sessionId),
     });
@@ -440,7 +441,7 @@ test('AT-6 (HAZARD PIN — fail-open exploring): an explore step whose structure
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
     sessionId, projectRoot, logsRoot, queueRoot, queryFn,
     logger: logger(logsRoot, sessionId),
   });
@@ -465,7 +466,7 @@ test('AT-7 (HAZARD PIN — forced-emit retry): empty first draft triggers exactl
     ];
     const { queryFn, prompts } = makeOrderedQueryFn(responses);
 
-    const result = await runArchitectTurn({
+    const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
       sessionId, projectRoot, logsRoot, queueRoot, queryFn,
       logger: logger(logsRoot, sessionId),
     });
@@ -499,7 +500,7 @@ test('AT-7 (HAZARD PIN — forced-emit retry): empty first draft triggers exactl
     };
 
     await assert.rejects(
-      () => runArchitectTurn({
+      () => runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
         sessionId, projectRoot, logsRoot, queueRoot, queryFn,
         logger: logger(logsRoot, sessionId),
       }),
@@ -536,7 +537,7 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: stubArchitectManifestPorts(),
     sessionId, projectRoot, logsRoot, queueRoot, queryFn,
     logger: logger(logsRoot, sessionId),
   });

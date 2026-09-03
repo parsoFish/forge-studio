@@ -33,7 +33,14 @@ import {
   type QueryFn,
 } from '../../kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows/manifest.ts';
+import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import type { ArchitectManifestPorts } from '../../kinds/architect-ports.ts';
+
+/** The REAL functions: this file asserts what `promoteManifests` actually wrote
+ *  parses back, so a stub would let it agree with a format the product never
+ *  produces. That is why it keeps its `@forge/flows` row deliberately. */
+const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests };
 import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
 
 // ---------------------------------------------------------------------------
@@ -119,7 +126,7 @@ test('interviewing → needs answers: writes questions.json + status awaiting-an
     },
   });
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -162,7 +169,7 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
     },
   });
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -224,7 +231,7 @@ test('F-W5-1: structured interview/draft steps must NOT run the SDK in plan mode
     }
     return gen();
   };
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -288,7 +295,7 @@ test('finalizing: bakes resolved decisions + promotes manifest to _queue/pending
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -341,7 +348,7 @@ test('draft: empty initiatives triggers a forced-emit retry that succeeds → aw
     return gen();
   };
 
-  const result = await runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts, sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   assert.equal(drafts, 2, 'the draft ran twice: initial (empty) + forced-emit retry');
@@ -361,7 +368,7 @@ test('draft: still-empty after the forced-emit retry throws a clear, recoverable
   };
 
   await assert.rejects(
-    () => runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runArchitectTurn({ manifestPorts: realManifestPorts, sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /no initiatives after a forced-emit retry/,
   );
   assert.equal(drafts, 2, 'it tried the initial draft + one forced-emit retry before giving up');
@@ -404,7 +411,7 @@ test('drafting: architect emits cross-initiative build order → manifest depend
     return gen();
   };
 
-  await runArchitectTurn({
+  await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -474,7 +481,7 @@ test('finalize is DETERMINISTIC: promotes the approved draft + appends decisions
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -543,7 +550,7 @@ test('completeness critic: findings block promotion and reset the session to awa
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -580,7 +587,7 @@ test('completeness critic: a clean pass (zero findings) promotes normally and st
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -617,7 +624,7 @@ test('completeness critic: a re-approve after findings SKIPS the critic and prom
     return gen();
   };
 
-  const firstResult = await runArchitectTurn({
+  const firstResult = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -637,7 +644,7 @@ test('completeness critic: a re-approve after findings SKIPS the critic and prom
     throw new Error('the critic must NOT be called again on a second finalize turn');
   };
 
-  const secondResult = await runArchitectTurn({
+  const secondResult = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -662,7 +669,7 @@ test('completeness critic: a crash is advisory — finalize still promotes and a
     throw new Error('sdk unavailable');
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -709,7 +716,7 @@ test('completeness critic: the one-shot flag is durable — a promotion crash af
   writeFileSync(blockedQueueRoot, 'not a directory');
 
   await assert.rejects(() =>
-    runArchitectTurn({
+    runArchitectTurn({ manifestPorts: realManifestPorts,
       sessionId,
       projectRoot,
       logsRoot,
@@ -728,7 +735,7 @@ test('completeness critic: the one-shot flag is durable — a promotion crash af
   );
 
   // Retry the finalize turn with a working queue — the critic must NOT re-run.
-  const retry = await runArchitectTurn({
+  const retry = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -774,7 +781,7 @@ test('completeness critic: oversized manifest bodies are truncated in the critic
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -799,7 +806,7 @@ test('awaiting-answers turn is a no-op (bridge owns the wait state)', async () =
   const { projectRoot, logsRoot, queueRoot, sessionId } = setupSession({
     phase: 'awaiting-answers',
   });
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -819,7 +826,7 @@ test('an unstarted session throws a clear error', async () => {
   // no-status message. Both are the "clear error for an unstarted session" this
   // test guards — missing and escaped deliberately collapse (no oracle).
   await assert.rejects(
-    runArchitectTurn({ sessionId: 'nope', projectRoot: join(root, 'p'), queryFn: makeQueryFn({}) }),
+    runArchitectTurn({ manifestPorts: realManifestPorts, sessionId: 'nope', projectRoot: join(root, 'p'), queryFn: makeQueryFn({}) }),
     /no status\.json|failed containment/,
   );
 });
@@ -865,7 +872,7 @@ test('runner streams tool_use events from the agent stream (drives the architect
     return gen();
   };
 
-  await runArchitectTurn({
+  await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -938,7 +945,7 @@ test('W6-B1: runner forwards thinking + coalesced redacted_thinking to the event
     return gen();
   };
 
-  await runArchitectTurn({
+  await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId),
   });
 
@@ -971,7 +978,7 @@ test('ARCH-1: runner emits a brain-query event on every turn', async () => {
     interview: { done: false, questions: [{ question: 'Q?', header: 'hdr', options: [{ label: 'A', description: 'a' }] }] },
   });
 
-  await runArchitectTurn({
+  await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot,
     queryFn,
     logger: logger(logsRoot, sessionId),
@@ -1025,7 +1032,7 @@ test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot,
     queryFn,
     logger: logger(logsRoot, sessionId),
@@ -1051,7 +1058,7 @@ test('ARCH-1: draft turn populates brain_context from agent brain/ reads', async
 test('ARCH-6: rejected turn archives the session dir and does not throw', async () => {
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ phase: 'rejected' });
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot,
     queryFn: makeQueryFn({}),
     logger: logger(logsRoot, sessionId),
@@ -1076,7 +1083,7 @@ test('ARCH-6: rejected turn on already-archived session does not throw (idempote
   renameSync(sessionDir, join(archivedRoot, sessionId));
 
   // Should not throw — archiveSessionDir error is swallowed.
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot,
     queryFn: makeQueryFn({}),
     logger: logger(logsRoot, sessionId),
@@ -1206,7 +1213,7 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
     return gen();
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -1282,7 +1289,7 @@ async function driveOneInterviewTurn(sessionId: string, projectRoot: string, log
   );
   let capturedModel: string | undefined;
   const queryFn = makeCapturingQueryFn((m) => { capturedModel = m; });
-  const result = await runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts, sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
   assert.equal(result.phase, 'awaiting-verdict');
   return capturedModel;
 }
@@ -1307,7 +1314,7 @@ test('status.modelTier mismatching the fixed tier throws naming the value and th
   );
   const queryFn = makeCapturingQueryFn(() => {});
   await assert.rejects(
-    () => runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    () => runArchitectTurn({ manifestPorts: realManifestPorts, sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /requested model tier "opus".*allowed tier\(s\): sonnet/,
   );
 });
@@ -1353,7 +1360,7 @@ test('exploring stage: findings land in edge-cases.json, feed the draft prompt, 
     return inner(args);
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId,
     projectRoot,
     logsRoot,
@@ -1407,7 +1414,7 @@ test('exploring stage fails open: an empty exploration proceeds to draft with no
     return inner(args);
   };
 
-  const result = await runArchitectTurn({
+  const result = await runArchitectTurn({ manifestPorts: realManifestPorts,
     sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId),
   });
 
