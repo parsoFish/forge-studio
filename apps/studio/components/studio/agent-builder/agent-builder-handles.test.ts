@@ -214,7 +214,8 @@ test('adding two skills through their handles moves the skill zone to count=2 an
   await press('add-skill-brain-query');
   await press('add-skill-webapp-testing');
 
-  // S5 beats 4 and 6: the same claim the story makes, on the same elements.
+  // S5 beats 5 and 7 (4 and 6 before the story's amendment 1): the same
+  // claim the story makes, on the same elements.
   expect(q('[data-accepts="skill"]')?.getAttribute('data-count')).toBe('2');
   expect(q('[data-accepts="mcp"]')?.getAttribute('data-count')).toBe('0');
 
@@ -292,7 +293,8 @@ test('the runtime pickers and the run panel carry the remaining named handles', 
 /**
  * MEASURED FOR THE S5 PARK, not a handle assertion.
  *
- * S5 beat 8 asserts `data-ready-count="6"`. From the Blank starter the six
+ * S5 beat 9 (beat 8 before the story's amendment 1) asserts
+ * `data-ready-count="6"`. From the Blank starter the six
  * checks are purpose / skill / guard / process / interactivity / runtime, and
  * `BLANK_STATE` already ships `guards: ['event-log']`, an interactivity
  * sentence and a model — so typing a purpose and composing one skill takes the
