@@ -648,7 +648,7 @@ export default function AgentBuilderPage() {
                 <div className="hex-glyph" aria-hidden />
                 <input
                   className="agent-name-input"
-                  type="text"
+                  type="text" data-field="agent-name"
                   aria-label="Agent name"
                   placeholder="Agent name…"
                   spellCheck={false}
@@ -681,7 +681,7 @@ export default function AgentBuilderPage() {
               <input
                 id="purpose-input"
                 className="input"
-                type="text"
+                type="text" data-field="purpose"
                 placeholder="What does this agent exist to accomplish?"
                 value={state.purpose}
                 onChange={(e) => patchState({ purpose: e.target.value })}
@@ -704,7 +704,7 @@ export default function AgentBuilderPage() {
               <label className="field-label" htmlFor="interactivity-input">Human Interactivity</label>
               <textarea
                 id="interactivity-input"
-                className="input"
+                className="input" data-field="interactivity"
                 rows={2}
                 placeholder={`e.g. "Autonomous; a human verdict gate decides approve or send-back."`}
                 value={state.interactivity}

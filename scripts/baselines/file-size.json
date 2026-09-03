@@ -81,7 +81,7 @@
   "packages/sessions/tests/integration/architect-runner.test.ts": 1427,
   "scripts/check-raw-fs-guarded.mjs": 1790,
   "scripts/check-raw-fs-guarded.test.ts": 1036,
-  "scripts/journeys/agents.mjs": 2252,
+  "scripts/journeys/agents.mjs": 2230,
   "scripts/journeys/community.mjs": 1599,
   "scripts/journeys/flows-author.mjs": 846,
   "scripts/journeys/flows-run.mjs": 2267,

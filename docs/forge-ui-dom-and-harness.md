@@ -2029,6 +2029,37 @@ is what this contract reads — but it cannot be the only distinguisher.
   actually present, each vocabulary verbatim (agents-32).
   `/agents/new` shows the curated starter picker first
   (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
+  **Bead `forge-8vfn.5.15` — the builder's STORY handles (M4, 2026-09-04).**
+  A story beat's two verbs resolve `[data-field="…"]` (`fill`) and
+  `[data-action="…"]` (`press`) and nothing else
+  (`scripts/stories/beats.mjs`); every other attribute on this page is CSS
+  identity that only a journey's `page.locator` can reach. Until this bead the
+  builder declared **zero `data-field`** across its ten inputs and exactly four
+  `data-action`s, so naming the agent, composing its skills, fencing its tools
+  and capping its spend — the four acts 1.0.md §3's S5 row names — had no
+  handle at all, and S5 stood red at beat 3. The handles below are ADDITIVE:
+  every pre-existing attribute (`data-starter-option`, `data-id`/`data-kind`,
+  `data-sdk-id`, `data-model-id`, `data-loop-strategy`, `data-access`,
+  `data-run-project`, `data-run-cost-ceiling`) keeps its exact value, because
+  the journeys query by those and the story presses by these.
+  - `data-field` — `agent-name` (the header input), `purpose`
+    (`#purpose-input`), `instructions` (`#process-input`), `interactivity`
+    (`#interactivity-input`), `run-project` (the `<select>`, also
+    `[data-run-project]`), `run-cost-ceiling` (the `<input type="number">`,
+    also `[data-run-cost-ceiling]`).
+  - `data-action` — `starter-<id>` on every starter option (`starter-blank`
+    included); `add-<kind>-<id>` on every catalog chip, the KIND in the name so
+    composing a skill and fencing a tool are different acts on the same widget;
+    `sdk-<id>`, `model-<id>`, `loop-<id>`, `access-<id>` on the runtime picks.
+  - **Order is load-bearing, and it is why `starter-<id>` matters most.**
+    `/agents/new` mounts the starter picker ALONE — the purpose field, the
+    instructions body and `[data-action="toggle-advanced"]` do not exist in the
+    document until a starter is chosen, which is why S5 beat 4 read
+    "the control is absent" rather than "slow". The agent-name field and the
+    Run column DO render on that first frame (the header and
+    `aside.col-right` sit outside the picker branch). Staged, measured and
+    pinned by `components/studio/agent-builder/agent-builder-handles.test.ts`
+    (jsdom; every handle mutation-proved red).
   **W7-B4 agent lifecycle (agents-09/18/22/28).** The save from `/agents/new`
   carries `create: true` — a name normalising to an existing slug **409s**
   (`agent "<slug>" already exists…`) instead of silently overwriting that
