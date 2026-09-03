@@ -35,7 +35,8 @@ import yaml from 'js-yaml';
 
 import { WebSocket } from 'ws';
 
-import { startBridge, writeAuthoringSession } from './ui-bridge.ts';
+import { startBridge } from './ui-bridge.ts';
+import { writeAuthoringSession } from '@forge/sessions/bridge-studio-kickoff.ts'; // carved with the four minting routes (M4)
 
 let forgeRoot: string;
 let url: string;

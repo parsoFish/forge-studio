@@ -72,6 +72,18 @@ export type SessionHostSurface = {
   ) => unknown;
   /** `SPAWN_AGENT_SPECS` — the kind to agent-id/logPrefix mapping whose other
    *  side is pinned by `session-tail-kind-parity.test.ts`. */
+  /** `spawnAgentDispatch` — the generic studio-agent dispatch the onboarding
+   *  kickoff uses instead of a per-kind turn spawn. */
+  readonly spawnAgentDispatch: (
+    forgeRoot: string,
+    slug: string,
+    runId: string,
+    project?: string,
+    inputs?: Record<string, string>,
+    sessionDir?: string,
+    costCeilingUsd?: number,
+    projectsRoot?: string,
+  ) => void;
   readonly spawnAgentSpecs: Readonly<Record<string, { readonly argvPrefix: readonly string[]; readonly logPrefix: string }>>;
   /** `safeParseJson` — still called by `handleReflect` in the host. */
   readonly safeParseJson: <T>(raw: string) => T | null;
@@ -443,7 +455,7 @@ export function newArchitectSessionId(): string {
   const entropy = randomBytes(4).toString('hex');
   return `${stamp}-${entropy}`;
 }
-function invalidGenerationProjectReason(id: string): string | null {
+export function invalidGenerationProjectReason(id: string): string | null {
   if (id.length > MAX_EXACT_ID_LENGTH) {
     return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_EXACT_ID_LENGTH}-character length limit`;
   }

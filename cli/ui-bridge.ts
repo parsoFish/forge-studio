@@ -28,10 +28,8 @@ import {
   readFileSync,
   readSync,
   readdirSync,
-  realpathSync,
   statSync,
   watch as fsWatch,
-  writeFileSync,
   type FSWatcher,
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -69,13 +67,7 @@ import {
   pathOnly,
   parseQuery,
 } from './bridge-studio.ts';
-import { KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
-import {
-  loadKbDescriptors,
-  computeAgentCleanupFindings,
-  KB_SEEDING_ANCHOR_PREFIX,
-} from '@forge/knowledge/bridge-studio-kbs.ts';
-import { deriveKbActiveJob, activeJobReason } from '@forge/knowledge/kb-job-state.ts';
+import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
@@ -127,7 +119,6 @@ import {
   type DemoBuilderStatus,
 } from '@forge/sessions/demo-builder-runner.ts';
 import { safeReadFileInSession } from '@forge/sessions/studio/session-transcript.ts';
-import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
 import {
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
@@ -661,6 +652,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     listInstructionsSessions,
     broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
     listProjectBrainSessions,
+    spawnAgentDispatch,
+    newRunStamp,
+    safeInputKeyRe: SAFE_INPUT_KEY_RE,
     projectsRoot,
     // The spawn/serve surface the carved session routes still need from here.
     // These stay host-owned deliberately: `safeParseJson` is still called by
@@ -3405,6 +3399,18 @@ async function handleHttp(
 
 // ---- Architect routes (ADR 020) -------------------------------------------
 
+/** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
+const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+
+/** Timestamp stamp + short random suffix for a generated run id
+ *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
+ *  dispatches of the same slug in the same millisecond (a programmatic driver,
+ *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
+function newRunStamp(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 /** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
  *  is prepended to `<sid> --project <project>` to build the full argv passed
  *  to `orchestrator/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
@@ -3535,8 +3541,6 @@ const SAFE_AGENT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
  *  one project-id rule (`PROJECT_ID_RE`, orchestrator/studio/validate.ts) —
  *  aliased here so the existing call site reads unchanged. */
 const SAFE_PROJECT_NAME_RE = PROJECT_ID_RE;
-/** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
-const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 /** R6-04-F2 WI-1 contract point 3 — a `materials:` upload's `filename` must
  *  be a single safe path-segment NAME: alnum-first (bans dotfiles like
  *  `.env` and the `..foo`/`.`/`..` shapes outright — no traversal token is
@@ -3721,12 +3725,6 @@ const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 const MAX_GENERATION_PROJECT_LENGTH = MAX_EXACT_ID_LENGTH;
 const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
-/** R4-21 (T3) — the authoring session's initial free-text description
- *  (`POST /api/studio/authoring/start`'s `prompt`, written verbatim to
- *  `prompt.md`). A generous bound on an operator-typed field, no different
- *  in spirit from every other length-capped text input in this file — just
- *  named for its own route rather than reusing an unrelated cap. */
-const MAX_AUTHORING_PROMPT_LENGTH = 4000;
 
 function invalidGenerationProjectReason(id: string): string | null {
   if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
@@ -3831,14 +3829,6 @@ function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId:
   return { ok: true, dir: guarded.realPath };
 }
 
-/** Timestamp stamp + short random suffix for a generated run id
- *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
- *  dispatches of the same slug in the same millisecond (a programmatic driver,
- *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
-function newRunStamp(): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
-}
 
 /**
  * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
@@ -4002,49 +3992,7 @@ function guardedSessionDir(
   return guarded.ok ? guarded.realPath : null;
 }
 
-/** R4-17, D8 — renders the operator's own onboarding-start `inputs` verbatim
- *  as `prompt.md`'s body. No fabricated interview: form field labels are
- *  never re-cast as agent questions, mirroring the honest single-turn shape
- *  project-brain's `prompt.md` already has. */
-/**
- * W8-B3 (operator note ON-5) — the kb-cleanup session's OPENING OPERATOR TURN.
- *
- * ON-5: "there is no transcript for many of these sessions". Measured: a
- * kb-cleanup session's dir held only `status.json` until an operator verdict
- * landed, so `deriveSessionTranscript` honestly found nothing and the session
- * opened on an empty pane — even though the operator HAD made a request (they
- * clicked "Cleanup plan" on a specific KB's health panel). That request was
- * real input and simply was not written down.
- *
- * This records the request, at the moment it was made, in the same shape and
- * for the same reason `renderOnboardingPrompt` (below) records an onboarding
- * form: the operator's own inputs, verbatim, never re-cast as a fabricated
- * agent question (D8).
- *
- * The finding count is stamped "at kickoff" ON PURPOSE. It is a HISTORICAL
- * fact about the request, not a status field: the cleanup-plan artifact still
- * re-derives findings live from a fresh scan at read time
- * (`deriveCleanupPlan`), and nothing must ever read this line back as current
- * — see the `findings` comment on the start route itself.
- */
-function renderKbCleanupPrompt(kbId: string, binding: { kind: string; ref?: string }, findingCount: number): string {
-  const target = binding.ref === undefined ? binding.kind : `${binding.kind} ${binding.ref}`;
-  return [
-    `Clean up the knowledge base \`${kbId}\` (${target}).`,
-    '',
-    `Requested from that KB's health panel with ${findingCount} agent-tier finding${findingCount === 1 ? '' : 's'} open at kickoff.`,
-    'Draft a cleanup plan for review; nothing is applied without an explicit approval.',
-    '',
-  ].join('\n');
-}
 
-function renderOnboardingPrompt(inputs: Record<string, string>): string {
-  const keys = Object.keys(inputs);
-  if (keys.length === 0) return '# Onboarding inputs\n\n(no inputs provided)\n';
-  const lines = ['# Onboarding inputs', ''];
-  for (const k of keys) lines.push(`- ${k}: ${inputs[k]}`);
-  return lines.join('\n') + '\n';
-}
 
 /**
  * R4-16 PIN 4/5 (SEC-02, forge-d1f) — the COMPLETE set of `/start`-family
@@ -4417,128 +4365,7 @@ function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
   return out;
 }
 
-/**
- * R4-17 round-3 BLOCKER pin 5, item 1 — create the onboarding session's own
- * directory and write its two files (`status.json`, `prompt.md`), extracted
- * out of the `POST /api/studio/onboarding/start` route body into its own
- * EXPORTED function taking an EXPLICIT `sessionId`. Exists so the exclusive-
- * create defences below (closes 1 and 2) can be exercised directly against a
- * KNOWN id — once `newArchitectSessionId()` carries real entropy (close 3,
- * that function's own docstring), an external caller can no longer reliably
- * pre-plant a colliding directory to exercise closes 1/2 THROUGH the route
- * at all. The round-3 test file discloses exactly this: AT-13/14/15's
- * assertions stay true post-fix, but only vacuously, once the id is
- * unguessable — this export is the seam a follow-up unit test (owned by
- * whoever picks that up) would call directly with a fixed id instead.
- *
- * THREE independent closes (T2 ruling — a defence that only works because
- * another one also works is one defence, not two):
- *   1. `mkdirSync(sessionDir)` with NO `recursive` — a pre-existing entry at
- *      this exact path (a planted symlink OR a real, empty directory an
- *      attacker pre-staked) throws EEXIST rather than being silently reused.
- *   2. Both leaf writes use the exclusive create flag (`{flag:'wx'}`, i.e.
- *      `O_CREAT|O_EXCL`) — an existing path at the leaf, symlink included,
- *      fails the open() with EEXIST instead of following the symlink and
- *      writing through it.
- *   3. `newArchitectSessionId()` (the id this function's callers pass in)
- *      now carries real entropy — see its own docstring, above.
- *
- * `onboardingParent` MUST already be the caller's realpath-verified,
- * contained `_onboarding` directory (the route verifies this BEFORE calling
- * in) — this function does not re-derive that; it only guards the ONE new
- * segment (`sessionId`) joined onto it. Since `sessionId` is required to
- * match `SAFE_ID_RE` (no `/`, no `..`, no leading `.`) it is always a single
- * path segment, so `join(onboardingParent, sessionId)` cannot itself escape
- * `onboardingParent` — "validating a root does not validate what you write
- * beneath it" (this file's round-2 lesson, applied one level deeper again;
- * here the id is generated/validated rather than request-derived, so the
- * escape vector this closes is TOCTOU/guessing, not path injection).
- */
-export function writeOnboardingSession(
-  onboardingParent: string,
-  sessionId: string,
-  project: string,
-  runId: string,
-  inputs: Record<string, string>,
-): { sessionDir: string } {
-  if (!SAFE_ID_RE.test(sessionId)) {
-    throw new Error(`invalid onboarding sessionId: ${JSON.stringify(sessionId)}`);
-  }
-  const sessionDir = join(onboardingParent, sessionId);
-  // Close 1: exclusive directory CREATE. No `recursive` — a pre-existing
-  // entry at this exact path is a hard EEXIST error, never silently reused.
-  mkdirSync(sessionDir);
-  writeFileSync(
-    join(sessionDir, 'status.json'),
-    JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
-    { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
-  );
-  // D8 — no fabricated interview: prompt.md renders the operator's own
-  // inputs verbatim, exactly as project-brain's honestly-one-turn prompt
-  // does; form field labels are never re-cast as agent questions.
-  writeFileSync(join(sessionDir, 'prompt.md'), renderOnboardingPrompt(inputs), { encoding: 'utf8', flag: 'wx' });
-  return { sessionDir };
-}
 
-/**
- * R4-21 (T3, BLOCKER-2 fix) — create the authoring session's own directory
- * and write its two files (`status.json`, `prompt.md`). Byte-for-byte the
- * SAME three independent closes as `writeOnboardingSession`, directly above
- * (exclusive dir create, exclusive leaf writes, a server-generated
- * `sessionId`) — see that function's own docstring for the full rationale;
- * not restated here. The only difference is the seed content: one free-text
- * `prompt` (the operator's initial description of the skill/hook to build)
- * instead of a multi-field `inputs` record, written verbatim — no fabricated
- * interview question, same D8 rationale `renderOnboardingPrompt` documents.
- *
- * R4-21 phase 2, WI-2: `prompt` is ALSO written INTO `status.json` (alongside
- * `phase`/`project`/`runId`/`startedAt`), not just into `prompt.md`. Verified
- * by reading `buildTurnPrompt` (`orchestrator/interactive-runner.ts`): the
- * generic spine composes its turn prompt from the SKILL.md + the phase row +
- * a JSON dump of `status.json` — it never reads `prompt.md`. Without this,
- * the operator's description of what to build is silently dropped and the
- * agent drafts from nothing. `prompt.md` is kept too — it stays the
- * operator-visible artifact the session's file-package/transcript pane reads.
- */
-export function writeAuthoringSession(
-  authoringParent: string,
-  sessionId: string,
-  project: string,
-  runId: string,
-  prompt: string,
-  /** ADR-043 §3 amendment (wave-6 kickoff model-tier seam): already validated
-   *  by the caller (`resolveKickoffModelTier` against the real creation-agent
-   *  SKILL.md envelope) before this ever runs. Absent ⇒ unchanged default
-   *  behavior — the key is omitted from status.json entirely, not written
-   *  as `undefined`. */
-  modelTier?: ModelTier,
-): { sessionDir: string } {
-  if (!SAFE_ID_RE.test(sessionId)) {
-    throw new Error(`invalid authoring sessionId: ${JSON.stringify(sessionId)}`);
-  }
-  const sessionDir = join(authoringParent, sessionId);
-  // Close 1: exclusive directory CREATE. No `recursive` — a pre-existing
-  // entry at this exact path is a hard EEXIST error, never silently reused.
-  mkdirSync(sessionDir);
-  writeFileSync(
-    join(sessionDir, 'status.json'),
-    JSON.stringify(
-      {
-        phase: 'analyzing',
-        project,
-        runId,
-        prompt,
-        startedAt: new Date().toISOString(),
-        ...(modelTier ? { modelTier } : {}),
-      },
-      null,
-      2,
-    ),
-    { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
-  );
-  writeFileSync(join(sessionDir, 'prompt.md'), `${prompt}\n`, { encoding: 'utf8', flag: 'wx' });
-  return { sessionDir };
-}
 
 /** Returns true if the request was a demo-builder route (and was handled). */
 async function handleDemoBuilder(
@@ -4883,460 +4710,6 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/studio/onboarding/start {project, inputs?} — R4-17, the
-  // onboarding session's kickoff route.
-  //
-  // D5 (BINDING — the headline finding this route's whole shape answers):
-  // the campaign's recurring defect family is a route that accepts a
-  // caller-supplied repo-path field and never re-validates it before using it
-  // as a write/spawn target (SEC-02, SEC-03, the `/start`-family
-  // `projectRepoPath` enumeration above `architectSessionDir`). This route's
-  // answer is to have NO such field to guard at all — the body type below
-  // pulls only `project`/`inputs`; an extra `projectRepoPath` (or anything
-  // else) in the raw body is simply never read, so it is provably inert, not
-  // merely undocumented (AT-3, cli/ui-bridge-onboarding-start.test.ts).
-  //
-  // `project` is validated (PROJECT_ID_RE + length cap, via the same
-  // `invalidGenerationProjectReason` the demo-generation routes already use)
-  // BEFORE any fs call, then resolved through the SAME
-  // `resolveContainedProjectDir` (`cli/contract-stages.ts`) the sibling
-  // `GET /api/studio/projects/:id/contract-stages` route already calls — by
-  // IMPORT, not a second implementation (round-1 BLOCKER fix: this route
-  // previously called bare `realpathSync` here, which resolves symlinks but
-  // never checks the result lands inside `ctx.projectsRoot`, so a symlinked
-  // project slug escaped containment entirely — see
-  // `cli/ui-bridge-onboarding-start.test.ts` AT-7/AT-8 for the live-execution
-  // reject/accept proof). `sessionId` is generated by THIS code
-  // (`newArchitectSessionId`), never taken from the request, so the
-  // `_onboarding/<sessionId>` join onto the now-verified real directory
-  // cannot itself introduce a further escape.
-  //
-  // D6: spawns the IDENTICAL `spawnAgentDispatch(forgeRoot, 'onboarding-agent',
-  // runId, project, inputs)` the generic `POST /api/agents/:slug/run` route
-  // spawns, with `--session-dir` additionally threaded through (D7) so
-  // `forge agent dispatch` can write the terminal phase into this session's
-  // status.json when the run ends.
-  if (method === 'POST' && url === '/api/studio/onboarding/start') {
-    try {
-      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
-      if (typeof body.project !== 'string') {
-        sendJson(res, 400, { error: 'project is required' }, origin);
-        return true;
-      }
-      const projectReason = invalidGenerationProjectReason(body.project);
-      if (projectReason) {
-        sendJson(res, 400, { error: projectReason }, origin);
-        return true;
-      }
-      const project = body.project;
-
-      const inputs: Record<string, string> = {};
-      if (body.inputs !== undefined) {
-        if (typeof body.inputs !== 'object' || body.inputs === null || Array.isArray(body.inputs)) {
-          sendJson(res, 400, { error: 'inputs must be an object of string values' }, origin);
-          return true;
-        }
-        for (const [k, v] of Object.entries(body.inputs as Record<string, unknown>)) {
-          if (!SAFE_INPUT_KEY_RE.test(k)) {
-            sendJson(res, 400, { error: `invalid input key: ${JSON.stringify(k)} (expected ${SAFE_INPUT_KEY_RE})` }, origin);
-            return true;
-          }
-          if (typeof v !== 'string') {
-            sendJson(res, 400, { error: `input "${k}" must be a string` }, origin);
-            return true;
-          }
-          inputs[k] = v;
-        }
-      }
-
-      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
-      if (realProjectDir === null) {
-        sendJson(res, 404, { error: `project not found: ${project}` }, origin);
-        return true;
-      }
-
-      const sessionId = newArchitectSessionId();
-      const runId = `_agent-onboarding-agent-${newRunStamp()}`;
-      // `sessionId` is this code's own generated value (never request-
-      // derived) and `_onboarding` is a fixed literal — joining it onto the
-      // already realpath-verified `realProjectDir` cannot escape.
-      // R4-17 round-2 BLOCKER: `resolveContainedProjectDir` proves the PROJECT
-      // dir is contained — it says NOTHING about what is written beneath it.
-      // `_onboarding` is a path segment inside a CHECKED-OUT REPO, so it is
-      // attacker-supplied content: a commit carrying a symlink named
-      // `_onboarding` redirects every write here, because
-      // `mkdirSync(recursive:true)` transparently follows a symlinked
-      // intermediate segment. Reproduced live before this guard existed —
-      // `status.json` and `prompt.md` landed outside `projectsRoot` from a
-      // project that passed containment. "Validating a root does not validate
-      // what you write beneath it", one level deeper than the round-1 fix.
-      //
-      // The parent is therefore created and realpath-verified BEFORE the
-      // session dir is created beneath it, and the session dir is verified in
-      // turn — the same realpath + `startsWith(root + sep)` shape used
-      // throughout, applied at every level that is written rather than only at
-      // the root. A pre-existing REAL `_onboarding` directory (the second and
-      // every later onboarding run) passes unchanged; only one whose realpath
-      // leaves the verified project dir is refused.
-      const onboardingParent = join(realProjectDir, '_onboarding');
-      mkdirSync(onboardingParent, { recursive: true });
-      const realOnboardingParent = realpathSync(onboardingParent);
-      if (!realOnboardingParent.startsWith(realProjectDir + sep)) {
-        sendJson(res, 400, { error: `onboarding session directory for project "${project}" resolves outside the project` }, origin);
-        return true;
-      }
-      // R4-17 round-3 BLOCKER pin 5, item 1: the leaf writes below (session
-      // dir + status.json + prompt.md) are guarded independently of the
-      // realpath checks above — see writeOnboardingSession's own docstring
-      // for the three closes (exclusive dir create, exclusive leaf writes,
-      // sessionId entropy). A guessable, colliding sessionId directory could
-      // otherwise be pre-planted with symlinked leaves that both writes
-      // below would silently follow.
-      const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs);
-
-      // W7-B5 (agents-20/31 + projects-31): the SAME t0 `agent-run.dispatched`
-      // marker the generic `POST /api/agents/:slug/run` host emits. This route
-      // mints a runId on the SAME shared run identity space, so it must reach
-      // the SAME state on the shared surfaces at t0 — without this event
-      // `GET /api/agents/runs/<runId>` 404s here while the generic route's
-      // runId already 200s (the AT-6 status-equivalence pin in
-      // cli/ui-bridge-onboarding-start.test.ts is exactly that check), the
-      // onboarding panel's first poll reads "no such run" for a run it just
-      // started, and the drawer's `GET /api/events/<runId>` 404s at t0.
-      // Guard symmetry with the generic host: the server-minted id is checked
-      // before this, its FIRST write.
-      if (!isSafeRunId(runId)) {
-        throw new Error('refused to dispatch — unsafe server-minted run id');
-      }
-      createLogger(runId, ctx.logsRoot).emit({
-        initiative_id: runId,
-        phase: 'orchestrator',
-        skill: 'onboarding-agent',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'agent-run.dispatched',
-        metadata: { agent_slug: 'onboarding-agent', project },
-      });
-      // Bead forge-c6h: THIS is the route that actually produces a --session-dir,
-      // so it is the one the projects-root snapshot has to reach. The session dir
-      // was created under ctx.projectsRoot (resolved once at startBridge); handing
-      // the same snapshot down means the subprocess's containment guard checks the
-      // root the dir was created under, instead of re-deriving one from a config
-      // file that may have changed inside this run's window.
-      spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir, undefined, ctx.projectsRoot);
-      // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
-      // for this route (cli/dry-bridge.ts) claims the agent dispatch is
-      // "skipped with marker + event, exactly as the generic run host" — this
-      // is the call that makes that claim true. spawnAgentDispatch already
-      // no-ops under FORGE_DRY_BRIDGE=1 (and FORGE_ARCHITECT_NO_SPAWN=1); this
-      // adds the explicit response marker + JSONL event the OTHER four
-      // spawn-helper families already carry, so dry-bridge suppression is
-      // never silent here either.
-      sendJson(
-        res, 200,
-        { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/onboarding/start', sessionId) },
-        origin,
-      );
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // GET /api/studio/projects/:id/onboarding/active — W6-B14 reattach
-  // discovery. `OnboardWithAgent` (forge-ui) only ever knew its dispatched
-  // runId from its OWN component state — a nav-away (or reload) forgot it,
-  // with no way back to a still-running server-side onboarding dispatch even
-  // though the run's own `status.json` (written by `writeOnboardingSession`
-  // above with `phase: 'running'`, then updated to a terminal phase by
-  // `writeSessionTerminalPhase`, cli/agent-run.ts) already carries everything
-  // needed to reattach. This is that tiny GET: find this project's most
-  // recent `_onboarding/<sessionId>` (sessionId embeds a sortable
-  // `newArchitectSessionId()` timestamp, above — a plain string sort picks
-  // the latest) and report its own `runId`/`phase` — `sessionId: null` if
-  // this project has never run onboarding. Read-only; no dispatch branch on
-  // this URL, so nothing here can trigger a run (mirrors the ingest-activity
-  // route's own GET-only contract, cli/bridge-studio-kbs.ts).
-  if (method === 'GET' && url.startsWith('/api/studio/projects/') && url.endsWith('/onboarding/active')) {
-    try {
-      const project = decodeURIComponent(url.slice('/api/studio/projects/'.length, url.length - '/onboarding/active'.length));
-      const projectReason = invalidGenerationProjectReason(project);
-      if (projectReason) { sendJson(res, 400, { error: projectReason }, origin); return true; }
-      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
-      if (realProjectDir === null) { sendJson(res, 404, { error: `project not found: ${project}` }, origin); return true; }
-
-      // SEC-04 — route the `_onboarding` LISTING itself through the shared
-      // guard (`guardedReadDir`, same primitive `listInstructionsSessions`'s
-      // per-session reads already use below): `realProjectDir` proves the
-      // PROJECT dir is contained, but says nothing about a `_onboarding`
-      // entry BENEATH it — a checked-out project repo is attacker-supplied
-      // content, and a commit carrying a symlink named `_onboarding` would
-      // otherwise redirect this enumeration outside `projectsRoot` (the
-      // exact escape `writeOnboardingSession`'s own header above documents
-      // for the WRITE side of this same directory).
-      const sessionIds = (guardedReadDir(ctx.projectsRoot, [project, '_onboarding']) ?? [])
-        .filter((name) => !name.startsWith('_'));
-      if (sessionIds.length === 0) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
-
-      // "Most recent" is picked by each session's OWN `status.json.startedAt`
-      // (millisecond-precision ISO, sorts correctly as a plain string), never
-      // by sorting the sessionId strings themselves — `newArchitectSessionId()`
-      // has only ONE-SECOND timestamp granularity plus a RANDOM (non-monotonic)
-      // hex entropy suffix, so two sessions started within the same wall-clock
-      // second (a real shape: an operator double-clicking, or two fast test
-      // dispatches) sort in an ARBITRARY order by id alone.
-      let latest: string | null = null;
-      let latestStatus: { phase?: unknown; runId?: unknown; startedAt?: unknown } | null = null;
-      let latestStartedAt = '';
-      for (const sessionId of sessionIds) {
-        const status = guardedReadSessionStatus<{ phase?: unknown; runId?: unknown; startedAt?: unknown }>(
-          ctx.projectsRoot, [project, '_onboarding', sessionId],
-        );
-        const startedAt = typeof status?.startedAt === 'string' ? status.startedAt : '';
-        if (latest === null || startedAt > latestStartedAt) {
-          latest = sessionId;
-          latestStatus = status;
-          latestStartedAt = startedAt;
-        }
-      }
-      if (!latest) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
-
-      sendJson(res, 200, {
-        ok: true,
-        sessionId: latest,
-        runId: typeof latestStatus?.runId === 'string' ? latestStatus.runId : null,
-        phase: typeof latestStatus?.phase === 'string' ? latestStatus.phase : null,
-      }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/studio/authoring/start {project, prompt} — R4-21, the
-  // authoring session's kickoff route. Mirrors `POST /api/studio/onboarding/
-  // start` EXACTLY: PROJECT_ID_RE + length-cap project validation via
-  // `invalidGenerationProjectReason`, resolved through the SAME
-  // `resolveContainedProjectDir`, a server-generated `sessionId` (never
-  // request-derived), and the identical
-  // mkdir-then-realpath-verify-the-parent-BEFORE-creating-the-session-dir
-  // shape (see the onboarding route's own D5/D6 comments, directly above,
-  // for the full security rationale — not restated here). `inputs` becomes
-  // a single free-text `prompt` (creation-agent's session is seeded by one
-  // operator description, not a multi-field form) written verbatim to
-  // `prompt.md` AND into `status.json` — no fabricated interview question,
-  // same D8 rationale as `renderOnboardingPrompt`.
-  //
-  // R4-21 phase 2, WI-2: the KNOWN GAP a prior round of this route disclosed
-  // here — `spawnAgentDispatch` invoking the generic dispatch host, which
-  // `resolveDispatchableAgent` refuses for `surface: interactive` defs like
-  // `creation-agent` — is CLOSED. `spawnAgentTurn(forgeRoot, 'authoring',
-  // project, sessionId)` below spawns `forge agent run authoring <sid>
-  // --project <p>`, which reaches the generic `runInteractiveTurn` spine
-  // (ADR-043 §3, `cli/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
-  // `authoring` session-kind's `turnSpec` — the SAME bounded-turn shape
-  // architect/instructions/demo-builder/project-brain already use, just
-  // through the generic spine rather than a bespoke `*-runner.ts`.
-  if (method === 'POST' && url === '/api/studio/authoring/start') {
-    try {
-      const body = (await readJson(req)) as { project?: unknown; prompt?: unknown; modelTier?: unknown };
-      if (typeof body.project !== 'string') {
-        sendJson(res, 400, { error: 'project is required' }, origin);
-        return true;
-      }
-      const projectReason = invalidGenerationProjectReason(body.project);
-      if (projectReason) {
-        sendJson(res, 400, { error: projectReason }, origin);
-        return true;
-      }
-      const project = body.project;
-
-      if (typeof body.prompt !== 'string' || body.prompt.trim() === '') {
-        sendJson(res, 400, { error: 'prompt is required and must be a non-empty string' }, origin);
-        return true;
-      }
-      if (body.prompt.length > MAX_AUTHORING_PROMPT_LENGTH) {
-        sendJson(res, 400, { error: `prompt exceeds the ${MAX_AUTHORING_PROMPT_LENGTH}-character cap` }, origin);
-        return true;
-      }
-      const prompt = body.prompt;
-
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
-      // creation-agent SKILL.md envelope.
-      const modelTierResult = resolveKickoffModelTier('creation-agent', body.modelTier);
-      if (!modelTierResult.ok) {
-        sendJson(res, 400, { error: modelTierResult.error }, origin);
-        return true;
-      }
-
-      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const realProjectDir = resolveContainedProjectDir(projectsRoot, project);
-      if (realProjectDir === null) {
-        sendJson(res, 404, { error: `project not found: ${project}` }, origin);
-        return true;
-      }
-
-      const sessionId = newArchitectSessionId();
-      const runId = `_agent-creation-agent-${newRunStamp()}`;
-      // Same two-level containment shape as onboarding's start route: the
-      // `_authoring` parent is created + realpath-verified BEFORE the
-      // session dir is created beneath it (a project repo could carry a
-      // committed symlink named `_authoring`, redirecting every write here —
-      // "validating a root does not validate what you write beneath it").
-      const authoringParent = join(realProjectDir, '_authoring');
-      mkdirSync(authoringParent, { recursive: true });
-      const realAuthoringParent = realpathSync(authoringParent);
-      if (!realAuthoringParent.startsWith(realProjectDir + sep)) {
-        sendJson(res, 400, { error: `authoring session directory for project "${project}" resolves outside the project` }, origin);
-        return true;
-      }
-      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt, modelTierResult.tier);
-
-      spawnAgentTurn(ctx.forgeRoot, 'authoring', project, sessionId);
-      sendJson(
-        res, 200,
-        { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/authoring/start', sessionId) },
-        origin,
-      );
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/studio/kbs/:id/cleanup/start — R4-19-F2, the kb-cleanup
-  // session's kickoff route (ADR-043 §1/§3, brain-maintenance /
-  // cleanup-plan). Mirrors `POST /api/studio/authoring/start` immediately
-  // above where the shapes match: the KB id is validated with KB_ID_RE
-  // BEFORE any fs call, a server-generated `sessionId` (never
-  // request-derived), and `spawnAgentTurn` rides the SAME generic
-  // `runInteractiveTurn` spine via the `kb-cleanup` SPAWN_AGENT_SPECS row
-  // above.
-  //
-  // Session-dir anchor: mirrors the KB-create hand-off's own anchor rule
-  // EXACTLY (cli/bridge-studio-kbs.ts ~:1189) — a project-bound KB anchors
-  // its cleanup session under its OWN real, discovered project
-  // (`binding.ref`); every OTHER binding kind (flow/band/unique) has no
-  // natural project home, so it anchors under the dot-prefixed KB-seeding
-  // anchor (`KB_SEEDING_ANCHOR_PREFIX + id`) instead — the SAME carve-out
-  // that keeps `discoverProjects` from surfacing a phantom `projects/<id>/`
-  // for a non-project KB (the MAJOR-2 defect that hand-off's own R1-06 WI-2
-  // fix guards against).
-  //
-  // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
-  // here (unlike authoring/start): `guardedWriteSessionStatus`
-  // (orchestrator/interactive-session.ts) already realpath-guards the whole
-  // `[sessionProject, '_kb-cleanup', sessionId, 'status.json']` path AND
-  // creates the session dir (`mkdirSync(dirname(p), {recursive:true})`) as
-  // part of the SAME guarded write — a project (or a fresh `.kb-<id>`
-  // anchor) need not pre-exist, mirroring the KB-create hand-off's own
-  // session write exactly.
-  const kbCleanupStartMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/);
-  if (method === 'POST' && kbCleanupStartMatch) {
-    try {
-      const kbId = decodeURIComponent(kbCleanupStartMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-      const kb = loadKbDescriptors(ctx.forgeRoot).find((k) => k.id === kbId);
-      if (!kb) {
-        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
-        return true;
-      }
-
-      // W7-B2 (knowledge-05): a cleanup plan drafted against a KB a drain/
-      // consolidate is actively mutating is stale on arrival — refuse with
-      // the same reason the action group shows.
-      const kbActiveJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
-      if (kbActiveJob) {
-        sendJson(res, 409, { error: activeJobReason(kbActiveJob), runId: kbActiveJob.runId }, origin);
-        return true;
-      }
-
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
-      // brain-maintenance SKILL.md envelope (the kb-cleanup session's agent —
-      // see studio/session-kinds.yaml's `kb-cleanup` row).
-      const body = (await readJson(req)) as { modelTier?: unknown };
-      const modelTierResult = resolveKickoffModelTier('brain-maintenance', body.modelTier);
-      if (!modelTierResult.ok) {
-        sendJson(res, 400, { error: modelTierResult.error }, origin);
-        return true;
-      }
-
-      const sessionProject = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-      const sessionId = newArchitectSessionId();
-
-      // A LIVE, KB-scoped brain-lint pass — the honest per-KB scoping
-      // buildKbHealth uses (cli/bridge-studio-kbs.ts's
-      // computeAgentCleanupFindings), never a fabricated/hardcoded []. This
-      // IS the turn input the agent reads as read-only context
-      // (orchestrator/interactive-runner.ts's `buildTurnPrompt` inlines the
-      // whole status object) — it is NOT the cleanup-plan artifact's source
-      // of truth: the artifact re-derives live from a FRESH scan at read
-      // time (derive-don't-store, orchestrator/studio/session-transcript.ts's
-      // `deriveCleanupPlan`). Never "optimise" the renderer into reading
-      // this stored copy back — a resolved finding after this snapshot
-      // would then never show as cleared.
-      const findings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
-
-      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-
-      // W8-B3 (ON-5) — the operator's request, recorded as the session's
-      // opening turn. Written through the SAME guarded leaf sibling as
-      // status.json below, so a symlinked `prompt.md` planted inside a real
-      // session dir is refused rather than followed (`guardedWriteFile`
-      // creates the parent dir itself, so it does not need status.json to
-      // have run first).
-      //
-      // ORDER IS LOAD-BEARING, and this is the second write on a path that
-      // used to have exactly one: `status.json` is what makes a session dir a
-      // SESSION. `readGuardedSessionIndexSummary` returns null without it and
-      // `collectStudioSessionIndexRows` skips the row; the shell route 404s.
-      // So the existence marker goes LAST, and any failure here leaves a
-      // directory that no surface can see — rather than a live-looking
-      // session at phase `drafting` with an empty record and no agent ever
-      // spawned, which is unrecoverable except by hand. This needs no
-      // rollback and adds no unguarded fs sink.
-      if (guardedWriteFile(
-        projectsRoot,
-        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
-        renderKbCleanupPrompt(kbId, kb.binding, findings.length),
-      ) === null) {
-        sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
-        return true;
-      }
-
-      const written = guardedWriteSessionStatus(
-        projectsRoot,
-        [sessionProject, '_kb-cleanup', sessionId],
-        {
-          session_id: sessionId,
-          project: sessionProject,
-          phase: 'drafting',
-          kb_id: kbId,
-          kb_binding: kb.binding,
-          findings,
-          ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
-        },
-      );
-      if (written === null) {
-        sendJson(res, 500, { error: `kb-cleanup start: hand-off session status.json for kb "${kbId}" failed containment` }, origin);
-        return true;
-      }
-
-      spawnAgentTurn(ctx.forgeRoot, 'kb-cleanup', sessionProject, sessionId);
-      sendJson(
-        res, 200,
-        { ok: true, sessionId, project: sessionProject, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/kbs/:id/cleanup/start', sessionId) },
-        origin,
-      );
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
 
   // R4-16 round 2 (pin 3, Finding A) — every route below resolves its
   // session dir through `resolveDemoSessionDir`, the ONE choke point (see

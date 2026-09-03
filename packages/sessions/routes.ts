@@ -26,6 +26,7 @@ import { handleArchitectRoutes } from './bridge-studio-architect.ts';
 import { handleInstructionsRoutes } from './bridge-studio-instructions.ts';
 import type { InstructionsStatus } from './instructions-runner.ts';
 import { handleProjectBrainRoutes, type ProjectBrainRow } from './bridge-studio-project-brain.ts';
+import { handleKickoffRoutes } from './bridge-studio-kickoff.ts';
 import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
@@ -57,6 +58,9 @@ export type SessionsRouteDeps = {
   readonly broadcastProjectBrainChanged: () => void;
   /** Injected only until the session index collector carves. */
   readonly listProjectBrainSessions: (projectsRoot: string) => ProjectBrainRow[];
+  /** Host-owned and still host-used; see `bridge-studio-kickoff.ts`. */
+  readonly newRunStamp: () => string;
+  readonly safeInputKeyRe: RegExp;
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
@@ -97,6 +101,9 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     listInstructionsSessions: deps.listInstructionsSessions,
     broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
     listProjectBrainSessions: deps.listProjectBrainSessions,
+    spawnAgentDispatch: deps.spawnAgentDispatch,
+    newRunStamp: deps.newRunStamp,
+    safeInputKeyRe: deps.safeInputKeyRe,
     spawnAgentTurn: deps.spawnAgentTurn,
     spawnAgentSpecs: deps.spawnAgentSpecs,
     safeParseJson: deps.safeParseJson,
@@ -112,6 +119,8 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
 const ARCHITECT_FILE_RE = /^\/api\/architect\/file\//;
 const INSTRUCTIONS_FILE_RE = /^\/api\/instructions\/file\//;
 const PB_THEMES_RE = /^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/;
+const ONBOARDING_ACTIVE_RE = /^\/api\/studio\/projects\/([^/]+)\/onboarding\/active$/;
+const KB_CLEANUP_START_RE = /^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/;
 
 export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext> {
   type Res = Parameters<RouteTable<RouteContext>[number]['handler']>[1];
@@ -121,6 +130,8 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
     handleInstructionsRoutes(req, res, familyContext(ctx, deps), url, method);
   const pbrain = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
     handleProjectBrainRoutes(req, res, familyContext(ctx, deps), url, method);
+  const kick = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
+    handleKickoffRoutes(req, res, familyContext(ctx, deps), url, method);
   return [
     {
       method: 'GET',
@@ -244,6 +255,41 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       matches: (url) => pathOf(url) === '/api/project-brain/abandon',
       dryClassification: 'exempt-local',
       handler: pbrain,
+    },
+    {
+      method: 'POST',
+      path: '/api/studio/onboarding/start',
+      matches: (url) => pathOf(url) === '/api/studio/onboarding/start',
+      dryClassification: 'stub-actions',
+      handler: kick,
+    },
+    {
+      method: 'GET',
+      path: '/api/studio/projects/:project/onboarding/active',
+      matches: (url) => ONBOARDING_ACTIVE_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: kick,
+    },
+    {
+      // HANDOFF L12 (library -> sessions). It wears library's URL prefix but it
+      // MINTS a session, and ruling 17 puts such a route with the sessions kind.
+      method: 'POST',
+      path: '/api/studio/authoring/start',
+      matches: (url) => pathOf(url) === '/api/studio/authoring/start',
+      dryClassification: 'stub-actions',
+      handler: kick,
+    },
+    {
+      // HANDOFF K10 (knowledge -> sessions). The 18th KB route, implemented
+      // inline in the host and so invisible to the KB seam's handler-file-derived
+      // list of 17. Anchored at a different segment count from knowledgeRoutes'
+      // own KB patterns; the contract test pins that disjointness against the
+      // ASSEMBLED table rather than assuming it.
+      method: 'POST',
+      path: '/api/studio/kbs/:kbId/cleanup/start',
+      matches: (url) => KB_CLEANUP_START_RE.test(pathOf(url)),
+      dryClassification: 'stub-actions',
+      handler: kick,
     },
     {
       method: 'GET',

@@ -36,6 +36,9 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     listInstructionsSessions: () => [],
     broadcastProjectBrainChanged: () => {},
     listProjectBrainSessions: () => [],
+    spawnAgentDispatch: () => {},
+    newRunStamp: () => 'stamp',
+    safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
     projectsRoot: '/home/parso/forge/projects',
     spawnAgentTurn: () => ({ ok: true }),
     spawnAgentSpecs: {},
@@ -57,7 +60,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 20, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 24, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -151,6 +154,46 @@ test('approve and abandon are SEPARATE entries with different dry classification
   assert.equal(approve.dryClassification, 'stub-actions', 'approve spawns a turn');
   assert.equal(abandon.dryClassification, 'exempt-local', 'abandon does not spawn');
   assert.notEqual(approve.dryClassification, abandon.dryClassification, 'the split exists BECAUSE they differ');
+});
+
+const KICKOFF_ROUTES = [
+  ['POST', '/api/studio/onboarding/start', '/api/studio/onboarding/start'],
+  ['GET', '/api/studio/projects/mdtoc/onboarding/active', '/api/studio/projects/:project/onboarding/active'],
+  ['POST', '/api/studio/authoring/start', '/api/studio/authoring/start'],
+  ['POST', '/api/studio/kbs/kb1/cleanup/start', '/api/studio/kbs/:kbId/cleanup/start'],
+] as const;
+
+for (const [method, url, path] of KICKOFF_ROUTES) {
+  test(`${method} ${url} is claimed by ${path}`, () => {
+    assert.equal(claimant(method, url), path);
+  });
+
+  test(`${method} ${url} is still claimed WITH a query string`, () => {
+    assert.equal(claimant(method, `${url}?x=1`), path, 'a matcher that does not call pathOnly fails exactly here');
+  });
+}
+
+test('the two carried-over handoff routes are claimed by THIS table, not their URL pillar', () => {
+  // L12 wears library's /api/studio/authoring prefix and K10 wears knowledge's
+  // /api/studio/kbs prefix, but both MINT a session, which ruling 17 makes a
+  // sessions route. This is the assertion that says the handoff actually closed
+  // rather than the route merely having moved file.
+  assert.equal(claimant('POST', '/api/studio/authoring/start'), '/api/studio/authoring/start');
+  assert.equal(claimant('POST', '/api/studio/kbs/kb1/cleanup/start'), '/api/studio/kbs/:kbId/cleanup/start');
+});
+
+test('K10 does not swallow the KB routes that belong to knowledge', () => {
+  // Disjointness is a property of the SIBLING table's current patterns, so it is
+  // pinned, never assumed. K10 is anchored at exactly `/cleanup/start`; a KB
+  // route with a different tail or segment count must fall through to knowledge.
+  assert.equal(claimant('POST', '/api/studio/kbs/kb1/maintenance'), null);
+  assert.equal(claimant('GET', '/api/studio/kbs/kb1'), null);
+  assert.equal(claimant('POST', '/api/studio/kbs/kb1/cleanup/start/extra'), null);
+});
+
+test('the onboarding-active route does not swallow projects\' own :id routes', () => {
+  assert.equal(claimant('GET', '/api/studio/projects/mdtoc'), null);
+  assert.equal(claimant('GET', '/api/studio/projects/mdtoc/onboarding'), null);
 });
 
 test('the architect and instructions families do not claim each other\'s URLs', () => {
