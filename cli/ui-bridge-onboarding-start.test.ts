@@ -53,7 +53,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
-import { cmdAgentDispatch } from '@forge/agents/agent-run.ts';
+import { cmdAgentDispatch } from '@forge/agents/agent-dispatch-cmd.ts';
 import { SAFE_ID_RE } from './bridge-studio.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };

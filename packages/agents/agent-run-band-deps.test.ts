@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { cmdAgentDispatch } from './agent-run.ts';
+import { cmdAgentDispatch } from './agent-dispatch-cmd.ts';
 
 /** Drive `cmdAgentDispatch`, stubbing `process.exit`/console so a refusal's
  *  `process.exit(2)` returns control (via a sentinel throw) rather than

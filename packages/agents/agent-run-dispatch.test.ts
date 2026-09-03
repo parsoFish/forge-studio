@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { cmdAgentDispatch } from './agent-run.ts';
+import { cmdAgentDispatch } from './agent-dispatch-cmd.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 const ROOT = FORGE_ROOT;
