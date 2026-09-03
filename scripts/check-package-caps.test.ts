@@ -16,18 +16,21 @@
  * disagree about what they are counting.
  *
  * Discipline (immutable-gates): every green below names the wrong
- * implementation it kills, and each of the three formula controls is a
- * PLANTED file whose effect on the count is asserted, so a re-implementation
- * that "looks right" cannot pass.
+ * implementation it kills, and each formula control plants a real file in a
+ * synthetic git repo and asserts its exact effect on the count, so a
+ * re-implementation that "looks right" cannot pass.
  *
  * RUN: node --test --experimental-strip-types scripts/check-package-caps.test.ts
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { measurePackages } from './check-package-caps.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-package-caps.mjs');
@@ -45,22 +48,38 @@ function measured(): Record<string, { lines: number; cap: number | null }> {
   return JSON.parse(run(['--json']).out).packages;
 }
 
-/** Plant a file, run the body, always remove the file. */
-function withPlanted(rel: string, contents: string, body: () => void): void {
-  const abs = join(ROOT, rel);
-  const dir = dirname(abs);
-  const dirExisted = existsSync(dir);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(abs, contents);
-  try {
-    body();
-  } finally {
-    rmSync(abs, { force: true });
-    if (!dirExisted) rmSync(dir, { recursive: true, force: true });
+const TEN_LINES = `${Array.from({ length: 10 }, (_, i) => `export const l${i} = ${i};`).join('\n')}\n`;
+
+/**
+ * The formula controls run against a SYNTHETIC git repo, never the live tree.
+ *
+ * The first draft of this file planted its probes into `packages/flows/` and
+ * the full suite caught it: `check-boundaries.test.ts` shells
+ * dependency-cruiser at the same live tree from a parallel process and died
+ * with `ENOENT ... __cap_probe__.ts` mid-delete. That is known-flake #6's root
+ * cause exactly, and §15.93's rule — a guard self-test plants its own fixture
+ * tree rather than writing into a production path.
+ */
+const SCRATCH: string[] = [];
+after(() => { for (const d of SCRATCH) rmSync(d, { recursive: true, force: true }); });
+
+function repoWith(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), 'cap-probe-'));
+  SCRATCH.push(root);
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root });
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), body);
   }
+  return root;
 }
 
-const TEN_LINES = `${Array.from({ length: 10 }, (_, i) => `export const l${i} = ${i};`).join('\n')}\n`;
+/** flows' measured lines in a synthetic repo holding exactly `files`. */
+function flowsLines(files: Record<string, string>): number {
+  return measurePackages(repoWith(files)).get('flows') ?? 0;
+}
+
+const BASE = { 'packages/flows/real.ts': TEN_LINES };
 
 // =============================================================================
 // The gate itself
@@ -99,43 +118,40 @@ test('every package with a QUARRY cap is measured, and every measured package ha
 });
 
 // =============================================================================
-// The three formula controls (ruling 94) — each is a PLANTED file
+// The formula controls (ruling 94) — planted files in a synthetic git repo
 // =============================================================================
 
-test('control 1: a planted test-fixtures/ file does NOT move the count', () => {
+test('the baseline synthetic repo measures exactly its one production file', () => {
+  assert.equal(flowsLines(BASE), 10, 'ten lines of production code read as ten');
+});
+
+test('control 1: a test-fixtures/ file does NOT move the count', () => {
   // Kills: a re-implementation that filters only on `.test.ts` and therefore
   // charges a package for its fixtures.
-  const before = measured().flows.lines;
-  withPlanted('packages/flows/tests/unit/test-fixtures/__cap_probe__.ts', TEN_LINES, () => {
-    assert.equal(measured().flows.lines, before, 'a test-fixtures/ file is not production');
-  });
-  assert.equal(measured().flows.lines, before, 'and the probe left no residue');
+  assert.equal(flowsLines({ ...BASE, 'packages/flows/tests/unit/test-fixtures/big.ts': TEN_LINES }), 10);
 });
 
-test('control 2: a planted .yaml does NOT move the count', () => {
+test('control 2: a .yaml does NOT move the count', () => {
   // Kills: the `!.test.ts !.md` grep three lanes each wrote by hand, which
   // counts .yaml and .json and reads 20–96 lines high.
-  const before = measured().flows.lines;
-  withPlanted('packages/flows/__cap_probe__.yaml', TEN_LINES, () => {
-    assert.equal(measured().flows.lines, before, 'a non-CODE extension is not production');
-  });
+  assert.equal(flowsLines({ ...BASE, 'packages/flows/data.yaml': TEN_LINES }), 10);
 });
 
-test('control 3: a planted .ts DOES move the count, by exactly its line count', () => {
+test('control 3: a .ts DOES move the count, by exactly its line count', () => {
   // The positive control: if planting real production code does not move the
   // number, the gate is measuring nothing at all.
-  const before = measured().flows.lines;
-  withPlanted('packages/flows/__cap_probe__.ts', TEN_LINES, () => {
-    assert.equal(measured().flows.lines, before + 10, 'a .ts file is production, counted line for line');
-  });
-  assert.equal(measured().flows.lines, before, 'and the probe left no residue');
+  assert.equal(flowsLines({ ...BASE, 'packages/flows/more.ts': TEN_LINES }), 20);
 });
 
-test('control 4: a planted .test.ts does NOT move the count', () => {
-  const before = measured().flows.lines;
-  withPlanted('packages/flows/__cap_probe__.test.ts', TEN_LINES, () => {
-    assert.equal(measured().flows.lines, before, 'a test file is not production');
-  });
+test('control 4: a .test.ts does NOT move the count', () => {
+  assert.equal(flowsLines({ ...BASE, 'packages/flows/more.test.ts': TEN_LINES }), 10);
+});
+
+test('control 5: an untracked-but-not-ignored file IS counted (--others --exclude-standard)', () => {
+  // The controls above never `git add`, so they already prove the --others
+  // half; this names it, because a re-implementation using plain `git
+  // ls-files` would read every one of them as zero.
+  assert.ok(flowsLines(BASE) > 0, 'a file that is not yet committed still counts');
 });
 
 // =============================================================================

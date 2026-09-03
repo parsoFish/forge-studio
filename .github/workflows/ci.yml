@@ -92,6 +92,9 @@ jobs:
       - name: One owner per production file (QUARRY.md)
         run: node scripts/check-owner.mjs
 
+      - name: Per-package LOC caps (QUARRY.md, bead 5.18)
+        run: node scripts/check-package-caps.mjs
+
   # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
   # (production build; dry-bridge + no-spawn seams — nothing can spawn an
   # agent, touch a git remote or start the daemon), crawls every reachable
