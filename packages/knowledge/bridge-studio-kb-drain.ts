@@ -79,18 +79,13 @@
  * unchanged from how consolidate's per-group turns already work.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { createLogger, sanitizeError } from '@forge/kernel';
-import {
-  runBrainFixTurn,
-  type RunBrainFixInput,
-  type RunBrainFixResult,
-} from '@forge/sessions/brain-fix-runner.ts';
 import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
 import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
+import type { KbDrainFixTurnInput, KbDrainFixTurnResult, KbDrainRunFixTurnFn } from './kb-drain-model.ts';
 import {
   guardAgentKbEdits,
   snapshotBrainTree,
@@ -157,54 +152,49 @@ export { finalizeRoundRows } from './kb-drain-model.ts';
 export type { KbDrainRoundRow } from './kb-drain-model.ts';
 
 // ---------------------------------------------------------------------------
-// Default fix-turn: runBrainFixTurn + its cost read back from its own log
+// The no-spawn stand-in — the only fix-turn implementation left in this package
 // ---------------------------------------------------------------------------
+//
+// M4 ruling 86: the REAL default (`runBrainFixTurn` plus the read-back of its
+// `cost_usd` out of `_logs/_brainfix-<runId>/events.jsonl`) moved to
+// `apps/forge/routes.ts`, the assembly. It had to: it named
+// `@forge/sessions`'s turn AND encoded that turn's own event-log layout, both
+// of which are knowledge OF the turn rather than of the drain. What stays here
+// is the no-op, which touches no SDK and needs no sessions concept.
+//
+// The env gate stays here too, and that placement is load-bearing: gating the
+// CALL SITE instead (the pre-#164 shape) made every dispatch-counting test
+// fail under CI's global FORGE_ARCHITECT_NO_SPAWN=1, and main was red for six
+// merges before a tail PR's gate surfaced it.
 
-/** Reads a brain-fix SUB-turn's own terminal `cost_usd` back out of its event
- *  log. `subRunId` is NEVER request-derived — it is always synthesized here
- *  as `` `${runId}__r${round}__${i}` ``, never the route's own `runId` — so
- *  unlike the drain run's own log helpers above this needs no allowlist
- *  entry (no curated taint-list name reaches it). Mirrors
- *  `readBrainFixState`'s scan-backward shape but extracts `cost_usd`
- *  (a top-level field `runBrainFixTurn` emits on its 'end' event, per
- *  orchestrator/brain-fix-runner.ts) instead of the cleared/failed state.
- *  Returns 0 on any read/parse failure or a crashed turn — a failed turn
- *  accrues zero cost toward the ceiling, matching `runBrainFixTurn`'s own
- *  crash path (it never reaches the cost-bearing 'end' event). */
-function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number {
-  const evPath = join(forgeRoot, '_logs', `_brainfix-${subRunId}`, 'events.jsonl');
-  if (!existsSync(evPath)) return 0;
-  let raw: string;
-  try {
-    raw = readFileSync(evPath, 'utf8');
-  } catch {
-    return 0;
-  }
-  for (const line of raw.split('\n').reverse()) {
-    if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; cost_usd?: number };
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
-      return typeof ev.cost_usd === 'number' ? ev.cost_usd : 0;
-    }
-    if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') return 0;
-  }
-  return 0;
-}
-
-async function defaultKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainFixResult & { costUsd: number }> {
-  const result = await runBrainFixTurn(input);
-  const costUsd = readBrainFixTurnCostUsd(input.forgeRoot, input.runId);
-  return { ...result, costUsd };
-}
+/**
+ * M4 ruling 86 — the refusal for a drain that reaches an agent-tier residual
+ * with no turn injected and spawning enabled.
+ *
+ * LAZY, and that placement was a finding rather than a choice: the first cut
+ * threw at SELECTION time, which refused a drain whose findings were all
+ * AUTO-tier — drained deterministically, no agent turn ever dispatched. Five
+ * of this package's own drain tests failed and were right to: demanding a turn
+ * a run will never use is not a safety check, it is a new precondition. Thrown
+ * at the CALL, the refusal fires exactly when a turn is actually needed and
+ * absent, and an auto-only drain needs no injection at all.
+ *
+ * A silent fallback here would be worse than either: a caller that forgot to
+ * thread `runFixTurn` would get a drain reporting every agent-tier finding
+ * uncleared, indistinguishable from a genuinely hard KB.
+ */
+const refuseUninjectedFixTurn: KbDrainRunFixTurnFn = () => {
+  throw new Error(
+    'runKbDrain: this drain reached an agent-tier finding but no fix turn was injected ' +
+      'and spawning is not disabled — the real brain-fix turn is supplied by the assembly ' +
+      '(apps/forge/routes.ts threads it through knowledgeRoutes as `runFixTurn`). Refusing ' +
+      'rather than reporting every agent-tier finding uncleared.',
+  );
+};
 
 /** The no-spawn stand-in for the DEFAULT fix turn under FORGE_ARCHITECT_NO_SPAWN /
  *  dry-bridge: never touches the SDK, leaves the finding uncleared, costs 0. */
-async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainFixResult & { costUsd: number }> {
+async function noSpawnKbDrainFixTurn(input: KbDrainFixTurnInput): Promise<KbDrainFixTurnResult & { costUsd: number }> {
   return { runId: input.runId, cleared: false, costUsd: 0, editAudit: noKbEdits() };
 }
 
@@ -216,24 +206,52 @@ async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
 // The engine's own injectable seams
 // ---------------------------------------------------------------------------
 //
-// These two types live HERE, with `runKbDrain`, rather than in
-// `kb-drain-model.ts` with the rest of the vocabulary. They name the fix-turn
-// the engine dispatches, so they reference `@forge/sessions/brain-fix-runner`'s
-// input and result — an edge this file already carries and the model should
-// not acquire. Splitting a file must not multiply the package's boundary rows,
-// and the alternative (the model importing sessions too) would have added one
-// for a pair of type aliases.
+// These types live HERE, with `runKbDrain`, rather than in `kb-drain-model.ts`
+// with the rest of the vocabulary: they describe the fix-turn the engine
+// dispatches, which is `runKbDrain`'s own concern.
+//
+// M4 ruling 86 (amended): THIS PACKAGE DECLARES THE PORT. It used to name
+// `@forge/sessions`'s `RunBrainFixInput`/`RunBrainFixResult`, which is an
+// upward import — knowledge is rank 2, sessions rank 4 — and carried four
+// baseline rows (this file, `bridge-studio-kb-consolidate.ts`, and two of our
+// own tests). The first instinct was to lift the shapes into
+// `@forge/contracts`, ruling 81's precedent; measured, that was the wrong
+// move, because `KbEditGateResult` is OUR type and names `KbEditChange` and
+// `KbEditUnsoundness` — so the "lift two types" would have relocated this
+// package's brain-edit vocabulary out of it, across six files, for a shape
+// only two packages share.
+//
+// The asymmetry is the answer: sessions importing OUR types is downward and
+// legal (`kinds/brain-fix.ts` does exactly that for `KbEditGateResult`), so
+// the shared shape needs no neutral home — only the upward DECLARATION has to
+// stop. As the consumer we declare what we need from an injected turn, in our
+// own vocabulary: findings fields plus our own gate result, no sessions
+// concept present. `runKbDrain` never sets `queryFn` or `logsRoot`, so neither
+// appears here.
+//
+// Conformance is enforced where it belongs: `apps/forge/routes.ts` is the one
+// place both this port and sessions' real turn are legally visible, and the
+// `KnowledgeRouteDeps` typing makes the real function assignable-or-red there
+// under the repo-wide build (§15.71 — apps/ is outside every package
+// tsconfig, so this only bites in `npm run build`).
 
-/** Same input as `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), but
- *  the result additionally carries `costUsd` — `RunBrainFixResult` itself
- *  does not return cost (it only logs `cost_usd` on the turn's own 'end'
- *  event), so the default implementation reads it back out of that event
- *  log (`readBrainFixTurnCostUsd` below) after every real turn. Injectable
- *  so termination-matrix tests (esp. the cost-ceiling case) can hand back a
- *  precise, deterministic cost per call without a real SDK turn. */
-export type KbDrainRunFixTurnFn = (
-  input: RunBrainFixInput,
-) => Promise<RunBrainFixResult & { costUsd: number }>;
+/**
+ * The fix-turn PORT — `KbDrainFixTurnInput`, `KbDrainFixTurnResult` and
+ * `KbDrainRunFixTurnFn` — lives in `kb-drain-model.ts` with the rest of this
+ * drain's vocabulary, and is re-exported here because that is where every
+ * consumer already looks for the engine's seams.
+ *
+ * It used to be declared in THIS file for a reason that ruling 86 removed: it
+ * named `@forge/sessions`'s input and result, an edge this file carried and
+ * the model should not have acquired. The port names no sessions concept any
+ * more — findings vocabulary in, this package's own `KbEditGateResult` out —
+ * so the vocabulary file is where it belongs.
+ */
+export type {
+  KbDrainFixTurnInput,
+  KbDrainFixTurnResult,
+  KbDrainRunFixTurnFn,
+} from './kb-drain-model.ts';
 
 /** Same signature as the internal `writeKbDrainStatus` (below). Injectable
  *  ONLY so a test can fail a PRECISE persist call (e.g. the very first one)
@@ -290,8 +308,15 @@ export async function runKbDrain(
   // CI's global FORGE_ARCHITECT_NO_SPAWN=1 (main went red at #164 and stayed
   // red for six merges before the tail PR's gate surfaced it).
   const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
-  const runFixTurn: KbDrainRunFixTurnFn = opts.runFixTurn
-    ?? (noSpawn ? noSpawnKbDrainFixTurn : defaultKbDrainFixTurn);
+  // M4 ruling 86 — the real turn is INJECTED, so its absence must be named,
+  // not silently tolerated. Before this the fall-through was a real spawn
+  // compiled into this package; now a caller that forgot to thread
+  // `runFixTurn` would otherwise get a drain that reports every agent-tier
+  // finding uncleared and looks like a legitimately hard KB. Fail loud at the
+  // seam instead. The no-spawn arm is NOT a fallback for a missing injection:
+  // it is the deliberate stand-in when the env forbids spawning at all.
+  const runFixTurn: KbDrainRunFixTurnFn =
+    opts.runFixTurn ?? (noSpawn ? noSpawnKbDrainFixTurn : refuseUninjectedFixTurn);
   const persistStatus = opts.persistStatus ?? writeKbDrainStatus;
   const maxRounds = opts.maxRounds ?? KB_DRAIN_MAX_ROUNDS;
   const maxCostUsd = opts.maxCostUsd ?? DEFAULT_KB_DRAIN_MAX_COST_USD;

@@ -41,6 +41,7 @@ import { resolveKbBrainDir } from './brain-paths.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
 
 import { classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
@@ -166,7 +167,14 @@ export async function approveKbCleanup(
   forgeRoot: string,
   projectsRoot: string,
   dirSegs: readonly string[],
-  opts: { expectedKbId?: string } = {},
+  /**
+   * `runFixTurn` (M4 ruling 86) is the real brain-fix turn, supplied by the
+   * caller because this package (rank 2) may not import `@forge/sessions`
+   * (rank 4). Its non-draft arm reaches `runBrainConsolidateNow`, which
+   * dispatches one turn per agent-tier group; absent, that call refuses by
+   * name rather than reporting every finding uncleared.
+   */
+  opts: { expectedKbId?: string; runFixTurn?: KbDrainRunFixTurnFn } = {},
 ): Promise<ApproveKbCleanupOutcome> {
   // --- SYNC INVARIANT SPAN START — see header. No await until the
   //     phase:'applying' write below has returned. ---
@@ -354,7 +362,7 @@ export async function approveKbCleanup(
   // above — it protects the on-disk category-index file from two
   // concurrently-RUNNING drains; the claim above protects against a SECOND
   // drain ever being enqueued in the first place for one approval.
-  await enqueueConsolidate(kbId, () => runBrainConsolidateNow(forgeRoot, kbId, runId));
+  await enqueueConsolidate(kbId, () => runBrainConsolidateNow(forgeRoot, kbId, runId, opts.runFixTurn));
 
   const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied', finalized });
   if (written === null) {

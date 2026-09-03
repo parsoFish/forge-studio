@@ -302,12 +302,26 @@ export async function handleKbIngestActivity(
  *
  * Returns false for a non-matching URL (passthrough), never throws.
  */
+import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
+
+/**
+ * M4 ruling 86 — the maintenance route is reached through a FACTORY now: its
+ * `op=consolidate` arm dispatches the real brain-fix turn, which the assembly
+ * supplies (`apps/forge/routes.ts` via `knowledgeRoutes(deps)`) rather than
+ * this package importing it. Same shape and reason as `createKbCreateHandler`.
+ */
+export function createKbMaintenanceHandler(deps: { runFixTurn: KbDrainRunFixTurnFn }) {
+  return (req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string) =>
+    handleKbMaintenance(req, res, ctx, rawUrl, method, deps.runFixTurn);
+}
+
 export async function handleKbMaintenance(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: RouteContext,
   rawUrl: string,
   method: string,
+  runFixTurn?: KbDrainRunFixTurnFn,
 ): Promise<boolean> {
   // Normalise here, not only in the caller: the route table hands handlers the
   // RAW url so an arm that later needs the query string still has it, and
@@ -531,7 +545,7 @@ export async function handleKbMaintenance(
         // existing GET .../fix-agent/:runId route. Queued per-kbId (not run
         // directly) so an overlapping dispatch against the same KB never
         // races its real agent turns against this one on the same files.
-        enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
+        enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId, runFixTurn));
         sendJson(res, 200, { op: 'consolidate', ok: true, runId }, origin);
         return true;
       }

@@ -78,7 +78,7 @@ function initQueueDirs(forgeRoot: string): void {
  * argument changed meaning, from a base URL to the forge root. An unmatched
  * path reports the host's 404, never a status of 0 (§15.50).
  */
-const routes = knowledgeRoutes({ listFlowIds: () => ['forge-develop'], listFlowBandIds: () => ['review-band', 'demo-band'] });
+const routes = knowledgeRoutes({ listFlowIds: () => ['forge-develop'], listFlowBandIds: () => ['review-band', 'demo-band'], runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); } });
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
 
 async function get(root: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {

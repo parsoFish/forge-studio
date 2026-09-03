@@ -22,6 +22,9 @@
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { parseManifestPort } from './session-kind-deps.ts';
 import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
+// M4 ruling 86 — the real brain-fix turn, bound at the assembly because this
+// is the one place that may import both knowledge's port and sessions' turn.
+import { realKbDrainFixTurn } from './brain-fix-turn.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
@@ -124,7 +127,7 @@ export type AssembledRouteTable = RouteTable<RouteContext>;
 
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
-    ...knowledgeRoutes({ listFlowIds, listFlowBandIds }),
+    ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn }),
     ...libraryRoutes,
     ...projectsRoutes({
       seedBrain: seedProjectBrain,

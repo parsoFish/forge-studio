@@ -22,7 +22,7 @@
 import { mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import matter from 'gray-matter';
-import { runBrainFixTurn } from '@forge/sessions/brain-fix-runner.ts';
+import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { type Finding } from './brain-lint.ts';
 import { isDryBridge } from '@forge/kernel';
@@ -297,7 +297,24 @@ export function applyDeterministicConsolidateFixes(
  * entirely), so a CI run with residual findings still reaches a terminal
  * state deterministically — just with an honest `cleared: false`.
  */
-export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: string): Promise<void> {
+export async function runBrainConsolidateNow(
+  forgeRoot: string,
+  kbId: string,
+  runId: string,
+  /**
+   * The brain-fix turn, INJECTED (M4 ruling 86). This file used to import
+   * `runBrainFixTurn` from `@forge/sessions` directly — an upward import from
+   * rank 2 to rank 4, and this package's only remaining one. The turn now
+   * arrives from the assembly, which is the one place both this port and
+   * sessions' real function are legally visible.
+   *
+   * Optional in the SIGNATURE and refused at the CALL, deliberately: three
+   * call sites reach this function and one is a host file, so a required
+   * parameter would be a breaking change across a boundary for no safety gain
+   * — whereas an absent turn on the spawning path is named loudly below.
+   */
+  runFixTurn?: KbDrainRunFixTurnFn,
+): Promise<void> {
   // MINOR 1: the whole body is wrapped so the SINGLE terminal event is
   // guaranteed even on an unexpected throw in the pre-terminal repair phase
   // (the initial runBrainLint, or applyDeterministicConsolidateFixes'
@@ -318,11 +335,25 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
 
     if (!noSpawn) {
       const groups = groupConsolidateFindings(forgeRoot, residual);
+      // M4 ruling 86 — named refusal, and AFTER the grouping deliberately: a
+      // consolidate run with no agent-tier groups dispatches no turn, so
+      // demanding one up front would be a new precondition rather than a
+      // safety check (the same correction the drain's refusal needed). A
+      // silent fallback is the thing to avoid: a caller that forgot to thread
+      // the turn would consolidate nothing and report an honest-looking
+      // `cleared: false`.
+      if (groups.size > 0 && !runFixTurn) {
+        throw new Error(
+          'runBrainConsolidateNow: this run reached agent-tier groups but no fix turn was ' +
+            'injected and spawning is not disabled — the real brain-fix turn is supplied by ' +
+            'the assembly. Refusing rather than reporting every finding uncleared.',
+        );
+      }
       let i = 0;
       for (const [targetFile, group] of groups) {
         const { message, fixHint } = describeConsolidateGroup(group);
         try {
-          await runBrainFixTurn({
+          await runFixTurn!({
             runId: `${runId}__${i}`,
             kbId,
             file: targetFile,

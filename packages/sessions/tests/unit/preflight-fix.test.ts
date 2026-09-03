@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runPreflightFixTurn, type QueryFn } from './preflight-fix-runner.ts';
-import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
+import { runPreflightFixTurn, type QueryFn } from '../../kinds/preflight-fix.ts';
+import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
 
 function setup(): { forgeRoot: string; projectDir: string; logsRoot: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'pf-fix-'));

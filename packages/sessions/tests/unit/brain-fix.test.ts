@@ -23,8 +23,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runBrainFixTurn, type QueryFn } from './brain-fix-runner.ts';
-import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
+import { runBrainFixTurn, type QueryFn } from '../../kinds/brain-fix.ts';
+import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers — minimal brain fixture (same pattern as packages/knowledge/tests/unit/brain-lint-integrity.test.ts)

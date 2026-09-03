@@ -279,8 +279,13 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
     return;
   }
   const runId = flag('run-id') ?? `manual-${kind}`;
-  const { runBrainFixTurn } = await import('@forge/sessions/brain-fix-runner.ts');
-  const r = await runBrainFixTurn({
+  // M4 port 5 (ruling 60): resolve the KIND through the spine's session-less
+  // fix dispatch rather than naming a `run<X>Turn` import. The row owns the
+  // console summary too, so the kind that produces the edit audit reports it.
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const row = FIX_KIND_RUNNERS['brain-fix'];
+  const runTurn = await row.loadRunTurn();
+  const r = await runTurn({
     runId,
     kbId: kb,
     file,
@@ -290,14 +295,7 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
     message: flag('message') ?? '',
     forgeRoot: FORGE_ROOT,
   });
-  console.log(`brain-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${kind} ${file}`);
-  // W8-F1 — say WHY, not just that it did not clear. This command reads
-  // `r.cleared` and used to print nothing else, so an edit the gate refused
-  // (or a disposal it could not carry out) was invisible on the one path an
-  // operator drives by hand. `editAudit` is populated on every turn now;
-  // a field produced and read by nobody is the shape this lane exists to close.
-  for (const u of r.editAudit.unsound) console.log(`  ${u.relPath}: ${u.message}`);
-  for (const e of r.editAudit.errors) console.error(`  ${e}`);
+  row.printResult(runId, r, { kind, file });
 }
 
 function cmdBrainIndex(rest: string[]): void {
@@ -902,16 +900,18 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
   }
   const projectDir = resolvePreflightProjectDir(project);
   const runId = flag('run-id') ?? `manual-${clause}`;
-  const { runPreflightFixTurn } = await import('@forge/sessions/preflight-fix-runner.ts');
-  const r = await runPreflightFixTurn({
+  // M4 port 6 (ruling 60) — see `brain fix` above.
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const runTurn = await FIX_KIND_RUNNERS['preflight-fix'].loadRunTurn();
+  const r = await runTurn({
     runId,
     projectDir,
-    clause: clause as Parameters<typeof runPreflightFixTurn>[0]['clause'],
+    clause: clause as Parameters<typeof runTurn>[0]['clause'],
     instruction: flag('instruction') ?? '',
     detail: flag('detail'),
     forgeRoot: FORGE_ROOT,
   });
-  console.log(`preflight-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${clause}`);
+  FIX_KIND_RUNNERS['preflight-fix'].printResult(runId, r, { clause });
 }
 
 /**
