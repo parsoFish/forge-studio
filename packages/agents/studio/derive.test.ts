@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveAgentSpec, executionPathForSurface, agentCapabilityDescriptor, FORGE_ROOT } from './derive.ts';
-import { listAgentDefinitions, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, loadAgentDefinition } from './agent-registry.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

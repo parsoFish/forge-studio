@@ -70,7 +70,7 @@ import { join } from 'node:path';
 import { runAgent, resolveOneShotBudgetUsd } from './run-agent.ts';
 import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { dispatchAgentRun } from './agent-dispatch.ts';
-import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions } from './studio/agent-registry.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
