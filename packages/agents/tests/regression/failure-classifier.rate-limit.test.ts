@@ -31,7 +31,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCycleFailure } from './failure-classifier.ts';
+import { classifyCycleFailure } from '../../failure-classifier.ts';
 import type { EventLogEntry } from '@forge/kernel';
 
 /** The sibling suite's fixture builder, duplicated rather than exported: a
