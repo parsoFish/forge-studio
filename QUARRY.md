@@ -98,7 +98,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | disposition | loc |
 |---|---|---|---|
-| packages/agents/agent-run.ts | agents | verbatim | 926 |
+| packages/agents/agent-run.ts | agents | verbatim | 891 |
 | packages/factory/architect-plan.ts | factory | verbatim | 862 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 255 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
@@ -239,7 +239,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-report.ts | flows | verbatim | 29 |
 | packages/flows/cycle.ts | flows | verbatim | 484 |
 | packages/flows/daemon.ts | flows | verbatim | 248 |
-| packages/sessions/demo-builder-runner.ts | sessions | verbatim | 814 |
+| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 710 |
 | packages/flows/demo-fix-loop.ts | flows | verbatim | 218 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
@@ -260,7 +260,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/gate-recipes.ts | projects | verbatim | 146 |
 | packages/flows/initiative-id.ts | flows | verbatim | 210 |
 | packages/library/instruction-seed-match.ts | library | verbatim | 152 |
-| packages/sessions/instructions-runner.ts | sessions | verbatim | 630 |
+| packages/sessions/kinds/instructions.ts | sessions | verbatim | 513 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 422 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 883 |
 | packages/sessions/interactive-session.ts | sessions | verbatim | 993 |
@@ -295,7 +295,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
 | packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
-| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 284 |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 384 |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 186 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 66 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |

@@ -101,14 +101,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runArchitectTurn, writeStatus, type ArchitectStatus } from './architect-runner.ts';
-import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from './instructions-runner.ts';
+import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from './kinds/instructions.ts';
 import {
   runDemoBuilderTurn,
   demoSessionDir,
   DEMO_SKILL_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
-} from './demo-builder-runner.ts';
+} from './kinds/demo-builder.ts';
 import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from './kinds/project-brain.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';

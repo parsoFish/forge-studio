@@ -1,63 +1,41 @@
 /**
- * In-UI demo-builder runner (Stage B).
+ * The `demo` session kind — a registered step-handler variant (ADR 043 as
+ * amended 2026-09-03, M4 ruling 60).
  *
- * Builds a project's demo as a rich, self-contained **HTML page** (`DEMO.html`)
- * plus the in-repo machinery to reproduce it — replacing the rigid `demo.json`
- * contract with bespoke, Forge-styled HTML the agent authors per project. The
- * operator reviews the rendered page in a sandboxed iframe and gives direct
- * feedback; the agent revises until the operator locks it in for reproducibility.
+ * Builds a project's demo: an agent authors demo machinery and DEMO.html into
+ * the project repo, the operator reviews it, and an approved generation is
+ * locked with a snapshot.
  *
- * Unlike the read-only instructions-creator (where the runner writes the single
- * output file), the demo-builder agent WRITES the machinery + DEMO.html into the
- * project repo itself (write tools, cwd = the repo). The runner verifies the
- * agent produced DEMO.html, drives the feedback loop, and records the lock.
+ * THE NAME TRAP, which is real and load-bearing (`AgentRunnerEntry.kindDir`'s
+ * own doc calls it out): the operator types the agent-id `demo-builder`, but
+ * the SESSION KIND is `demo` and its on-disk dir is `_demo`. So the registry
+ * KEY is `demo-builder` while `demoKind.id` is `demo` — which is what drives
+ * the `_demo-<sid>` event-log directory every consumer already derives
+ * independently. Naming the variant `demo-builder` would write events into
+ * `_demo-builder-<sid>`, a directory nothing reads.
  *
- * State machine (`status.json.phase`):
- *   generating ──▶ awaiting-review ──(bridge: feedback)──▶ generating
- *                        │ (bridge: lock)
- *                        ▼
- *                     locking ──▶ locked
- *                        └ (bridge: abandon) ──▶ abandoned
+ * This file holds ONLY the kind's identity — its phases, its agent spec, the
+ * generate/lock steps, the generation snapshots, and the studio-branch bracket
+ * around the steps that write into the project repo. Every piece of turn
+ * plumbing it used to carry now lives once in `kind-turn.ts`.
  *
- * Accepted residual (same trust tier as the hardlink/TOCTOU notes in
- * `packages/sessions/studio/session-transcript.ts`'s header — read that first for
- * the precedent this follows): `runLockStep`'s selected-generation restore
- * writes `DEMO.html` then the generator skill as two separate `writeFileSync`
- * calls, not one atomic transaction. A genuine fs failure between the two
- * (disk full, EMFILE, a killed process) leaves a half-restore — one file
- * holding the chosen generation's bytes, the other still holding whatever was
- * in the repo before this lock attempt. This is disclosed, not fixed: the
- * validation that gates this write (the `skillRelPath` allowlist + realpath
- * containment below) runs BEFORE either write, so the residual is strictly
- * about a mid-restore OS-level failure, never about untrusted input reaching
- * a write it shouldn't; a true atomic pair-write would need a temp-file +
- * rename on both files plus a way to make two renames commit together
- * (effectively a two-phase-commit journal) for a failure mode that is
- * self-healing regardless — the operator's next lock attempt re-runs the
- * SAME restore from the SAME immutable `generations/<n>/` snapshot and
- * overwrites whatever partial state was left, so no repeated attempt can
- * observe (or worsen) the half-restored window.
+ * Ported from `packages/sessions/demo-builder-runner.ts`. Byte-identical spawn
+ * behaviour is pinned by `interactive-runners-golden.test.ts` against
+ * `orchestrator/test-fixtures/spawn-capture/interactive-demo-builder.json`.
  */
 
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 
+import { runAgentTurn } from '../interactive-session.ts';
 import {
-  runAgentTurn,
-  guardedReadSessionStatus,
-  guardedWriteSessionStatus,
-  statusWriteRefusalReason,
-  makeHeartbeatWriter,
-  makeReasoningSink,
-  makeThinkingSink,
-  type QueryFn,
-} from './interactive-session.ts';
-import { createLogger, type EventLogger } from '@forge/kernel';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+  runKindTurn,
+  type KindTurnInput,
+  type KindTurnPlumbing,
+  type SessionKindVariant,
+} from './kind-turn.ts';
+import { guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
 import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -168,17 +146,7 @@ export type DemoBuilderStatus = {
   finalized?: { kind: string; id: string };
 };
 
-export type RunDemoBuilderTurnInput = {
-  sessionId: string;
-  /** Managed-project dir under forge `projects/` (holds the session dir). */
-  projectRoot: string;
-  /** Forge root for reading the base CSS + skill. Defaults to `process.cwd()`. */
-  forgeRoot?: string;
-  queryFn?: QueryFn;
-  logsRoot?: string;
-  logger?: EventLogger;
-  skillPromptPath?: string;
-};
+export type RunDemoBuilderTurnInput = KindTurnInput;
 
 export type RunDemoBuilderTurnResult = {
   phase: DemoBuilderPhase;
@@ -197,109 +165,67 @@ export function demoSessionDir(projectRoot: string, sessionId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Turn entry point
+// The variant
 // ---------------------------------------------------------------------------
+
+/**
+ * The studio-branch bracket around the steps that WRITE INTO THE PROJECT REPO.
+ * Kind composition, not plumbing: only this kind's agent authors machinery into
+ * someone else's repo, so only this kind brackets its steps that way.
+ *
+ * R4-23 WI-2 round-2 fix (AT-10): the commit runs in a `finally`, so a step
+ * that throws AFTER the agent has already written partial machinery still gets
+ * committed rather than leaving the project repo checked out on `forge-studio`
+ * with uncommitted writes. No `catch` — only `finally` — so the error still
+ * propagates unchanged.
+ */
+async function withStudioRepo<T>(
+  status: DemoBuilderStatus,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  try { ensureStudioBranch(status.project_repo_path); } catch { /* non-git project */ }
+  try {
+    return await run();
+  } finally {
+    try {
+      commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`);
+    } catch { /* best-effort */ }
+  }
+}
+
+export const demoKind: SessionKindVariant<DemoBuilderStatus, RunDemoBuilderTurnResult> = {
+  // `demo`, NOT `demo-builder` — see this file's header. The id drives the
+  // `_demo-<sid>` event-log directory every consumer derives independently.
+  id: 'demo',
+  kindDir: DEMO_KIND_DIR,
+  label: 'demo-builder runner',
+  eventLabel: 'demo-builder turn',
+  eventPhase: 'demo',
+  eventSkill: 'demo-builder-runner',
+  initiativeId: (sessionId) => `demo-${sessionId}`,
+
+  steps: {
+    generating: async ({ input, status, plumbing, writeStatus }) =>
+      await withStudioRepo(status, () => runGenerateStep({ input, status, plumbing, writeStatus })),
+
+    locking: async ({ input, status, plumbing, writeStatus }) =>
+      await withStudioRepo(status, () => runLockStep({ input, status, plumbing, writeStatus })),
+
+    abandoned: async ({ status, writeStatus }) => {
+      writeStatus({ ...status, phase: 'abandoned' });
+      return { phase: 'abandoned', wrote: [] };
+    },
+  },
+
+  // awaiting-review / locked — no actionable work this turn.
+  otherwise: (status) => ({ phase: status.phase, wrote: [] }),
+  startMetadata: (status) => ({ iteration: status.iteration }),
+};
 
 export async function runDemoBuilderTurn(
   input: RunDemoBuilderTurnInput,
 ): Promise<RunDemoBuilderTurnResult> {
-  // SEC-04 runner leg: contain the session dir before the first read — `sessionId`
-  // and the kind-dir arrive as their own guarded segments against the projectRoot
-  // base, so a traversal sessionId or a symlinked `_demo` resolves to a reject and
-  // the runner REFUSES rather than read out-of-root content.
-  const dirSegments = [DEMO_KIND_DIR, input.sessionId];
-  const guarded = resolveGuardedPath(input.projectRoot, dirSegments);
-  if (!guarded.ok) {
-    throw new Error(
-      `demo-builder runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
-    );
-  }
-  const sessionDir = guarded.realPath;
-  // SEC-04 leaf: route the status.json READ through the guarded sibling (leaf
-  // included) so a symlinked status.json inside the real, contained session dir
-  // is refused too. projectRoot trusted; kind-dir + sessionId ride as guarded
-  // segments. A rejected leaf collapses to null → the runner refuses.
-  const status = guardedReadSessionStatus<DemoBuilderStatus>(input.projectRoot, dirSegments);
-  if (!status) {
-    throw new Error(
-      `demo-builder runner: no status.json at ${sessionDir}. Has the session been started?`,
-    );
-  }
-
-  const forgeRoot = input.forgeRoot ?? resolve('.');
-  const logsRoot = input.logsRoot ?? resolve('_logs');
-  const cycleId = `_demo-${input.sessionId}`;
-  const initiativeId = `demo-${input.sessionId}`;
-  const logger = input.logger ?? createLogger(cycleId, logsRoot);
-  const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
-
-  const startEv = logger.emit({
-    initiative_id: initiativeId,
-    phase: 'demo',
-    skill: 'demo-builder-runner',
-    event_type: 'start',
-    input_refs: [join(sessionDir, 'status.json')],
-    output_refs: [],
-    message: `demo-builder turn (phase=${status.phase}, iteration=${status.iteration})`,
-    metadata: { session_id: input.sessionId, phase: status.phase, iteration: status.iteration },
-  });
-
-  // W6-B1: interactive sessions are operator-attended, low-volume turns —
-  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
-  // other interactive runner (the unattended dev-loop/PM/reflector phases
-  // are unchanged and keep the sampler's defaults).
-  const sink = makeToolEventSink(
-    logger,
-    {
-      initiativeId,
-      parentEventId: startEv.event_id,
-      phase: 'demo',
-      skill: 'demo-builder-runner',
-    },
-    { readOnlySampleRate: 1, cap: 200 },
-  );
-  const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const sinkCtx = { initiativeId, phase: 'demo' as const, skill: 'demo-builder-runner', idMeta: { session_id: input.sessionId } };
-  const onText = makeReasoningSink(logger, sinkCtx);
-  const onThinking = makeThinkingSink(logger, sinkCtx);
-
-  let result: RunDemoBuilderTurnResult;
-
-  // The agent writes demo machinery (.forge/demo/, .forge/skills/demo-design/)
-  // into the project repo — land it on the project's forge-studio branch.
-  const writesProjectRepo = status.phase === 'generating' || status.phase === 'locking';
-  if (writesProjectRepo) {
-    try { ensureStudioBranch(status.project_repo_path); } catch { /* non-git project */ }
-  }
-
-  // R4-23 WI-2 round-2 fix (AT-10): the phase dispatch is wrapped in try/finally
-  // so the post-dispatch commitStudioChange step below ALWAYS runs, even when the
-  // dispatch throws (e.g. runGenerateStep's required-file check, which can throw
-  // AFTER the agent has already written partial machinery into the repo). Without
-  // this, a mid-turn throw unwound straight past the commit step, leaving the
-  // project repo checked out on forge-studio with the agent's writes uncommitted.
-  // No catch here — only finally — so the thrown error still propagates unchanged
-  // to the caller once the (still best-effort) commit has landed.
-  try {
-    if (status.phase === 'generating') {
-      result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking });
-    } else if (status.phase === 'locking') {
-      result = runLockStep({ input, sessionDir, status, logger, initiativeId });
-    } else if (status.phase === 'abandoned') {
-      writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'abandoned' });
-      result = { phase: 'abandoned', wrote: [] };
-    } else {
-      // awaiting-review / locked — no actionable work this turn.
-      result = { phase: status.phase, wrote: [] };
-    }
-  } finally {
-    if (writesProjectRepo) {
-      try { commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`); } catch { /* best-effort */ }
-    }
-  }
-
-  sink.flushIteration(1);
-  return result;
+  return await runKindTurn(demoKind, input);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,20 +234,17 @@ export async function runDemoBuilderTurn(
 
 async function runGenerateStep(args: {
   input: RunDemoBuilderTurnInput;
-  sessionDir: string;
   status: DemoBuilderStatus;
-  forgeRoot: string;
-  queryFn: QueryFn;
-  logger: EventLogger;
-  initiativeId: string;
-  onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
-  onHeartbeat: () => void;
-  onText: (text: string) => void;
-  onThinking: (text: string) => void;
+  plumbing: KindTurnPlumbing;
+  writeStatus: (next: DemoBuilderStatus) => void;
 }): Promise<RunDemoBuilderTurnResult> {
-  const { input, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { input, status, plumbing, writeStatus } = args;
+  const { forgeRoot, logger, initiativeId } = plumbing;
   const baseCss = readBaseCss(forgeRoot);
-  const feedback = readFeedback(input.projectRoot, input.sessionId);
+  // CONSUME-ONCE: the driver reads feedback.md, runs this step, and deletes the
+  // note only once the step RESOLVES. Before the port this runner read it and
+  // never cleared it, so one revise kept steering every later generation.
+  return await plumbing.withOperatorFeedback(async (feedback) => {
 
   // Composition: the demoProcess may reference demo-element kinds from the forge
   // library. When it does, the demo is COMPOSED of project-side element-skills the
@@ -365,21 +288,20 @@ async function runGenerateStep(args: {
   ].join('\n');
 
   const { costUsd } = await runAgentTurn({
-    queryFn,
+    queryFn: plumbing.queryFn,
     prompt,
     cwd: status.project_repo_path,
     model: resolveSessionModel(demoBuilderAgentSpec, status.modelTier),
     allowedTools: demoBuilderAgentSpec.allowedTools,
     disallowedTools: demoBuilderAgentSpec.disallowedTools,
-    ...(() => {
-      const hooks = sdkHooksForAgent({ skill: demoBuilderAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId });
-      return hooks !== undefined ? { hooks } : {};
-    })(),
+    // W8-B6 — hook dispatch comes from the driver already bound to this turn's
+    // logger and initiative id, so no kind can spawn hook-blind.
+    ...plumbing.hooksForSkill(demoBuilderAgentSpec.skill),
     maxTurns: 24,
-    onToolUse,
-    onHeartbeat,
-    onText,
-    onThinking,
+    onToolUse: plumbing.onToolUse,
+    onHeartbeat: plumbing.onHeartbeat,
+    onText: plumbing.onText,
+    onThinking: plumbing.onThinking,
     label: `demo-builder-${input.sessionId}`,
   });
 
@@ -412,14 +334,16 @@ async function runGenerateStep(args: {
   writeFileSync(demoSnapPath, readFileSync(demoPath));
   const skillSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_SKILL_FILENAME], 'generation SKILL.md snapshot');
   writeFileSync(skillSnapPath, readFileSync(requiredSkillPath));
-  // feedback.md at TURN END (D8) — the runner never clears it, so this is
-  // read fresh rather than reusing the pre-turn `feedback` value, matching
-  // the literal "at turn end" contract even though the two are identical
-  // under today's code (no in-turn feedback.md mutation exists).
+  // feedback.md at TURN END (D8) — records what THIS generation consumed.
+  // Before the M4 ruling-60 port this re-read the file, on the premise that
+  // "the runner never clears it"; the port falsifies that premise (the driver
+  // consumes the note once, after this step resolves), so the value the step
+  // was GIVEN is now both the correct record and the only one that stays true
+  // for the whole turn.
   const generationMeta = {
     iteration: status.iteration,
     createdAt: new Date().toISOString(),
-    feedback: readFeedback(input.projectRoot, input.sessionId),
+    feedback,
     targetElement: target ?? null,
     composed,
     skillRelPath: requiredSkillRel,
@@ -427,7 +351,7 @@ async function runGenerateStep(args: {
   const metaSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_META_FILENAME], 'generation meta.json');
   writeFileSync(metaSnapPath, `${JSON.stringify(generationMeta, null, 2)}\n`);
 
-  writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-review' });
+  writeStatus({ ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
     event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath], cost_usd: costUsd,
@@ -436,6 +360,7 @@ async function runGenerateStep(args: {
   });
 
   return { phase: 'awaiting-review', wrote: [requiredSkillPath, demoPath], demoPath };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -444,12 +369,12 @@ async function runGenerateStep(args: {
 
 function runLockStep(args: {
   input: RunDemoBuilderTurnInput;
-  sessionDir: string;
   status: DemoBuilderStatus;
-  logger: EventLogger;
-  initiativeId: string;
+  plumbing: KindTurnPlumbing;
+  writeStatus: (next: DemoBuilderStatus) => void;
 }): RunDemoBuilderTurnResult {
-  const { input, sessionDir, status, logger, initiativeId } = args;
+  const { input, status, plumbing, writeStatus } = args;
+  const { logger, initiativeId, sessionDir } = plumbing;
 
   // R4-16 pin 2 (Finding C) — set only when THIS lock actually restored a
   // generation's snapshot; then it names the skill THAT generation recorded,
@@ -566,7 +491,7 @@ function runLockStep(args: {
   // all five finalizing kinds now write one). A locked demo IS the project's
   // .forge/demo/demo.lock.json, so the pointer names the PROJECT; the shell
   // route derives whether that lock is still on disk.
-  writeDemoStatus(input.projectRoot, input.sessionId, {
+  writeStatus({
     ...status,
     phase: 'locked',
     finalized: { kind: 'demo', id: status.project },
@@ -637,28 +562,6 @@ function guardedGenerationWritePath(projectRoot: string, segs: readonly string[]
   return p;
 }
 
-/**
- * SEC-04 leaf: guarded status.json write. Routes the WHOLE
- * `<projectRoot>/<kind>/<sid>/status.json` path (leaf included) through the
- * containment guard and THROWS (fail closed) if the leaf escapes.
- */
-function writeDemoStatus(projectRoot: string, sessionId: string, status: DemoBuilderStatus): void {
-  const p = guardedWriteSessionStatus(projectRoot, [DEMO_KIND_DIR, sessionId], status);
-  if (p === null) {
-    // W7-FIX-A2 (W7A2-01): the seam ALSO refuses a write that would move an
-    // on-disk `cancelled` phase — a turn that finished after the operator
-    // cancelled. Name that honestly (the advance is discarded by design;
-    // lifecycle reads terminal, never crashed) instead of "containment".
-    if (statusWriteRefusalReason(projectRoot, [DEMO_KIND_DIR, sessionId], status.phase) === 'cancelled') {
-      throw new Error(
-        `demo-builder runner: the session was cancelled while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
-      );
-    }
-    throw new Error(
-      'demo-builder runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
-    );
-  }
-}
 
 function describeDemoProcess(projectRepoPath: string): string {
   let steps;
@@ -755,6 +658,7 @@ function elementGeneratorLines(els: DemoElementDefinition[]): string[] {
   return out;
 }
 
+
 /** The task-specific instruction block: per-element iteration, composed, or legacy.
  * Exported (read-only) for the R4-07 descriptor-parity test — the builder and the
  * demo agent must consume the same demoProcess descriptor in the same step order. */
@@ -801,14 +705,7 @@ function readBaseCss(forgeRoot: string): string {
   }
 }
 
-function readFeedback(projectRoot: string, sessionId: string): string | null {
-  // SEC-04 leaf: routed through the guard (leaf included).
-  const fb = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, 'feedback.md']);
-  if (fb === null) return null;
-  const trimmed = fb.trim();
-  return trimmed || null;
-}
-
-// W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates
-// were removed — this file now consumes the ONE shared pair exported from
-// interactive-session.ts (imported above).
+// W6-B1 review round 2 removed this file's local makeReasoningSink/
+// makeThinkingSink duplicates in favour of the shared pair. The M4 ruling-60
+// port took the next step: the sinks are BUILT by kind-turn.ts and arrive on
+// `plumbing`, so this file neither declares nor constructs them.

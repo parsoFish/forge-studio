@@ -6,7 +6,7 @@
  * `splitSkillTurnSections` loader contract landing in `packages/agents/skill-path.ts`
  * via WI-1). WI-2 moves the generate-step's INSTRUCTION PROSE (the three
  * branch bodies — per-element / composed / legacy — plus the update-mode
- * guidance) out of `packages/sessions/demo-builder-runner.ts` and into the skill.
+ * guidance) out of the demo-builder runner (now `kinds/demo-builder.ts`) and into the skill.
  * The runner keeps injecting only DATA: project name/repo path, operator
  * guidance/feedback, the ordered element-step list, the element generator
  * bodies, and the forge base stylesheet.
@@ -55,7 +55,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import {
   runDemoBuilderTurn,
@@ -64,15 +65,17 @@ import {
   DEMO_SKILL_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
-} from './demo-builder-runner.ts';
+} from './kinds/demo-builder.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
-const RUNNER_TS_PATH = join(FORGE_ROOT, 'packages', 'sessions', 'demo-builder-runner.ts');
+// Anchored on the kernel's FORGE_ROOT, not a hand-counted `..` chain
+// (COMMON §15.14): a depth-coupled chain silently re-points at a file that
+// does not exist the moment either end moves.
+const RUNNER_TS_PATH = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'demo-builder.ts');
 const SKILL_MD_PATH = join(FORGE_ROOT, 'skills', 'demo-builder', 'SKILL.md');
 
 /** Normalise whitespace on both sides before comparing — the moved sentences
@@ -167,12 +170,9 @@ function makeElementWritingQueryFn(elementId: string, capture?: (prompt: string)
 // AT-1 — prose-left-the-TS (grep-assert, both files read from disk at test time)
 // ---------------------------------------------------------------------------
 
-// Verified present in demo-builder-runner.ts TODAY (base c45e3892) by running:
-//   python3 -c "... substring search, whitespace-normalised ..."
-// against the file — all five returned IN_TS=True IN_SKILL=False. Quoting the
-// verification below in each entry's comment (grep output summarised — see the
-// session report for the raw run) rather than re-deriving it at test time,
-// since the assertions THEMSELVES are the live re-check on every run.
+// Each entry's comment cites where the prose sat at base c45e3892 (then
+// `demo-builder-runner.ts`, now `kinds/demo-builder.ts`); the assertions
+// below are the live re-check on every run.
 const MOVED_SENTENCES: Array<{ label: string; text: string }> = [
   {
     // packages/sessions/demo-builder-runner.ts:709 (demoTaskLines, `target` branch).
@@ -215,7 +215,7 @@ test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 bra
     const needle = norm(text);
     assert.ok(
       !tsNorm.includes(needle),
-      `${label}: must be ABSENT from packages/sessions/demo-builder-runner.ts (the prose must move to SKILL.md) — it is still there`,
+      `${label}: must be ABSENT from packages/sessions/kinds/demo-builder.ts (the prose must move to SKILL.md) — it is still there`,
     );
     assert.ok(
       skillNorm.includes(needle),
@@ -228,7 +228,7 @@ test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 bra
 // AT-2 — no fail-open remains
 // ---------------------------------------------------------------------------
 
-test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from demo-builder-runner.ts', () => {
+test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from kinds/demo-builder.ts', () => {
   const tsText = readFileSync(RUNNER_TS_PATH, 'utf8');
   assert.ok(
     !tsText.includes('You are the forge demo-builder agent.'),
@@ -567,7 +567,7 @@ const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
     text: 'This is also the file `forge preflight` DEMO-SKILL checks.',
   },
   {
-    // KNOWN DROPPED — verified absent from both packages/sessions/demo-builder-runner.ts
+    // KNOWN DROPPED — verified absent from both packages/sessions/kinds/demo-builder.ts
     // and skills/demo-builder/SKILL.md today (see AT-1's file header + the grep
     // run recorded in this file's session report: 0 hits either side).
     label: 'KNOWN-DROPPED — deliverable #2, "find a real recent change" sourcing instruction',

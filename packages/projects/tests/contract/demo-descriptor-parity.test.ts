@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { checkDemo } from '../../preflight.ts';
-import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/demo-builder-runner.ts';
+import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
 import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
 // `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
 // library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`

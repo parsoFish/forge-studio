@@ -18,6 +18,8 @@
  * `registry-entry-shape.test.ts` pins that compatibility so a field added on
  * either side cannot drift silently.
  */
+import { demoKind, runDemoBuilderTurn } from './demo-builder.ts';
+import { instructionsKind, runInstructionsTurn } from './instructions.ts';
 import { projectBrainKind, runProjectBrainTurn } from './project-brain.ts';
 import type { KindTurnInput } from './kind-turn.ts';
 
@@ -48,7 +50,51 @@ export interface SessionKindRunner {
   printResult: (result: unknown) => void;
 }
 
+/**
+ * ORDER IS PART OF THE OPERATOR SURFACE. `knownAgentIds()` concatenates
+ * `Object.keys(AGENT_RUNNERS)` with these keys and prints the result in
+ * `forge agent run`'s usage line, so the declaration order here decides what
+ * the operator reads. It is kept as the single table's was — architect,
+ * instructions, demo-builder, project-brain — so a port changes nothing an
+ * operator can see. Add a ported kind in the position its AGENT_RUNNERS row
+ * held, not at the end.
+ */
 export const SESSION_KIND_RUNNERS: Record<string, SessionKindRunner> = {
+  instructions: {
+    verb: 'instructions run',
+    requiresProject: true,
+    // R3-05-F3 — the kind reads the studio/instruction-seeds/ library under
+    // forgeRoot to compose AGENTS.md from vetted blocks.
+    needsForgeRoot: true,
+    kindDir: instructionsKind.kindDir,
+    loadRunTurn: async () => runInstructionsTurn,
+    printResult: (raw) => {
+      const result = raw as Awaited<ReturnType<typeof runInstructionsTurn>>;
+      console.log(`instructions turn complete — phase=${result.phase}`);
+      if (result.questions?.length) {
+        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
+      }
+      if (result.draftPath) console.log(`  DRAFT: ${result.draftPath}`);
+      if (result.agentsPath) console.log(`  AGENTS.md: ${result.agentsPath}`);
+    },
+  },
+  // The KEY is the agent-id the operator types; the KIND is `demo` and its dir
+  // is `_demo`. Those three strings are intentionally different — see the kind
+  // module's header. `kindDir` reads off the variant so the trap cannot be
+  // re-typed wrong here.
+  'demo-builder': {
+    verb: 'demo-builder run',
+    requiresProject: true,
+    needsForgeRoot: true,
+    kindDir: demoKind.kindDir,
+    loadRunTurn: async () => runDemoBuilderTurn,
+    printResult: (raw) => {
+      const result = raw as Awaited<ReturnType<typeof runDemoBuilderTurn>>;
+      console.log(`demo-builder turn complete — phase=${result.phase}`);
+      if (result.demoPath) console.log(`  DEMO: ${result.demoPath}`);
+      if (result.lockPath) console.log(`  LOCK: ${result.lockPath}`);
+    },
+  },
   'project-brain': {
     verb: 'project-brain run',
     requiresProject: true,
