@@ -100,7 +100,7 @@ test('6: flags a fold onto an identifier projects-root (projectsRoot form)', () 
 // =============================================================================
 
 test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () => {
-  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'packages/agents/find-session-project.ts');
   const realText = readFileSync(realPath, 'utf8');
 
   // Baseline scan of the real source. NOTE (informational, not asserted): before
@@ -108,7 +108,7 @@ test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () 
   // fold is routed through the guard. We deliberately do NOT gate on this count —
   // the scanner may still surface unrelated syntactic folds in the file (see the
   // implementer note in the report), so the durable proof is the mutation below.
-  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'packages/agents/find-session-project.ts');
   assert.ok(Array.isArray(realFindings), 'the scanner returns a findings array on real source');
 
   // Inject a fresh fold and PROVE the mutation applied before reading any verdict.
@@ -116,7 +116,7 @@ test('7 (MUTATION): a re-introduced fold in the real source tree is caught', () 
   const mutatedText = `${realText}\n${MUT_LINE}\n`;
   assert.ok(mutatedText.includes(MUT_LINE), 'precondition: the fold mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/find-session-project.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the injected fold adds a finding the scanner did not have before',
@@ -153,8 +153,12 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
     {
       // The audited-trusted dual-mode residual (allowlisted by file+folded).
       'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
-      // A fresh, un-audited fold — must fail the build.
-      'packages/agents/agent-run.ts': "const p = resolve('projects', evilArg);\n",
+      // A fresh, un-audited fold — must fail the build. The fixture subject is
+      // `find-session-project.ts` because that is what `PROJECTS_ROOT_FOLD_MODULES`
+      // now scopes: M4-agents s3 split `agent-run.ts`, and the real
+      // `join(projectsDir, name)` fold left with `findSessionProject`. A fixture
+      // planted in a module the scan no longer covers proves nothing.
+      'packages/agents/find-session-project.ts': "const p = resolve('projects', evilArg);\n",
       // Remaining fold-scope modules present but benign, so the scan sees a
       // complete module set rather than skipping absent files.
       'packages/agents/agent-dispatch.ts': "export const noop = true;\n",
@@ -163,7 +167,7 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
     (root) => {
       // Fixture precondition: assert the two folds are on disk before the verdict.
       assert.ok(
-        readFileSync(join(root, 'packages/agents/agent-run.ts'), 'utf8').includes("resolve('projects', evilArg)"),
+        readFileSync(join(root, 'packages/agents/find-session-project.ts'), 'utf8').includes("resolve('projects', evilArg)"),
         'precondition: the un-allowlisted fold is present in the fixture',
       );
       assert.ok(
@@ -176,8 +180,8 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
       // { findings: kept, ... }; main() exits 1 on findings.length).
       assert.ok(res.findings.length >= 1, 'the un-allowlisted fold makes the build fail (non-empty kept findings)');
       assert.ok(
-        res.findings.some((f) => f.file === 'packages/agents/agent-run.ts' && f.folded === 'evilArg'),
-        'the failing finding is the packages/agents/agent-run.ts evilArg fold',
+        res.findings.some((f) => f.file === 'packages/agents/find-session-project.ts' && f.folded === 'evilArg'),
+        'the failing finding is the packages/agents/find-session-project.ts evilArg fold',
       );
       assert.ok(
         !res.findings.some((f) => f.folded === 'target'),
@@ -191,7 +195,7 @@ test('10: runLint PASSES when the only fold is an audited residual', () => {
   withFixture(
     {
       'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
-      'packages/agents/agent-run.ts': "export const noop = true;\n",
+      'packages/agents/find-session-project.ts': "export const noop = true;\n",
       'packages/agents/agent-dispatch.ts': "export const noop = true;\n",
       'packages/flows/scheduler.ts': "export const noop = true;\n",
     },
