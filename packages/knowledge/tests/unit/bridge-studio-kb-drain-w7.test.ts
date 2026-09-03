@@ -27,7 +27,10 @@ import { deriveKbActiveJob } from '../../kb-job-state.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
 import { runBrainLint } from '../../brain-lint.ts';
 import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures (mirrors cli/bridge-studio-kb-drain.test.ts Part A)
@@ -278,14 +281,39 @@ test('runKbDrain — a cancel request lands as a "cancelled" terminal between tu
 // Part B — HTTP routes (isolated bridge)
 // ---------------------------------------------------------------------------
 
-async function makeIsolatedBridge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+/**
+ * Part B drives the CARVED HANDLERS directly — no bridge (COMMON §5: a package
+ * test never boots one). The table, the req/res mocks and the `{status, json}`
+ * shape are the seam `tests/integration/routes-dispatch.test.ts` established,
+ * so every assertion below is byte-for-byte what it was over HTTP.
+ *
+ * What is deliberately NOT tested here any more: origin/CSRF/404-fallthrough.
+ * Those are the HOST's policy, they live in `cli/*.test.ts`, and asserting them
+ * from inside the package would re-test the host through its tenant.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+function makeIsolatedBridge(): { root: string } {
   const root = mkdtempSync(join(tmpdir(), 'kb-drain-w7-http-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(root, '_queue', state), { recursive: true });
   }
   mkdirSync(join(root, '_logs'), { recursive: true });
-  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
-  return { root, url, close };
+  return { root };
 }
 
 function seedCleanKb(root: string, kbId: string): void {
@@ -300,9 +328,16 @@ function writeDrainStatus(root: string, runId: string, status: Record<string, un
   writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2));
 }
 
-async function postJson(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'x-forge-csrf': '1' } });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+async function postJson(root: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => ({}),
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, 'POST');
+  assert.ok(matched, `no carved route claimed POST ${path}`);
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
 }
 
 const RUNNING_STATUS = {
@@ -311,12 +346,12 @@ const RUNNING_STATUS = {
 };
 
 test('POST /api/studio/kbs/:id/drain — events.jsonl exists the moment the dispatch returns (knowledge-13)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
     seedCleanKb(iso.root, 'evt-sync');
-    const dispatch = await postJson(iso.url, '/api/studio/kbs/evt-sync/drain');
+    const dispatch = await postJson(iso.root, '/api/studio/kbs/evt-sync/drain');
     assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
     const runId = dispatch.json['runId'] as string;
     // SYNCHRONOUS check — before the deferred queue tick can have run.
@@ -326,56 +361,52 @@ test('POST /api/studio/kbs/:id/drain — events.jsonl exists the moment the disp
     );
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('POST /api/studio/kbs/:id/drain/cancel — live run: cancel requested (flag written, 200)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
     const runId = 'cx-kb-drain-live1';
     writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, updatedAt: new Date().toISOString() });
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['runId'], runId);
     assert.equal(res.json['mode'], 'requested');
     assert.ok(existsSync(join(iso.root, '_logs', `_kb-drain-${runId}`, 'cancel.json')), 'cancel flag file must exist');
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('POST /api/studio/kbs/:id/drain/cancel — stale run (no heartbeat): forced terminal cancel', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
     const runId = 'cx-kb-drain-stale1';
     const stale = new Date(Date.now() - (KB_DRAIN_STALE_MS + 60_000)).toISOString();
     writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, updatedAt: stale });
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['mode'], 'forced');
     const after = JSON.parse(readFileSync(join(iso.root, '_logs', `_kb-drain-${runId}`, 'status.json'), 'utf8')) as { state: string };
     assert.equal(after.state, 'cancelled');
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('POST /api/studio/kbs/:id/drain/cancel — 409 when no active run', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
     const runId = 'cx-kb-drain-done1';
     writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, state: 'green', updatedAt: new Date().toISOString() });
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 409, JSON.stringify(res.json));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -384,12 +415,12 @@ test('POST /api/studio/kbs/:id/drain/cancel — 409 when no active run', async (
 // terminal (state + runId), not just "no active drain run": "refuses
 // honestly" means the operator learns WHY there is nothing to cancel.
 test('POST /api/studio/kbs/:id/drain/cancel — the terminal-run 409 names the latest run + its terminal state (knowledge-14, W7 FIX-B-KB)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
     const runId = 'cx-kb-drain-done2';
     writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, state: 'no-progress', updatedAt: new Date().toISOString() });
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 409, JSON.stringify(res.json));
     const err = String(res.json['error'] ?? '');
     assert.ok(err.includes('terminal'), `the 409 reason must say the run is terminal, got "${err}"`);
@@ -397,22 +428,20 @@ test('POST /api/studio/kbs/:id/drain/cancel — the terminal-run 409 names the l
     assert.equal(res.json['runId'], runId, `the 409 body must name the terminal run, got ${JSON.stringify(res.json)}`);
     assert.equal(res.json['state'], 'no-progress', `the 409 body must carry the terminal state, got ${JSON.stringify(res.json)}`);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('POST /api/studio/kbs/:id/drain/cancel — 409 with the never-dispatched reason when NO run exists at all (W7 FIX-B-KB)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 409, JSON.stringify(res.json));
     const err = String(res.json['error'] ?? '');
     assert.ok(err.includes('no active drain run'), `got "${err}"`);
     assert.equal('runId' in res.json, false, `no runId may be fabricated when no run exists, got ${JSON.stringify(res.json)}`);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -427,14 +456,14 @@ test('POST /api/studio/kbs/:id/drain/cancel — 409 with the never-dispatched re
 // ---------------------------------------------------------------------------
 
 test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel flag; a late-starting queued run cannot resurrect', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedCleanKb(iso.root, 'cx-kb');
     const runId = 'cx-kb-drain-queued1';
     const stale = new Date(Date.now() - (KB_DRAIN_STALE_MS + 60_000)).toISOString();
     writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, updatedAt: stale });
 
-    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    const res = await postJson(iso.root, '/api/studio/kbs/cx-kb/drain/cancel');
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['mode'], 'forced');
     assert.ok(
@@ -470,7 +499,6 @@ test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel 
     assert.equal(turns, 0, 'a cancelled run must dispatch no agent turn at all');
     assert.equal(autoCalls, 0, 'a cancelled run must not apply auto-fixes either');
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });

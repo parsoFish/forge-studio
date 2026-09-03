@@ -12,6 +12,11 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
+
 import { CHECK_NAMES, checkReflectorLoss } from '../../brain-lint.ts';
 
 import {
@@ -24,50 +29,67 @@ import {
 } from './test-fixtures/bridge-studio-kbs.ts';
 
 let forgeRoot: string;
-let bridgeUrl: string;
-let closeServer: () => Promise<void>;
 
 before(async () => {
   const shared = await setupSharedForge();
   forgeRoot = shared.root;
-  bridgeUrl = shared.url;
-  closeServer = shared.close;
 });
 
 after(async () => {
-  await closeServer();
   rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-async function post(
-  path: string,
-  body?: Record<string, unknown>,
-  nocsrf = false,
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (!nocsrf) headers['x-forge-csrf'] = '1';
-  const res = await fetch(`${bridgeUrl}${path}`, {
-    method: 'POST',
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+/**
+ * `post`/`get`/`getAt` drive the CARVED HANDLERS directly — no bridge
+ * (COMMON §5: a package test never boots one). The `{status, json}` shape is
+ * preserved so every assertion below is byte-for-byte what it was over HTTP.
+ * Not tested here any more, deliberately: origin/CSRF/404-fallthrough — the
+ * HOST's policy, tested in `cli/*.test.ts`.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+async function drive(root: string, path: string, method: string, body: unknown = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  if (!matched) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+async function post(path: string, body?: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
+  return drive(forgeRoot, path, 'POST', body ?? {});
 }
 
 async function get(path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${bridgeUrl}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  return drive(forgeRoot, path, 'GET');
 }
 
-/** GET against an isolated bridge (mirrors `postAt`'s style/pairing). Used by
+/** GET against an isolated root (mirrors `postAt`'s style/pairing). Used by
  *  the R6-08 WI-1 health-itemization RED pins below, which each need their
  *  OWN forge-root (a fresh 'cycles' with exactly one seeded defect, or the
  *  isolated alpha/alpha-two/throwkb fixtures) rather than the shared file-level
  *  fixture — mutating the SHARED 'cycles'/HEALTH_KB_ID KBs would risk
  *  interfering with the ~30 other tests in this file that read them. */
-async function getAt(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+async function getAt(root: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
+  return drive(root, path, 'GET');
 }
 
 const FULL_SCOPE_CHECK_NAMES = CHECK_NAMES;
@@ -167,7 +189,7 @@ test('R6-08 4on: a lone checkFrontmatter defect (missing description) on the top
       '# RB Frontmatter Fixture\n\nMinimal fixture body with no links (deliberately missing `description` — the ONE defect this fixture carries).\n',
     );
 
-    const detail = await getAt(iso.url, '/api/studio/kbs/cycles');
+    const detail = await getAt(iso.root, '/api/studio/kbs/cycles');
     assert.equal(detail.status, 200, JSON.stringify(detail.json));
     const health = detail.json['health'] as
       | { checks?: CheckHealthEntry[]; lintErrors?: number; lintFlags?: number }
@@ -209,7 +231,6 @@ test('R6-08 4on: a lone checkFrontmatter defect (missing description) on the top
     const rollupErrors = health!.checks!.reduce((sum, c) => sum + c.errorCount, 0);
     assert.equal(health!.lintErrors, rollupErrors, `aggregate lintErrors (${health!.lintErrors}) must equal the sum of checks[].errorCount (${rollupErrors})`);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -227,13 +248,13 @@ test('R6-08 WI-1 RED-C (risk #5, sibling-leak guard): checks[checkProjectBrainIn
     // Fixture precondition (before any verdict): the pre-existing, already
     // correctly-scoped op=lint read really does see 2 findings for alpha,
     // independent of alpha-two.
-    const lintAlpha = await postAt(iso.url, '/api/studio/kbs/alpha/maintenance', { op: 'lint' });
+    const lintAlpha = await postAt(iso.root, '/api/studio/kbs/alpha/maintenance', { op: 'lint' });
     const alphaFindings = (lintAlpha.json['findings'] as Array<{ check?: string }>).filter(
       (f) => f.check === 'checkProjectBrainIndexes',
     );
     assert.equal(alphaFindings.length, 2, `precondition: alpha must have 2 checkProjectBrainIndexes findings via op=lint, got ${alphaFindings.length}`);
 
-    const detail = await getAt(iso.url, '/api/studio/kbs/alpha');
+    const detail = await getAt(iso.root, '/api/studio/kbs/alpha');
     assert.equal(detail.status, 200, JSON.stringify(detail.json));
     const health = detail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
     assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
@@ -247,7 +268,6 @@ test('R6-08 WI-1 RED-C (risk #5, sibling-leak guard): checks[checkProjectBrainIn
       `checkProjectBrainIndexes.flagCount for "alpha" must be exactly 2 (its own findings only) — a naive substring scope would fold in sibling "alpha-two"'s 1 finding and report 3. Got ${JSON.stringify(entry)}`,
     );
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -264,7 +284,7 @@ test('R6-08 WI-1 addendum (RULING 3, unlettered in the WI spec): a lint-run thro
     // just with the current silent-catch bug (lintFlags/lintErrors both 0).
     seedProjectBrain(iso.root, 'throwkb', ['t-one'], { patternsAsDir: true });
 
-    const detail = await getAt(iso.url, '/api/studio/kbs/throwkb');
+    const detail = await getAt(iso.root, '/api/studio/kbs/throwkb');
     assert.equal(detail.status, 200, JSON.stringify(detail.json));
     const health = detail.json['health'] as { checks?: CheckHealthEntry[]; healthError?: string } | undefined;
     assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
@@ -279,7 +299,6 @@ test('R6-08 WI-1 addendum (RULING 3, unlettered in the WI spec): a lint-run thro
       `a top-level healthError (string) must be present on a lint-run throw — got ${JSON.stringify(health)}`,
     );
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -311,7 +330,7 @@ test('R6-08 4on (F2): checkReflectorLoss is a GLOBAL advisory (_queue/done) — 
     seedProjectBrain(iso.root, 'reflector-loss-check', ['r-one']);
 
     for (const kbId of ['cycles', 'reflector-loss-check']) {
-      const detail = await getAt(iso.url, `/api/studio/kbs/${kbId}`);
+      const detail = await getAt(iso.root, `/api/studio/kbs/${kbId}`);
       assert.equal(detail.status, 200, JSON.stringify(detail.json));
       const health = detail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
       assert.ok(health, `health object must be present for "${kbId}", got ${JSON.stringify(detail.json)}`);
@@ -325,7 +344,6 @@ test('R6-08 4on (F2): checkReflectorLoss is a GLOBAL advisory (_queue/done) — 
       );
     }
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -347,7 +365,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     );
     writeFileSync(join(emptyDir, 'patterns.md'), `# ${emptyId} — Patterns\n\n> fixture index.\n\n## Theme pages\n`);
 
-    const emptyDetail = await getAt(iso.url, `/api/studio/kbs/${emptyId}`);
+    const emptyDetail = await getAt(iso.root, `/api/studio/kbs/${emptyId}`);
     assert.equal(emptyDetail.status, 200, JSON.stringify(emptyDetail.json));
     const emptyHealth = emptyDetail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
     assert.ok(emptyHealth, `health object must be present, got ${JSON.stringify(emptyDetail.json)}`);
@@ -394,7 +412,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
       '# F1 Own-Theme Defect Fixture\n\nDeliberately missing `description` — the ONE defect this fixture carries.\n',
     );
 
-    const defectDetail = await getAt(iso.url, `/api/studio/kbs/${defectId}`);
+    const defectDetail = await getAt(iso.root, `/api/studio/kbs/${defectId}`);
     assert.equal(defectDetail.status, 200, JSON.stringify(defectDetail.json));
     const defectHealth = defectDetail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
     assert.ok(defectHealth, `health object must be present, got ${JSON.stringify(defectDetail.json)}`);
@@ -434,7 +452,6 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     assert.ok(cat, `checks[] must include a checkCategoryScope entry, got ${JSON.stringify(defectHealth!.checks)}`);
     assert.equal(cat!.status, 'n/a', `checkCategoryScope is a forge-brain-only routing convention — must be 'n/a' for a non-forge KB, never a vacuous 'pass' or a false 'fail'. Got ${JSON.stringify(cat)}`);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });

@@ -249,6 +249,42 @@ test('AT-1 (RAW WIRE — a fetch()-delivered ".." cannot reach this route at all
 
 // Kills: a route that 200s (or 500s) instead of a clean 404 for a
 // well-formed but non-existent kb id.
+/**
+ * knowledge-05, RELOCATED from
+ * `packages/knowledge/tests/integration/bridge-studio-kbs-w7.test.ts`
+ * (M4-knowledge s5, T1 ruling 57).
+ *
+ * That file asserted the active-job 409 across EVERY mutating KB route,
+ * `cleanup/start` among them. Its five siblings are carved into
+ * `packages/knowledge/routes.ts` and are now driven handler-level, with no
+ * bridge (COMMON §5) — but this route is the 18th KB route and the one still
+ * implemented INLINE in `cli/ui-bridge.ts`, because it mints an interactive
+ * session and ruling 17 forbids carving that into a rank-2 package. It is
+ * handoff K10 to M4-sessions.
+ *
+ * So the assertion could not follow the others, and deleting it to make a
+ * conversion tidy would have quietly dropped the one route in the family whose
+ * gate nobody else covers. It lives here instead: this file boots a real
+ * bridge and already owns this route's test surface. It goes to sessions with
+ * the route.
+ */
+test('knowledge-05 (relocated): cleanup/start 409s while a drain is live for that KB — the 18th KB route honours the same active-job gate as its five carved siblings', async () => {
+  writeKb('busy-kb', '{ kind: unique }');
+  // A LIVE drain status file — what `deriveKbActiveJob` reads to report a job.
+  const runId = 'busy-kb-drain-relocated';
+  const drainDir = join(forgeRoot, '_logs', `_kb-drain-${runId}`);
+  mkdirSync(drainDir, { recursive: true });
+  writeFileSync(join(drainDir, 'status.json'), JSON.stringify({
+    state: 'running', round: 1, counts: { auto: 0, agent: 1, user: 0 }, perFinding: [],
+    costUsd: 0, kbId: 'busy-kb', updatedAt: new Date().toISOString(),
+  }), 'utf8');
+
+  const res = await start('busy-kb');
+  const body = await res.json() as Record<string, unknown>;
+  assert.equal(res.status, 409, JSON.stringify(body));
+  assert.match(String(body['error']), /active for this kb/, JSON.stringify(body));
+});
+
 test('AT-2: unknown (but well-formed) kb id -> 404', async () => {
   const res = await start('no-such-kb-at-all');
   assert.equal(res.status, 404, `expected 404, got ${res.status}: ${await res.text()}`);

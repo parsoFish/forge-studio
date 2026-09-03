@@ -11,17 +11,53 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { dispatchRoute } from '@forge/kernel';
+import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 import { deriveKbActiveJob, activeJobReason } from '../../kb-job-state.ts';
 
-async function makeIsolatedBridge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+/**
+ * These drive the CARVED HANDLERS directly — no bridge (COMMON §5). The
+ * `{status, json}` shape is preserved so every assertion is byte-for-byte what
+ * it was over HTTP. Origin/CSRF/404-fallthrough are the HOST's policy and stay
+ * in `cli/*.test.ts`.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
+const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
+
+function mockRes(): { res: ServerResponse; captured: { status: number | null; body: string } } {
+  const captured: { status: number | null; body: string } = { status: null, body: '' };
+  const res = {
+    writeHead(status: number) { captured.status = status; return res; },
+    end(payload?: string) { if (payload !== undefined) captured.body = payload; return res; },
+  } as unknown as ServerResponse;
+  return { res, captured };
+}
+
+async function drive(root: string, path: string, method: string, body: unknown = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = {
+    forgeRoot: root,
+    logsRoot: join(root, '_logs'),
+    readBody: async () => body,
+  };
+  const matched = await dispatchRoute(routes, mockReq(), res, ctx, path, method);
+  if (!matched) return { status: 404, json: {} };
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+function makeIsolatedBridge(): { root: string } {
   const root = mkdtempSync(join(tmpdir(), 'kbs-w7-http-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(root, '_queue', state), { recursive: true });
   }
   mkdirSync(join(root, '_logs'), { recursive: true });
-  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
-  return { root, url, close };
+  return { root };
 }
 
 function seedKb(root: string, kbId: string, opts: { project?: boolean } = {}): string {
@@ -50,35 +86,22 @@ function seedLiveDrain(root: string, kbId: string): string {
   return runId;
 }
 
-async function postJson(base: string, path: string, body?: Record<string, unknown>): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
+const postJson = (root: string, path: string, body: Record<string, unknown> = {}) => drive(root, path, 'POST', body);
 
-async function getJson(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`);
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
+const getJson = (root: string, path: string) => drive(root, path, 'GET');
 
-async function del(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await fetch(`${base}${path}`, { method: 'DELETE', headers: { 'x-forge-csrf': '1' } });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
+const del = (root: string, path: string) => drive(root, path, 'DELETE');
 
 // ---------------------------------------------------------------------------
 // knowledge-V01 — create collision must check BOTH containment roots
 // ---------------------------------------------------------------------------
 
 test('POST /api/studio/kbs — 409 when the id already lives at brain/projects/<id> (knowledge-V01: no silent shadow)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedKb(iso.root, 'gitpulse', { project: true });
     seedProject(iso.root, 'gitpulse');
-    const res = await postJson(iso.url, '/api/studio/kbs', {
+    const res = await postJson(iso.root, '/api/studio/kbs', {
       id: 'gitpulse', name: 'gitpulse', binding: { kind: 'project', ref: 'gitpulse' }, desc: 'shadow attempt',
     });
     assert.equal(res.status, 409, JSON.stringify(res.json));
@@ -87,7 +110,6 @@ test('POST /api/studio/kbs — 409 when the id already lives at brain/projects/<
     assert.ok(!existsSync(join(iso.root, 'brain', 'gitpulse')), 'no shadow brain/<id> dir may be scaffolded');
     assert.ok(existsSync(join(iso.root, 'brain', 'projects', 'gitpulse', 'kb.yaml')));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -97,45 +119,48 @@ test('POST /api/studio/kbs — 409 when the id already lives at brain/projects/<
 // ---------------------------------------------------------------------------
 
 test('mutating KB routes 409 with the active-job reason while a drain is live (knowledge-05)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedKb(iso.root, 'busy-kb');
     const runId = seedLiveDrain(iso.root, 'busy-kb');
     const job = deriveKbActiveJob(iso.root, 'busy-kb');
     assert.deepEqual(job, { kind: 'drain', runId });
 
-    const consolidate = await postJson(iso.url, '/api/studio/kbs/busy-kb/maintenance', { op: 'consolidate' });
+    const consolidate = await postJson(iso.root, '/api/studio/kbs/busy-kb/maintenance', { op: 'consolidate' });
     assert.equal(consolidate.status, 409, JSON.stringify(consolidate.json));
     assert.equal(consolidate.json['error'], activeJobReason({ kind: 'drain', runId }));
 
-    const index = await postJson(iso.url, '/api/studio/kbs/busy-kb/maintenance', { op: 'index' });
+    const index = await postJson(iso.root, '/api/studio/kbs/busy-kb/maintenance', { op: 'index' });
     assert.equal(index.status, 409, JSON.stringify(index.json));
 
-    const cleanup = await postJson(iso.url, '/api/studio/kbs/busy-kb/cleanup/start', {});
-    assert.equal(cleanup.status, 409, JSON.stringify(cleanup.json));
+    // `POST /api/studio/kbs/:id/cleanup/start` is deliberately absent from this
+    // list. It is the 18th KB route and the ONE that is still implemented
+    // inline in `cli/ui-bridge.ts` (it mints an interactive session, so ruling
+    // 17 forbids carving it into a rank-2 package) — handoff K10 to
+    // M4-sessions. A handler-level test cannot reach it, so its 409 assertion
+    // MOVED to `cli/ui-bridge-kb-cleanup.test.ts`, which boots a real bridge
+    // and already owns that route's test surface. It was not dropped.
 
-    const remove = await del(iso.url, '/api/studio/kbs/busy-kb');
+    const remove = await del(iso.root, '/api/studio/kbs/busy-kb');
     assert.equal(remove.status, 409, JSON.stringify(remove.json));
 
-    const active = await getJson(iso.url, '/api/studio/kbs/busy-kb/active-job');
+    const active = await getJson(iso.root, '/api/studio/kbs/busy-kb/active-job');
     assert.equal(active.status, 200);
     assert.deepEqual(active.json['job'], { kind: 'drain', runId });
     assert.equal(active.json['reason'], activeJobReason({ kind: 'drain', runId }));
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
 test('GET /api/studio/kbs/:id/active-job — null when nothing runs', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedKb(iso.root, 'idle-kb');
-    const res = await getJson(iso.url, '/api/studio/kbs/idle-kb/active-job');
+    const res = await getJson(iso.root, '/api/studio/kbs/idle-kb/active-job');
     assert.equal(res.status, 200);
     assert.equal(res.json['job'], null);
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -145,7 +170,7 @@ test('GET /api/studio/kbs/:id/active-job — null when nothing runs', async () =
 // ---------------------------------------------------------------------------
 
 test('POST maintenance op=index — drains THIS kb\'s index-tier findings and reports kb + global halves (knowledge-06)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     // A project KB whose theme is NOT listed in its category index — the
     // per-KB index half must fix exactly that.
@@ -163,13 +188,12 @@ test('POST maintenance op=index — drains THIS kb\'s index-tier findings and re
       '',
     ].join('\n'));
     writeFileSync(join(dir, 'patterns.md'), '# Patterns\n\n');
-    const res = await postJson(iso.url, '/api/studio/kbs/idx-kb/maintenance', { op: 'index' });
+    const res = await postJson(iso.root, '/api/studio/kbs/idx-kb/maintenance', { op: 'index' });
     assert.equal(res.status, 200, JSON.stringify(res.json));
     const kbHalf = res.json['kb'] as { applied: number };
     assert.ok(kbHalf && kbHalf.applied >= 1, `expected ≥1 per-KB index fix applied — got ${JSON.stringify(res.json)}`);
     assert.match(readFileSync(join(dir, 'patterns.md'), 'utf8'), /unlisted/, 'the theme must be linked into ITS OWN index');
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
@@ -179,7 +203,7 @@ test('POST maintenance op=index — drains THIS kb\'s index-tier findings and re
 // ---------------------------------------------------------------------------
 
 test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and reports project-anchored orphans (knowledge-24)', async () => {
-  const iso = await makeIsolatedBridge();
+  const iso = makeIsolatedBridge();
   try {
     seedKb(iso.root, 'doomed-kb');
     // Dot-anchor sessions (non-project KB).
@@ -191,14 +215,13 @@ test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and repo
     mkdirSync(projSession, { recursive: true });
     writeFileSync(join(projSession, 'status.json'), JSON.stringify({ phase: 'applied', kb_id: 'doomed-kb' }));
 
-    const res = await del(iso.url, '/api/studio/kbs/doomed-kb');
+    const res = await del(iso.root, '/api/studio/kbs/doomed-kb');
     assert.equal(res.status, 200, JSON.stringify(res.json));
     assert.equal(res.json['removedSessionAnchor'], true);
     assert.deepEqual(res.json['orphanedSessions'], ['other-project/_kb-cleanup/2026-08-20T09-01-00-bbbb']);
     assert.ok(!existsSync(join(iso.root, 'projects', '.kb-doomed-kb')), 'the dot-anchor dir must be removed');
     assert.ok(existsSync(projSession), 'a real project\'s session dir is never swept');
   } finally {
-    await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
