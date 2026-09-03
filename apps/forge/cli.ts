@@ -23,17 +23,17 @@ import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/bra
 import { runStudioLint } from '../../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
-import { composeAgentsMd } from '@forge/projects/agents-md-compose.ts';
+import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
 import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
-import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { runInit, ensureLayout, type InitReport } from '@forge/kernel';
+import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir, runInit,
+  ensureLayout, resolveGuardedPath, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
+import { bandAgentDeps } from './band-agent-deps.ts';
 import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
 import { cmdProjectReset } from '@forge/projects/reset.ts';
 import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
-import { resolveGuardedPath } from '@forge/kernel';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -103,7 +103,7 @@ process.chdir(FORGE_ROOT);
     case 'demo-builder':
       return await cmdDemoBuilder(args.slice(1));
     case 'agent':
-      return await cmdAgent(args.slice(1), FORGE_ROOT);
+      return await cmdAgent(args.slice(1), FORGE_ROOT, { band: bandAgentDeps });
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'demo':

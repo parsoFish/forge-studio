@@ -43,9 +43,9 @@ is assembled, no model call is made.
 That guarantee is scoped to the flow path. `contract-check` is
 `library: true` with `surface: unattended`, so it is also in the
 standalone-dispatchable roster: `resolveDispatchableAgent`
-(`orchestrator/agent-dispatch.ts`) refuses only unknown slugs and
+(`packages/agents/agent-dispatch.ts`) refuses only unknown slugs and
 `surface:'interactive'` defs, and `contract-check` is not in
-`STANDALONE_BAND_SLUGS` (`orchestrator/band-agent-run.ts`) the way
+`STANDALONE_BAND_SLUGS` (`packages/agents/band-agent-run.ts`) the way
 `demo-agent`/`adversarial-review` are. So `forge agent dispatch
 contract-check` or `POST /api/agents/contract-check/run` DOES reach
 `runAgent` and spawns this def as a bare one-shot agent — there is no
