@@ -7,7 +7,22 @@
  * escapes into the real `_queue/` or `_logs/`.
  */
 
-import { test } from 'node:test';
+/**
+ * MOVED HERE by M4 ruling 92 (ruling 83's obligation 2), from
+ * `packages/sessions/tests/integration/architect-runner.test.ts`.
+ *
+ * 26 of these 35 tests inject `realManifestPorts` — the REAL parse/serialize/
+ * mint/promote functions — into the architect turn and assert what
+ * `promoteManifests` actually wrote to `_queue/pending/`. flows is rank 5 and
+ * sessions rank 4, so naming those there was a `package-layer-order` violation
+ * carried as two baseline rows. `apps/forge` injects these same ports in
+ * production (`session-kind-deps.ts`), so this is the honest home for a test of
+ * the assembly's own wiring, not a workaround for the rank rule. Both rows are
+ * deleted with the move.
+ *
+ * Splitting instead was rejected: `setupSession` (28 of 35) and `logger` (25 of
+ * 35) would be needed on both sides, which ruling 91 forbids duplicating.
+ */import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mkdirSync,
@@ -31,17 +46,17 @@ import {
   ARCHITECT_MODEL,
   type ArchitectStatus,
   type QueryFn,
-} from '../../kinds/architect.ts';
+} from '@forge/sessions/kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
 import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import type { ArchitectManifestPorts } from '../../kinds/architect-ports.ts';
+import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
 
 /** The REAL functions: this file asserts what `promoteManifests` actually wrote
  *  parses back, so a stub would let it agree with a format the product never
  *  produces. That is why it keeps its `@forge/flows` row deliberately. */
 const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests };
-import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
+import { REDACTED_THINKING_MARKER } from '@forge/sessions/interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // Fakes — async generators yielding SDK-shaped `result` messages.
