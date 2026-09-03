@@ -27,6 +27,8 @@ import { handleInstructionsRoutes } from './bridge-studio-instructions.ts';
 import type { InstructionsStatus } from './instructions-runner.ts';
 import { handleProjectBrainRoutes, type ProjectBrainRow } from './bridge-studio-project-brain.ts';
 import { handleKickoffRoutes } from './bridge-studio-kickoff.ts';
+import { handleDemoRoutes } from './bridge-studio-demo.ts';
+import type { DemoBuilderStatus } from './demo-builder-runner.ts';
 import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
@@ -61,6 +63,10 @@ export type SessionsRouteDeps = {
   /** Host-owned and still host-used; see `bridge-studio-kickoff.ts`. */
   readonly newRunStamp: () => string;
   readonly safeInputKeyRe: RegExp;
+  /** The demo kind's own list-changed broadcast. */
+  readonly broadcastDemoChanged: () => void;
+  /** Injected only until the session index collector carves. */
+  readonly listDemoSessions: (projectsRoot: string) => DemoBuilderStatus[];
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
@@ -104,6 +110,8 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     spawnAgentDispatch: deps.spawnAgentDispatch,
     newRunStamp: deps.newRunStamp,
     safeInputKeyRe: deps.safeInputKeyRe,
+    broadcastDemoChanged: deps.broadcastDemoChanged,
+    listDemoSessions: deps.listDemoSessions,
     spawnAgentTurn: deps.spawnAgentTurn,
     spawnAgentSpecs: deps.spawnAgentSpecs,
     safeParseJson: deps.safeParseJson,
@@ -121,6 +129,11 @@ const INSTRUCTIONS_FILE_RE = /^\/api\/instructions\/file\//;
 const PB_THEMES_RE = /^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/;
 const ONBOARDING_ACTIVE_RE = /^\/api\/studio\/projects\/([^/]+)\/onboarding\/active$/;
 const KB_CLEANUP_START_RE = /^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/;
+const DEMO_SERVE_RE = /^\/api\/demo-builder\/demo\//;
+const DEMO_FRAGMENT_RE = /^\/api\/demo-builder\/fragment\//;
+const DEMO_GENERATION_RE = /^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
+const DEMO_HIST_LIST_RE = /^\/api\/demo-builder\/history\/([^/]+)$/;
+const DEMO_HIST_SERVE_RE = /^\/api\/demo-builder\/history\/([^/]+)\/([^/]+)$/;
 
 export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext> {
   type Res = Parameters<RouteTable<RouteContext>[number]['handler']>[1];
@@ -132,6 +145,8 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
     handleProjectBrainRoutes(req, res, familyContext(ctx, deps), url, method);
   const kick = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
     handleKickoffRoutes(req, res, familyContext(ctx, deps), url, method);
+  const demo = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
+    handleDemoRoutes(req, res, familyContext(ctx, deps), url, method);
   return [
     {
       method: 'GET',
@@ -290,6 +305,89 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       matches: (url) => KB_CLEANUP_START_RE.test(pathOf(url)),
       dryClassification: 'stub-actions',
       handler: kick,
+    },
+    {
+      method: 'GET',
+      path: '/api/demo-builder/sessions',
+      matches: (url) => pathOf(url) === '/api/demo-builder/sessions',
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      method: 'GET',
+      path: '/api/demo-builder/demo/:project/:sessionId',
+      matches: (url) => DEMO_SERVE_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      method: 'GET',
+      path: '/api/demo-builder/fragment/:project/:sessionId/:element',
+      matches: (url) => DEMO_FRAGMENT_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      // MUST precede the two history matchers: this one is four segments after
+      // the prefix, they are one and two, so they do not actually collide — but
+      // the ordering is pinned rather than left to the regexes' luck.
+      method: 'GET',
+      path: '/api/demo-builder/generation/:project/:sessionId/:n/:file',
+      matches: (url) => DEMO_GENERATION_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      // Two segments BEFORE one segment: `/history/:project/:id` must be tried
+      // before `/history/:project`, or the shorter pattern claims neither — the
+      // host chain had them in this order and the order is part of the contract.
+      method: 'GET',
+      path: '/api/demo-builder/history/:project/:id',
+      matches: (url) => DEMO_HIST_SERVE_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      method: 'GET',
+      path: '/api/demo-builder/history/:project',
+      matches: (url) => DEMO_HIST_LIST_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      method: 'POST',
+      path: '/api/demo-builder/start',
+      matches: (url) => pathOf(url) === '/api/demo-builder/start',
+      dryClassification: 'exempt-local',
+      handler: demo,
+    },
+    {
+      method: 'POST',
+      path: '/api/demo-builder/brief',
+      matches: (url) => pathOf(url) === '/api/demo-builder/brief',
+      dryClassification: 'stub-actions',
+      handler: demo,
+    },
+    {
+      method: 'POST',
+      path: '/api/demo-builder/feedback',
+      matches: (url) => pathOf(url) === '/api/demo-builder/feedback',
+      dryClassification: 'stub-actions',
+      handler: demo,
+    },
+    {
+      method: 'POST',
+      path: '/api/demo-builder/lock',
+      matches: (url) => pathOf(url) === '/api/demo-builder/lock',
+      dryClassification: 'stub-actions',
+      handler: demo,
+    },
+    {
+      method: 'POST',
+      path: '/api/demo-builder/abandon',
+      matches: (url) => pathOf(url) === '/api/demo-builder/abandon',
+      dryClassification: 'stub-actions',
+      handler: demo,
     },
     {
       method: 'GET',

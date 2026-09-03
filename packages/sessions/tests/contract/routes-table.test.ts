@@ -39,6 +39,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     spawnAgentDispatch: () => {},
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
+    broadcastDemoChanged: () => {},
+    listDemoSessions: () => [],
     projectsRoot: '/home/parso/forge/projects',
     spawnAgentTurn: () => ({ ok: true }),
     spawnAgentSpecs: {},
@@ -60,7 +62,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 24, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 35, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');

@@ -32,9 +32,9 @@ import {
   watch as fsWatch,
   type FSWatcher,
 } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { join, resolve, sep, basename, dirname } from 'node:path';
+import { join, resolve, basename, dirname } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '@forge/flows/queue.ts';
@@ -62,12 +62,10 @@ import {
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
-  SAFE_ID_RE,
-  LEGACY_SESSION_TERMINAL_PHASES,
   pathOnly,
   parseQuery,
 } from './bridge-studio.ts';
-import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
+import { PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
 import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
@@ -77,7 +75,7 @@ import { isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/ses
 import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
 import { handleStudioAffordanceRoutes, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import {
-  deriveSessionLifecycleFor, sessionLogDirName, sessionHeartbeatMtimeMs, killTrackedRun,
+  deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun,
   type SessionLifecycleState, type SessionLifecycle,
   // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
   // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
@@ -114,17 +112,15 @@ import {
   type InstructionsStatus,
 } from '@forge/sessions/instructions-runner.ts';
 import {
-  DEMO_HTML_REL_PATH,
-  GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
 } from '@forge/sessions/demo-builder-runner.ts';
-import { safeReadFileInSession } from '@forge/sessions/studio/session-transcript.ts';
+import { } from '@forge/sessions/studio/session-transcript.ts';
 import {
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { resolveDispatchableAgent } from '@forge/agents/agent-dispatch.ts';
-import { listAgentDefinitions, loadFlowDefinition, discoverProjects } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, loadFlowDefinition } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -134,20 +130,15 @@ import {
 } from '@forge/agents/studio/materials.ts';
 import { stageMaterials, MaterialsStagingError } from '@forge/agents/materials-staging.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { skillsDir, MAX_SKILL_ID_LENGTH, skillPathRelative } from '@forge/agents/skill-path.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { skillsDir } from '@forge/agents/skill-path.ts';
+import { } from '@forge/agents/studio/derive.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '@forge/agents/studio/connection-run-gate.ts';
-import {
-  guardedReadSessionStatus,
-  guardedWriteSessionStatus,
-} from '@forge/sessions/interactive-session.ts';
+import { guardedReadSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '@forge/flows/run-model.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
 import { fixedTierForSessionKind } from '@forge/sessions/session-model-tier.ts';
 
 
@@ -655,6 +646,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     spawnAgentDispatch,
     newRunStamp,
     safeInputKeyRe: SAFE_INPUT_KEY_RE,
+    broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
+    listDemoSessions,
     projectsRoot,
     // The spawn/serve surface the carved session routes still need from here.
     // These stay host-owned deliberately: `safeParseJson` is still called by
@@ -1774,83 +1767,6 @@ function readGuardedSessionIndexSummary(
   };
 }
 
-/**
- * `GET /api/studio/sessions`' row collector: flattens EVERY registered
- * session kind (`studio/session-kinds.yaml` via `loadSessionKinds` — never a
- * hardcoded kind list, so a new registry kind needs no code change here)
- * across every on-disk project into one row set.
- *
- * The four kinds with their OWN per-kind list route/reader
- * (architect/instructions/demo/project-brain) reuse THAT reader verbatim —
- * `listArchitectSessions` / `listInstructionsSessions` / `listDemoSessions` /
- * `listProjectBrainSessions`, the exact functions `GET /api/architect/
- * sessions` etc. already call — never a second, independently-written scan
- * of the same on-disk shape. Every OTHER kind (onboarding, authoring,
- * kb-cleanup today; any future kind added the same way) has no bespoke list
- * route (bridge-studio-sessions.ts's own header note: the generic
- * session-detail GET is authoring/kb-cleanup's ONLY read route) — those fall
- * through to the generic per-segment-guarded directory scan below, which
- * mirrors `collectSessionRows`'s own directory-enumeration shape immediately
- * above in this file (readdirSync of REAL, on-disk project names — never
- * request-derived — with the per-session STATUS READ routed through the SAME
- * `resolveGuardedPath` choke point every other guarded session read in this
- * file uses).
- *
- * `kind` never comes from a request — every row's `kind` is a registry
- * descriptor id from `loadSessionKinds`, so this route has no kind-id
- * traversal surface at all (unlike the single-session GET, whose `kind` path
- * segment IS request-derived and validated against the registry).
- */
-/**
- * W8-A2 (ON-7 defect 1) — the ONE seam every session-list surface routes
- * through to get `{terminal, lifecycle}` for a row: the generic aggregate
- * index's `pushRow` below, AND each of the four bespoke per-kind list
- * routes (`GET /api/architect/sessions` etc.) — so a lifecycle-carrying row
- * can never omit the derivation by forgetting to call
- * `deriveSessionLifecycleFor` inline. Before this fix the four bespoke
- * routes never called `deriveSessionLifecycleFor` at all (imported once,
- * called once, by `pushRow` alone) — this is the wiring fix, not a second
- * derivation: `terminal` + `lifecycle` are computed EXACTLY the way
- * `pushRow` already computed them, just callable from five places instead
- * of copy-pasted or reinvented at four of them.
- */
-/**
- * W8-A2 (ON-7) — `staleMs` for the bespoke per-kind session panels: ms since
- * the last sign of life, preferring the runner's OWN signals over the status
- * file's mtime.
- *
- * Order, and why:
- *   1. `.heartbeat` mtime — written only while a runner is genuinely alive,
- *      so it is the strongest positive evidence. Without this, an architect
- *      legitimately sitting in `drafting` for minutes while heartbeating
- *      would raise a FALSE stall warning.
- *   2. the runner's own `updated_at` — its CLAIM about when it last made
- *      progress. This is what the panel has always used, and it is the signal
- *      the flows-run stall cameo exercises.
- *   3. `lifecycle.idleMs` — last resort only.
- *
- * `lifecycle.idleMs` is deliberately NOT the primary source: it is
- * `now - max(status.json MTIME, .heartbeat, events.jsonl)`, and the runner
- * rewrites status.json on every phase transition, so a dead runner whose file
- * was merely touched reads FRESH — a fail-open exactly inverse to this lane's
- * purpose. (Falling back to idleMs also fixes the pre-existing
- * `Date.now() - 0` bug in the old hand-rolled version, which reported ~56
- * years of staleness for an unparseable `updated_at`.)
- */
-function sessionStaleMs(
-  ctx: { logsRoot: string },
-  kind: string,
-  sessionId: string,
-  updatedAt: string | undefined,
-  lifecycle: SessionLifecycle | null,
-): number {
-  const now = Date.now();
-  const heartbeatMs = sessionHeartbeatMtimeMs(ctx.logsRoot, kind, sessionId);
-  if (heartbeatMs !== null) return Math.max(0, now - heartbeatMs);
-  const claimed = updatedAt !== undefined ? Date.parse(updatedAt) : Number.NaN;
-  if (!Number.isNaN(claimed)) return Math.max(0, now - claimed);
-  return lifecycle?.idleMs ?? 0;
-}
 
 function deriveRowLifecycle(
   ctx: { projectsRoot: string; logsRoot: string },
@@ -1872,33 +1788,6 @@ function deriveRowLifecycle(
   return { terminal, lifecycle };
 }
 
-/**
- * W8-A2 (ON-7 defect 1, review fix) — `loadSessionKinds` THROWS when
- * `studio/session-kinds.yaml` is missing/unreadable/malformed
- * (`loadSessionKindsSequence`'s own contract, orchestrator/studio/
- * session-kinds.ts). The pre-existing aggregate-index call site
- * (`collectStudioSessionIndexRows` below) accepted that risk unguarded —
- * every REAL forge install always has this file, so it never threw there in
- * practice. The four bespoke per-kind list routes this WI wires
- * `deriveRowLifecycle` into are exercised by many MORE pre-existing test
- * fixtures that never needed the registry before (their routes never called
- * `loadSessionKinds` at all) and do not set it up. An uncaught throw
- * mid-request there is not a clean 500 — none of these four GET handlers
- * wrap their body in try/catch, so the throw left `res.end()` never called
- * and the caller's `fetch()` hanging forever (reproduced: `cli/ui-bridge-
- * architect.test.ts` hung indefinitely against this fix before this
- * helper). Caught HERE, at the one place all four call it, and degrades to
- * "no descriptor resolved" — the SAME graceful "no lifecycle on this row"
- * fallback each route already has for a registry that resolved but simply
- * lacks this kind.
- */
-function findSessionKindDescriptorSafe(forgeRoot: string, kind: string): SessionKindDescriptor | undefined {
-  try {
-    return loadSessionKinds(forgeRoot).find((d) => d.id === kind);
-  } catch {
-    return undefined;
-  }
-}
 
 function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
@@ -2357,8 +2246,6 @@ async function handleHttp(
 
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
-  // ---- Demo-builder (Stage B) -------------------------------------------
-  if (await handleDemoBuilder(req, res, ctx, url, method)) return;
   if (await handleReflect(req, res, ctx, url, method)) return;
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
@@ -3697,137 +3584,12 @@ function validateMaterialsField(rawMaterials: unknown, def: AgentDefinition): Ma
   return { ok: true, entries };
 }
 
-/** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
- *  path segments. `n` is a bounded digit string (mirrors a generation number,
- *  never negative/decimal). `filename` structurally forbids `..`, `/`, and an
- *  absolute path — a malicious segment can never even reach the realpath
- *  choke point (`safeReadFileInSession`), which is this route's actual
- *  containment guard (D11). The negative lookahead rejects a filename that is
- *  EXACTLY "." or ".." — without it, correctness for those two values would
- *  depend on `n` happening to be a digit string (so the joined
- *  `generations/<n>/.` or `generations/<n>/..` merely resolves to a
- *  directory and 404s for an unrelated reason) rather than the filename
- *  actually being rejected as a structural violation (pin 2, Finding E). */
-const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
-const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
-
-/** R4-16 pin 2 (Finding A, BLOCKER) — `project`/`sessionId` on the
- *  generation-serve route below are validated with the EXACT PROJECT_ID_RE/
- *  SAFE_ID_RE + length-cap contract `cli/bridge-studio-sessions.ts` already
- *  applies to its own session routes (imported, not re-declared): length cap
- *  THEN charset, BEFORE any fs call. Without this, `demoSessionDir(join(
- *  projectsRoot, project), sessionId)` — a plain `path.join`, no containment
- *  of its own — walks an attacker-chosen `project`/`sessionId` (e.g. ".." /
- *  "../OUTSIDE") straight out of `projectsRoot` before `safeReadFileInSession`
- *  ever runs; that choke point only proves containment relative to whatever
- *  `sessionDir` it is handed, so an escaping caller-supplied dir defeats it
- *  entirely (reproduced live: AT-36). */
-const MAX_GENERATION_PROJECT_LENGTH = MAX_EXACT_ID_LENGTH;
-const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
 
-function invalidGenerationProjectReason(id: string): string | null {
-  if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
-    return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_PROJECT_LENGTH}-character length limit`;
-  }
-  // W7-A4: the ONE project-id rule (case-preserving directory name, exact).
-  if (!PROJECT_ID_RE.test(id)) {
-    return `invalid project "${id}" — must match ${PROJECT_ID_RE} (the project's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
-  }
-  return null;
-}
 
-function invalidGenerationSessionIdReason(id: string): string | null {
-  if (id.length > MAX_GENERATION_SESSION_ID_LENGTH) {
-    return `invalid sessionId "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_SESSION_ID_LENGTH}-character length limit`;
-  }
-  if (!SAFE_ID_RE.test(id)) {
-    return `invalid sessionId "${id}" — must match ${SAFE_ID_RE} (alphanumeric, "_", "-"; no "/", ".", "..", whitespace, or null bytes)`;
-  }
-  return null;
-}
 
-/**
- * R4-16 round 2 (pin 3, Findings A + B, both BLOCKER) — the ONE choke point
- * every demo-builder route uses to turn a CALLER-SUPPLIED `project` +
- * `sessionId` into a session dir. This is the ONLY place a caller-supplied
- * `project`/`sessionId` is turned into a session dir via `demoSessionDir(
- * join(ctx.projectsRoot, project), sessionId)` in the demo-builder handler
- * (SEC-03 WI-6 correction: `listDemoSessions` also calls `demoSessionDir`
- * directly, but on names it obtained itself from `readdirSync` — server-
- * enumerated, never caller-supplied — so it is deliberately outside this
- * function's coverage, not an oversight; the original wording overstated
- * this as the ONLY caller of `demoSessionDir` full stop, which is what let
- * the `/demo/` and `/fragment/` GET routes below be written straight past
- * this choke point undetected) — round 1 validated `project`/`sessionId` on
- * the GET generation route alone, which closed that one ROUTE, not the class: the
- * five sibling routes (start/brief/feedback/lock/abandon) built the exact
- * same unguarded call themselves and reached `readSessionStatus`/
- * `writeSessionStatus` (no containment of their own) with only a
- * non-emptiness check on the inputs (AT-43/44, reproduced live).
- *
- * Two escapes closed in one pass:
- *   - Finding A: `project`/`sessionId` are validated (length cap THEN
- *     charset, BEFORE any fs call) with the exact PROJECT_ID_RE/SAFE_ID_RE
- *     contract `cli/bridge-studio-sessions.ts` applies to its own session
- *     routes — reused via `invalidGenerationProjectReason`/
- *     `invalidGenerationSessionIdReason` above (round 1 already imported the
- *     regexes for the GET route; not re-declared here). A `".."`-shaped
- *     value is rejected structurally and never reaches a `path.join`.
- *   - Finding B: a NAME that legitimately PASSES SAFE_ID_RE can still be a
- *     symlink on disk pointing outside this project — validating the STRING
- *     says nothing about what the PATH resolves to. This function proves
- *     containment the same way `resolveSafeSessionDir`
- *     (cli/bridge-studio-sessions.ts) does: `realpathSync` the resolved
- *     directory and require it to land inside THIS project's own resolved
- *     dir (`realpathSync(<projectsRoot>/<project>)`) — scoped to the
- *     specific project, never a `projectsRoot`-wide check, which would still
- *     admit a symlink pointing into ANOTHER project's session dir (exactly
- *     R2-10's own AT-47 escape shape).
- *
- * CREATE case (`POST /start`'s session dir does not exist yet):
- * `realpathSync` on a path that doesn't exist throws ENOENT, which must be
- * treated as neither an escape NOR a false pass. This walks up from the
- * candidate session dir to the closest EXISTING ancestor (same idea as
- * `closestExistingAncestorContained`, orchestrator/demo-builder-runner.ts —
- * a different module boundary, so not imported across it: that helper is
- * private to the runner's lock-step restore, this one is private to the
- * bridge's route dispatch, and each needs a different reference boundary —
- * a project repo root there, this project's OWN dir here) and proves THAT
- * ancestor is contained instead. Any remaining not-yet-existing tail
- * segments are plain literal directory names — `sessionId` already passed
- * SAFE_ID_RE, which forbids "/" — so they cannot themselves introduce an
- * escape between the check and the caller's later `mkdirSync`.
- */
-type DemoSessionDirOutcome =
-  | { readonly ok: true; readonly dir: string }
-  | { readonly ok: false; readonly reason: string };
 
-function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId: string): DemoSessionDirOutcome {
-  const projectReason = invalidGenerationProjectReason(project);
-  if (projectReason) return { ok: false, reason: projectReason };
-  const sessionIdReason = invalidGenerationSessionIdReason(sessionId);
-  if (sessionIdReason) return { ok: false, reason: sessionIdReason };
 
-  // SEC-04 (bd forge-ebj) — MIGRATED off the bespoke realpath baseline onto the
-  // shared per-segment IDENTITY guard. `project` now arrives as its OWN element
-  // of `segments[]`, NEVER folded into a realpath baseline: the previous check
-  // realpath'd `join(projectsRoot, project)` FIRST and compared against THAT,
-  // so when `project` itself was a SYMLINK the baseline WAS the escaped
-  // location and the `startsWith` was tautological (root-folding — verbatim
-  // from the adversarial-containment-review catalogue; the charset shape was
-  // already guarded by the two reason-checks above, but the symlinked-first-
-  // segment shape was not). `resolveGuardedPath` walks project → `_demo` →
-  // sessionId, identity-checking each; the session dir may not exist yet (the
-  // `/start` create case), which it handles by walking to the deepest existing
-  // ancestor and reassembling the literal tail. A missing dir and an escaping
-  // symlink both collapse to a single generic reason (no oracle).
-  const guarded = resolveGuardedPath(projectsRoot, [project, '_demo', sessionId]);
-  if (!guarded.ok) {
-    return { ok: false, reason: `sessionId "${sessionId}" for project "${project}" resolves outside the project directory` };
-  }
-  return { ok: true, dir: guarded.realPath };
-}
 
 
 /**
@@ -3994,157 +3756,10 @@ function guardedSessionDir(
 
 
 
-/**
- * R4-16 PIN 4/5 (SEC-02, forge-d1f) — the COMPLETE set of `/start`-family
- * routes that accept a caller-supplied `projectRepoPath`: `/api/architect/start`,
- * `/api/instructions/start`, `/api/demo-builder/start`, and
- * `/api/project-brain/start`. Each persists it verbatim into the session's
- * `status.json` as `project_repo_path`. That field becomes the agent's
- * `cwd`, the target of real `git` branch-create + commit calls, and the base
- * for every artifact write — reproduced live: an unvalidated field served a
- * planted sentinel outside the forge tree and let a forged status write real
- * artifacts into an arbitrary git repo. This comment is the complete
- * enumeration — a future `/start`-family route accepting this field MUST
- * wire this same guard before any read/write/status-persist, not just add
- * itself to this list.
- *
- * Reuses the SHIPPED guard (`isContainedProjectRepoPath`,
- * `cli/manifest-path-guard.ts`) rather than a new check — same choke point
- * `cli/bridge-recovery.ts` already uses for `worktree_path` /
- * `project_repo_path` on the recovery routes. Returns the offending value
- * (so the caller can name it in the 400) when present-but-not-contained,
- * `null` when absent or genuinely contained under `<forgeRoot>/projects/`.
- *
- * Finding B: `''` is treated as absent here, matching every call site's
- * `body.projectRepoPath || join(ctx.projectsRoot, body.project)` default —
- * `??` does NOT substitute for `''`, so every call site MUST use `||`, never
- * `??`, for this field.
- *
- * Finding C: `candidate` is `unknown`, not `string | undefined` — the
- * request body is untrusted JSON and the static type is a lie about what
- * can actually arrive at runtime. A non-string value (e.g. `0`, `null`,
- * `{}`) must fail closed with a 400 naming it, rather than falling through
- * to `isAbsolute()` and leaking a raw Node `TypeError [ERR_INVALID_ARG_TYPE]`.
- *
- * PRECONDITION (load-bearing, stated because a future caller will otherwise
- * break it silently): `candidate` is `JSON.parse` output from a request body.
- * That is what makes the value space closed — string / number / boolean /
- * null / array / object, never a BigInt, Symbol, circular structure or a
- * hostile `toJSON`. This function is deliberately NOT exported; feeding it
- * from a non-JSON source would reopen shapes `describeRejectedValue` cannot
- * be assumed to survive.
- */
-function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; projectsRoot: string }): string | null {
-  if (candidate === undefined || candidate === '') return null;
-  if (typeof candidate !== 'string') return describeRejectedValue(candidate);
-  return isContainedProjectRepoPath(candidate, roots) ? null : candidate;
-}
 
-/**
- * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15) — the
- * COMPLETE set of `/start`-family routes that accept an optional
- * caller-supplied `modelTier`: `/api/architect/start`,
- * `/api/instructions/start`, `/api/project-brain/start`,
- * `/api/demo-builder/start`, `/api/studio/authoring/start`,
- * `POST /api/studio/kbs/:id/cleanup/start`. Each MUST validate it through
- * this helper BEFORE any mkdir/status write, and persist the returned
- * `tier` (when present) verbatim into the session's initial `status.json`
- * as `modelTier` — every turn runner (the four legacy runners +
- * `runInteractiveTurn`) reads it back from there and resolves it through
- * `resolveSessionModel` on EVERY turn (ADR 024's SKILL.md-is-the-envelope
- * contract, not just at kickoff).
- *
- * The allowed set is derived from the agent's OWN `SKILL.md` (via
- * `deriveAgentSpec` + `resolveSessionModel`) — NEVER a client-supplied list
- * — so a request naming a tier outside the skill's declared envelope
- * (`strategy:range`'s `range:`, or the single tier a `strategy:fixed` skill
- * pins) is rejected naming both the offending value and the real allowed
- * set, exactly per `resolveSessionModel`'s own error contract. Never trust a
- * wider set than the skill itself declares.
- *
- * `candidate` is `unknown`, not `string | undefined` — same untrusted-JSON
- * discipline as `invalidProjectRepoPath` above (request bodies are `JSON.parse`
- * output, so a non-string `modelTier` — `0`, `null`, `{}` — is a real shape
- * that must fail closed with a 400 naming it, not a raw `TypeError`).
- */
-/**
- * W7-B6 (sessions-kinds-02 / projects-15 / crosscut-21): a kickoff `project`
- * must name a DISCOVERED project. Every session /start route used to accept
- * any string — the containment guards tolerate a not-yet-existing segment
- * (creation mode), so a typo minted `projects/<typo>/_<kind>/<sid>/` and the
- * phantom then appeared on /projects as a real project card (and, for the
- * architect, spawned a real agent turn against it). Returns the 404 reason,
- * or `null` when the project is in the roster. The KB-anchored kind
- * (kb-cleanup's `.kb-<id>`) has its own anchor rules and never passes
- * through this check.
- */
-function unknownProjectReason(ctx: HttpContext, candidate: unknown): string | null {
-  // NON-STRING shapes and containment-rejected strings (traversal, "..",
-  // separators, control chars — everything `isSafeSegment` refuses) stay
-  // each route's own (pre-existing, PINNED) 400 contracts — they fall
-  // THROUGH this check so those guards keep firing exactly as before. But a
-  // string isSafeSegment ACCEPTS that still fails PROJECT_ID_RE is the
-  // creation-mode GAP (W7-B6 review F1): spaces, interior dots, leading
-  // "_"/"."/"-" all pass the containment guard, so "my project" or
-  // ".hidden" minted a phantom projects/<junk>/ (and, for the architect,
-  // spawned a paid agent turn) straight past the roster check — those are
-  // refused HERE. `invalidGenerationProjectReason` is the ONE project-id
-  // shape rule (length cap THEN charset, value interpolation bounded),
-  // reused rather than re-declared.
-  if (typeof candidate !== 'string') return null;
-  if (isSafeSegment(candidate)) {
-    const invalidShape = invalidGenerationProjectReason(candidate);
-    if (invalidShape !== null) return invalidShape;
-  } else {
-    return null; // the downstream containment guard's own pinned 400 fires
-  }
-  const known = discoverProjects(ctx.projectsRoot, ctx.forgeRoot).some((p) => p.id === candidate);
-  return known ? null : `unknown project "${candidate}" — not in the project roster (onboard it at /projects/new first)`;
-}
 
-function resolveKickoffModelTier(
-  agentSlug: string,
-  candidate: unknown,
-): { ok: true; tier: ModelTier | undefined } | { ok: false; error: string } {
-  if (candidate === undefined) return { ok: true, tier: undefined };
-  if (typeof candidate !== 'string') {
-    return { ok: false, error: `modelTier must be a string (got ${describeRejectedValue(candidate)})` };
-  }
-  try {
-    const spec = deriveAgentSpec(skillPathRelative(agentSlug));
-    resolveSessionModel(spec, candidate as ModelTier);
-    return { ok: true, tier: candidate as ModelTier };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
 
-/** Cap on the rendered offending value interpolated into a 400 body. Two
- *  independent reasons, both measured: (1) `JSON.stringify` THROWS
- *  `RangeError: Maximum call stack size exceeded` on a deeply nested value —
- *  measured boundary on this build: fine at depth 4,166, throws at 4,167,
- *  while `JSON.parse` still succeeds at depth 100,000, so a wire body can
- *  reach this function and blow up inside it; and (2) without a cap the
- *  response is unbounded — measured, a 200,038-byte request produced a
- *  300,063-byte response, LARGER than the request because re-quoting adds
- *  overhead. Closing a `TypeError` leak while shipping a `RangeError` leak in
- *  the same error-formatting path would be this campaign's "the fix ships its
- *  own instance of the defect it closed" pattern, for the fourth time. */
-const MAX_REJECTED_VALUE_CHARS = 200;
 
-/** Renders an untrusted, non-string value for a 400 body: never throws, never
- *  unbounded. The `?? String(candidate)` arm covers the values whose
- *  `JSON.stringify` is `undefined` rather than a string. */
-function describeRejectedValue(candidate: unknown): string {
-  let rendered: string;
-  try {
-    rendered = JSON.stringify(candidate) ?? String(candidate);
-  } catch {
-    rendered = '<unrepresentable value>';
-  }
-  if (rendered.length <= MAX_REJECTED_VALUE_CHARS) return rendered;
-  return `${rendered.slice(0, MAX_REJECTED_VALUE_CHARS)}… (${rendered.length} chars, truncated)`;
-}
 
 /** Parse an already-read JSON string; null on malformed content. Companion to
  *  the guarded read primitives (which return raw contents, not parsed JSON) so
@@ -4154,27 +3769,6 @@ function safeParseJson<T>(raw: string): T | null {
   try { return JSON.parse(raw) as T; } catch { return null; }
 }
 
-function newArchitectSessionId(): string {
-  // YYYY-MM-DDTHH-mm-ss (matches ArchitectSession.session_id elsewhere) plus
-  // an 8-hex-char entropy suffix (R4-17 round-3 BLOCKER pin 5, item 1, close
-  // 3): the timestamp alone has only ONE-SECOND granularity — zero entropy —
-  // so a session id was guessable well enough to pre-plant a colliding
-  // directory (reproduced live, 100% hit rate over a 4-second candidate
-  // window; see cli/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
-  // helper is shared by FIVE routes (architect / instructions /
-  // project-brain / demo-builder / onboarding start) and nothing downstream
-  // string-matches the bare timestamp shape — only SAFE_ID_RE plus a length
-  // cap gate it — so fixing it here fixes all five in one place rather than
-  // only the caller that happened to get adversarially reviewed.
-  //
-  // Hex digits are a subset of SAFE_ID_RE's charset ([A-Za-z0-9_-]), and the
-  // fixed-width timestamp prefix still sorts chronologically across
-  // different seconds (the entropy suffix only breaks ties WITHIN the same
-  // second, where finer ordering was never a guarantee anyway).
-  const stamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+$/, '');
-  const entropy = randomBytes(4).toString('hex');
-  return `${stamp}-${entropy}`;
-}
 
 /**
  * `POST /api/plan-verdict` — all that remains of the architect host handler.
@@ -4309,28 +3903,7 @@ function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
 }
 
 
-/** Read the Forge demo base stylesheet (best-effort; a minimal dark fallback). */
-function readForgeDemoCss(forgeRoot: string): string {
-  try {
-    return readFileSync(join(forgeRoot, 'studio', 'demo', 'forge-demo.css'), 'utf8');
-  } catch {
-    return 'body{background:#0a0e14;color:#e6edf3;font-family:system-ui,sans-serif;padding:2rem}';
-  }
-}
 
-/** Wrap one element fragment in a self-contained, Forge-styled HTML doc so a single
- *  component renders as a styled slice of the full demo. */
-function wrapDemoFragment(forgeRoot: string, element: string, fragment: string): string {
-  return [
-    '<!doctype html>',
-    '<html lang="en"><head><meta charset="utf-8">',
-    `<title>demo · ${element}</title>`,
-    `<style>${readForgeDemoCss(forgeRoot)}</style>`,
-    '</head><body>',
-    fragment,
-    '</body></html>',
-  ].join('\n');
-}
 
 /** Discover every demo-builder session under `projects/<name>/_demo/<sid>/`
  *  — used by the bridge's `GET /api/demo-builder/sessions`. Best-effort; never
@@ -4367,614 +3940,6 @@ function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
 
 
 
-/** Returns true if the request was a demo-builder route (and was handled). */
-async function handleDemoBuilder(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: HttpContext,
-  url: string,
-  method: string,
-): Promise<boolean> {
-  const origin = allowedOrigin(req);
-
-  // GET /api/demo-builder/sessions — list every session with its current state.
-  if (method === 'GET' && url === '/api/demo-builder/sessions') {
-    const statuses = listDemoSessions(ctx.projectsRoot);
-    // Live-tail each non-terminal session's log so the dedicated screen's hex
-    // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
-    for (const s of statuses) {
-      if (!LEGACY_SESSION_TERMINAL_PHASES.demo.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS['demo-builder'].logPrefix, s.session_id);
-    }
-    // W8-A2 (ON-7 defect 1) — see the architect route's identical comment.
-    // The registry id for this kind is 'demo' (SPAWN_AGENT_SPECS's own key
-    // is 'demo-builder', but its logPrefix — and the session-kinds.yaml id —
-    // is 'demo'; see the top-of-file note at collectStudioSessionIndexRows).
-    const demoDescriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'demo');
-    const sessions = statuses.map((s) => {
-      // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
-      // (it is status.json content, git-plantable, not a routing input). These
-      // probes existsSync/readdirSync THROUGH it: an out-of-root value was an
-      // existence oracle AND the fragments readdir ENUMERATED (disclosed) an
-      // out-of-root directory's filenames. Contain the value first
-      // (isContainedProjectRepoPath — the same guard the serve routes apply),
-      // THEN route each leaf through the per-segment identity guard (leaf
-      // included) with that now-contained value as the root. A forged
-      // out-of-root path yields no demoUrl/fragments (safe default), never a
-      // disclosure. DEMO.html lives in the PROJECT REPO under .forge/demo/.
-      const repoContained =
-        typeof s.project_repo_path === 'string' &&
-        isContainedProjectRepoPath(s.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
-      const demoUrl = repoContained && guardedFile(s.project_repo_path, DEMO_HTML_REL_PATH.split('/'), 'read') !== null
-        ? `/api/demo-builder/demo/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}`
-        : null;
-      // Per-element rendered fragments present in the repo (element ids) — so the
-      // operator can view each part's output independently.
-      const fragmentNames = repoContained ? guardedReadDir(s.project_repo_path, ['.forge', 'demo', 'fragments']) : null;
-      const fragments: string[] = (fragmentNames ?? [])
-        .filter((f) => f.endsWith('.html'))
-        .map((f) => f.slice(0, -'.html'.length));
-
-      // W8-A2 (ON-7 defect 1) — see the architect route: the derived lifecycle,
-      // and `staleMs` from the runner's own heartbeat/`updated_at`, never the
-      // status file's mtime. NOTE the on-disk log dir for this kind is
-      // `_demo-<sid>`, not `_demo-builder-<sid>`.
-      const rowLifecycle = demoDescriptor
-        ? deriveRowLifecycle(ctx, demoDescriptor, s.phase, s.project, s.session_id).lifecycle
-        : null;
-      const staleMs = sessionStaleMs(ctx, 'demo', s.session_id, s.updated_at, rowLifecycle);
-
-      return {
-        sessionId: s.session_id,
-        project: s.project,
-        projectRepoPath: s.project_repo_path,
-        phase: s.phase,
-        mode: s.mode ?? 'create',
-        targetElement: s.targetElement ?? null,
-        iteration: s.iteration,
-        prompt: s.prompt,
-        demoUrl,
-        fragments,
-        hasLockedDemo: repoContained && guardedFile(s.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null,
-        staleMs,
-        ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
-      };
-    });
-    sendJson(res, 200, { sessions }, origin);
-    return true;
-  }
-
-  // GET /api/demo-builder/demo/<project>/<sid> — serve the session's DEMO.html
-  // from the PROJECT REPO (.forge/demo/DEMO.html), with a path-escape guard.
-  // Reads status.json to resolve project_repo_path. (Unlike the instructions
-  // /file route, the served file lives in the repo, NOT the session dir.)
-  if (method === 'GET' && url.startsWith('/api/demo-builder/demo/')) {
-    const rest = url.slice('/api/demo-builder/demo/'.length).split('/').map(decodeURIComponent);
-    const [project, sessionId] = rest;
-    if (!project || !sessionId) {
-      sendJson(res, 400, { error: 'expected /api/demo-builder/demo/<project>/<sid>' }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half A — route through the SHIPPED choke point
-    // (`resolveDemoSessionDir`, ~1477) instead of calling `demoSessionDir`
-    // raw. `split('/')` above runs on the RAW url BEFORE `decodeURIComponent`,
-    // so a %2F-smuggled ".." survives the split and only becomes a "/"
-    // afterwards — invisible to the truthiness check that used to be the
-    // only gate here. `resolveDemoSessionDir` validates `project`/`sessionId`
-    // by charset (never reaching `join`) AND proves real realpath
-    // containment inside THIS project's own resolved dir.
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
-    if (!dirOutcome.ok) {
-      sendJson(res, 400, { error: dirOutcome.reason }, origin);
-      return true;
-    }
-    // SEC-04 (bd forge-ebj) — the status.json READ goes through the guarded
-    // leaf sibling (leaf included) so a symlinked status leaf inside the
-    // resolved-contained session dir is refused, not followed.
-    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
-    if (!status) {
-      sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half B — `status.project_repo_path` is untrusted at READ
-    // time (status.json content, not routing input; a forged file on disk
-    // reaches here exactly the way a forged session dir did for Half A). The
-    // OLD check here built BOTH `base` and `requested` from this SAME
-    // untrusted value, so `requested.startsWith(base)` was true BY
-    // CONSTRUCTION for every possible value — a guard that cannot fail is
-    // not a guard, so it is deleted here rather than kept as decoration.
-    // Validate the value itself instead, with the SHIPPED
-    // `isContainedProjectRepoPath` (cli/manifest-path-guard.ts) — the same
-    // guard `invalidProjectRepoPath` (~1610) applies to `project_repo_path`
-    // on every `/start` route. (`invalidProjectRepoPath` itself is not
-    // reused directly: its `candidate === ''` early-return means "absent,
-    // use the caller's default" — correct for a request body at WRITE time,
-    // wrong here, where the field is mandatory and already persisted; a
-    // forged empty string must be REJECTED, not silently treated as fine.)
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
-      sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
-      return true;
-    }
-    // SEC-04 (bd forge-ebj) — project_repo_path is proven contained above, but
-    // the DEMO.html LEAF beneath it could still be a symlink/hardlink out of
-    // root; route the whole leaf path (fixed DEMO_HTML_REL_PATH segments under
-    // the now-contained repo root) through the per-segment identity + nlink
-    // guard so a symlinked DEMO.html is refused, not followed.
-    const demoBody = guardedReadFile(status.project_repo_path, DEMO_HTML_REL_PATH.split('/'));
-    if (demoBody === null) {
-      sendJson(res, 404, { error: 'DEMO.html not found', project, sessionId }, origin);
-      return true;
-    }
-    try {
-      res.writeHead(200, servedFileHeaders('DEMO.html', origin));
-      res.end(demoBody);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // GET /api/demo-builder/fragment/<project>/<sid>/<element> — serve one element's
-  // rendered HTML fragment (<repo>/.forge/demo/fragments/<element>.html), so the
-  // operator can view a single part's output independently. Path-escape guarded.
-  if (method === 'GET' && url.startsWith('/api/demo-builder/fragment/')) {
-    const rest = url.slice('/api/demo-builder/fragment/'.length).split('/').map(decodeURIComponent);
-    const [project, sessionId, element] = rest;
-    if (!project || !sessionId || !element) {
-      sendJson(res, 400, { error: 'expected /api/demo-builder/fragment/<project>/<sid>/<element>' }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half A — see the /demo/ route above for the full
-    // rationale; identical fix, same choke point.
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
-    if (!dirOutcome.ok) {
-      sendJson(res, 400, { error: dirOutcome.reason }, origin);
-      return true;
-    }
-    // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-    // sibling (leaf-symlink close).
-    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
-    if (!status) {
-      sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half B (symmetry) — this route's base/requested check
-    // below is ALSO built from `status.project_repo_path` on both sides, so
-    // it is exactly as tautological in `project_repo_path` as the /demo/
-    // route's deleted check was — the AT-13 non-regression test measures
-    // only that the `element` component (folded into `requested` alone,
-    // fully `join()`-normalised) is already safe; it says nothing about
-    // `project_repo_path` itself. Close the same hole here rather than leave
-    // the twin route exposed. `element`'s own handling below is UNCHANGED.
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
-      sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
-      return true;
-    }
-    // The lexical `startsWith(base)` still guards the `element` component's own
-    // `..`/escape shape (AT-13 non-regression, 400). SEC-04 (bd forge-ebj)
-    // additionally routes the actual READ through the per-segment identity +
-    // nlink guard (project_repo_path is proven contained above ⇒ a trusted
-    // root here), so a symlinked/hardlinked fragment LEAF inside the real
-    // fragments dir is refused (⇒ null ⇒ 404), never followed out of root.
-    const base = join(status.project_repo_path, '.forge', 'demo', 'fragments') + sep;
-    const requested = join(status.project_repo_path, '.forge', 'demo', 'fragments', `${element}.html`);
-    if (!requested.startsWith(base)) {
-      sendJson(res, 400, { error: 'path escape rejected' }, origin);
-      return true;
-    }
-    // A fragment is just the element's `<section>` slice. Wrap it in the Forge
-    // demo base stylesheet so the component view is a styled slice of the full
-    // demo (the composer inlines the same CSS into DEMO.html). If the fragment
-    // is already a full HTML doc, serve it untouched.
-    const raw = guardedReadFile(status.project_repo_path, ['.forge', 'demo', 'fragments', ...`${element}.html`.split('/')]);
-    if (raw === null) {
-      sendJson(res, 404, { error: 'fragment not found', project, sessionId, element }, origin);
-      return true;
-    }
-    try {
-      const isFullDoc = /^\s*<!doctype|^\s*<html[\s>]/i.test(raw);
-      const out = isFullDoc ? raw : wrapDemoFragment(ctx.forgeRoot, element, raw);
-      res.writeHead(200, servedFileHeaders(`${element}.html`, origin));
-      res.end(out);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename> — serve
-  // one R4-16 generation-snapshot file out of <sessionDir>/generations/<n>/.
-  // ALL FOUR path segments are validated before any fs call: `project`/
-  // `sessionId` go through `resolveDemoSessionDir` above — the ONE choke
-  // point every demo-builder route (this GET route AND the five POST routes
-  // below) resolves a session dir through, closing both the ".."-shaped
-  // escape (pin 2, Finding A) AND a symlinked session dir whose NAME
-  // legitimately passes SAFE_ID_RE (pin 3, Finding B); `n`/`filename`
-  // against GENERATION_NUMBER_RE/GENERATION_FILENAME_RE, structurally
-  // forbidding `..`, `/`, an absolute path, or a bare `.`/`..`. The final
-  // read then goes through `safeReadFileInSession` (session-transcript.ts's
-  // realpath choke point, D11) as belt-and-braces against a symlink escape
-  // from WITHIN the already-validated session dir (e.g. one generation-
-  // snapshot FILE symlinked out, rather than the session dir itself).
-  //
-  // The sibling /demo/ and /fragment/ GET routes above remain OUT OF SCOPE
-  // for this round: they still validate `project`/`sessionId` for
-  // non-emptiness only and rely solely on a lexical `startsWith(base)` check
-  // on the resolved file path — a real gap, filed as an evidenced follow-up
-  // rather than fixed here (a containment change for those two wants its own
-  // attack round). Every demo-builder POST route (start/brief/feedback/lock/
-  // abandon), by contrast, IS now covered — see their call sites below.
-  const generationMatch = url.match(/^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/);
-  if (method === 'GET' && generationMatch) {
-    let project: string;
-    let sessionId: string;
-    let n: string;
-    let filename: string;
-    try {
-      project = decodeURIComponent(generationMatch[1]);
-      sessionId = decodeURIComponent(generationMatch[2]);
-      n = decodeURIComponent(generationMatch[3]);
-      filename = decodeURIComponent(generationMatch[4]);
-    } catch {
-      sendJson(res, 400, { error: 'invalid generation route — malformed URL encoding' }, origin);
-      return true;
-    }
-    if (!GENERATION_NUMBER_RE.test(n)) {
-      sendJson(res, 400, { error: `invalid generation number "${n}"` }, origin);
-      return true;
-    }
-    if (!GENERATION_FILENAME_RE.test(filename)) {
-      sendJson(res, 400, { error: `invalid filename "${filename}"` }, origin);
-      return true;
-    }
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
-    if (!dirOutcome.ok) {
-      sendJson(res, 400, { error: dirOutcome.reason }, origin);
-      return true;
-    }
-    const fileBody = safeReadFileInSession(dirOutcome.dir, join(GENERATIONS_DIRNAME, n, filename));
-    if (fileBody === null) {
-      sendJson(res, 404, { error: 'generation snapshot file not found', project, sessionId, generation: n, filename }, origin);
-      return true;
-    }
-    res.writeHead(200, servedFileHeaders(filename, origin));
-    res.end(fileBody);
-    return true;
-  }
-
-  // GET /api/demo-builder/history/<project> — list previously-locked demos
-  // (snapshots under <repo>/.forge/demo/history/<id>/), newest first.
-  const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
-  if (method === 'GET' && histListMatch) {
-    const project = decodeURIComponent(histListMatch[1]);
-    // SEC-04 (bd forge-ebj) — `project` was folded raw into
-    // `join(projectsRoot, project, '.forge','demo','history')` and enumerated
-    // with NO guard: a `%2F`-smuggled `../..` project enumerated an
-    // out-of-root history tree, and an in-root project whose `.forge/demo/
-    // history` is a git-plantable SYMLINK was followed out of root by
-    // readdirSync. Gate the request-derived `project` (its OWN segment under
-    // the trusted projectsRoot) first — a traversed/symlinked project is a 400
-    // — then route the history readdir + each per-id leaf through the guard so
-    // a symlinked history dir (or a symlinked id/leaf beneath it) is refused,
-    // never followed. A legit project with no history yet reads as empty.
-    const projGuard = resolveGuardedPath(ctx.projectsRoot, [project]);
-    if (!projGuard.ok) {
-      sendJson(res, 400, { error: 'invalid project' }, origin);
-      return true;
-    }
-    const histSegs = [project, '.forge', 'demo', 'history'];
-    const entries: Array<Record<string, unknown>> = [];
-    const ids = guardedReadDir(ctx.projectsRoot, histSegs) ?? [];
-    for (const id of ids) {
-      if (guardedFile(ctx.projectsRoot, [...histSegs, id, 'DEMO.html'], 'read') === null) continue;
-      const metaRaw = guardedReadFile(ctx.projectsRoot, [...histSegs, id, 'meta.json']);
-      const meta = (metaRaw !== null ? safeParseJson<Record<string, unknown>>(metaRaw) : null) ?? {};
-      entries.push({
-        id,
-        demoUrl: `/api/demo-builder/history/${encodeURIComponent(project)}/${encodeURIComponent(id)}`,
-        lockedAt: typeof meta.locked_at === 'string' ? meta.locked_at : null,
-        prompt: typeof meta.prompt === 'string' ? meta.prompt : '',
-        iterations: typeof meta.iterations === 'number' ? meta.iterations : null,
-      });
-    }
-    entries.sort((a, b) => String(b.lockedAt ?? '').localeCompare(String(a.lockedAt ?? '')));
-    sendJson(res, 200, { history: entries }, origin);
-    return true;
-  }
-
-  // GET /api/demo-builder/history/<project>/<id> — serve a snapshotted DEMO.html.
-  const histServeMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)\/([^/]+)$/);
-  if (method === 'GET' && histServeMatch) {
-    const project = decodeURIComponent(histServeMatch[1]);
-    const id = decodeURIComponent(histServeMatch[2]);
-    // SEC-04 (bd forge-ebj) — the old `requested.startsWith(base)` was
-    // self-defeating: `base` and `requested` were BOTH built from the same
-    // untrusted `project`, so a `../..` traversal sat in BOTH sides and the
-    // check was tautological; and a symlinked `.forge/demo/history` dir is
-    // lexically inside `base` yet readFileSync followed it out of root. Route
-    // the WHOLE path (project AND id each as their OWN segment under the
-    // trusted projectsRoot, DEMO.html leaf included) through the per-segment
-    // identity guard, which the lexical prefix check structurally cannot do. A
-    // rejected/absent path both collapse to 404 (no existence oracle).
-    const demoHtml = guardedReadFile(ctx.projectsRoot, [project, '.forge', 'demo', 'history', id, 'DEMO.html']);
-    if (demoHtml === null) {
-      sendJson(res, 404, { error: 'demo not found', project, id }, origin);
-      return true;
-    }
-    try {
-      res.writeHead(200, servedFileHeaders('DEMO.html', origin));
-      res.end(demoHtml);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-    return true;
-  }
-
-
-  // R4-16 round 2 (pin 3, Finding A) — every route below resolves its
-  // session dir through `resolveDemoSessionDir`, the ONE choke point (see
-  // its own header comment, above the GET generation route). Each rejects
-  // with a 400 naming the offending value BEFORE any read, write,
-  // `mkdirSync`, or spawn.
-  if (method === 'POST' && url === '/api/demo-builder/start') {
-    try {
-      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string; modelTier?: unknown };
-      if (!body.project) {
-        sendJson(res, 400, { error: 'project is required' }, origin);
-        return true;
-      }
-      // W7-B6 (sessions-kinds-02): roster check — no phantom project dirs.
-      const unknownDemoProject = unknownProjectReason(ctx, body.project);
-      if (unknownDemoProject !== null) {
-        sendJson(res, 404, { error: unknownDemoProject }, origin);
-        return true;
-      }
-      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through
-      // read/status write. See invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
-      if (badRepoPath !== null) {
-        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
-        return true;
-      }
-      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
-      // demo-builder SKILL.md envelope.
-      const modelTierResult = resolveKickoffModelTier('demo-builder', body.modelTier);
-      if (!modelTierResult.ok) {
-        sendJson(res, 400, { error: modelTierResult.error }, origin);
-        return true;
-      }
-      // The CREATE case — `dirOutcome.dir` does not exist on disk yet;
-      // `resolveDemoSessionDir` proves its closest EXISTING ancestor is
-      // contained (see its header) rather than false-rejecting a brand new
-      // session.
-      const sessionId = newArchitectSessionId();
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // dirOutcome.ok proved the DIR contained; the status.json WRITE below
-      // goes through the guarded leaf sibling (leaf included).
-      // forge-4vt — the `projectRepoPath || join(projectsRoot, project)`
-      // fallback below reaches the demo.lock.json READ a few lines down with a
-      // repoPath folded from the untrusted `body.project`. `resolveDemoSessionDir`
-      // above DOES reject an out-of-root project today, but that containment is
-      // an accident of SOURCE ORDER — it guards the session DIR, not this
-      // independently re-derived repoPath, so a refactor that reorders or drops
-      // it would silently reopen the read. Route `body.project` through the
-      // SAME resolveGuardedPath choke point the sibling /start routes use,
-      // BEFORE the read, so containment is structural (the guard's own output)
-      // rather than order-dependent.
-      let repoPath: string;
-      if (body.projectRepoPath) {
-        repoPath = body.projectRepoPath;
-      } else {
-        const guardedProject = resolveGuardedPath(ctx.projectsRoot, [body.project]);
-        if (!guardedProject.ok) {
-          sendJson(res, 400, { error: 'invalid project' }, origin);
-          return true;
-        }
-        repoPath = guardedProject.realPath;
-      }
-      // Default the mode by whether a locked demo already exists.
-      const mode: 'create' | 'update' =
-        body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
-      // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf
-      // sibling (leaf included; mkdirs the parent, refuses a symlinked leaf).
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [body.project, '_demo', sessionId], {
-        session_id: sessionId,
-        project: body.project,
-        project_repo_path: repoPath,
-        phase: 'briefing',
-        mode,
-        // Optional per-element iteration target (a demo-element kind id).
-        ...(typeof body.targetElement === 'string' && body.targetElement ? { targetElement: body.targetElement } : {}),
-        iteration: 1,
-        prompt: '',
-        updated_at: new Date().toISOString(),
-        ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
-      }) === null) {
-        sendJson(res, 400, { error: 'invalid session path' }, origin);
-        return true;
-      }
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, sessionId, mode }, origin);
-    } catch (err) {
-      // sanitizeError, not String(err) — the same helper 13 sibling routes in
-      // this file already use. A genuine fs error on the status write (EACCES,
-      // ENOSPC) otherwise echoes an absolute filesystem path into the response.
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/demo-builder/brief {project, sessionId, brief} — record the
-  // operator's look-and-feel / change-notes and kick off the agent
-  // (briefing → generating).
-  if (method === 'POST' && url === '/api/demo-builder/brief') {
-    try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string; targetElement?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — dirOutcome.ok above proved the DIR contained;
-      // route each leaf (prompt.md, status.json) through the guarded leaf
-      // siblings so the leaf itself is contained too (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      const brief = body.brief ?? '';
-      // `targetElement` narrows the turn to one demo element (per-element iteration);
-      // omit/empty to compose the full demo.
-      const targetElement = typeof body.targetElement === 'string' && body.targetElement ? body.targetElement : status.targetElement;
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
-        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
-          ...status, phase: 'generating', iteration: 1, prompt: brief,
-          ...(targetElement ? { targetElement } : {}),
-        }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/demo-builder/feedback {project, sessionId, feedback} — record the
-  // operator's feedback + re-generate (iteration + 1).
-  if (method === 'POST' && url === '/api/demo-builder/feedback') {
-    try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string; feedback?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — route each leaf (feedback.md, status.json)
-      // through the guarded leaf siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      if (
-        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback ?? '') === null ||
-        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: status.iteration + 1 }) === null
-      ) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/demo-builder/lock {project, sessionId, generation?} — lock the
-  // current demo in. R4-16: an optional `generation` names which snapshot to
-  // lock — structurally validated (integer ≥ 1) BEFORE any write, so a
-  // rejected request never mutates status.json.
-  if (method === 'POST' && url === '/api/demo-builder/lock') {
-    try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string; generation?: unknown };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      const hasGeneration = Object.prototype.hasOwnProperty.call(body, 'generation') && body.generation !== undefined;
-      if (hasGeneration && !(typeof body.generation === 'number' && Number.isInteger(body.generation) && body.generation >= 1)) {
-        sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
-      // siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
-        ...status,
-        phase: 'locking',
-        ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
-      }) === null) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/demo-builder/abandon {project, sessionId} — abandon the session.
-  if (method === 'POST' && url === '/api/demo-builder/abandon') {
-    try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string };
-      if (!body.project || !body.sessionId) {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      if (!dirOutcome.ok) {
-        sendJson(res, 400, { error: dirOutcome.reason }, origin);
-        return true;
-      }
-      // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
-      // siblings (leaf-symlink close).
-      const dirSegs = [body.project, '_demo', body.sessionId];
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
-        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
-        return true;
-      }
-      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
-      ctx.broadcastDemoChanged();
-      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  return false;
-}
 
 // ---- Reflection routes (the third human moment, in-UI) --------------------
 //
