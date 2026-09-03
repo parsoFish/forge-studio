@@ -28,7 +28,7 @@ fix itself, is what kept getting missed.
 vars excluded, `ANTHROPIC_API_KEY` retained; `buildChildEnv` with a
 `MAX_ENV_OVERRIDE_KEYS` cap) applied at `packages/agents/pinned-sdk-query.ts`, the
 single SDK-query boundary every agent spawn passes. A **default-deny** structural
-lock (`packages/agents/pinned-sdk-query.enforce.test.ts`) flags any import of a
+lock (`packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts`) flags any import of a
 child-spawning SDK export (`query`, `unstable_v2_*`) outside the wrapper — across
 `orchestrator/`, `loops/`, `cli/`, **and** `scripts/*.mjs` — so a new bypassing
 launch path can't ship silently. Gate children additionally strip each project's
