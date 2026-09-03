@@ -603,7 +603,7 @@ export const journey = defineJourney({
               // Checked BEFORE the click, where the picker is the live surface.
               const starterPressable = await page.evaluate(() =>
                 document.querySelector('[data-starter-option="blank"][data-action="starter-blank"]') !== null);
-              check(starterPressable, 'A-scratch (5.15): the blank starter carries its story handle [data-action="starter-blank"] alongside [data-starter-option] — the handle S5 beat 4 needs to reach Advanced at all');
+              check(starterPressable, 'A-scratch (5.15): the blank starter carries its story handle [data-action="starter-blank"] alongside [data-starter-option] — the handle S5 beat 5 needs to reach Advanced at all');
               await page.locator('[data-starter-option="blank"]').click();
               await page.waitForSelector('#purpose-input', { timeout: 10000 });
 

@@ -15,6 +15,39 @@ because a mis-bucketed test is a small lie about what that test is for.
 door's own test (ruling 31), it is named by `SPEC.md` §1, and exit row 6's
 proving command expects to find exactly that one file outside this directory.
 
+## `test-fixtures/` — the one place a helper is shared, not duplicated
+
+Everywhere else in this package a small helper is DUPLICATED into each file
+that needs it, with the reason written beside it: a `.test.ts` that exports a
+helper becomes an import target for other tests and starts constraining what it
+may assert. Twelve lines is the cheaper side of that trade, and
+`regression/failure-classifier.rate-limit.test.ts` set the precedent.
+
+`test-fixtures/` is the exception, and it takes a real argument to open it. The
+one module in it — `interactive-runner-log-observer.ts` — is 268 lines used by
+all four clusters of the file it came out of, and one of those clusters
+(`regression/agent-run-log-observer.test.ts`) tests the log walker as its
+SUBJECT, carrying beads `forge-q1z` and `forge-1im` in its own comments. Three
+duplicated copies of a 162-line walker is the signal that a seam is wrong, not
+a smaller file; a subject with its own tests wants its own module.
+
+Two rules, so the exception stays one:
+
+- **Only test files may import it.** `scripts/check-owner.mjs`'s
+  `NOT_PRODUCTION` regex excludes `.test.*` files AND anything under
+  `test-fixtures/`, so a module here is test support by the repo's own
+  definition and does not count toward the package's production LOC cap (T1
+  ruling 94, 2026-09-04). A PRODUCTION importer would break that reading — it
+  would make package code depend on a file the cap does not count. Every
+  importer must itself match `NOT_PRODUCTION`.
+- **The bead comments live with the code they describe.** When a defect's
+  mechanism moves here, its `forge-*` provenance moves with it, or the next
+  reader finds a hardened reader with no record of what it was hardened
+  against.
+
+Anything smaller than that walker gets duplicated. This directory is not a
+general dumping ground for shared helpers.
+
 ## Two things a mover has to know
 
 **Anchors.** Files here are two levels below the package root. Anything that
