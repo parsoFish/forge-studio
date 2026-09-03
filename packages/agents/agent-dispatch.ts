@@ -25,6 +25,7 @@ import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
 import { createLogger } from '@forge/kernel';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 import { fireAgentCompleteTriggers } from '@forge/flows/flow-trigger.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
@@ -42,13 +43,13 @@ export type DispatchAgentRunOpts = {
   skillsDir: string;
   /** Used verbatim as the `_logs/` run directory name (guarded). */
   runId: string;
-  /** Log root; default `'_logs'`. */
+  /** Log root; default `<FORGE_ROOT>/_logs` (absolute — never cwd-relative). */
   logsRoot?: string;
   /** Optional project binding — the repo the agent runs against (also the default cwd). */
   project?: ProjectBinding;
   /** Freeform operator-supplied run inputs (e.g. `{ northStar, repo }`), surfaced as prompt DATA. */
   inputs?: Record<string, string>;
-  /** Spawn cwd; default `project.repoPath ?? process.cwd()`. */
+  /** Spawn cwd; default `project.repoPath ?? <logsRoot>/<runId>` (the run's own directory — never the parent process's cwd; bead forge-8vfn.5.37). */
   workdir?: string;
   /** Test-injection only (see `RunContext.queryFn`); one-shot path only. */
   queryFn?: StreamQueryFn;
@@ -288,7 +289,7 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
   }
   const loadDefs = opts.loadDefs ?? listAgentDefinitions;
   const def = resolveDispatchableAgent(opts.slug, loadDefs(opts.skillsDir));
-  const logsRoot = opts.logsRoot ?? '_logs';
+  const logsRoot = opts.logsRoot ?? join(FORGE_ROOT, '_logs');
   const discovered = discoverStagedMaterials(logsRoot, opts.runId);
   // Report deviations (round 5 skip / round 6 errno discrimination) — but
   // ONLY when there is something to report. On the ordinary ENOENT path
@@ -330,7 +331,7 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
     }
   }
   const prompt = buildStandaloneRunPrompt(def, { project: opts.project, inputs: opts.inputs, materials: discovered.materials });
-  const workdir = opts.workdir ?? opts.project?.repoPath ?? process.cwd();
+  const workdir = opts.workdir ?? opts.project?.repoPath ?? join(logsRoot, opts.runId);
   // `logsRoot` is already resolved above (materials discovery needs it first) —
   // the rebase onto R6-04 brought two identical declarations together.
   const result = await runAgent(def, {

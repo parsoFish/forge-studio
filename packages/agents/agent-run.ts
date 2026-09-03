@@ -601,7 +601,7 @@ export async function cmdAgentDispatch(
     // endpoint reports `failed` instead of a perpetual `running` (the RunPanel
     // polls it). Best-effort — never masks the original error / exit code.
     try {
-      createLogger(runId, '_logs').emit({
+      createLogger(runId, join(forgeRoot, '_logs')).emit({
         initiative_id: runId,
         phase: 'orchestrator',
         skill: slug,
