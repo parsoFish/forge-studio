@@ -15,11 +15,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import {
   findReachableModules,
+  listEntryModules,
+  DISPATCH_ENTRY_MODULES,
   countSinks,
   analyze,
   formatBaseline,
@@ -27,6 +30,8 @@ import {
   compareBaseline,
   runCheck,
 } from './check-request-path-sinks.mjs';
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
 // Namespace import (NOT a named import) so probing a not-yet-built export
 // yields `undefined` rather than an ESM link-time SyntaxError that would take
 // the whole file down — see the SEC-04 caller-count group at the bottom.
@@ -291,6 +296,81 @@ test('--write regenerates the baseline file and a subsequent check passes', () =
 // =============================================================================
 // Group 2 — CI-enforced gate: the REAL check against the REAL repository
 // =============================================================================
+
+// =============================================================================
+// The entry derivation (beads forge-8vfn.5.34 and 5.48)
+//
+// The seed used to be "every ui-bridge.ts / bridge-*.ts under cli/". That is a
+// hand-written tree name, and two things follow from it: the M4 host carve
+// moves the host to apps/forge/ and would have emptied the seed silently (the
+// lint fails only on GROWTH, so 605 rows -> 0 reads PASS), and a module that
+// receives request-derived input but that no bridge module imports -- a CLI
+// dispatch entry -- is invisible no matter how many sinks it grows.
+// =============================================================================
+
+test('5.34: the seed follows the host into apps/forge/ — a carve cannot empty it', () => {
+  // Kills: the pre-fix derivation, which reads only cli/ and would return []
+  // for this tree, blinding the whole lint while still reporting PASS.
+  const root = mkdtempSync(join(tmpdir(), 'sinks-carve-'));
+  try {
+    mkdirSync(join(root, 'apps/forge'), { recursive: true });
+    mkdirSync(join(root, 'cli'), { recursive: true });
+    writeFileSync(join(root, 'cli/preflight.ts'), 'export const x = 1;\n');
+    writeFileSync(join(root, 'apps/forge/ui-bridge.ts'), 'export function handle() { return 1; }\n');
+    assert.deepEqual(listEntryModules(root), ['apps/forge/ui-bridge.ts']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('5.34: a package that carves its routes is picked up with no edit to this script', () => {
+  // Kills: a scan list naming packages by hand — the shape that left
+  // dry-bridge-coverage blind to a carved packages/agents/routes.ts.
+  const root = mkdtempSync(join(tmpdir(), 'sinks-routes-'));
+  try {
+    mkdirSync(join(root, 'packages/newpkg'), { recursive: true });
+    writeFileSync(join(root, 'packages/newpkg/routes.ts'), 'export const routes = [];\n');
+    assert.deepEqual(listEntryModules(root), ['packages/newpkg/routes.ts']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('5.34: an entirely hostless tree yields an EMPTY seed — the caller must be able to see that', () => {
+  // The honest failure branch. An empty seed is not an error here; it is a
+  // fact the guard's own test asserts against the real repo (below), so a
+  // blinded scan can never look like a clean one.
+  const root = mkdtempSync(join(tmpdir(), 'sinks-empty-'));
+  try {
+    mkdirSync(join(root, 'cli'), { recursive: true });
+    assert.deepEqual(listEntryModules(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('5.34: the REAL repository seed is non-empty and holds the host, every carved route table, and the dispatch entries', () => {
+  const seed = listEntryModules(REPO_ROOT);
+  assert.ok(seed.length > 0, 'an empty seed on the real repo means this lint is scanning nothing');
+  assert.ok(seed.some((m) => m.endsWith('ui-bridge.ts')), 'the bridge host is seeded');
+  assert.ok(seed.some((m) => /^packages\/[^/]+\/routes\.ts$/.test(m)), 'carved route tables are seeded');
+  for (const m of DISPATCH_ENTRY_MODULES) {
+    assert.ok(seed.includes(m), `declared dispatch entry ${m} is seeded`);
+  }
+});
+
+test('5.48: the two sibling lints share ONE scope — every declared dispatch entry is reachable here', () => {
+  // The bead itself. check-raw-fs-guarded audited these four modules while
+  // this lint could not see them, so a planted sink in agent-run.ts fired on
+  // one lint and not the other on the same line. Measured before the fix:
+  // four of that script's thirty EXPLICIT_MODULES were unreachable from this
+  // walk. Kills: a fix that adds agent-run.ts alone and leaves the class open.
+  const reachable = new Set(findReachableModules(REPO_ROOT));
+  for (const m of DISPATCH_ENTRY_MODULES) {
+    assert.ok(reachable.has(m), `${m} must be reachable from the shared entry seed`);
+  }
+  assert.ok(reachable.has('packages/agents/agent-run.ts'), 'bead 5.48\'s named module specifically');
+});
 
 test('the real repository baseline passes clean (no new or grown request-path sinks)', () => {
   const code = runCheck({});

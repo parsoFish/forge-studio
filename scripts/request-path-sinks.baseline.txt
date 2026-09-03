@@ -36,7 +36,13 @@ packages/agents/_adapters/aider/index.ts execFile 1
 packages/agents/_adapters/aider/index.ts execFileSync 4
 packages/agents/_adapters/aider/index.ts readFileSync 1
 packages/agents/_adapters/gemini/index.ts readFileSync 1
+packages/agents/agent-dispatch-cmd.ts existsSync 3
+packages/agents/agent-dispatch-cmd.ts realpathSync 5
+packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
+packages/agents/agent-run.ts existsSync 2
+packages/agents/band-agent-run.ts existsSync 3
+packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 6
 packages/agents/bridge-agents-history-rows.ts readdirSync 5
 packages/agents/bridge-agents-history-rows.ts readFileSync 1
@@ -47,6 +53,9 @@ packages/agents/bridge-agents-studio.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts readFileSync 2
 packages/agents/bridge-agents-studio.ts rmSync 1
 packages/agents/bridge-agents-studio.ts writeFileSync 1
+packages/agents/find-session-project.ts existsSync 3
+packages/agents/find-session-project.ts readdirSync 1
+packages/agents/find-session-project.ts statSync 1
 packages/agents/materials-staging.ts mkdirSync 1
 packages/agents/materials-staging.ts statSync 2
 packages/agents/materials-staging.ts unlinkSync 1
@@ -587,6 +596,7 @@ packages/sessions/kinds/instructions.ts existsSync 1
 packages/sessions/kinds/instructions.ts mkdirSync 1
 packages/sessions/kinds/instructions.ts writeFileSync 1
 packages/sessions/kinds/kind-turn.ts rmSync 1
+packages/sessions/kinds/project-brain.ts mkdirSync 1
 packages/sessions/session-readability.ts readFileSync 1
 packages/sessions/studio/session-kinds.ts existsSync 1
 packages/sessions/studio/session-kinds.ts readFileSync 2

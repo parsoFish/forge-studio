@@ -1923,3 +1923,76 @@ The site itself is unchanged and still guard-terminal:
 'write')`, THROWS when the leaf escapes (fail closed, the runner contract), and
 only then `mkdirSync`s the parent of a path the guard has already accepted. The
 `mkdirSync` never sees a request-derived string the guard did not resolve.
+
+### M4-flows PR 4 — ten rows made VISIBLE by giving the two lints one entry seed (beads 5.34 / 5.48)
+
+No sink moved, changed shape or was added. Ten `(file, sink)` rows appear
+because `check-request-path-sinks.mjs` could not previously **see** the modules
+they live in.
+
+The two sibling request-path lints derived their scope from the same function,
+`listEntryModules`, and that function read one hand-written tree name: every
+`ui-bridge.ts` / `bridge-*.ts` under `cli/`. Two consequences, both measured on
+`85351d12`:
+
+- **A module no bridge module imports was invisible to this lint no matter how
+  many sinks it grew.** `check-raw-fs-guarded.mjs` compensated with its own
+  `EXPLICIT_MODULES` hand list, so the two lints disagreed about their own
+  scope by exactly **four of that list's thirty modules** — `agent-run.ts`,
+  `agent-dispatch-cmd.ts`, `find-session-project.ts` and
+  `kinds/project-brain.ts`. A planted sink in `agent-run.ts` fired on one lint
+  and not the other, on the same line. That is bead `forge-8vfn.5.48`.
+- **The seed was one carve away from emptying itself.** `listEntryModules`
+  returned four modules, all under `cli/`, and the M4 host carve moves all four
+  into `apps/forge/`. Because this lint fails only on GROWTH, the seed going to
+  zero would have taken 605 rows to 0 and still reported PASS. That is bead
+  `forge-8vfn.5.34`, and it is why the fix had to land before the carve.
+
+The seed is now derived from three sources, none of them a hand-written
+directory list: the bridge host in whichever of `cli/` or `apps/forge/` holds
+it; every `packages/<pkg>/routes.ts`, found by globbing `packages/`, so a
+package that carves its routes tomorrow is picked up with no edit to the
+script; and one `DISPATCH_ENTRY_MODULES` declaration for the CLI dispatch
+entries, consumed by **both** lints so they cannot drift apart again. Entry
+modules go 4 → 12 and reachable modules 295 → 303.
+
+| file | sinks now baselined | classification |
+|---|---|---|
+| `packages/agents/agent-dispatch-cmd.ts` | `existsSync` 3, `realpathSync` 5, `statSync` 2 | already audited under the full model by `check-raw-fs-guarded` (`EXPLICIT_MODULES`), 0 unguarded — the CLI dispatch entry's `--project` id rides `resolveGuardedPath` as a segment `[read]` |
+| `packages/agents/agent-run.ts` | `existsSync` 2 | already audited, 0 unguarded — bead 5.48's named module `[read]` |
+| `packages/agents/find-session-project.ts` | `existsSync` 3, `readdirSync` 1, `statSync` 1 | already audited, 0 unguarded — boolean `status.json` / `PLAN.md` probes under a `readdir`-enumerated `projects/*` `[read]` |
+| `packages/sessions/kinds/project-brain.ts` | `mkdirSync` 1 | already audited, 0 unguarded |
+| `packages/agents/band-agent-run.ts` | `existsSync` 3, `readFileSync` 1 | **newly audited by anything** — see below |
+
+**Nine of the ten belong to modules `check-raw-fs-guarded` has been auditing
+all along with zero unguarded findings, so they are counts, not new risk.**
+
+`packages/agents/band-agent-run.ts` is the exception and the reason this PR is
+worth reading twice: it is reachable from `agent-run.ts`, so the shared seed
+brings it into tier-1 scope, and it had been in **neither** lint's full model.
+Under that model its two `existsSync` sites read as tainted via `initiativeId`.
+They are **accidentally-safe**, and the classification was reached by reading
+the code rather than by assuming the count was benign:
+
+- `SAFE_INITIATIVE_RE` (`band-agent-run.ts:75`) is
+  `/^[A-Za-z0-9][A-Za-z0-9._-]*$/`, and `:196` **throws** on a miss before
+  either join is reached. That class requires a leading alphanumeric and admits
+  no path separator, so `..`, `.`, `a/b` and any absolute path are all
+  rejected — probed against the real regex, not inferred from its name.
+- `dir` on both lines comes from the config-derived queue paths
+  (`paths.inFlight` / `pending` / `readyForReview` / `failed` / `done` /
+  `merged`), never from the caller, and the leaf is always `<id>.md`.
+
+Both are recorded as audited residuals in `check-raw-fs-guarded.mjs`'s
+allowlist (residuals 91 → 93, each with the reason above) rather than fixed,
+because `packages/agents/band-agent-run.ts` is agents-owned by `QUARRY.md` and
+a flows lane may not edit it beyond a repoint. The structural fix — route both
+through `guardedFile(dir, [`${initiativeId}.md`], 'read')`, so the invariant is
+held by the guard rather than by a regex three hundred lines up — is filed for
+its owner.
+
+**Scope conservation, asserted rather than assumed** (§15.85: a scanner's count
+falling after a pure move is the blinded-scanner tell): `check-raw-fs-guarded`
+goes 79 + 384 → 80 + 383. Exactly one module crossed from the tier-2 sweep into
+the tier-1 full model, it is named above, and the **total scanned is conserved
+at 463**.
