@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -338,7 +339,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         return;
       }
       const sessionProject = result.project ?? project.trim();
-      setMintedSessionId(result.sessionId);
+      // `flushSync`, not a bare setState: `router.push` on the next line begins
+      // navigating immediately, and React would not have committed the update
+      // before it did — the attribute reached the DOM of the page being left as
+      // the EMPTY STRING. S9 run 3 caught exactly that (`expected a value to
+      // bind as <authoringSessionId>, got ""`) on a run that dispatched a real
+      // agent. Committing synchronously is what makes the id observable on the
+      // page that minted it, which is the whole point of publishing it.
+      flushSync(() => setMintedSessionId(result.sessionId as string));
       router.push(`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(result.sessionId)}?project=${encodeURIComponent(sessionProject)}`);
     } finally {
       setSubmitting(false);
