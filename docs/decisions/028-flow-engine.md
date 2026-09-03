@@ -19,7 +19,7 @@ harness is the cutover oracle.
 
 ## Context
 
-`orchestrator/cycle.ts` hardcodes PM → dev-loop → unifier → PR → closure →
+`packages/flows/cycle.ts` hardcodes PM → dev-loop → unifier → PR → closure →
 reflector. Studio requires arbitrary operator-authored flows. The brain
 binds twelve hard constraints on any such engine — most critically: human
 gates are structural, gates are orchestrator-verified, the system never
@@ -43,7 +43,7 @@ self-modifies while running, and resume never discards work.
    "load flow.yaml → flow-runner". No parallel old/new implementations
    survive cutover: the hardcoded sequence is deleted once
    `verify-cycle` routine AND release tiers pass on the engine path.
-3. **Run = derived, never stored.** `orchestrator/run-model.ts` aggregates
+3. **Run = derived, never stored.** `packages/flows/run-model.ts` aggregates
    queue state + manifest + `events.jsonl` + artifacts dir into the run view
    (phases, phaseMeta, artifactsReady, gate, failedAt, origin). Read-only;
    zero new write paths. The event log's `phase` field carries the flow-node
@@ -154,7 +154,7 @@ which found and fixed the resume event-emission regression. Full suite 1122 gree
 
 ## Amendment (Stage C, 2026-06-27): flow triggers IMPLEMENTED + per-flow kickoff
 
-Item 7 ("Triggers") is now **implemented**, not reserved. `orchestrator/flow-trigger.ts`
+Item 7 ("Triggers") is now **implemented**, not reserved. `packages/flows/flow-trigger.ts`
 `fireFlowTriggers(flow, event, deps)` is the single, generic, declaration-driven
 firing path — both event sites route through it with an injectable dispatcher:
 
@@ -164,7 +164,7 @@ firing path — both event sites route through it with an injectable dispatcher:
   manifest — the old marker risk), carrying the source initiative. The scheduler's
   `drainFlowRunRequests` sweep repoints that initiative at the target flow. No seed
   flow declares `on: complete` today, so this path is unit-tested, not yet live.
-- **`on: merged`** — fired by `orchestrator/finalize-merged.ts` once a merged PR is
+- **`on: merged`** — fired by `packages/flows/finalize-merged.ts` once a merged PR is
   confirmed (async + post-run, *after* the flow already terminated at
   `ready-for-review`). `forge-develop` declares `{on: merged, flow: forge-reflect}`;
   finalize-merged reads that declaration and fires reflect from it — the **single
@@ -182,7 +182,7 @@ replacement for this ADR's node-kind resolution: project-manager, developer-ralp
 and reflector stop declaring a privileged `executor:` slug and instead resolve
 through the generic `'agent'` kind (`execAgent` → `runAgent`, R2-01-F1/F2), driven
 by `runtime.loopStrategy` — `'ralph'` dispatches to the orchestrator's existing
-loop machinery (`loops/ralph/`, ADR 002); `'one-shot'` drives the `runAgent`
+loop machinery (`packages/agents/ralph/`, ADR 002); `'one-shot'` drives the `runAgent`
 primitive's single query. Only `developer-unifier` keeps a declared
 `executor: 'unifier'` row — its dual-boundary close-contract gate (ADR 026,
 ADR 036) stays orchestrator-owned until R4-01-F4 retires it, after R4-10-F2
@@ -198,7 +198,7 @@ T1-ratified during the wave-7 flows-pillar consolidation. The Triggers item
 above says "`forge-develop` declares `{on: merged, flow: forge-reflect}`" —
 since R4-09-F1 the declaration's target is the reflect **agent** (`{on:
 merged, target: {kind: agent, ref: reflector}}`), resolved by
-`orchestrator/finalize-merged.ts` through the agent-def `reflection-close`
+`packages/flows/finalize-merged.ts` through the agent-def `reflection-close`
 band guard (`agent-bands.ts`), and W7-C1 deletes the vestigial single-node
 `studio/flows/forge-reflect/` wrapper entirely. Reflect is an **OOTB agent
 run, not a flow**: it never appears as a flow monitor or a flowLineage entry;

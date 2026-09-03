@@ -12,7 +12,7 @@ tells you to add a row, that is the page it means.**
 
 **Why this document exists.** Between 2026-07 and 2026-08 the same defect was found ten separate times across six initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
 
-The guard those fixes converge on is [`cli/studio-path-guard.ts`](../../cli/studio-path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
+The guard those fixes converge on is [`packages/kernel/path-guard.ts`](../../packages/kernel/path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
 
 ## Escape shapes
 
@@ -36,7 +36,7 @@ Three labels, applied strictly:
 
 **Verification status is not uniform, and the difference matters.** Rows are marked:
 
-- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `cli/bridge-studio-kbs-containment.test.ts`, `cli/bridge-studio-sibling-containment.test.ts`, `cli/bridge-studio-flow-trigger-oracle.test.ts`, `orchestrator/brain-paths-containment.test.ts`, and (from earlier initiatives) `cli/bridge-studio-write.test.ts` / `cli/bridge-studio-flows.test.ts`.
+- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts`, `cli/bridge-studio-sibling-containment.test.ts`, `cli/bridge-studio-flow-trigger-oracle.test.ts`, `packages/knowledge/tests/integration/brain-paths-containment.test.ts`, and (from earlier initiatives) `cli/bridge-studio-write.test.ts` / `cli/bridge-studio-flows.test.ts`.
 - **`[read]`** — classified by reading the code and its call chain. Structurally sound, but **no live repro was executed**. A `[read]` row is a lead, not a proven exploit.
 - **`[unver]`** — could not be definitively classified. **Never treated as safe.**
 
@@ -73,12 +73,12 @@ spread across rows where a reader would have to notice its absence.
 
 ## Recorded design assumption — `CycleInput` and the ingest choke point
 
-`orchestrator/scheduler.ts` (the `resolve('projects', m.project)` fallback for a
+`packages/flows/scheduler.ts` (the `resolve('projects', m.project)` fallback for a
 manifest with no `project_repo_path`) and every consumer that receives a built
 `CycleInput` are **not** individually guarded, by design. They are safe **iff every
 path by which a manifest reaches disk passes ingest validation** — `writeManifest`,
-whose three production callers, as of SEC-03, are `orchestrator/promote-manifests.ts`,
-`POST /api/initiatives`, and `orchestrator/mint-triggered-initiative.ts` (added by
+whose three production callers, as of SEC-03, are `packages/flows/promote-manifests.ts`,
+`POST /api/initiatives`, and `packages/flows/mint-triggered-initiative.ts` (added by
 SEC-03 — previously bypassed the choke point entirely; see "Fixed in SEC-03" above).
 
 This is written down rather than left as silence so nobody later reads the absence of
@@ -92,9 +92,9 @@ real — the taxonomy is stated in full so it cannot be read as exhaustive when 
 not:
 
 1. **Routes through `writeManifest`** — validated at ingest. Three production
-   ingest callers as of SEC-03: `orchestrator/promote-manifests.ts`,
-   `cli/bridge-recovery.ts`'s `POST /api/initiatives`, and
-   `orchestrator/mint-triggered-initiative.ts`.
+   ingest callers as of SEC-03: `packages/flows/promote-manifests.ts`,
+   `packages/flows/bridge-recovery.ts`'s `POST /api/initiatives`, and
+   `packages/flows/mint-triggered-initiative.ts`.
 2. **Carries its own assertion** — `runRequeue`, `applyReviewVerdict`,
    `finalize-merged.ts`, `drain-fix-loop.ts`. These read manifests that did not
    necessarily come through ingest, so each guards at its own boundary.
@@ -107,7 +107,7 @@ not:
      frontmatter regex edit that bypasses `writeManifest` entirely. Safe because
      `wtHandle.path` is `resolve(worktreesRoot, initiativeId)` — computed by forge
      from config plus an already-pattern-gated id, never client-derived.
-   - The `persistManifest*` family in `orchestrator/manifest.ts` — round-trips an
+   - The `persistManifest*` family in `packages/flows/manifest.ts` — round-trips an
      already-on-disk manifest through `serializeManifest` + `writeFileSync` without
      revalidating anything. As of forge-shc (2026-08-09) this family gains
      `persistManifestCostCeiling`, called from `POST /api/develop/start` on the
@@ -116,14 +116,14 @@ not:
      introduces no path surface beyond enqueue's own; it `existsSync`-guards,
      re-parses, re-serialises with a validated numeric `cost_ceiling_usd`, and never
      touches a path-shaped field.
-   - `orchestrator/scheduler-dispatch.ts`'s `annotateManifestForRetry` — re-parses
+   - `packages/flows/scheduler-dispatch.ts`'s `annotateManifestForRetry` — re-parses
      and re-serialises an already-on-disk manifest, mutating only `retry_count` and
      `previous_failure_modes`; no path-shaped field is touched.
-   - `orchestrator/enqueue-flow-run.ts` and `orchestrator/enqueue-plan-run.ts` — each
+   - `packages/flows/enqueue-flow-run.ts` and `packages/flows/enqueue-plan-run.ts` — each
      re-serialises an already-on-disk manifest to "repoint" it, mutating only
      `flow_id`/`phase` and deleting `resume_from`/`claimed_at`/`claimed_by`; no
      path-shaped field is touched.
-   - `cli/bridge-studio-runs.ts`'s `POST /api/runs` — re-serialises an already-on-disk
+   - `packages/flows/bridge-studio-runs.ts`'s `POST /api/runs` — re-serialises an already-on-disk
      manifest, mutating only `origin` (constrained server-side to the literal union
      `'architect' | 'human-directed'`, never the request's raw string).
 
@@ -132,7 +132,7 @@ not:
    `paths.manifestsDir` (`mkdirSync` + `writeFileSync`/`serializeManifest`, multiple
    call sites). This is not a bypass of the choke point: every draft written there is
    later PROMOTED through the class-1 path (`promoteManifests(paths.manifestsDir,
-   ...)` — the same `orchestrator/promote-manifests.ts` this section already counts
+   ...)` — the same `packages/flows/promote-manifests.ts` this section already counts
    as a `writeManifest` caller), and the fields the architect writes at the drafting
    stage (initiative id, title, acceptance criteria, body prose) never include a
    path-shaped field — `project_repo_path`/`worktree_path`/`cycle_id` are added later,
