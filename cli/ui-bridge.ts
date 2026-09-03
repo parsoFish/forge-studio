@@ -637,6 +637,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     safeParseJson,
     servedFileHeaders,
     dryBridgeAgentTurnMarker,
+    // M4 agents carve: the SAME tail closures `handleHttp`'s ctx already
+    // carries — one registry, injected twice, never duplicated.
+    ensureAgentRunTail: ensureTailFor,
+    releaseAgentRunTail: stopTailFor,
   });
 
   const http = createServer((req, res) => {
