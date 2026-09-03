@@ -335,6 +335,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/connection-readiness.ts | library | verbatim | 49 |
 | packages/agents/studio/connection-run-gate.ts | agents | verbatim | 71 |
 | packages/library/studio/connection-validate.ts | library | verbatim | 217 |
+| packages/agents/studio/agent-registry.ts | agents | verbatim | 283 |
 | packages/agents/studio/derive.ts | agents | verbatim | 290 |
 | packages/agents/studio/hook-dispatch.ts | agents | verbatim | 439 |
 | packages/library/studio/hook-library.ts | library | verbatim | 526 |
@@ -413,6 +414,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/path-guard.ts | kernel | verbatim | 707 |
 | packages/kernel/ports.ts | kernel | verbatim | 71 |
 | packages/kernel/spawn-env.ts | kernel | verbatim | 181 |
+| packages/kernel/studio-object.ts | kernel | verbatim | 96 |
 | packages/kernel/route-entry.ts | kernel | verbatim | 114 |
 | packages/kernel/http-envelope.ts | kernel | verbatim | 72 |
 | packages/kernel/project-contract.ts | kernel | verbatim | 37 |

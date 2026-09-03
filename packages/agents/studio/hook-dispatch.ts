@@ -142,7 +142,7 @@ import { resolve } from 'node:path';
 
 import type { EventLogger } from '@forge/kernel';
 import { FORGE_ROOT } from './derive.ts';
-import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from './agent-registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library/studio/hook-library.ts';
 import { HookRunError, runHookScript, type HookRunFailureReason } from '@forge/library/studio/hook-runtime.ts';
 

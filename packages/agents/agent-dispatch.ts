@@ -20,7 +20,13 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listFlowIds, loadFlowDefinition, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions } from './studio/agent-registry.ts';
+// §15.43: `normalizeProjectId` is a kernel export this file was taking via a
+// legacy re-export detour — imported from its real owner instead of moved.
+import { normalizeProjectId } from '@forge/kernel';
+// The Flow kind stays in `orchestrator/studio/registry.ts` until wave 4 —
+// handed, listed in the share report, not closed here.
+import { listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
