@@ -54,7 +54,7 @@ security-permissions UWI-6).
    is unchanged). Gate and capture *execution* is orchestrator-owned:
    - Quality gates: unchanged (already orchestrator-run), now bounded by a
      wall-clock timeout (`FORGE_GATE_TIMEOUT_MS`, default 30 min).
-   - **Demo capture** (`orchestrator/phases/orchestrated-capture.ts`): when a
+   - **Demo capture** (`packages/flows/phases/orchestrated-capture.ts`): when a
      packaging UWI's demo.json declares capture-needing checkpoints (a
      `command`, or an explicit screenshot/video kind), the orchestrator spawns
      `forge demo capture <initiative-id>` itself (child process, cwd = the WI
@@ -163,7 +163,7 @@ precondition, may not start before this line resolves.
 
 **Operator verdict: APPROVED as specced — 2026-07-24** (recorded from the wave-4 S2 session decision). The relocation proceeds exactly per the contract-doc spec: orchestrator-owned merge-boundary gate keyed off testProcess.local + testProcess.ci, unattended remediation via develop-agent re-dispatch on scoped fix WIs from .forge/last-gate-failure.md under R4-10-F2's shared cap, cap exhaustion parks needs-operator, and the preserved invariant — no path to merge exists with a red full-suite baseline. R4-10-F2 (the build+prove owner, wave-4 tail) is now UNBLOCKED.
 
-**Implemented — R4-10-F2 (2026-08-02).** `runMergeBoundaryGate` (`orchestrator/cycle-helpers.ts`) is the runnable band; it executes inside the demo band (`execDemo`, in `orchestrator/phases/executor-table.ts` since M2-B, BEFORE the demo, on the integrated branch tip) and RETURNS its verdict (never throws) so a red baseline drives the bounded `gate-fix` loop (`orchestrator/gate-fix-loop.ts`) instead of failing the cycle. A red gate opens no PR (the DAG walk terminates to `ready-for-review`); the fix-loop drain re-enters `resume_from:'develop'`. `composedUnifierGate` remains for the retained forge-cycle fixtures until R4-01-F4.
+**Implemented — R4-10-F2 (2026-08-02).** `runMergeBoundaryGate` (`packages/flows/cycle-helpers.ts`) is the runnable band; it executes inside the demo band (`execDemo`, in `orchestrator/phases/executor-table.ts` since M2-B, BEFORE the demo, on the integrated branch tip) and RETURNS its verdict (never throws) so a red baseline drives the bounded `gate-fix` loop (`packages/flows/gate-fix-loop.ts`) instead of failing the cycle. A red gate opens no PR (the DAG walk terminates to `ready-for-review`); the fix-loop drain re-enters `resume_from:'develop'`. `composedUnifierGate` remains for the retained forge-cycle fixtures until R4-01-F4.
 
 **Amended 2026-08-31 (M2-B — operator ruling, `docs/roadmaps/1.0.md` §4 M2 Lane B;
 governed by [`SPEC.md`](../../SPEC.md) §6 Project, approved at the H5 gate).**
@@ -186,5 +186,5 @@ deliberately, to prove the port is real.
 
 What replaces the absent seam as the guarantee is narrower and stated plainly:
 there is exactly **one** production caller wiring the real preflight
-(`orchestrator/cycle.ts`, via `createProjectGate()`), and a conformance test that
-fails if `orchestrator/flow-runner.ts` ever imports `cli/preflight.ts` again.
+(`packages/flows/cycle.ts`, via `createProjectGate()`), and a conformance test that
+fails if `orchestrator/flow-runner.ts` ever imports `packages/projects/preflight.ts` again.
