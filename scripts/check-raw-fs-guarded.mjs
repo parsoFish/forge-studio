@@ -104,7 +104,7 @@
  *     TIER 1 (`targetModules`, full model): bridge ENTRY modules + every
  *     bridge-REACHABLE module carrying the HTTP-plumbing signal + the explicit
  *     spawn-boundary list. TIER 2 (`sweepModules`): every OTHER non-test module
- *     under `cli/` and `orchestrator/`, scanned for the UNAMBIGUOUS shapes only
+ *     under `cli/`, `orchestrator/`, `packages/` and `apps/`, UNAMBIGUOUS only
  *     — a value read off an HTTP request MEMBER (`body.*`/`params.*`/`query.*`/
  *     `req.*`/`request.*`), a raw leaf below a guard producer's output, or one
  *     of the six bare ids in `SWEEP_MODEL.bareTaint` (the names that are never
@@ -118,18 +118,12 @@
  *     brand-new DELEGATE HELPER outside the declared surface whose route caller
  *     hands it a request id under one of those four names, by plain parameter.
  *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
- *     for) or give it the HTTP-plumbing signal. A module OUTSIDE `cli/` and
- *     `orchestrator/` (`loops/`, `apps/studio/`, `scripts/`) is not scanned by
- *     EITHER tier.
- *   - TIER 1's ENTRY half is still name-shaped one level up: `listEntryModules`
- *     treats `cli/ui-bridge.ts` + `cli/bridge-*.ts` as the HTTP entry points, so
- *     a brand-new top-level dispatcher under a different name, imported by
- *     nothing that already exists, reaches tier 2 only, not the full model.
- *     Adding a whole new dispatcher is a far larger architectural event than
- *     adding a route module (the shape this lint's scope defect was actually
- *     about), but the seam is named here rather than left implied.
+ *     for) or give it the HTTP-plumbing signal. A module outside the four walk
+ *     roots (`loops/`, `scripts/`) is scanned by neither tier.
+ *   - TIER 1's ENTRY half was name-shaped until bead 5.34; `listEntryModules`
+ *     now derives host, route tables and dispatch entries structurally.
  *   - TIER 1's reachability half inherits the sibling walker's limits: only
- *     RELATIVE imports inside `cli/`+`orchestrator/` are followed, so a module
+ *     RELATIVE imports inside the walked trees are followed, so a module
  *     reached across a process-spawn boundary (the interactive runners) or
  *     through a bare-package specifier is in tier 1 only because
  *     `EXPLICIT_MODULES` lists it. An UNREACHABLE new route module (nothing
@@ -151,7 +145,7 @@ import { fileURLToPath } from 'node:url';
 // lint's scope. There is exactly ONE import-graph walker in scripts/, and it
 // lives in check-request-path-sinks.mjs (both scripts import it main-guarded,
 // so importing it has no side effects).
-import { findReachableModules, listEntryModules } from './check-request-path-sinks.mjs';
+import { findReachableModules, listEntryModules, DISPATCH_ENTRY_MODULES } from './check-request-path-sinks.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -347,13 +341,13 @@ export const EXPLICIT_MODULES = [
   // boundary), so this list is the only mechanism that lints them. Session-
   // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
   // sinks in every one.
-  'packages/agents/agent-run.ts', 'packages/agents/agent-dispatch-cmd.ts', 'packages/agents/find-session-project.ts',
+  // Bead 5.48: the four CLI-dispatch entries that sat here are now the sibling's `DISPATCH_ENTRY_MODULES` — one declaration, consumed by both lints.
   'packages/sessions/interactive-session.ts',
   'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts',
   'packages/sessions/kinds/instructions.ts',
-  'packages/sessions/kinds/project-brain.ts',
   'packages/sessions/kinds/demo-builder.ts',
+  'packages/agents/band-agent-run.ts', // shared seed; two safe sites allowlisted
   // M4 §4 step 2: carving this module's routes out took its HTTP-plumbing
   // signal with them, dropping it to tier 2 where `runId` is excluded; ten
   // audited residuals silently stopped suppressing (89->78) while the check
@@ -405,7 +399,7 @@ export const EXPLICIT_MODULES = [
  *  the curated bare-id list in modules where those ids are server-built). */
 const HTTP_PLUMBING_RE = /(?<![.\w$])(?:IncomingMessage|ServerResponse)\b|(?<![.\w$])(?:sendJson|readJson|pathOnly|allowedOrigin|refuseDryBridge)\s*[(,}]/;
 
-/** Repo-relative non-test `.ts` files under `cli/` and `orchestrator/`. */
+/** Repo-relative non-test `.ts` files under the four walk roots. */
 function allSourceModules(root) {
   const out = [];
   const walk = (rel) => {
@@ -442,22 +436,22 @@ function allSourceModules(root) {
  * pre-W8-F5 hand list covered, so a derivation that silently drops one fails.
  */
 export function targetModules(root = FORGE_ROOT) {
-  const hasCli = existsSync(join(root, 'cli'));
-  const entries = hasCli ? listEntryModules(root) : [];
-  const reachable = hasCli ? findReachableModules(root) : [];
+  // Bead 5.34: no `hasCli` gate — it read an absent `cli/` as "no entries".
+  const entries = listEntryModules(root);
+  const reachable = findReachableModules(root);
   const plumbing = reachable.filter((rel) => {
     const abs = join(root, rel);
     return existsSync(abs) && HTTP_PLUMBING_RE.test(readFileSync(abs, 'utf8'));
   });
-  const all = new Set([...EXPLICIT_MODULES, ...entries, ...plumbing]);
+  const all = new Set([...EXPLICIT_MODULES, ...DISPATCH_ENTRY_MODULES, ...entries, ...plumbing]);
   return [...all].filter((m) => existsSync(join(root, m))).sort();
 }
 
 /**
- * TIER 2 — the SWEEP: every other non-test module under `cli/` and
- * `orchestrator/`, scanned for the UNAMBIGUOUS shape only (a value read off an
- * HTTP request MEMBER — `body.*`/`params.*`/`query.*`/`req.*`/`request.*` — or a
- * raw leaf appended below a guard producer's output, reaching a raw fs sink).
+ * TIER 2 — the SWEEP: every other non-test module under the four walk roots,
+ * scanned for the UNAMBIGUOUS shape only (a value read off an HTTP request
+ * MEMBER — `body.*`/`params.*`/`query.*`/`req.*`/`request.*` — or a raw leaf
+ * appended below a guard producer's output, reaching a raw fs sink).
  *
  * WHY A RESTRICTED MODEL AND NOT THE FULL ONE. The full model's curated BARE id
  * list (`runId`, `repoPath`, `initiativeId`, …) is calibrated FOR request
@@ -876,6 +870,12 @@ export function analyzeModule(text, relFile, model = {}) {
 // four tests across two suites before it was noticed. The remap is mechanical
 // and safe; the key design is not.
 export const ALLOWLIST = [
+  // Bead 5.48; evidence in docs/reference/request-path-sinks.md, "M4-flows PR 4".
+  { file: 'packages/agents/band-agent-run.ts', line: 212, sink: 'existsSync',
+    reason: 'BOOL-PROBE + BOUNDARY-VALIDATED: ownership probe join(<config-derived queue dir>, `${initiativeId}.md`); initiativeId passed SAFE_INITIATIVE_RE (/^[A-Za-z0-9][A-Za-z0-9._-]*$/) at :196 which throws on a miss, so no separator, no leading dot and no absolute path is expressible; boolean probe only, no bytes read or written through this path.' },
+  { file: 'packages/agents/band-agent-run.ts', line: 222, sink: 'existsSync',
+    reason: 'BOOL-PROBE + BOUNDARY-VALIDATED: manifest lookup join(<config-derived queue dir>, `${initiativeId}.md`) over the four runnable states; same SAFE_INITIATIVE_RE gate at :196 throws before this loop is reached, so the candidate path is <config root>/<validated stem>.md by construction.' },
+
   // ---- shared TEST FIXTURE modules (M4) ----
   // The only non-production rows here. The sweep skips `*.test.ts` by filename,
   // so these helpers were invisible inside a test file; M4's split under the

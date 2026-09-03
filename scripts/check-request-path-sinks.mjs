@@ -3,16 +3,23 @@
  * check-request-path-sinks.mjs — no-new-unguarded-sinks RATCHET.
  *
  * Why this exists: docs/reference/request-path-sinks.md enumerates every
- * request-derived filesystem path in cli/ and orchestrator/ as of one point
- * in time. The same defect shape (a request-derived path reaching an fs/git
- * call with no real containment) was found TWELVE times across seven
- * initiatives despite that document existing — discovery stayed luck-driven
- * because nothing forced a re-check when a NEW call site appeared. This
- * script is that force: it counts calls to a fixed list of filesystem/
- * process sinks in every module reachable from a bridge HTTP route, and
- * fails the build the moment a NEW (file, sink) pair appears or an existing
- * one's call count goes UP, until a human looks at it and updates the
- * baseline. It never goes down on its own.
+ * request-derived filesystem path in the repo as of one point in time. The
+ * same defect shape (a request-derived path reaching an fs/git call with no
+ * real containment) was found TWELVE times across seven initiatives despite
+ * that document existing — discovery stayed luck-driven because nothing
+ * forced a re-check when a NEW call site appeared. This script is that force:
+ * it counts calls to a fixed list of filesystem/process sinks in every module
+ * reachable from a request-path ENTRY (see `listEntryModules`), and fails the
+ * build the moment a NEW (file, sink) pair appears or an existing one's call
+ * count goes UP, until a human looks at it and updates the baseline. It never
+ * goes down on its own.
+ *
+ * The header used to say "in cli/ and orchestrator/" and "reachable from a
+ * bridge HTTP route". Both were stale and the second was load-bearing: the
+ * package move put the subject under packages/, and a scope that is only ever
+ * a bridge route cannot see a CLI dispatch entry — which is precisely how a
+ * planted sink in packages/agents/agent-run.ts stayed invisible here while
+ * the sibling lint caught it on the same line (bead forge-8vfn.5.48).
  *
  * ============================================================================
  * WHAT THIS RATCHET DOES NOT COVER (read this before trusting a green run)
@@ -362,19 +369,75 @@ function resolveImportTarget(fromRelFile, spec) {
   return target;
 }
 
-/** The bridge's HTTP ENTRY modules — `cli/ui-bridge.ts` plus every non-test
- *  `cli/bridge-*.ts`. Exported so the SIBLING dataflow lint
- *  (check-raw-fs-guarded.mjs) seeds its declared request-handling surface from
- *  the SAME derivation this walk starts from, instead of maintaining a second
- *  (and, until W8-F5, narrower) name list of its own. */
+/**
+ * The trees a bridge host may live in. `cli/` is where it lives today and
+ * `apps/forge/` is where the M4 host carve puts it; naming BOTH is what stops
+ * the carve silently emptying this seed. A tree that is absent is skipped, not
+ * an error — the point is that the derivation does not care which one holds
+ * the host (bead forge-8vfn.5.34).
+ */
+const HOST_TREES = ['cli', 'apps/forge'];
+
+/**
+ * Modules that receive request-derived input but that NO bridge module
+ * imports, so the reachability walk below can never find them: the CLI
+ * dispatch entries. `forge agent run` parses argv and drives the same
+ * project/session/run identifiers a route would.
+ *
+ * This is the list bead forge-8vfn.5.48 is about. It lived only in
+ * `check-raw-fs-guarded.mjs`'s `EXPLICIT_MODULES`, so the two sibling lints
+ * disagreed about their own scope: measured on `b3f728c0`, four of that
+ * script's thirty modules were unreachable from this walk and therefore
+ * invisible here while the sibling audited them. A planted sink in
+ * `packages/agents/agent-run.ts` was caught by one lint and not the other, on
+ * the same line. Declared HERE, once, and consumed by both.
+ */
+export const DISPATCH_ENTRY_MODULES = [
+  'packages/agents/agent-dispatch-cmd.ts',
+  'packages/agents/agent-run.ts',
+  'packages/agents/find-session-project.ts',
+  'packages/sessions/kinds/project-brain.ts',
+];
+
+/**
+ * The HTTP + dispatch ENTRY modules both request-path lints seed from.
+ *
+ * Three sources, none of them a hand-written directory list (bead
+ * forge-8vfn.5.34 — a guard scoped by a hand list went blind the last time the
+ * tree moved, and this one would have gone blind at the host carve):
+ *
+ *   1. the bridge host — `ui-bridge.ts` and every non-test `bridge-*.ts`, in
+ *      whichever of HOST_TREES holds it;
+ *   2. every `packages/<pkg>/routes.ts` — the carved route tables, discovered
+ *      by globbing `packages/`, so a package carving its routes tomorrow is
+ *      picked up with no edit here;
+ *   3. DISPATCH_ENTRY_MODULES, above.
+ *
+ * Exported so the SIBLING dataflow lint (check-raw-fs-guarded.mjs) seeds its
+ * declared request-handling surface from the SAME derivation, instead of
+ * maintaining a second and differently-wrong list of its own.
+ */
 export function listEntryModules(root) {
-  const cliDir = join(root, 'cli');
-  const out = [];
-  for (const f of readdirSync(cliDir)) {
-    if (!f.endsWith('.ts') || f.endsWith('.test.ts')) continue;
-    if (f === 'ui-bridge.ts' || f.startsWith('bridge-')) out.push(`cli/${f}`);
+  const out = new Set();
+  for (const tree of HOST_TREES) {
+    const dir = join(root, tree);
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.ts') || f.endsWith('.test.ts')) continue;
+      if (f === 'ui-bridge.ts' || f.startsWith('bridge-')) out.add(`${tree}/${f}`);
+    }
   }
-  return out.sort();
+  const packagesDir = join(root, 'packages');
+  if (existsSync(packagesDir)) {
+    for (const pkg of readdirSync(packagesDir)) {
+      const rel = `packages/${pkg}/routes.ts`;
+      if (existsSync(join(root, rel))) out.add(rel);
+    }
+  }
+  for (const rel of DISPATCH_ENTRY_MODULES) {
+    if (existsSync(join(root, rel))) out.add(rel);
+  }
+  return [...out].sort();
 }
 
 /** Step 1 — reachability. Returns the sorted array of repo-relative module
