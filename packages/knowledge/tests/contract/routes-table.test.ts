@@ -38,6 +38,18 @@ import { readFileSync } from 'node:fs';
 
 import { knowledgeRoutes } from '../../routes.ts';
 
+/**
+ * `knowledgeRoutes` is a factory (M4-knowledge s5): `listFlowIds` is the
+ * Flow-kind loader in the legacy registry, which a rank-2 package may not
+ * import, so the host supplies it. These stubs are deliberately NOT the real
+ * loaders — a table test asserts on the table's shape, and a dispatch test on
+ * a handler's response; neither should depend on what flows exist on disk.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
 /** The 17 routes the two handlers dispatch at the pin (161c5abb), in the
  *  order their if-chains match them. Derived by reading every `url.match(…)`
  *  / `url === …` arm in both files, not from prose:
@@ -103,7 +115,7 @@ const CARVED: ReadonlySet<string> = new Set([
 const key = (m: string, p: string) => `${m} ${p}`;
 
 test('routes-table: the table holds exactly the routes carved so far — no route silently dropped, none invented', () => {
-  const got = knowledgeRoutes.map((r) => key(r.method, r.path)).sort();
+  const got = routes.map((r) => key(r.method, r.path)).sort();
   const want = [...CARVED].sort();
   assert.deepEqual(got, want,
     `the carved table must dispatch exactly what left the if-chains.\n` +
@@ -119,13 +131,13 @@ test('routes-table: every carved route is one the if-chains actually dispatched 
 
 test('routes-table: no two entries share a method+path — a duplicate silently shadows whichever loses the iteration', () => {
   const seen = new Map<string, number>();
-  for (const r of knowledgeRoutes) seen.set(key(r.method, r.path), (seen.get(key(r.method, r.path)) ?? 0) + 1);
+  for (const r of routes) seen.set(key(r.method, r.path), (seen.get(key(r.method, r.path)) ?? 0) + 1);
   const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
   assert.deepEqual(dupes, [], `duplicate table entries: ${dupes.join(', ')}`);
 });
 
 test('routes-table: every entry carries a dryClassification — a carved route that loses it is a route that SPAWNS under FORGE_DRY_BRIDGE=1', () => {
-  const missing = knowledgeRoutes.filter((r) => !r.dryClassification).map((r) => key(r.method, r.path));
+  const missing = routes.filter((r) => !r.dryClassification).map((r) => key(r.method, r.path));
   assert.deepEqual(missing, [], `entries with no dryClassification: ${missing.join(', ')}`);
 });
 
@@ -149,7 +161,7 @@ test('routes-table: every entry carries a dryClassification — a carved route t
  * behaviour the string describes. Neither is sufficient alone.
  */
 test('routes-table: the maintenance route is ONE row valued stub-actions — five ops behind one URL, discriminated by a body field a url matcher cannot read (ruling 29)', () => {
-  const rows = knowledgeRoutes.filter((r) => r.path === '/api/studio/kbs/:id/maintenance');
+  const rows = routes.filter((r) => r.path === '/api/studio/kbs/:id/maintenance');
   assert.equal(rows.length, 1,
     `the maintenance route must be ONE table entry, not one per op: \`RouteEntry.matches\` is ` +
     `(url) => boolean and \`op\` arrives in the request body, which is a consumable stream. ` +
@@ -174,7 +186,7 @@ test('routes-table: cli/dry-bridge.ts KEEPS its two op-scoped maintenance rows �
 });
 
 test('routes-table: every entry has a callable handler — a table of metadata with a missing handler 500s at request time, not at load time', () => {
-  const bad = knowledgeRoutes.filter((r) => typeof r.handler !== 'function').map((r) => key(r.method, r.path));
+  const bad = routes.filter((r) => typeof r.handler !== 'function').map((r) => key(r.method, r.path));
   assert.deepEqual(bad, [], `entries with no callable handler: ${bad.join(', ')}`);
 });
 
@@ -217,7 +229,7 @@ const COLLISIONS: ReadonlyArray<readonly [string, string, string]> = [
 test('routes-table: order is load-bearing — each colliding URL is claimed by the entry the if-chain claimed it with, not by a later arm that also matches', () => {
   for (const [url, method, expected] of COLLISIONS) {
     if (!CARVED.has(key(method, expected))) continue; // not carved yet — still the if-chain's
-    const claimant = knowledgeRoutes.find((r) => r.method === method && r.matches(url));
+    const claimant = routes.find((r) => r.method === method && r.matches(url));
     assert.ok(claimant, `no table entry claims ${method} ${url} — the route is unreachable`);
     assert.equal(claimant.path, expected,
       `${method} ${url} must be claimed by "${expected}", not "${claimant.path}". ` +

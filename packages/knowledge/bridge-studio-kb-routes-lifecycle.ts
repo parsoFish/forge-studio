@@ -16,12 +16,11 @@ import {
   loadConfig,
   resolveProjectsDir,
   type PathGuardResult,
+  discoverProjects,
 } from '@forge/kernel';
-import { listFlowIds, discoverProjects } from '../../orchestrator/studio/registry.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts/studio/types.ts';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
 import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession } from './bridge-studio-kbs.ts';
@@ -62,7 +61,31 @@ function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult
  *
  * Returns false for a non-matching URL (passthrough), never throws.
  */
-export async function handleKbCreate(
+/**
+ * The one collaborator this handler cannot import.
+ *
+ * `listFlowIds` is the Flow-kind loader in `orchestrator/studio/registry.ts`;
+ * a rank-2 package may not import the legacy tree, and the Flow kind is not
+ * carved until wave 4. Declared STRUCTURALLY (a function shape, not the real
+ * type) so this file names no forbidden module even in a type position, and
+ * supplied at `apps/forge/routes.ts`, which `classify()` gives no rule at all.
+ * `listFlowBandIds` rides along for the same reason one rank higher
+ * (`@forge/flows`).
+ *
+ * `discoverProjects` is NOT here: it already lives in `@forge/kernel`, and the
+ * registry merely re-exports it — this file was taking a legacy detour to a
+ * symbol it may import directly.
+ */
+export type KbCreateDeps = {
+  /** `orchestrator/studio/registry.ts`'s `listFlowIds`. */
+  listFlowIds: (forgeRoot: string) => string[];
+  /** `@forge/flows/flow-band-vocab.ts`'s `listFlowBandIds`. */
+  listFlowBandIds: (forgeRoot: string, flowId: string) => string[];
+};
+
+export function createKbCreateHandler(deps: KbCreateDeps) {
+  const { listFlowIds, listFlowBandIds } = deps;
+  return async function handleKbCreate(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: RouteContext,
@@ -282,6 +305,7 @@ export async function handleKbCreate(
   }
 
   return false;
+  };
 }
 
 /**
