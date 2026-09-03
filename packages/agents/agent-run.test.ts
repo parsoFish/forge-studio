@@ -1,53 +1,45 @@
 /**
- * R4-22 WI-5 (T3, acceptance tests) — pins the contract for the dispatch
- * FORK `cmdAgentRun` (`cli/agent-run.ts`) must gain (ADR-043 §3): a
- * `turnSpec`-bearing session-kind descriptor routes onto the generic spine
- * `runInteractiveTurn` (`orchestrator/interactive-runner.ts`, R4-22 WI-3,
- * already landed on this branch); everything else keeps riding the existing,
- * byte-for-byte UNTOUCHED `AGENT_RUNNERS` registry path.
+ * R4-22 WI-5 (T3, acceptance tests) — pins the dispatch FORK in `cmdAgentRun`
+ * (`packages/agents/agent-run.ts`, ADR-043 §3): a `turnSpec`-bearing
+ * session-kind descriptor routes onto the generic spine `runInteractiveTurn`
+ * (`packages/sessions/interactive-runner.ts`); every bespoke dispatch id keeps
+ * riding its own registry row untouched.
  *
- * RED-NOW: no fork exists yet — `cmdAgentRun` unconditionally resolves
- * `AGENT_RUNNERS[agentId]` FIRST and bails out with "unknown agent-id" for
- * anything not in that 4-entry registry. Every "new road" test below is
- * expected to fail for exactly that reason until WI-5 lands. See the T3
- * report for the exact captured RED output.
+ * The fork LANDED in WI-5; this file has been green since. (It was written
+ * red-first, and its original header described that pre-fork state as the
+ * present — corrected here by the M4 ruling-60 port, which is also why the
+ * bespoke rows now live in two tables: see AT-2's own note below.)
  *
  * ---------------------------------------------------------------------------
  * WHY NO DEPENDENCY-INJECTION SEAM (a design call this file had to make)
  * ---------------------------------------------------------------------------
- * `cmdAgentRun` today has the 2-arg signature `(rest, forgeRoot)`. Adding a
- * `deps?: { runInteractiveTurn?: ... }` parameter (mirroring
- * `cmdAgentDispatch`'s own `deps?: { dispatch?: ... }` a few dozen lines
- * below it in the same file) would be the obvious DI seam — but this test
- * file must typecheck AS WRITTEN, against `cmdAgentRun`'s CURRENT signature,
- * because WI-5 has not landed yet and is not this file's job to implement.
- * Calling a 2-arg function with a 3rd argument is a real `tsc` arity error,
- * not a runtime RED — that would violate this WI's "your file MUST
- * typecheck" requirement outright. `node:test`'s `mock.module()` was also
- * considered and rejected for the identical reason
- * `cli/ui-bridge-agent-run-ceiling.test.ts`'s own header already rejected it
- * for a sibling seam: it requires `--experimental-test-module-mocks`, a flag
- * `npm test` (and this WI's own mandated run command) does not pass.
+ * `cmdAgentRun` keeps its 2-arg signature `(rest, forgeRoot)`: this file must
+ * typecheck against that signature as written, so a `deps?: {...}` third
+ * argument was never available to it. `node:test`'s `mock.module()` was
+ * rejected for the reason `cli/ui-bridge-agent-run-ceiling.test.ts`'s header
+ * gives for a sibling seam — it needs `--experimental-test-module-mocks`, a
+ * flag `npm test` does not pass.
  *
  * Instead, every "new road" test below drives `cmdAgentRun` to REAL,
  * SDK-free execution of `runInteractiveTurn` by giving the turnSpec fixture a
  * single `step: noop` phase (the one step `runInteractiveTurn` runs with zero
- * external calls — confirmed by `orchestrator/interactive-runner.test.ts`'s
+ * external calls — confirmed by `packages/sessions/interactive-runner.test.ts`'s
  * own AT-2). The "call record" required by AT-1 below is then read back from
  * `runInteractiveTurn`'s OWN real event-log artifact, LOCATED BY CONTENT, not
  * by a hardcoded directory-name literal (R4-22 F4 amendment — see
  * `findInteractiveRunnerStartEvent` below): every event `runInteractiveTurn`
- * emits carries `skill: 'interactive-runner'` (`orchestrator/
- * interactive-runner.ts`'s `RUNNER_SKILL`), a value no legacy runner ever
+ * emits carries `skill: 'interactive-runner'`
+ * (`packages/sessions/interactive-runner.ts`'s `RUNNER_SKILL`), a value no
+ * bespoke runner ever
  * emits, so scanning every events.jsonl under `<forgeRoot>/_logs/` for that
  * skill plus a matching `metadata.{session_id,session_kind}` finds the right event
  * regardless of which directory it landed in — deliberately decoupled from
- * `orchestrator/interactive-runner.ts:213`'s own directory-naming convention
+ * `packages/sessions/interactive-runner.ts`'s own directory-naming convention
  * (`_<descriptor.id>-<sessionId>`, pinned separately by this file's AT-a/AT-b
- * and by `cli/agent-run-log-dir-colocation.test.ts`'s co-location ratchet),
+ * and by `packages/agents/agent-run-log-dir-colocation.test.ts`'s ratchet),
  * because a dir-NAME discriminator alone cannot tell "the spine ran" apart
  * from "a legacy runner sharing the same kind id ran" once both write into
- * an identically-named directory. `orchestrator/logging.ts`'s `createLogger`
+ * an identically-named directory. `packages/kernel/logging.ts`'s `createLogger`
  * writes the artifact; the `start` event's own
  * `metadata.{session_id,session_kind,phase,step}` is read straight from
  * `runInteractiveTurn`'s own source, not guessed — a MECHANISM-GROUNDED proof
@@ -59,12 +51,9 @@
  * argument AND as the test process's `process.cwd()` for the call's duration
  * (restored in a `finally`, mirroring `cli/agent-run-dispatch.test.ts`'s own
  * AT-D7-9 precedent for exactly this technique). `cmdAgentRun`'s existing
- * `--project` resolution (`resolve('projects', projectArg)`) is cwd-relative
- * and forgeRoot-independent today; chdir'ing into the fixture forgeRoot makes
- * `resolve('projects', ...)` and any (unspecified, so-far) `resolve(forgeRoot,
- * 'projects', ...)` convention the WI-5 implementer might choose resolve to
- * the IDENTICAL path — this test suite does not need to guess which
- * convention lands.
+ * `--project` resolution is forgeRoot-derived; chdir'ing into the fixture
+ * forgeRoot makes the cwd-relative and forgeRoot-relative forms resolve to the
+ * IDENTICAL path, so the fixture is insensitive to which one the code uses.
  *
  * ---------------------------------------------------------------------------
  * DESIGN DECISIONS THIS FILE PINS (T3 call, per the WI-5 brief)
@@ -100,6 +89,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
+import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import { writeSessionStatus, readSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
@@ -218,22 +208,18 @@ function setupTurnspecFixture(): TurnspecFixture {
  *  directory-NAME prefix). LOCATES the ONE `runInteractiveTurn`-emitted
  *  "start" event, ANYWHERE under `<forgeRoot>/_logs/`, matching `sessionId`
  *  + `sessionKind` by CONTENT — `skill: 'interactive-runner'`
- *  (`orchestrator/interactive-runner.ts`'s `RUNNER_SKILL`, stamped on every
- *  event the spine emits and on NO event any of the 4 legacy runners emit:
- *  they stamp 'architect-runner' / 'instructions-runner' /
- *  'demo-builder-runner' / 'project-brain-builder' — see each runner's own
- *  `skill:` literal, `orchestrator/{architect,instructions,demo-builder,
- *  project-brain-builder}-runner.ts`).
+ *  (`packages/sessions/interactive-runner.ts`'s `RUNNER_SKILL`, stamped on
+ *  every event the spine emits and on NO event any bespoke runner emits: they
+ *  stamp 'architect-runner' / 'instructions-runner' / 'demo-builder-runner' /
+ *  'project-brain-builder' — see each one's own `skill:` literal).
  *
- *  Deliberately does NOT assume any particular directory NAME: once
- *  `orchestrator/interactive-runner.ts:213`'s cycleId becomes
- *  `_<descriptor.id>-<sessionId>` (this WI's own fixed convention, pinned by
- *  AT-a/AT-b/the co-location ratchet), that directory name is
- *  INDISTINGUISHABLE from a legacy runner's own directory for any id the two
- *  share (architect/instructions/project-brain) — a dir-name discriminator
- *  can no longer tell "the spine ran" apart from "the legacy runner with the
- *  same kind id ran"; only the event's own `skill` field still can. Returns
- *  `undefined` if no matching event exists anywhere. */
+ *  Deliberately does NOT assume any directory NAME: the spine's cycleId is
+ *  `_<descriptor.id>-<sessionId>` (pinned by AT-a/AT-b and the co-location
+ *  ratchet), INDISTINGUISHABLE from a bespoke runner's own directory for any
+ *  id the two share (architect/instructions/project-brain) — only the event's
+ *  own `skill` field can still tell "the spine ran" from "the bespoke runner
+ *  with the same kind id ran". Returns `undefined` if no matching event
+ *  exists anywhere. */
 /** Shared walk (extracted so findInteractiveRunnerStartEvent's find-one and
  *  assertNoInteractiveRunnerSkillEvent's assert-none below cannot silently
  *  drift apart on what counts as "every event under _logs/"): yields every
@@ -396,7 +382,7 @@ test('R4-22 WI-5, AT-1: a turnSpec-only agent-id (no AGENT_RUNNERS entry) drives
     // Fixture preconditions, established BEFORE any verdict is read.
     const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === TURNSPEC_ONLY_ID);
     assert.ok(descriptor?.turnSpec, 'fixture precondition: descriptor must carry a turnSpec');
-    assert.equal(AGENT_RUNNERS[TURNSPEC_ONLY_ID], undefined, 'fixture precondition: must NOT be an AGENT_RUNNERS key');
+    assert.ok(!BESPOKE_DISPATCH_IDS.includes(TURNSPEC_ONLY_ID), 'fixture precondition: must NOT be a bespoke dispatch id in either table');
     const seeded = readSessionStatus<{ phase: string }>(fx.sessionDir);
     assert.equal(seeded?.phase, 'p1', 'fixture precondition: seeded status.json must start in phase p1');
 
@@ -424,19 +410,21 @@ test('R4-22 WI-5, AT-1: a turnSpec-only agent-id (no AGENT_RUNNERS entry) drives
 });
 
 // ---------------------------------------------------------------------------
-// AT-2 — legacy road untouched, for all 4 AGENT_RUNNERS ids.
+// AT-2 — bespoke road untouched, for all 4 bespoke dispatch ids.
 // ---------------------------------------------------------------------------
+// M4 ruling 60: a PORTED kind's row moves to `@forge/sessions/kinds/registry.ts`,
+// so the preconditions below ask the UNION `cmdAgentRun` consults, not one half.
+const BESPOKE_DISPATCH_IDS = [...Object.keys(AGENT_RUNNERS), ...Object.keys(SESSION_KIND_RUNNERS)];
 
-// Kills: a fork that routes an id with turnSpec undefined/absent (every real
-// AGENT_RUNNERS id today) through runInteractiveTurn anyway — proven two
-// ways: (a) the printed error is the exact `entry.verb`-flavored legacy text
+// Kills: a fork that routes an id with turnSpec undefined/absent (every
+// bespoke dispatch id today) through runInteractiveTurn anyway — proven two
+// ways: (a) the printed error is the exact `entry.verb`-flavored bespoke text
 // (runInteractiveTurn's own errors are never phrased this way — see its
 // source, "runInteractiveTurn: ..." throughout), and (b) no event anywhere
 // under `_logs/` carries `skill: 'interactive-runner'` — the marker ONLY
 // runInteractiveTurn stamps (R4-22 F4 amendment: content-based, not a
 // `_interactive-<id>-*` directory-name check, which stops discriminating the
-// moment the spine's directory name collides with the legacy runner's own —
-// see this file's header).
+// moment the spine's directory name collides with the bespoke runner's own).
 const LEGACY_FAST_FAIL_CASES: { agentId: string; args: string[]; expected: RegExp }[] = [
   { agentId: 'instructions', args: ['instructions', 'some-session-id'], expected: /^forge instructions run: --project <name> is required$/m },
   { agentId: 'demo-builder', args: ['demo-builder', 'some-session-id'], expected: /^forge demo-builder run: --project <name> is required$/m },
@@ -446,7 +434,7 @@ const LEGACY_FAST_FAIL_CASES: { agentId: string; args: string[]; expected: RegEx
 
 for (const { agentId, args, expected } of LEGACY_FAST_FAIL_CASES) {
   test(`R4-22 WI-5, AT-2 (legacy road untouched): 'agent run ${agentId}' still hits the legacy AGENT_RUNNERS fast-fail text, never runInteractiveTurn`, async () => {
-    assert.notEqual(AGENT_RUNNERS[agentId], undefined, `fixture precondition: "${agentId}" must be a real AGENT_RUNNERS key`);
+    assert.ok(BESPOKE_DISPATCH_IDS.includes(agentId), `fixture precondition: "${agentId}" must be a real dispatch id in either table`);
     const baseline = snapshotLogs(ROOT);
     const r = await run(args, ROOT);
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
@@ -455,6 +443,13 @@ for (const { agentId, args, expected } of LEGACY_FAST_FAIL_CASES) {
     assertNoInteractiveRunnerSkillEvent(ROOT, baseline, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
   });
 }
+
+// Structural: a port that adds or renames a dispatch id cannot leave AT-2
+// passing vacuously over a shrinking set (COMMON §15.70, one table over).
+test('AT-2 coverage: every bespoke dispatch id has a fast-fail case', () => {
+  assert.deepEqual(LEGACY_FAST_FAIL_CASES.map((c) => c.agentId).sort(), [...BESPOKE_DISPATCH_IDS].sort(),
+    'each id in AGENT_RUNNERS + SESSION_KIND_RUNNERS needs its own AT-2 fast-fail case');
+});
 
 // ---------------------------------------------------------------------------
 // AT-3 — ordering pin: a turnSpec-only id must not hit the unknown-agent-id
@@ -470,7 +465,7 @@ test('R4-22 WI-5, AT-3 (ordering pin): a turnSpec-only agent-id must NOT be reje
   try {
     const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === TURNSPEC_ONLY_ID);
     assert.ok(descriptor?.turnSpec, 'fixture precondition: descriptor must carry a turnSpec');
-    assert.equal(AGENT_RUNNERS[TURNSPEC_ONLY_ID], undefined, 'fixture precondition: must NOT be an AGENT_RUNNERS key');
+    assert.ok(!BESPOKE_DISPATCH_IDS.includes(TURNSPEC_ONLY_ID), 'fixture precondition: must NOT be a bespoke dispatch id in either table');
 
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId], fx.forgeRoot));
     assert.doesNotMatch(
@@ -567,11 +562,16 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
 // exists to detect).
 //
 // The fork keys ONLY on `descriptor?.turnSpec` and is evaluated BEFORE the
-// `AGENT_RUNNERS` lookup, so the moment a descriptor whose id COLLIDES with a
-// legacy runner key gains a `turnSpec`, that bespoke runner is silently
-// bypassed. Three real ids collide today: `architect`, `instructions`,
-// `project-brain` (`demo` deliberately does not — the yaml's id differs from
-// the `demo-builder` runner key).
+// bespoke lookup, so the moment a descriptor whose id COLLIDES with a bespoke
+// runner key gains a `turnSpec`, that runner is silently bypassed. Three real
+// ids collide today: `architect`, `instructions`, `project-brain` (`demo`
+// deliberately does not — the yaml's id differs from the `demo-builder` key).
+//
+// M4 ruling 60: the collision set is `BESPOKE_DISPATCH_IDS`, the UNION of both
+// dispatch tables. Reading `AGENT_RUNNERS` alone would drop each kind out of
+// this tripwire at the exact moment it ports — the scanner that quietly stops
+// reaching its call sites (COMMON §15.70), on the one test written to catch a
+// silent routing change.
 //
 // ADR-043 says that switch is INTENTIONAL — it is precisely how each runner
 // migrates in batch E. The danger is that it can also happen BY ACCIDENT, and
@@ -588,7 +588,7 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
 // reviewed act that updates this invariant, never a silent yaml edit.
 // KILLS: an accidental `turnSpec:` added to a legacy row, which would bypass a
 // bespoke runner in production with every existing suite still green.
-test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the REAL session-kinds.yaml carries a turnSpec', () => {
+test('R4-22 WI-5, AT-7 (standing invariant): no bespoke dispatch id in the REAL session-kinds.yaml carries a turnSpec', () => {
   const repoRoot = FORGE_ROOT;
   const descriptors = loadSessionKinds(repoRoot);
 
@@ -596,23 +596,23 @@ test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the R
   // the real yaml failed to load or the collision set were empty, this test
   // would pass vacuously and protect nothing.
   assert.ok(descriptors.length > 0, 'arrange: the real studio/session-kinds.yaml must load with at least one descriptor');
-  const legacyIds = Object.keys(AGENT_RUNNERS);
-  assert.ok(legacyIds.length > 0, 'arrange: AGENT_RUNNERS must be non-empty');
-  const colliding = descriptors.filter((d) => legacyIds.includes(d.id));
+  const bespokeIds = BESPOKE_DISPATCH_IDS;
+  assert.ok(bespokeIds.length > 0, 'arrange: the two dispatch tables must not both be empty');
+  const colliding = descriptors.filter((d) => bespokeIds.includes(d.id));
   assert.ok(
     colliding.length > 0,
-    `arrange: at least one descriptor id must collide with an AGENT_RUNNERS key, else this invariant is vacuous ` +
-      `(descriptor ids: ${descriptors.map((d) => d.id).join(', ')}; legacy ids: ${legacyIds.join(', ')})`,
+    `arrange: at least one descriptor id must collide with a bespoke dispatch id, else this invariant is vacuous ` +
+      `(descriptor ids: ${descriptors.map((d) => d.id).join(', ')}; bespoke ids: ${bespokeIds.join(', ')})`,
   );
 
   const hijacked = colliding.filter((d) => d.turnSpec !== undefined).map((d) => d.id);
   assert.deepEqual(
     hijacked,
     [],
-    `session-kind(s) ${hijacked.join(', ')} share an id with a legacy AGENT_RUNNERS entry AND declare a turnSpec, so ` +
+    `session-kind(s) ${hijacked.join(', ')} share an id with a bespoke dispatch row AND declare a turnSpec, so ` +
       `cmdAgentRun's fork now routes them to the generic spine and their bespoke runner is DEAD CODE. If this is a ` +
       `deliberate batch-E migration (ADR-043), that is fine — but it must be explicit: migrate the runner, retire its ` +
-      `AGENT_RUNNERS entry, and update this invariant in the same PR. If you did not intend to change routing, remove ` +
+      `dispatch row, and update this invariant in the same PR. If you did not intend to change routing, remove ` +
       `the turnSpec. The golden-capture suite CANNOT catch this: it calls the four turn functions directly and never ` +
       `exercises the fork.`,
   );

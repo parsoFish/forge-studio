@@ -38,7 +38,7 @@ import {
  * The row shape this route reads, declared structurally.
  *
  * The real `ProjectBrainRow` still lives in
- * `orchestrator/project-brain-builder-runner.ts` — that runner's shell is
+ * `packages/sessions/kinds/project-brain.ts` — that runner's shell is
  * handoff K21, sessions' own carve-in, and it has not landed yet. Naming the
  * legacy type from here would mint a `package-to-legacy` row for the duration,
  * so the three fields the arm actually reads are declared instead. When K21

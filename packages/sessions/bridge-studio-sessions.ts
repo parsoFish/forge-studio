@@ -46,7 +46,7 @@
  * `<projectsRoot>/<project>/_<kind>/<sessionId>` — `_<kind>` built from
  * `descriptor.id`, the same shape `architectSessionDir` / `instructionsSessionDir`
  * / `projectBrainSessionDir` already use (cli/ui-bridge.ts:1416,
- * packages/sessions/instructions-runner.ts:142, orchestrator/project-brain-builder-runner.ts:77).
+ * packages/sessions/instructions-runner.ts:142, packages/sessions/kinds/project-brain.ts:77).
  *
  * Security (the part reviewers attack hardest — a standing brief after 3
  * consecutive lexical-check failures in this campaign):

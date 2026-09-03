@@ -52,11 +52,11 @@ process.chdir(FORGE_ROOT);
 
 // R2-01-F3a: `forge agent run <agent-id> <session-id> [--project <name>]` —
 // the generic path over the 4 interactive runners (architect / instructions /
-// demo-builder / project-brain) — and its `AGENT_RUNNERS` registry +
-// `cmdAgent`/`cmdAgentRun` skeleton live in `../cli/agent-run.ts` (moved
-// there in the R2-01 final-review cleanup; cli.ts had grown past the
-// 800-line cap). The 4 legacy `cmd<X>Run` thin delegations further down
-// import `cmdAgent`/`cmdAgentRun` from there.
+// demo-builder / project-brain) — and the `cmdAgent`/`cmdAgentRun` skeleton
+// live in `packages/agents/agent-run.ts`; the 4 thin `cmd<X>Run` delegations
+// below import them from there. `cmdAgentRun` resolves an agent-id from TWO
+// tables: the un-ported `AGENT_RUNNERS` there, and `SESSION_KIND_RUNNERS`
+// (`packages/sessions/kinds/registry.ts`) for each PORTED kind (ruling 60).
 
 (async () => {
   // F-10: surface env-setup issues for the SDK-talking verb (warn-only; some

@@ -13,7 +13,7 @@
  * questions.json, feedback.md) and reacts to whichever exist. This is what
  * makes the shell generic AND what makes project-brain's transcript
  * honestly ONE turn fall out naturally — its runner
- * (project-brain-builder-runner.ts) never writes answers.json/
+ * (kinds/project-brain.ts) never writes answers.json/
  * questions.json/feedback.md; there is no interview for that kind.
  *
  * Real on-disk shapes (verified against source, not guessed):

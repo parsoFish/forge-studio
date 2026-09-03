@@ -1,7 +1,7 @@
 /**
  * R4-19 WI-1 pins — the analyze-step read-source branch.
  *
- * `runAnalyzeStep` (project-brain-builder-runner.ts) hardcodes
+ * `runAnalyzeStep` (now the project-brain kind's analyzing step) hardcodes
  * `cwd: status.project_repo_path` and a prompt containing the literal line
  * `Project repo (your working directory — READ from here): <project_repo_path>`
  * for EVERY project-brain session, regardless of `status.kb_binding.kind`.
@@ -29,7 +29,7 @@
  *   3. companion — the WRITE contract (3-6 themes + profile.md into staging)
  *      is unchanged on the flow/band branch — only the READ source differs.
  *
- * Sibling file (not inline in project-brain-builder-runner.test.ts) so this
+ * Sibling file (not inline in the project-brain runner's own test) so this
  * module-load-time SyntaxError doesn't collateral-fail that file's four
  * already-green pins while `buildAnalyzePlan` doesn't exist yet.
  */

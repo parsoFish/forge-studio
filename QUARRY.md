@@ -77,7 +77,7 @@ operator-ratified new cap — never a silent raise.
 | `cli/ui-bridge.ts` | `apps/forge` | 6,602 | the 6,602-line host: agent spawn, session index and authoring routes in one file |
 | `orchestrator/band-agent-run.ts` | `agents` | 242 | generic band dispatch that hardcodes two `orchestrator/phases/` imports — the port must exist first |
 | `orchestrator/flow-runner.ts` | `flows` | 615 | M2-B replaced its ten phase imports with the `PhaseExecutor` port; the table it shed is `phases/executor-{table,deps}.ts` |
-| `orchestrator/project-brain-builder-runner.ts` | `knowledge` | 448 | a knowledge concern wrapped in the sessions turn-loop plumbing it must shed. **Split 2026-09-03 (M4-knowledge s5, ruling 56):** the brain half — `buildAnalyzePlan`, `commitProjectBrain`, `listStagedThemes`, `PROJECT_BRAIN_KIND_DIR` — is now `packages/knowledge/project-brain-build.ts` (its own row below). The file could not move whole: it dispatches an agent turn, so it imports `@forge/agents` (rank 3) and `@forge/sessions` (rank 4). **The 295-line residue IS the shed plumbing** — the turn loop, `runAnalyzeStep`, and `writeProjectBrainStatus`, which calls `guardedWriteSessionStatus`/`statusWriteRefusalReason` from `@forge/sessions` and is why the commit no longer writes the session status. Owner cell left at `knowledge` deliberately: the residue belongs to M4-sessions' port of this runner as a session kind, and the cell should follow it there rather than be guessed now. |
+| `packages/sessions/kinds/project-brain.ts` | `sessions` | 186 | **PORTED 2026-09-03 (M4-sessions s3, ruling 60).** Was `orchestrator/project-brain-builder-runner.ts`. The brain half — `buildAnalyzePlan`, `commitProjectBrain`, `listStagedThemes`, `PROJECT_BRAIN_KIND_DIR` — left first as `packages/knowledge/project-brain-build.ts` (M4-knowledge s5, ruling 56). The 296-line residue was the SHED PLUMBING, and this port sheds it: containment preamble, guarded status read/write, logger/sink/heartbeat/thinking construction and the start/end events are now `kinds/kind-turn.ts`'s, shared by every ported kind. What is left here is the kind's IDENTITY — its phase set, its agent spec, and the two steps that do work. Its `AGENT_RUNNERS` row moved to `kinds/registry.ts` beside it; the old file is deleted. Owner cell now `sessions`, as the knowledge row predicted it would become. |
 | `orchestrator/studio/registry.ts` | `kernel` | 1,180 | one loader for Agent, Flow, KB, Catalog, Community, Template and Project — five packages in one file |
 | `orchestrator/studio/validate.ts` | `kernel` | 1,066 | the same five-way split on the validation side |
 
@@ -295,7 +295,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
 | packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
-| orchestrator/project-brain-builder-runner.ts | knowledge | rewritten | 295 |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 284 |
+| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 186 |
+| packages/sessions/kinds/registry.ts | sessions | rewritten | 66 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |

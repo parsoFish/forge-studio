@@ -56,7 +56,7 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
  *  `LEGACY_SESSION_TERMINAL_PHASES` above. Sourced from the runners' own
  *  phase vocabularies: `ArchitectPhase`
  *  (`packages/sessions/architect-runner.ts`) and `ProjectBrainPhase`
- *  (`orchestrator/project-brain-builder-runner.ts`) + the two bespoke panels
+ *  (`packages/sessions/kinds/project-brain.ts`) + the two bespoke panels
  *  (SessionArchitectPanel / SessionProjectBrainPanel), which render an
  *  operator control at exactly these phases and nowhere else. */
 export const LEGACY_SESSION_AWAITS_PHASES: Readonly<Record<string, Readonly<Record<string, 'questions' | 'verdict'>>>> = {

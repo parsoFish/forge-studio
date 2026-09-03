@@ -8,7 +8,7 @@
  * the read OUT of the intended project subtree:
  *
  *   - runInstructionsTurn   → instructionsSessionDir  (packages/sessions/instructions-runner.ts:142/153)
- *   - runProjectBrainTurn   → projectBrainSessionDir  (orchestrator/project-brain-builder-runner.ts:76/96)
+ *   - runProjectBrainTurn   → projectBrainSessionDir  (packages/sessions/kinds/project-brain.ts)
  *   - runDemoBuilderTurn    → demoSessionDir          (packages/sessions/demo-builder-runner.ts:171/182)
  *
  * The Stage-1 reproduce agent exercised only the HTTP surface and SUPPRESSED
@@ -51,7 +51,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runInstructionsTurn, instructionsSessionDir } from './instructions-runner.ts';
-import { runProjectBrainTurn, projectBrainSessionDir } from '../../orchestrator/project-brain-builder-runner.ts';
+import { runProjectBrainTurn, projectBrainSessionDir } from './kinds/project-brain.ts';
 import { runDemoBuilderTurn, demoSessionDir } from './demo-builder-runner.ts';
 import type { QueryFn } from './interactive-session.ts';
 
