@@ -26,7 +26,6 @@ import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { runArchitectTurn } from '@forge/sessions/architect-runner.ts';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
@@ -84,24 +83,6 @@ export interface AgentRunnerEntry {
 }
 
 export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
-  architect: {
-    verb: 'architect run',
-    requiresProject: false,
-    kindDir: '_architect',
-    loadRunTurn: async () => runArchitectTurn as unknown as AgentTurnFn,
-    printResult: (raw) => {
-      const result = raw as Awaited<ReturnType<typeof runArchitectTurn>>;
-      console.log(`architect turn complete — phase=${result.phase}`);
-      if (result.questions?.length) {
-        console.log(`  ${result.questions.length} question(s) awaiting the operator`);
-      }
-      if (result.planPath) console.log(`  PLAN: ${result.planPath}`);
-      if (result.promotedManifestPaths?.length) {
-        console.log(`  promoted ${result.promotedManifestPaths.length} manifest(s) to _queue/pending/:`);
-        for (const p of result.promotedManifestPaths) console.log(`    ${p}`);
-      }
-    },
-  },
 };
 
 /** Every agent-id `forge agent run` accepts — DERIVED from both dispatch

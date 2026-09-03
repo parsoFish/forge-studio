@@ -457,7 +457,7 @@ test('C3: the real handling-module set is present and includes the charter modul
   const mods = targetModules();
   for (const m of [
     'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
-    'packages/sessions/interactive-session.ts', 'packages/sessions/architect-runner.ts', 'packages/sessions/kinds/instructions.ts',
+    'packages/sessions/interactive-session.ts', 'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
     'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
   ]) {
     assert.ok(mods.includes(m), `charter module ${m} must be in scope`);
@@ -927,7 +927,7 @@ test('G5: the derived scope is a SUPERSET of the charter list and of every cli/b
   for (const m of [
     'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/factory/architect-plan.ts',
     'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
-    'packages/sessions/architect-runner.ts', 'packages/sessions/kinds/instructions.ts',
+    'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
     'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
     'packages/projects/project-config.ts', 'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
     'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',

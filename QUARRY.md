@@ -223,14 +223,14 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/band-agent-run.ts | agents | rewritten | 368 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 39 |
-| packages/sessions/architect-runner.ts | sessions | verbatim | 1715 |
+| packages/sessions/kinds/architect.ts | sessions | verbatim | 1584 |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/brain-fix-runner.ts | sessions | verbatim | 381 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 141 |
 | packages/flows/claim-validator.ts | flows | verbatim | 233 |
 | apps/forge/cli.ts | apps/forge | pruned | 998 |
 | apps/forge/routes.ts | apps/forge | verbatim | 38 |
-| packages/sessions/completeness-critic-runner.ts | sessions | verbatim | 286 |
+| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 297 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 242 |
@@ -240,7 +240,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-report.ts | flows | verbatim | 29 |
 | packages/flows/cycle.ts | flows | verbatim | 484 |
 | packages/flows/daemon.ts | flows | verbatim | 248 |
-| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 710 |
+| packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 711 |
 | packages/flows/demo-fix-loop.ts | flows | verbatim | 218 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
@@ -261,7 +261,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/gate-recipes.ts | projects | verbatim | 146 |
 | packages/flows/initiative-id.ts | flows | verbatim | 210 |
 | packages/library/instruction-seed-match.ts | library | verbatim | 152 |
-| packages/sessions/kinds/instructions.ts | sessions | verbatim | 513 |
+| packages/sessions/kinds/instructions.ts | sessions | verbatim | 514 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 422 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 883 |
 | packages/sessions/interactive-session.ts | sessions | verbatim | 993 |
@@ -296,9 +296,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
 | packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
-| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 384 |
-| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 186 |
-| packages/sessions/kinds/registry.ts | sessions | rewritten | 66 |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 421 |
+| packages/sessions/kinds/project-brain.ts | sessions | rewritten | 179 |
+| packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/projects/project-config.ts | projects | verbatim | 330 |

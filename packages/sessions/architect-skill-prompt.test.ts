@@ -44,17 +44,21 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import {
   runArchitectTurn,
   writeStatus,
   type ArchitectStatus,
   type QueryFn,
-} from './architect-runner.ts';
+} from './kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
 
 const HERE = import.meta.dirname;
-const ARCHITECT_RUNNER_TS = join(HERE, 'architect-runner.ts');
+/** Anchored on FORGE_ROOT, not a `..`/HERE chain (COMMON §15.14) — the fourth
+ *  such anchor this wave. Was `architect-runner.ts` beside this file before the
+ *  M4 ruling-60 port made it the architect KIND module. */
+const ARCHITECT_RUNNER_TS = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect.ts');
 const ARCHITECT_SKILL_MD = join(HERE, '..', '..', 'skills', 'architect', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
@@ -156,7 +160,7 @@ function normalizeProse(text: string): string {
     .trim();
 }
 
-test('AT-1 (prose-left-the-TS): 5 distinctive instruction sentences — covering all 4 turns — are absent from architect-runner.ts and present in SKILL.md', () => {
+test('AT-1 (prose-left-the-TS): 5 distinctive instruction sentences — covering all 4 turns — are absent from kinds/architect.ts and present in SKILL.md', () => {
   const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
   const skillMd = readFileSync(ARCHITECT_SKILL_MD, 'utf8');
   const normRunner = normalizeProse(runnerSrc);
@@ -197,7 +201,7 @@ test('AT-1 (prose-left-the-TS): 5 distinctive instruction sentences — covering
 // AT-2 — no fail-open remains
 // ---------------------------------------------------------------------------
 
-test('AT-2 (no-fail-open-remains): architect-runner.ts deletes the "You are the forge architect." fallback and its private loadSkillPrompt', () => {
+test('AT-2 (no-fail-open-remains): kinds/architect.ts deletes the "You are the forge architect." fallback and its private loadSkillPrompt', () => {
   const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
   assert.ok(
     !runnerSrc.includes('You are the forge architect.'),
@@ -654,7 +658,7 @@ test('AT-9 (Round-2, Part A): frozen no-content-loss set — every distinct pre-
 // it per the design's untouched-region allowance. This content legitimately
 // STAYS in TypeScript (it is conditionally rendered from `edge-cases.json`,
 // not static instruction prose) — checked against the runner .ts, not SKILL.md.
-test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (renderExploreBlock) survives verbatim in architect-runner.ts', () => {
+test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (renderExploreBlock) survives verbatim in kinds/architect.ts', () => {
   const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
   const samples = [
     "Edge cases you enumerated — every one MUST land per its disposition:",

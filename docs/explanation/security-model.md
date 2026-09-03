@@ -128,7 +128,7 @@ not:
      `'architect' | 'human-directed'`, never the request's raw string).
 
    **Not class 3, and not an ingest point either — a pre-ingest STAGING tier:**
-   `orchestrator/architect-runner.ts` writes and amends DRAFT manifests directly into
+   `packages/sessions/kinds/architect.ts` writes and amends DRAFT manifests directly into
    `paths.manifestsDir` (`mkdirSync` + `writeFileSync`/`serializeManifest`, multiple
    call sites). This is not a bypass of the choke point: every draft written there is
    later PROMOTED through the class-1 path (`promoteManifests(paths.manifestsDir,

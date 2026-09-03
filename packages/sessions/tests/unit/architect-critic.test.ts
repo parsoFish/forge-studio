@@ -27,7 +27,7 @@ import {
   CRITIC_MAX_CRASH_ERROR_CHARS,
   type QueryFn,
   type RunCompletenessCriticInput,
-} from './completeness-critic-runner.ts';
+} from '../../kinds/architect-critic.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 /** In-memory logger stub — the critic threads it to hook dispatch and never

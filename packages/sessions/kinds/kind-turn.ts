@@ -195,6 +195,36 @@ export type SessionKindVariant<
   steps: Record<string, KindStepHandler<S, R, I>>;
   /** Phases with no handler — the bespoke runners' trailing `else`. */
   otherwise: (status: S) => R;
+  /**
+   * A missing `status.json` that is NOT a refusal. Return a result to end the
+   * turn with it; return `null` for the standard refusal.
+   *
+   * Exactly one kind needs this and the hook exists for that measured
+   * behaviour alone: architect's ARCH-6 idempotency, where a rejected session
+   * has been MOVED to `_architect/_archived/<sid>`, so a repeat reject turn
+   * finds no live status and must return `{phase:'rejected'}` rather than
+   * throw. Reading the archived copy is a second request-derived path, so an
+   * implementation must contain it the same way the live read is contained.
+   */
+  onMissingStatus?: (input: I) => R | null;
+  /**
+   * Turn-boundary work that must happen for EVERY phase — including terminal
+   * ones — after the logger exists and BEFORE the start event. May THROW to
+   * refuse the turn.
+   *
+   * Also exactly one kind, and also pinned to measured behaviour: architect's
+   * W7-B6 cost-ceiling refusal (spend DERIVED from the session's own event
+   * log, compared to the operator's kickoff ceiling, emitting an `error` event
+   * and throwing) and its ARCH-1 `brain-query` event, which records the
+   * planner brain-first mandate on every turn regardless of phase.
+   *
+   * THESE TWO HOOKS ARE THE WHOLE BUDGET (M4 ruling 78). Ruling 60 chose to
+   * dissolve plumbing and keep identity; it did NOT authorise the ADR-043
+   * machinery. A hook added to this shared driver for one kind is that
+   * machinery arriving through the back door, so a kind wanting a third gets
+   * its own entry point instead, and its PR says so.
+   */
+  preamble?: (args: { input: I; status: S; logger: EventLogger; logsRoot: string }) => void;
   /** Extra `metadata` keys on the start event, beyond session_id + phase. */
   startMetadata?: (status: S) => Record<string, unknown>;
   /** Extra `metadata` keys on the end event, beyond session_id + phase. */
@@ -235,6 +265,10 @@ export async function runKindTurn<
   // dir is refused too. A rejected leaf collapses to null → the turn refuses.
   const status = guardedReadSessionStatus<S>(input.projectRoot, dirSegments);
   if (!status) {
+    // A kind may define a missing status as something other than a refusal
+    // (see `onMissingStatus`); anything else fails loud, as it always has.
+    const recovered = variant.onMissingStatus?.(input) ?? null;
+    if (recovered !== null) return recovered;
     throw new Error(`${variant.label}: no status.json at ${sessionDir}. Has the session been started?`);
   }
 
@@ -244,6 +278,9 @@ export async function runKindTurn<
   const initiativeId = variant.initiativeId(input.sessionId);
   const logger = input.logger ?? createLogger(cycleId, logsRoot);
   const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
+
+  // Every phase, before the start event, and free to throw (see `preamble`).
+  variant.preamble?.({ input, status, logger, logsRoot });
 
   const startEv = logger.emit({
     initiative_id: initiativeId,
