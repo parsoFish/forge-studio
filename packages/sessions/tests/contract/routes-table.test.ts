@@ -32,6 +32,8 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     ensureSessionTail: () => {},
     broadcastKindChanged: () => {},
     broadcastArchitectChanged: () => {},
+    broadcastInstructionsChanged: () => {},
+    listInstructionsSessions: () => [],
     projectsRoot: '/home/parso/forge/projects',
     spawnAgentTurn: () => ({ ok: true }),
     spawnAgentSpecs: {},
@@ -53,7 +55,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 8, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 14, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -97,6 +99,36 @@ for (const [method, url, path] of ARCHITECT_ROUTES) {
     assert.equal(claimant(method, `${url}?x=1`), path, 'a matcher that does not call pathOnly fails exactly here');
   });
 }
+
+const INSTRUCTIONS_ROUTES = [
+  ['GET', '/api/instructions/sessions', '/api/instructions/sessions'],
+  ['GET', '/api/instructions/file/mdtoc/s1/AGENTS.md', '/api/instructions/file/:project/:sessionId/*name'],
+  ['POST', '/api/instructions/start', '/api/instructions/start'],
+  ['POST', '/api/instructions/brief', '/api/instructions/brief'],
+  ['POST', '/api/instructions/answer', '/api/instructions/answer'],
+  ['POST', '/api/instructions/verdict', '/api/instructions/verdict'],
+] as const;
+
+for (const [method, url, path] of INSTRUCTIONS_ROUTES) {
+  test(`${method} ${url} is claimed by ${path}`, () => {
+    assert.equal(claimant(method, url), path);
+  });
+
+  test(`${method} ${url} is still claimed WITH a query string`, () => {
+    assert.equal(claimant(method, `${url}?x=1`), path, 'a matcher that does not call pathOnly fails exactly here');
+  });
+}
+
+test('the architect and instructions families do not claim each other\'s URLs', () => {
+  // Both families have a `/sessions` list, a `/file/` server and a `/start`.
+  // First-match-wins means a matcher that forgot its own prefix would silently
+  // answer for the other kind — with a plausible 200, which is the carve defect
+  // that leaves nothing red.
+  assert.equal(claimant('GET', '/api/architect/sessions'), '/api/architect/sessions');
+  assert.equal(claimant('GET', '/api/instructions/sessions'), '/api/instructions/sessions');
+  assert.equal(claimant('POST', '/api/architect/start'), '/api/architect/start');
+  assert.equal(claimant('POST', '/api/instructions/start'), '/api/instructions/start');
+});
 
 test('/api/plan-verdict is NOT claimed by this table — it is flows-owned', () => {
   // It sat inside the same host function as the five arms above. Ownership was

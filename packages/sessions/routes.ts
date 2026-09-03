@@ -23,6 +23,8 @@ import type { IncomingMessage } from 'node:http';
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { pathOnly } from '@forge/kernel';
 import { handleArchitectRoutes } from './bridge-studio-architect.ts';
+import { handleInstructionsRoutes } from './bridge-studio-instructions.ts';
+import type { InstructionsStatus } from './instructions-runner.ts';
 import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
@@ -45,6 +47,11 @@ export type SessionsRouteDeps = {
   /** The architect kind's own list-changed broadcast, which predates the generic
    *  one above and is what the architect screen actually listens for. */
   readonly broadcastArchitectChanged: () => void;
+  /** The instructions kind's own list-changed broadcast. */
+  readonly broadcastInstructionsChanged: () => void;
+  /** Injected only until the session index collector carves — see
+   *  `bridge-studio-instructions.ts`'s own note. */
+  readonly listInstructionsSessions: (projectsRoot: string) => InstructionsStatus[];
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
@@ -81,6 +88,8 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     readBody: () => ctx.readBody(),
     ensureSessionTail: deps.ensureSessionTail,
     broadcastArchitectChanged: deps.broadcastArchitectChanged,
+    broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
+    listInstructionsSessions: deps.listInstructionsSessions,
     spawnAgentTurn: deps.spawnAgentTurn,
     spawnAgentSpecs: deps.spawnAgentSpecs,
     safeParseJson: deps.safeParseJson,
@@ -94,10 +103,14 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
  *  keeps a classification per URL; all five delegate into the carved family
  *  module, which holds the arms verbatim. */
 const ARCHITECT_FILE_RE = /^\/api\/architect\/file\//;
+const INSTRUCTIONS_FILE_RE = /^\/api\/instructions\/file\//;
 
 export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext> {
-  const arch = (req: IncomingMessage, res: Parameters<RouteTable<RouteContext>[number]['handler']>[1], ctx: RouteContext, url: string, method: string) =>
+  type Res = Parameters<RouteTable<RouteContext>[number]['handler']>[1];
+  const arch = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
     handleArchitectRoutes(req, res, familyContext(ctx, deps), url, method);
+  const instr = (req: IncomingMessage, res: Res, ctx: RouteContext, url: string, method: string) =>
+    handleInstructionsRoutes(req, res, familyContext(ctx, deps), url, method);
   return [
     {
       method: 'GET',
@@ -133,6 +146,48 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       matches: (url) => pathOf(url) === '/api/architect/rerun',
       dryClassification: 'stub-actions',
       handler: arch,
+    },
+    {
+      method: 'GET',
+      path: '/api/instructions/sessions',
+      matches: (url) => pathOf(url) === '/api/instructions/sessions',
+      dryClassification: 'exempt-local',
+      handler: instr,
+    },
+    {
+      method: 'GET',
+      path: '/api/instructions/file/:project/:sessionId/*name',
+      matches: (url) => INSTRUCTIONS_FILE_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: instr,
+    },
+    {
+      method: 'POST',
+      path: '/api/instructions/start',
+      matches: (url) => pathOf(url) === '/api/instructions/start',
+      dryClassification: 'exempt-local',
+      handler: instr,
+    },
+    {
+      method: 'POST',
+      path: '/api/instructions/brief',
+      matches: (url) => pathOf(url) === '/api/instructions/brief',
+      dryClassification: 'stub-actions',
+      handler: instr,
+    },
+    {
+      method: 'POST',
+      path: '/api/instructions/answer',
+      matches: (url) => pathOf(url) === '/api/instructions/answer',
+      dryClassification: 'stub-actions',
+      handler: instr,
+    },
+    {
+      method: 'POST',
+      path: '/api/instructions/verdict',
+      matches: (url) => pathOf(url) === '/api/instructions/verdict',
+      dryClassification: 'stub-actions',
+      handler: instr,
     },
     {
       method: 'GET',

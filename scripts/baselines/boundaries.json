@@ -140,7 +140,6 @@
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/knowledge/bridge-studio-kbs.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/knowledge/kb-job-state.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/projects/contract-stages.ts",
-  "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/projects/project-config.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/sessions/architect-runner.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/sessions/bridge-studio-lifecycle.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge.ts|packages/sessions/bridge-studio-sessions.ts",
