@@ -336,6 +336,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/connection-run-gate.ts | agents | verbatim | 71 |
 | packages/library/studio/connection-validate.ts | library | verbatim | 217 |
 | packages/agents/studio/agent-registry.ts | agents | verbatim | 283 |
+| packages/agents/studio/agent-usage.ts | agents | verbatim | 121 |
 | packages/agents/studio/derive.ts | agents | verbatim | 290 |
 | packages/agents/studio/hook-dispatch.ts | agents | verbatim | 439 |
 | packages/library/studio/hook-library.ts | library | verbatim | 526 |
