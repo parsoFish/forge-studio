@@ -6,6 +6,14 @@
  * Extracted from app/agents/[id]/page.tsx (D12 file-size split, R2-09) — a
  * pure move, no behaviour change. `data-section="starter-picker"` and
  * `data-starter-option` stay byte-identical (the agents journey drives both).
+ *
+ * Bead `forge-8vfn.5.15`: each option additionally publishes
+ * `data-action="starter-<id>"`. `data-starter-option` is the identity the
+ * journey queries by CSS; `data-action` is the only vocabulary a story beat's
+ * `press` verb resolves, and picking a starter is the act that MOUNTS the rest
+ * of the builder — `[data-action="toggle-advanced"]` does not exist on
+ * `/agents/new` until it happens (S5 beat 4's second cause). Both attributes
+ * stay: they answer different readers, and dropping either breaks one of them.
  */
 
 import type { Agent } from '@/lib/studio-client';
@@ -32,6 +40,7 @@ export function StarterPicker({ starters, onPick, onBlank }: Props) {
             key={s.id}
             type="button"
             data-starter-option={s.id}
+            data-action={`starter-${s.id}`}
             onClick={() => onPick(s)}
             style={{
               textAlign: 'left',
@@ -56,6 +65,7 @@ export function StarterPicker({ starters, onPick, onBlank }: Props) {
         <button
           type="button"
           data-starter-option="blank"
+          data-action="starter-blank"
           onClick={onBlank}
           style={{
             textAlign: 'left',

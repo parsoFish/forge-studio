@@ -118,6 +118,9 @@ export function RuntimePicker({
                 key={String(sdk.id)}
                 className={`sdk-card${selected ? ' selected' : ''}${!available ? ' disabled' : ''}`}
                 data-sdk-id={sdk.id}
+                // Bead `forge-8vfn.5.15`: `data-sdk-id` is identity, `data-action`
+                // is the only vocabulary a story beat can press. Both stay.
+                data-action={`sdk-${sdk.id}`}
                 role="radio"
                 aria-checked={selected}
                 aria-disabled={!available || undefined}
@@ -197,6 +200,7 @@ export function RuntimePicker({
                   key={id}
                   className={`seg-btn${active ? ' active' : ''}`}
                   data-loop-strategy={id}
+                  data-action={`loop-${id}`}
                   {...(active ? { 'data-active': 'true' } : {})}
                   onClick={() => onRuntimeChange({ ...runtime, loopStrategy: id })}
                 >
@@ -260,6 +264,7 @@ function ModelChipRow({ models, selectedIds, onToggle }: ModelChipRowProps) {
             key={String(m.id)}
             className={`model-chip${selected ? ' selected' : ''}`}
             data-model-id={m.id}
+            data-action={`model-${m.id}`}
             // W7-B5 (agents-41): a chip is a toggleable option — checkbox
             // semantics (a Range strategy selects several at once).
             role="checkbox"
@@ -300,6 +305,7 @@ function BrainAccessCard({ access, selected, onSelect }: { access: string; selec
     <div
       className={`brain-option${selected ? ' selected' : ''}`}
       data-access={access}
+      data-action={`access-${access}`}
       // W7-B5 (agents-41): one of a mutually-exclusive radiogroup (the
       // wrapper carries role=radiogroup) — announced with its checked state
       // instead of being a bare focusable div.

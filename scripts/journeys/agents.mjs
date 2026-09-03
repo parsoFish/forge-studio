@@ -608,8 +608,27 @@ export const journey = defineJourney({
               ).catch(() => {});
               const blankPresent = await page.evaluate(() => document.querySelector('[data-starter-option="blank"]') !== null);
               check(blankPresent, 'A-scratch: the starter picker offers a genuine "blank" option ([data-starter-option="blank"])');
+              // Bead forge-8vfn.5.15: the picker is the ONLY act on /agents/new
+              // (the purpose field and [data-action="toggle-advanced"] are not in
+              // the document yet), so the starter's own `data-action` is what
+              // makes the rest of this route reachable to a story beat at all.
+              // Checked BEFORE the click, where the picker is the live surface.
+              const starterPressable = await page.evaluate(() =>
+                document.querySelector('[data-starter-option="blank"][data-action="starter-blank"]') !== null);
+              check(starterPressable, 'A-scratch (5.15): the blank starter carries its story handle [data-action="starter-blank"] alongside [data-starter-option] — the handle S5 beat 4 needs to reach Advanced at all');
               await page.locator('[data-starter-option="blank"]').click();
               await page.waitForSelector('#purpose-input', { timeout: 10000 });
+
+              // Bead forge-8vfn.5.15, the enforcement half: the DOM contract
+              // names six `data-field` handles on this builder, and a contract
+              // enforced nowhere is this campaign's dominant defect class. The
+              // census reports the MISSING names, not a count — a check whose
+              // negative result reads as "nothing to report" is not a check.
+              const missingFields = await page.evaluate(() =>
+                ['agent-name', 'purpose', 'instructions', 'interactivity', 'run-project', 'run-cost-ceiling']
+                  .filter((f) => document.querySelector(`[data-field="${f}"]`) === null));
+              check(missingFields.length === 0,
+                `A-scratch (5.15): every named data-field handle resolves on the builder${missingFields.length ? ` — MISSING: ${missingFields.join(', ')}` : ''}`);
 
               // Compose from nothing: name, purpose, process.
               await page.locator('input.agent-name-input').fill(SCRATCH_AGENT_NAME);
@@ -632,6 +651,13 @@ export const journey = defineJourney({
                 document.querySelector(`[data-component="catalog-palette"] .catalog-chip[data-id="${id}"][data-kind="skill"]`) !== null,
                 DND_SKILL_ID);
               check(chipPresent, `A-scratch: "${DND_SKILL_ID}" (skills-create's own skill) is a real, draggable catalog chip — live filesystem discovery (R3-01-F2)`);
+              // Bead forge-8vfn.5.15: the same chip is also PRESSABLE by a story
+              // beat, and the kind is in the action name so composing a skill and
+              // fencing a tool never collapse into one act.
+              const chipPressable = await page.evaluate((id) =>
+                document.querySelector(`.catalog-chip[data-id="${id}"][data-kind="skill"][data-action="add-skill-${id}"]`) !== null,
+                DND_SKILL_ID);
+              check(chipPressable, `A-scratch (5.15): the "${DND_SKILL_ID}" chip carries [data-action="add-skill-${DND_SKILL_ID}"] — composing a skill is nameable by a story beat`);
               await dragSkillChipIntoZone(page, DND_SKILL_ID);
               const zoneCount = await page.evaluate(() =>
                 document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '0');

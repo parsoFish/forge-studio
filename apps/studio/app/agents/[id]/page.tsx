@@ -649,6 +649,11 @@ export default function AgentBuilderPage() {
                 <input
                   className="agent-name-input"
                   type="text"
+                  // Bead `forge-8vfn.5.15`: the operator's first act on
+                  // `/agents/new` — naming the agent — had no handle a story
+                  // beat could resolve. `data-field` is the `fill` verb's only
+                  // vocabulary (scripts/stories/beats.mjs).
+                  data-field="agent-name"
                   aria-label="Agent name"
                   placeholder="Agent name…"
                   spellCheck={false}
@@ -682,6 +687,7 @@ export default function AgentBuilderPage() {
                 id="purpose-input"
                 className="input"
                 type="text"
+                data-field="purpose"
                 placeholder="What does this agent exist to accomplish?"
                 value={state.purpose}
                 onChange={(e) => patchState({ purpose: e.target.value })}
@@ -705,6 +711,7 @@ export default function AgentBuilderPage() {
               <textarea
                 id="interactivity-input"
                 className="input"
+                data-field="interactivity"
                 rows={2}
                 placeholder={`e.g. "Autonomous; a human verdict gate decides approve or send-back."`}
                 value={state.interactivity}
