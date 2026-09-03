@@ -1,16 +1,16 @@
 /**
  * band-agent-run.ts — standalone isolation surface for the band-guard node
- * agents (R4-10-F3, ADR-039).
+ * agents (R4-10-F3, ADR-039). Carved out of `orchestrator/band-agent-run.ts`.
  *
  * The develop flow's two successor agents — `demo-agent` and
  * `adversarial-review` — are "banded": in the flow they run through their
- * orchestrator-band pipelines (`runDemoAgentPipeline` / `runAdversarialReview`),
- * NOT the bare `runAgent` primitive the generic `dispatchAgentRun` uses. So
- * running one "standalone" through the generic dispatch would spawn the bare
- * SKILL.md with none of the pipeline's bands (derive / validate / orchestrated
- * capture / judgment / harvest) — different, weaker artifacts. This module is
- * the isolation surface that keeps PARITY: it runs the SAME pipeline function
- * the flow's band executor runs, against an EXISTING initiative's worktree, so a
+ * band pipelines (`runDemoAgentPipeline` / `runAdversarialReview`), NOT the
+ * bare `runAgent` primitive the generic `dispatchAgentRun` uses. So running one
+ * "standalone" through the generic dispatch would spawn the bare SKILL.md with
+ * none of the pipeline's bands (derive / validate / orchestrated capture /
+ * judgment / harvest) — different, weaker artifacts. This module is the
+ * isolation surface that keeps PARITY: it runs the SAME pipeline function the
+ * flow's band executor runs, against an EXISTING initiative's worktree, so a
  * standalone run produces the same artifacts a flow run does (the diagram's
  * ship-both principle). developer-ralph's standalone unit is `runDeveloperLoop`
  * (the dev node); this module covers the two one-shot band pipelines.
@@ -33,23 +33,40 @@
  * still authored on its own branch — a standalone demo re-run legitimately
  * refreshes the initiative's demo; only the cross-cycle `_logs` record is isolated.
  * NO gate/CI runs here (ADR-036 posture, same as `dispatchAgentRun`).
+ *
+ * THE PORT, AND WHY IT IS NOT `PhaseExecutor` (measured 2026-09-03, M4-agents).
+ * This package is rank 3; the two pipelines are `@forge/factory` (rank 7) and the
+ * queue/manifest readers are `@forge/flows` (rank 6). None of the three may be
+ * imported here, so all three arrive as `BandAgentDeps`, bound at
+ * `apps/forge/cli.ts`. The plan named `packages/kernel/ports.ts`'s
+ * `PhaseExecutor` for the pipelines; it does not fit and was not forced.
+ * `PhaseExecutor.run` returns `CycleOutcome`, which is
+ * `'merged' | 'pr-open' | 'ready-for-review'` (`packages/contracts/index.ts:138`)
+ * — a whole-cycle verdict. What crosses this seam is a PIPELINE status
+ * (`complete` / `complete-with-misses` / `failed`), which the run's terminal
+ * `end` event, the CLI's summary line and three tests all read. Routing it
+ * through `PhaseExecutor` would either discard that status or require a cast
+ * that lies about the value (COMMON §15.66). So the port is declared here, at
+ * the package that owns the seam (ruling 59's shape: the deps type belongs to
+ * the package whose surface needs it), and it is narrow: one call, one status.
+ *
+ * What did NOT leave: every guard. The initiative-id charset check, the
+ * in-flight refusal and the worktree bounds check stay in this module — a carve
+ * that exported a guard-bearing helper "for the duration" would be a
+ * security-invariant breach, not a smaller diff (COMMON §15.47).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { getPaths } from '@forge/flows/queue.ts';
-import { createLogger } from '@forge/kernel';
-import { loadAgentDefinition } from './studio/registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { runDemoAgentPipeline, type DemoAgentPipelineResult } from '@forge/factory/phases/demo-agent.ts';
-import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { createLogger, type EventLogger } from '@forge/kernel';
+import { loadAgentDefinition } from './studio/agent-registry.ts';
+import { skillPath } from './skill-path.ts';
+import { resolveBandGuard } from './agent-bands.ts';
+import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
 /** The two band-guard slugs runnable standalone here → their pipeline kind. */
-const STANDALONE_BAND_SLUGS: Record<string, 'demo' | 'review'> = {
+const STANDALONE_BAND_SLUGS: Record<string, BandPipelineKind> = {
   'demo-agent': 'demo',
   'adversarial-review': 'review',
 };
@@ -57,9 +74,75 @@ const STANDALONE_BAND_SLUGS: Record<string, 'demo' | 'review'> = {
 /** Safe manifest-file stem — no path separators / traversal (it is joined into a queue path). */
 const SAFE_INITIATIVE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type BandAgentStandaloneResult =
-  | { kind: 'demo'; slug: string; initiativeId: string; runId: string; result: DemoAgentPipelineResult }
-  | { kind: 'review'; slug: string; initiativeId: string; runId: string; result: AdversarialReviewResult };
+export type BandPipelineKind = 'demo' | 'review';
+
+/**
+ * The six queue state directories this surface reads. Declared with every field
+ * REQUIRED and by name, so the real `getPaths` from `@forge/flows/queue.ts`
+ * satisfies it structurally at the assembly site and a rename there breaks the
+ * repo-wide typecheck rather than passing a fake in this package's own tests
+ * (COMMON §15.71).
+ */
+export type BandQueuePaths = {
+  pending: string;
+  inFlight: string;
+  readyForReview: string;
+  merged: string;
+  done: string;
+  failed: string;
+};
+
+/** The three manifest fields the band surface reads; `parseManifest`'s result satisfies it. */
+export type BandInitiativeFields = {
+  worktree_path?: string | undefined;
+  project_repo_path?: string | undefined;
+  cost_budget_usd?: number | undefined;
+};
+
+/** What the injected pipeline runner is handed — the union of the two pipelines' inputs. */
+export type BandPipelineInput = {
+  initiativeId: string;
+  worktreePath: string;
+  /** The RUN id, never the initiative's `cycle_id` — this is the isolation. */
+  cycleId: string;
+  logsRoot: string;
+  costBudgetUsd?: number | undefined;
+  /** Review only: the managed-project name for the Brain-3 advisory context. */
+  projectName?: string | undefined;
+  forgeRoot: string;
+};
+
+export type BandPipelineCall = {
+  kind: BandPipelineKind;
+  input: BandPipelineInput;
+  logger: EventLogger;
+  queryFn?: StreamQueryFn | undefined;
+};
+
+/**
+ * The status the pipelines report. Narrower than either pipeline's full result
+ * type (which names factory-owned artifact paths this package has no use for):
+ * the status is what the run's `end` event, the CLI summary and the callers read.
+ */
+export type BandPipelineOutcome = { status: 'complete' | 'complete-with-misses' | 'failed' };
+
+/** Everything above this package's rank, bound once at `apps/forge/cli.ts`. */
+export type BandAgentDeps = {
+  /** `@forge/factory/phases/{demo-agent,adversarial-review}.ts`, behind one call. */
+  runPipeline(call: BandPipelineCall): Promise<BandPipelineOutcome>;
+  /** `getPaths` from `@forge/flows/queue.ts`. */
+  queuePaths(queueRoot: string): BandQueuePaths;
+  /** `parseManifest` from `@forge/flows/manifest.ts`. */
+  parseInitiativeManifest(content: string): BandInitiativeFields;
+};
+
+export type BandAgentStandaloneResult = {
+  kind: BandPipelineKind;
+  slug: string;
+  initiativeId: string;
+  runId: string;
+  result: BandPipelineOutcome;
+};
 
 export type RunBandAgentStandaloneOpts = {
   slug: string;
@@ -70,7 +153,7 @@ export type RunBandAgentStandaloneOpts = {
    * from the real cycle and the bridge's runId-keyed status endpoint resolves it.
    */
   runId: string;
-  /** `_logs` root; default `<cwd>/_logs`. */
+  /** `_logs` root; default `<forgeRoot>/_logs`. */
   logsRoot?: string;
   /** Root carrying `studio/` + `brain/` + the queue/worktree roots; default `<cwd>`. */
   forgeRoot?: string;
@@ -108,11 +191,12 @@ function resolveInitiativeContext(
   initiativeId: string,
   queueRoot: string,
   forgeRoot: string,
+  deps: BandAgentDeps,
 ): { worktreePath: string; projectRepoPath: string; costBudgetUsd?: number } {
   if (!SAFE_INITIATIVE_RE.test(initiativeId)) {
     throw new Error(`runBandAgentStandalone: invalid initiative id ${JSON.stringify(initiativeId)} (a manifest-file stem: [A-Za-z0-9._-])`);
   }
-  const paths = getPaths(queueRoot);
+  const paths = deps.queuePaths(resolve(queueRoot));
   // Settled states are runnable; in-flight/pending are owned by a live cycle.
   const runnable: Array<{ dir: string; state: string }> = [
     { dir: paths.readyForReview, state: 'ready-for-review' },
@@ -143,7 +227,7 @@ function resolveInitiativeContext(
         `a standalone demo/review runs against an existing, settled post-develop branch`,
     );
   }
-  const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+  const m = deps.parseInitiativeManifest(readFileSync(manifestPath, 'utf8'));
   const worktreePath = m.worktree_path ?? '';
   if (!worktreePath || !existsSync(worktreePath)) {
     throw new Error(
@@ -152,7 +236,11 @@ function resolveInitiativeContext(
     );
   }
   assertWorktreeInBounds(worktreePath, forgeRoot);
-  return { worktreePath, projectRepoPath: m.project_repo_path ?? '', costBudgetUsd: m.cost_budget_usd };
+  return {
+    worktreePath,
+    projectRepoPath: m.project_repo_path ?? '',
+    ...(m.cost_budget_usd === undefined ? {} : { costBudgetUsd: m.cost_budget_usd }),
+  };
 }
 
 /**
@@ -161,6 +249,7 @@ function resolveInitiativeContext(
  */
 export async function runBandAgentStandalone(
   opts: RunBandAgentStandaloneOpts,
+  deps: BandAgentDeps,
 ): Promise<BandAgentStandaloneResult> {
   const kind = STANDALONE_BAND_SLUGS[opts.slug];
   if (!kind) {
@@ -175,7 +264,7 @@ export async function runBandAgentStandalone(
   const forgeRoot = opts.forgeRoot ? resolve(opts.forgeRoot) : resolve('.');
   const logsRoot = opts.logsRoot ? resolve(opts.logsRoot) : join(forgeRoot, '_logs');
   const queueRoot = opts.queueRoot ? resolve(opts.queueRoot) : join(forgeRoot, '_queue');
-  const ctx = resolveInitiativeContext(opts.initiativeId, queueRoot, forgeRoot);
+  const ctx = resolveInitiativeContext(opts.initiativeId, queueRoot, forgeRoot, deps);
 
   // Isolate under the runId: events + _logs artifacts land under _logs/<runId>/,
   // NOT the initiative's cycle_id — so the run-status endpoint resolves it and
@@ -184,7 +273,7 @@ export async function runBandAgentStandalone(
   // "events/cost visible" AC the run surface exists for).
   const base = createLogger(opts.runId, logsRoot);
   let costUsd = 0;
-  const logger: typeof base = {
+  const logger: EventLogger = {
     ...base,
     emit(partial) {
       const entry = base.emit(partial);
@@ -206,24 +295,20 @@ export async function runBandAgentStandalone(
     metadata: { agent_slug: opts.slug, standalone: true, initiative_id: opts.initiativeId },
   });
 
-  let result: DemoAgentPipelineResult | AdversarialReviewResult;
-  if (kind === 'demo') {
-    result = await runDemoAgentPipeline(
-      { initiativeId: opts.initiativeId, worktreePath: ctx.worktreePath, cycleId: opts.runId, logsRoot, costBudgetUsd: ctx.costBudgetUsd, forgeRoot },
-      logger,
-      { queryFn: opts.queryFn },
-    );
-  } else {
-    result = await runAdversarialReview(
-      {
-        initiativeId: opts.initiativeId, worktreePath: ctx.worktreePath, cycleId: opts.runId, logsRoot, costBudgetUsd: ctx.costBudgetUsd,
-        ...(ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
-        forgeRoot,
-      },
-      logger,
-      { queryFn: opts.queryFn },
-    );
-  }
+  const result = await deps.runPipeline({
+    kind,
+    input: {
+      initiativeId: opts.initiativeId,
+      worktreePath: ctx.worktreePath,
+      cycleId: opts.runId,
+      logsRoot,
+      ...(ctx.costBudgetUsd === undefined ? {} : { costBudgetUsd: ctx.costBudgetUsd }),
+      ...(kind === 'review' && ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
+      forgeRoot,
+    },
+    logger,
+    queryFn: opts.queryFn,
+  });
 
   base.emit({
     initiative_id: opts.initiativeId,
@@ -236,7 +321,48 @@ export async function runBandAgentStandalone(
     metadata: { agent_slug: opts.slug, standalone: true, kind, pipeline_status: result.status },
   });
 
-  return kind === 'demo'
-    ? { kind: 'demo', slug: opts.slug, initiativeId: opts.initiativeId, runId: opts.runId, result: result as DemoAgentPipelineResult }
-    : { kind: 'review', slug: opts.slug, initiativeId: opts.initiativeId, runId: opts.runId, result: result as AdversarialReviewResult };
+  return { kind, slug: opts.slug, initiativeId: opts.initiativeId, runId: opts.runId, result };
+}
+
+/** What `forge agent dispatch` needs back from the band branch. */
+export type StandaloneBandDispatch =
+  | { ok: false; usage: string }
+  | { ok: true; summary: string };
+
+/**
+ * The `forge agent dispatch <band-slug>` branch, in one place: the usage
+ * refusal, the missing-binding refusal, the run, and the summary line.
+ *
+ * Two refusals with deliberately different shapes. A missing
+ * `--input initiative=<id>` is an OPERATOR mistake — `{ ok: false }`, so the
+ * caller prints usage and exits 2 like every other argument failure, before the
+ * run exists. An absent `band` binding is a BUILD mistake — it throws, so the
+ * caller's catch records the run's terminal failure marker (bead 5.38: a
+ * requested run that cannot proceed still owes the bridge a terminus) and exits
+ * 1. Neither ever falls through to the generic dispatch: that would spawn the
+ * bare SKILL.md with none of the pipeline's bands and report success, which is
+ * the weaker-artifacts failure this whole module exists to prevent.
+ */
+export async function dispatchStandaloneBand(
+  args: { slug: string; initiativeId: string | undefined; runId: string; forgeRoot: string },
+  band: BandAgentDeps | undefined,
+): Promise<StandaloneBandDispatch> {
+  if (!args.initiativeId) {
+    return { ok: false, usage: `standalone "${args.slug}" needs --input initiative=<id> (the post-develop initiative to run against)` };
+  }
+  if (!band) {
+    throw new Error(
+      `standalone "${args.slug}" runs its FLOW pipeline, and this invocation was built without the band ` +
+        'pipelines injected (deps.band) — refusing rather than spawning the bare SKILL.md, which would ' +
+        'produce band-less artifacts. The CLI entry point (apps/forge/cli.ts) binds them.',
+    );
+  }
+  const out = await runBandAgentStandalone(
+    { slug: args.slug, initiativeId: args.initiativeId, runId: args.runId, forgeRoot: args.forgeRoot, queryFn: undefined },
+    band,
+  );
+  return {
+    ok: true,
+    summary: `agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`,
+  };
 }

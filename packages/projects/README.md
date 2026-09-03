@@ -28,7 +28,6 @@ both directions, and is required to FAIL against an empty index.
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
 | constraint blocks | `authorConstraintBlocks` · `loadProjectConstraintBlocks` · `selectorMatches` |
 | gate recipes | `deriveGateRecipe` · `renderGateRecipeBlock` |
-| AGENTS.md | `composeAgentsMd` |
 | onboarding & roster | `scaffoldContractArtifacts` · `demoProcessChanged` · `loadProjectsWithMeta` · `cmdProjectMigrate` |
 | HTTP routes | `projectsRoutes` |
 

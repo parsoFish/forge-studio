@@ -61,10 +61,10 @@ test('it accounts for a real population, not an empty set', () => {
 });
 
 test('it FAILS on an unowned file — a row removed (the defect it exists for)', () => {
-  withQuarry((rows) => rows.filter((l) => !l.includes('| orchestrator/band-agent-run.ts |')), (q, b) => {
+  withQuarry((rows) => rows.filter((l) => !l.includes('| orchestrator/flow-runner.ts |')), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `a file with no row must fail — got exit 0:\n${out}`);
-    assert.match(out, /unowned: orchestrator\/band-agent-run\.ts/);
+    assert.match(out, /unowned: orchestrator\/flow-runner\.ts/);
   });
 });
 
@@ -77,26 +77,26 @@ test('it FAILS on an orphan row — the quarry describing a file that is not the
 });
 
 test('it FAILS on a duplicate row — a file has exactly one owner', () => {
-  withQuarry((rows) => [...rows, '| orchestrator/band-agent-run.ts | flows | verbatim | 1 |'], (q, b) => {
+  withQuarry((rows) => [...rows, '| orchestrator/flow-runner.ts | flows | verbatim | 1 |'], (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `two rows for one file must fail — got exit 0:\n${out}`);
-    assert.match(out, /duplicate row: orchestrator\/band-agent-run\.ts/);
+    assert.match(out, /duplicate row: orchestrator\/flow-runner\.ts/);
   });
 });
 
 test('it FAILS on an owner outside the eleven-package vocabulary', () => {
-  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/band-agent-run.ts |') ? '| orchestrator/band-agent-run.ts | kernal | verbatim | 1 |' : l)), (q, b) => {
+  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/flow-runner.ts |') ? '| orchestrator/flow-runner.ts | kernal | verbatim | 1 |' : l)), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `a typo'd owner must fail — got exit 0:\n${out}`);
-    assert.match(out, /unknown owner: orchestrator\/band-agent-run\.ts \(owner "kernal"\)/);
+    assert.match(out, /unknown owner: orchestrator\/flow-runner\.ts \(owner "kernal"\)/);
   });
 });
 
 test('it FAILS on a disposition outside verbatim|pruned|rewritten|deleted', () => {
-  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/band-agent-run.ts |') ? '| orchestrator/band-agent-run.ts | kernel | moved | 1 |' : l)), (q, b) => {
+  withQuarry((rows) => rows.map((l) => (l.includes('| orchestrator/flow-runner.ts |') ? '| orchestrator/flow-runner.ts | kernel | moved | 1 |' : l)), (q, b) => {
     const { code, out } = run(['--quarry', q, '--baseline', b]);
     assert.equal(code, 1, `an invented disposition must fail — got exit 0:\n${out}`);
-    assert.match(out, /unknown disposition: orchestrator\/band-agent-run\.ts \(disposition "moved"\)/);
+    assert.match(out, /unknown disposition: orchestrator\/flow-runner\.ts \(disposition "moved"\)/);
   });
 });
 

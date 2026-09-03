@@ -14,8 +14,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { composeAgentsMd, buildAgentsMdBody } from '../../agents-md-compose.ts';
-import { runPreflight } from '../../preflight.ts';
+import { composeAgentsMd, buildAgentsMdBody } from './agents-md-compose.ts';
+import { runPreflight } from '@forge/projects/preflight.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 function fixtureProject(): string {
