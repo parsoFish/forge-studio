@@ -24,6 +24,7 @@
  * list functions, so it sits ABOVE this layer, in `bridge-studio-session-index.ts`.
  */
 import { randomBytes } from 'node:crypto';
+import type { OutgoingHttpHeaders } from 'node:http';
 
 import type { ModelTier } from '@forge/agents/phase-agent.ts';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
@@ -51,6 +52,38 @@ export type ContainmentCheck = (
   candidate: string,
   roots: { forgeRoot: string; projectsRoot: string },
 ) => boolean;
+
+/**
+ * The host's spawn/serve surface, injected at assembly (rulings 13/35/59).
+ *
+ * Every member stays in `cli/ui-bridge.ts` for a measured reason, not a stylistic
+ * one: host code that does NOT carve still calls it, so moving it would mint a
+ * `legacy-to-package` row in the opposite direction to this milestone's goal.
+ * The types are written in THIS package's words so no rank above sessions is
+ * named — structural typing does the rest.
+ */
+export type SessionHostSurface = {
+  /** `spawnAgentTurn` — the detached per-kind runner spawn. */
+  readonly spawnAgentTurn: (
+    forgeRoot: string,
+    agentId: 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup',
+    project: string,
+    sessionId: string,
+  ) => unknown;
+  /** `SPAWN_AGENT_SPECS` — the kind to agent-id/logPrefix mapping whose other
+   *  side is pinned by `session-tail-kind-parity.test.ts`. */
+  readonly spawnAgentSpecs: Readonly<Record<string, { readonly argvPrefix: readonly string[]; readonly logPrefix: string }>>;
+  /** `safeParseJson` — still called by `handleReflect` in the host. */
+  readonly safeParseJson: <T>(raw: string) => T | null;
+  /** `servedFileHeaders` — still called by `handleHttp` in the host. */
+  readonly servedFileHeaders: (filename: string, origin: string) => OutgoingHttpHeaders;
+  /** The dry bridge's turn marker. Its kernel move is half-done (`cli/dry-bridge.ts`
+   *  still owns this half), so it injects rather than imports — see the s1
+   *  outcome §6, which measures four rows that close when that move completes. */
+  readonly dryBridgeAgentTurnMarker: (logsRoot: string, route: string, sessionId: string) => Record<string, unknown>;
+  /** The shipped containment guard from `@forge/flows`, above this package. */
+  readonly isContainedProjectRepoPath: ContainmentCheck;
+};
 
 export type SessionRootsContext = {
   readonly forgeRoot: string;

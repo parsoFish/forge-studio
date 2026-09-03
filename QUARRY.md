@@ -186,6 +186,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/reflection-doc.ts | factory | verbatim | 354 |
 | packages/flows/run-list-cache.ts | flows | verbatim | 397 |
 | packages/sessions/session-model-tier.ts | sessions | verbatim | 49 |
+| packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 394 |
 | packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 421 |
 | packages/sessions/routes.ts | sessions | verbatim | 104 |
 | packages/sessions/session-phases.ts | sessions | verbatim | 74 |

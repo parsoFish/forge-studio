@@ -18,8 +18,12 @@
  * `tests/contract/routes-table.test.ts` pins which entry claims each colliding
  * URL rather than merely asserting both exist.
  */
+import type { IncomingMessage } from 'node:http';
+
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { pathOnly } from '@forge/kernel';
+import { handleArchitectRoutes } from './bridge-studio-architect.ts';
+import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
@@ -38,7 +42,13 @@ export type SessionsRouteDeps = {
    *  open bespoke panel refetches without waiting for its poll. A kind with no
    *  such message in the bridge's vocabulary honestly no-ops. */
   readonly broadcastKindChanged: (kind: string) => void;
-};
+  /** The architect kind's own list-changed broadcast, which predates the generic
+   *  one above and is what the architect screen actually listens for. */
+  readonly broadcastArchitectChanged: () => void;
+  /** This bridge's projects directory. Per-instance, and absent from the shared
+   *  `RouteContext`, so it is injected rather than read off the context. */
+  readonly projectsRoot: string;
+} & SessionHostSurface;
 
 /** Matching strips the query; handlers receive the RAW url and normalise for
  *  themselves, so an arm that later needs the query string still has it. */
@@ -54,8 +64,76 @@ const SESSION_READ_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
 const SESSION_CANCEL_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/;
 const AGENT_CAPABILITY_RE = /^\/api\/studio\/agents\/([^/]+)\/capability$/;
 
+/** The context the carved family handlers read: the shared `RouteContext`, the
+ *  bridge closures this package declared above, and the host surface injected
+ *  at assembly. Built once per request rather than per route so the families all
+ *  see the same object. */
+function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
+  return {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    // NOT `ctx.projectsRoot`: the shared `RouteContext` is `{forgeRoot, logsRoot,
+    // readBody}` and nothing more, so a cast asserting the field exists compiles
+    // and then reads `undefined` at runtime — every session list silently empty,
+    // with no error anywhere. (Written as that cast first; the suite caught it.)
+    // It is per-bridge state, so it arrives the same way the closures do.
+    projectsRoot: deps.projectsRoot,
+    readBody: () => ctx.readBody(),
+    ensureSessionTail: deps.ensureSessionTail,
+    broadcastArchitectChanged: deps.broadcastArchitectChanged,
+    spawnAgentTurn: deps.spawnAgentTurn,
+    spawnAgentSpecs: deps.spawnAgentSpecs,
+    safeParseJson: deps.safeParseJson,
+    servedFileHeaders: deps.servedFileHeaders,
+    dryBridgeAgentTurnMarker: deps.dryBridgeAgentTurnMarker,
+    isContainedProjectRepoPath: deps.isContainedProjectRepoPath,
+  };
+}
+
+/** `/api/architect/*` — five routes, one entry each so `dry-bridge-coverage`
+ *  keeps a classification per URL; all five delegate into the carved family
+ *  module, which holds the arms verbatim. */
+const ARCHITECT_FILE_RE = /^\/api\/architect\/file\//;
+
 export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext> {
+  const arch = (req: IncomingMessage, res: Parameters<RouteTable<RouteContext>[number]['handler']>[1], ctx: RouteContext, url: string, method: string) =>
+    handleArchitectRoutes(req, res, familyContext(ctx, deps), url, method);
   return [
+    {
+      method: 'GET',
+      path: '/api/architect/sessions',
+      matches: (url) => pathOf(url) === '/api/architect/sessions',
+      dryClassification: 'exempt-local',
+      handler: arch,
+    },
+    {
+      method: 'GET',
+      path: '/api/architect/file/:project/:sessionId/*name',
+      matches: (url) => ARCHITECT_FILE_RE.test(pathOf(url)),
+      dryClassification: 'exempt-local',
+      handler: arch,
+    },
+    {
+      method: 'POST',
+      path: '/api/architect/start',
+      matches: (url) => pathOf(url) === '/api/architect/start',
+      dryClassification: 'stub-actions',
+      handler: arch,
+    },
+    {
+      method: 'POST',
+      path: '/api/architect/answer',
+      matches: (url) => pathOf(url) === '/api/architect/answer',
+      dryClassification: 'stub-actions',
+      handler: arch,
+    },
+    {
+      method: 'POST',
+      path: '/api/architect/rerun',
+      matches: (url) => pathOf(url) === '/api/architect/rerun',
+      dryClassification: 'stub-actions',
+      handler: arch,
+    },
     {
       method: 'GET',
       path: '/api/studio/sessions/:kind/:sessionId',
