@@ -298,7 +298,9 @@ and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
 - **Consolidate-run log dir/writes** — `writeConsolidateTerminalEvent` /
   `writeConsolidateErrorTerminalEvent` (`cli/bridge-studio-kbs.ts:252-296`,
   `mkdirSync`/`appendFileSync` on `join(forgeRoot,'_logs','_brainfix-'+runId)`)
-  and `runBrainFixTurn`'s own heartbeat dir (`orchestrator/brain-fix-runner.ts:90-92`,
+  and the brain-fix turn's own heartbeat dir (`packages/sessions/kinds/fix-turn.ts`
+  since M4 ports 5–6; was `brain-fix-runner.ts`, and the path in this row was
+  stale at `orchestrator/` before that),
   newly reachable from the bridge because `bridge-studio-kbs.ts` now imports
   `runBrainFixTurn` directly instead of only spawning it as a subprocess via
   `apps/forge/cli.ts`). Both take a bare `runId` parameter — a name on the
@@ -314,10 +316,23 @@ and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
   create) — the raw-fs-guarded lint does not also flag that sibling only
   because it reaches its sink through `p.runId`, a member expression outside
   the scan's curated bare-name list, not because the value differs. Allowlisted
-  in `check-raw-fs-guarded.mjs`; `orchestrator/brain-fix-runner.ts`'s own three
-  sinks are outside that lint's scanned-module list (same shared-helper
-  reasoning as `brain-fix-auto.ts` above) but are covered by the same
-  trust argument and the sink-count ratchet, `--write`-accepted below.
+  in `check-raw-fs-guarded.mjs`; the brain-fix turn's own sinks are outside that
+  lint's scanned-module list (same shared-helper reasoning as
+  `brain-fix-auto.ts` above) but are covered by the same trust argument and the
+  sink-count ratchet, `--write`-accepted below.
+
+  **M4 ports 5–6 (ruling 60) moved these, and the census is 1:1 with one
+  genuine reduction.** `brain-fix-runner.ts` carried three sinks
+  (`mkdirSync`/`readFileSync`/`writeFileSync` = 1 each);
+  `packages/sessions/kinds/fix-turn.ts` now carries two — the `mkdirSync` for
+  the cycle dir and the `readFileSync` for the skill prompt, each moved
+  unchanged. The third is GONE, not relocated: the hand-rolled throttled
+  heartbeat write was replaced by the spine's existing `makeHeartbeatWriter`
+  (`packages/sessions/interactive-session.ts:912`), whose `writeFileSync` was
+  already baselined — so the site is shared rather than duplicated and the
+  total falls by one. `preflight-fix-runner.ts` held no baselined row and its
+  identity module holds no sink. Host-minus-package diffs to zero on the two
+  that moved (§15.75).
 
 None of the four is a new *unguarded* sink: the index-append and the log-dir
 writes are TRUSTED-AT-CONSTRUCTION (server/linter-derived, not request-body

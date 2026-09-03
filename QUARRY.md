@@ -231,7 +231,9 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 39 |
 | packages/sessions/kinds/architect.ts | sessions | verbatim | 1584 |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
-| packages/sessions/brain-fix-runner.ts | sessions | verbatim | 381 |
+| packages/sessions/kinds/brain-fix.ts | sessions | rewritten | 269 |
+| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 331 |
+| packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 90 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 141 |
 | packages/flows/claim-validator.ts | flows | verbatim | 233 |
 | apps/forge/cli.ts | apps/forge | pruned | 998 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
@@ -301,7 +303,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 87 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 1132 |
-| packages/sessions/preflight-fix-runner.ts | sessions | verbatim | 248 |
+| packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 132 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 421 |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 179 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |

@@ -87,7 +87,7 @@ import {
   runBrainFixTurn,
   type RunBrainFixInput,
   type RunBrainFixResult,
-} from '@forge/sessions/brain-fix-runner.ts';
+} from '@forge/sessions/kinds/brain-fix.ts';
 import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
 import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';

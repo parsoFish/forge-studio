@@ -293,8 +293,15 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
 
   it('the ratchet actually sees the spawn sites — it is not vacuously green on an empty scan', () => {
     const files = spawnCapableFiles();
+    // The floor moved 12 → 11 with M4 ports 5–6 (ruling 60), and the reason is
+    // recorded here because a census floor that drops silently is how a
+    // blinded scanner reads as progress (§15.85). brain-fix-runner.ts and
+    // preflight-fix-runner.ts each held their own spawn site; both are now
+    // kinds on `packages/sessions/kinds/fix-turn.ts`, which holds ONE. Two
+    // names out, one in — the capability is unchanged and the named list
+    // below is what actually pins that.
     assert.ok(
-      files.length >= 12,
+      files.length >= 11,
       `expected the scan to find the known spawn-capable files; found ${files.length}: ${files.join(', ')}`,
     );
     for (const known of [
@@ -304,8 +311,13 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
       // there so a kind cannot spawn hook-blind. The census follows the
       // capability rather than shrinking by one file per port (§15.70).
       'packages/sessions/kinds/kind-turn.ts',
-      'packages/sessions/brain-fix-runner.ts',
-      'packages/sessions/preflight-fix-runner.ts',
+      // M4 ports 5–6 (ruling 60): brain-fix and preflight-fix were the last
+      // two bespoke runners and each value-imported the pinned query itself.
+      // They are now kinds on the session-LESS `kinds/fix-turn.ts` driver,
+      // which holds the single spawn site and wires the hooks for both — so
+      // the census loses two names and gains one. That is consolidation, not
+      // a shrink: the same rule this block already records for kind-turn.ts.
+      'packages/sessions/kinds/fix-turn.ts',
       'packages/factory/phases/release-finalize.ts',
       'packages/factory/phases/developer-loop.ts',
       'packages/agents/ralph/claude-agent.ts',
