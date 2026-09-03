@@ -63,7 +63,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 import { listProjectStarters } from '@forge/kernel';
-import { discoverProjects, listFlowIds, loadFlowDefinition, type DiscoveredProject } from '../../../orchestrator/studio/registry.ts';
+import { discoverProjects, type DiscoveredProject } from '@forge/kernel';
+import { listFlowIds, loadFlowDefinition } from '../../../orchestrator/studio/registry.ts';
 import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
 import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';

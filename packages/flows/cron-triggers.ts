@@ -39,7 +39,8 @@
 import { join, resolve } from 'node:path';
 import { Cron } from 'croner';
 
-import { listFlowIds, loadFlowDefinition, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
+import { normalizeProjectId } from '@forge/kernel';
+import { listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 
