@@ -56,9 +56,32 @@ function codeFiles(root) {
     .filter((p) => CODE_EXTENSIONS.some((e) => p.endsWith(e)) && !NOT_CODE.has(p));
 }
 
-/** `wc -l` semantics: the number of newline characters in the file. */
-function lineCount(absolute) {
-  const text = readFileSync(absolute, 'utf8');
+/**
+ * `wc -l` semantics: the number of newline characters in the file.
+ *
+ * Returns `null` for a path that has VANISHED between the glob and this read.
+ * The caller's `existsSync` above is a time-of-check/time-of-use gap, not a
+ * guarantee: the checker walks the live tree, and a sibling guard test plants
+ * and removes real files in that tree to prove its own checker sees them
+ * (`scripts/check-disabled-reason.test.ts` and its
+ * `apps/studio/components/__ratchet_probe__.tsx`). Test FILES run in parallel
+ * processes under `node:test`, so this checker can glob a probe and then read
+ * it after the sibling has deleted it — which crashed the whole audit with an
+ * ENOENT stack and reds a lane's CI for a reason no diff caused
+ * (`_1.0/known-flakes.md` #6, root-caused from a CI failure on PR #341).
+ *
+ * A file that no longer exists has no size to check, so skipping it is the
+ * honest answer rather than a tolerance: it narrows nothing, widens nothing,
+ * and no other error is swallowed — anything but ENOENT still throws.
+ */
+export function lineCount(absolute) {
+  let text;
+  try {
+    text = readFileSync(absolute, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
   let n = 0;
   for (let i = 0; i < text.length; i += 1) if (text.charCodeAt(i) === 10) n += 1;
   return n;
@@ -84,7 +107,9 @@ export function audit(root, baseline) {
   for (const rel of files) {
     const absolute = join(root, rel);
     if (!existsSync(absolute)) continue; // a deleted-but-staged path
-    sizes.set(rel, lineCount(absolute));
+    const lines = lineCount(absolute);
+    if (lines === null) continue; // vanished after the check above — see lineCount
+    sizes.set(rel, lines);
   }
 
   const newOversize = [];
