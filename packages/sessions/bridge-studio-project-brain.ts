@@ -21,6 +21,7 @@ import { guardedReadDir, guardedReadFile, guardedWriteFile } from '@forge/kernel
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { listProjectBrainSessions } from './bridge-studio-session-index.ts';
 
 import {
   deriveRowLifecycle,
@@ -48,6 +49,14 @@ export type ProjectBrainRow = {
   readonly phase: string;
   readonly project: string;
   readonly session_id: string;
+  /** Read by the session index when it flattens this kind into the cross-kind
+   *  list; typed rather than left to the index signature, because `?? null` on
+   *  an `unknown` widens to `{} | null` and loses the row's shape. */
+  readonly modelTier?: string | null;
+  /** Required, not optional: a real project-brain status always carries it, and
+   *  making it optional here would push a `?? ''` into the index and quietly
+   *  turn a missing timestamp into an empty one. */
+  readonly updated_at: string;
   /** The status document carries more than the arms read; the index signature
    *  keeps the round-trip through `guardedRead/WriteSessionStatus` lossless
    *  rather than silently narrowing a document this module only passes through. */
@@ -59,10 +68,6 @@ export type ProjectBrainRouteContext = SessionRootsContext & {
   readonly readBody: () => Promise<unknown>;
   readonly ensureSessionTail: (kind: string, sessionId: string) => void;
   readonly broadcastProjectBrainChanged: () => void;
-  /** Injected only until the session index collector carves — the same
-   *  inject-then-collapse as `listInstructionsSessions`; that collector is the
-   *  host's last caller of this reader. */
-  readonly listProjectBrainSessions: (projectsRoot: string) => ProjectBrainRow[];
 } & SessionHostSurface;
 
 export async function handleProjectBrainRoutes(
@@ -79,7 +84,7 @@ export async function handleProjectBrainRoutes(
   // provides notes; POST /api/demo-builder/brief then kicks off the agent.
   // R1-3b — project-brain builder ops (analyze → review → commit).
   if (method === 'GET' && url === '/api/project-brain/sessions') {
-    const statuses = ctx.listProjectBrainSessions(ctx.projectsRoot);
+    const statuses = listProjectBrainSessions(ctx.projectsRoot);
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES['project-brain'].has(s.phase)) ctx.ensureSessionTail(ctx.spawnAgentSpecs['project-brain'].logPrefix, s.session_id);
     }

@@ -28,6 +28,7 @@ import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } fr
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 
 import { DRAFT_FILENAME, type InstructionsStatus } from './instructions-runner.ts';
+import { listInstructionsSessions } from './bridge-studio-session-index.ts';
 import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
@@ -54,18 +55,6 @@ export type InstructionsRouteContext = SessionRootsContext & {
   readonly readBody: () => Promise<unknown>;
   readonly ensureSessionTail: (kind: string, sessionId: string) => void;
   readonly broadcastInstructionsChanged: () => void;
-  /**
-   * TEMPORARY, and it deletes itself. `listInstructionsSessions` still lives in
-   * `cli/ui-bridge.ts` because the session INDEX collector there also calls it,
-   * and that collector cannot carve until the demo/project-brain families do
-   * (it needs their list functions too). Copying the function into this package
-   * would leave two definitions of one reader; importing it from the host would
-   * mint a `legacy-to-package` row. So it is injected for exactly as long as
-   * that collector stays behind — the same inject-then-collapse the carve spec
-   * §8.2 used for the shared helpers, and it becomes a plain local when the
-   * index carves later in this same PR.
-   */
-  readonly listInstructionsSessions: (projectsRoot: string) => InstructionsStatus[];
 } & SessionHostSurface;
 
 
@@ -81,7 +70,7 @@ export async function handleInstructionsRoutes(
 
   // GET /api/instructions/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/instructions/sessions') {
-    const statuses = ctx.listInstructionsSessions(ctx.projectsRoot);
+    const statuses = listInstructionsSessions(ctx.projectsRoot);
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {

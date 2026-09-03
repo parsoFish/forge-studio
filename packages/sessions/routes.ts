@@ -24,11 +24,10 @@ import type { RouteContext, RouteTable } from '@forge/kernel';
 import { pathOnly } from '@forge/kernel';
 import { handleArchitectRoutes } from './bridge-studio-architect.ts';
 import { handleInstructionsRoutes } from './bridge-studio-instructions.ts';
-import type { InstructionsStatus } from './instructions-runner.ts';
-import { handleProjectBrainRoutes, type ProjectBrainRow } from './bridge-studio-project-brain.ts';
+import { handleProjectBrainRoutes } from './bridge-studio-project-brain.ts';
 import { handleKickoffRoutes } from './bridge-studio-kickoff.ts';
 import { handleDemoRoutes } from './bridge-studio-demo.ts';
-import type { DemoBuilderStatus } from './demo-builder-runner.ts';
+import { handleStudioSessionsIndex } from './bridge-studio-session-index.ts';
 import type { SessionHostSurface } from './bridge-studio-session-helpers.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
@@ -53,20 +52,13 @@ export type SessionsRouteDeps = {
   readonly broadcastArchitectChanged: () => void;
   /** The instructions kind's own list-changed broadcast. */
   readonly broadcastInstructionsChanged: () => void;
-  /** Injected only until the session index collector carves — see
-   *  `bridge-studio-instructions.ts`'s own note. */
-  readonly listInstructionsSessions: (projectsRoot: string) => InstructionsStatus[];
   /** The project-brain kind's own list-changed broadcast. */
   readonly broadcastProjectBrainChanged: () => void;
-  /** Injected only until the session index collector carves. */
-  readonly listProjectBrainSessions: (projectsRoot: string) => ProjectBrainRow[];
   /** Host-owned and still host-used; see `bridge-studio-kickoff.ts`. */
   readonly newRunStamp: () => string;
   readonly safeInputKeyRe: RegExp;
   /** The demo kind's own list-changed broadcast. */
   readonly broadcastDemoChanged: () => void;
-  /** Injected only until the session index collector carves. */
-  readonly listDemoSessions: (projectsRoot: string) => DemoBuilderStatus[];
   /** This bridge's projects directory. Per-instance, and absent from the shared
    *  `RouteContext`, so it is injected rather than read off the context. */
   readonly projectsRoot: string;
@@ -104,14 +96,11 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     ensureSessionTail: deps.ensureSessionTail,
     broadcastArchitectChanged: deps.broadcastArchitectChanged,
     broadcastInstructionsChanged: deps.broadcastInstructionsChanged,
-    listInstructionsSessions: deps.listInstructionsSessions,
     broadcastProjectBrainChanged: deps.broadcastProjectBrainChanged,
-    listProjectBrainSessions: deps.listProjectBrainSessions,
     spawnAgentDispatch: deps.spawnAgentDispatch,
     newRunStamp: deps.newRunStamp,
     safeInputKeyRe: deps.safeInputKeyRe,
     broadcastDemoChanged: deps.broadcastDemoChanged,
-    listDemoSessions: deps.listDemoSessions,
     spawnAgentTurn: deps.spawnAgentTurn,
     spawnAgentSpecs: deps.spawnAgentSpecs,
     safeParseJson: deps.safeParseJson,
@@ -388,6 +377,17 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       matches: (url) => pathOf(url) === '/api/demo-builder/abandon',
       dryClassification: 'stub-actions',
       handler: demo,
+    },
+    {
+      // MUST precede the two-segment read matcher: this is the cross-kind index
+      // at exactly `/api/studio/sessions`, and a matcher for it that forgot to
+      // anchor would be swallowed by the `:kind/:sessionId` pattern below.
+      method: 'GET',
+      path: '/api/studio/sessions',
+      matches: (url) => pathOf(url) === '/api/studio/sessions',
+      dryClassification: 'exempt-local',
+      handler: (req, res, ctx, url, method) =>
+        handleStudioSessionsIndex(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, projectsRoot: deps.projectsRoot }, url, method),
     },
     {
       method: 'GET',

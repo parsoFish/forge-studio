@@ -28,6 +28,7 @@ import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolve
 import { DEMO_HTML_REL_PATH, GENERATIONS_DIRNAME, type DemoBuilderStatus } from './demo-builder-runner.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
+import { listDemoSessions } from './bridge-studio-session-index.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';
 import {
   deriveRowLifecycle,
@@ -47,9 +48,6 @@ export type DemoRouteContext = SessionRootsContext & {
   readonly readBody: () => Promise<unknown>;
   readonly ensureSessionTail: (kind: string, sessionId: string) => void;
   readonly broadcastDemoChanged: () => void;
-  /** Injected only until the session index collector carves — see
-   *  `bridge-studio-instructions.ts`'s note on the same pattern. */
-  readonly listDemoSessions: (projectsRoot: string) => DemoBuilderStatus[];
 } & SessionHostSurface;
 
 /** The host's `MAX_GENERATION_SESSION_ID_LENGTH`, preserved as an alias rather
@@ -69,7 +67,7 @@ export async function handleDemoRoutes(
   const origin = allowedOrigin(req);
   // GET /api/demo-builder/sessions — list every session with its current state.
   if (method === 'GET' && url === '/api/demo-builder/sessions') {
-    const statuses = ctx.listDemoSessions(ctx.projectsRoot);
+    const statuses = listDemoSessions(ctx.projectsRoot);
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {

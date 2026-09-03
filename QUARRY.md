@@ -191,6 +191,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/bridge-studio-project-brain.ts | sessions | verbatim | 238 |
 | packages/sessions/bridge-studio-kickoff.ts | sessions | verbatim | 702 |
 | packages/sessions/bridge-studio-demo.ts | sessions | verbatim | 796 |
+| packages/sessions/bridge-studio-session-index.ts | sessions | verbatim | 381 |
 | packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 394 |
 | packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 421 |
 | packages/sessions/routes.ts | sessions | verbatim | 104 |

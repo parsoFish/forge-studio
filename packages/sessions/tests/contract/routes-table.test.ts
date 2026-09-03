@@ -33,14 +33,11 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     broadcastKindChanged: () => {},
     broadcastArchitectChanged: () => {},
     broadcastInstructionsChanged: () => {},
-    listInstructionsSessions: () => [],
     broadcastProjectBrainChanged: () => {},
-    listProjectBrainSessions: () => [],
     spawnAgentDispatch: () => {},
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
     broadcastDemoChanged: () => {},
-    listDemoSessions: () => [],
     projectsRoot: '/home/parso/forge/projects',
     spawnAgentTurn: () => ({ ok: true }),
     spawnAgentSpecs: {},
@@ -62,7 +59,7 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 35, 'a route added or removed without updating this pin');
+  assert.equal(table.length, 36, 'a route added or removed without updating this pin');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');
@@ -248,11 +245,17 @@ test('every entry claims its URL with a query string appended — the matcher no
   assert.equal(claimant('GET', '/api/studio/agents/creation-agent/capability?x=1'), '/api/studio/agents/:slug/capability');
 });
 
-test('a neighbouring URL in the same family is claimed by nobody', () => {
-  // The aggregate index (`/api/studio/sessions`, no segments) is still a host
-  // arm; if a matcher here ever claimed it, the index would 404 with the wrong
-  // handler answering. Kills a `:kind` matcher written with `*` or `?`.
-  assert.equal(claimant('GET', '/api/studio/sessions'), null);
+test('the aggregate index is claimed by its OWN entry, not by the :kind read matcher', () => {
+  // This assertion used to read "claimed by nobody", because the aggregate index
+  // was still a host arm. It has now carved, so the pin inverts: the zero-segment
+  // URL must be claimed by the index entry and NOT swallowed by the two-segment
+  // `:kind/:sessionId` matcher beside it. Kills a `:kind` matcher written with
+  // `*` or `?`, which is what the original was guarding against.
+  assert.equal(claimant('GET', '/api/studio/sessions'), '/api/studio/sessions');
+  assert.notEqual(claimant('GET', '/api/studio/sessions'), '/api/studio/sessions/:kind/:sessionId');
+});
+
+test('neighbouring studio URLs outside this package are still claimed by nobody', () => {
   assert.equal(claimant('GET', '/api/studio/agents'), null);
   assert.equal(claimant('GET', '/api/studio/agents/creation-agent'), null);
 });

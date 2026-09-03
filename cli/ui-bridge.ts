@@ -62,8 +62,6 @@ import {
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
-  pathOnly,
-  parseQuery,
 } from './bridge-studio.ts';
 import { PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
 import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
@@ -71,12 +69,11 @@ import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
-import { isTerminalPhase, sessionIsReadable, sessionShellHref } from '@forge/sessions/bridge-studio-sessions.ts';
+import { sessionIsReadable } from '@forge/sessions/bridge-studio-sessions.ts';
 import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
 import { handleStudioAffordanceRoutes, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import {
-  deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun,
-  type SessionLifecycleState, type SessionLifecycle,
+  sessionLogDirName, killTrackedRun,
   // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
   // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
   // below): the SAME stall ceiling, ownership-proof liveness check, and
@@ -105,19 +102,6 @@ import type { BridgeIdentity } from '../apps/forge/forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { reconcileReflectFeedback, type RerunReflectorFn } from '@forge/factory/reflect-reconcile.ts';
-import {
-  listArchitectSessions,
-} from '@forge/sessions/architect-runner.ts';
-import {
-  type InstructionsStatus,
-} from '@forge/sessions/instructions-runner.ts';
-import {
-  type DemoBuilderStatus,
-} from '@forge/sessions/demo-builder-runner.ts';
-import { } from '@forge/sessions/studio/session-transcript.ts';
-import {
-  type ProjectBrainStatus,
-} from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { resolveDispatchableAgent } from '@forge/agents/agent-dispatch.ts';
 import { listAgentDefinitions, loadFlowDefinition } from '../orchestrator/studio/registry.ts';
@@ -133,13 +117,11 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';
 import { } from '@forge/agents/studio/derive.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '@forge/agents/studio/connection-run-gate.ts';
-import { guardedReadSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { buildAgentSlugToNodeId, type Run } from '@forge/flows/run-model.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
+import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
-import { fixedTierForSessionKind } from '@forge/sessions/session-model-tier.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -640,14 +622,11 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     broadcastKindChanged,
     broadcastArchitectChanged: () => broadcast({ type: 'architect-list-changed' }),
     broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
-    listInstructionsSessions,
     broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
-    listProjectBrainSessions,
     spawnAgentDispatch,
     newRunStamp,
     safeInputKeyRe: SAFE_INPUT_KEY_RE,
     broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
-    listDemoSessions,
     projectsRoot,
     // The spawn/serve surface the carved session routes still need from here.
     // These stay host-owned deliberately: `safeParseJson` is still called by
@@ -1678,282 +1657,11 @@ function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logs
   return rows;
 }
 
-// ---------------------------------------------------------------------------
-// W6-B11 — GET /api/studio/sessions, the aggregate in-flight sessions index
-// backing the /sessions page + Home's active-sessions strip.
-// ---------------------------------------------------------------------------
-
-/** One row of the aggregate `GET /api/studio/sessions` index: every in-flight
- *  (or, without `?active=1`, every) interactive session across ALL registry
- *  kinds and every project, flattened to the fields the /sessions index page
- *  + Home's active-sessions strip both need. */
-export type SessionIndexRow = {
-  kind: string;
-  sessionId: string;
-  project: string;
-  phase: string;
-  /** Derived via `isTerminalPhase` (cli/bridge-studio-sessions.ts) — the
-   *  SAME derivation the single-session route's tail-gating already uses,
-   *  never a second, hand-kept terminal-phase notion. */
-  terminal: boolean;
-  /** W7-A2 — TRUTHFUL in both directions: `deriveSessionLifecycle(...)
-   *  .needsYou` (cli/bridge-studio-lifecycle.ts) — true iff an operator
-   *  gate is open (`awaits: questions|verdict` on the phase row, or the
-   *  LEGACY_SESSION_AWAITS_PHASES table for architect/project-brain) OR the
-   *  runner crashed/stalled. An agent that is merely working (a `step:
-   *  agent` row's staged-review/next-turn affordances) is NOT "needs you" —
-   *  the pre-W7 derivation (`deriveSessionAffordances(...).length > 0`)
-   *  counted those and inverted the signal for four of eight kinds
-   *  (home-sessions-08, sessions-kinds-15). */
-  needsYou: boolean;
-  /** W7-A2 — the derived lifecycle state (`working` | `awaiting-operator` |
-   *  `crashed` | `stalled` | `terminal`); see cli/bridge-studio-lifecycle.ts. */
-  state: SessionLifecycleState;
-  /** W7-A2 — the runner's crash message read live off
-   *  `_logs/_<kind>-<sid>/stderr.log` for a `crashed` row; `null` otherwise. */
-  error: string | null;
-  /** W7-A2 — ms since the last on-disk sign of life; `null` when the
-   *  session has no log dir (no liveness signal). */
-  idleMs: number | null;
-  modelTier: string | null;
-  /** ISO timestamp of the session's last known write, or `''` — honest-absent,
-   *  never fabricated — when the kind's status.json carries no timestamp
-   *  field at all (kb-cleanup's shape today). */
-  updatedAt: string;
-  href: string;
-};
-
-/** Bound on `GET /api/studio/sessions`' response — an unbounded number of
- *  on-disk sessions (every project x every kind, for the lifetime of the
- *  forge instance) must never balloon the response; 200 comfortably covers
- *  any realistic in-flight count for the "one operator, many side projects"
- *  shape this platform is built around. Rows are sorted needs-you-first-
- *  then-newest (`sortAndCapSessionIndexRows`) BEFORE this cap is applied, so
- *  a capped response favours keeping needs-you rows over stale passive ones. */
-export const SESSION_INDEX_MAX_ROWS = 200;
-
-/** Generic phase/model/timestamp read for a session-kind with no dedicated
- *  per-kind list route (onboarding, authoring, kb-cleanup, and any future
- *  kind registered the same way) — the SAME guarded choke point
- *  (`resolveGuardedPath`) `readGuardedSessionStatus` (above) uses, just
- *  widened to the extra fields the aggregate index needs; not a second,
- *  independently-invented containment mechanism. `updatedAt` prefers
- *  `updated_at` (the four legacy kinds' own field name, in case a future
- *  kind reuses it), falls back to `startedAt` (onboarding's/authoring's own
- *  field — `writeOnboardingSession`/`writeAuthoringSession`, this file), and
- *  is `''` — honest-absent, never fabricated — when neither exists
- *  (kb-cleanup's status.json carries no timestamp field at all today). */
-function readGuardedSessionIndexSummary(
-  projectsRoot: string,
-  project: string,
-  kindDirName: string,
-  sessionId: string,
-): { phase: string; modelTier: string | null; updatedAt: string } | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
-  if (!guarded.ok || !guarded.exists) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(guarded.realPath, 'utf8'));
-  } catch {
-    return null;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const obj = parsed as Record<string, unknown>;
-  if (typeof obj.phase !== 'string') return null;
-  return {
-    phase: obj.phase,
-    modelTier: typeof obj.modelTier === 'string' ? obj.modelTier : null,
-    updatedAt: typeof obj.updated_at === 'string' ? obj.updated_at : typeof obj.startedAt === 'string' ? obj.startedAt : '',
-  };
-}
 
 
-function deriveRowLifecycle(
-  ctx: { projectsRoot: string; logsRoot: string },
-  descriptor: SessionKindDescriptor,
-  phase: string,
-  project: string,
-  sessionId: string,
-): { terminal: boolean; lifecycle: SessionLifecycle } {
-  // Review fix (pre-existing, `pushRow`'s own note): `terminal` is derived
-  // FIRST — cheap, and a terminal phase never has an affordance-table row.
-  const terminal = isTerminalPhase(descriptor, phase);
-  // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
-  // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
-  // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
-  // computed at read time, never stored.
-  const lifecycle = deriveSessionLifecycleFor({
-    descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
-  });
-  return { terminal, lifecycle };
-}
 
 
-function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
-  const descriptors = loadSessionKinds(ctx.forgeRoot);
-  const rows: SessionIndexRow[] = [];
-  // W8-B3 (sessions-kinds-R06/31) — resolved ONCE PER KIND for this request,
-  // not once per row. The tier is a property of the KIND's agent, so a
-  // per-row lookup would re-read the same SKILL.md for every session of that
-  // kind — 24+ file reads on today's corpus, on a polled index route, for at
-  // most 8 distinct answers. Request-scoped and thrown away afterwards, so it
-  // is still derived at read time and a re-pointed SKILL.md is picked up on
-  // the very next request; nothing is cached across requests.
-  const tierByKind = new Map<string, string | null>();
-  const fixedTierFor = (descriptor: SessionKindDescriptor): string | null => {
-    const hit = tierByKind.get(descriptor.id);
-    if (hit !== undefined) return hit;
-    const resolved = fixedTierForSessionKind(ctx.forgeRoot, descriptor);
-    tierByKind.set(descriptor.id, resolved);
-    return resolved;
-  };
 
-  const pushRow = (
-    descriptor: SessionKindDescriptor,
-    sessionId: string,
-    project: string,
-    phase: string,
-    modelTier: string | null,
-    updatedAt: string,
-  ): void => {
-    // `SessionIndexRow.needsYou`'s own header: "a derivable operator
-    // affordance exists at this phase" — a terminal session, by
-    // definition, needs nothing further from the operator; `deriveRowLifecycle`
-    // derives `terminal` before `lifecycle` so that is true structurally.
-    const { terminal, lifecycle } = deriveRowLifecycle(ctx, descriptor, phase, project, sessionId);
-    // W8-B3 (sessions-kinds-R06/31) — the SAME read-time fixed-tier fallback
-    // the session shell applies (cli/session-model-tier.ts), so the index
-    // MODEL column and the session's own chip can never disagree about what a
-    // fixed-tier kind ran on. The index used to show "—" for every architect
-    // and project-brain row for exactly this reason.
-    const resolvedTier = modelTier ?? fixedTierFor(descriptor);
-    rows.push({
-      kind: descriptor.id,
-      sessionId,
-      project,
-      phase,
-      terminal,
-      needsYou: lifecycle.needsYou,
-      state: lifecycle.state,
-      error: lifecycle.error,
-      idleMs: lifecycle.idleMs,
-      modelTier: resolvedTier,
-      updatedAt,
-      // W8-F6 (bead forge-6gv.27) — the ONE server-side builder of a session
-      // address (cli/bridge-studio-sessions.ts), so the index and the route it
-      // links to can never disagree about where a session lives. Every row
-      // here is status.json-backed by construction (`readGuardedSessionIndexSummary`
-      // above, and the four bespoke per-kind listers), i.e. already
-      // `resolveReadableSession`'s `source:'status'` arm — pinned rather than
-      // re-probed at runtime, which would be a guard that can never fail.
-      href: sessionShellHref(descriptor.id, sessionId, project),
-    });
-  };
-
-  for (const descriptor of descriptors) {
-    if (descriptor.id === 'architect') {
-      for (const s of listArchitectSessions(ctx.projectsRoot)) {
-        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
-      }
-    } else if (descriptor.id === 'instructions') {
-      for (const s of listInstructionsSessions(ctx.projectsRoot)) {
-        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
-      }
-    } else if (descriptor.id === 'demo') {
-      for (const s of listDemoSessions(ctx.projectsRoot)) {
-        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
-      }
-    } else if (descriptor.id === 'project-brain') {
-      for (const s of listProjectBrainSessions(ctx.projectsRoot)) {
-        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
-      }
-    } else {
-      const kindDirName = `_${descriptor.id}`;
-      let projects: string[];
-      try {
-        projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
-      } catch {
-        projects = [];
-      }
-      for (const project of projects) {
-        const kindDir = join(ctx.projectsRoot, project, kindDirName);
-        if (!existsSync(kindDir)) continue;
-        let sessionIds: string[];
-        try {
-          sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-        } catch {
-          continue;
-        }
-        for (const sessionId of sessionIds) {
-          if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors collectSessionRows
-          const summary = readGuardedSessionIndexSummary(ctx.projectsRoot, project, kindDirName, sessionId);
-          if (summary === null) continue; // unreadable/missing/escaping/hardlinked -> not a real session row
-          pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt);
-        }
-      }
-    }
-  }
-  return rows;
-}
-
-/** Deterministic ordering + bound for the aggregate sessions index —
- *  needs-you rows first, then newest-`updatedAt` first within each group;
- *  capped to the newest `cap` rows. Pure (no I/O), so it is unit-testable in
- *  isolation from the filesystem (ADR 042's "a pure function with an
- *  explicit error contract may be exported for direct tests" boundary).
- *  ISO-8601 timestamps compare correctly as plain strings; a `''`
- *  honest-absent `updatedAt` (kb-cleanup's shape today) sorts LAST within its
- *  needsYou group — an empty string is always lexically smaller than any real
- *  timestamp — never mistaken for "newest". */
-export function sortAndCapSessionIndexRows(
-  rows: readonly SessionIndexRow[],
-  cap: number = SESSION_INDEX_MAX_ROWS,
-): SessionIndexRow[] {
-  return [...rows]
-    .sort((a, b) => {
-      if (a.needsYou !== b.needsYou) return a.needsYou ? -1 : 1;
-      if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
-      return 0;
-    })
-    .slice(0, cap);
-}
-
-/**
- * GET /api/studio/sessions[?active=1] — the aggregate sessions index backing
- * the /sessions page + Home's active-sessions strip. No path segments
- * (distinguishes it from `GET /api/studio/sessions/:kind/:id`,
- * bridge-studio-sessions.ts's single-session route — that regex requires
- * exactly two further path segments, this route requires none). Read-only —
- * covered by BRIDGE_ROUTE_CLASSIFICATION's blanket `{method:'GET',
- * route:'*'}` row (cli/dry-bridge.ts); no per-route table entry is needed
- * for a GET.
- *
- * `?active=1` filters to non-terminal rows only — the shape the /sessions
- * page and Home strip both request (operator-locked: in-flight sessions
- * ONLY, never terminal history). Omitting the query param returns every row
- * (terminal included), kept for testability and any future consumer that
- * genuinely wants the unfiltered set.
- */
-async function handleStudioSessionsIndex(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: HttpContext,
-  url: string,
-  method: string,
-): Promise<boolean> {
-  if (method !== 'GET' || pathOnly(url) !== '/api/studio/sessions') return false;
-  const origin = allowedOrigin(req);
-  try {
-    const activeOnly = parseQuery(url).get('active') === '1';
-    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
-    const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
-    const sessions = sortAndCapSessionIndexRows(filtered);
-    sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
-  } catch (err) {
-    sendJson(res, 500, { error: sanitizeError(err) }, origin);
-  }
-  return true;
-}
 
 async function handleHttp(
   req: IncomingMessage,
@@ -2276,7 +1984,6 @@ async function handleHttp(
   // single-session route immediately below: distinct URL shapes (no path
   // segments vs exactly two), so ordering doesn't affect matching, but this
   // keeps the two GET /api/studio/sessions... routes textually adjacent.
-  if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
   // M4 §4 step 2 — GET /api/studio/sessions/:kind/:id carved to packages/sessions/routes.ts.
   // W7-A2 — the generic session CANCEL route. MUST be dispatched BEFORE the
   // affordance write route immediately below: that route's regex matches
@@ -3723,36 +3430,6 @@ function spawnAgentDispatch(
   } catch { /* best-effort */ }
 }
 
-/**
- * SEC-04 (bd forge-ebj) — the ONE containment choke point for the bridge's
- * request-derived session-dir families (architect / instructions /
- * project-brain / demo). `project` and `sessionId` arrive from request input
- * (a JSON body value OR a decoded URL segment); `kindDirName` is a fixed
- * literal (`_architect` / `_instructions` / `_project-brain` / `_demo`). Each
- * untrusted value is passed as its OWN element of `resolveGuardedPath`'s
- * `segments[]` (cli/studio-path-guard.ts) — NEVER folded into `root` — so the
- * per-segment IDENTITY walk catches every escape shape from the
- * adversarial-containment-review catalogue: a `/`-, `.`- or `..`-laden segment,
- * a symlinked `<project>` / `_<kind>` / `<sessionId>`, a cross-object same-root
- * alias, and a hardlinked leaf.
- *
- * Returns the fully-resolved, contained dir, or `null` on ANY escape — a
- * missing dir and an escaping symlink both collapse to `null`, so the caller's
- * response is indistinguishable between "wrong id" and "blocked escape" (no
- * oracle). The leaf may legitimately NOT exist yet (the `/start` create case),
- * so existence is NOT required here; every read route separately returns 404
- * when its `status.json` / file is subsequently found absent, and every write
- * route mkdirs under a dir this function already proved contained.
- */
-function guardedSessionDir(
-  projectsRoot: string,
-  project: string,
-  kindDirName: string,
-  sessionId: string,
-): string | null {
-  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
-  return guarded.ok ? guarded.realPath : null;
-}
 
 
 
@@ -3825,40 +3502,6 @@ async function handleArchitect(
 // finalize). The bridge spawns one CLI turn per operator action via the
 // shared `spawnAgentTurn(forgeRoot, 'instructions', project, sessionId)`.
 
-/** Discover every instructions session under `projects/<name>/_instructions/<sid>/`
- *  — used by the bridge's `GET /api/instructions/sessions`. Best-effort; never
- *  throws on a malformed dir. Mirrors architect-runner's `listArchitectSessions`,
- *  kept local to the bridge (not added to the runner). */
-function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
-  const out: InstructionsStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const instrDir = join(projectsRoot, project, '_instructions');
-    if (!existsSync(instrDir)) continue;
-    let sids: string[];
-    try {
-      sids = readdirSync(instrDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch { continue; }
-    for (const sid of sids) {
-      if (sid.startsWith('_')) continue; // skip _archived/
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_instructions` (git-plantable inside any onboarded project's
-      // own repo) cannot fold this enumeration onto a victim dir outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_instructions', sid);
-      if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — route the status.json READ through the guarded
-      // leaf sibling so a symlinked `status.json` inside a real session dir is
-      // refused, not followed (the dir guard alone did not cover the leaf).
-      const status = guardedReadSessionStatus<InstructionsStatus>(projectsRoot, [project, '_instructions', sid]);
-      if (status) out.push(status);
-    }
-  }
-  return out;
-}
 
 
 // ---- Demo-builder routes (Stage B) ----------------------------------------
@@ -3876,67 +3519,10 @@ function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
 // R1-3b — the project-brain turn spawns via
 // `spawnAgentTurn(forgeRoot, 'project-brain', project, sessionId)`.
 
-/** R1-3b — list every project-brain session with its current state. */
-function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
-  const out: ProjectBrainStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const base = join(projectsRoot, project, '_project-brain');
-    if (!existsSync(base)) continue;
-    let sids: string[];
-    try { sids = readdirSync(base); } catch { continue; }
-    for (const sid of sids) {
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_project-brain` cannot fold this enumeration onto a victim
-      // dir outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_project-brain', sid);
-      if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
-      const status = guardedReadSessionStatus<ProjectBrainStatus>(projectsRoot, [project, '_project-brain', sid]);
-      if (status) out.push(status);
-    }
-  }
-  return out;
-}
 
 
 
 
-/** Discover every demo-builder session under `projects/<name>/_demo/<sid>/`
- *  — used by the bridge's `GET /api/demo-builder/sessions`. Best-effort; never
- *  throws on a malformed dir. Mirrors `listInstructionsSessions`. */
-function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
-  const out: DemoBuilderStatus[] = [];
-  if (!existsSync(projectsRoot)) return out;
-  let projects: string[];
-  try { projects = readdirSync(projectsRoot); } catch { return out; }
-  for (const project of projects) {
-    const demoDir = join(projectsRoot, project, '_demo');
-    if (!existsSync(demoDir)) continue;
-    let sids: string[];
-    try {
-      sids = readdirSync(demoDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch { continue; }
-    for (const sid of sids) {
-      if (sid.startsWith('_')) continue; // skip _archived/
-      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
-      // symlinked `_demo` cannot fold this enumeration onto a victim dir
-      // outside root.
-      const dir = guardedSessionDir(projectsRoot, project, '_demo', sid);
-      if (!dir) continue;
-      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
-      const status = guardedReadSessionStatus<DemoBuilderStatus>(projectsRoot, [project, '_demo', sid]);
-      if (status) out.push(status);
-    }
-  }
-  return out;
-}
 
 
 
