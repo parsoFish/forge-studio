@@ -20,6 +20,7 @@
  * `drain/cancel` vs `drain/:runId` collision.
  */
 import type { RouteContext, RouteTable } from '@forge/kernel';
+import { parseManifestPort } from './session-kind-deps.ts';
 import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
@@ -161,6 +162,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       releaseAgentRunTail: deps.releaseAgentRunTail,
     }),
     ...sessionsRoutes({
+      parseManifest: parseManifestPort,
       ensureSessionTail: deps.ensureSessionTail,
       broadcastKindChanged: deps.broadcastKindChanged,
       broadcastArchitectChanged: deps.broadcastArchitectChanged,

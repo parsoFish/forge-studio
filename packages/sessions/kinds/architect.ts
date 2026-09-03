@@ -62,13 +62,8 @@ import {
 } from './architect-plan.ts';
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import {
-  serializeManifest,
-  parseManifest,
-  mintAndPersistManifestCycleId,
-  type InitiativeManifest,
-} from '@forge/flows/manifest.ts';
-import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { requirePorts, type ArchitectManifestPorts } from './architect-ports.ts';
+import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
 import type { EventLogger } from '@forge/kernel';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
@@ -183,6 +178,9 @@ export type AnswerRound = {
 export type RunArchitectTurnInput = {
   sessionId: string;
   projectRoot: string;
+  /** Manifest functions bound at `apps/forge` — see ArchitectManifestPorts.
+   *  Absent ⇒ any turn reaching manifest work REFUSES (never a fallback). */
+  manifestPorts?: ArchitectManifestPorts;
   /** Inject a fake `query` for tests. Defaults to the SDK. */
   queryFn?: QueryFn;
   /** `_logs/` root; defaults to `<cwd>/_logs`. */
@@ -883,7 +881,7 @@ async function runDraftStep(
   // Write draft manifests (promoted to the queue only on finalize/approve).
   if (!existsSync(paths.manifestsDir)) mkdirSync(paths.manifestsDir, { recursive: true });
   for (const m of manifests) {
-    writeFileSync(join(paths.manifestsDir, `${m.initiative_id}.md`), serializeManifest(m));
+    writeFileSync(join(paths.manifestsDir, `${m.initiative_id}.md`), requirePorts(input).serializeManifest(m));
   }
 
   const proposed: ProposedInitiative[] = manifests.map((m, idx) => ({
@@ -963,7 +961,7 @@ function renderInterviewSummary(rounds: InterviewRound[]): string {
 /** Render every manifest about to be promoted (id, dependencies, full body)
  *  into one block per initiative for the critic prompt. Reads fresh from disk
  *  so the critic reviews EXACTLY what `promoteManifests` is about to move. */
-function buildManifestsSummary(manifestsDir: string): string {
+function buildManifestsSummary(manifestsDir: string, parseManifest: ArchitectManifestPorts['parseManifest']): string {
   if (!existsSync(manifestsDir)) return '(no manifests found)';
   const files = readdirSync(manifestsDir).filter((f) => f.endsWith('.md'));
   if (files.length === 0) return '(no manifests found)';
@@ -1009,7 +1007,7 @@ async function runFinalizeCompletenessCritic(args: {
 
   const interviewSummary = renderInterviewSummary(readInterview(input.projectRoot, input.sessionId));
   const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;
-  const manifestsSummary = buildManifestsSummary(paths.manifestsDir);
+  const manifestsSummary = buildManifestsSummary(paths.manifestsDir, requirePorts(input).parseManifest);
 
   const critic = await runCompletenessCritic({
     idea: status.idea,
@@ -1088,6 +1086,8 @@ async function runFinalizeCompletenessCritic(args: {
 async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTurnResult> {
   const { input, status, plumbing, writeStatus, paths } = args;
   const { logger } = plumbing;
+  // Refuses here, before any work, if the ports were never injected.
+  const ports = requirePorts(input);
   const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);
 
   // DETERMINISTIC FINALIZE (#3, 2026-06-01). "Approve" must promote EXACTLY the
@@ -1109,10 +1109,10 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
   } else if (resolved) {
     for (const f of manifestFiles) {
       const p = join(paths.manifestsDir, f);
-      const m = parseManifest(readFileSync(p, 'utf8'));
+      const m = ports.parseManifest(readFileSync(p, 'utf8'));
       if (m.body.includes('## Resolved design decisions')) continue;
       const body = `${m.body}\n\n## Resolved design decisions (operator)\n\n${resolved}\n`;
-      writeFileSync(p, serializeManifest({ ...m, body }));
+      writeFileSync(p, ports.serializeManifest({ ...m, body }));
     }
   }
   // P4: compute architect cost + duration from the session's own event log and
@@ -1128,8 +1128,8 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
       : [];
     for (const f of reReadFiles) {
       const p = join(paths.manifestsDir, f);
-      const m = parseManifest(readFileSync(p, 'utf8'));
-      writeFileSync(p, serializeManifest({
+      const m = ports.parseManifest(readFileSync(p, 'utf8'));
+      writeFileSync(p, ports.serializeManifest({
         ...m,
         architect_session_id: input.sessionId,
         architect_cost_usd: archStats.cost_usd,
@@ -1164,7 +1164,7 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
     }
   }
 
-  const { writtenManifestPaths, writtenInitiativeIds } = promoteManifests(paths.manifestsDir, {
+  const { writtenManifestPaths, writtenInitiativeIds } = ports.promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
 
@@ -1174,7 +1174,7 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
   // log ⇒ cost/roadmap/metrics roll up as one unit. Idempotent + best-effort.
   for (let i = 0; i < writtenManifestPaths.length; i++) {
     const initId = writtenInitiativeIds[i];
-    if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
+    if (initId) ports.mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
   }
 
   writeStatus({ ...workingStatus, phase: 'committed' });

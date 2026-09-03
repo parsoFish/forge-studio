@@ -41,7 +41,7 @@
  * an earlier exact-text set-difference design): a `questions.json` entry
  * contributes a PENDING agent turn iff the caller's real `phase` is exactly
  * `AWAITING_ANSWERS_PHASE` — the interview-handoff contract both
- * architect-runner.ts and instructions-runner.ts write to `status.json`
+ * kinds/architect.ts and kinds/instructions.ts write to `status.json`
  * while blocked on the operator (see the questions.json ↔ answers.json
  * handoff documented at packages/sessions/interactive-session.ts's "Interview
  * handoff" section). Any other phase means questions.json (if present) is
@@ -101,7 +101,11 @@ import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
-import { parseManifest } from '@forge/flows/manifest.ts';
+import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+
+/** Injected `parseManifest` (flows is rank 5, this package rank 4). The SHAPE
+ *  is imported directly — it lives in contracts now (ruling 81). */
+export type ParseManifestPort = (content: string) => InitiativeManifest;
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library/studio/skill-package.ts';
 import type { PackageFile } from '@forge/library/studio/skill-package.ts';
 import { sessionArtifactKindState, type SessionKindDescriptor, type SessionStage } from './session-kinds.ts';
@@ -115,20 +119,17 @@ const PROMPT_FILENAME = 'prompt.md';
 const ANSWERS_FILENAME = 'answers.json';
 const QUESTIONS_FILENAME = 'questions.json';
 const FEEDBACK_FILENAME = 'feedback.md';
-/** The instructions-runner's draft filename (packages/sessions/instructions-runner.ts
- *  `DRAFT_FILENAME`, currently 'AGENTS.draft.md'). Deliberately re-declared as
- *  its own constant here rather than imported: instructions-runner.ts pulls in
- *  the live SDK query chain (pinned-sdk-query.ts) at module top level, and this
- *  module is a pure, fs-only derivation with no business importing a live
- *  runner for a single filename string. Flagged in the T3 report for T2 to
- *  ratify or hoist to a shared leaf constant. */
+/** The instructions kind's draft filename (`kinds/instructions.ts`
+ *  `DRAFT_FILENAME`, 'AGENTS.draft.md'). Re-declared rather than imported: that
+ *  module pulls the live SDK query chain in at load, and this one is a pure
+ *  fs-only derivation with no business importing a runner for one string. */
 const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';
 const MANIFESTS_DIRNAME = 'manifests';
 const THEMES_DIRNAME = 'themes';
 
 /** The phase token the questions/answers interview handoff uses while
  *  blocked on the operator — written to status.json by both
- *  architect-runner.ts and instructions-runner.ts (see
+ *  kinds/architect.ts and kinds/instructions.ts (see
  *  packages/sessions/interactive-session.ts's "Interview handoff" section). A
  *  questions.json entry is a pending agent turn iff the caller's real phase
  *  equals this constant; any other phase means questions.json is stale. */
@@ -1125,7 +1126,7 @@ export type SessionArtifactPayload =
   | FilePackageArtifact
   | CleanupPlanArtifact;
 
-function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
+function deriveRoadmapDraft(sessionDir: string, label: string, parseManifest: ParseManifestPort): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
   const rows: RoadmapDraftRow[] = [];
   for (const file of files) {
@@ -1296,8 +1297,11 @@ export function deriveSessionArtifact(input: {
    *  entirely ⇒ every unmatched action derives 'unknown', never 'cleared' —
    *  the fail-safe default. Ignored for every other kind. */
   cleanupScan?: CleanupScan;
+  /** Only consumed by the 'roadmap-draft' kind, which REFUSES without it.
+   *  Ignored for every other kind. */
+  parseManifest?: ParseManifestPort;
 }): SessionArtifactPayload {
-  const { descriptor, sessionDir, contractStages, cleanupFindings, cleanupScan } = input;
+  const { descriptor, sessionDir, contractStages, cleanupFindings, cleanupScan, parseManifest } = input;
   const kind = descriptor.artifact.kind;
   const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
@@ -1311,7 +1315,12 @@ export function deriveSessionArtifact(input: {
 
   switch (kind) {
     case 'roadmap-draft':
-      return deriveRoadmapDraft(sessionDir, label);
+      // No silent default (ruling 77): an empty roadmap-draft would look like a
+      // session that produced nothing rather than one that could not be read.
+      if (!parseManifest) {
+        throw new Error('deriveSessionArtifact: the "roadmap-draft" kind needs the parseManifest port, bound at `apps/forge`; it was not injected.');
+      }
+      return deriveRoadmapDraft(sessionDir, label, parseManifest);
     case 'markdown-draft':
       return deriveMarkdownDraft(sessionDir, label);
     case 'brain-structure':
