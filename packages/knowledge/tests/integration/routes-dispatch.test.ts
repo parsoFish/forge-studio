@@ -37,6 +37,18 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
+/**
+ * `knowledgeRoutes` is a factory (M4-knowledge s5): `listFlowIds` is the
+ * Flow-kind loader in the legacy registry, which a rank-2 package may not
+ * import, so the host supplies it. These stubs are deliberately NOT the real
+ * loaders — a table test asserts on the table's shape, and a dispatch test on
+ * a handler's response; neither should depend on what flows exist on disk.
+ */
+const routes = knowledgeRoutes({
+  listFlowIds: () => ['forge-develop'],
+  listFlowBandIds: () => ['review-band', 'demo-band'],
+});
+
 type Captured = { status: number | null; body: string };
 
 /** The smallest `res` `sendJson` needs: `writeHead(status, headers)` + `end(payload)`. */
@@ -74,7 +86,7 @@ function ctx(body?: unknown): KnowledgeRouteContext {
 test('routes-dispatch: a query-bearing url reaches its handler — the table hands handlers the RAW url, so a handler that does not normalise for itself 404s silently', async () => {
   const { res, captured } = mockRes();
   const answered = await dispatchRoute(
-    knowledgeRoutes, mockReq(), res, ctx(),
+    routes, mockReq(), res, ctx(),
     '/api/studio/kbs/cycles/drain?cacheBust=1', 'GET',
   );
   assert.equal(answered, true,
@@ -89,7 +101,7 @@ test('routes-dispatch: a query-bearing url reaches its handler — the table han
 test('routes-dispatch: the same url without a query behaves identically — proves the test above is about the query, not about the route being broken outright', async () => {
   const { res, captured } = mockRes();
   const answered = await dispatchRoute(
-    knowledgeRoutes, mockReq(), res, ctx(),
+    routes, mockReq(), res, ctx(),
     '/api/studio/kbs/cycles/drain', 'GET',
   );
   assert.equal(answered, true, 'the bare route must answer');
@@ -100,7 +112,7 @@ test('routes-dispatch: POST /drain/cancel runs the CANCEL handler, not the drain
   const c = ctx();
   const { res, captured } = mockRes();
   const answered = await dispatchRoute(
-    knowledgeRoutes, mockReq(), res, c,
+    routes, mockReq(), res, c,
     '/api/studio/kbs/cycles/drain/cancel', 'POST',
   );
   assert.equal(answered, true, 'POST /api/studio/kbs/:id/drain/cancel must be claimed and answered');
@@ -114,7 +126,7 @@ test('routes-dispatch: POST /drain/cancel runs the CANCEL handler, not the drain
 test('routes-dispatch: a url no entry owns returns false without answering — the host must be able to fall through to its remaining switch', async () => {
   const { res, captured } = mockRes();
   const answered = await dispatchRoute(
-    knowledgeRoutes, mockReq(), res, ctx(),
+    routes, mockReq(), res, ctx(),
     '/api/studio/projects', 'GET',
   );
   assert.equal(answered, false, 'the knowledge table must not claim another package\'s route');
@@ -125,7 +137,7 @@ test('routes-dispatch: a url no entry owns returns false without answering — t
 test('routes-dispatch: a method no entry declares returns false — DELETE on a drain route is not silently treated as GET', async () => {
   const { res, captured } = mockRes();
   const answered = await dispatchRoute(
-    knowledgeRoutes, mockReq(), res, ctx(),
+    routes, mockReq(), res, ctx(),
     '/api/studio/kbs/cycles/drain', 'DELETE',
   );
   assert.equal(answered, false, 'no entry declares DELETE on /drain');
@@ -178,7 +190,7 @@ async function underDryBridge<T>(fn: () => Promise<T>): Promise<T> {
 test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the maintenance route REFUSES op=fix-agent — the one op that spawns', async () => {
   const { res, captured } = mockRes();
   const answered = await underDryBridge(() => dispatchRoute(
-    knowledgeRoutes, mockReq(), res,
+    routes, mockReq(), res,
     ctx({ op: 'fix-agent', file: 'brain/forge-dev/themes/x.md', check: 'frontmatter', kind: 'agent', message: 'x' }),
     '/api/studio/kbs/cycles/maintenance', 'POST',
   ));
@@ -195,7 +207,7 @@ test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the maintenance rout
 test('dry-bridge positive control: under FORGE_DRY_BRIDGE=1 the SAME route lets op=lint proceed — which is why the row is stub-actions and not refuse', async () => {
   const { res, captured } = mockRes();
   const answered = await underDryBridge(() => dispatchRoute(
-    knowledgeRoutes, mockReq(), res, ctx({ op: 'lint' }), '/api/studio/kbs/cycles/maintenance', 'POST',
+    routes, mockReq(), res, ctx({ op: 'lint' }), '/api/studio/kbs/cycles/maintenance', 'POST',
   ));
   assert.equal(answered, true, 'no entry claimed POST /api/studio/kbs/cycles/maintenance');
   assert.notEqual(captured.status, 409,
