@@ -85,6 +85,37 @@ both orders, and key order is a byte-level difference the pin records **separate
 hide a reorder inside a deep-equal. The kind returns the assembled bag; the driver appends
 `abortController` and nothing else, which is why every capture survived ports 5–6 unchanged.
 
+## The roadmap-draft split, and why it has a reader port
+
+`studio/roadmap-draft.ts` holds `deriveRoadmapDraft` plus `ParseManifestPort`,
+`RoadmapDraftRow` and `RoadmapDraftArtifact`. It was extracted from
+`studio/session-transcript.ts` under **M4 ruling 83**, which accepted that file's
+ceiling being re-keyed 1,359 → 1,368 for 3b's injected-port seam *on the
+condition that row 5's split brought it back down*. It did: **1,298**, below even
+the pre-3b ceiling, and the exemption was tightened to that rather than left as
+slack.
+
+**The seam falls here because of the port.** Every other artifact derivation in
+that module reads files; this is the only one that needs a manifest *parsed*, and
+`ParseManifestPort` exists solely for it. `packages/flows` is rank 5 and this
+package rank 4, so the manifest functions are injected at the assembly
+(`apps/forge/session-kind-deps.ts`); the manifest SHAPE comes from
+`@forge/contracts` (ruling 81), so neither side declares a structural stand-in.
+
+**The three types are re-exported from `session-transcript.ts`, not repointed.**
+Ten files across `apps/studio`, `packages/sessions` and `apps/forge` name them;
+repointing all ten would churn two trees this lane does not own for no
+behavioural gain. Ruling 81's own precedent — `flows/manifest.ts` re-exports the
+lifted types from contracts for exactly this reason.
+
+**`deriveRoadmapDraft` takes its readers as a port** (`SessionDirReaders`)
+instead of importing them. `listDirEntries` and `safeReadFileInSession` live in
+`session-transcript.ts`, six other derivations there use them, and that module
+imports `deriveRoadmapDraft` — so importing them back would close a cycle. The
+port is also the idiom this module already carried for `parseManifest`, and it
+keeps the containment guarantee un-reimplemented: whatever the caller passes is
+the same realpath-checked reader the rest of the transcript layer uses.
+
 ## The two dispatch tables are a UNION
 
 `AT-7` — the tripwire for a descriptor silently gaining a `turnSpec` and bypassing its runner — read

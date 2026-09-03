@@ -78,7 +78,7 @@
   "packages/sessions/studio/session-kinds.test.ts": 2398,
   "packages/sessions/studio/session-kinds.ts": 1389,
   "packages/sessions/studio/session-transcript.test.ts": 2400,
-  "packages/sessions/studio/session-transcript.ts": 1368,
+  "packages/sessions/studio/session-transcript.ts": 1298,
   "packages/sessions/tests/integration/architect-runner.test.ts": 1427,
   "scripts/check-raw-fs-guarded.mjs": 1790,
   "scripts/check-raw-fs-guarded.test.ts": 1036,
