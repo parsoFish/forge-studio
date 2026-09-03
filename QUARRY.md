@@ -211,6 +211,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/ralph/stop-conditions.ts | agents | verbatim | 685 |
 | packages/agents/agent-bands.ts | agents | verbatim | 86 |
 | packages/agents/agent-dispatch.ts | agents | verbatim | 365 |
+| packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
 | packages/projects/agents-md-compose.ts | projects | verbatim | 109 |
 | packages/sessions/architect-runner.ts | sessions | verbatim | 1715 |
 | orchestrator/band-agent-run.ts | agents | rewritten | 242 |

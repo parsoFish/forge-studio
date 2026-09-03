@@ -196,7 +196,15 @@ export function prepareWorkspace(input: LoopInput): DevWorkspacePaths {
 }
 
 export async function run(input: LoopInput, agent: AgentInvocation = stubAgent): Promise<LoopResult> {
-  const startedAt = Date.now();
+  // MONOTONIC, not wall clock (known flake #3, bead-adjacent to 5.38's
+  // honesty row). `Date.now()` can go BACKWARDS under load on WSL2 — the host
+  // this runs on — so `Date.now() - startedAt` produced a NEGATIVE
+  // `duration_ms` in a real gate run, and a run that reports a negative
+  // duration is not honest history. `performance.now()` is monotonic by
+  // definition, so the subtraction below cannot be negative whatever the wall
+  // clock does. Used ONLY for the elapsed measurement; nothing here treats it
+  // as a timestamp.
+  const startedAt = performance.now();
   const { promptPath, agentMdPath, fixPlanPath } = prepareWorkspace(input);
 
   // Tier 2 thinning (2026-05-26): the wedged-no-progress check was
@@ -413,7 +421,7 @@ function finalize(
     status,
     iterations: state.iteration,
     cost_usd: state.costUsdSoFar,
-    duration_ms: Date.now() - startedAt,
+    duration_ms: Math.round(performance.now() - startedAt),
     artifacts: { agentMdPath, fixPlanPath },
     filesChanged,
     stop_reason: stopReason,

@@ -41,7 +41,17 @@ test('Ralph runner: stamps templates and exits on iteration budget', async () =>
     assert.equal(result.status, 'failed', `status was ${result.status}`);
     assert.ok(result.iterations >= 1, 'at least one iteration ran');
     assert.equal(result.cost_usd, 0, 'stub agent costs nothing');
-    assert.ok(result.duration_ms >= 0, 'duration tracked');
+    // Asserted on a MONOTONIC measurement, not the wall clock. This line was
+    // known flake #3: `duration_ms` came from `Date.now()`, which goes
+    // backwards under load on WSL2, so a real gate run saw a negative
+    // duration. The fix is at the source (`runner.ts` measures with
+    // `performance.now()`), which makes this assertion structurally true
+    // rather than usually true — a widened tolerance would have hidden the
+    // dishonest number instead of removing it.
+    assert.ok(
+      Number.isFinite(result.duration_ms) && result.duration_ms >= 0,
+      `duration must be a non-negative monotonic measurement, got ${result.duration_ms}`,
+    );
 
     // Verify PROMPT.md substitution worked.
     const prompt = readFileSync(join(dir, 'PROMPT.md'), 'utf8');
