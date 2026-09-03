@@ -1,0 +1,188 @@
+{
+  "prompt": "# Preflight-Fix\n\nApply the operator decision.\n\n\n## Fix task\n\n**Project (cwd):** <PROJECT>\n**Preflight clause:** C5\n**Current failure:** no constraints doc found\n**Operator decision:** forge honours git ownership; never edit tests to pass.\n\nApply ONLY the minimal edit that clears this clause, per the operator decision. Touch nothing else, then stop.",
+  "options": {
+    "cwd": "<PROJECT>",
+    "model": "claude-haiku-4-5-20251001",
+    "permissionMode": "acceptEdits",
+    "allowedTools": [
+      "Read",
+      "Edit",
+      "Write"
+    ],
+    "disallowedTools": [
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "Grep",
+      "Glob",
+      "Task",
+      "Agent"
+    ],
+    "maxTurns": 8,
+    "abortController": "<AbortController>"
+  },
+  "optionsKeyOrder": [
+    "cwd",
+    "model",
+    "permissionMode",
+    "allowedTools",
+    "disallowedTools",
+    "maxTurns",
+    "abortController"
+  ],
+  "result": {
+    "runId": "capture-preflightfix",
+    "cleared": true
+  },
+  "events": [
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "start",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [
+        "<PROJECT>"
+      ],
+      "message": "preflight-fix.start (clause=C5, project=<PROJECT>)",
+      "metadata": {
+        "runId": "capture-preflightfix",
+        "clause": "C5"
+      },
+      "output_refs": [],
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "file_change",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "file.modify",
+      "metadata": {
+        "path": "/pinned/target",
+        "op": "modify"
+      },
+      "output_refs": [
+        "/pinned/target"
+      ],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "tool_use",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "tool.Edit",
+      "metadata": {
+        "tool": "Edit",
+        "input_summary": "/pinned/target",
+        "seq": 1
+      },
+      "output_refs": [
+        "/pinned/target"
+      ],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "pinned thinking block",
+      "metadata": {
+        "runId": "capture-preflightfix",
+        "kind": "thinking"
+      },
+      "output_refs": [],
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "[thinking redacted]",
+      "metadata": {
+        "runId": "capture-preflightfix",
+        "kind": "thinking"
+      },
+      "output_refs": [],
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "pinned reasoning text",
+      "metadata": {
+        "runId": "capture-preflightfix",
+        "kind": "reasoning"
+      },
+      "output_refs": [],
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "tool_use",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [],
+      "message": "tool.Read",
+      "metadata": {
+        "tool": "Read",
+        "input_summary": "/pinned/read",
+        "seq": 2
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cost_usd": 0.0042,
+      "cycle_id": "_preflight-fix-capture-preflightfix",
+      "event_id": "<event_id>",
+      "event_type": "end",
+      "initiative_id": "_preflight-fix-capture-preflightfix",
+      "input_refs": [
+        "<PROJECT>"
+      ],
+      "message": "preflight-fix.end (cleared=true)",
+      "metadata": {
+        "runId": "capture-preflightfix",
+        "clause": "C5",
+        "cleared": true
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "orchestrator",
+      "skill": "preflight-fix",
+      "started_at": "<started_at>"
+    }
+  ],
+  "logDirEntries": [
+    ".heartbeat",
+    "events.jsonl"
+  ]
+}

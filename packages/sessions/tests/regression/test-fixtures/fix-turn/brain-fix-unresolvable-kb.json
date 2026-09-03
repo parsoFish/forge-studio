@@ -1,0 +1,202 @@
+{
+  "prompt": "# Brain-Fix\n\nApply a single targeted fix.\n\n\n## Fix task\n\n**File (absolute path):** <THEME>\n**Finding kind:** frontmatter.missing-field\n**Finding message:** missing required frontmatter field: description\n\nOpen the file, apply ONLY the single targeted fix that clears this finding, do not touch any other files, then stop.",
+  "options": {
+    "cwd": "<ROOT>",
+    "model": "claude-haiku-4-5-20251001",
+    "disallowedTools": [
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "Write",
+      "Grep",
+      "Glob",
+      "Task",
+      "Agent"
+    ],
+    "maxTurns": 8,
+    "permissionMode": "default",
+    "allowedTools": [
+      "Read"
+    ],
+    "canUseTool": "<fn>",
+    "abortController": "<AbortController>"
+  },
+  "optionsKeyOrder": [
+    "cwd",
+    "model",
+    "disallowedTools",
+    "maxTurns",
+    "permissionMode",
+    "allowedTools",
+    "canUseTool",
+    "abortController"
+  ],
+  "result": {
+    "runId": "capture-brainfix-nokb",
+    "cleared": false,
+    "editAudit": {
+      "changes": [],
+      "refused": [],
+      "repaired": [],
+      "unsound": [],
+      "errors": [
+        "kb-edit-gate: the kb id \"no-such-kb\" resolves to no readable brain directory — this turn's writes could not be attributed or audited"
+      ]
+    }
+  },
+  "events": [
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "start",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [
+        "<THEME>"
+      ],
+      "message": "brain-fix.start (kind=frontmatter.missing-field, file=<THEME>)",
+      "metadata": {
+        "runId": "capture-brainfix-nokb",
+        "kbId": "no-such-kb",
+        "kind": "frontmatter.missing-field",
+        "check": "checkFrontmatter"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "file_change",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "file.modify",
+      "metadata": {
+        "path": "/pinned/target",
+        "op": "modify"
+      },
+      "output_refs": [
+        "/pinned/target"
+      ],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "tool_use",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "tool.Edit",
+      "metadata": {
+        "tool": "Edit",
+        "input_summary": "/pinned/target",
+        "seq": 1
+      },
+      "output_refs": [
+        "/pinned/target"
+      ],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "pinned thinking block",
+      "metadata": {
+        "runId": "capture-brainfix-nokb",
+        "kind": "thinking"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "[thinking redacted]",
+      "metadata": {
+        "runId": "capture-brainfix-nokb",
+        "kind": "thinking"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "log",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "pinned reasoning text",
+      "metadata": {
+        "runId": "capture-brainfix-nokb",
+        "kind": "reasoning"
+      },
+      "output_refs": [],
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "tool_use",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [],
+      "message": "tool.Read",
+      "metadata": {
+        "tool": "Read",
+        "input_summary": "/pinned/read",
+        "seq": 2
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    },
+    {
+      "cost_usd": 0.0042,
+      "cycle_id": "_brainfix-capture-brainfix-nokb",
+      "event_id": "<event_id>",
+      "event_type": "end",
+      "initiative_id": "_brainfix-capture-brainfix-nokb",
+      "input_refs": [
+        "<THEME>"
+      ],
+      "message": "brain-fix.end (cleared=false)",
+      "metadata": {
+        "runId": "capture-brainfix-nokb",
+        "kind": "frontmatter.missing-field",
+        "file": "<THEME>",
+        "cleared": false,
+        "refused": 0,
+        "unsound": [],
+        "gateErrors": [
+          "kb-edit-gate: the kb id \"no-such-kb\" resolves to no readable brain directory — this turn's writes could not be attributed or audited"
+        ]
+      },
+      "output_refs": [],
+      "parent_event_id": "<parent_event_id>",
+      "phase": "reflection",
+      "skill": "brain-fix",
+      "started_at": "<started_at>"
+    }
+  ]
+}
