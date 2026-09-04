@@ -60,8 +60,6 @@
   "packages/sessions/demo-builder-runner.test.ts": 859,
   "packages/sessions/interactive-finalizers.test.ts": 1255,
   "packages/sessions/interactive-runner.test.ts": 1848,
-  "packages/sessions/studio/session-kinds.test.ts": 2398,
-  "packages/sessions/studio/session-transcript.test.ts": 2400,
   "scripts/check-raw-fs-guarded.mjs": 1371,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
   "scripts/journeys/agents.mjs": 2230,
