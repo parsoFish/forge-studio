@@ -143,10 +143,12 @@ packages/flows/bridge-recovery.ts mkdirSync 1
 packages/flows/bridge-recovery.ts readFileSync 3
 packages/flows/bridge-recovery.ts renameSync 1
 packages/flows/bridge-recovery.ts rmSync 1
-packages/flows/bridge-studio-runs.ts existsSync 10
+packages/flows/bridge-studio-runs-review.ts existsSync 6
+packages/flows/bridge-studio-runs-review.ts readFileSync 2
+packages/flows/bridge-studio-runs.ts existsSync 4
 packages/flows/bridge-studio-runs.ts mkdirSync 1
 packages/flows/bridge-studio-runs.ts openSync 1
-packages/flows/bridge-studio-runs.ts readFileSync 3
+packages/flows/bridge-studio-runs.ts readFileSync 1
 packages/flows/bridge-studio-runs.ts renameSync 1
 packages/flows/bridge-studio-runs.ts rmSync 1
 packages/flows/bridge-studio-runs.ts spawn 1

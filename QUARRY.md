@@ -134,7 +134,8 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/bridge-studio-kb-routes-read.ts | knowledge | verbatim | 308 |
 | packages/knowledge/bridge-studio-kbs.ts | knowledge | verbatim | 720 |
 | packages/sessions/bridge-studio-lifecycle.ts | sessions | verbatim | 424 |
-| packages/flows/bridge-studio-runs.ts | flows | verbatim | 947 |
+| packages/flows/bridge-studio-runs.ts | flows | verbatim | 440 |
+| packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 517 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 206 |
 | packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 664 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | packages/sessions/session-resolution.ts | sessions | rewritten | 466 |
