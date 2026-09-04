@@ -45,7 +45,8 @@ import { fileURLToPath } from 'node:url';
 import { inspectBashCommand } from '../../bash-fence.ts';
 import { makeWriteRootCanUseTool, runAgentTurn, writeSessionStatus, type QueryFn, type WriteRootCanUseTool } from '../../interactive-session.ts';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
-import { loadSessionKinds, validateSessionKinds, BASH_FENCE_MODES } from '../../studio/session-kinds.ts';
+import { loadSessionKinds, BASH_FENCE_MODES } from '../../studio/session-kinds.ts';
+import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
 import { createLogger } from '@forge/kernel';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
