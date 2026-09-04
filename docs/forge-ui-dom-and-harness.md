@@ -1063,7 +1063,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   from the dispatch, which is why it drifted; there is now ONE table
   (`KICKOFF_SURFACES`), the component dispatches on it, `canStartFlow` reads
   `launches` off the same row, and `lib/flow-kickoff-render.test.ts` renders
-  every row and fails if a row claims a launch control it does not draw. Each row is a real anchor —
+  every row and fails if a row claims a launch control it does not draw. The
+  BUILD tab publishes the SAME attribute on its own read-only badge —
+  `span[data-component="flow-kickoff-badge"][data-kickoff-kind]` in
+  `FlowHeader` (ruling 167, bead `forge-8vfn.6.11.1`) — naming the launch
+  surface the LAST SAVE derived from the flow's head station. The two never
+  co-render: BUILD and MONITOR are the two branches of one ternary on
+  `/flows/[id]`, so a story may read `data-kickoff-kind` from whichever tab it
+  stands on. The badge is read-only ON PURPOSE: `apps/studio` imports contracts
+  only (§0), so the derivation lives in `@forge/flows` and the builder renders
+  its answer — a control here would be a second source of truth for the same
+  fact, which is what `flows-25` was. Each row is a real anchor —
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
   [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]` — whose
   `href` is its `/flows/[id]/run/[runId]` detail page. Notes on the vocabulary,

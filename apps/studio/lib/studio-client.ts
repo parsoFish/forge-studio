@@ -2165,11 +2165,10 @@ export async function fetchFlow(id: string): Promise<Flow | null> {
  *  FAILURE path carries the bridge's per-node validation `findings` — the
  *  client used to throw them away, leaving only the words "validation
  *  failed". Pass `create: true` in the body for the /flows/new path so a
- *  duplicate id 409s instead of silently overwriting (flows-13). */
+ *  duplicate id 409s instead of silently overwriting (flows-13). `kickoff` is the launch surface the save DERIVED from the flow's head station (ruling 167); null ⇒ the generic picker. */
 export async function saveFlow(
-  id: string,
-  body: Record<string, unknown>,
-): Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[] }> {
+  id: string, body: Record<string, unknown>,
+): Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[]; kickoff?: string | null }> {
   const r = await studioPut(`/api/studio/flows/${encodeURIComponent(id)}`, body);
   if (!r.ok) {
     return {
@@ -2182,6 +2181,7 @@ export async function saveFlow(
     ok: true,
     version: typeof r.data?.version === 'number' ? (r.data.version as number) : undefined,
     findings: Array.isArray(r.data?.findings) ? (r.data!.findings as unknown[]) : [],
+    kickoff: typeof r.data?.kickoff === 'string' ? (r.data.kickoff as string) : null,
   };
 }
 

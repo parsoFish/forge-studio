@@ -42,6 +42,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { deriveFlowKickoff } from '@forge/flows/studio/flow-kickoff.ts';
 import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
@@ -449,7 +450,25 @@ export async function handleStudioWriteRoutes(
         Array.isArray(b['nodes']) ? (b['nodes'] as unknown[]) : [],
       );
 
-      // 5. Merge UI-editable fields over existing; preserve id/origin/disposable/path
+      // 5. Build the agents map. validateFlow reads it (step 8) and so does the
+      // kickoff derivation, which needs the HEAD station's definition — so it
+      // is built before the merge rather than after it.
+      const skillsDir = toSkillsDir(ctx.forgeRoot);
+      let agentsList: AgentDefinition[] = [];
+      try {
+        agentsList = listAgentDefinitions(skillsDir);
+      } catch {
+        // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
+      }
+      const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
+      // Fold in the starters this save would materialise, so the agent-ref
+      // check passes on the strength of the PLAN rather than of a side effect
+      // that has already been committed to disk.
+      for (const { def } of plannedStarterAgents) {
+        if (!agentsMap.has(def.slug)) agentsMap.set(def.slug, def);
+      }
+
+      // 6. Merge UI-editable fields over existing; preserve id/origin/disposable/path
       const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? id;
       const goal = typeof b['goal'] === 'string' ? b['goal'] : existing?.goal ?? '';
       const project =
@@ -486,30 +505,25 @@ export async function handleStudioWriteRoutes(
         nodes: nodes as FlowDefinition['nodes'],
         edges: edges as FlowDefinition['edges'],
         triggers: triggers as FlowDefinition['triggers'],
-        // W7-B4 (flows-12): kickoff is a NON-UI field the builder never
-        // sends — it must ride the merge like origin/disposable, or every
-        // BUILD-tab save of a seeded flow silently strips its launch surface.
-        kickoff: existing?.kickoff,
+        // W7-B4 (flows-12): kickoff is a NON-UI field the builder never sends —
+        // it must ride the merge like origin/disposable, or every BUILD-tab
+        // save of a seeded flow silently strips its launch surface. Ruling 167
+        // (bead `forge-8vfn.6.11.1`): where the merge leaves it ABSENT, derive
+        // it from the flow's head station, so a flow the builder created is
+        // launchable the way its first station needs to be launched. A declared
+        // kind is authoritative — `deriveFlowKickoff` fills, it never rewrites.
+        kickoff: deriveFlowKickoff(
+          {
+            nodes: nodes as FlowDefinition['nodes'],
+            edges: edges as FlowDefinition['edges'],
+            kickoff: existing?.kickoff,
+          },
+          agentsMap,
+        ),
         path: flowYamlPath,
       };
 
-      // 6. Build agents map for validateFlow
-      const skillsDir = toSkillsDir(ctx.forgeRoot);
-      let agentsList: AgentDefinition[] = [];
-      try {
-        agentsList = listAgentDefinitions(skillsDir);
-      } catch {
-        // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
-      }
-      const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
-      // Fold in the starters this save would materialise, so the agent-ref
-      // check passes on the strength of the PLAN rather than of a side effect
-      // that has already been committed to disk.
-      for (const { def } of plannedStarterAgents) {
-        if (!agentsMap.has(def.slug)) agentsMap.set(def.slug, def);
-      }
-
-      // 7. Validate — reject on any error-level finding. `flowProjectOf`
+      // 8. Validate — reject on any error-level finding. `flowProjectOf`
       // resolves the TARGET flow's project (R2-04) so the external-trigger
       // project requirement checks the flow the mint actually uses. `merged`
       // (the flow being saved) is resolved from memory so an in-flight edit to
@@ -556,7 +570,7 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 8. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
+      // 9. Edit-lock: reject if a run of this flowId is currently active (ADR-028 D6)
       // The predicate `r.flowId === id` is correct: since S8/DEC-3 run-model stamps
       // each run with the flowId its manifest names (forge-architect /
       // forge-develop), so a run of THIS flow is locked while in flight.
@@ -579,7 +593,16 @@ export async function handleStudioWriteRoutes(
       // Definition drops YAML comments by construction, so "don't rewrite"
       // is the only preservation that actually preserves.
       if (existing && flowEditableProjection(existing) === flowEditableProjection(merged)) {
-        sendJson(res, 200, { ok: true, id, version: existing.version, noop: true, findings: flagFindings }, origin);
+        sendJson(
+          res,
+          200,
+          // `kickoff` rides every 200: the BUILD tab renders the derived launch
+          // surface read-only and has no way to compute it, so a response that
+          // omits it on the no-op path leaves the badge stale after a save the
+          // operator watched succeed. Null = no kickoff = the generic picker.
+          { ok: true, id, version: existing.version, noop: true, findings: flagFindings, kickoff: merged.kickoff?.kind ?? null },
+          origin,
+        );
         return true;
       }
 
@@ -587,7 +610,7 @@ export async function handleStudioWriteRoutes(
       // mutated (review finding 10).
       const materializedAgents = applyStarterAgentMaterialisation(ctx.forgeRoot, plannedStarterAgents);
 
-      // 9. Serialize and write. Derive from the ALREADY-GUARDED real path.
+      // 10. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);
       const flowDir = dirname(flowYamlPath);
       if (!existsSync(flowDir)) {
@@ -600,6 +623,8 @@ export async function handleStudioWriteRoutes(
         id,
         version,
         findings: flagFindings,
+        /** The launch surface this save derived (ruling 167). Null ⇒ generic. */
+        kickoff: merged.kickoff?.kind ?? null,
         ...(materializedAgents.length > 0 ? { materializedAgents } : {}),
       }, origin);
     } catch (err) {

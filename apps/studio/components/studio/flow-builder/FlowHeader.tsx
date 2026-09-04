@@ -30,6 +30,7 @@ import type { Flow, Kb, FlowTrigger, ShippedTriggerKind, WebhookEventName } from
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { FlowSaveFindings, type FlowSaveFinding } from './FlowSaveFindings';
+import { KICKOFF_SURFACES, kickoffSurfaceIdOfKind } from '@/lib/kickoff-surface';
 
 export type FlowHeaderState = {
   name: string;
@@ -51,7 +52,7 @@ type Props = {
   /** Triggered by Save; parent provides nodes/edges to include in the PUT
    *  body. W7-B4 (flows-10): the failure shape carries the bridge's per-node
    *  `findings` — rendered below the header, never thrown away. */
-  onSave: () => Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[] }>;
+  onSave: () => Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[]; kickoff?: string | null }>;
   /** All flows (for the flow selector) */
   flows: Flow[];
   /** Called when the user selects a different flow from the dropdown */
@@ -78,6 +79,15 @@ export function FlowHeader({
   onDelete,
 }: Props): JSX.Element {
   const [kbs, setKbs] = useState<Kb[]>([]);
+  /**
+   * Ruling 167 (bead `forge-8vfn.6.11.1`) — the launch surface DERIVED from
+   * this flow's head station. `apps/studio` imports contracts only (§0), so
+   * the one derivation lives in `@forge/flows` and this holds its answer:
+   * the loaded flow's saved kind, replaced by whatever the last save
+   * reported. `undefined` means "this mount has not saved yet", which is why
+   * it is not `null` — `null` is a real answer (no kickoff ⇒ generic).
+   */
+  const [savedKickoffKind, setSavedKickoffKind] = useState<string | null | undefined>(undefined);
   // W7-B4 (flows-10): the last failed save's validation findings — cleared
   // by any subsequent successful save.
   const [saveFindings, setSaveFindings] = useState<FlowSaveFinding[]>([]);
@@ -104,6 +114,10 @@ export function FlowHeader({
     const r = await onSave();
     const failedFindings = !r.ok && Array.isArray(r.findings) ? (r.findings as FlowSaveFinding[]) : [];
     setSaveFindings(failedFindings.filter((f) => typeof f?.message === 'string'));
+    // A save is the ONLY moment the derived launch surface can change, and the
+    // server is the only thing that knows it — so the badge follows the
+    // response rather than waiting for a reload of the flow list.
+    if (r.ok) setSavedKickoffKind(r.kickoff ?? null);
     return r;
   });
 
@@ -280,6 +294,37 @@ export function FlowHeader({
             v{version}
           </span>
         )}
+
+        {/* Ruling 167 — how this flow is launched, DERIVED at save from its
+            head station and shown back read-only. Not a control: an operator
+            choice here could disagree with the canvas, which is exactly the
+            `declared-data-fails-open` shape `flows-25` cost us. It reports the
+            last SAVED file, so the copy says so rather than implying live. */}
+        {(() => {
+          const surfaceId = kickoffSurfaceIdOfKind(
+            savedKickoffKind === undefined
+              ? flows.find((f) => f.id === flowId)?.kickoff?.kind
+              : savedKickoffKind,
+          );
+          return (
+            <span
+              data-component="flow-kickoff-badge"
+              data-kickoff-kind={surfaceId}
+              title="Derived from this flow's first station when it was last saved — save again to update it."
+              style={{
+                fontSize: 11,
+                color: 'var(--faint)',
+                fontFamily: 'var(--font-mono)',
+                padding: '2px 8px',
+                border: '1px solid var(--line)',
+                borderRadius: 4,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Launched from: {KICKOFF_SURFACES[surfaceId].builderLabel}
+            </span>
+          );
+        })()}
 
         <div style={{ flex: 1 }} />
 
