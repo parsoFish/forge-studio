@@ -1,0 +1,587 @@
+/**
+ * Tests for the initiative-manifest module — parse, validate, serialise, write.
+ * Used by the architect (to write valid manifests) and the orchestrator
+ * (to read them when claiming).
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  parseManifest,
+  serializeManifest,
+  validateManifest,
+  writeManifest,
+  readManifestOrigin,
+  readManifestCycleId,
+  readManifestFlowId,
+  persistManifestCycleId,
+  persistManifestResumeFromDemo,
+  persistManifestSendBack,
+  persistManifestSpecs,
+  type InitiativeManifest,
+} from '../../manifest.ts';
+
+function fixture(): InitiativeManifest {
+  return {
+    initiative_id: 'INIT-2026-05-04-x',
+    project: 'demo',
+    project_repo_path: '/tmp/demo',
+    created_at: '2026-05-04T18:00:00Z',
+    iteration_budget: 50,
+    cost_budget_usd: 25,
+    phase: 'pending',
+    origin: 'architect',
+    body: '# Demo initiative\n\nAdd auth + profile.\n\n## Acceptance Criteria\n\nGiven a user, when they log in, then they see the dashboard.',
+  };
+}
+
+test('serializeManifest → parseManifest round-trips fields and body', () => {
+  const m = fixture();
+  const md = serializeManifest(m);
+  assert.match(md, /^---\n/);
+  assert.match(md, /initiative_id: INIT-2026-05-04-x/);
+  assert.match(md, /# Demo initiative/);
+
+  const parsed = parseManifest(md);
+  assert.equal(parsed.initiative_id, m.initiative_id);
+  assert.equal(parsed.project, m.project);
+  assert.equal(parsed.iteration_budget, 50);
+  assert.equal(parsed.cost_budget_usd, 25);
+  assert.equal(parsed.origin, 'architect');
+  assert.match(parsed.body, /# Demo initiative/);
+  assert.match(parsed.body, /Acceptance Criteria/);
+});
+
+test('validateManifest: passes a clean manifest', () => {
+  const errors = validateManifest(fixture());
+  assert.deepEqual(errors, []);
+});
+
+test('validateManifest: rejects missing initiative_id', () => {
+  const m = { ...fixture(), initiative_id: '' };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => e.includes('initiative_id')), `got ${JSON.stringify(errors)}`);
+});
+
+test('validateManifest: rejects malformed initiative_id', () => {
+  const m = { ...fixture(), initiative_id: 'not-an-init-id' };
+  const errors = validateManifest(m);
+  assert.ok(
+    errors.some((e) => e.includes('initiative_id') && e.includes('INIT-')),
+    `got ${JSON.stringify(errors)}`,
+  );
+});
+
+test('validateManifest: rejects budgets ≤ 0', () => {
+  const e1 = validateManifest({ ...fixture(), iteration_budget: 0 });
+  const e2 = validateManifest({ ...fixture(), cost_budget_usd: -1 });
+  assert.ok(e1.some((e) => e.includes('iteration_budget')));
+  assert.ok(e2.some((e) => e.includes('cost_budget_usd')));
+});
+
+test('cost_ceiling_usd: optional, round-trips through serialize/parse when present', () => {
+  const m: InitiativeManifest = { ...fixture(), cost_ceiling_usd: 120 };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.cost_ceiling_usd, 120);
+});
+
+test('cost_ceiling_usd: absent stays undefined (not serialized)', () => {
+  const md = serializeManifest(fixture());
+  assert.ok(!/cost_ceiling_usd/.test(md), 'absent ceiling must not be serialized');
+  assert.equal(parseManifest(md).cost_ceiling_usd, undefined);
+});
+
+test('W6-RV-1: title round-trips through serialize/parse when present, trimmed', () => {
+  const m: InitiativeManifest = { ...fixture(), title: '  Add dark mode toggle  ' };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.title, 'Add dark mode toggle');
+});
+
+test('W6-RV-1: title absent stays undefined (not serialized) — a legacy manifest round-trips byte-clean', () => {
+  const md = serializeManifest(fixture());
+  assert.ok(!/^title:/m.test(md), 'absent title must not be serialized');
+  assert.equal(parseManifest(md).title, undefined);
+});
+
+test('W6-RV-1: a blank title in frontmatter parses as absent, not an empty string', () => {
+  const md = serializeManifest(fixture()).replace(/^---\n/, '---\ntitle: "   "\n');
+  assert.equal(parseManifest(md).title, undefined);
+});
+
+test('validateManifest: rejects cost_ceiling_usd ≤ 0 when present, allows absent', () => {
+  assert.ok(validateManifest({ ...fixture(), cost_ceiling_usd: 0 }).some((e) => e.includes('cost_ceiling_usd')));
+  assert.equal(validateManifest(fixture()).filter((e) => e.includes('cost_ceiling_usd')).length, 0);
+});
+
+test('writeManifest: writes a parseable file under _queue/pending/', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-manifest-'));
+  try {
+    const queueRoot = join(dir, '_queue');
+    // SEC-02: writeManifest is the ingest choke point — it containment-checks
+    // the manifest's path fields against `<forgeRoot>/projects` (forgeRoot =
+    // the queue root's parent). The fixture's stock `/tmp/demo` is genuinely
+    // outside that root and is now correctly refused, so this test states a
+    // real, contained repo path.
+    mkdirSync(join(dir, 'projects'), { recursive: true });
+    const m = { ...fixture(), project_repo_path: join(dir, 'projects', 'demo') };
+    const out = writeManifest(m, { queueRoot });
+    assert.ok(existsSync(out), `expected file at ${out}`);
+    assert.ok(out.includes('pending'), `expected pending/, got ${out}`);
+
+    const content = readFileSync(out, 'utf8');
+    const parsed = parseManifest(content);
+    assert.equal(parsed.initiative_id, m.initiative_id);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('writeManifest: refuses to write an invalid manifest', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-manifest-'));
+  try {
+    const queueRoot = join(dir, '_queue');
+    const bad = { ...fixture(), initiative_id: '' };
+    assert.throws(
+      () => writeManifest(bad, { queueRoot }),
+      /initiative_id/,
+      'should throw with field name',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseManifest: tolerates manifests with body only (no optional fields)', () => {
+  const md = `---\ninitiative_id: INIT-2026-05-04-y\nproject: demo\ncreated_at: 2026-05-04T18:00:00Z\niteration_budget: 10\ncost_budget_usd: 5\nphase: pending\n---\n\n# Body only\n`;
+  const parsed = parseManifest(md);
+  assert.match(parsed.body, /Body only/);
+  assert.equal(parsed.quality_gate_cmd, undefined);
+  assert.equal(parsed.depends_on_initiatives, undefined);
+});
+
+test('parseManifest: throws on missing required fields', () => {
+  const md = `---\nproject: demo\n---\n\nbody`;
+  assert.throws(() => parseManifest(md), /initiative_id/);
+});
+
+// ---- F-04 quality_gate_cmd round trip ----
+
+test('parseManifest: extracts quality_gate_cmd from frontmatter', () => {
+  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nphase: pending\nquality_gate_cmd:\n  - pytest\n  - -q\n  - tests/\n---\n\n# body\n`;
+  const parsed = parseManifest(md);
+  assert.deepEqual(parsed.quality_gate_cmd, ['pytest', '-q', 'tests/']);
+});
+
+test('serializeManifest → parseManifest: quality_gate_cmd round-trips', () => {
+  const m: InitiativeManifest = {
+    ...fixture(),
+    quality_gate_cmd: ['cargo', 'test', '--all'],
+  };
+  const round = parseManifest(serializeManifest(m));
+  assert.deepEqual(round.quality_gate_cmd, ['cargo', 'test', '--all']);
+});
+
+test('parseManifest: missing quality_gate_cmd is undefined (allowed)', () => {
+  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nphase: pending\n---\nbody`;
+  const parsed = parseManifest(md);
+  assert.equal(parsed.quality_gate_cmd, undefined);
+});
+
+test('validateManifest: rejects empty quality_gate_cmd array', () => {
+  const m = { ...fixture(), quality_gate_cmd: [] as string[] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /quality_gate_cmd/i.test(e)));
+});
+
+test('validateManifest: rejects quality_gate_cmd with empty-string entries', () => {
+  const m = { ...fixture(), quality_gate_cmd: ['', 'test'] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /quality_gate_cmd/i.test(e)));
+});
+
+test('validateManifest: accepts a well-formed quality_gate_cmd', () => {
+  const m = { ...fixture(), quality_gate_cmd: ['npm', 'test'] };
+  const errors = validateManifest(m);
+  assert.equal(errors.length, 0, `unexpected errors: ${errors.join('; ')}`);
+});
+
+// ---------- G6: origin cohort tag (closes I6) ----------
+
+test('parseManifest: origin defaults to architect when frontmatter omits it', () => {
+  // A legacy manifest authored before the `origin` field existed.
+  const legacy = [
+    '---',
+    'initiative_id: INIT-2026-05-04-legacy',
+    'project: demo',
+    'created_at: 2026-05-04T18:00:00Z',
+    'iteration_budget: 10',
+    'cost_budget_usd: 2',
+    'phase: pending',
+    '---',
+    '',
+    '# Legacy initiative',
+  ].join('\n');
+  const parsed = parseManifest(legacy);
+  assert.equal(parsed.origin, 'architect');
+  // ...and validates clean (the default is a valid value).
+  assert.deepEqual(validateManifest(parsed), []);
+});
+
+test('parseManifest: explicit human-directed origin is preserved', () => {
+  const m = { ...fixture(), origin: 'human-directed' as const };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.origin, 'human-directed');
+});
+
+test('serializeManifest: always writes origin (legacy manifest gains the tag on round-trip)', () => {
+  // Round-tripping a manifest that defaulted origin must persist the tag
+  // so the cohort split is unambiguous on disk, not inferred forever.
+  const legacy = [
+    '---',
+    'initiative_id: INIT-2026-05-04-legacy',
+    'project: demo',
+    'created_at: 2026-05-04T18:00:00Z',
+    'iteration_budget: 10',
+    'cost_budget_usd: 2',
+    'phase: pending',
+    '---',
+    '',
+    '# Legacy initiative',
+  ].join('\n');
+  const serialised = serializeManifest(parseManifest(legacy));
+  assert.match(serialised, /origin: architect/);
+});
+
+test('validateManifest: rejects an unrecognised origin', () => {
+  const m = { ...fixture(), origin: 'sideloaded' as unknown as 'architect' };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /origin must be one of/i.test(e)), errors.join('; '));
+});
+
+test('ADR 019: resume_from round-trips and is omitted when absent', () => {
+  // Absent → not serialised.
+  const plain = serializeManifest(fixture());
+  assert.ok(!/resume_from:/.test(plain), 'resume_from should be absent by default');
+  assert.equal(parseManifest(plain).resume_from, undefined);
+
+  // Present → serialised + parsed back.
+  const resuming = serializeManifest({ ...fixture(), resume_from: 'demo' });
+  assert.match(resuming, /resume_from: demo/);
+  assert.equal(parseManifest(resuming).resume_from, 'demo');
+
+  // ADR 026: the retired 'developer' resume value is dropped on parse (undefined).
+  const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
+  assert.equal(parseManifest(legacy).resume_from, undefined);
+});
+
+test('ADR 028 / J5: flow_id round-trips and is omitted when absent', () => {
+  // Absent → not serialised, parses to undefined (legacy manifests).
+  const plain = serializeManifest(fixture());
+  assert.ok(!/flow_id:/.test(plain), 'flow_id should be absent by default');
+  assert.equal(parseManifest(plain).flow_id, undefined);
+
+  // Present → serialised + parsed back.
+  const withFlow = serializeManifest({ ...fixture(), flow_id: 'my-first-flow' });
+  assert.match(withFlow, /flow_id: my-first-flow/);
+  assert.equal(parseManifest(withFlow).flow_id, 'my-first-flow');
+});
+
+test('readManifestOrigin: reads the tag from a file, defaults on missing/unparseable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-origin-'));
+  try {
+    const hd = join(dir, 'hd.md');
+    const m = { ...fixture(), initiative_id: 'INIT-2026-05-04-hd', origin: 'human-directed' as const };
+    writeFileSync(hd, serializeManifest(m));
+    assert.equal(readManifestOrigin(hd), 'human-directed');
+    // Missing file → default (telemetry must never throw).
+    assert.equal(readManifestOrigin(join(dir, 'nope.md')), 'architect');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readManifestFlowId: reads flow_id from a file, null on missing/absent/unparseable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-flowid-'));
+  try {
+    const withFlow = join(dir, 'rr.md');
+    writeFileSync(withFlow, serializeManifest({ ...fixture(), flow_id: 'forge-develop' }));
+    assert.equal(readManifestFlowId(withFlow), 'forge-develop');
+    // Absent flow_id → null (S8/DEC-3: runCycle then throws — no default flow).
+    const noFlow = join(dir, 'plain.md');
+    writeFileSync(noFlow, serializeManifest(fixture()));
+    assert.equal(readManifestFlowId(noFlow), null);
+    // Missing file → null (never throws).
+    assert.equal(readManifestFlowId(join(dir, 'nope.md')), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 026: cycle_id round-trips and is omitted when absent', () => {
+  // Absent → omit-on-undefined (frontmatter unchanged for legacy manifests).
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /cycle_id:/);
+  assert.equal(parseManifest(plain).cycle_id, undefined);
+
+  // Present → round-trips.
+  const withId = serializeManifest({ ...fixture(), cycle_id: '2026-06-07T10-00-00_INIT-2026-05-04-x' });
+  assert.match(withId, /cycle_id: 2026-06-07T10-00-00_INIT-2026-05-04-x/);
+  assert.equal(parseManifest(withId).cycle_id, '2026-06-07T10-00-00_INIT-2026-05-04-x');
+});
+
+test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it back', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-cycleid-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    // Legacy manifest → no persisted id.
+    assert.equal(readManifestCycleId(p), null);
+
+    persistManifestCycleId(p, 'CYCLE-A');
+    assert.equal(readManifestCycleId(p), 'CYCLE-A');
+    // Idempotent: a second persist never re-stamps (the anchor is immutable).
+    persistManifestCycleId(p, 'CYCLE-B');
+    assert.equal(readManifestCycleId(p), 'CYCLE-A');
+
+    // Missing file → null + no throw.
+    assert.equal(readManifestCycleId(join(dir, 'nope.md')), null);
+    persistManifestCycleId(join(dir, 'nope.md'), 'X'); // no-op, must not throw
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 019 (R4-10-F6): persistManifestResumeFromDemo stamps the resume marker (crash recovery)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-resume-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, undefined);
+    persistManifestResumeFromDemo(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'demo');
+    // Idempotent + missing-file safe.
+    persistManifestResumeFromDemo(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'demo');
+    persistManifestResumeFromDemo(join(dir, 'nope.md')); // no-op, must not throw
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- P4: architect telemetry fields (cost + duration) ----------
+
+test('P4: architect_session_id / architect_cost_usd / architect_duration_ms round-trip', () => {
+  const m: InitiativeManifest = {
+    ...fixture(),
+    architect_session_id: 'sid-abc123',
+    architect_cost_usd: 0.46,
+    architect_duration_ms: 95000,
+  };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /architect_session_id: sid-abc123/);
+  assert.match(serialised, /architect_cost_usd: 0\.46/);
+  assert.match(serialised, /architect_duration_ms: 95000/);
+
+  const parsed = parseManifest(serialised);
+  assert.equal(parsed.architect_session_id, 'sid-abc123');
+  assert.equal(parsed.architect_cost_usd, 0.46);
+  assert.equal(parsed.architect_duration_ms, 95000);
+});
+
+test('P4: architect telemetry fields absent on legacy manifest (omit-when-undefined)', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /architect_session_id/);
+  assert.doesNotMatch(plain, /architect_cost_usd/);
+  assert.doesNotMatch(plain, /architect_duration_ms/);
+
+  const parsed = parseManifest(plain);
+  assert.equal(parsed.architect_session_id, undefined);
+  assert.equal(parsed.architect_cost_usd, undefined);
+  assert.equal(parsed.architect_duration_ms, undefined);
+});
+
+test('P4: architect_cost_usd of 0 round-trips (zero is a valid measurement)', () => {
+  const m: InitiativeManifest = {
+    ...fixture(),
+    architect_cost_usd: 0,
+    architect_duration_ms: 0,
+  };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.architect_cost_usd, 0);
+  assert.equal(parsed.architect_duration_ms, 0);
+});
+
+// ---------- R4-05-F2: specs (initiative → spec-WI back-references) ----------
+
+test('R4-05-F2: specs round-trips through parse -> serialize (present multi-entry)', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', 'WI-2', 'WI-3'] };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /specs:/);
+  const parsed = parseManifest(serialised);
+  assert.deepEqual(parsed.specs, ['WI-1', 'WI-2', 'WI-3']);
+});
+
+test('R4-05-F2: specs is absent by default and omitted on serialize', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /specs:/);
+  assert.equal(parseManifest(plain).specs, undefined);
+});
+
+test('R4-05-F2: an empty specs array is omitted on serialize (mirrors depends_on_initiatives)', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: [] };
+  const serialised = serializeManifest(m);
+  assert.doesNotMatch(serialised, /specs:/);
+  assert.equal(parseManifest(serialised).specs, undefined);
+});
+
+test('validateManifest: rejects a non-string specs entry', () => {
+  const m = { ...fixture(), specs: ['WI-1', 123] as unknown as string[] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /specs/i.test(e)), errors.join('; '));
+});
+
+test('validateManifest: rejects an empty-string specs entry', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', ''] };
+  const errors = validateManifest(m);
+  assert.ok(errors.some((e) => /specs/i.test(e)), errors.join('; '));
+});
+
+test('validateManifest: accepts a well-formed specs list', () => {
+  const m: InitiativeManifest = { ...fixture(), specs: ['WI-1', 'WI-2'] };
+  const errors = validateManifest(m);
+  assert.equal(errors.length, 0, `unexpected errors: ${errors.join('; ')}`);
+});
+
+test('R4-05-F2: persistManifestSpecs writes then re-reads the list, overwrites on second call, and never throws on a missing file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-specs-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).specs, undefined);
+
+    persistManifestSpecs(p, ['WI-1', 'WI-2']);
+    assert.deepEqual(parseManifest(readFileSync(p, 'utf8')).specs, ['WI-1', 'WI-2']);
+
+    // NOT one-shot: a second call overwrites the list (unlike cycle_id).
+    persistManifestSpecs(p, ['WI-1', 'WI-2', 'WI-3']);
+    assert.deepEqual(parseManifest(readFileSync(p, 'utf8')).specs, ['WI-1', 'WI-2', 'WI-3']);
+
+    // Missing file → no-op, must not throw.
+    persistManifestSpecs(join(dir, 'nope.md'), ['WI-1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- ADR 040: send-back loop (resume_from: 'develop', review_rounds, persistManifestSendBack) ----------
+
+function frontmatterWith(field: string, raw: string): string {
+  return [
+    '---',
+    'initiative_id: INIT-2026-05-04-x',
+    'project: demo',
+    'project_repo_path: /tmp/demo',
+    "created_at: '2026-05-04T18:00:00Z'",
+    'iteration_budget: 50',
+    'cost_budget_usd: 25',
+    'phase: pending',
+    'origin: architect',
+    `${field}: ${raw}`,
+    '---',
+    '# x',
+    '',
+  ].join('\n');
+}
+
+test('ADR 040: resume_from accepts \'develop\' (send-back re-entry) and round-trips', () => {
+  const resuming = serializeManifest({ ...fixture(), resume_from: 'develop' });
+  assert.match(resuming, /resume_from: develop/);
+  assert.equal(parseManifest(resuming).resume_from, 'develop');
+});
+
+test('ADR 040: resume_from rejects unrecognised values on parse (dropped to undefined)', () => {
+  const md = frontmatterWith('resume_from', 'bogus');
+  assert.equal(parseManifest(md).resume_from, undefined);
+});
+
+test('ADR 040: review_rounds round-trips through serialize -> parse', () => {
+  const m: InitiativeManifest = { ...fixture(), review_rounds: 3 };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /review_rounds: 3/);
+  assert.equal(parseManifest(serialised).review_rounds, 3);
+});
+
+test('ADR 040: review_rounds is absent by default and omitted on serialize', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /review_rounds/);
+  assert.equal(parseManifest(plain).review_rounds, undefined);
+});
+
+test('ADR 040: parseManifest drops invalid review_rounds values (negative, non-numeric, non-integer)', () => {
+  assert.equal(parseManifest(frontmatterWith('review_rounds', '-1')).review_rounds, undefined);
+  assert.equal(parseManifest(frontmatterWith('review_rounds', 'x')).review_rounds, undefined);
+  assert.equal(parseManifest(frontmatterWith('review_rounds', '1.5')).review_rounds, undefined);
+});
+
+test('validateManifest: rejects review_rounds that is not a non-negative integer, accepts a well-formed one', () => {
+  assert.ok(
+    validateManifest({ ...fixture(), review_rounds: -1 }).some((e) => /review_rounds/i.test(e)),
+  );
+  assert.ok(
+    validateManifest({ ...fixture(), review_rounds: 1.5 }).some((e) => /review_rounds/i.test(e)),
+  );
+  assert.equal(
+    validateManifest({ ...fixture(), review_rounds: 0 }).filter((e) => /review_rounds/i.test(e)).length,
+    0,
+  );
+  assert.equal(validateManifest(fixture()).filter((e) => /review_rounds/i.test(e)).length, 0);
+});
+
+test('ADR 040: persistManifestSendBack stamps resume_from:develop + increments review_rounds from a fresh manifest', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+
+    const first = persistManifestSendBack(p);
+    assert.deepEqual(first, { round: 1 });
+    const onDisk1 = parseManifest(readFileSync(p, 'utf8'));
+    assert.equal(onDisk1.resume_from, 'develop');
+    assert.equal(onDisk1.review_rounds, 1);
+
+    const second = persistManifestSendBack(p);
+    assert.deepEqual(second, { round: 2 });
+    const onDisk2 = parseManifest(readFileSync(p, 'utf8'));
+    assert.equal(onDisk2.review_rounds, 2);
+    assert.equal(onDisk2.resume_from, 'develop');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 040: persistManifestSendBack overwrites a stale resume_from:demo crash-recovery stamp — an operator send-back supersedes it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest({ ...fixture(), resume_from: 'demo' }));
+
+    const result = persistManifestSendBack(p);
+    assert.deepEqual(result, { round: 1 });
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'develop');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifest file is missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    assert.throws(() => persistManifestSendBack(join(dir, 'nope.md')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
