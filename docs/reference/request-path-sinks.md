@@ -2042,3 +2042,69 @@ The classification is unchanged and is restated rather than assumed: the read is
 `flowPathForId`'s `<forgeRoot>/studio/flows/<flowId>/flow.yaml`, where `flowId`
 is a registry-resolved flow id and the root is now kernel's `FORGE_ROOT` rather
 than a hand-counted `'..'` chain — strictly tighter than before the move.
+
+### Relocated in M4-sessions s6 (exit row 5, PR B1) — four splits, nine sink pairs, no new surface
+
+Four `packages/sessions` production files came under the 800-line cap by
+splitting along the one cycle-free seam each had. Nine `(file, sink)` pairs move
+with the code they belong to; **not one sink is added, removed or re-shaped**:
+
+```
+bridge-studio-sessions.ts   readdirSync 1 -> 0      session-resolution.ts            readdirSync 0 -> 1
+interactive-runner.ts       lstatSync   1 -> 0      interactive-agent-step.ts        lstatSync   0 -> 1
+interactive-runner.ts       mkdirSync   2 -> 0      interactive-agent-step.ts        mkdirSync   0 -> 2
+interactive-runner.ts       readdirSync 1 -> 0      interactive-agent-step.ts        readdirSync 0 -> 1
+interactive-runner.ts       readFileSync 2 -> 0     interactive-agent-step.ts        readFileSync 0 -> 2
+interactive-runner.ts       rmSync      1 -> 0      interactive-agent-step.ts        rmSync      0 -> 1
+session-transcript.ts       readdirSync 2 -> 0      session-artifact-derivers.ts     readdirSync 0 -> 2
+session-transcript.ts       readFileSync 1 -> 0     session-artifact-derivers.ts     readFileSync 0 -> 1
+session-transcript.ts       realpathSync 6 -> 0     session-artifact-derivers.ts     realpathSync 0 -> 6
+```
+
+**Total sink CALLS are conserved exactly: 1,366 at merged main, 1,366 here** —
+the reading that matters (§15.73), because a "verbatim" move that quietly copies
+rather than moves shows up here and nowhere else. Reachable modules 304 → 308
+and `check-raw-fs-guarded`'s sweep 376 → 380: the four new modules in both, which
+is the direction §15.85 asks for. `(file, sink)` rows are 604 on both sides; the
+full-model tier stays at 80 modules and the allowlisted residual at 91, unmoved.
+
+Every figure was measured on a disposable worktree at merged main and on this
+head, and measured FOUR times, because four sibling merges moved the ground
+under it while this one PR was in flight:
+
+| measured at | calls | modules | raw-fs sweep | staled by |
+|---|---|---|---|---|
+| `b3f728c0` | 1,349 | 295 → 299 | — | flows #359, #363 |
+| `79462612` | 1,366 | 303 → 307 | 383 → 387 | flows #365 |
+| `d99afd04` | 1,366 | 304 → 308 | 384 → 388 | flows #367 |
+| `544f6621` | **1,366** | **304 → 308** | **376 → 380** | current |
+
+The invariants never moved: calls conserved, rows equal, +4 modules and +4 swept
+for the four new files. Only the absolutes did. A conservation claim re-based
+rather than re-measured proves conservation against a tree that no longer
+exists (§15.88, §15.105 — the sibling-merge rule reaches a lane's measurements,
+not only its pins).
+
+The six `realpathSync` calls are `safeReadFileInSession`'s realpath-guarded
+choke point. It travelled with the derivers because eleven call sites in that
+module use it; it remains the ONE guarded read path for a session dir, and the
+parent imports it back rather than growing a second one.
+
+#### A stale-loose ratchet on the file this PR splits, closed in passing
+
+Two baseline rows for `kinds/architect-plan.ts` — `existsSync 4` and
+`mkdirSync 2` — described a file that has had **0 and 1** since #362 replaced the
+archive helper's raw calls with `resolveGuardedPath`. #362 tightened the code and
+left the ratchet loose; the checker reports that as `tighten:`, which does not
+fail, so it survives every gate. The rows now read the truth (`existsSync`
+deleted, `mkdirSync 1`), and the baseline's 605 lines become 604 — exactly the
+604 rows the scanner finds, so declared and measured agree for the first time.
+
+**Why it is fixed here rather than filed:** a ratchet that permits four
+`existsSync` calls in a file containing none will pass a regression that adds
+four. Proven, not asserted — the same planted regression (one raw `existsSync`
+on a `sessionId`-derived path inside `archiveSessionDir`) run against both
+baselines: **tightened → FAIL** (`existsSync: baseline 0 -> now 1`, exit 1);
+**loose → PASS** (exit 0, reported only as a `tighten:` hint). Recording that as
+a residual for a later session, on the one file this PR is splitting, is the
+declared-data-fails-open shape ruling 102 was written for. No code changed.

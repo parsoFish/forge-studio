@@ -68,7 +68,7 @@ import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
-import { sessionIsReadable } from '@forge/sessions/bridge-studio-sessions.ts';
+import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
 import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
 import {
   sessionLogDirName,

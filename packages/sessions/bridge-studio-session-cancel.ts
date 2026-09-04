@@ -55,7 +55,7 @@ import { resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
-import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './bridge-studio-sessions.ts';
+import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './session-resolution.ts';
 import { killTrackedTurn } from './bridge-studio-lifecycle.ts';
 
 export type SessionCancelRouteContext = StudioContext & {

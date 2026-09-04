@@ -20,15 +20,8 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import {
-  renderPlanDoc,
-  renderPlanHtml,
-  writePlanDoc,
-  extractGwtBlocks,
-  type ArchitectSession,
-  type ProposedInitiative,
-  type CouncilTranscript,
-} from '../../kinds/architect-plan.ts';
+import { renderPlanDoc, writePlanDoc, type ArchitectSession, type ProposedInitiative, type CouncilTranscript } from '../../kinds/architect-plan.ts';
+import { renderPlanHtml, extractGwtBlocks } from '../../kinds/architect-plan-html.ts';
 // Note: ExplorationFields, ProjectMetrics, InitiativeType removed (ARCH-4).
 // Note: ProposedFeature + features[] removed (no-feature model, 2026-06-04).
 

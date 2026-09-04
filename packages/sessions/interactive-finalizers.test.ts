@@ -973,8 +973,8 @@ test(
 // recorded in this WI's report, applied and reverted in the live worktree,
 // never left uncommitted.
 // ===========================================================================
-
-const TRANSCRIPT_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'studio', 'session-transcript.ts');
+// M4 row 5: PACKAGE_DIRNAME travelled with deriveFilePackage; re-pointed, not relaxed (§15.93).
+const TRANSCRIPT_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'studio', 'session-artifact-derivers.ts');
 const FINALIZERS_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-finalizers.ts');
 
 /** Extracts session-transcript.ts's `PACKAGE_DIRNAME` module-private constant
