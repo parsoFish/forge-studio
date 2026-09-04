@@ -3,9 +3,10 @@ name: architect-completeness-critic
 description: Adversarial completeness review of drafted initiative manifests against the session's idea, interview, and PLAN — before they promote to the queue.
 phase: architect
 surface: unattended
-# Internal/system agent — dispatched by architect-runner.ts at FINALIZE (after
-# the operator approves the PLAN, before manifests promote to the queue),
-# never composed into a flow. `library: false` keeps it out of the Studio
+# Internal/system agent — dispatched at FINALIZE by
+# `runFinalizeCompletenessCritic` in `packages/sessions/kinds/architect.ts`
+# (after the operator approves the PLAN, before manifests promote to the
+# queue), never composed into a flow. `library: false` keeps it out of the Studio
 # agent roster while retaining the runtime spec deriveAgentSpec needs (same
 # pattern as brain-fix / instructions-creator / demo-builder).
 library: false
@@ -71,7 +72,7 @@ and contradictions, not preferences.
 
 ## Output contract
 
-Return ONLY the structured findings JSON (shape enforced by `FINDINGS_SCHEMA` in `orchestrator/completeness-critic-runner.ts`).
+Return ONLY the structured findings JSON (shape enforced by `FINDINGS_SCHEMA` in `packages/sessions/kinds/architect-critic.ts`).
 
 - `findings: []` means a clean pass — say so with an empty array, do not
   invent a finding to fill the slot.
