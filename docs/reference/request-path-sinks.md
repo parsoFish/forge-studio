@@ -2044,18 +2044,26 @@ session-transcript.ts       realpathSync 6 -> 0     session-artifact-derivers.ts
 **Total sink CALLS are conserved exactly: 1,366 at merged main, 1,366 here** —
 the reading that matters (§15.73), because a "verbatim" move that quietly copies
 rather than moves shows up here and nowhere else. Reachable modules 304 → 308
-and `check-raw-fs-guarded`'s sweep 384 → 388: the four new modules in both, which
+and `check-raw-fs-guarded`'s sweep 376 → 380: the four new modules in both, which
 is the direction §15.85 asks for. `(file, sink)` rows are 604 on both sides; the
-full-model tier stays at 80 modules and the allowlisted residual at 93, unmoved.
+full-model tier stays at 80 modules and the allowlisted residual at 91, unmoved.
 
 Every figure was measured on a disposable worktree at merged main and on this
-head, and measured TWICE — the first pass read 1,366 / 303 → 307 / 383 → 387
-against `79462612`, and flows' #365 landed between that pass and this one,
-moving merged main's own baseline. The branch's original numbers (1,349 calls,
-295 → 299 modules) were true at `b3f728c0` and were staled the same way by #359
-and #363. Three sibling merges, three re-measurements: a conservation claim
-re-based rather than re-measured proves conservation against a tree that no
-longer exists (§15.88, §15.105).
+head, and measured FOUR times, because four sibling merges moved the ground
+under it while this one PR was in flight:
+
+| measured at | calls | modules | raw-fs sweep | staled by |
+|---|---|---|---|---|
+| `b3f728c0` | 1,349 | 295 → 299 | — | flows #359, #363 |
+| `79462612` | 1,366 | 303 → 307 | 383 → 387 | flows #365 |
+| `d99afd04` | 1,366 | 304 → 308 | 384 → 388 | flows #367 |
+| `544f6621` | **1,366** | **304 → 308** | **376 → 380** | current |
+
+The invariants never moved: calls conserved, rows equal, +4 modules and +4 swept
+for the four new files. Only the absolutes did. A conservation claim re-based
+rather than re-measured proves conservation against a tree that no longer
+exists (§15.88, §15.105 — the sibling-merge rule reaches a lane's measurements,
+not only its pins).
 
 The six `realpathSync` calls are `safeReadFileInSession`'s realpath-guarded
 choke point. It travelled with the derivers because eleven call sites in that
