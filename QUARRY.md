@@ -155,6 +155,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/demo-runtime.ts | factory | verbatim | 184 |
 | packages/factory/demo-types.ts | factory | verbatim | 59 |
 | packages/factory/demo.ts | factory | verbatim | 232 |
+| apps/forge/library-flow-source.ts | apps/forge | rewritten | 14 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 58 |
 | apps/forge/dry-bridge.ts | kernel | rewritten | 428 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 67 |

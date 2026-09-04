@@ -67,6 +67,7 @@
  */
 import type { AgentFacts } from './studio/agent-facts.ts';
 import { createCatalogHandler, CATALOG_URL, type SdkAvailabilityFn } from './bridge-studio-catalog.ts';
+import type { FlowSource } from './studio/template-library.ts';
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
 
 import {
@@ -162,10 +163,12 @@ export type LibraryRouteDeps = {
   readonly agentFacts: AgentFacts;
   /** Live SDK availability, same reason: the adapter registry is agents'. */
   readonly isSdkAvailable: SdkAvailabilityFn;
+  /** The Flow kind's loaders — `@forge/flows` is rank 5 (ruling 113). */
+  readonly flowSource: FlowSource;
 };
 
 export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteContext> {
-  const { agentFacts } = deps;
+  const { agentFacts, flowSource } = deps;
   const handleCatalog = createCatalogHandler(deps);
   return [
   // ---- bridge-studio-catalog.ts (1 route, the last to leave the bridge)
@@ -324,21 +327,21 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     path: '/api/studio/templates',
     matches: (url) => pathOf(url) === '/api/studio/templates',
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:257, verbatim
-    handler: handleTemplateCreate,
+    handler: (req, res, ctx, url, method) => handleTemplateCreate(req, res, ctx, url, method, flowSource),
   },
   {
     method: 'PUT',
     path: '/api/studio/templates/:id',
     matches: (url) => TEMPLATE_ID_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:258, verbatim
-    handler: handleTemplatePut,
+    handler: (req, res, ctx, url, method) => handleTemplatePut(req, res, ctx, url, method, flowSource),
   },
   {
     method: 'DELETE',
     path: '/api/studio/templates/:id',
     matches: (url) => TEMPLATE_ID_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:259, verbatim
-    handler: handleTemplateDeleteRoute,
+    handler: (req, res, ctx, url, method) => handleTemplateDeleteRoute(req, res, ctx, url, method, flowSource),
   },
   {
     method: 'GET',
@@ -346,7 +349,7 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     matches: (url) => pathOf(url) === '/api/studio/templates',
     // exempt-local BY CONSTRUCTION: lists on-disk template files.
     dryClassification: 'exempt-local',
-    handler: handleTemplatesList,
+    handler: (req, res, ctx, url, method) => handleTemplatesList(req, res, ctx, url, method, flowSource),
   },
   {
     method: 'GET',
@@ -354,7 +357,7 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     matches: (url) => TEMPLATE_ID_RE.test(pathOf(url)),
     // exempt-local BY CONSTRUCTION: reads one on-disk template file.
     dryClassification: 'exempt-local',
-    handler: handleTemplateDetail,
+    handler: (req, res, ctx, url, method) => handleTemplateDetail(req, res, ctx, url, method, flowSource),
   },
 
   // ---- bridge-studio-instructions.ts (1 route, was :89)
