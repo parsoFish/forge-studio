@@ -74,7 +74,8 @@ function isolatedForgeRoot(): string {
 }
 
 /** A betterado-shaped fixture project: a drifted `<artifactRoot>/skills/`
- *  layout, a stale (non-starter) local test cmd + demoProcess + releaseProcess,
+ *  layout, a hand-authored (matching-no-starter) local test cmd + demoProcess
+ *  + releaseProcess,
  *  a preserved acceptance secret NAME, and a REAL secrets.env with a canary
  *  value that must never surface anywhere the reset writes or returns. */
 function betteradoShapedProject(): string {
@@ -133,7 +134,7 @@ test('reset.ts source never spells "secrets.env" in executable code — the stru
   );
 });
 
-test('applyContractReset preserves northStar/instructions/secret-name byte-identical; regenerates testProcess.local/demoProcess from the starter; PRESERVES releaseProcess (the starter has no opinion); never leaks the secret VALUE', () => {
+test('applyContractReset preserves northStar/instructions/secret-name byte-identical; PRESERVES a hand-authored testProcess.local/demoProcess that differs from EVERY starter; PRESERVES releaseProcess (the starter has no opinion); never leaks the secret VALUE', () => {
   const forgeRoot = isolatedForgeRoot();
   const projectDir = betteradoShapedProject();
   try {
@@ -182,16 +183,36 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
       'the secret NAME must survive byte-identical in testProcess.acceptance.requiresEnv',
     );
 
-    // --- Regeneration: testProcess.local / demoProcess ---------------------
-    assert.deepEqual(tp.local, { cmd: ['npm', 'test'] }, 'testProcess.local must regenerate to the typescript-cli starter value');
+    // --- PRESERVATION (bead forge-8vfn.6.4): hand-authored sections ---------
+    // Ruling 38 fix (b) preserves a section the MATCHED starter is silent on.
+    // It could not see the harm measured on the real ground: this fixture's
+    // `go test -tags all …` and its Go/ADO demo steps match NO starter forge
+    // ships, yet `typescript-cli` has an opinion on both, so both were
+    // rewritten — `go test …` became `npm test`, and a 3-step Go/ADO demo
+    // became a 2-step npm one (`_1.0/evidence/M4-projects-s3-S3/
+    // reset-dryrun-typescript-cli.txt`). A value that differs from EVERY
+    // starter was never template-derived; it is the operator's, and the
+    // section level is where that has to be decided, because ruling 38's
+    // whole-section-absent test cannot reach inside a section the starter
+    // does declare.
+    assert.deepEqual(
+      tp.local,
+      { cmd: ['go', 'test', '-tags', 'all', '-count=1', './...'] },
+      'a testProcess.local matching no starter is hand-authored and must survive verbatim',
+    );
     assert.deepEqual(
       rawAfter.demoProcess,
-      [
-        { kind: 'capture', text: 'Build the CLI (npm run build) and note the before state.' },
-        { kind: 'verify', text: 'Run npm run acceptance — the built binary vs a checked-in fixture.' },
-      ],
-      'demoProcess must regenerate to the typescript-cli starter steps',
+      [{ kind: 'capture', text: 'a stale, pre-current-template demo step' }],
+      'a demoProcess matching no starter is hand-authored and must survive verbatim',
     );
+
+    // …and the report says WHICH kind of preservation it is, so "the starter
+    // had no opinion" is never confused with "this is yours" (S15.92).
+    const reasonOf = (section: string) => drift.rows.find((r) => r.section === section);
+    assert.equal(reasonOf('testProcess.local')?.action, 'preserve');
+    assert.equal(reasonOf('testProcess.local')?.reason, 'hand-authored');
+    assert.equal(reasonOf('demoProcess')?.reason, 'hand-authored');
+    assert.equal(reasonOf('releaseProcess')?.reason, 'starter-silent');
 
     // --- PRESERVATION (ruling 38 fix b): releaseProcess ---------------------
     // typescript-cli declares no releaseProcess at all — the starter has NO
@@ -220,5 +241,57 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
     assert.equal(result.skillMovesApplied[0]?.id, 'ado-api-explorer');
   } finally {
     cleanup(forgeRoot, projectDir);
+  }
+});
+
+// ── Bead forge-8vfn.6.4: the rule must DISCRIMINATE, not blanket-preserve ────
+//
+// "Differs from every starter ⇒ hand-authored" is only worth having if the
+// converse holds: a value that matches SOME starter is template-derived, and a
+// reset to a different starter must still move it. Without this case,
+// preservation is indistinguishable from switching regeneration off.
+
+test('a section that matches ANOTHER starter is template-derived and still regenerates', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const projectDir = betteradoShapedProject();
+  try {
+    // Plant the typescript-API starter's demoProcess verbatim, then reset to
+    // typescript-cli. The project never authored these steps — it got them
+    // from a template — so the reset must carry it to the CLI ones.
+    const apiDemo = [
+      { kind: 'capture', text: 'Start the server and note the before state of the endpoint.' },
+      { kind: 'verify', text: 'GET the endpoint (e.g. /health) and assert the JSON response.' },
+    ];
+    const configPath = join(projectDir, '.forge', 'project.json');
+    const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(configPath, `${JSON.stringify({ ...raw, demoProcess: apiDemo }, null, 2)}\n`);
+
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
+    const demo = drift.rows.find((r) => r.section === 'demoProcess');
+    assert.equal(demo?.action, 'regenerate', 'a demoProcess taken from another starter is not hand-authored');
+    assert.deepEqual(demo?.after, [
+      { kind: 'capture', text: 'Build the CLI (npm run build) and note the before state.' },
+      { kind: 'verify', text: 'Run npm run acceptance — the built binary vs a checked-in fixture.' },
+    ]);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('with NO starters at all, nothing is called hand-authored — there is no basis to judge against', () => {
+  // The starter-less forgeRoot `reset-containment.test.ts` uses. Every mode
+  // already degrades to 'protected' there; the new rule must not invent a
+  // second, differently-worded preservation on top of it.
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-nostarters-'));
+  const projectDir = betteradoShapedProject();
+  try {
+    const drift = computeContractDrift(projectDir, { forgeRoot });
+    for (const row of drift.rows) {
+      assert.notEqual(row.reason, 'hand-authored', `row "${row.section}" claims hand-authored with no starter to compare against`);
+    }
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
