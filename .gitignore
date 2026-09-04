@@ -119,13 +119,18 @@ secrets.env
 # .claude/skills/journey-sync/ is the UI-journey maintenance contract (the demo
 # harness sync rules) and IS committed; .claude/skills/tiered-orchestration/ is the
 # campaign mechanism (lanes.sh, the lane protocol + hook, the stall watcher) and IS
-# committed — other .claude/skills stay local.
+# committed — and so are the two skills tiered-orchestration's "See also" sends its
+# readers to. Those two were ignored until 2026-09-04, so no lane worktree since M0
+# had them: a brief citing `immutable-gates` named a skill the lane could not open.
+# Other .claude/skills stay local.
 .claude/*
 !.claude/commands/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/journey-sync/
 !.claude/skills/tiered-orchestration/
+!.claude/skills/immutable-gates/
+!.claude/skills/adversarial-containment-review/
 *.swp
 *.swo
 *~
