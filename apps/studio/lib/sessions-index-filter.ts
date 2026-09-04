@@ -8,7 +8,7 @@
  * derive what to render, so the behaviour is unit-testable without a mount.
  *
  * Filtering never re-sorts: the bridge's needs-you-first-then-newest order
- * (`sortAndCapSessionIndexRows`, cli/ui-bridge.ts) is preserved verbatim —
+ * (`sortAndCapSessionIndexRows`, apps/forge/ui-bridge.ts) is preserved verbatim —
  * a filter only removes rows, exactly like the component's own established
  * "renders that order verbatim, never re-sorting client-side" rule.
  */

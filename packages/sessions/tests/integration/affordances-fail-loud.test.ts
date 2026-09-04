@@ -18,7 +18,7 @@
  * went with the M4 row-37 carve: COMMON §5 forbids a package test booting one,
  * and nothing it added was asserted (rulings 30/49/50). Nothing here weakens
  * the sibling suites: `affordances-revise.test.ts` owns every reachable path
- * against the REAL checked-in yaml, and `cli/bridge-studio-affordances.test.ts`
+ * against the REAL checked-in yaml, and `apps/forge/bridge-studio-affordances.test.ts`
  * still drives a real bridge for the host's own request policy.
  */
 

@@ -2,7 +2,7 @@
  * route-entry.ts — the one shape every package's HTTP route table declares.
  *
  * M4 §4 step 2: each package's `/api/*` handlers leave the bridge monoliths
- * (`cli/ui-bridge.ts` and its `bridge-studio*` siblings) and become a table in
+ * (`apps/forge/ui-bridge.ts` and its `bridge-studio*` siblings) and become a table in
  * `packages/<pkg>/routes.ts`. `apps/forge/routes.ts` is the host-owned
  * assembly — one `import` and one spread per package, the only line another
  * lane adds. The host dispatches the assembled table BEFORE its own remaining
@@ -24,7 +24,7 @@
  *
  * `dryClassification` IS NOT DECORATION. `cli/dry-bridge.ts` classifies every
  * route so `FORGE_DRY_BRIDGE=1` can refuse or stub the ones that spawn, and
- * `cli/dry-bridge-coverage.test.ts` counts them. An entry that loses its
+ * `apps/forge/dry-bridge-coverage.test.ts` counts them. An entry that loses its
  * classification in the carve is a route that SPAWNS under a dry bridge. The
  * field is non-optional for exactly that reason: the type will not let a lane
  * forget it.
@@ -70,7 +70,7 @@ export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * shape of a *response*, and the host is the single place that policy is
  * applied." That is right, and it left `RouteEntry` unable to express a
  * MUTATING carved route: a handler needing a body had to import `readJson`
- * from `cli/bridge-studio.ts`, re-adding the exact `package-to-legacy` row the
+ * from `apps/forge/bridge-studio.ts`, re-adding the exact `package-to-legacy` row the
  * envelope move existed to remove. The knowledge lane did not meet this — both
  * its carved POSTs take everything from the URL — and the library lane, whose
  * routes are almost entirely writes, met it immediately.

@@ -65,7 +65,7 @@ contentBase64}]`; the kind is derived SERVER-side against
 client-supplied kind is never read — and gated against the target agent's
 declared `materials:` (`agentAcceptsMaterial`, R2-B11's previously-uncalled
 gate — this is its first production caller). Accepted uploads stage under
-`_logs/<runId>/materials/` (`cli/materials-staging.ts`, guarded via
+`_logs/<runId>/materials/` (`packages/agents/materials-staging.ts`, guarded via
 `resolveGuardedPath`, check-then-write with zero partial writes on refusal)
 and are recorded on the run's own event log as REFERENCES only
 (`{path, kind}`, the `agent-run.materials-staged` log event) — contents are
@@ -130,7 +130,7 @@ collapses to `phaseLogRefreshSignal(run, nodeId)`
 (`forge-ui/lib/phase-log-refresh.ts`) reading that server-attributed field —
 the attribution is NOT re-derived client-side, because only 4 of 12 phase
 strings equal their node id. **No new emission path**: the existing 200ms
-`events.jsonl` poll-tail + WebSocket broadcast (`cli/ui-bridge.ts`) carries
+`events.jsonl` poll-tail + WebSocket broadcast (`apps/forge/ui-bridge.ts`) carries
 it, so ADR-025's deferred items stay deferred. A same-render terminal
 transition no longer drops a node's final line (its `end`, or for a failed
 node its `error` — the one line that says why it failed).
@@ -183,7 +183,7 @@ node expand/collapse) and the extended `flows-run-drawer-live-tail`, plus a
 `/agents/[id]` gains a per-agent run-history ledger, rendered by the SAME
 `forge-ui/components/studio/HistoryLedger.tsx` the flow monitor uses — the
 "build once, two surfaces" mandate of R6-B7 discharged. Rows come from a new
-read route `GET /api/agents/:slug/history` (`cli/ui-bridge.ts`) which joins
+read route `GET /api/agents/:slug/history` (`apps/forge/ui-bridge.ts`) which joins
 **three execution paths**, each row's status and cost read from **that
 target's own record**: flow-node runs (attribution from the flow definitions'
 own `node.agent`, status `run.phases[nodeId]`, cost
@@ -225,11 +225,11 @@ git commit because `projects/<name>/` is a managed project's own working
 tree. It now delegates to `resolveGuardedPath`'s per-segment identity walk.
 Six escape shapes (directory symlink, leaf file symlink, hardlinked leaf ×
 standalone and session paths) are pinned in
-`cli/ui-bridge-agent-history-containment.test.ts`; `nlink === 1` is what
+`apps/forge/ui-bridge-agent-history-containment.test.ts`; `nlink === 1` is what
 closes the hardlinks, since `realpath` is structurally blind to them. Audit
 rows added to `docs/reference/request-path-sinks.md` including a **retraction**
 of the row that had described the old guard as containment. The sinks
-baseline moved **422 → 421** — the fix removed `cli/ui-bridge.ts`'s last
+baseline moved **422 → 421** — the fix removed `apps/forge/ui-bridge.ts`'s last
 `statSync` sink outright. The sweep of other call sites is **SEC-04**
 (`forge-ebj`), deliberately out of scope here.
 
@@ -238,7 +238,7 @@ path on all three link kinds but not the `unresolved` state (page wiring is
 `tsc`-verified, per this repo's standing note for `'use client'` shells);
 `safeReadFileInSession`'s hardlink residual is untouched for the OTHER
 session files it reads, since this route uses a stricter purpose-built choke
-point; and `cli/ui-bridge.ts` (3998 lines) plus
+point; and `apps/forge/ui-bridge.ts` (3998 lines) plus
 `forge-ui/app/agents/[id]/page.tsx` (877) both exceed the 800-line hard max,
 pre-existing and filed rather than split inside a pinned security fix.
 
@@ -613,7 +613,7 @@ through the live `aggregateRun` rather than invented.
     lint-resolution; Ingest activity lists reflection-driven ingest events
     from the event log, read-only, with **no ingest affordance** (explicit
     negative AC — decision 3). **Mockup check names are illustrative, the
-    real `cli/brain-lint.ts` check list wins** (2026-08-03 review pass: the
+    real `packages/knowledge/brain-lint.ts` check list wins** (2026-08-03 review pass: the
     mockup's "theme distribution balance" / "raw evidence archived" names
     don't exist as checks, and the real set is ~10 functions, not 9 — do NOT
     build the invented checks). ACs: named checks match `forge brain lint`
@@ -682,7 +682,7 @@ through the live `aggregateRun` rather than invented.
 - **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C.
   There is exactly **one** pending-change signal in all of Studio and it is
   hard-coded to a single file: `communityIndexMeta`
-  (`cli/bridge-studio-community.ts`) runs a literal `git status --porcelain --
+  (`packages/library/bridge-studio-community.ts`) runs a literal `git status --porcelain --
   studio/community/registry.yaml`, publishes `meta.registryDirty`, and
   `forge-ui/app/community/page.tsx` renders a notice from it. Agents, flows, hooks
   and knowledge-base edits produce **no signal at all** — an operator can author a
@@ -850,7 +850,7 @@ R4-11-F4 attention strip during real multi-project operation.
   `forge-uie` (the ratchet is blind to a new CALLER of an already-unguarded
   shared function), `forge-2w4` (a third home of the parse-body-before-status
   class), `forge-aug` (the standalone scan is unbounded and `_agent-*` dirs
-  are never pruned), and `forge-mqf` (`cli/ui-bridge.ts` at 3998 lines).
+  are never pruned), and `forge-mqf` (`apps/forge/ui-bridge.ts` at 3998 lines).
 - 2026-08-15 — **Wave-6 docs-sync pass.** R6-03-F1/F2 flipped `planned` →
   `implemented` (delivered by the IA-1..8 batches; F3 superseded by IA-5).
   R6-08 gains a delivery note (B12/B13/IA-4) without flipping its own
@@ -862,7 +862,7 @@ R4-11-F4 attention strip during real multi-project operation.
   [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C, the wave-8
   ON-2 platform-round-trip design spike. Generalizes the one hard-coded
   single-path dirty check in Studio (`communityIndexMeta` →
-  `meta.registryDirty`, `cli/bridge-studio-community.ts`) into one derivation
+  `meta.registryDirty`, `packages/library/bridge-studio-community.ts`) into one derivation
   over a declared, drift-guarded set of Studio-written tracked roots, surfaced
   where the objects live rather than only on `/community`. Routed to R6 by
   `docs/roadmaps/README.md` §2's coverage map (*"Operator surface &

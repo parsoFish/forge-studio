@@ -305,7 +305,7 @@ function parseRepo(v: unknown): string | undefined {
  * Best-effort per project: a project whose `.forge/project.json` fails to
  * load (malformed, unrelated to `repo`) is skipped rather than crashing
  * resolution for an event about a DIFFERENT project — mirrors
- * `cli/bridge-hooks.ts`'s `findWebhookTrigger` per-flow try/catch precedent.
+ * `packages/flows/bridge-hooks.ts`'s `findWebhookTrigger` per-flow try/catch precedent.
  */
 export function resolveProjectIdForRepo(forgeRoot: string, repo: string): string | null {
   if (!REPO_RE.test(repo)) return null;

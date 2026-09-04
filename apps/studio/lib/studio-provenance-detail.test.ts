@@ -1,5 +1,5 @@
 /**
- * AT-12 (bead forge-3oq review, T3 companion to cli/studio-provenance.test.ts's
+ * AT-12 (bead forge-3oq review, T3 companion to apps/forge/studio-provenance.test.ts's
  * AT-8/AT-9/AT-10/AT-11) — the CLIENT side of the KB/flow detail-route gap.
  *
  * `forge-ui/lib/studio-client.ts` declares `Kb.provenance` REQUIRED with a
@@ -98,7 +98,7 @@ test('AT-12b: fetchKb normalises an ABSENT wire `provenance` (the honest shape o
     status: 200,
     json: async () => ({
       // No `provenance` key at all — exactly what GET /api/studio/kbs/:id
-      // sends TODAY (cli/bridge-studio-kbs.ts's `kbPublic` spread carries no
+      // sends TODAY (packages/knowledge/bridge-studio-kbs.ts's `kbPublic` spread carries no
       // provenance field pre-fix).
       kb: {
         id: 'no-provenance-kb',

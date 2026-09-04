@@ -2,7 +2,7 @@
  * routes.ts — `@forge/knowledge`'s HTTP routes, as a table.
  *
  * M4 §4 step 2. These routes used to reach their handlers through two
- * monolithic prefix dispatchers that `cli/ui-bridge.ts` called in sequence
+ * monolithic prefix dispatchers that `apps/forge/ui-bridge.ts` called in sequence
  * (`:2366-2367`). The handlers have not moved; what has moved is the
  * DISPATCH, out of an if-chain buried in a 6,602-line host and into a table
  * `apps/forge/routes.ts` assembles.
@@ -22,7 +22,7 @@
  * `bridge-studio-kbs.ts` routes followed in the PR that split that 2,068-line
  * file five ways under the 800-line cap — extracting eleven arms from a file
  * that is simultaneously being broken up is one rewrite, not two.
- * `handleStudioKbRoutes` is now DELETED, along with `cli/ui-bridge.ts`'s
+ * `handleStudioKbRoutes` is now DELETED, along with `apps/forge/ui-bridge.ts`'s
  * import of it and its call at `:2367`; nothing dispatches these routes but
  * this table.
  *
@@ -91,7 +91,7 @@ import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
  * The context these handlers receive. `StudioContext` moved to `@forge/kernel`
  * with the rest of the HTTP envelope (T1 ruling on PARK 2), so this is now a
  * re-export rather than the structural duplicate it had to be while the type
- * still lived in `cli/bridge-studio.ts`.
+ * still lived in `apps/forge/bridge-studio.ts`.
  */
 export type KnowledgeRouteContext = RouteContext;
 
@@ -127,7 +127,7 @@ const m = {
 
 /**
  * Ordered, first-match-wins. The order below is the order the two if-chains
- * matched these arms in at `161c5abb`, and `cli/ui-bridge.ts:2366-2367` called
+ * matched these arms in at `161c5abb`, and `apps/forge/ui-bridge.ts:2366-2367` called
  * `handleStudioKbRoutes` BEFORE `handleStudioKbDrainRoutes`, so the eleven
  * `bridge-studio-kbs.ts` arms (:1156 :1178 :1214 :1266 :1337 :1553 :1625 :1753
  * :1783 :1809 :1842) precede the six `bridge-studio-kb-drain.ts` arms (:1490

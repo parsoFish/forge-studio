@@ -43,7 +43,7 @@ flow id was retired, and every manifest writer (`orchestrator/manifest.ts`,
 `flow-runner.ts`, `architect-runner.ts`, `enqueue-develop-run.ts`) now requires
 a real `flow_id`; `run-model.ts`'s `FALLBACK_FLOW_ID = 'unknown'` applies only
 to pre-S8 manifests, never to a live operator-authored flow. Verification
-test: **R5-04-F1** — `cli/bridge-studio-flows.test.ts` ("PUT
+test: **R5-04-F1** — `apps/forge/bridge-studio-flows.test.ts` ("PUT
 /api/studio/flows/locked-flow → 423 when a run with that flowId is active"),
 green; R5-04 implemented 2026-07-18 (roadmap R5-B10).
 
@@ -161,7 +161,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     **Recurrence + second trigger path (2026-07-16):** with NO daemon alive, the
     walkthrough's real `approve-and-merge` click hit the bridge's verdict-approve
     handler, whose `runReleaseFinalize` call is an **in-process SDK agent turn**
-    (`cli/ui-bridge.ts` wiring; `cli/bridge-studio-runs.ts` approve branch) —
+    (`apps/forge/ui-bridge.ts` wiring; `packages/flows/bridge-studio-runs.ts` approve branch) —
     structurally outside `FORGE_ARCHITECT_NO_SPAWN`, which only guards `spawn()`
     sites. A real finalizer ran ($0.58), and because the seeded `worktree_path`
     was a plain dir inside the forge repo, its git ops bubbled up to forge's own
@@ -175,7 +175,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     campaign's scope):** the bridge exposes three real-agent trigger surfaces no
     env guard covers — the in-process `runReleaseFinalize` in verdict-approve
     (plus the real `gh pr merge` beside it), `spawnBrainFix`
-    (`cli/bridge-studio-kbs.ts`, KB lint-resolution route), and
+    (`packages/knowledge/bridge-studio-kbs.ts`, KB lint-resolution route), and
     `POST /api/scheduler/start` (boots the real daemon). A harness-mode seam
     (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
     paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
@@ -189,7 +189,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     now exposes `listPlainSkills(forgeRoot)` (a live filesystem scan of
     `skills/*/SKILL.md` entries with no `runtime` block — the inverse of
     `isStudioAgent`), and `GET /api/studio/catalog`
-    (`cli/bridge-studio.ts`) unions it into `catalog.skills` — community entries
+    (`apps/forge/bridge-studio.ts`) unions it into `catalog.skills` — community entries
     win on an id collision — so a `/skills/new`-authored skill appears in the
     palette on the very next fetch, no bridge restart. The `agents` journey's
     `agents-scratch-build` beat now drags the real skill `skills-create` authored
@@ -227,7 +227,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    agent `composition.skills`), the ONE creation entry point
    (`[data-action="new-skill"]`, D8), and a marketplace draft→scan→approve→
    re-review install pipeline (`orchestrator/studio/skill-library.ts`,
-   `cli/bridge-studio-skills.ts` — see `docs/roadmaps/R3-library-componentry.md`
+   `packages/library/bridge-studio-skills.ts` — see `docs/roadmaps/R3-library-componentry.md`
    baseline R3-B8). (Item 11 above — UI-created skills invisible to the catalog
    palette — was already resolved as of R3-01-F2.) **NOT closed by this:** a
    surface to EDIT an existing local skill's SKILL.md body — `/skills/[id]` is
@@ -361,7 +361,7 @@ is authoritative for how/when.
   DELETE-encoded-as-`POST … (delete)`. A legit refactor (named regex constant, braced
   gate, arrow handler) either reds with a misleading "stale table entry?" message or
   silently loosens matching. Document all shapes in the known-limits header; extend the
-  direction-2 offender message to name scanner-shape breakage. `cli/dry-bridge-coverage.test.ts`. *(R7)*
+  direction-2 offender message to name scanner-shape breakage. `apps/forge/dry-bridge-coverage.test.ts`. *(R7)*
 - **Manifest `cycle_id` unvalidated → `createLogger` path resolution** (pre-existing root
   cause, not a regression; this branch added one more call site exercising it). A
   maliciously-crafted `cycle_id` (`../`) would write logs outside `ctx.logsRoot`; today's
@@ -444,7 +444,7 @@ All minor; R1-01 landed clean (opus whole-branch + security review both clean). 
 can pick them up:
 
 - **`listProjectIds` not factored.** The project-id enumeration (`discoverProjects(...).map(p => p.id)`)
-  is duplicated inline at the `POST /api/studio/kbs` binding check and in `cli/studio-lint.ts` (its flow
+  is duplicated inline at the `POST /api/studio/kbs` binding check and in `apps/forge/studio-lint.ts` (its flow
   sibling `listFlowIds` was factored to `registry.ts`). Factor a parallel `listProjectIds` if a third
   consumer appears. *Re-entry:* next touch of either site.
 - **`forge studio lint`'s KB scan is one-level** (`brain/<id>/kb.yaml`) — it does not descend into

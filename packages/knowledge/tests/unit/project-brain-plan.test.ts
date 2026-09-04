@@ -133,7 +133,7 @@ test('RED (R4-19 WI-1): a flow/band kb_binding reads CYCLE evidence, not the (no
   // NOTE (T1, R4-19 WI-1): the original pin also asserted the prompt never
   // contains `status.project_repo_path` at all. That is logically impossible
   // for the REAL flow/band shape: the create hand-off sets
-  // project_repo_path = join(projectsRoot, '.kb-<id>') (cli/bridge-studio-kbs.ts),
+  // project_repo_path = join(projectsRoot, '.kb-<id>') (packages/knowledge/bridge-studio-kbs.ts),
   // i.e. the PARENT of the .kb-anchored STAGING dir — and the verbatim
   // staging-dir WRITE line (companion test below) necessarily contains STAGING,
   // hence its parent. The real intent (no project-repo READ) is fully captured

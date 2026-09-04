@@ -183,7 +183,7 @@ test('routes-table: the maintenance route is ONE row valued stub-actions — fiv
 });
 
 test('routes-table: cli/dry-bridge.ts KEEPS its two op-scoped maintenance rows — it classifies, it does not dispatch, so the finer grain is not the table\'s to flatten', () => {
-  const manifest = readFileSync(new URL('../../../../cli/dry-bridge.ts', import.meta.url), 'utf8');
+  const manifest = readFileSync(new URL('../../../../apps/forge/dry-bridge.ts', import.meta.url), 'utf8');
   for (const row of ['/api/studio/kbs/:id/maintenance (op=fix-agent)',
                      '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)']) {
     assert.ok(manifest.includes(row),

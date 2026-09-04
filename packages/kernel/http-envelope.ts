@@ -2,14 +2,14 @@
  * http-envelope.ts — the HTTP response envelope every carved route table needs.
  *
  * M4 §4 step 2, T1 ruling on M4-knowledge's PARK 2. These five symbols lived in
- * `cli/bridge-studio.ts`. Every package that carves its routes out of the
+ * `apps/forge/bridge-studio.ts`. Every package that carves its routes out of the
  * bridge needs them, and a package importing `cli/` is a `package-to-legacy`
  * boundary violation — so the knowledge lane's first carve would have added one
  * such row, and the five later carves (projects, library, sessions, agents,
  * flows) would each have added their own. They live here instead, which removes
  * the row rather than baselining six of them.
  *
- * `cli/bridge-studio.ts` re-exports all five as a transition affordance so its
+ * `apps/forge/bridge-studio.ts` re-exports all five as a transition affordance so its
  * existing importers are untouched; when the host itself moves (flows lane) the
  * re-export goes with it.
  *
@@ -24,7 +24,7 @@
  * `pathOnly`'s two-line twin — so the first carved route that reads a query
  * string should move it rather than import `cli/`." The sessions lane's
  * `/api/studio/sessions` index route is that route (M4, `additive: kernel`).
- * `cli/bridge-studio.ts` re-exports it so the host's callers are unchanged.
+ * `apps/forge/bridge-studio.ts` re-exports it so the host's callers are unchanged.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 

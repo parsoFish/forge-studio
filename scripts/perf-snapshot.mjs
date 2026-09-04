@@ -202,7 +202,7 @@ async function probeUi(uiUrl) {
 /** Time a single GET: wall-clock ms via performance.now() around the fetch
  *  (through to the body being fully read, so it reflects real payload
  *  transfer, not just headers), plus the response's byte length + status.
- *  `fetchImpl` is injectable (mirrors cli/forge-watch.ts's
+ *  `fetchImpl` is injectable (mirrors apps/forge/forge-watch.ts's
  *  probeBridgeIdentity) so tests can stub non-2xx/rejecting responses
  *  without a live server. Never throws on an HTTP error — a non-2xx is a
  *  valid sample (ok:false); it only throws on a network-level failure

@@ -16,7 +16,7 @@
  *   DELETE /api/studio/skills/:id      → delete (W7-B4, library-05)    (handleSkillDelete)
  *
  * M4 route-carve: each route above used to be one arm of a single dispatcher,
- * `handleStudioSkillsRoutes`, that `cli/ui-bridge.ts` called directly. That
+ * `handleStudioSkillsRoutes`, that `apps/forge/ui-bridge.ts` called directly. That
  * dispatcher is now gone — `packages/library/routes.ts` is what dispatches
  * these, as a table. Each handler below keeps the SAME five-parameter
  * contract the dispatcher's arms ran under —
@@ -64,13 +64,13 @@ import { installSkillPackage, approveSkillDraft, repinSkillPackage } from './stu
 import { removeInstallLedgerEntry } from './studio/skill-install-ledger.ts';
 
 // SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept
-// at or below the host's own body-size cap (~1 MiB, cli/ui-bridge.ts) so a
+// at or below the host's own body-size cap (~1 MiB, apps/forge/ui-bridge.ts) so a
 // staged package can never exceed what the body reader already admits; a
 // request over this cap is refused before any staging write.
 const MAX_STAGED_PACKAGE_BYTES = 1 * 1024 * 1024; // 1 MiB
 
 /** Server-minted, unpredictable staging id — mirrors `newRunStamp` in
- *  cli/ui-bridge.ts (ISO-8601 stamp to ms precision + 4 base36 chars, so two
+ *  apps/forge/ui-bridge.ts (ISO-8601 stamp to ms precision + 4 base36 chars, so two
  *  installs in the same millisecond never collide onto one staging dir). NEVER
  *  derived from client input: the guarded stage's containment proof rests on
  *  this being fully server-controlled. */
@@ -134,7 +134,7 @@ export async function handleSkillsList(req: IncomingMessage, res: ServerResponse
 /**
  * POST /api/studio/skills (P2) — author a plain composable skill.
  *
- * MOVED VERBATIM from cli/bridge-studio-writes.ts (deleted there in this
+ * MOVED VERBATIM from apps/forge/bridge-studio-writes.ts (deleted there in this
  * same commit) — behaviour must not change at all; AT-55 pins it.
  * A "skill" here is a plain SKILL.md (name + description + body, no runtime
  * block) — composable into agents. Distinct from a studio agent (which has a
@@ -208,7 +208,7 @@ export async function handleSkillCreate(req: IncomingMessage, res: ServerRespons
  *   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
  * Every field is validated at this boundary; a SERVER-derived sourceId (never
  * from the client) names a private staging dir under
- * <forgeRoot>/_skill-staging; stageSkillPackage (cli/skill-staging.ts) writes
+ * <forgeRoot>/_skill-staging; stageSkillPackage (packages/library/skill-staging.ts) writes
  * each entry through the shared realpath containment guard, and the returned
  * server-trusted staged realpath is what installSkillPackage copies from. The
  * staging dir is rm'd in a `finally` on BOTH success and failure. Every
@@ -275,7 +275,7 @@ export async function handleSkillInstall(req: IncomingMessage, res: ServerRespon
       try {
         // stagingRoot must exist before the guard resolves against it
         // (resolveGuardedPath realpath's its root and refuses a missing one).
-        // Mirrors the stageMaterials caller in cli/ui-bridge.ts, which mkdir's
+        // Mirrors the stageMaterials caller in apps/forge/ui-bridge.ts, which mkdir's
         // the run dir before staging.
         mkdirSync(stagingRoot, { recursive: true });
         const stagedDir = stageSkillPackage(stagingRoot, sourceId, entries);
@@ -598,7 +598,7 @@ export async function handleSkillDetail(req: IncomingMessage, res: ServerRespons
       const d = (data ?? {}) as Record<string, unknown>;
 
       // WI-3: the forge-ui detail page needs source/usedBy/provenance, which
-      // this route did not carry until now. No cli/bridge-studio-skills.test.ts
+      // this route did not carry until now. No packages/library/bridge-studio-skills.test.ts
       // assertion pins an exhaustive key set on this response (checked before
       // making this change), so these are additive fields, not a shape change
       // any existing AT depends on. Reusing listSkillLibrary's own union +

@@ -11,7 +11,7 @@
  * touch. It moves once, whole.
  *
  * WHAT IS DELIBERATELY NOT HERE. Five symbols the families also need stay in
- * `cli/ui-bridge.ts` and are INJECTED at assembly (rulings 13/35/59), because
+ * `apps/forge/ui-bridge.ts` and are INJECTED at assembly (rulings 13/35/59), because
  * host code that does NOT carve still calls them, and moving them would mint
  * `legacy-to-package` rows in the opposite direction to this milestone's goal:
  * `spawnAgentTurn`, `spawnAgentDispatch` and `SPAWN_AGENT_SPECS` (the host's
@@ -57,7 +57,7 @@ export type ContainmentCheck = (
 /**
  * The host's spawn/serve surface, injected at assembly (rulings 13/35/59).
  *
- * Every member stays in `cli/ui-bridge.ts` for a measured reason, not a stylistic
+ * Every member stays in `apps/forge/ui-bridge.ts` for a measured reason, not a stylistic
  * one: host code that does NOT carve still calls it, so moving it would mint a
  * `legacy-to-package` row in the opposite direction to this milestone's goal.
  * The types are written in THIS package's words so no rank above sessions is
@@ -209,7 +209,7 @@ export function deriveRowLifecycle(
   // Review fix (pre-existing, `pushRow`'s own note): `terminal` is derived
   // FIRST — cheap, and a terminal phase never has an affordance-table row.
   const terminal = isTerminalPhase(descriptor, phase);
-  // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
+  // W7-A2 — ONE lifecycle derivation per row (packages/sessions/bridge-studio-lifecycle.ts):
   // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
   // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
   // computed at read time, never stored.
@@ -306,8 +306,8 @@ function describeRejectedValue(candidate: unknown): string {
  * itself to this list.
  *
  * Reuses the SHIPPED guard (`isContainedProjectRepoPath`,
- * `cli/manifest-path-guard.ts`) rather than a new check — same choke point
- * `cli/bridge-recovery.ts` already uses for `worktree_path` /
+ * `packages/flows/manifest-path-guard.ts`) rather than a new check — same choke point
+ * `packages/flows/bridge-recovery.ts` already uses for `worktree_path` /
  * `project_repo_path` on the recovery routes. Returns the offending value
  * (so the caller can name it in the 400) when present-but-not-contained,
  * `null` when absent or genuinely contained under `<forgeRoot>/projects/`.
@@ -515,7 +515,7 @@ export function newArchitectSessionId(): string {
   // 3): the timestamp alone has only ONE-SECOND granularity — zero entropy —
   // so a session id was guessable well enough to pre-plant a colliding
   // directory (reproduced live, 100% hit rate over a 4-second candidate
-  // window; see cli/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
+  // window; see apps/forge/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
   // helper is shared by FIVE routes (architect / instructions /
   // project-brain / demo-builder / onboarding start) and nothing downstream
   // string-matches the bare timestamp shape — only SAFE_ID_RE plus a length

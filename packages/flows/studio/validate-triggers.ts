@@ -4,7 +4,7 @@
  * tested in isolation. Check ids match the design 1:1: trigger-kind,
  * trigger-kind-reserved, trigger-target, trigger-cron, trigger-webhook,
  * trigger-shape. Cross-flow webhook-id uniqueness is NOT checked here (a single
- * flow can't see its siblings) — it lives in cli/studio-lint.ts (check id
+ * flow can't see its siblings) — it lives in apps/forge/studio-lint.ts (check id
  * trigger-webhook-unique).
  */
 import { Cron } from 'croner';
@@ -53,7 +53,7 @@ const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']
 
 /**
  * adversarial-review fix: `pr-merged`/`issue-raised` are GitHub-only by
- * ruled design (`cli/bridge-hooks.ts`'s `resolveEventName` only maps
+ * ruled design (`packages/flows/bridge-hooks.ts`'s `resolveEventName` only maps
  * `pull_request`/`issues` under `provider === 'github'` — gitea/gitlab stay
  * schema-reserved with zero stub handlers). Without a matching lint
  * restriction, a `provider: gitlab` (or `gitea`) declaration on either kind

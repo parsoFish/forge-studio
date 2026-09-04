@@ -68,7 +68,7 @@ export {
 import { runFlow, flowPathForId } from './flow-runner.ts';
 import { createPhaseExecutor } from '../../orchestrator/phases/executor-table.ts';
 import { createProjectGate, defaultRunClosure } from '../../orchestrator/phases/executor-deps.ts';
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
 // now a thin, non-LLM PR-opener inlined here (REV-6). The operator's verdict

@@ -28,7 +28,7 @@
  * gate-key shape — literally `quality_gate_cmd` at the top level with no
  * `testProcess` — which is the state the REAL `gitpulse` project is in on this
  * host and the exact shape `GET /api/studio/projects/:id/contract-stages`
- * already answers 409 for (`cli/bridge-studio.ts`'s own migrate-hint branch).
+ * already answers 409 for (`apps/forge/bridge-studio.ts`'s own migrate-hint branch).
  * It is not an invented "broken" value: it is a copy of the live one, so the
  * health verdict this journey asserts is produced by the real
  * `validateProjectConfig`, not by a fixture the UI was taught to recognise.

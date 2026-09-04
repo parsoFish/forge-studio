@@ -4,7 +4,7 @@
  * A deterministic, non-LLM composition of an instructions draft from the
  * CURRENT (possibly unsaved) builder state carried in the request body.
  * NEVER writes to disk (D9). Spins up a real bridge against a tmp forge-root
- * fixture, mirroring cli/bridge-studio-write.test.ts's harness.
+ * fixture, mirroring apps/forge/bridge-studio-write.test.ts's harness.
  *
  * Covers:
  *   - happy path: {ok, draft, derivation}
@@ -30,7 +30,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

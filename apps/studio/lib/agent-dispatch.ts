@@ -200,7 +200,7 @@ export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => vo
 // ---------------------------------------------------------------------------
 // pollKbDrain (W6-B13) — the drain-to-green panel's live poll. Same bounded/
 // explicit-timeout mechanics as `pollAgentRun`, over the drain status shape
-// (`cli/bridge-studio-kb-drain.ts`'s `KbDrainStatus`, mirrored client-side in
+// (`packages/knowledge/bridge-studio-kb-drain.ts`'s `KbDrainStatus`, mirrored client-side in
 // `./studio-client.ts`). A drain run keeps running server-side regardless of
 // whether anything is watching it (it is driven by `enqueueConsolidate`, not
 // this poll) — `'timed-out'` here means only "this browser stopped

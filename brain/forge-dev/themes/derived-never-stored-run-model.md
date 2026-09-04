@@ -19,7 +19,7 @@ silently vanish" the nodes that never ran (`docs/forge-ui-dom-and-harness.md:517
 
 ## The corollary that bites: one derivation, reused
 
-The trap is not storing a derived value — it is deriving it **twice**. `cli/metrics.ts::aggregate()`
+The trap is not storing a derived value — it is deriving it **twice**. `packages/flows/metrics.ts::aggregate()`
 was the one correct cost implementation; `per_skill` and `run-model-derive.ts::buildNodeMeta()` both
 summed events unconditionally and **inflated dev-loop cost 2-3×** (an iteration-loop phase restates
 its dollars on rollup `end` events — [[cost-event-phase-aware-aggregation-rule]]). Both fed

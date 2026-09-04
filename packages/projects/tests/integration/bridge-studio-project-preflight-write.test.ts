@@ -76,7 +76,7 @@ function ctx(forgeRoot: string, body?: unknown): RouteContext {
 
 /** A fake `spawnPreflightFix` dep that records its calls instead of
  *  launching a real detached process — the same shape the real
- *  `cli/bridge-studio-writes.ts` export has, minus the child_process spawn. */
+ *  `apps/forge/bridge-studio-writes.ts` export has, minus the child_process spawn. */
 function fakeDeps(): PreflightWriteDeps & { calls: Array<{ forgeRoot: string; p: { project: string; clause: string; instruction: string; detail: string; runId: string } }> } {
   const calls: Array<{ forgeRoot: string; p: { project: string; clause: string; instruction: string; detail: string; runId: string } }> = [];
   return {

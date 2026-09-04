@@ -5,7 +5,7 @@
  * own header note).
  *
  * session-client.ts is the typed client for the ONE session-shell read route
- * (cli/bridge-studio-sessions.ts: `GET /api/studio/sessions/:kind/:sessionId
+ * (packages/sessions/bridge-studio-sessions.ts: `GET /api/studio/sessions/:kind/:sessionId
  * ?project=<p>` → `{ok, kind, sessionId, project, phase, stages, defaultStage,
  * turns, artifact}`) — mirroring template-client.ts's / skill-client.ts's role.
  *
@@ -51,8 +51,8 @@
  * campaign keeps finding). See AT-90 below for the new required-field pin.
  *
  * VERIFIED GAP, flagged for T2/whoever implements PR1's wire-contract change:
- * as of this amendment, `cli/bridge-studio-sessions.ts` (re-read verbatim;
- * `git diff --stat HEAD -- cli/bridge-studio-sessions.ts` is empty — nothing
+ * as of this amendment, `packages/sessions/bridge-studio-sessions.ts` (re-read verbatim;
+ * `git diff --stat HEAD -- packages/sessions/bridge-studio-sessions.ts` is empty — nothing
  * has changed there since PR1 merged) does NOT put `label` on the `artifact`
  * it sends. Its 200 response is built from `deriveSessionArtifact(...)`
  * (orchestrator/studio/session-transcript.ts) alone — that function's three
@@ -122,7 +122,7 @@ import { resolve } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Fixtures — mirror the REAL on-disk-derived shapes verified in
-// cli/bridge-studio-sessions.test.ts (AT-38/39/40) and orchestrator/studio/
+// packages/sessions/bridge-studio-sessions.test.ts (AT-38/39/40) and orchestrator/studio/
 // session-transcript.ts's exported types, not invented shapes.
 // ---------------------------------------------------------------------------
 
@@ -540,7 +540,7 @@ test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS
 // (_logs/_<kind>-<sessionId>/), with no project-side status.json to read.
 // Same hard-required treatment as "terminal" immediately above — a missing
 // or non-boolean wire field throws by name, never silently defaulted to
-// false. See docs F6 spec section 4 (forge-ui) and cli/session-readability.ts
+// false. See docs F6 spec section 4 (forge-ui) and packages/sessions/session-readability.ts
 // section 2 (the route side that sets this field).
 // ===========================================================================
 
@@ -587,7 +587,7 @@ test('W8-B3: parseSessionShellPayload: "transcriptSources" missing, non-array, o
 // ===========================================================================
 // interpretSessionShellOutcome — AT-33..AT-42
 //
-// Body shapes below mirror cli/bridge-studio-sessions.ts's REAL sendJson(...)
+// Body shapes below mirror packages/sessions/bridge-studio-sessions.ts's REAL sendJson(...)
 // calls verbatim (see that module's lines ~197-309 and bridge-studio-sessions.
 // test.ts AT-42/43/44/48) — never invented shapes.
 // ===========================================================================
@@ -755,7 +755,7 @@ test('AT-97: parseSessionShellPayload: an EMPTY-STRING "title" is legitimately A
 // ===========================================================================
 // R4-15 — roadmap-draft row "dependsOn" (AT-98..AT-101). `parseRoadmapDraftRow`
 // (session-client.ts:177..187) is the SECOND sink for this field: the server
-// (cli/bridge-studio-sessions.test.ts's AT-77) now sends it, but this
+// (packages/sessions/bridge-studio-sessions.test.ts's AT-77) now sends it, but this
 // client-side whitelist of 4 fields still drops it silently on arrival —
 // that fail-open loss is exactly what AT-98 exists to refuse. Missing is
 // TOLERATED (parses to []), matching the server's own default (session-
@@ -917,7 +917,7 @@ test('AT-109: parseSessionArtifact: an EMPTY generation-gallery ("generations": 
 // `parseSessionArtifact` — every test below currently throws
 // "unrecognised session artifact kind" (the `default` branch), mirroring the
 // generation-gallery block's own AT-103-style sanity comment pattern at ITS
-// branch base. Mirrors `cli/contract-stages.ts`'s server-side
+// branch base. Mirrors `packages/projects/contract-stages.ts`'s server-side
 // `ContractStageRow` shape exactly (structurally identical, per the R4-17
 // contract) — never a client-side re-derivation of status/detail/bytes.
 // ===========================================================================

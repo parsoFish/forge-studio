@@ -2,7 +2,7 @@
  * R4-22 F4 (T3, acceptance test) — pins the CO-LOCATION invariant between
  * the generic interactive spine's event-log directory
  * (`packages/sessions/interactive-runner.ts`'s `cycleId`, L290) and the
- * bridge's per-turn stderr sink (`cli/ui-bridge.ts`'s `spawnAgentTurn`,
+ * bridge's per-turn stderr sink (`apps/forge/ui-bridge.ts`'s `spawnAgentTurn`,
  * driven by its `SPAWN_AGENT_SPECS` table) — the two writers that MUST agree
  * on ONE directory per turn, or a turn's events and its stderr split across
  * two directories and the live UI panel (`apps/studio/app/sessions/[kind]/
@@ -23,7 +23,7 @@
  *
  * WHY STILL A SOURCE-TEXT RATCHET. The original reason was that
  * `SPAWN_AGENT_SPECS` was a module-private `const`. **That is no longer
- * true** — `cli/ui-bridge.ts:3430` now reads `export const
+ * true** — `apps/forge/ui-bridge.ts:3430` now reads `export const
  * SPAWN_AGENT_SPECS`, so this file's own retirement clause (a) is satisfied
  * on its face. It is deliberately NOT retired here: importing that symbol
  * from `packages/agents` would mint a `package-to-legacy` boundary
@@ -57,7 +57,7 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 // walks an EMPTY tree and reports zero findings, which reads as a pass.
 const REPO_ROOT = FORGE_ROOT;
 const INTERACTIVE_RUNNER_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-runner.ts');
-const UI_BRIDGE_PATH = join(REPO_ROOT, 'cli', 'ui-bridge.ts');
+const UI_BRIDGE_PATH = join(REPO_ROOT, 'apps', 'forge', 'ui-bridge.ts');
 
 const AUTHORING_ID = 'authoring';
 
@@ -76,7 +76,7 @@ function extractSpineCycleIdTemplate(source: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Extracts `cli/ui-bridge.ts`'s `spawnAgentTurn`'s `logDir` template
+/** Extracts `apps/forge/ui-bridge.ts`'s `spawnAgentTurn`'s `logDir` template
  *  literal, RAW — anchored on the `const logDir = join(forgeRoot, '_logs',
  *  \`...\`)` call shape unique to `spawnAgentTurn`. A SECOND, unrelated
  *  `const logDir = join(...)` exists elsewhere in this file (the dispatch-

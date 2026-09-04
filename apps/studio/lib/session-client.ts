@@ -1,7 +1,7 @@
 /**
  * Client-side typed parser + fetch helper for the Studio session-shell read
  * route (R2-10, PR2): `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
- * (cli/bridge-studio-sessions.ts) → `{ok, kind, sessionId, project, phase,
+ * (packages/sessions/bridge-studio-sessions.ts) → `{ok, kind, sessionId, project, phase,
  * stages, defaultStage, turns, artifact}`. Mirrors template-client.ts's /
  * skill-client.ts's role and idiom exactly: local structural parsers, no
  * cross-boundary import of orchestrator types (the shapes here are a
@@ -26,7 +26,7 @@
  * The route side landed with it: `deriveSessionArtifact`
  * (orchestrator/studio/session-transcript.ts) threads
  * `descriptor.artifact.label` onto all three artifact shapes, and
- * `cli/bridge-studio-sessions.ts` forwards the artifact verbatim. The
+ * `packages/sessions/bridge-studio-sessions.ts` forwards the artifact verbatim. The
  * envelope's `title` is threaded the same way, for the same reason.
  *
  * DESIGN CHOICE (flagged for T2, mirrors the note in this module's own test
@@ -628,7 +628,7 @@ export type SessionAffordanceKind = (typeof SESSION_AFFORDANCE_KINDS)[number];
 
 /** W7-C2 (sessions-kinds-17/19, bead forge-lzv) — one pending interview
  *  question as the bridge attaches it to the question-form affordance's
- *  meta at `awaiting-answers` (cli/bridge-studio-sessions.ts's
+ *  meta at `awaiting-answers` (packages/sessions/bridge-studio-sessions.ts's
  *  `attachPendingQuestions`): the REAL question text (what the panel posts
  *  back with each answer — never a placeholder), an optional short header,
  *  and the recommended options. */
@@ -636,7 +636,7 @@ export type SessionPendingQuestion = {
   /** W7-C2 T1 review (A3, finding sessions-kinds-19) — the correlation
    *  handle the panel posts back with this question's answer. Derived
    *  server-side from the question's POSITION in the round's questions.json
-   *  (`pendingQuestionId`, cli/bridge-studio-sessions.ts): answers no longer
+   *  (`pendingQuestionId`, packages/sessions/bridge-studio-sessions.ts): answers no longer
    *  correlate by TEXT alone, so a duplicated or edited question can no
    *  longer mis-bind an answer in the durable record. REQUIRED — an entry
    *  without it degrades the whole `questions` field (see
@@ -799,7 +799,7 @@ export type SessionShellPayload = {
   modelTier: string | null;
   /**
    * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
-   * (`cli/bridge-studio-sessions.ts`), threaded onto the wire so the generic
+   * (`packages/sessions/bridge-studio-sessions.ts`), threaded onto the wire so the generic
    * `SessionInteractivePanel` can gate its ActivityLog drawer without a
    * second, hand-kept terminal-phase table client-side. REQUIRED and
    * hard-parsed like every sibling field above — never omitted, never
@@ -828,14 +828,14 @@ export type SessionShellPayload = {
    * verdicts.json) ACTUALLY EXIST in this session dir, in scan order.
    * Replaces W7-FIX-A2's `transcript: boolean`, which was a per-kind stored
    * proxy that was wrong for `authoring` (see the bridge's own comment at
-   * cli/bridge-studio-sessions.ts). Read by `deriveSessionPanes`
+   * packages/sessions/bridge-studio-sessions.ts). Read by `deriveSessionPanes`
    * (session-shell-view.ts) purely to EXPLAIN an absent/quiet transcript
    * pane; the pane decision itself is made from `turns` + `affordances`.
    * REQUIRED and hard-parsed like `terminal` — an omitted key throws.
    */
   transcriptSources: string[];
   /**
-   * W7-A2 — the bridge's DERIVED lifecycle (`cli/bridge-studio-lifecycle.ts`):
+   * W7-A2 — the bridge's DERIVED lifecycle (`packages/sessions/bridge-studio-lifecycle.ts`):
    * `state` (working | awaiting-operator | crashed | stalled | terminal), a
    * truthful `needsYou`, the runner's crash `error` text, `idleMs`, and
    * `cancellable`. REQUIRED and hard-parsed (`parseSessionLifecycle`) — a
@@ -1093,7 +1093,7 @@ export function interpretSessionShellOutcome(outcome: SessionShellFetchOutcome):
 
 /** W7-A2 — `project` is OPTIONAL: `null` omits the query entirely and the
  *  bridge resolves the anchor project server-side (`findSessionProject`,
- *  cli/bridge-studio-sessions.ts) — a deep link that carries no `?project=`
+ *  packages/sessions/bridge-studio-sessions.ts) — a deep link that carries no `?project=`
  *  is a working address for every kind. */
 function sessionShellPath(kind: string, sessionId: string, project: string | null): string {
   const base = `/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}`;

@@ -1,7 +1,7 @@
 /**
  * W8-B5 WI-3 — acceptance tests for `forge community refresh` (exit row E1)
  * and for the ONE shared load → refresh → write runner both surfaces call
- * (`cli/community-refresh-run.ts`).
+ * (`packages/library/community-refresh-run.ts`).
  *
  * RED AT BRANCH BASE: neither `./community-refresh-run.ts` nor
  * `./community-refresh-cmd.ts` exists — every test in this file fails on the

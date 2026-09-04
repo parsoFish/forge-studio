@@ -179,7 +179,7 @@ test('R6-08 4on: a lone checkFrontmatter defect (missing description) on the top
   const iso = await makeIsolatedForge();
   try {
     // Fresh, ISOLATED 'cycles' KB (checkFrontmatter/checkIndexSync/checkOrphans
-    // are hardcoded to THEME_SUBDIRS=['cycles','forge-dev'] — cli/brain-lint.ts:124
+    // are hardcoded to THEME_SUBDIRS=['cycles','forge-dev'] — packages/knowledge/brain-lint.ts:124
     // — so a project-brain fixture can never exercise checkFrontmatter at all;
     // this must be a top-level brain). Isolated rather than the shared 'cycles'
     // fixture, which ~15 other tests in this file read and must stay pristine.
@@ -317,7 +317,7 @@ test('R6-08 4on (F2): checkReflectorLoss is a GLOBAL advisory (_queue/done) — 
   try {
     // Seed a REAL reflector-loss condition: a `_queue/done/` manifest with no
     // matching archive under `brain/cycles/_raw/` — checkReflectorLoss's own
-    // trigger (cli/brain-lint.ts). Deliberately GLOBAL: nothing ties this
+    // trigger (packages/knowledge/brain-lint.ts). Deliberately GLOBAL: nothing ties this
     // manifest to any one KB's brain dir (its `file` is under `_queue/done/`,
     // never under `brain/<kbId>`).
     writeFileSync(join(iso.root, '_queue', 'done', 'lost-init.md'), '# lost initiative\n');

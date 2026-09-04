@@ -13,7 +13,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT (D5, `_wave5/unit-specs/R4-21-phase2.md`; mirrored from
- * `cli/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
+ * `packages/library/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
  * this module's spec):
  *
  *  Wire contract: `POST /api/studio/authoring/finalize { project, sessionId,
@@ -78,7 +78,7 @@
  *          hint — real installed templates never carry one (category is
  *          STRUCTURAL, derived from which directory a definition lives in,
  *          `orchestrator/studio/template-library.ts`'s own D1) — validated by
- *          `writableCategoryOrReason` (`cli/bridge-studio-templates.ts`, the
+ *          `writableCategoryOrReason` (`packages/library/bridge-studio-templates.ts`, the
  *          SAME function `POST /api/studio/templates` uses) and stripped
  *          before the persisted bytes are written. `project-scaffold` is
  *          refused with the SAME `SCAFFOLD_READONLY` constant that route
@@ -183,7 +183,7 @@ import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizers.ts';
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
-// DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
+// DYNAMICALLY, inside runFinalize, below (mirrors packages/agents/agent-run.ts's own
 // project-brain kind's dynamic-import precedent).
 import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '@forge/sessions/interactive-runner.ts';
 import { finalizeSkillFromLanded } from './bridge-studio-authoring-skill.ts';
@@ -350,8 +350,8 @@ export async function runFinalize(
 
       // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
       // Dynamically imported so a static import never pulls the Claude Agent
-      // SDK into bridge start-up (cli/ui-bridge.ts does not import
-      // cli/agent-run.ts today) — mirrors cli/agent-run.ts's own
+      // SDK into bridge start-up (apps/forge/ui-bridge.ts does not import
+      // packages/agents/agent-run.ts today) — mirrors packages/agents/agent-run.ts's own
       // project-brain kind's dynamic-import precedent.
       const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
       if (!descriptor) {

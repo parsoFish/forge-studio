@@ -4,7 +4,7 @@
  * `disallowed-tools` must be written TOGETHER on a full re-serialize, never
  * one without the other.
  *
- * WHY THIS MATTERS. `cli/studio-lint-tool-fence.ts`'s scope test is
+ * WHY THIS MATTERS. `packages/library/studio-lint-tool-fence.ts`'s scope test is
  * presence-only (`'allowed-tools' in data || 'disallowed-tools' in data`),
  * deliberately (see that file's own header — option (b), judging content
  * instead of presence, is rejected for this lane). The ORIGINAL forge-6gv.19

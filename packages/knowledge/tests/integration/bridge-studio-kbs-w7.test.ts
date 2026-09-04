@@ -1,7 +1,7 @@
 /**
  * W7-B2 pinned tests — KB route honesty + the one action-group gate
  * (knowledge-V01 / -22 / -23 / -24 / -05 / -06 and the /active-job route).
- * Isolated bridge per test group, mirroring cli/bridge-studio-kb-drain.test.ts
+ * Isolated bridge per test group, mirroring packages/knowledge/tests/unit/bridge-studio-kb-drain.test.ts
  * Part B.
  */
 
@@ -144,10 +144,10 @@ test('mutating KB routes 409 with the active-job reason while a drain is live (k
 
     // `POST /api/studio/kbs/:id/cleanup/start` is deliberately absent from this
     // list. It is the 18th KB route and the ONE that is still implemented
-    // inline in `cli/ui-bridge.ts` (it mints an interactive session, so ruling
+    // inline in `apps/forge/ui-bridge.ts` (it mints an interactive session, so ruling
     // 17 forbids carving it into a rank-2 package) — handoff K10 to
     // M4-sessions. A handler-level test cannot reach it, so its 409 assertion
-    // MOVED to `cli/ui-bridge-kb-cleanup.test.ts`, which boots a real bridge
+    // MOVED to `apps/forge/ui-bridge-kb-cleanup.test.ts`, which boots a real bridge
     // and already owns that route's test surface. It was not dropped.
 
     const remove = await del(iso.root, '/api/studio/kbs/busy-kb');

@@ -1,0 +1,2272 @@
+/**
+ * forge-ui-bridge — small Node process that surfaces forge's durable
+ * artefacts (events.jsonl + queue dirs) to the browser-side forge-ui
+ * over a single WebSocket connection.
+ *
+ * Started by `forge watch`; outlives no individual cycle. On client
+ * connect it sends a snapshot of the current cycle list + recent events,
+ * then keeps a tail open on every in-flight cycle's events.jsonl and
+ * pushes new lines as they arrive.
+ *
+ * Stage M2-A scope (read-only):
+ *   - GET  /api/health           → 'ok'
+ *   - GET  /api/cycles           → { live: Cycle[], recent: Cycle[] }
+ *   - GET  /api/events/<cycleId> → full events.jsonl as JSON array
+ *   - WS   /ws                   → { type: 'snapshot', ... } once;
+ *                                  then { type: 'event', cycleId, event } per new log line;
+ *                                  then { type: 'cycle-list-changed' } on queue changes.
+ *
+ * M2-C adds POST handlers for verdicts (file writes guarded by proper-lockfile).
+ */
+
+import { createServer, type IncomingMessage, type ServerResponse, type OutgoingHttpHeaders } from 'node:http';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+  watch as fsWatch,
+  type FSWatcher,
+} from 'node:fs';
+import { } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { join, resolve, basename, dirname } from 'node:path';
+import { WebSocketServer, type WebSocket } from 'ws';
+
+import { getPaths, listInFlight } from '@forge/flows/queue.ts';
+import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
+import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
+import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
+import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
+import {
+  readReviewComments,
+  writeReviewComments,
+  appendReviewComment,
+  resolveComment,
+  editComment,
+  deleteComment,
+  deriveVerdictFromComments,
+  reviewCommentsPath,
+  isSafeCycleId,
+  REVIEW_COMMENTS_MAX,
+} from '@forge/factory/review-comments.ts';
+import lockfile from 'proper-lockfile';
+import {
+  handleStudioRoutes,
+  handleStudioWriteRoutes,
+  sanitizeError,
+  sendJson,
+  allowedOrigin,
+  CSRF_HEADER,
+} from './bridge-studio.ts';
+import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './routes.ts';
+// M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
+// here (skills, hooks, authoring, templates) are GONE: every arm is now a
+// per-route handler in `packages/library/routes.ts`, which the `routeTable`
+// imported on the line above already carries and `dispatchRoute` claims first.
+import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
+import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
+import {
+  sessionLogDirName,
+  // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
+  // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
+  // below): the SAME stall ceiling, ownership-proof liveness check, and
+  // crash-message extraction sessions already use — never a second,
+  // independently-invented staleness rule.
+} from '@forge/sessions/bridge-studio-lifecycle.ts';
+// M4 §4 step 2 — instructions, connections and community carved the same way.
+// This file's line COUNT is held constant across the carve on purpose: 18 audited
+// rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
+import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
+import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
+import {
+  handleStudioPostRoutes,
+  applyReviewVerdict,
+  applyPlanVerdict,
+  type StudioPostContext,
+  type ReleaseFinalizeHookInput,
+} from '@forge/flows/bridge-studio-runs.ts';
+import { runReleaseFinalize } from '@forge/factory/phases/release-finalize.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
+import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
+import { mergePullRequest } from '@forge/flows/pr.ts';
+import type { BridgeIdentity } from './forge-watch.ts';
+import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
+import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { reconcileReflectFeedback, type RerunReflectorFn } from '@forge/factory/reflect-reconcile.ts';
+import { isSafeRunId } from '@forge/agents/run-agent.ts';
+// M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
+// one the carved `POST /api/agents/:slug/run` route applies, so the package
+// owns the single definition and the host imports it. Two copies of a
+// defense-in-depth guard drift; one does not.
+import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
+
+
+/** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
+ *  root, for frozen cycles written before the mirror-into-`artifacts/` change.
+ *  Kept as a named constant so the route and the deriver's own comment name the
+ *  same single file, and so widening it is a deliberate edit rather than a
+ *  string that quietly grows. */
+const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
+
+const TAIL_POLL_MS = 200;
+const RECENT_CYCLES_MAX = 20;
+// Feature #8 — daemon-stall liveness. Mirrors orchestrator/scheduler.ts's
+// staleHeartbeatMs default (5min). The UI flips to `daemon-stalled` only at a
+// GENEROUS multiple of that so a slow-but-alive cycle never false-alarms — the
+// stall surface is for "the daemon process is wedged / dead", not slowness.
+const DEFAULT_STALE_HEARTBEAT_MS = 5 * 60_000;
+const STALL_MULTIPLE = 6;
+
+type Cycle = {
+  cycleId: string;
+  initiativeId: string;
+  project?: string;
+  // R4-11-F1: `merged` is the transient pass-through state a confirmed-merge
+  // manifest briefly occupies between closure's two terminal moves (→merged,
+  // then merged→done in the same sweep) — distinct from the unrelated
+  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
+  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
+  startedAt?: string;
+  endedAt?: string;
+  /** Feature #10: cross-initiative dependency edges (manifest
+   *  `depends_on_initiatives`) — drives the UI's per-project roadmap spine. */
+  dependsOnInitiatives?: string[];
+};
+
+type WsOutbound =
+  | { type: 'snapshot'; cycles: { live: Cycle[]; recent: Cycle[] } }
+  | { type: 'event'; cycleId: string; event: EventLogEntry }
+  | { type: 'cycle-list-changed' }
+  // ADR 020 — an architect session changed (started, new questions, plan ready,
+  // committed). The UI re-fetches `/api/architect/sessions`.
+  | { type: 'architect-list-changed' }
+  // Stage A — an instructions-creator session changed (started, new questions,
+  // draft ready, committed). The UI re-fetches `/api/instructions/sessions`.
+  | { type: 'instructions-list-changed' }
+  // Stage B — a demo-builder session changed (started, regenerated, awaiting
+  // review, locked, abandoned). The UI re-fetches `/api/demo-builder/sessions`.
+  | { type: 'demo-list-changed' }
+  | { type: 'project-brain-list-changed' };
+
+export type BridgeOptions = {
+  forgeRoot: string;
+  port?: number;
+  /** Pre-existing snapshot of cycles — defaults to filesystem scan. */
+  scanCycles?: () => { live: Cycle[]; recent: Cycle[] };
+  /**
+   * Injectable for tests — defaults to the real `mergePullRequest` from
+   * orchestrator/pr.ts. Called by the POST /api/verdict 'approve' handler.
+   */
+  mergePr?: (worktreePath: string) => boolean;
+  /**
+   * Injectable for tests — defaults to the real `finalizeMergedReadyForReview`
+   * from orchestrator/finalize-merged.ts. Fired (void, non-blocking) on approve.
+   */
+  finalizeAfterMerge?: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  /**
+   * WS-A (release) — injectable for tests; defaults to a wrapper around the real
+   * `runReleaseFinalize` phase. Called on approve, AWAITED immediately BEFORE
+   * mergePr. Opt-in (skips when the project has no `releaseProcess`) and
+   * log-and-continue (a failure never blocks the merge).
+   */
+  runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /**
+   * D — injectable for tests; defaults to the real `rerunReflector` from
+   * orchestrator/reflector-rerun.ts. Fired (non-blocking) when operator
+   * reflection feedback is submitted, and at startup for any cycle whose
+   * feedback out-dates its last reflector.end.
+   */
+  rerunReflector?: RerunReflectorFn;
+};
+
+type TailState = {
+  cycleId: string;
+  filePath: string;
+  offset: number;
+  timer?: NodeJS.Timeout;
+};
+
+export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
+  const { forgeRoot } = opts;
+  // F1: a stable identity for this bridge process, captured once at startup
+  // and served from GET /api/health, so a second `forge studio` can recognise
+  // a healthy forge bridge and ATTACH read-only instead of killing it.
+  const identity: BridgeIdentity = {
+    service: 'forge-bridge',
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  };
+  const port = opts.port ?? 0; // 0 = OS-assigned
+  // getPaths takes the QUEUE ROOT, not the forge root — _queue/ is a
+  // child of forgeRoot.
+  const queuePaths = getPaths(resolve(forgeRoot, '_queue'));
+  const logsRoot = resolve(forgeRoot, '_logs');
+  // R4-17 round-2 BLOCKER: this was a hardcoded `resolve(forgeRoot,'projects')`
+  // — the ONE module of eight that never consulted config, while 23 sites
+  // elsewhere resolve through `resolveProjectsDir` (which honours
+  // `FORGE_PROJECTS_DIR` and `forge.config.json`'s documented `projectsDir`,
+  // orchestrator/config.ts). With that config set, this producer and
+  // `writeSessionTerminalPhase`'s containment guard resolved DIFFERENT roots, so
+  // a legitimately-created session dir failed the guard and the terminal phase
+  // was silently never written — a finished run reading `running` forever. A
+  // guard that resolves its root differently from the producer of the thing it
+  // guards is a false-rejection generator; the fix is one value, not two
+  // independent resolutions that happen to coincide in the default config.
+  //
+  // R4-17 round-3 BLOCKER (pin 5, item 2): `loadConfig()`'s no-arg default is
+  // cwd-relative (`resolve('forge.config.json')` against `process.cwd()`),
+  // not `forgeRoot`-relative — a caller started from a different cwd would
+  // silently fall back to `{}` even with a real `forge.config.json` sitting
+  // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
+  const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
+  const mergePrFn = opts.mergePr ?? mergePullRequest;
+  const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
+  // WS-A (release): the default release-finalize hook constructs a per-cycle
+  // logger and delegates to the real phase. Opt-in + log-and-continue live
+  // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
+  const runReleaseFinalizeFn =
+    opts.runReleaseFinalize ??
+    (async (input: ReleaseFinalizeHookInput): Promise<{ release_status: string }> => {
+      const logger = createLogger(input.cycleId, logsRoot);
+      return runReleaseFinalize(input, logger);
+    });
+  // D — auto-rerun the reflector on operator feedback. Default delegates to the
+  // real helper; the POST handler + startup reconcile both call this.
+  const rerunReflectorFn: RerunReflectorFn =
+    opts.rerunReflector ??
+    ((input) => import('@forge/factory/reflector-rerun.ts').then((m) => m.rerunReflector(input)));
+  // Recover feedback that landed while the bridge was down (or whose live rerun
+  // was lost to a restart): re-run the reflector for any cycle whose RECENT
+  // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
+  // blocks the server coming up. Skipped in no-spawn mode (seeded e2e/journey
+  // runs set FORGE_ARCHITECT_NO_SPAWN=1; the reconcile spawns reflectors, so it
+  // honours the same guard as spawnAgentTurn — no surprise agent runs there).
+  // R5-01-F1: dry-bridge suppresses this startup spawn path independently too —
+  // there is no HTTP response at boot, so the JSONL event IS the typed refusal.
+  if (isDryBridge()) {
+    emitDryBridgeRefusal({ route: 'startup:reflect-reconcile', method: 'BOOT', action: 'spawn-agent', logsRoot });
+  } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
+    void reconcileReflectFeedback({
+      logsRoot,
+      queueRoot: queuePaths.root,
+      rerunReflector: rerunReflectorFn,
+      log: (msg) => console.error(`[bridge] ${msg}`),
+    }).catch((err) => console.error(`[bridge] reflect reconcile failed: ${String(err)}`));
+  }
+
+  const clients = new Set<WebSocket>();
+  const tails = new Map<string, TailState>();
+  const queueWatchers: FSWatcher[] = [];
+  const architectWatchers: FSWatcher[] = [];
+  const instructionsWatchers: FSWatcher[] = [];
+  const demoWatchers: FSWatcher[] = [];
+
+  const broadcast = (msg: WsOutbound): void => {
+    const payload = JSON.stringify(msg);
+    for (const ws of clients) {
+      if (ws.readyState === ws.OPEN) {
+        try { ws.send(payload); } catch { /* dropped client */ }
+      }
+    }
+  };
+
+  const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
+    // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
+    // queue dirs only carry status. This scan walks _logs/ first to build
+    // a list of cycles (most-recent per initiative), then cross-references
+    // queue dirs to label each with its current status.
+    const live: Cycle[] = [];
+    const recent: Cycle[] = [];
+
+    type LogDirInfo = { cycleId: string; initiativeId: string; mtime: number };
+    const latestPerInit = new Map<string, LogDirInfo>();
+    if (existsSync(logsRoot)) {
+      for (const name of readdirSync(logsRoot)) {
+        const dir = join(logsRoot, name);
+        let mtime = 0;
+        try {
+          if (!statSync(dir).isDirectory()) continue;
+          mtime = statSync(dir).mtimeMs;
+        } catch { continue; }
+        // Cycle ID format: `<ISO-ish-timestamp>_<INIT-…>`.
+        const m = name.match(/_(INIT-.+)$/);
+        if (!m) continue;
+        const initId = m[1];
+        const cur = latestPerInit.get(initId);
+        if (!cur || cur.mtime < mtime) {
+          latestPerInit.set(initId, { cycleId: name, initiativeId: initId, mtime });
+        }
+      }
+    }
+
+    const queueStatusFor = (initId: string): { status: Cycle['status']; project?: string; dependsOnInitiatives?: string[] } | null => {
+      const fn = `${initId}.md`;
+      const lookups: Array<[string, Cycle['status']]> = [
+        [queuePaths.inFlight, 'in-flight'],
+        [queuePaths.readyForReview, 'ready-for-review'],
+        // R4-11-F1: `merged` — the brief pass-through window between a
+        // confirmed merge and its promotion to `done/` in the same sweep.
+        [queuePaths.merged, 'merged'],
+        [queuePaths.done, 'done'],
+        [queuePaths.failed, 'failed'],
+        [queuePaths.pending, 'pending'],
+      ];
+      for (const [dir, status] of lookups) {
+        const fp = join(dir, fn);
+        if (existsSync(fp)) {
+          let project: string | undefined;
+          let dependsOnInitiatives: string[] | undefined;
+          try {
+            const m = parseManifest(readFileSync(fp, 'utf8'));
+            project = m.project;
+            dependsOnInitiatives = m.depends_on_initiatives;
+          } catch { /* ignore */ }
+          return { status, project, dependsOnInitiatives };
+        }
+      }
+      return null;
+    };
+
+    const candidates: Array<{ cycle: Cycle; mtime: number }> = [];
+    for (const info of latestPerInit.values()) {
+      const q = queueStatusFor(info.initiativeId);
+      if (!q) continue; // log dir exists but the queue manifest is gone — orphan, skip
+      candidates.push({
+        cycle: {
+          cycleId: info.cycleId,
+          initiativeId: info.initiativeId,
+          project: q.project,
+          status: q.status,
+          dependsOnInitiatives: q.dependsOnInitiatives,
+        },
+        mtime: info.mtime,
+      });
+    }
+    // Also surface in-flight / ready-for-review manifests that don't yet
+    // have a log dir (just-claimed, pre-first-event).
+    const seenInits = new Set([...candidates.map((c) => c.cycle.initiativeId)]);
+    for (const name of listInFlight(queuePaths)) {
+      const id = name.replace(/\.md$/, '');
+      if (seenInits.has(id)) continue;
+      let project: string | undefined;
+      let dependsOnInitiatives: string[] | undefined;
+      try {
+        const m = parseManifest(readFileSync(join(queuePaths.inFlight, name), 'utf8'));
+        project = m.project;
+        dependsOnInitiatives = m.depends_on_initiatives;
+      } catch { /* */ }
+      candidates.push({
+        cycle: { cycleId: id, initiativeId: id, project, status: 'in-flight', dependsOnInitiatives },
+        mtime: Date.now(),
+      });
+    }
+
+    candidates.sort((a, b) => b.mtime - a.mtime);
+    for (const { cycle } of candidates) {
+      // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
+      // the tail end of a finished cycle finalizing (merged → done, same
+      // finalize sweep), not an actively-running one. That sweep spans the
+      // post-merge CI watch plus the reflector run, so a manifest legitimately
+      // sits in `merged/` for minutes on every normal finalize, not
+      // instantaneously.
+      if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
+        live.push(cycle);
+      } else if (recent.length < RECENT_CYCLES_MAX) {
+        recent.push(cycle);
+      }
+    }
+    return { live, recent };
+  });
+
+  // Feature #8 — max heartbeat age across in-flight cycles, from the
+  // `.heartbeat` file (mtime = last beat) the scheduler writes alongside each
+  // in-flight manifest. Authoritative liveness signal; cheaper than scanning
+  // every cycle's events. Never throws — a stat error skips that cycle.
+  const computeLiveness = (): LivenessReport => {
+    const staleHeartbeatMs = DEFAULT_STALE_HEARTBEAT_MS;
+    const stallThresholdMs = staleHeartbeatMs * STALL_MULTIPLE;
+    let maxAge = 0;
+    let count = 0;
+    const now = Date.now();
+    for (const filename of listInFlight(queuePaths)) {
+      const hbPath = join(queuePaths.inFlight, filename + '.heartbeat');
+      if (!existsSync(hbPath)) continue;
+      try {
+        const age = now - statSync(hbPath).mtimeMs;
+        count += 1;
+        if (age > maxAge) maxAge = age;
+      } catch { /* skip unreadable heartbeat */ }
+    }
+    return {
+      inFlightCount: count,
+      maxHeartbeatAgeMs: count > 0 ? maxAge : 0,
+      staleHeartbeatMs,
+      stallThresholdMs,
+      stalled: count > 0 && maxAge > stallThresholdMs,
+    };
+  };
+
+  const ensureTailFor = (cycleId: string): void => {
+    if (tails.has(cycleId)) return;
+    // Review round 1 (W7-B5): no client, no tail — the SAME rule
+    // `startTailsForLive` states just below ("with no client there is nobody
+    // to stream to"), applied at the one choke point every caller goes
+    // through. Standalone agent runs made this load-bearing: a dispatch
+    // arms a tail directly, so a run started with no browser attached used
+    // to register a `setInterval` that `stopAllTails` — which only fires on
+    // the LAST client disconnecting — would never be triggered to clear.
+    // Self-healing: every caller (the status poll, session-detail routes,
+    // startTailsForLive on connect) re-arms, and those only run while a UI
+    // is open.
+    if (clients.size === 0) return;
+    const filePath = join(logsRoot, cycleId, 'events.jsonl');
+    if (!existsSync(filePath)) return;
+    const state: TailState = { cycleId, filePath, offset: 0 };
+    state.timer = setInterval(() => pumpTail(state, (event) => broadcast({ type: 'event', cycleId, event })), TAIL_POLL_MS);
+    tails.set(cycleId, state);
+  };
+
+  /** Release ONE tail (review round 1). A terminal run's `events.jsonl` is
+   *  immutable and served on demand by `/api/events`, so a poller on it is
+   *  pure waste — and `stopAllTails` is far too coarse to be the only
+   *  release: it needs every WS client to disconnect, so a long Studio
+   *  session that dispatched N agents carried N permanent pollers. */
+  const stopTailFor = (cycleId: string): void => {
+    const t = tails.get(cycleId);
+    if (t === undefined) return;
+    if (t.timer) clearInterval(t.timer);
+    tails.delete(cycleId);
+  };
+
+  // W6-B2 — the ONE generalized session-tail activator, replacing the four
+  // hand-enumerated `ensure<Kind>Tail` closures that used to live here
+  // (ensureArchitectTail/ensureInstructionsTail/ensureDemoTail/
+  // ensureProjectBrainTail — each an identical one-line wrapper around
+  // `ensureTailFor(`_${prefix}-${sessionId}`)`, differing only in `prefix`).
+  // `kind` is the session-kind id — session-kinds.yaml's own `descriptor.id`
+  // for the generic `/api/studio/sessions/:kind/:id` route, or, for the four
+  // legacy per-kind list routes below, `SPAWN_AGENT_SPECS[agentId].logPrefix`
+  // (the SAME string: SPAWN_AGENT_SPECS's `logPrefix` values and the
+  // session-kinds.yaml `id` values coincide for every spawnable kind —
+  // 'demo-builder''s SPAWN_AGENT_SPECS KEY differs from its `logPrefix`
+  // ('demo'), but that `logPrefix` is exactly the 'demo' session-kind id).
+  // This is also the literal convention forge-ui's session-shell page
+  // derives independently (`apps/studio/app/sessions/[kind]/[sessionId]/
+  // page.tsx`: `` const cycleId = `_${kind}-${sessionId}` ``) — one naming
+  // rule, three call sites, no second hand-kept mapping anywhere.
+  //
+  // No terminal-phase filter here (unlike the legacy per-kind list routes,
+  // which skip already-terminal sessions before calling this): terminal
+  // phases are a DIFFERENT closed vocabulary per kind (committed/rejected
+  // for architect, locked/abandoned for demo, applied for kb-cleanup, ...) —
+  // hardcoding that set here would be exactly the "second hand-kept mapping"
+  // this generalization exists to remove. `ensureTailFor` is idempotent and
+  // no-ops for a log dir that doesn't exist (never started) or is already
+  // tailed; the only cost of tailing a terminal session is a bounded, cheap
+  // poll that stops the moment every WS client disconnects (`stopAllTails`).
+  const ensureSessionTail = (kind: string, sessionId: string): void => {
+    ensureTailFor(`_${kind}-${sessionId}`);
+  };
+
+  // Tail only LIVE cycles (in-flight / ready-for-review), and only while at
+  // least one browser is connected: a terminal cycle's log is immutable and
+  // served on demand via /api/events, and with no client there is nobody to
+  // stream to. This drops the idle cost from ~RECENT_CYCLES_MAX statSync polls
+  // every TAIL_POLL_MS to zero when no UI is open, and to just the live set
+  // otherwise. (Session tails — architect/instructions/demo-builder/
+  // project-brain/authoring/kb-cleanup — are driven separately by
+  // ensureSessionTail when the corresponding session-detail screen is open.)
+  const startTailsForLive = (): void => {
+    if (clients.size === 0) return;
+    for (const c of scanCycles().live) ensureTailFor(c.cycleId);
+  };
+
+  const stopAllTails = (): void => {
+    for (const t of tails.values()) if (t.timer) clearInterval(t.timer);
+    tails.clear();
+  };
+
+  const watchQueue = (): void => {
+    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed];
+    for (const d of dirs) {
+      if (!existsSync(d)) continue;
+      try {
+        const w = fsWatch(d, { persistent: false }, () => {
+          broadcast({ type: 'cycle-list-changed' });
+          // A new cycle may have appeared; pick up its log if so.
+          startTailsForLive();
+        });
+        queueWatchers.push(w);
+      } catch { /* fs.watch unavailable */ }
+    }
+  };
+
+  // ADR 020 — watch each project's `_architect/` dir (recursively where the
+  // platform supports it) so the runner's file-checkpoint writes (questions,
+  // PLAN, status) push a re-fetch signal to the UI. Mirrors `watchQueue`.
+  const watchArchitect = (): void => {
+    if (!existsSync(projectsRoot)) return;
+    let projects: string[];
+    try { projects = readdirSync(projectsRoot); } catch { return; }
+    for (const name of projects) {
+      const archDir = join(projectsRoot, name, '_architect');
+      if (!existsSync(archDir)) continue;
+      try {
+        const w = fsWatch(archDir, { persistent: false, recursive: true }, () => {
+          broadcast({ type: 'architect-list-changed' });
+        });
+        architectWatchers.push(w);
+      } catch {
+        // recursive watch unsupported — fall back to a non-recursive watch on
+        // the _architect dir (catches new sessions; the UI re-fetches anyway).
+        try {
+          const w = fsWatch(archDir, { persistent: false }, () => {
+            broadcast({ type: 'architect-list-changed' });
+          });
+          architectWatchers.push(w);
+        } catch { /* fs.watch unavailable */ }
+      }
+    }
+  };
+
+  // Stage A — watch each project's `_instructions/` dir so the runner's
+  // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
+  // signal to the UI. Mirrors `watchArchitect`.
+  const watchInstructions = (): void => {
+    if (!existsSync(projectsRoot)) return;
+    let projects: string[];
+    try { projects = readdirSync(projectsRoot); } catch { return; }
+    for (const name of projects) {
+      const instrDir = join(projectsRoot, name, '_instructions');
+      if (!existsSync(instrDir)) continue;
+      try {
+        const w = fsWatch(instrDir, { persistent: false, recursive: true }, () => {
+          broadcast({ type: 'instructions-list-changed' });
+        });
+        instructionsWatchers.push(w);
+      } catch {
+        // recursive watch unsupported — fall back to a non-recursive watch on
+        // the _instructions dir (catches new sessions; the UI re-fetches anyway).
+        try {
+          const w = fsWatch(instrDir, { persistent: false }, () => {
+            broadcast({ type: 'instructions-list-changed' });
+          });
+          instructionsWatchers.push(w);
+        } catch { /* fs.watch unavailable */ }
+      }
+    }
+  };
+
+  // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
+  // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
+  // Mirrors `watchInstructions`.
+  const watchDemo = (): void => {
+    if (!existsSync(projectsRoot)) return;
+    let projects: string[];
+    try { projects = readdirSync(projectsRoot); } catch { return; }
+    for (const name of projects) {
+      const demoDir = join(projectsRoot, name, '_demo');
+      if (!existsSync(demoDir)) continue;
+      try {
+        const w = fsWatch(demoDir, { persistent: false, recursive: true }, () => {
+          broadcast({ type: 'demo-list-changed' });
+        });
+        demoWatchers.push(w);
+      } catch {
+        // recursive watch unsupported — fall back to a non-recursive watch on
+        // the _demo dir (catches new sessions; the UI re-fetches anyway).
+        try {
+          const w = fsWatch(demoDir, { persistent: false }, () => {
+            broadcast({ type: 'demo-list-changed' });
+          });
+          demoWatchers.push(w);
+        } catch { /* fs.watch unavailable */ }
+      }
+    }
+  };
+
+  /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */
+  const KIND_LIST_CHANGED = { architect: 'architect-list-changed', instructions: 'instructions-list-changed', demo: 'demo-list-changed', 'project-brain': 'project-brain-list-changed' } as const;
+  const broadcastKindChanged = (kind: string): void => { const t = KIND_LIST_CHANGED[kind as keyof typeof KIND_LIST_CHANGED]; if (t !== undefined) broadcast({ type: t }); };
+  /** T1 ruling 59 — built ONCE here: the session routes' deps are this bridge's own closures. */
+  const routeTable = makeRouteTable({
+    ensureSessionTail,
+    broadcastKindChanged,
+    broadcastArchitectChanged: () => broadcast({ type: 'architect-list-changed' }),
+    broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
+    broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
+    spawnAgentDispatch,
+    newRunStamp,
+    safeInputKeyRe: SAFE_INPUT_KEY_RE,
+    broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
+    projectsRoot,
+    // The spawn/serve surface the carved session routes still need from here.
+    // These stay host-owned deliberately: `safeParseJson` is still called by
+    // `handleReflect` and `servedFileHeaders` by `handleHttp`, so moving them
+    // into the package would mint boundary rows in the wrong direction.
+    spawnAgentTurn,
+    spawnAgentSpecs: SPAWN_AGENT_SPECS,
+    safeParseJson,
+    servedFileHeaders,
+    dryBridgeAgentTurnMarker,
+    // M4 agents carve: the SAME tail closures `handleHttp`'s ctx already
+    // carries — one registry, injected twice, never duplicated.
+    ensureAgentRunTail: ensureTailFor,
+    releaseAgentRunTail: stopTailFor,
+  });
+
+  const http = createServer((req, res) => {
+    void handleHttp(req, res, {
+      routeTable,
+      broadcastKindChanged,
+      identity,
+      scanCycles,
+      liveness: computeLiveness,
+      logsRoot,
+      forgeRoot,
+      queueRoot: queuePaths.root,
+      projectsRoot,
+      broadcastArchitectChanged: () => broadcast({ type: 'architect-list-changed' }),
+      broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
+      broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
+      broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
+      // W6-B2 — the ONE generalized session tail, replacing
+      // ensureArchitectTail/ensureInstructionsTail/ensureDemoTail/
+      // ensureProjectBrainTail (see ensureSessionTail's own doc comment
+      // above for the shared cycle-id derivation). Every kind's
+      // session-detail GET activates it: the four legacy per-kind list
+      // routes below (architect/instructions/demo-builder/project-brain),
+      // plus the generic `/api/studio/sessions/:kind/:id` route
+      // (bridge-studio-sessions.ts) for authoring and kb-cleanup, which have
+      // no per-kind list route of their own.
+      ensureSessionTail,
+      // W7-B5 (agents-20) — the standalone-run tail activator. The runId is
+      // its own `_logs/` directory name, so this is `ensureTailFor` direct.
+      ensureAgentRunTail: ensureTailFor,
+      releaseAgentRunTail: stopTailFor,
+      mergePr: mergePrFn,
+      finalizeAfterMerge: finalizeAfterMergeFn,
+      runReleaseFinalize: runReleaseFinalizeFn,
+      rerunReflector: rerunReflectorFn,
+    });
+  });
+  const wss = new WebSocketServer({ server: http, path: '/ws' });
+
+  const debugWs = process.env.FORGE_BRIDGE_DEBUG === '1';
+  let connectionSeq = 0;
+  wss.on('connection', (ws, req) => {
+    clients.add(ws);
+    const id = ++connectionSeq;
+    if (debugWs) console.error(`[bridge] ws#${id} connect from ${req.socket.remoteAddress} clients=${clients.size}`);
+    // A watcher is now connected — begin streaming the live cycles.
+    startTailsForLive();
+    ws.on('close', (code, reason) => {
+      clients.delete(ws);
+      if (clients.size === 0) stopAllTails();
+      if (debugWs) console.error(`[bridge] ws#${id} close code=${code} reason="${reason.toString()}" remaining=${clients.size}`);
+    });
+    ws.on('error', (err) => {
+      clients.delete(ws);
+      if (clients.size === 0) stopAllTails();
+      if (debugWs) console.error(`[bridge] ws#${id} error: ${err.message}`);
+    });
+    // Initial snapshot.
+    try {
+      ws.send(JSON.stringify({ type: 'snapshot', cycles: scanCycles() } satisfies WsOutbound));
+    } catch { /* socket closed mid-send */ }
+  });
+
+  // Bind to all interfaces (0.0.0.0) — required for WSL2 port-forwarding
+  // to pick the port up and expose it on Windows localhost. Wait for the
+  // 'listening' event before calling address() — listen() is async and
+  // server.address() returns null until the bind completes (which would
+  // leave us reporting `port: 0` to callers).
+  await new Promise<void>((resolveListen, rejectListen) => {
+    http.once('error', rejectListen);
+    http.once('listening', () => resolveListen());
+    http.listen(port, '0.0.0.0');
+  });
+  // Live tails start lazily when the first browser connects (see the wss
+  // 'connection' handler); at startup we only wire the cheap fs.watch signals.
+  watchQueue();
+  watchArchitect();
+  watchInstructions();
+  watchDemo();
+
+  const close = async (): Promise<void> => {
+    for (const w of queueWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const w of architectWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const w of instructionsWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const w of demoWatchers) { try { w.close(); } catch { /* ignore */ } }
+    for (const t of tails.values()) { if (t.timer) clearInterval(t.timer); }
+    tails.clear();
+    for (const ws of clients) { try { ws.close(); } catch { /* ignore */ } }
+    clients.clear();
+    await new Promise<void>((r) => wss.close(() => r()));
+    await new Promise<void>((r) => http.close(() => r()));
+  };
+
+  const address = http.address();
+  const actualPort = typeof address === 'object' && address ? address.port : port;
+  return { url: `http://127.0.0.1:${actualPort}`, close };
+}
+
+// ---- HTTP handlers ---------------------------------------------------------
+
+type LivenessReport = {
+  /** in-flight cycles considered (those with a `.heartbeat` file). */
+  inFlightCount: number;
+  /** max heartbeat age across in-flight cycles, ms (0 when none in flight). */
+  maxHeartbeatAgeMs: number;
+  /** the project's stale threshold (default 5min). */
+  staleHeartbeatMs: number;
+  /** the generous stall threshold (6× stale) the UI flips state at. */
+  stallThresholdMs: number;
+  /** true when maxHeartbeatAgeMs > stallThresholdMs AND a cycle is in flight. */
+  stalled: boolean;
+};
+
+type HttpContext = {
+  /** F1 — this bridge process's identity, served from GET /api/health. */
+  identity: BridgeIdentity;
+  scanCycles: () => { live: Cycle[]; recent: Cycle[] };
+  /** Feature #8 — daemon-stall liveness across in-flight cycles. */
+  liveness: () => LivenessReport;
+  logsRoot: string;
+  forgeRoot: string;
+  queueRoot: string;
+  /** ADR 020 — `<forgeRoot>/projects`, the root the architect routes walk. */
+  projectsRoot: string;
+  /** Broadcast an `architect-list-changed` WS message (fsWatch may miss
+   *  same-tick writes; the routes call this after they mutate session state). */
+  broadcastArchitectChanged: () => void;
+  /** Broadcast an `instructions-list-changed` WS message (fsWatch may miss
+   *  same-tick writes; the routes call this after they mutate session state). */
+  broadcastInstructionsChanged: () => void;
+  /** Broadcast a `demo-list-changed` WS message (fsWatch may miss same-tick
+   *  writes; the routes call this after they mutate session state). */
+  broadcastDemoChanged: () => void;
+  /** R1-3b — broadcast a `project-brain-list-changed` WS message. */
+  broadcastProjectBrainChanged: () => void;
+  /** W6-B2 — start (idempotently) live-tailing ANY session kind's event log
+   *  (architect/instructions/demo/project-brain/authoring/kb-cleanup — every
+   *  kind whose runner writes to `_logs/_<kind>-<sid>/events.jsonl`), keyed
+   *  on the session-kind id (== `SPAWN_AGENT_SPECS[agentId].logPrefix`).
+   *  Replaces the four former per-kind `ensure<Kind>Tail` fields. */
+  ensureSessionTail: (kind: string, sessionId: string) => void;
+  /** T1 ruling 59 — THIS bridge's route table (its session routes act on this bridge's WS fan-out, so two bridges must not share one). */
+  routeTable: AssembledRouteTable;
+  /** W7-C2 (A12) — the ONE per-kind live-refresh mapping, shared by the tabled cancel route and the affordance write route. */
+  broadcastKindChanged: (kind: string) => void;
+  /** W7-B5 (agents-20) — start (idempotently) live-tailing a STANDALONE
+   *  agent-dispatch run's event log (`_logs/<runId>/events.jsonl`, runId
+   *  minted `_agent-<slug>-<stamp>`) — the third tailable category next to
+   *  session logs and live flow cycles. Called at dispatch time and re-armed
+   *  by the run-status route while the run is live (a WS reconnect resets
+   *  every tail; the panel/run-page poll recovers it). */
+  ensureAgentRunTail: (runId: string) => void;
+  /** Release a standalone run's tail once the run is terminal (review round
+   *  1) — its log is immutable from then on, and `stopAllTails` alone only
+   *  fires when the LAST WS client disconnects. */
+  releaseAgentRunTail: (runId: string) => void;
+  /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
+  mergePr: (worktreePath: string) => boolean;
+  /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
+  finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
+  /** WS-A — finalise the release on the PR branch before merge (opt-in; log-and-continue). */
+  runReleaseFinalize: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
+  rerunReflector: RerunReflectorFn;
+};
+
+/** Content-type by extension for served artifacts. `.html` → `text/html` so the
+ *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
+ *  else stays `text/plain`. Module-private and, by convention enforced in
+ *  `apps/forge/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
+ *  this file), callable ONLY from `servedFileHeaders` below — every route
+ *  that serves a file on the bridge origin must go through the hardened
+ *  helper, never this alone. */
+function contentTypeFor(filename: string): string {
+  return filename.toLowerCase().endsWith('.html')
+    ? 'text/html; charset=utf-8'
+    : 'text/plain; charset=utf-8';
+}
+
+/** Reduce a filename to a header-safe charset before it rides inside
+ *  `content-disposition: inline; filename="..."`. Strips anything outside
+ *  `[A-Za-z0-9._-]` — a bare `"`, CR, LF or any other byte that could break
+ *  out of the quoted string or smuggle a second header is gone — and falls
+ *  back to a fixed placeholder if that empties the name entirely.
+ *  `basename()` runs first so a `filename` that still carries `/`-joined
+ *  path segments contributes only its leaf.
+ *
+ *  This is genuinely load-bearing, not decorative, for SOME of the seven
+ *  call sites and NOT others — checked per route, not assumed: `isSafeSegment`
+ *  (cli/studio-path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
+ *  which gate the `/api/artifact/`, `/api/architect/file/` and
+ *  `/api/instructions/file/` routes) denies control characters (so CR/LF
+ *  header-injection is ALREADY refused before this ever runs on those three
+ *  routes — a 400, not a sanitised 200) but has no opinion on a bare `"`, so
+ *  THIS function is what stops a quote breaking out of the quoted-string on
+ *  those routes and on `/api/demo-builder/fragment/` (whose `element`
+ *  component is checked only by a lexical `startsWith(base)`, same gap).
+ *  `/api/demo-builder/generation/`'s `GENERATION_FILENAME_RE` is a strict
+ *  `[A-Za-z0-9._-]+` allowlist that already excludes `"` and control
+ *  characters — this function is unreachable-but-harmless for that route.
+ *  `/api/demo-builder/demo/` and `/api/demo-builder/history/<project>/<id>`
+ *  always pass the fixed literal `'DEMO.html'`, never request-derived
+ *  input. */
+function sanitizeHeaderFilename(filename: string): string {
+  const leaf = basename(filename);
+  const cleaned = leaf.replace(/[^A-Za-z0-9._-]/g, '_');
+  return cleaned.length > 0 ? cleaned : 'file';
+}
+
+/** WI-3 (regate row `artifact-plan-45`, bead forge-6gv.3.2) — the COMPLETE
+ *  header set for a route serving an AGENT-AUTHORED file on the bridge's own
+ *  origin (artifact / PLAN / DEMO / instructions-draft / fragment /
+ *  generation-snapshot). Before this helper, `contentTypeFor` alone reached
+ *  `res.writeHead` at seven call sites with no `content-security-policy`, no
+ *  `x-content-type-options` and no `content-disposition` — script inside such
+ *  a file would run AS the bridge origin (localhost:4123) and could drive
+ *  every mutating route the CSRF check only guards with a header a
+ *  same-origin fetch can add just as easily (approve-and-merge, scheduler
+ *  start, plan verdicts). No live exploit exists today: a survey of every
+ *  HTML file these routes can actually serve on this host — 109
+ *  `_logs/**\/artifacts/*.html` files plus every `.forge/demo/**.html`,
+ *  `_demo/**\/DEMO.html` and `_architect/**\/PLAN.html` — found zero
+ *  `<script>`, zero inline `onclick=`/`onload=`, zero external `<link>`
+ *  stylesheets (the only `src=` values are `data:image/png;base64,…`
+ *  screenshots). A script-blocking CSP therefore breaks nothing that exists
+ *  today and closes the class before an agent-authored file changes that.
+ *
+ *  Deliberately STRUCTURAL, not per-site: this is the only function in the
+ *  file allowed to call `contentTypeFor` (enforced by the source-level
+ *  ratchet in `apps/forge/ui-bridge-served-file-headers.test.ts`), so a content-type
+ *  can never be obtained here without the hardening headers riding along —
+ *  the eighth route someone adds next year gets this for free by using the
+ *  helper, and the ratchet fails loudly if they reach for `contentTypeFor`
+ *  directly instead.
+ *
+ *  Two INDEPENDENT script defences, on purpose: `sandbox` with no
+ *  `allow-scripts` (the document gets an opaque origin — cannot run script,
+ *  cannot reach the bridge, cannot read its own cookies/storage) AND
+ *  `default-src 'none'` (a CSP script-src belt for a UA that ignores or only
+ *  partially applies the sandbox directive). `style-src 'unsafe-inline'` +
+ *  `img-src data:` + `font-src data:` are exactly what the surveyed files
+ *  use (inlined CSS, base64 screenshots) — nothing wider is opened.
+ *  `content-type` stays `text/html` for `.html` (never `text/plain`):
+ *  `apps/studio/app/artifact/page.tsx`, `apps/studio/components/PlanGate.tsx` and
+ *  `apps/studio/components/studio/artifact/ArchitectPlanGate.tsx` all render
+ *  these files in a `sandbox=""` iframe and expect the browser to actually
+ *  RENDER the markup — `text/plain` would show raw source, a user-visible
+ *  regression. `content-disposition: inline` (never `attachment`) for the
+ *  same reason: `attachment` forces a download instead of an iframe render.
+ *  See `sanitizeHeaderFilename` for which routes it is actually load-bearing
+ *  on versus redundant-with-an-already-strict-guard. */
+function servedFileHeaders(filename: string, origin: string): OutgoingHttpHeaders {
+  return {
+    'content-type': contentTypeFor(filename),
+    'x-content-type-options': 'nosniff',
+    'content-security-policy':
+      "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'",
+    'content-disposition': `inline; filename="${sanitizeHeaderFilename(filename)}"`,
+    'access-control-allow-origin': origin,
+    'vary': 'origin',
+  };
+}
+
+/** True when `v` is a `{given, when, then}` shape (all string fields present). */
+function isAcShape(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.given === 'string' && typeof o.when === 'string' && typeof o.then === 'string';
+}
+
+/**
+ * Atomically read-modify-write the review-comment sidecar for a cycle under a
+ * proper-lockfile guard (mirrors applyReviewVerdict). The sidecar file is
+ * created empty first so the lock has a target even on the first comment.
+ * `mutate` is a pure transform; the write persists its result.
+ */
+async function withReviewCommentLock(
+  logsRoot: string,
+  cycleId: string,
+  mutate: (sidecar: ReturnType<typeof readReviewComments>) => ReturnType<typeof readReviewComments>,
+): Promise<ReturnType<typeof readReviewComments>> {
+  // Ensure the sidecar exists so proper-lockfile has a target (writeReviewComments
+  // throws on a traversal cycleId — that propagates as a 500, never a write).
+  if (!existsSync(reviewCommentsPath(logsRoot, cycleId))) {
+    writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
+  }
+  const release = await lockfile.lock(reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  try {
+    const next = mutate(readReviewComments(logsRoot, cycleId));
+    writeReviewComments(logsRoot, cycleId, next);
+    return next;
+  } finally {
+    try { await release(); } catch { /* ignore */ }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R6-06 WI-1 — agent run-history ledger (GET /api/agents/:slug/history) +
+// the shared standalone-run status/cost derivation it reuses from the
+// pre-existing GET /api/agents/runs/<runId> route (D3.5/shared-derivation:
+// ONE function, never two independently-written copies that can drift).
+// ---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+async function handleHttp(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+): Promise<void> {
+  const url = req.url ?? '/';
+  const method = req.method ?? 'GET';
+  const origin = allowedOrigin(req);
+
+  // CORS preflight for the browser fetch with content-type JSON.
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'access-control-allow-origin': origin,
+      'vary': 'origin',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-headers': 'content-type, x-forge-csrf',
+    });
+    res.end();
+    return;
+  }
+
+  // ---- Webhook receipts (R2-04, ADR-041) ---------------------------------
+  // POST /api/hooks/:hookId is called by EXTERNAL services (github/gitea/
+  // gitlab), never by the Studio browser client — a webhook delivery cannot
+  // carry the x-forge-csrf header (that header exists to defeat CROSS-ORIGIN
+  // forgery from a browser; a server-to-server webhook is neither same-origin
+  // nor a browser fetch). Its trust boundary is signature/token verification
+  // (orchestrator/webhook-verify.ts), not the CSRF header, so this route is
+  // dispatched — and therefore EXEMPT — BEFORE the anti-CSRF guard below runs.
+  if (await handleHookRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+
+  // Anti-CSRF: every state-changing request must carry the custom header.
+  // A non-safelisted header cannot be sent cross-origin without a preflight;
+  // since we do not approve foreign-origin preflights, this blocks CSRF.
+  if (method !== 'GET' && method !== 'OPTIONS') {
+    if (!req.headers[CSRF_HEADER]) {
+      sendJson(res, 403, { error: 'missing or invalid CSRF header' }, origin);
+      return;
+    }
+  }
+
+  if (await dispatchRoute(ctx.routeTable, req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => readJson(req) }, url, method)) return; // M4 §4 step 2 — carved tables win over legacy arms; `url` stays RAW; `readBody` hands down the RESULT of the host's body policy (CSRF checked just above), never the policy itself (ruling 30)
+  if (method === 'GET' && url === '/api/health') {
+    // F1: a JSON identity (not bare `ok`) so a second `forge studio` can tell a
+    // healthy forge bridge from a stale/foreign listener and attach instead of
+    // killing it. Probes still treat any 200 as "up", so readiness is unchanged.
+    sendJson(res, 200, ctx.identity, origin);
+    return;
+  }
+  if (method === 'GET' && url === '/api/cycles') {
+    sendJson(res, 200, ctx.scanCycles(), origin);
+    return;
+  }
+  // Feature #8 — daemon-stall liveness. The scheduler writes a `.heartbeat`
+  // file (mtime = last beat) alongside each in-flight manifest. The max age
+  // across in-flight cycles is the freshest signal that the daemon is making
+  // progress; when it exceeds a GENEROUS multiple of staleHeartbeatMs the UI
+  // surfaces a daemon-stalled state. forge does NOT hand-roll a watchdog — the
+  // OS supervisor (systemd / pm2) restarts `forge serve`; this endpoint only
+  // SURFACES the stall to the operator (see docs/operations/serve-supervision.md).
+  if (method === 'GET' && url === '/api/liveness') {
+    sendJson(res, 200, ctx.liveness(), origin);
+    return;
+  }
+  if (method === 'GET' && url.startsWith('/api/events/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
+    // SEC-04 (bd forge-ebj) — cycleId is request-derived and, until now,
+    // folded raw into `join(logsRoot, cycleId, 'events.jsonl')` with no
+    // per-segment guard: a `%2F`-smuggled `../..` cycleId escaped `_logs`
+    // entirely, and a symlinked `events.jsonl` leaf inside a real cycle dir
+    // was followed out of root. Route the WHOLE path (cycleId as its OWN
+    // segment under the trusted logsRoot, leaf included) through the guard;
+    // a rejected/absent path both collapse to 404 (no existence oracle).
+    // W7-A2 (sessions-kinds-24, home-sessions-11): a guard-CLEAN path whose
+    // events.jsonl simply does not exist yet (a session minted seconds ago,
+    // or one whose turn never ran) is 200 `{events: []}` — never a console
+    // 404 on the operator's first screen. A guard-REJECTED path (traversal,
+    // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
+    // (apps/forge/sec04-cycleid-containment.test.ts) hold.
+    const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
+    if (eventsGuard.ok && !eventsGuard.exists) {
+      sendJson(res, 200, { cycleId, events: [] }, origin);
+      return;
+    }
+    const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
+    if (raw === null) {
+      sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
+      return;
+    }
+    try {
+      const events: EventLogEntry[] = [];
+      for (const line of raw.split('\n')) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch { /* skip malformed */ }
+      }
+      sendJson(res, 200, { cycleId, events }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'GET' && url.startsWith('/api/cost/')) {
+    // U1: cost summary per cycle (total + per-phase + per-skill).
+    const cycleId = decodeURIComponent(url.slice('/api/cost/'.length));
+    // SEC-04 (bd forge-ebj) — `summariseCycle` folds `cycleId` into
+    // `join(logsRoot, cycleId, 'events.jsonl')` internally; gate the
+    // request-derived cycleId (as its OWN segment under the trusted logsRoot)
+    // through the per-segment identity guard BEFORE that read so a
+    // `%2F`-smuggled `../..` cycleId or a symlinked cycle dir is refused. A
+    // legitimately in-flight cycle whose dir does not yet exist stays valid
+    // (create-mode ⇒ ok), so an empty summary is unaffected.
+    const costCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+    if (!costCycleGuard.ok) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return;
+    }
+    try {
+      const { summariseCycle } = await import('@forge/flows/metrics.ts');
+      const m = summariseCycle(cycleId, ctx.logsRoot);
+      sendJson(res, 200, {
+        cycleId,
+        totalUsd: m.total_cost_usd,
+        perPhase: m.per_phase, // { phase: { cost_usd, iterations, duration_ms } }
+        perSkill: m.per_skill, // { skill: { invocations, cost_usd, duration_ms } }
+      }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'GET' && url.startsWith('/api/graph/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
+    // Prefer the immutable cycle snapshot; fall back to the live worktree graph
+    // while the cycle is still in-flight (the snapshot is only mirrored at cycle
+    // end). Without this fallback a RESUMED cycle — whose PM phase is skipped, so
+    // it has no snapshot until it finishes — serves no graph, and the WI hexes
+    // vanish from the live hex view for the whole run. Mirrors /api/work-item.
+    // SEC-04 (bd forge-ebj) — BOTH the snapshot path (cycleId under the
+    // trusted logsRoot) and the live-worktree fallback (initiativeId, derived
+    // from the request-supplied cycleId, under the trusted forgeRoot) are
+    // request-derived. Route each through the per-segment identity guard with
+    // the untrusted id as its OWN segment; a traversed cycleId or a symlinked
+    // leaf/dir at either location is refused rather than followed out of root.
+    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
+    const raw =
+      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', '_graph.md']) ??
+      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', '_graph.md']);
+    if (raw === null) {
+      sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId }, origin);
+      return;
+    }
+    try {
+      sendJson(res, 200, { cycleId, mermaid: raw }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  // Feature #9: single work-item definition for the hex-detail drawer. Serves
+  // the on-disk WI snapshot the PM emitted — preferring the immutable cycle
+  // snapshot (`_logs/<cycleId>/work-items-snapshot/<wiId>.md`), falling back to
+  // the live worktree spec (`_worktrees/<initiativeId>/.forge/work-items/<wiId>.md`)
+  // while the cycle is still in-flight (the snapshot is only mirrored at cycle
+  // end). The cycleId encodes the initiativeId as `<timestamp>_<INIT-...>`.
+  if (method === 'GET' && url.startsWith('/api/work-item/')) {
+    const rest = decodeURIComponent(url.slice('/api/work-item/'.length));
+    const slash = rest.indexOf('/');
+    if (slash < 0) {
+      sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' }, origin);
+      return;
+    }
+    const cycleId = rest.slice(0, slash);
+    const wiId = rest.slice(slash + 1);
+    if (!cycleId || !wiId || !DEV_WORK_ITEM_ID_PATTERN.test(wiId)) {
+      sendJson(res, 400, { error: 'cycleId and a WI-<n>[<letter>] wiId are required' }, origin);
+      return;
+    }
+    // SEC-04 (bd forge-ebj) — cycleId is request-derived and was folded raw
+    // into both `_logs/<cycleId>/...` and `_worktrees/<initiativeId>/...`; a
+    // symlinked cycleId DIRECTORY and a symlinked `WI-<n>.md` LEAF both escaped
+    // (wiId is already charset-gated above, but the cycleId hop was not).
+    // Route each candidate (untrusted id as its OWN segment under a trusted
+    // root, leaf included) through the per-segment identity guard.
+    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
+    const found =
+      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', `${wiId}.md`]) ??
+      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`]);
+    if (found === null) {
+      sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId }, origin);
+      return;
+    }
+    try {
+      const w = parseWorkItem(found);
+      sendJson(res, 200, {
+        work_item_id: w.work_item_id,
+        acceptance_criteria: w.acceptance_criteria,
+        files_in_scope: w.files_in_scope,
+        quality_gate_cmd: w.quality_gate_cmd ?? [],
+        body: w.body,
+      }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  // Cycle-scoped artifact (PLAN.md / DEMO.md / etc.). The UI's /plan
+  // and /demo sub-pages fetch these so the operator's interaction
+  // points (verdict form) link to richer in-app views instead of
+  // having to dig into the filesystem.
+  // Path normalisation + a startsWith(logsRoot) check defeat
+  // ../-escape attempts.
+  if (method === 'GET' && url.startsWith('/api/artifact/')) {
+    const rest = decodeURIComponent(url.slice('/api/artifact/'.length));
+    const slash = rest.indexOf('/');
+    if (slash < 0) {
+      sendJson(res, 400, { error: 'expected /api/artifact/<cycleId>/<filename>' }, origin);
+      return;
+    }
+    const cycleId = rest.slice(0, slash);
+    const filename = rest.slice(slash + 1);
+    if (!cycleId || !filename) {
+      sendJson(res, 400, { error: 'cycleId and filename are required' }, origin);
+      return;
+    }
+    // The startsWith(safeBase) check below builds safeBase from the SAME
+    // cycleId, so a traversal INSIDE cycleId (e.g. '..') normalises into both
+    // sides identically and passes it — validate the segment itself
+    // (2026-07-24 adversarial review; same predicate as isSafeRunId).
+    if (!/^[A-Za-z0-9._-]+$/.test(cycleId) || cycleId.includes('..')) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return;
+    }
+    // W7-C3 (bd forge-0u4), re-cut by the W7-C3 review (A-M6) — the FILENAME
+    // dimension is enumerated as a DENY of the shapes that matter, sharing
+    // the guard's OWN per-segment predicate (`isSafeSubPath`) so the cheap
+    // 400 layer and the containment 404 layer cannot drift. The first cut was
+    // an allow-list charset (`/^[A-Za-z0-9._-]+$/` + `.includes('..')`) and
+    // was a fails-closed regression: it 400'd 55 of 508 real on-disk artifact
+    // files (10.8%, all `.capture/{before,after}/*.out` demo evidence named
+    // from AC titles) while every real attack shape was ALREADY refused by
+    // `guardedReadFile` below. Legitimate names with spaces, parentheses,
+    // em-dashes and a leading `..` pass; separators, `.`/`..` segments, empty
+    // segments, control characters, NUL, DEL and encoded separators do not.
+    // Pinned both ways in apps/forge/sec04-cycleid-containment.test.ts (a real
+    // `.capture` name serves 200; every escape shape still refused) and per
+    // predicate in cli/studio-path-guard.test.ts.
+    if (!isSafeSubPath(filename)) {
+      sendJson(res, 400, { error: 'invalid filename' }, origin);
+      return;
+    }
+    const filenameSegments = filename.split('/');
+    // SEC-04 (bd forge-ebj) — the lexical `startsWith(safeBase)` above was
+    // blind to a SYMLINKED leaf: `artifacts/<filename>` real-located inside a
+    // genuine cycle dir but pointing out of root passed it and readFileSync
+    // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
+    // filename segments, all under the trusted logsRoot) through the
+    // per-segment identity + nlink guard, which the lexical check cannot do.
+    let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
+    // W7-D1 — PARITY with `deriveArtifacts` (orchestrator/run-model-derive.ts),
+    // which marks `pr` ready when `pr-description.md` exists in EITHER
+    // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
+    // location too so older frozen logs still resolve"). This route only ever
+    // read `artifacts/`, so a frozen pre-mirror cycle advertised a PR tab in
+    // `artifactsReady` and 404'd when the operator clicked it — a declaration
+    // enforced by nothing, found by the Wave D crawl on
+    // 2026-06-18T10-27-18_INIT-2026-06-17-release-definition-permissions-coverage.
+    //
+    // Deliberately ONE exact filename, and only as a FALLBACK after the
+    // modern location misses: the cycle-log root also holds events.jsonl,
+    // report.md, retro.md and user-questions.json, none of which may become
+    // servable as a side effect. It goes through the SAME `guardedReadFile`,
+    // so a symlinked legacy copy is refused exactly as a symlinked modern one
+    // is. All four directions pinned in sec04-cycleid-containment.test.ts.
+    if (body === null && filename === LEGACY_ROOT_ARTIFACT) {
+      body = guardedReadFile(ctx.logsRoot, [cycleId, LEGACY_ROOT_ARTIFACT]);
+    }
+    if (body === null) {
+      sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
+      return;
+    }
+    try {
+      res.writeHead(200, servedFileHeaders(filename, origin));
+      res.end(body);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+
+  // ---- Architect (ADR 020) ----------------------------------------------
+  if (await handleArchitect(req, res, ctx, url, method)) return;
+  if (await handleReflect(req, res, ctx, url, method)) return;
+  // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
+  // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
+  // read-only; the POSTs are gated by the x-forge-csrf guard above.
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot }, url, method)) return;
+  if (await handleStudioRoutes(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    // W8-F6 (bead forge-6gv.27) — this file is the one place that imports BOTH
+    // apps/forge/bridge-studio.ts and packages/sessions/bridge-studio-sessions.ts, so it wires the
+    // readability predicate in rather than letting the runs routes import it
+    // and close a module cycle. Same seam, same reason, as `ensureSessionTail`.
+    sessionIsReadable: ({ kind, sessionId }) => sessionIsReadable({
+      projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot, kind, sessionId,
+    }),
+  }, url, method)) return;
+  if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // M4 §4 step 2 — skills (7 routes), hooks (8), authoring (1) and templates (5)
+  // were dispatched here in this order. All 21 are entries in
+  // `packages/library/routes.ts` now and the table dispatch at :2094 claims them
+  // BEFORE this chain is reached, so nothing dispatches them but that table.
+  // W6-B2 — the generic session-detail GET is the ONLY read route authoring
+  // and kb-cleanup sessions have (no per-kind list route like architect/
+  // instructions/demo-builder/project-brain); ensureSessionTail must be
+  // threaded through here to close bd forge-2ee's "no consumer reads the
+  // authoring spine's events dir" half.
+  // W6-B11 — the aggregate sessions-index GET. Checked before the
+  // single-session route immediately below: distinct URL shapes (no path
+  // segments vs exactly two), so ordering doesn't affect matching, but this
+  // keeps the two GET /api/studio/sessions... routes textually adjacent.
+  // M4 §4 step 2 — GET /api/studio/sessions/:kind/:id carved to packages/sessions/routes.ts.
+  // W7-A2 — the generic session CANCEL route. MUST be dispatched BEFORE the
+  // affordance write route immediately below: that route's regex matches
+  // any `/api/studio/sessions/:kind/:sid/<segment>` and would swallow the
+  // literal `cancel` segment as an affordance id (409 "not available").
+  // W7-C2 T1 review (A12) — ONE per-kind live-refresh mapping, shared by the
+  // cancel route and the generic affordance WRITE route below (which used to
+  // keep its own inline instructions/demo pair). A kind with no
+  // `*-list-changed` message in the bridge's WS vocabulary (authoring /
+  // kb-cleanup) honestly no-ops here; those surfaces refresh on the
+  // session shell's own poll.
+  // M4 §4 step 2 — POST …/:id/cancel and the generic session-affordance WRITE
+  // endpoint (…/:kind/:sessionId/:affordance) are both carved to
+  // packages/sessions/routes.ts; cancel's entry precedes the affordance's,
+  // whose matcher would otherwise claim the cancel URL.
+  // M4 §4 step 2 — carved to packages/library/routes.ts; the table dispatch above already claimed this route.
+  // W6-B6 fix — the per-slug capability route, resolved against the
+  // UNFILTERED agent defs (bypasses the library:false roster gate
+  // /api/studio/agents applies). Adjacent to the instructions-draft route:
+  // same /api/studio/agents/:slug/... URL family, same guarded-path posture.
+  // M4 §4 step 2 — carved to packages/sessions/routes.ts.
+  // M4 §4 step 2 — connections (4 routes) and community (5) dispatched here, last
+  // of the seven. Both are in `packages/library/routes.ts` now.
+  // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
+  const studioPostCtx: StudioPostContext = {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    queueRoot: ctx.queueRoot,
+    projectsRoot: ctx.projectsRoot,
+    mergePr: ctx.mergePr,
+    finalizeAfterMerge: ctx.finalizeAfterMerge,
+    runReleaseFinalize: ctx.runReleaseFinalize,
+    broadcastArchitectChanged: ctx.broadcastArchitectChanged,
+  };
+  if (await handleStudioPostRoutes(req, res, studioPostCtx, url, method)) return;
+
+  // Scheduler lifecycle.
+  if (method === 'GET' && url === '/api/scheduler/status') {
+    const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
+    sendJson(res, 200, state, origin);
+    return;
+  }
+  if (method === 'POST' && url === '/api/scheduler/start') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/start', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
+    try {
+      // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
+      // the shared helper — the bridge no longer shells out to a `forge start`
+      // CLI command (it's been deleted). Behaviour is identical: detached
+      // child, stdout/stderr → _logs/daemon/serve.log, pid → forge.pid.
+      // `spawnServeDetached` is the ONE liveness authority (null = a live
+      // daemon already owns the pid file); the route never re-derives it.
+      const result = spawnServeDetached(ctx.forgeRoot);
+      if (result === null) {
+        // W7-FIX-A3 (round-2 finding 4): Start is NOT Resume. A daemon that is
+        // already running was not started by this click, and its `.paused`
+        // flag is a deliberate, queue-wide decision another tab may have just
+        // made — clearing it here (as this route used to, before the check)
+        // meant a stale tab's Start silently resumed claiming with no operator
+        // intent. The real state is reported instead; Resume is the control
+        // that clears the flag.
+        const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
+        sendJson(res, 200, { ok: true, alreadyRunning: true, state }, origin);
+        return;
+      }
+      // W7-FIX-A3 (A3-05): a FRESH start keeps the card's promise ("queued
+      // work will run once you start it"). `.paused` is a queue flag
+      // independent of process liveness, so pause → stop → Start used to bring
+      // the daemon back with the stale flag armed and every claim refused. The
+      // scheduler re-reads the flag on every poll, so clearing it here — after
+      // the spawn, inside the branch that actually started something — is
+      // honest for the daemon we just launched and leaves a running one alone.
+      setPaused(false, ctx.queueRoot);
+      // Best-effort wait for the daemon to come up before reporting state.
+      await sleep(800);
+      const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
+      sendJson(res, 200, { ok: true, started: true, state: after }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  // Pause / resume — toggle the `<queueRoot>/.paused` flag the scheduler
+  // reads each poll. In-flight cycles keep running; only new claims stop.
+  if (method === 'POST' && (url === '/api/scheduler/pause' || url === '/api/scheduler/resume')) {
+    try {
+      const pause = url.endsWith('/pause');
+      setPaused(pause, ctx.queueRoot, pause ? 'paused from UI' : '');
+      sendJson(res, 200, { ok: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+  // Stop — SIGTERM the daemon; it drains in-flight cycles then exits. We
+  // don't block the request on the drain — the status poll reflects
+  // `running:false` once it's down. W7-FIX-A3 (A3-07): the signalled pid is
+  // MARKED (`_logs/daemon/stopping`) so `daemonState` reports `stopping:true`
+  // to every poller for as long as that pid drains — Stop is not a silent
+  // control, and a second tab / a reload sees the same transitional state.
+  if (method === 'POST' && url === '/api/scheduler/stop') {
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, { route: '/api/scheduler/stop', method, action: 'daemon', logsRoot: ctx.logsRoot });
+      return;
+    }
+    try {
+      const { pidFile, stoppingFile } = daemonPaths(ctx.forgeRoot);
+      const pid = readPid(pidFile);
+      if (pid === null || !isAlive(pid)) {
+        clearPidFile(ctx.forgeRoot);
+        sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
+        return;
+      }
+      // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while THIS pid
+      // drains. `orchestrator/scheduler.ts`'s signal handler treats a SECOND
+      // SIGTERM as force-quit (`signalCount === 2` → exit), so re-signalling a
+      // pid that is already draining hard-kills the in-flight cycles the first
+      // Stop was politely waiting on — from nothing more than a second tab, or
+      // one whose 10s poll had not yet flipped to `stopping`. The marker this
+      // route writes is exactly the fact needed to make the repeat a no-op; a
+      // marker naming any OTHER pid is stale and never suppresses a real Stop.
+      if (readPid(stoppingFile) === pid) {
+        sendJson(res, 200, { ok: true, alreadyStopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
+        return;
+      }
+      process.kill(pid, 'SIGTERM');
+      markStopping(ctx.forgeRoot, pid);
+      sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return;
+  }
+
+  // Start development (S7 / DEC-3) — the roadmap "start development" button.
+  // Repoints each initiative's manifest at the forge-develop flow and makes it
+  // claimable (the real enqueue behind the develop trigger). Batch (plan-
+  // everything-before-kickoff): the roadmap can decompose N initiatives up
+  // front, so kickoff accepts N ids at once and reports a per-id result
+  // rather than one HTTP status for the whole request. The global CSRF guard
+  // above (x-forge-csrf) already gates this POST.
+  if (method === 'POST' && url === '/api/develop/start') {
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const rawIds = body['initiativeIds'];
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        sendJson(res, 400, { error: 'initiativeIds required (non-empty string array)' }, origin);
+        return;
+      }
+      // Validate the WHOLE batch before any enqueue — a mixed-validity request
+      // is rejected outright (no silent filtering, no partial side effects).
+      const invalid = rawIds
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => typeof v !== 'string' || v.length === 0);
+      if (invalid.length > 0) {
+        const named = invalid.map(({ v, i }) => `[${i}]=${JSON.stringify(v)}`).join(', ');
+        sendJson(res, 400, { error: `initiativeIds contains invalid entries (must be non-empty strings): ${named}` }, origin);
+        return;
+      }
+      // Dedupe, preserving first-occurrence order — one enqueue + one result per id.
+      const initiativeIds = [...new Set(rawIds as string[])];
+
+      // forge-shc WI-1 (T1 ruling): an operator per-run cost-ceiling override
+      // is accepted ONLY on a single-id batch — a single scalar can't map
+      // onto N manifests unambiguously. Validated fully BEFORE any enqueue
+      // side effect (mirrors the 3-stage discipline at
+      // `POST /api/agents/:slug/run` — batch-shape, then value bounds — a
+      // refused request never repoints or stamps any manifest).
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        if (initiativeIds.length > 1) {
+          sendJson(
+            res,
+            400,
+            { error: `costCeilingUsd may only be supplied with a single initiativeId (got ${initiativeIds.length})` },
+            origin,
+          );
+          return;
+        }
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        costCeilingUsd = v;
+      }
+
+      // W8-A3 (`flows-37`, review round 2 finding 2): the operator's answer to a
+      // repoint, forwarded like the other two doors. Without it NO client could
+      // confirm through this route at all — the per-card "Start development"
+      // control posts exactly ONE named initiative and was left telling the
+      // operator to "confirm the repoint" through a route with no way to.
+      //
+      // Review round 3, S2-4: it is REFUSED for a multi-id batch, before any
+      // enqueue runs — the same shape `costCeilingUsd` uses 30 lines above, and
+      // for the same reason. A confirmation that accompanies N ids rubber-stamps
+      // N moves the calling surface cannot show, which is the shape this lane
+      // exists to remove; leaving that as a client-side convention while the
+      // route accepted it is precisely the doctrine this module writes down and
+      // would then have violated.
+      const developConfirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+        ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
+        : undefined;
+      if (developConfirmRepointFrom !== undefined && initiativeIds.length > 1) {
+        sendJson(
+          res,
+          400,
+          { error: 'confirmRepointFrom is only valid for a single-initiative request — a batch cannot confirm a move it cannot show' },
+          origin,
+        );
+        return;
+      }
+
+      const results = initiativeIds.map((initiativeId) => {
+        // Per-item isolation: a throw on one item must not 500 away the
+        // results of items whose side effects already applied.
+        try {
+          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: developConfirmRepointFrom });
+          if (result.status === 'enqueued' && costCeilingUsd !== undefined) {
+            // Single-id-only invariant (checked above) means this fires at
+            // most once per request — stamp only when the operator supplied
+            // an explicit, already-validated ceiling; never fabricate one.
+            // shc review finding 2: fold the REAL outcome into the per-item
+            // result as `ceilingStamped` — a silently-failed stamp (the
+            // manifest went missing/unwritable between enqueue and stamp)
+            // must stay distinguishable from a landed one, never reported as
+            // an unconditional success.
+            const pendingPath = join(getPaths(ctx.queueRoot).pending, `${initiativeId}.md`);
+            const ceilingStamped = persistManifestCostCeiling(pendingPath, costCeilingUsd);
+            return { ...result, ok: result.status === 'enqueued', ceilingStamped };
+          }
+          return { ...result, ok: result.status === 'enqueued' };
+        } catch (err) {
+          return { status: 'error' as const, initiativeId, ok: false, detail: sanitizeError(err) };
+        }
+      });
+      const ok = results.every((r) => r.ok);
+      sendJson(res, 200, { ok, results }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+
+  // Plan (R4-05 / F4) — the roadmap's per-initiative "Plan" trigger. Repoints
+  // ONE WI-less initiative's manifest at the forge-architect flow (decompose
+  // only) and makes it claimable — the same manifest-move queue-state
+  // transition as "start development" above, just single-id: unlike the batch
+  // develop/start route, there is exactly one outcome per request here, so it
+  // maps directly onto real HTTP statuses instead of a per-id results array.
+  // No in-request spawn — the scheduler claims it later and runs
+  // execPm -> runProjectManager.
+  if (method === 'POST' && url.startsWith('/api/initiatives/') && url.endsWith('/plan')) {
+    const initiativeId = decodeURIComponent(url.slice('/api/initiatives/'.length, url.length - '/plan'.length));
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    // W8-A3 (`flows-37`, review round 1 S2-2): the third door onto a repoint.
+    // Same compare-and-swap forward as `POST /api/flows/:id/run`; the rule
+    // itself lives on `enqueuePlanRun`.
+    let planBody: unknown;
+    try {
+      planBody = await readJson(req);
+    } catch {
+      planBody = {};
+    }
+    const planConfirmRepointFrom = typeof (planBody as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+      ? ((planBody as Record<string, unknown>)['confirmRepointFrom'] as string)
+      : undefined;
+    try {
+      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: planConfirmRepointFrom });
+      const httpStatus =
+        result.status === 'enqueued' ? 200 :
+        result.status === 'not-found' ? 404 :
+        result.status === 'already-running' || result.status === 'repoint-requires-confirm' ? 409 :
+        500;
+      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // W7-A3 (flows-02/03) — per-flow run trigger: enqueue an EXISTING
+  // initiative onto THIS flow (`enqueueFlowRun`, the ADR-041 generic per-flow
+  // claimable enqueue). The flow monitor's generic "Start Run" used to POST the
+  // flow id as an initiativeId to /api/runs (always 400, silently). Same
+  // status→HTTP mapping as the plan route above; the scheduler claims it later.
+  if (method === 'POST' && url.startsWith('/api/flows/') && url.endsWith('/run')) {
+    const flowId = decodeURIComponent(url.slice('/api/flows/'.length, url.length - '/run'.length));
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(flowId)) {
+      sendJson(res, 400, { error: 'invalid flow id' }, origin);
+      return;
+    }
+    // Existence through the guard family (never a raw fs probe on a
+    // request-derived segment): the flow id is a single slug segment under the
+    // trusted forgeRoot/studio/flows.
+    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
+      sendJson(res, 404, { error: 'flow not found', flowId }, origin);
+      return;
+    }
+    let body: unknown;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+      return;
+    }
+    const initiativeId = typeof (body as Record<string, unknown>)?.['initiativeId'] === 'string'
+      ? ((body as Record<string, unknown>)['initiativeId'] as string)
+      : '';
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    // W8-A3 (`flows-37`): the operator's confirmation, forwarded verbatim as the
+    // FLOW they were shown — a compare-and-swap, not a boolean override (review
+    // round 3, S2-3). A non-string is carried as `undefined`, i.e. no
+    // confirmation at all, so an accidental client serialization fails closed.
+    // The RULE is the enqueue's; this line only carries the operator's answer.
+    const confirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+      ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
+      : undefined;
+    try {
+      // W7-FIX-A3 (A3-01, round-2 finding 6): the OPERATOR route refuses a
+      // shipped initiative — and the rule now lives ON `enqueueFlowRun`
+      // (`allowFinishedSource`, default off) rather than as a pre-check bolted
+      // onto this one route, so the sibling operator route
+      // (`POST /api/develop/start`) is closed by the same guard instead of
+      // still yanking a merged manifest out of `done/`. The route only maps
+      // the status onto its HTTP code; the id rule + the fs probe are the
+      // enqueue's own (one INIT predicate, no third copy of the regex here).
+      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot, confirmRepointFrom });
+      const httpStatus =
+        result.status === 'enqueued' ? 200 :
+        result.status === 'not-found' ? 404 :
+        result.status === 'already-running' || result.status === 'already-done' ||
+          result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ? 409 :
+        500;
+      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
+  // comments. GET reads them + the derived verdict; POST appends one; POST
+  // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
+  // read-modify-write is atomic per cycle). Verdict derivation is over the set:
+  // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
+  if (method === 'GET' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
+    const sidecar = readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    return;
+  }
+  // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
+  // non-blocking comment has no resolve affordance, so delete is the only way
+  // to clear it; edit fixes a typo'd concern without losing its anchor id.
+  // Same lock + derive-on-every-mutate shape as append/resolve.
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/edit')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
+      const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
+      if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
+      if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+      );
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/delete')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
+      const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
+      if (readReviewComments(ctx.logsRoot, cycleId).comments.length >= REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
+        return;
+      }
+      const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+      );
+      sendJson(res, 200, {
+        ...result,
+        comment: result.comments[result.comments.length - 1],
+        derivedVerdict: deriveVerdictFromComments(result.comments),
+      }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Review verdict — the M2-C intervention surface. Delegates to applyReviewVerdict.
+  if (method === 'POST' && url === '/api/verdict') {
+    try {
+      const body = await readJson(req);
+      const b = body as Record<string, unknown>;
+      await applyReviewVerdict(req, res, studioPostCtx, {
+        initiativeId: typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '',
+        kind: (b['kind'] as 'approve' | 'send-back') ?? 'send-back',
+        rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
+        acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])
+          ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
+          : undefined,
+        concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
+        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
+}
+
+// ---- Architect routes (ADR 020) -------------------------------------------
+
+/** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
+const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+
+/** Timestamp stamp + short random suffix for a generated run id
+ *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
+ *  dispatches of the same slug in the same millisecond (a programmatic driver,
+ *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
+function newRunStamp(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
+ *  is prepended to `<sid> --project <project>` to build the full argv passed
+ *  to `orchestrator/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
+ *  <sid>/` capture dir. `demo-builder` is the one legacy case where verb and
+ *  log prefix diverge (verb `demo-builder`, log prefix `demo`) — preserved
+ *  exactly from the pre-collapse per-agent functions.
+ *
+ *  R4-21 phase 2, WI-2 (D5's sibling concern): `authoring` is the first row
+ *  that does NOT go through a bespoke `<verb> run <sid> --project <p>` CLI
+ *  command — it rides the GENERIC `forge agent run <agent-id> <sid> --project
+ *  <p>` dispatch fork (ADR-043 §3, `packages/agents/agent-run.ts`'s `cmdAgentRun`), so its
+ *  argvPrefix is `['agent', 'run', 'authoring']` rather than `['<verb>',
+ *  'run']`. The 4 legacy rows carry an EXPLICIT argv prefix instead of the
+ *  former `{verb}` + implicit `'run'` shape specifically so this one row can
+ *  differ in SHAPE (3 tokens, not 2) while the legacy rows stay
+ *  byte-equivalent to their pre-existing argv — `['architect','run']`,
+ *  `['instructions','run']`, `['demo-builder','run']`,
+ *  `['project-brain','run']` are the SAME tokens the old `{verb}+'run'`
+ *  construction produced, just spelled as a literal array.
+ *
+ *  W6-B2 review fix (MEDIUM 1) — exported (with SPAWN_AGENT_SPECS below) so
+ *  packages/sessions/tests/contract/session-tail-kind-parity.test.ts can import the real table directly
+ *  and assert, for every studio/session-kinds.yaml descriptor with a
+ *  corresponding entry here, that `logPrefix === descriptor.id` — the
+ *  coincidence ensureSessionTail's `_${kind}-${sessionId}` derivation
+ *  (this file, near ensureTailFor) relies on. Without this ratchet, a
+ *  future rename of either side drifts silently: ensureSessionTail just
+ *  no-ops (ensureTailFor's existsSync guard swallows the miss), so a
+ *  session's WS tail would quietly stop activating with no error anywhere. */
+export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
+
+export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
+  architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
+  instructions: { argvPrefix: ['instructions', 'run'], logPrefix: 'instructions' },
+  'demo-builder': { argvPrefix: ['demo-builder', 'run'], logPrefix: 'demo' },
+  'project-brain': { argvPrefix: ['project-brain', 'run'], logPrefix: 'project-brain' },
+  authoring: { argvPrefix: ['agent', 'run', 'authoring'], logPrefix: 'authoring' },
+  // R4-19-F2 — the kb-cleanup session, riding the SAME generic
+  // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
+  // kb-cleanup <sid> --project <p>`.
+  'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
+};
+
+/** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
+ *  spawn pattern). Best-effort + fire-and-forget — the runner checkpoints to
+ *  the session dir and the relevant `broadcast*Changed` signal drives the UI
+ *  re-fetch. `FORGE_ARCHITECT_NO_SPAWN=1` disables the spawn for harness /
+ *  curl runs that pre-seed session state (mirrors `FORGE_BRIDGE_DEBUG`).
+ *
+ *  The runner's stderr (uncaught exceptions, SDK errors) is captured to
+ *  `_logs/_<logPrefix>-<sid>/stderr.log` so stalls are diagnosable via the
+ *  existing GET /api/<family>/file/<project>/<sid>/stderr.log endpoints.
+ *
+ *  R2-01-F3b: collapses the 4 near-byte-identical `spawn<X>Turn` helpers
+ *  (architect/instructions/demo-builder/project-brain) that differed only in
+ *  the CLI verb and the log-dir prefix — same guard, same detached-spawn
+ *  shape, same argv per agent as before the collapse.
+ *
+ *  R2-01 final-review fix (e): guard `sessionId` against path traversal
+ *  before it's used to build the `_logs/_<logPrefix>-<sessionId>/` dir name
+ *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
+ *  handlers already 404 an unknown sessionId before spawning, plus the
+ *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
+ *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
+ *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
+// Exported (W6-B4) so packages/sessions/bridge-studio-sessions-affordances.ts's
+// generic session-affordance write endpoint can DELEGATE to this SAME spawn
+// helper instead of reimplementing it, injected via its AffordanceRouteContext
+// (mirrors SessionsRouteContext's ensureSessionTail injection, in
+// packages/sessions/bridge-studio-sessions.ts) — the sessions route modules
+// never import FROM this file (see its own header for the reasoning), so this
+// stays exported and passed by reference at the wiring call site, never
+// imported directly.
+//
+// Both paths above were `cli/bridge-studio-{affordances,sessions}.ts` until the
+// sessions carve moved them and ruling 87 deleted the affordances host file
+// outright. The comment kept naming files that no longer existed; repointed
+// with the M4-flows host carve.
+export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
+  // W7-C2 T1 review (A7) — this helper no longer swallows. Its outcome is
+  // REPORTED to the caller (`SpawnTurnOutcome`, in
+  // packages/sessions/bridge-studio-sessions-affordances.ts) so a route can
+  // refuse to claim `{ok:true, phase:
+  // 'analyzing'}` for a turn that never started; a session left in a working
+  // phase with no log dir can never be derived as `stalled`
+  // (packages/sessions/bridge-studio-lifecycle.ts), so a swallowed failure showed the
+  // operator `working` forever with `needsYou:false`. A DELIBERATE no-spawn
+  // (FORGE_ARCHITECT_NO_SPAWN / the dry bridge) is `ok` with
+  // `spawned:false` — not a failure. Callers that genuinely have nothing to
+  // do with the outcome ignore the return value exactly as before.
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return { ok: true, spawned: false };
+  if (!isSafeRunId(sessionId)) {
+    console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
+    return { ok: false, error: 'unsafe sessionId (path-traversal risk) — refusing to spawn' };
+  }
+  const { argvPrefix, logPrefix } = SPAWN_AGENT_SPECS[agentId];
+  try {
+    const logDir = join(forgeRoot, '_logs', `_${logPrefix}-${sessionId}`);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(
+      process.execPath,
+      ['--experimental-strip-types', 'apps/forge/cli.ts', ...argvPrefix, sessionId, '--project', project],
+      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
+    );
+    closeSync(stderrFd);
+    proc.unref();
+    // W7-A2 — track the turn's pid so the generic cancel route
+    // (packages/sessions/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
+    // live turn, and the lifecycle derivation can tell "re-run in flight"
+    // from "crashed" (isTurnAlive additionally proves ownership via the
+    // sessionId in the process's own argv above). Same logDir, same guard
+    // posture as stderr.log; best-effort like the rest of this helper.
+    if (typeof proc.pid === 'number') {
+      guardedWriteFile(join(forgeRoot, '_logs'), [`_${logPrefix}-${sessionId}`, 'turn.pid'], `${proc.pid}\n`);
+    }
+    return { ok: true, spawned: true };
+  } catch (err) {
+    // W7-C2 T1 review (A7) — surfaced, never swallowed: logged here for the
+    // bridge operator AND returned so the route can answer honestly.
+    console.error(`spawnAgentTurn: failed to start the ${agentId} turn for session ${sessionId}:`, err);
+    return { ok: false, error: sanitizeError(err) };
+  }
+}
+
+
+
+
+
+
+
+
+
+
+/**
+ * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
+ * (R6-04 WI-2 extraction, mirrors `parseAgentDispatchArgs`'s pure argv PARSER
+ * on the other side of the CLI boundary, packages/agents/agent-run.ts). Extracted from
+ * `spawnAgentDispatch` so the argv-building itself becomes independently
+ * testable (no spawn, no mock) — this function has no side effects and
+ * performs no safety checks of its own (`spawnAgentDispatch` still owns the
+ * `isSafeRunId`/`SAFE_AGENT_SLUG_RE` refusal, unchanged, before ever calling
+ * this). Returns EXACTLY the array `cmdAgentDispatch`'s `rest` parameter
+ * expects (`[slug, '--run-id', runId, ...optional flags]`) — NOT the full
+ * node-invocation array; `spawnAgentDispatch` still prepends the
+ * process-invocation boilerplate (`--experimental-strip-types`,
+ * `orchestrator/cli.ts`, `agent`, `dispatch`) around this helper's output.
+ *
+ * Input keys are filtered through `SAFE_INPUT_KEY_RE` here (defense-in-depth,
+ * unchanged from before this extraction) so no arg injects a flag. Input
+ * VALUES are arbitrary — safe as a single `k=v` arg since `spawn()` runs no
+ * shell.
+ */
+export function buildAgentDispatchArgs(
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+  /** R4-17, D6/D7 — when given, threaded through as `forge agent dispatch`'s
+   *  `--session-dir <abs>` so the dispatch process can write the terminal
+   *  phase into that session's status.json when the run ends (D7). Omitted
+   *  by the generic `POST /api/agents/:slug/run` route (D6: byte-identical
+   *  behaviour without it) — only `POST /api/studio/onboarding/start` passes
+   *  it today. `sessionDir` is always OUR OWN already-created, already-
+   *  realpath-verified directory (never request-derived text folded in
+   *  here), so no extra validation is needed at this spawn-arg boundary; the
+   *  process on the receiving end (`cmdAgentDispatch`, packages/agents/agent-run.ts)
+   *  guards its own write through it regardless.
+   */
+  sessionDir?: string,
+  /** R6-04 (WI-2) — the operator's per-kickoff cost ceiling, already
+   *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
+   *  before this is ever called. */
+  costCeilingUsd?: number,
+  /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.projectsRoot` (resolved
+   *  once at `startBridge`), threaded through as `forge agent dispatch`'s
+   *  `--projects-root <abs>` so the spawned subprocess's
+   *  `writeSessionTerminalPhase` (packages/agents/agent-run.ts) can honour THIS exact
+   *  root verbatim instead of re-deriving its own from `forge.config.json`/
+   *  env at write time — the re-derivation was the defect (see that
+   *  function's docstring). `cmdAgentDispatch` re-validates this value
+   *  itself (absolute/exists/contained-in-forgeRoot) before trusting it, so
+   *  no extra validation is needed at this spawn-arg boundary. */
+  projectsRoot?: string,
+): string[] {
+  const args = [slug, '--run-id', runId];
+  if (project) args.push('--project', project);
+  for (const [k, v] of Object.entries(inputs ?? {})) {
+    if (!SAFE_INPUT_KEY_RE.test(k)) continue;
+    args.push('--input', `${k}=${v}`);
+  }
+  if (sessionDir) args.push('--session-dir', sessionDir);
+  if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
+  if (projectsRoot) args.push('--projects-root', projectsRoot);
+  return args;
+}
+
+/**
+ * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
+ * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
+ * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
+ * never bubbles into the request). slug/runId/project are pre-validated by the
+ * route; input keys are re-checked in `buildAgentDispatchArgs` (defense-in-
+ * depth) so no arg injects a flag.
+ */
+function spawnAgentDispatch(
+  forgeRoot: string,
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+  sessionDir?: string,
+  costCeilingUsd?: number,
+  /** Bead forge-c6h — see `buildAgentDispatchArgs`'s matching parameter. */
+  projectsRoot?: string,
+): void {
+  // Argv construction is pure (no I/O, no side effects) — safe to build
+  // above the spawn-suppression early-return below, so it stays observable
+  // as ordinary function composition rather than something only a real spawn
+  // attempt could exercise.
+  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
+    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
+    return;
+  }
+  const args = ['--experimental-strip-types', 'apps/forge/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
+  try {
+    const logDir = join(forgeRoot, '_logs', runId);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(process.execPath, args, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
+    closeSync(stderrFd);
+    proc.unref();
+    // W7-B5 (agents-30): EVERY dispatch records its child pid at
+    // `_logs/<runId>/turn.pid` so the cancel route (`POST /api/agents/runs/
+    // :runId/cancel`) can reach it. Ownership proof at kill time is the
+    // runId in the child's own argv (`--run-id <runId>` — a whole element),
+    // via the same `isTurnAlive` the session cancel uses. Guarded write,
+    // best-effort like stderr.log.
+    if (typeof proc.pid === 'number') {
+      guardedWriteFile(join(forgeRoot, '_logs'), [runId, 'turn.pid'], `${proc.pid}\n`);
+    }
+    // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
+    // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
+    // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/
+    // turn.pid` (`sessionLogDirName`, packages/sessions/bridge-studio-lifecycle.ts — the
+    // SAME template `spawnAgentTurn` uses). Before this, onboarding was the
+    // one kind `killTrackedTurn` could never find, so cancel returned
+    // `killed:false` and left the agent running. `isTurnAlive` proves
+    // ownership through the `--session-dir` value's basename (the sid) in
+    // the child's own argv. kind/sid are derived from the ALREADY-validated
+    // sessionDir the route built (never request text); the guarded write
+    // refuses anything that does not resolve under `_logs`. Best-effort like
+    // stderr.log — never bubbles into the request.
+    if (sessionDir !== undefined && typeof proc.pid === 'number') {
+      const sid = basename(sessionDir);
+      const kind = basename(dirname(sessionDir)).replace(/^_/, '');
+      if (kind.length > 0 && isSafeRunId(sid)) {
+        guardedWriteFile(join(forgeRoot, '_logs'), [sessionLogDirName(kind, sid), 'turn.pid'], `${proc.pid}\n`);
+      }
+    }
+  } catch { /* best-effort */ }
+}
+
+
+
+
+
+
+
+
+
+/** Parse an already-read JSON string; null on malformed content. Companion to
+ *  the guarded read primitives (which return raw contents, not parsed JSON) so
+ *  a SEC-04 guarded read can replace a `readJsonFile(join(dir, leaf))` call
+ *  without re-following the leaf: the guard read the bytes, this parses them. */
+function safeParseJson<T>(raw: string): T | null {
+  try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
+
+/**
+ * `POST /api/plan-verdict` — all that remains of the architect host handler.
+ *
+ * The five `/api/architect/*` arms carved to `@forge/sessions`
+ * (`bridge-studio-architect.ts`); this one did NOT, and the reason is a
+ * dependency measurement rather than an ownership opinion: `ctx.mergePr`,
+ * `ctx.finalizeAfterMerge` and `ctx.queueRoot` appear in this whole function
+ * only inside this arm, and the handler it delegates to is flows'
+ * (`applyPlanVerdict`), which also serves `/api/runs/:id/gates/plan`.
+ */
+async function handleArchitect(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  const origin = allowedOrigin(req);
+  // POST /api/plan-verdict — delegates to applyPlanVerdict in bridge-studio.ts.
+  if (method === 'POST' && url === '/api/plan-verdict') {
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const planCtx: StudioPostContext = {
+        forgeRoot: ctx.forgeRoot,
+        logsRoot: ctx.logsRoot,
+        queueRoot: ctx.queueRoot,
+        projectsRoot: ctx.projectsRoot,
+        mergePr: ctx.mergePr,
+        finalizeAfterMerge: ctx.finalizeAfterMerge,
+        broadcastArchitectChanged: ctx.broadcastArchitectChanged,
+        spawnArchitectTurnFn: (forgeRoot, project, sessionId) => spawnAgentTurn(forgeRoot, 'architect', project, sessionId),
+      };
+      await applyPlanVerdict(req, res, planCtx, {
+        project: typeof body['project'] === 'string' ? body['project'] : '',
+        sessionId: typeof body['sessionId'] === 'string' ? body['sessionId'] : '',
+        kind: (body['kind'] as 'approve' | 'revise' | 'reject') ?? 'reject',
+        rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
+        entryRoute: '/api/plan-verdict',
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---- Instructions-creator routes (Stage A) --------------------------------
+//
+// Mirrors the architect routes: an operator-driven, file-checkpointed runner
+// that authors a managed project's AGENTS.md (interview → draft → verdict →
+// finalize). The bridge spawns one CLI turn per operator action via the
+// shared `spawnAgentTurn(forgeRoot, 'instructions', project, sessionId)`.
+
+
+
+// ---- Demo-builder routes (Stage B) ----------------------------------------
+//
+// Mirrors the instructions routes: an operator-driven, file-checkpointed runner
+// that authors a managed project's DEMO.html (generate → review → lock). Unlike
+// instructions (whose output lives in the session dir), the demo-builder agent
+// writes DEMO.html into the PROJECT REPO under .forge/demo/ — so the file route
+// serves from `project_repo_path`, not the session dir. The bridge spawns one
+// CLI turn per operator action, via the shared
+// `spawnAgentTurn(forgeRoot, 'demo-builder', project, sessionId)` — note the
+// log-dir prefix stays `_demo-<sid>` (not `_demo-builder-<sid>`), matching
+// the pre-collapse `spawnDemoBuilderTurn` exactly.
+
+// R1-3b — the project-brain turn spawns via
+// `spawnAgentTurn(forgeRoot, 'project-brain', project, sessionId)`.
+
+
+
+
+
+
+
+
+
+// ---- Reflection routes (the third human moment, in-UI) --------------------
+//
+// The reflector emits `_logs/<cycleId>/user-questions.json` (StructuredQuestion[])
+// as its Stage-2 file handoff; the operator's answers land in
+// `user-feedback.md`. The /reflect/<cycleId> page renders the questions and
+// POSTs the answers here — converting the old reflect slash command into
+// an in-UI page, consistent with the in-UI architect + review moments.
+async function handleReflect(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  const origin = allowedOrigin(req);
+
+  if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
+    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
+    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin); return true; }
+    // SEC-04 (bd forge-ebj) — cycleId was folded raw into `join(logsRoot,
+    // cycleId)` and each leaf raw-appended: a `%2F`-smuggled `../..` cycleId
+    // disclosed an out-of-root user-questions.json, and a symlinked leaf inside
+    // a real cycle dir was followed. Gate the request-derived cycleId (its OWN
+    // segment under the trusted logsRoot) through the per-segment identity
+    // guard first — a traversed/symlinked cycle dir is a 400 with NO read —
+    // then route every leaf read through the guard too (leaf-symlink close).
+    const reflectCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+    if (!reflectCycleGuard.ok) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return true;
+    }
+    const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
+    const questions = questionsRaw !== null ? (safeParseJson<unknown[]>(questionsRaw) ?? []) : [];
+    const answered = guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null;
+    // R4-09-F3: the durable reflect mode (REFLECT_MODE_FILE) — the authoritative
+    // signal the UI uses to render the automated read-only view, independent of
+    // per-question inferred-marker compliance.
+    const modeRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'reflect-mode.json']);
+    const modeDoc = modeRaw !== null ? safeParseJson<{ mode?: string }>(modeRaw) : null;
+    const mode = modeDoc?.mode === 'automated' ? 'automated' : modeDoc?.mode === 'interactive' ? 'interactive' : undefined;
+    sendJson(res, 200, { cycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
+    return true;
+  }
+
+  if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
+    // R5-01-F1 (task A-finalfix FIX 1): reflect-answer is `stub-actions`, not
+    // `refuse` — it does two things, writing user-feedback.md (bookkeeping)
+    // and detached-firing rerunReflector (the real agent turn). Only the
+    // latter is dry-bridge-gated below; the write always proceeds so the
+    // route's normal 200 stays truthful ("feedback captured").
+    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
+    try {
+      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
+      // SEC-04 (bd forge-ebj) — the WRITE twin of the reflect GET read. cycleId
+      // was folded raw into `join(logsRoot, cycleId)` and `user-feedback.md`
+      // raw-appended: a `%2F`-smuggled `../..` cycleId overwrote an out-of-root
+      // user-feedback.md, and a symlinked leaf was followed. Gate the cycleId
+      // (its OWN segment under the trusted logsRoot) first — reject a
+      // traversed/symlinked dir (400, no write) and keep the "cycle not found"
+      // 404 for a genuinely absent in-root cycle.
+      const dirGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+      if (!dirGuard.ok) { sendJson(res, 400, { error: 'invalid cycleId', cycleId }, origin); return true; }
+      if (!dirGuard.exists) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
+      const dir = dirGuard.realPath;
+      const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
+      for (const a of body.answers ?? []) {
+        lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
+      }
+      lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
+      // Route the leaf through the guard too: a symlinked user-feedback.md
+      // inside the (now identity-verified) real cycle dir is refused, never
+      // followed out of root. A rejected leaf writes NOTHING (fail closed).
+      if (guardedWriteFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], lines.join('\n')) === null) {
+        sendJson(res, 400, { error: 'invalid cycle path', cycleId }, origin);
+        return true;
+      }
+      const dryMarker = dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/reflect/:cycleId/answer', cycleId);
+      sendJson(res, 200, { ok: true, ...dryMarker }, origin);
+      if (!isDryBridge()) {
+        // D — auto-rerun the reflector so the feedback is distilled into retro.md +
+        // brain themes. Detached (don't block the HTTP response on a full reflector
+        // pass), but observable: success AND failure emit an event into the cycle's
+        // events.jsonl (not console), so a lost rerun is visible and the startup
+        // reconcile can recover it. The UI owns reflection without the CLI.
+        const reflectLogger = createLogger(cycleId, ctx.logsRoot);
+        ctx
+          .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
+          .then(() =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [join(dir, 'user-feedback.md')],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-fired',
+              metadata: { trigger: 'feedback-submit' },
+            }),
+          )
+          .catch((err) =>
+            reflectLogger.emit({
+              initiative_id: cycleId,
+              phase: 'reflection',
+              skill: 'bridge',
+              event_type: 'log',
+              input_refs: [],
+              output_refs: [],
+              message: 'bridge.reflect-rerun-failed',
+              metadata: { error: String(err) },
+            }),
+          );
+      }
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
+
+function readJson(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolveJson, rejectJson) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    req.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy();
+        rejectJson(new Error('request body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
+    });
+    req.on('error', rejectJson);
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ---- Tail mechanics --------------------------------------------------------
+
+function pumpTail(state: TailState, emit: (event: EventLogEntry) => void): void {
+  try {
+    const size = statSync(state.filePath).size;
+    if (size <= state.offset) return;
+    const chunk = readPartial(state.filePath, state.offset, size);
+    state.offset = size;
+    for (const line of chunk.split('\n')) {
+      if (!line.trim()) continue;
+      try { emit(JSON.parse(line) as EventLogEntry); } catch { /* skip malformed */ }
+    }
+  } catch { /* file rotated / removed */ }
+}
+
+function readPartial(filePath: string, from: number, to: number): string {
+  const length = to - from;
+  if (length <= 0) return '';
+  const buffer = Buffer.alloc(length);
+  const fd = openSync(filePath, 'r');
+  try {
+    readSync(fd, buffer, 0, length, from);
+  } finally {
+    closeSync(fd);
+  }
+  return buffer.toString('utf8');
+}

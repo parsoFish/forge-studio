@@ -36,7 +36,7 @@ Three labels, applied strictly:
 
 **Verification status is not uniform, and the difference matters.** Rows are marked:
 
-- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts`, `cli/bridge-studio-sibling-containment.test.ts`, `cli/bridge-studio-flow-trigger-oracle.test.ts`, `packages/knowledge/tests/integration/brain-paths-containment.test.ts`, and (from earlier initiatives) `cli/bridge-studio-write.test.ts` / `cli/bridge-studio-flows.test.ts`.
+- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts`, `apps/forge/bridge-studio-sibling-containment.test.ts`, `apps/forge/bridge-studio-flow-trigger-oracle.test.ts`, `packages/knowledge/tests/integration/brain-paths-containment.test.ts`, and (from earlier initiatives) `apps/forge/bridge-studio-write.test.ts` / `apps/forge/bridge-studio-flows.test.ts`.
 - **`[read]`** — classified by reading the code and its call chain. Structurally sound, but **no live repro was executed**. A `[read]` row is a lead, not a proven exploit.
 - **`[unver]`** — could not be definitively classified. **Never treated as safe.**
 
@@ -62,8 +62,8 @@ Applied retroactively: the `[read]` rows below that make a failure-behaviour
 claim are **`orchestrator/studio/hook-library.ts:164-198`** (rejects literal and
 percent-decoded traversal), the **`INIT_ID_RE`/`SAFE_CYCLE_ID_RE` charset rows**
 (`enqueue-flow-run`/`enqueue-plan-run`/`bridge-studio-runs`,
-`review-comments.ts`), **`cli/bridge-studio-writes.ts:199-201`** (404 before any
-fs call), and **`cli/bridge-studio-kbs.ts:788-794`** (`resolve(file) !== file`
+`review-comments.ts`), **`apps/forge/bridge-studio-writes.ts:199-201`** (404 before any
+fs call), and **`packages/knowledge/bridge-studio-kbs.ts:788-794`** (`resolve(file) !== file`
 rejects). Each states a *rejecting input exists*, which is the classification
 bar, but **none has had its caller's handling of that rejection executed** — so
 the rejection is `[read]`-verified and the FAILURE HANDLING around it is
@@ -190,7 +190,7 @@ each one's status individually — a caller you did not check is "not checked", 
 `scripts/check-request-path-sinks.test.ts`, and into CI as its own step
 (`.github/workflows/ci.yml`, "Request-path sinks ratchet check") — is a checked-in
 ratchet against `scripts/request-path-sinks.baseline.txt`. It walks every module
-reachable, via relative imports, from `cli/ui-bridge.ts` plus every `cli/bridge-*.ts`,
+reachable, via relative imports, from `apps/forge/ui-bridge.ts` plus every `cli/bridge-*.ts`,
 counts calls to a fixed list of fs/process sinks (`writeFileSync`, `readFileSync`,
 `mkdirSync`, `rmSync`, `spawn`, `execSync`, etc. — 24 names total) per reachable file,
 and fails the build the moment a NEW `(file, sink)` pair appears or an existing pair's

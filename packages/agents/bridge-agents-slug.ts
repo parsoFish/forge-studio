@@ -2,7 +2,7 @@
  * bridge-agents-slug.ts — the two `/api/agents/:slug/*` routes, and the
  * materials validation only the run route uses.
  *
- * Carved out of `cli/ui-bridge.ts` (M4-agents, exit row 2). Every symbol here
+ * Carved out of `apps/forge/ui-bridge.ts` (M4-agents, exit row 2). Every symbol here
  * was checked for uses outside the agent surface before it moved: the whole
  * materials cluster (`MATERIAL_FILENAME_RE`, the three message builders,
  * `decodeStrictBase64`, `validateMaterialsField`) had none.
@@ -11,7 +11,7 @@
  *
  * `SAFE_AGENT_SLUG_RE` is exported rather than kept private, because the host's
  * `spawnAgentDispatch` — sessions' kickoff routes hold the same reference, so it
- * stays in `cli/ui-bridge.ts` — applies the same refusal. ONE definition,
+ * stays in `apps/forge/ui-bridge.ts` — applies the same refusal. ONE definition,
  * imported by the host, rather than two copies of a defense-in-depth guard that
  * would drift. And note what it is NOT: `@forge/kernel`'s `SLUG_RE` is
  * `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`, which requires a leading LETTER and
@@ -133,7 +133,7 @@ const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ()._[\]-]{0,127}$/;
 /** Comma-separated, declaration-order rendering of an agent's declared
  *  materials kinds for a refusal message — the literal `(none)` when the
  *  agent declares nothing at all (R6-04-F2 WI-1, exact wording pinned by
- *  `cli/ui-bridge-agent-run-materials.test.ts`). */
+ *  `apps/forge/ui-bridge-agent-run-materials.test.ts`). */
 function declaredMaterialKindsClause(declared: readonly string[]): string {
   return declared.length > 0 ? declared.join(', ') : '(none)';
 }

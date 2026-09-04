@@ -22,13 +22,13 @@ writes lands in a **git-tracked path inside the forge repo itself**:
 
 | What the operator authors | Where Studio writes it | Tracked? |
 |---|---|---|
-| Agent (skill) | `skills/<slug>/SKILL.md` (`cli/bridge-studio-writes.ts`, the agent PUT route) | tracked |
-| Flow | `studio/flows/<id>/flow.yaml` (`cli/bridge-studio-writes.ts`, the flow save route) | tracked |
-| Hook | `studio/hooks/<id>/{hook.yaml,scripts/run.sh}` (`cli/bridge-studio-hooks.ts`, create + edit routes) | tracked |
-| Knowledge base | `brain/<id>/{kb.yaml,themes/,_raw/}` (`cli/bridge-studio-kbs.ts`, the KB create route) | tracked |
-| Community registry rows | `studio/community/registry.yaml` (`cli/bridge-studio-writes.ts` CRUD + `commitRegistryDraft` in `orchestrator/interactive-finalizers.ts`) | tracked |
-| Templates / demo elements | `studio/artifact-templates/<id>.md`, `studio/demo-elements/<id>.md` (`cli/bridge-studio-templates.ts`) | tracked |
-| Skill packages, installs, approvals | `skills/<id>/**` (`cli/bridge-studio-skills.ts`, `installSkillPackage` / `approveSkillDraft` in `orchestrator/studio/skill-library.ts`, `installCommunityHookPackage` in `orchestrator/studio/community-install.ts`) | tracked |
+| Agent (skill) | `skills/<slug>/SKILL.md` (`apps/forge/bridge-studio-writes.ts`, the agent PUT route) | tracked |
+| Flow | `studio/flows/<id>/flow.yaml` (`apps/forge/bridge-studio-writes.ts`, the flow save route) | tracked |
+| Hook | `studio/hooks/<id>/{hook.yaml,scripts/run.sh}` (`packages/library/bridge-studio-hooks.ts`, create + edit routes) | tracked |
+| Knowledge base | `brain/<id>/{kb.yaml,themes/,_raw/}` (`packages/knowledge/bridge-studio-kbs.ts`, the KB create route) | tracked |
+| Community registry rows | `studio/community/registry.yaml` (`apps/forge/bridge-studio-writes.ts` CRUD + `commitRegistryDraft` in `orchestrator/interactive-finalizers.ts`) | tracked |
+| Templates / demo elements | `studio/artifact-templates/<id>.md`, `studio/demo-elements/<id>.md` (`packages/library/bridge-studio-templates.ts`) | tracked |
+| Skill packages, installs, approvals | `skills/<id>/**` (`packages/library/bridge-studio-skills.ts`, `installSkillPackage` / `approveSkillDraft` in `orchestrator/studio/skill-library.ts`, `installCommunityHookPackage` in `orchestrator/studio/community-install.ts`) | tracked |
 | Per-machine install ledger + hook approvals | `studio/installed-skills.yaml`, `studio/hook-approvals.yaml` | tracked directory, files **not** gitignored |
 
 That table is representative, not exhaustive — every enumeration of it so far has come back longer
@@ -37,7 +37,7 @@ rather than a hand-maintained list. Two useful pieces of negative evidence: Stud
 writes **nothing** under `docs/`, and `studio/catalog.yaml` and `studio/session-kinds.yaml` have no
 write path at all — they are hand-edited by design ([ADR 027](./027-studio-object-model.md) §5,
 restated in `orchestrator/studio/registry.ts`). And one adjacent gap found while enumerating:
-`_template-staging/` (`cli/bridge-studio-templates.ts`) is **not** gitignored, unlike its siblings
+`_template-staging/` (`packages/library/bridge-studio-templates.ts`) is **not** gitignored, unlike its siblings
 `_skill-staging/` and `_interactive-library/`. It is cleaned in a `finally`, so the leak is latent —
 but a crash mid-request leaves an untracked directory sitting next to exactly the pending state this
 ADR is about.
@@ -56,7 +56,7 @@ run"), and `docs/roadmaps/README.md`'s driving-order table cites it as the reaso
 first, in wave 0.
 **The no-auto-commit decision is correct and this ADR does not reverse it.**
 
-One honest exception, stated so this ADR does not overclaim: `fixMisRouted` (`cli/brain-fix-auto.ts`),
+One honest exception, stated so this ADR does not overclaim: `fixMisRouted` (`packages/knowledge/brain-fix-auto.ts`),
 reachable from Studio's "apply auto-fixes" button, runs `git -C <forgeRoot> mv` to relocate a
 mis-categorised brain theme while preserving its history. `git mv` **stages** — so exactly one Studio
 path today writes the forge repo's index. It is gated on a clean worktree first (a read-only
@@ -68,7 +68,7 @@ The problem is what the decision left unbuilt. Four things follow from "write th
 
 ### 1. There is exactly one pending-change signal in all of Studio, and it is hard-coded to one file
 
-`communityIndexMeta` (`cli/bridge-studio-community.ts`) runs a literal, single-path
+`communityIndexMeta` (`packages/library/bridge-studio-community.ts`) runs a literal, single-path
 `git status --porcelain -- studio/community/registry.yaml`, publishes the boolean as
 `meta.registryDirty`, and `forge-ui/app/community/page.tsx` renders a notice from it. Agents, flows,
 hooks and KB edits produce **no signal at all**. An operator can author a week of platform changes
@@ -113,7 +113,7 @@ running it for two months against **managed project repos**:
   silently lost its edits"*);
 - `saveProjectRepo` — one explicit operator "Save" merges the branch into the default branch and pushes;
 - `hasPendingStudioChanges` — a derived pending-state answer, surfaced through
-  `GET /api/studio/projects/:id/repo-status` (`cli/bridge-studio.ts`) and `fetchRepoStatus`
+  `GET /api/studio/projects/:id/repo-status` (`apps/forge/bridge-studio.ts`) and `fetchRepoStatus`
   (`forge-ui/lib/studio-client.ts`).
 
 So forge already treats a *managed project's* repo as a first-class, transacted write target with a

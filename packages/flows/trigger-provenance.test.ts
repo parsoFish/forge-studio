@@ -23,7 +23,7 @@
  *    `defaultStartFlowRun`). Driven through the REAL, already-shipped
  *    `mintTriggeredInitiative` (orchestrator/mint-triggered-initiative.ts)
  *    with a hand-built `FlowRunRequest` mirroring each real call site's
- *    shape exactly (cron-triggers.ts `makeFireFn`, cli/bridge-hooks.ts's
+ *    shape exactly (cron-triggers.ts `makeFireFn`, packages/flows/bridge-hooks.ts's
  *    webhook route, flow-trigger.ts `fireAgentCompleteTriggers`) — then the
  *    REAL `aggregateRun`/`listRuns` reads the resulting on-disk manifest.
  *    This is "plant it directly" in the sense that requires no change to
@@ -61,7 +61,7 @@
  *
  * ROUND-2 AMENDMENT (relayed operator ruling): the original webhook
  * fixtures below omitted `sourceFlowId` — a field every real
- * `cli/bridge-hooks.ts` call site now sets (the declaring flow, resolved by
+ * `packages/flows/bridge-hooks.ts` call site now sets (the declaring flow, resolved by
  * `findWebhookTrigger`). Omitting it pressured the implementation into
  * adding a fallback in `orchestrator/mint-triggered-initiative.ts`'s
  * `deriveTriggerFields`: strip the `webhook:` prefix off `triggeredBy` and
@@ -267,7 +267,7 @@ test('trigger.kind === "webhook" for a run derived from a staged webhook request
   try {
     planFlow(root, 'worker-webhook', 'test-project');
     // forge-76y: built through the fixture builder (mirrors the real
-    // cli/bridge-hooks.ts staging shape) — every real webhook call site
+    // packages/flows/bridge-hooks.ts staging shape) — every real webhook call site
     // now sets sourceFlowId, which the builder's default already does
     // (round-2 finding: an earlier version of this fixture omitted it and,
     // to satisfy it, the implementation grew a fallback that reports the
@@ -401,7 +401,7 @@ test('an attacker-controlled webhook payload string never appears anywhere in tr
     const hookId = 'demo-runner-hook';
     const declaringFlowId = 'demo-runner-declaring-flow-2';
     // forge-76y: built through the fixture builder (mirrors the real
-    // cli/bridge-hooks.ts staging shape): sourceFlowId is the declaring
+    // packages/flows/bridge-hooks.ts staging shape): sourceFlowId is the declaring
     // flow, resolved separately from the hook id embedded in triggeredBy.
     // Round-2 finding: omitting this field here made the implementation
     // grow a forbidden fallback (strip 'webhook:' off triggeredBy, report
@@ -489,12 +489,12 @@ test('trigger.scope is normalizeProjectId-agreeing for a resolved project (fixtu
 test('trigger.scope is exactly null (not undefined, not "") when the firing event has no resolved project', () => {
   const root = makeTmp();
   try {
-    // Webhook is the real, documented case: cli/bridge-hooks.ts deliberately
+    // Webhook is the real, documented case: packages/flows/bridge-hooks.ts deliberately
     // never sets eventProject ("there is no repo->forge-project-id mapping
     // anywhere in the codebase... a scoped webhook trigger fails closed").
     planFlow(root, 'worker-unscoped', 'test-project');
     // forge-76y: built through the fixture builder (mirrors the real
-    // cli/bridge-hooks.ts staging shape) — sourceFlowId is independent of
+    // packages/flows/bridge-hooks.ts staging shape) — sourceFlowId is independent of
     // scope (which derives from eventProject, deliberately left at the
     // builder's default `null` below, mirroring real bridge-hooks.ts, which
     // never resolves an eventProject for a webhook); omitting sourceFlowId
@@ -533,7 +533,7 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
 // flow has no honest provenance, so `trigger` should be ABSENT — not
 // present with a degraded/guessed `source`. This closes the loop the
 // round-1 fixtures opened: those fixtures omitted `sourceFlowId` (a field
-// every real cli/bridge-hooks.ts call site sets) while still asserting
+// every real packages/flows/bridge-hooks.ts call site sets) while still asserting
 // `trigger` was present, which pressured the implementation into adding a
 // fallback (`deriveTriggerFields` in orchestrator/mint-triggered-initiative.ts:
 // strip the `webhook:` prefix off `triggeredBy` and report the HOOK id as

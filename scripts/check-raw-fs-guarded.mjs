@@ -347,7 +347,7 @@ export const EXPLICIT_MODULES = [
   // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine, and the four
   // legacy runners. They cannot be reached by the reachability walk (that walk
   // follows relative imports from the bridge entry points; the
-  // cli/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
+  // packages/agents/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
   // boundary), so this list is the only mechanism that lints them. Session-
   // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
   // sinks in every one.
@@ -436,9 +436,9 @@ function allSourceModules(root) {
  * model. Three DERIVATIONS, no filename glob (W8-F5, bead forge-6gv.23):
  *
  *   1. every bridge ENTRY module, from the sibling walker's own
- *      `listEntryModules` (`cli/ui-bridge.ts` + non-test `cli/bridge-*.ts`) —
+ *      `listEntryModules` (`apps/forge/ui-bridge.ts` + non-test `cli/bridge-*.ts`) —
  *      until W8-F5 this lint saw only the `cli/bridge-studio*` subset, which is
- *      how `cli/bridge-recovery.ts` (four routes, `renameSync`/`rmSync` on
+ *      how `packages/flows/bridge-recovery.ts` (four routes, `renameSync`/`rmSync` on
  *      `:id`-derived paths) shipped for two waves outside the dataflow gate;
  *   2. every module REACHABLE from those entries (the sibling's import walk)
  *      that carries the HTTP-plumbing signal — a delegated route helper is a

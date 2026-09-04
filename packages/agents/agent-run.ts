@@ -194,7 +194,7 @@ async function runTurnSpecAgent(
   // R4-21 phase 2, correction B: the ROOT itself is now resolveProjectsDir's
   // single source of truth (honouring FORGE_PROJECTS_DIR / forge.config.json's
   // projectsDir), not a hardcoded `resolve('projects')` — every bridge route
-  // already resolves the projects root this way (e.g. cli/ui-bridge.ts's
+  // already resolves the projects root this way (e.g. apps/forge/ui-bridge.ts's
   // POST /api/studio/authoring/start), and this CLI entry point is what
   // POST /api/studio/authoring/start's spawned turn actually runs, so the two
   // must agree or a session created under a non-default projectsDir is
@@ -364,7 +364,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: Agen
   // any runner's "no status.json"/containment refusal, …) previously had
   // NOTHING between it and the top-level `apps/forge/cli.ts` catch-all,
   // which only logs to stderr — invisible to the detached, unref'd spawn
-  // `cli/ui-bridge.ts`'s `spawnAgentTurn` uses. `entry.kindDir` is each
+  // `apps/forge/ui-bridge.ts`'s `spawnAgentTurn` uses. `entry.kindDir` is each
   // runner's own on-disk session-dir segment (see AgentRunnerEntry.kindDir's
   // doc for the demo-builder/`_demo` trap).
   const sessionDir = join(projectRoot, entry.kindDir, sessionId);

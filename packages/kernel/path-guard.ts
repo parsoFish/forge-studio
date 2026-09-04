@@ -148,7 +148,7 @@ export type PathGuardResult = PathGuardOk | PathGuardReject;
  * to distinguish "the containment guard rejected this write" from an
  * unrelated internal error in a `catch` block that lives in a DIFFERENT
  * file than the `throw` (e.g. `orchestrator/project-brain-seed.ts` throwing,
- * `cli/bridge-studio-writes.ts` catching) — mirroring the established
+ * `apps/forge/bridge-studio-writes.ts` catching) — mirroring the established
  * `orchestrator/ -> cli/` import direction this module already anchors
  * (SEC-01, `resolveKbBrainDir`). The message is for internal
  * diagnostics/logging only, same rule as `PathGuardReject.reason`: a call
@@ -206,7 +206,7 @@ const CONTROL_CHAR_RE = /[\u0000-\u001f]/;
  *
  * LOAD-BEARING structural gate (forge-01u): `seg: string` is only a
  * compile-time claim. Every segment on the request path ultimately
- * originates from a parsed JSON request body (see `cli/ui-bridge.ts`'s route
+ * originates from a parsed JSON request body (see `apps/forge/ui-bridge.ts`'s route
  * handlers), and nothing upstream enforces the TypeScript annotation at
  * runtime — a JSON array, plain object, number, boolean, `null`, or
  * `undefined` all type-check as `any`/`unknown` at the body-parsing boundary

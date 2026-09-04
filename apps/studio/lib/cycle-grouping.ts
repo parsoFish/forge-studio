@@ -3,7 +3,7 @@
  * 1.6 — "roadmap page rework: initiative-centric, not cycle-centric").
  *
  * `GET /api/cycles` already collapses to the latest log dir per initiative
- * server-side (`cli/ui-bridge.ts::scanCycles`'s `latestPerInit` map), but any
+ * server-side (`apps/forge/ui-bridge.ts::scanCycles`'s `latestPerInit` map), but any
  * consumer working from a wider cycle history — or a future endpoint that
  * surfaces every attempt — can still see more than one `Cycle` per
  * `initiativeId`: a resume/requeue after a crash or send-back produces a new
@@ -39,7 +39,7 @@ const UNASSIGNED_PROJECT = 'unassigned';
  *
  * The "active" cycle for a given initiative is the one with the
  * lexicographically-greatest `cycleId`: cycle IDs are formatted
- * `<ISO-ish-timestamp>_<initiativeId>` (see `cli/ui-bridge.ts`), so string
+ * `<ISO-ish-timestamp>_<initiativeId>` (see `apps/forge/ui-bridge.ts`), so string
  * comparison is a correct recency ordering without relying on the caller
  * having pre-sorted `cycles`.
  *

@@ -1,6 +1,6 @@
 /**
  * R2-04 (ADR-041) — webhook signature verification for the bridge's
- * `POST /api/hooks/:hookId` route (cli/bridge-hooks.ts).
+ * `POST /api/hooks/:hookId` route (packages/flows/bridge-hooks.ts).
  *
  * github/gitea share GitHub's `X-Hub-Signature-256` HMAC-SHA256 scheme
  * (verified via `@octokit/webhooks-methods`, battle-tested rather than

@@ -4,12 +4,12 @@
  * choke point. It writes a manifest with `serializeManifest` +
  * `writeFileSync` directly, never calling `writeManifest`
  * (orchestrator/manifest.ts:381) — the documented SINGLE place where
- * `assertManifestPathFields` (SEC-02, cli/manifest-path-guard.ts) validates
+ * `assertManifestPathFields` (SEC-02, packages/flows/manifest-path-guard.ts) validates
  * `worktree_path` / `project_repo_path` / `cycle_id` / `project`.
  *
  * MEASUREMENT (executed live before writing these tests, not assumed):
  *   1. `PUT /api/studio/flows/:id` accepts `body.project` VERBATIM as a
- *      string (cli/bridge-studio-writes.ts ~958-961) with NO shape/format
+ *      string (apps/forge/bridge-studio-writes.ts ~958-961) with NO shape/format
  *      validation anywhere — `validateFlow` never checks `flow.project`'s
  *      shape at all; `checkFlowTriggers`/`checkTargetProject`
  *      (orchestrator/studio/validate-triggers.ts) only requires it
@@ -71,7 +71,7 @@ import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { parseManifest, type InitiativeManifest } from './manifest.ts';
 import { stageFlowRunRequest, drainFlowRunRequests } from './flow-run-requests.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

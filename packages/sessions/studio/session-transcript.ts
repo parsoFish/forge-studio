@@ -49,7 +49,7 @@
  * its text — text-based re-ask detection silently dropped a legitimately
  * re-asked verbatim question, which is the defect this supersedes.
  *
- * Accepted residual (read-only, self-healing, NOT fixed): `cli/ui-bridge.ts`
+ * Accepted residual (read-only, self-healing, NOT fixed): `apps/forge/ui-bridge.ts`
  * (~lines 1592-1596) writes `answers.json` then `status.json` as two separate
  * writes, not one atomic transaction. A crash between them leaves
  * `status.json` at `phase: 'awaiting-answers'` even though the round was
@@ -208,7 +208,7 @@ export type DeriveTranscriptResult =
        *  This replaces the wire's old `transcript: descriptor.turnSpec ===
        *  undefined` boolean (packages/sessions/bridge-studio-sessions.ts), which was a
        *  STORED PROXY and factually wrong: `authoring` declares a `turnSpec`
-       *  yet its start route (`writeAuthoringSession`, cli/ui-bridge.ts)
+       *  yet its start route (`writeAuthoringSession`, apps/forge/ui-bridge.ts)
        *  writes `prompt.md` before the generic spine ever runs, so the proxy
        *  claimed "records no turns" for a kind that records one from second
        *  zero. Derived from the same reads that build `turns` — there is no
@@ -390,7 +390,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     if (body === null) continue;
     // W8-B3 (ON-5) — a BLANK opener is not a turn. Three real brief routes
     // (`/api/project-brain/brief`, `/api/instructions/brief`,
-    // `/api/demo-builder/brief`, cli/ui-bridge.ts) write `body.brief ?? ''`,
+    // `/api/demo-builder/brief`, apps/forge/ui-bridge.ts) write `body.brief ?? ''`,
     // so an operator who skips the optional brief gets a zero-byte
     // `prompt.md` — which rendered as an EMPTY operator bubble in the
     // transcript. The file is still reported in `sourcesFound` (it really is

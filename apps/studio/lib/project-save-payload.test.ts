@@ -1,5 +1,5 @@
 /**
- * W7-FIX-A4 (W7A4-03) — the project↔KB binding is DERIVED (cli/kb-sites.ts
+ * W7-FIX-A4 (W7A4-03) — the project↔KB binding is DERIVED (packages/knowledge/kb-sites.ts
  * `projectKbBindings`, "never stored") from kb.yaml `binding.ref`, and the
  * roster hands the derived value to the editor as `project.kb`. The editor
  * must therefore NEVER echo `kb` back on save unless the operator actually

@@ -1,11 +1,11 @@
 /**
- * Acceptance tests for cli/bridge-studio-skills.ts (R3-01-F3/F4, WI-0).
+ * Acceptance tests for packages/library/bridge-studio-skills.ts (R3-01-F3/F4, WI-0).
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-skills.ts` import is the
  * expected red). See _wave5/specs/R3-01-F3F4.md for the full design; AT
  * numbers below map 1:1 onto that spec's
- * "AT set — cli/bridge-studio-skills.test.ts".
+ * "AT set — packages/library/bridge-studio-skills.test.ts".
  *
  * Style: real bridge (startBridge) + fetch, mirroring bridge-studio-kbs.test.ts
  * and bridge-studio-write.test.ts — plus one direct handler-invocation test
@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ test('AT-55: POST /api/studio/skills writes library: true (palette-visible + lin
 
 // ---------------------------------------------------------------------------
 // POST /api/studio/skills — BLOCKER, symlink escape (2026-08-05 adversarial-
-// review round 3, finding A/1-3). `cli/bridge-studio-skills.ts` still does a
+// review round 3, finding A/1-3). `packages/library/bridge-studio-skills.ts` still does a
 // LEXICAL `skillDirPath.startsWith(skillsDir(forgeRoot) + sep)` check on the
 // UNRESOLVED, join()-constructed path — it was never migrated to the shared
 // `resolveGuardedSkillMdPath` realpath choke point
@@ -546,7 +546,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
 // a client-supplied packageDir and instead accepts
 //   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
 // minting a SERVER-derived sourceId, staging entries under
-// <forgeRoot>/_skill-staging/<sourceId>/ via cli/skill-staging.ts's guarded
+// <forgeRoot>/_skill-staging/<sourceId>/ via packages/library/skill-staging.ts's guarded
 // stageSkillPackage, copying via installSkillPackage, then rm'ing the staging
 // dir in a `finally`. (The AT-51 packageDir tests above pin TODAY's contract;
 // they are retired with the fix by the impl worker, not here — this file only

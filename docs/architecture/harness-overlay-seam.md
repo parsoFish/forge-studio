@@ -31,7 +31,7 @@ const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
 ```
 
 - **`QueryFn`** — [packages/agents/ralph/claude-agent.ts:22](../../packages/agents/ralph/claude-agent.ts#L22): the dev-loop's per-turn agent driver.
-- **Architect + council** — the architect runner resolves the same injectable `queryFn` (defaulting to `sdkQuery`); the council transcript type (`CouncilTranscript`) is defined in [`cli/architect-plan.ts`](../../cli/architect-plan.ts), and the council runs inside [`skills/architect/`](../../skills/architect/) — there is no separate `council.ts`.
+- **Architect + council** — the architect runner resolves the same injectable `queryFn` (defaulting to `sdkQuery`); the council transcript type (`CouncilTranscript`) is defined in [`packages/sessions/kinds/architect-plan.ts`](../../packages/sessions/kinds/architect-plan.ts), and the council runs inside [`skills/architect/`](../../skills/architect/) — there is no separate `council.ts`.
 - PM / reflector take the same `{ queryFn }` options shape
   (`runProjectManager(input, logger, { queryFn })`).
 

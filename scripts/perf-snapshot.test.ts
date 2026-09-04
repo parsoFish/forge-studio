@@ -12,7 +12,7 @@
  *     deterministic, no I/O.
  *   - timeFetch/measureApiEndpoint — impure (real network I/O in
  *     production), but both take an injectable `fetchImpl` (mirrors
- *     cli/forge-watch.ts's `probeBridgeIdentity(url, fetchImpl)`), so they're
+ *     apps/forge/forge-watch.ts's `probeBridgeIdentity(url, fetchImpl)`), so they're
  *     exercised here against a STUBBED fetch — no live bridge required (and
  *     none is touched from this lane).
  *

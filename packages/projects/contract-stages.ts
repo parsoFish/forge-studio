@@ -37,11 +37,11 @@
  * call, then resolved via `realpathSync` and required to land inside the
  * resolved `projectsRoot` (never a lexical prefix check on an unresolved
  * path). This is deliberately the SAME shape as
- * `cli/bridge-studio-sessions.ts`'s `resolveSafeSessionDir` — realpath the
+ * `packages/sessions/bridge-studio-sessions.ts`'s `resolveSafeSessionDir` — realpath the
  * candidate, compare against the realpath'd root with a `startsWith`
  * boundary check — and NOT `resolveGuardedPath`
  * (`cli/studio-path-guard.ts`)/`isContainedProjectRepoPath`
- * (`cli/manifest-path-guard.ts`): those enforce a STRICTER per-segment
+ * (`packages/flows/manifest-path-guard.ts`): those enforce a STRICTER per-segment
  * IDENTITY check (a symlinked `<root>/<id>` pointing at a DIFFERENT real
  * object under the SAME root is rejected outright, by design — see
  * `studio-path-guard.ts`'s "escape shape 3"). That stricter shape would
@@ -88,16 +88,16 @@ const ROADMAP_REL_PATH = 'roadmap.md';
  * `projectsRoot` (equal, or prefixed by `projectsRoot + sep`). A missing
  * directory and an escaping symlink both collapse to `null` — the caller
  * cannot distinguish "wrong id" from "blocked escape" from the outcome,
- * mirroring `resolveSafeSessionDir` (`cli/bridge-studio-sessions.ts`). See
+ * mirroring `resolveSafeSessionDir` (`packages/sessions/bridge-studio-sessions.ts`). See
  * the module header for why this — not `resolveGuardedPath` — is the right
  * shape here (AT-28's false-rejection control).
  *
  * Exported (R4-17 round-1 BLOCKER fix): `POST /api/studio/onboarding/start`
- * (`cli/ui-bridge.ts`) needs the IDENTICAL containment shape on the same
+ * (`apps/forge/ui-bridge.ts`) needs the IDENTICAL containment shape on the same
  * `projectsRoot`/project-id pair `GET /api/studio/projects/:id/
  * contract-stages` already resolves through this function — reused by import
  * rather than re-implemented, per this campaign's standing "one guard, many
- * callers" rule (see `cli/ui-bridge.ts`'s call site for the full note).
+ * callers" rule (see `apps/forge/ui-bridge.ts`'s call site for the full note).
  */
 export function resolveContainedProjectDir(projectsRoot: string, projectId: string): string | null {
   let realProjectsRoot: string;
@@ -128,7 +128,7 @@ function deriveContractRow(projectDir: string, config: ProjectConfig | null): Co
   if (config !== null) {
     status = 'present';
     // Wording ("gate command: <tokens>") is pinned to the
-    // ALLOWED_DETAIL_PATTERNS allow-list shape (cli/contract-stages.test.ts,
+    // ALLOWED_DETAIL_PATTERNS allow-list shape (packages/projects/tests/integration/contract-stages.test.ts,
     // AT-23) — a fixed template, not a word choice being preserved for its
     // own sake.
     detail.push(`gate command: ${config.testProcess.local.cmd.join(' ')}`);
@@ -174,7 +174,7 @@ function deriveSecretsRow(config: ProjectConfig | null): ContractStageRow {
 function deriveDemoRow(projectDir: string, config: ProjectConfig | null): ContractStageRow {
   const demoSteps = config?.demoProcess ?? [];
   // Wording ("step: <kind>") is pinned to the ALLOWED_DETAIL_PATTERNS
-  // allow-list shape (cli/contract-stages.test.ts, AT-23) — a fixed
+  // allow-list shape (packages/projects/tests/integration/contract-stages.test.ts, AT-23) — a fixed
   // template, not a word choice being preserved for its own sake.
   const detail: string[] = demoSteps.map((step) => `step: ${step.kind}`);
   let status: ContractStageStatus = demoSteps.length > 0 ? 'present' : 'absent';
@@ -204,7 +204,7 @@ const BRAIN_PROFILE_FILENAME = 'profile.md';
  *  still `present` (bytes: 0); "present" answers "does the artifact exist",
  *  not "is it non-empty".
  *
- *  T2 ruling (round-1 pin 2, item 3): `checkC4` (HARD) in `cli/preflight.ts`
+ *  T2 ruling (round-1 pin 2, item 3): `checkC4` (HARD) in `packages/projects/preflight.ts`
  *  fails closed unless BOTH `roadmap.md` AND `brain/projects/<id>/
  *  profile.md` (Brain 3, ADR 035, central in the forge repo) exist, but this
  *  row previously only ever looked at `roadmap.md` — a project could read

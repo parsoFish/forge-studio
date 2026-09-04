@@ -2,7 +2,7 @@
  * session-index-sort.test.ts — `sortAndCapSessionIndexRows`, as a package unit
  * test.
  *
- * SPLIT OUT of `cli/ui-bridge-sessions-index.test.ts` by the M4 routes carve.
+ * SPLIT OUT of `apps/forge/ui-bridge-sessions-index.test.ts` by the M4 routes carve.
  * That file held two different kinds of test against one subject: six
  * HTTP-level acceptance tests that boot a real bridge and fetch
  * `GET /api/studio/sessions`, and these five, which call a pure sorting helper

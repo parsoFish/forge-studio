@@ -1,7 +1,7 @@
 /**
  * Structural teeth for R3-04's negative acceptance criterion ("no
  * create/edit UI for this category anywhere", D1 of `_wave5/specs/R3-04.md`)
- * — T2-mandated (round 2, item 6). `cli/bridge-studio-connections.test.ts`'s
+ * — T2-mandated (round 2, item 6). `packages/library/bridge-studio-connections.test.ts`'s
  * bridge-refusal tests prove the ROUTE never accepts a mutating request;
  * that is necessary but not sufficient — nothing stopped a future PR from
  * adding a `apps/studio/app/connections/new/page.tsx` that POSTs somewhere
@@ -12,7 +12,7 @@
  * Three checks, each independent:
  *   1. No authoring PAGE exists on disk at all (a pure fs check — true
  *      TODAY, before any of R3-04 lands, and must stay true forever).
- *   2. `cli/bridge-studio-connections.ts` exports no write-verb-named
+ *   2. `packages/library/bridge-studio-connections.ts` exports no write-verb-named
  *      function (dynamic import, so a not-yet-existing module fails ONLY
  *      this one test, not the whole file — mirrors
  *      `validate.test.ts`'s `import * as` namespace-import technique, one
@@ -60,7 +60,7 @@ test('no apps/studio/app/connections/[id]/edit/ authoring page exists on disk', 
 });
 
 // ---------------------------------------------------------------------------
-// 2. cli/bridge-studio-connections.ts's own export surface — dynamic import
+// 2. packages/library/bridge-studio-connections.ts's own export surface — dynamic import
 //    so a not-yet-existing module fails ONLY this one test.
 // ---------------------------------------------------------------------------
 

@@ -180,7 +180,7 @@ test('DEPS (HARD): malformed package.json is skipped (C1\'s problem to report), 
 //
 // The default is OFF deliberately, and the asymmetry is the point: a project
 // is born contract-green BEFORE anyone installs its dependencies (R1-03-F1,
-// `cli/onboard-born-green.test.ts`), so judging runnability at creation would
+// `apps/forge/onboard-born-green.test.ts`), so judging runnability at creation would
 // break one ratified acceptance to satisfy another. Claim time is when an
 // unprovisioned ground stops being "not yet" and becomes the reason a run dies
 // three minutes later — `packages/flows/claim-validator.ts` is the one caller

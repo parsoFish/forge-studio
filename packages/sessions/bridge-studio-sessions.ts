@@ -45,12 +45,12 @@
  * 16/17) needs no code change here. The on-disk session dir is derived as
  * `<projectsRoot>/<project>/_<kind>/<sessionId>` — `_<kind>` built from
  * `descriptor.id`, the same shape `architectSessionDir` / `instructionsSessionDir`
- * / `projectBrainSessionDir` already use (cli/ui-bridge.ts:1416,
+ * / `projectBrainSessionDir` already use (apps/forge/ui-bridge.ts:1416,
  * packages/sessions/kinds/instructions.ts, kinds/project-brain.ts).
  *
  * Security (the part reviewers attack hardest — a standing brief after 3
  * consecutive lexical-check failures in this campaign):
- *   - `sessionId` is validated with SAFE_ID_RE (cli/bridge-studio.ts) — real
+ *   - `sessionId` is validated with SAFE_ID_RE (apps/forge/bridge-studio.ts) — real
  *     session ids are ISO-ish timestamps (`2026-08-05T10-00-00`, uppercase
  *     `T`) which a lowercase-only slug rule rejects. `project` is validated
  *     with the ONE case-preserving id rule (PROJECT_ID_RE; a `.kb-<id>`
@@ -144,7 +144,7 @@ const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
  *  onboarding/authoring/kb-cleanup alike), and for authoring + kb-cleanup it
  *  is the ONLY read route they have — neither has a per-kind list route like
  *  `/api/architect/sessions`. `ensureSessionTail` is threaded in here (rather
- *  than only from the four legacy per-kind list routes in cli/ui-bridge.ts)
+ *  than only from the four legacy per-kind list routes in apps/forge/ui-bridge.ts)
  *  so every kind's live event log gets tailed to the WS stream, closing bd
  *  forge-2ee's "no consumer reads the authoring spine's events dir" half. */
 export type SessionsRouteContext = StudioContext & {
@@ -446,7 +446,7 @@ export async function handleStudioSessionsRoutes(
     // W6-B2 — live-tail this session's event log (idempotent; no-ops for a
     // kind whose runner never writes `_logs/_<kind>-<sid>/events.jsonl`, e.g.
     // 'onboarding', which dispatches through a different, already-streaming
-    // mechanism — see cli/ui-bridge.ts's ensureSessionTail doc comment).
+    // mechanism — see apps/forge/ui-bridge.ts's ensureSessionTail doc comment).
     // Gated on isTerminalPhase (review fix, MEDIUM 2): a terminal session
     // never appends further events, so tailing it would spin a permanent
     // 200ms poll with no per-tail teardown (ensureTailFor only stops ALL
@@ -608,7 +608,7 @@ export async function handleStudioSessionsRoutes(
         // record turns", and it was factually wrong: its own comment claimed a
         // `turnSpec` kind "never writes the transcript files", but `authoring`
         // declares a turnSpec AND its start route (`writeAuthoringSession`,
-        // cli/ui-bridge.ts) writes `prompt.md` before the generic spine ever
+        // apps/forge/ui-bridge.ts) writes `prompt.md` before the generic spine ever
         // runs — so the wire said "records no turns" for a kind that records
         // one from second zero. Measured, not argued: driving the real writer
         // and the real derivation yields `turns=1, source=prompt.md`.

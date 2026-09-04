@@ -9,7 +9,7 @@
  * DERIVED, never stored (exit row 4). Both inputs already exist and are
  * already derived per request by the server:
  *   · `GET /api/studio/projects/attention` — `buildProjectAttention`
- *     (`cli/bridge-studio.ts:1377`) re-scans the queue on every call;
+ *     (`apps/forge/bridge-studio.ts:1377`) re-scans the queue on every call;
  *   · `GET /api/cycles` — the live + recent cycle snapshot.
  * Nothing here is cached, and no `Project` gains an activity field.
  *

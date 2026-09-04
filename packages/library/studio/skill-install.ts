@@ -78,7 +78,7 @@ type RawPackageEntry = { relPath: string; absPath: string };
 /** Walk a package directory, resolving every entry through realpath so a
  *  symlink (or, in principle, a literal `../` component) that escapes the
  *  package root is caught before anything is read. Mirrors the traversal
- *  pattern at cli/bridge-studio-writes.ts:917, applied to the SOURCE side. */
+ *  pattern at apps/forge/bridge-studio-writes.ts:917, applied to the SOURCE side. */
 function walkPackageDir(packageDir: string): RawPackageEntry[] {
   const rootAbs = resolve(packageDir);
   const boundary = rootAbs + sep;

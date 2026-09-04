@@ -94,7 +94,7 @@ production, but only the `FilesystemKbBackend` ships. A future graph-memory
 backend would implement the same `KbBackend` interface and register in
 `getKbBackend`; none is shipped — the descriptor's `backend:` field is the
 selection point such a backend hangs off. The bridge KB routes
-(`cli/bridge-studio-kbs.ts`) read through `getKbBackend` rather than calling
+(`packages/knowledge/bridge-studio-kbs.ts`) read through `getKbBackend` rather than calling
 `kb-graph.ts` directly, so the reroute point is already in place.
 
 Next surface (not in this commit): the **planning-context** read — PM/reflector

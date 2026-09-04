@@ -1,6 +1,6 @@
 /**
  * SEC-07 r35 hardening (defense-in-depth) locks for `findSessionProject`
- * (`cli/agent-run.ts`). r35 is NOT a red→green exploit pin: the function's own
+ * (`packages/agents/agent-run.ts`). r35 is NOT a red→green exploit pin: the function's own
  * finding is a non-exploitable existence oracle, statically proven never to
  * return an out-of-root path (it only ever returns one of the real
  * `projects/*` entries it scanned). The fix (a) EXPORTS the function for direct

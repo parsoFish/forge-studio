@@ -28,7 +28,7 @@ import { WORK_ITEM_FILE_PATTERN } from './work-item.ts';
 // W7-FIX-A3 (round-2 finding 6): ONE predicate for the manifest id
 // convention. This module, `POST /api/flows/:id/run`'s own pre-check and
 // `enqueue-plan-run.ts` each carried a hand-copied regex for the same rule
-// (already drifting: `\d{4}` here vs `[0-9]{4}` in cli/bridge-studio-runs.ts),
+// (already drifting: `\d{4}` here vs `[0-9]{4}` in packages/flows/bridge-studio-runs.ts),
 // so a future tightening in one would leave the others accepting ids the
 // enqueue refuses — the exact fail-open the done/ guard must not have.
 import { isCanonicalInitiativeId } from './initiative-id.ts';

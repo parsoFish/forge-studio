@@ -60,13 +60,13 @@ function cleanCreateProjects() {
 
 // ── A1.3's SELF-OWNED lint-flagged scratch KB (W7-FIX-B-UI review finding 1) ─
 // A1.3's KB-strip assertion must never ride the repo's TRANSIENT standing
-// lint debt: KB lint is derived live per request (cli/kb-lint-summary.ts,
+// lint debt: KB lint is derived live per request (packages/knowledge/kb-lint-summary.ts,
 // derive-don't-store), so the day the operator drains the checked-in brains
 // to green (the wave-6 one-button "Drain to green"), an un-seeded
 // `kbs-needing-attention` assertion goes red with ZERO UI regression. The
 // beat therefore seeds its OWN condition: the same directly-verified fixture
 // shape as home.mjs's HOME_LINT_KB (a valid-frontmatter theme with NO
-// category index files beside it genuinely trips cli/brain-lint.ts's
+// category index files beside it genuinely trips packages/knowledge/brain-lint.ts's
 // checkProjectBrainIndexes → one `flag` → buildKbAttention "warn"), on its
 // own slug so the two journeys never collide on disk, with its own dedicated
 // .gitignore entry, seeded before the beat's Home visit and swept crash-safe
@@ -117,7 +117,7 @@ function writeSuLintKbFixture() {
 // so mdtoc's ledger is genuinely empty at this beat) — so seeding it never
 // mutates canonical state (state-ownership rule). It mirrors the EXACT on-disk
 // shape a real archived, merged cycle carries — the positive-control shape in
-// cli/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
+// apps/forge/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
 // (project: mdtoc, flow_id: forge-develop, cycle_id) + a `_logs/<cycleId>/
 // events.jsonl` (cycle.start → cycle.end complete) — so the REAL scanCycles →
 // deriveProjectCycleLedgerRows → HistoryLedger path renders a REAL, clickable row

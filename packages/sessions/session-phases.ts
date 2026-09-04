@@ -2,16 +2,16 @@
  * session-phases.ts — the phase vocabulary of the two session kinds that carry
  * neither a `turnSpec` nor a `panel` table.
  *
- * These three tables moved here from `cli/bridge-studio.ts` (M4 sessions lane).
+ * These three tables moved here from `apps/forge/bridge-studio.ts` (M4 sessions lane).
  * They were put in the host originally to break an import cycle: the generic
  * session route lived in the host's own `cli/` tree (it is
- * `packages/sessions/bridge-studio-sessions.ts` today), `cli/ui-bridge.ts`
+ * `packages/sessions/bridge-studio-sessions.ts` today), `apps/forge/ui-bridge.ts`
  * imported its handler, and a shared constant in either would have closed the
  * loop — so a third, dependency-free host module held it. That reason expired
  * when the route moved into this package: a package never imports the host, so
  * there is no cycle to break, and session phase vocabulary belongs with the
  * sessions seam (SPEC.md §5) rather than in the bridge that happens to serve
- * it. `cli/bridge-studio.ts` re-exports all three so its own consumers keep
+ * it. `apps/forge/bridge-studio.ts` re-exports all three so its own consumers keep
  * their single import — the same shape it already uses for `CANCELLED_PHASE`,
  * which likewise lives here and is re-exported there.
  *
@@ -33,7 +33,7 @@ export { CANCELLED_PHASE } from './session-status-io.ts';
 /** The per-kind terminal phases for the four kinds whose runners predate the
  *  ADR-043 phase table (architect, instructions, demo and project-brain —
  *  the four with no `turnSpec` to derive a `step: terminal` row from, unlike
- *  kb-cleanup/authoring). ONE named constant that both `cli/ui-bridge.ts`
+ *  kb-cleanup/authoring). ONE named constant that both `apps/forge/ui-bridge.ts`
  *  (its four per-kind list routes, which gate `ensureSessionTail` on it) and
  *  `packages/sessions/bridge-studio-sessions.ts` (the generic
  *  `/api/studio/sessions/:kind/:id` route) read, so neither hand-writes its

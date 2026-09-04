@@ -3,7 +3,7 @@
  * agent-instruction file. C8 (`docs/forge-project-contract.md`) requires a
  * HUMAN-authored `AGENTS.md`/`CLAUDE.md` to be present and nothing more; the
  * precedent is the `hasAgentFile` guard at
- * `cli/bridge-studio-writes.ts:2105-2112`. Two grounds, both regression-pinned
+ * `apps/forge/bridge-studio-writes.ts:2105-2112`. Two grounds, both regression-pinned
  * against a future "helpful" regeneration:
  *
  *   1. A project WITH an `AGENTS.md` — the file must survive byte-identical

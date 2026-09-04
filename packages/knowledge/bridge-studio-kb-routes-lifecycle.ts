@@ -260,7 +260,7 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
       // via resolveKbProcesses until an operator opts into an override).
       // forge-3oq: stamp `origin: 'studio'` on every KB created through this
       // route — mirrors the flow write path's `origin: existing?.origin ??
-      // 'studio'` stamp (cli/bridge-studio-writes.ts). Never 'seed' — that
+      // 'studio'` stamp (apps/forge/bridge-studio-writes.ts). Never 'seed' — that
       // token is reserved for the two shipped OOTB brains, committed by
       // hand, so an operator-created KB can never claim OOTB provenance.
       const kbYamlPath = join(kbDir, 'kb.yaml');
@@ -271,7 +271,7 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
 
       // 10. R1-06-F2: hand off to a project-brain seeding session — mirrors
       // POST /api/project-brain/start's `{ ok: true, sessionId }` contract
-      // (cli/ui-bridge.ts:3797-3826) plus its status.json write, so the new,
+      // (apps/forge/ui-bridge.ts:3797-3826) plus its status.json write, so the new,
       // still-empty KB gets a REAL agentic seeding pass through the SAME
       // shell (GET /api/studio/sessions/project-brain/:sessionId) rather
       // than a separate, competing seed path (T1 ruling Q3 removed the old

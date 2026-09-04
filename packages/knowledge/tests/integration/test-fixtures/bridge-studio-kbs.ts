@@ -70,10 +70,10 @@ export const TEST_THEME_MD = `# Test Theme\n\nThis is a test theme node.\n`;
 // R1-06 WI-3 group A fixture: a SCRATCH project KB (never cycles/forge-dev)
 // carrying real-corpus-shaped lint-warning findings, for the maintenance
 // op:'consolidate' RED pins below. checkFrontmatter / checkIndexSync /
-// checkStaleness / checkOrphans (cli/brain-lint.ts) are all hardcoded to
+// checkStaleness / checkOrphans (packages/knowledge/brain-lint.ts) are all hardcoded to
 // THEME_SUBDIRS = ['cycles','forge-dev'] and never scan brain/projects/*; the
 // ONLY forge-side lint check that covers a project brain at all is
-// checkProjectBrainIndexes (cli/brain-lint.ts:337), whose "not listed in
+// checkProjectBrainIndexes (packages/knowledge/brain-lint.ts:337), whose "not listed in
 // project category index" finding classifies as resolution:'agent' (line
 // 1042-1043) — a real, agent-tier, per-theme finding. Three fixture themes
 // with valid frontmatter/category but deliberately absent from patterns.md

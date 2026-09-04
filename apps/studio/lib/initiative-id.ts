@@ -7,7 +7,7 @@
  * segment carries no `_`). DemoReviewSurface had this recovery privately
  * while GateBar and ReviewVerdictForm posted the raw handle and 400'd — two
  * verdict surfaces, two id rules. Now all three resolve through here (the
- * bridge additionally recovers server-side: cli/bridge-studio-runs.ts
+ * bridge additionally recovers server-side: packages/flows/bridge-studio-runs.ts
  * `recoverInitiativeId` — defence in depth, same rule).
  */
 

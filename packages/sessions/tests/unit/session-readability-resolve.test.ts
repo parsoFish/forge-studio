@@ -8,7 +8,7 @@
  * `resolveReadableSession`'s legacy arm needs to VALIDATE a log-derived
  * project string, which is `invalidProjectReason`'s job — and that function
  * lives on packages/sessions/bridge-studio-sessions.ts and itself pulls `SAFE_ID_RE` from
- * cli/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX` from
+ * apps/forge/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX` from
  * packages/knowledge/bridge-studio-kbs.ts. Importing any of that into the leaf would create
  * the bridge module graph's first import cycle, so `resolveReadableSession`
  * and `sessionIsReadable` are exported from packages/sessions/bridge-studio-sessions.ts

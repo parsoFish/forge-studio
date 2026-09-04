@@ -1,6 +1,6 @@
 /**
  * ACCEPTANCE TESTS (must be RED until SEC-02 lands) — validator + escape-shape
- * catalog for `cli/manifest-path-guard.ts` (does not exist yet as of this
+ * catalog for `packages/flows/manifest-path-guard.ts` (does not exist yet as of this
  * writing; every import below is expected to fail module resolution until
  * the implementer lands it — that is the correct RED reason for this whole
  * file, not a typo).
@@ -331,7 +331,7 @@ test('assertManifestPathFields: THROWS on a violating field, does NOT throw on a
 
 // ---------------------------------------------------------------------------
 // writeManifest refuses — the choke point. Its only two production callers
-// (orchestrator/promote-manifests.ts:71, cli/bridge-recovery.ts:213) are both
+// (orchestrator/promote-manifests.ts:71, packages/flows/bridge-recovery.ts:213) are both
 // ingest paths.
 // ---------------------------------------------------------------------------
 
@@ -375,7 +375,7 @@ test('writeManifest: refuses a manifest with an out-of-root worktree_path AND cr
 
 // ---------------------------------------------------------------------------
 // ROUND 2, Finding 3 (MINOR, cwd-dependent resolution): `containedUnder`
-// (cli/manifest-path-guard.ts) calls a bare `resolve(candidate)`, which
+// (packages/flows/manifest-path-guard.ts) calls a bare `resolve(candidate)`, which
 // resolves a RELATIVE candidate against `process.cwd()` rather than against
 // `forgeRoot`. No live bypass was found (every production writer emits
 // absolute paths), but it is an unstated invariant. The agreed fix: reject
@@ -495,16 +495,16 @@ test('root-folding negative control: a candidate whose FIRST segment under the r
 
 // ---------------------------------------------------------------------------
 // PIN 5 — round-3 adversarial review, item 2 (BLOCKER): `isContainedProjectRepoPath`
-// (cli/manifest-path-guard.ts:170-173) hardcodes `join(opts.forgeRoot,
+// (packages/flows/manifest-path-guard.ts:170-173) hardcodes `join(opts.forgeRoot,
 // 'projects')` as the projects root, never consulting `FORGE_PROJECTS_DIR` or
 // `forge.config.json`'s `projectsDir` — unlike `resolveProjectsDir`
 // (orchestrator/config.ts), which every OTHER projects-root resolution in
-// this repo (`ctx.projectsRoot` in cli/ui-bridge.ts, `writeSessionTerminalPhase`
-// in cli/agent-run.ts, etc.) already goes through. Under a configured
+// this repo (`ctx.projectsRoot` in apps/forge/ui-bridge.ts, `writeSessionTerminalPhase`
+// in packages/agents/agent-run.ts, etc.) already goes through. Under a configured
 // projects root this function DISAGREES with the producers that correctly
 // used `resolveProjectsDir` — reachable from the approve/finalize path
-// (cli/bridge-studio-runs.ts:222/390, orchestrator/finalize-merged.ts:301,
-// orchestrator/drain-fix-loop.ts:136, cli/bridge-recovery.ts), so a
+// (packages/flows/bridge-studio-runs.ts:222/390, orchestrator/finalize-merged.ts:301,
+// orchestrator/drain-fix-loop.ts:136, packages/flows/bridge-recovery.ts), so a
 // configured `projectsDir` could break cycle approval entirely.
 //
 // T2's ruling: one concept, one resolution — `isContainedProjectRepoPath`
@@ -599,7 +599,7 @@ test('R4-17 pin 5, item 2 (ACCEPT control — default configuration must stay by
 // R4-17 pin 7 — round-4 adversarial review: `isContainedProjectRepoPath` /
 // `isContainedWorktreePath` self-resolve the projects root by RE-READING
 // `forge.config.json` from disk on EVERY call (`resolveConfiguredProjectsRoot`,
-// cli/manifest-path-guard.ts:115-117), while `startBridge` (cli/ui-bridge.ts:241)
+// packages/flows/manifest-path-guard.ts:115-117), while `startBridge` (apps/forge/ui-bridge.ts:241)
 // snapshots `ctx.projectsRoot` ONCE at server start and every route handler
 // uses that cached value for the process's lifetime. A live `forge.config.json`
 // edit while the bridge is running — an ordinary action, and forge is
@@ -805,7 +805,7 @@ test("R4-17 pin 7, item 4c (SEC-02/SEC-03 preservation — scripts/verify-cycle.
 
 // ---------------------------------------------------------------------------
 // R4-17 pin 8 — round-5 adversarial review: pin 7's `projectsRootFor` helper
-// (cli/manifest-path-guard.ts:167-172) REFUSES (returns `null`, so the
+// (packages/flows/manifest-path-guard.ts:167-172) REFUSES (returns `null`, so the
 // containment predicate returns `false`) whenever a caller supplies a
 // `projectsRoot` that is not a non-empty ABSOLUTE string, rather than
 // silently falling back to config self-resolution — a deliberate,

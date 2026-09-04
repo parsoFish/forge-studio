@@ -31,7 +31,7 @@
  * the M4 row-37 carve; COMMON §5 forbids that inside a package, and every
  * assertion below is about the handler's status and what it wrote to disk, not
  * about the wire. The host's own request policy (origin, CSRF, the 404
- * fallthrough) stays pinned in `cli/bridge-studio-affordances.test.ts`.
+ * fallthrough) stays pinned in `apps/forge/bridge-studio-affordances.test.ts`.
  */
 
 import { test, before, after } from 'node:test';

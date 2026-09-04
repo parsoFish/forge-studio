@@ -1,6 +1,6 @@
 /**
  * bridge-studio-architect.ts — the architect session kind's `/api/architect/*`
- * routes, carved out of `cli/ui-bridge.ts` (M4 §4 step 2).
+ * routes, carved out of `apps/forge/ui-bridge.ts` (M4 §4 step 2).
  *
  * The five arms below are VERBATIM. A carve that re-specifies a hand-written
  * matcher or re-derives a guard while it moves is how behaviour changes with

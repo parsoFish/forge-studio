@@ -2,7 +2,7 @@
  * GET /api/studio/agents/:slug/capability (W6-B6 fix — wave-6 final gate,
  * journey demo-builder DB-4).
  *
- * Root cause this route fixes: `/api/studio/agents` (`cli/bridge-studio.ts`)
+ * Root cause this route fixes: `/api/studio/agents` (`apps/forge/bridge-studio.ts`)
  * builds its roster from `listAgentDefinitions`, which filters through
  * `isStudioAgent` — `library !== false` (@forge/agents/studio/agent-registry.ts).
  * Every kickoff-only system agent (demo-builder, instructions-creator,

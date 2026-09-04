@@ -34,7 +34,7 @@
  * `sumAuthoritativeCostFromLines` (M0-A round-2 defect C) are the one
  * declared exception to "no imports besides node builtins": the latter
  * delegates to `orchestrator/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
- * single source of truth for cost summation also used by `cli/metrics.ts`,
+ * single source of truth for cost summation also used by `packages/flows/metrics.ts`,
  * `orchestrator/run-model.ts` and `orchestrator/run-model-derive.ts` — rather
  * than re-implementing the restatement rule a second time. That module's own
  * import of `EventLogEntry` is `import type`, erased at load, so pulling it

@@ -4,7 +4,7 @@
  *
  * WHY THIS EXISTS. That file has two independent read-modify-write callers:
  *
- *   1. `runCommunityRefresh`      (cli/community-refresh-run.ts)
+ *   1. `runCommunityRefresh`      (packages/library/community-refresh-run.ts)
  *   2. `mutateCommunityRegistry`  (bridge-studio-community-crud.ts — the CRUD routes)
  *
  * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
@@ -20,7 +20,7 @@
  * file.
  *
  * `proper-lockfile` is already a direct dependency and already this repo's
- * established primitive for exactly this shape (cli/bridge-studio-runs.ts's
+ * established primitive for exactly this shape (packages/flows/bridge-studio-runs.ts's
  * verdict mutex, orchestrator/drain-fix-loop.ts, orchestrator/manifest.ts,
  * orchestrator/review-comments.ts). Nothing new is introduced here.
  *
@@ -59,7 +59,7 @@ import { communityRegistryPath } from './studio/community-registry.ts';
  * sub-millisecond once they hold the lock: no writer performs I/O over the
  * network while holding it), short enough that a genuinely wedged lock
  * answers the operator rather than hanging their request. Mirrors the
- * verdict mutex in cli/bridge-studio-runs.ts.
+ * verdict mutex in packages/flows/bridge-studio-runs.ts.
  */
 export const COMMUNITY_REGISTRY_LOCK_RETRIES = Object.freeze({ retries: 5, minTimeout: 50 });
 
@@ -69,7 +69,7 @@ export const COMMUNITY_REGISTRY_LOCK_RETRIES = Object.freeze({ retries: 5, minTi
  * `stale / 2` ms; a holder that crashed refreshes nothing, so its lock
  * self-clears after this long instead of wedging the registry forever. Stated
  * explicitly (rather than inherited from the library default) because
- * `cli/community-registry-lock.test.ts` pins the behaviour on it.
+ * `packages/library/community-registry-lock.test.ts` pins the behaviour on it.
  */
 export const COMMUNITY_REGISTRY_LOCK_STALE_MS = 10_000;
 
@@ -90,7 +90,7 @@ export class CommunityRegistryLockError extends Error {
  *  directory before locking so a fresh forge root's two writers still
  *  serialise against each other.
  *
- *  Exported so `cli/community-registry-lock.test.ts` can plant a stale lock at
+ *  Exported so `packages/library/community-registry-lock.test.ts` can plant a stale lock at
  *  the REAL path rather than at a hand-typed guess of it: a test that builds
  *  the lock path itself goes silently green the day this target changes,
  *  which is precisely how a staleness test rots into an assertion about

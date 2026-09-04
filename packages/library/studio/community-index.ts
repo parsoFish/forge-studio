@@ -608,7 +608,7 @@ export function listCommunityIndex(forgeRoot: string, kinds?: readonly Community
   // connection is probed EXACTLY ONCE here (T2 round 5/6 probe-budget fix —
   // this loop used to be re-entered independently by hubsWithCounts and by
   // the bridge's own second listCommunityIndex call; both now derive from
-  // ONE computation, see hubCountsFrom below and cli/bridge-studio-community.ts).
+  // ONE computation, see hubCountsFrom below and packages/library/bridge-studio-community.ts).
   if ((want('mcp') || want('tool')) && existsSync(join(forgeRoot, 'studio', 'catalog.yaml'))) {
     for (const conn of listConnections(forgeRoot)) {
       if (!want(conn.kind)) continue;
@@ -670,7 +670,7 @@ export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
 // lintCommunityIndex — README rule: a vendored skill id must never collide
 // with a studio/community/registry.yaml `kind: skill` id (that would claim
 // third-party bytes as forge's own). Wired into the real `forge studio lint`
-// entry point in cli/studio-lint.ts.
+// entry point in apps/forge/studio-lint.ts.
 // ---------------------------------------------------------------------------
 
 /** Tolerant registry read — an absent or malformed studio/community/registry.yaml

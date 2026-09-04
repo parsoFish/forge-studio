@@ -1715,14 +1715,14 @@ describe('scanSkillPackage — quarantined keys are reported from BOTH top-level
 // are NOT reachable at this surface and are pinned in the bridge/staging suite
 // instead, NOT here:
 //   * d1 "client-named SOURCE root pointing outside both roots" — a bridge
-//     concern (cli/bridge-studio-skills.test.ts); installSkillPackage is
+//     concern (packages/library/bridge-studio-skills.test.ts); installSkillPackage is
 //     CONTRACTUALLY handed a package directory to copy, so it can never be the
 //     refusal point for the source path (post-fix it receives a server-minted,
 //     already-guarded staging realpath).
 //   * a literal `..`-string ENTRY path ('a/../../../../tmp/OUT/x') — the entry
 //     paths installSkillPackage sees come from a real readdirSync() walk, which
 //     never yields a `..` segment, so that string is only injectable at the
-//     staging layer where `path` is client-supplied (cli/skill-staging.test.ts).
+//     staging layer where `path` is client-supplied (packages/library/skill-staging.test.ts).
 // Writing either against installSkillPackage would produce a gate that can
 // never go GREEN (immutable-gates: a test must flip, not merely stay red), so
 // the reachable analogs below (a symlinked skills/<id>, and a symlinked NESTED

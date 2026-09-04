@@ -1,6 +1,6 @@
 /**
  * W6-B2 review fix (MEDIUM 1) — `ensureSessionTail(kind, sessionId)`
- * (cli/ui-bridge.ts) derives the WS tail's cycle-id/log-dir as
+ * (apps/forge/ui-bridge.ts) derives the WS tail's cycle-id/log-dir as
  * `_${kind}-${sessionId}`, where `kind` is a session-kind id (`studio/
  * session-kinds.yaml`'s `descriptor.id`). For the six kinds that spawn a
  * real agent turn through `spawnAgentTurn`, that log dir is ACTUALLY named
@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
 import { loadSessionKinds } from '../../studio/session-kinds.ts';
-import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../../../cli/ui-bridge.ts';
+import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../../../apps/forge/ui-bridge.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 

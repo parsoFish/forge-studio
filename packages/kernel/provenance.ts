@@ -17,7 +17,7 @@
  * object type carrying a real per-object origin signal — a "universal" badge
  * for agent/project/kb would have been fabricated. This module is the ONE
  * shared origin->provenance mapping every server descriptor route uses
- * (`cli/bridge-studio.ts`, `packages/knowledge/bridge-studio-kbs.ts`) so the mapping never
+ * (`apps/forge/bridge-studio.ts`, `packages/knowledge/bridge-studio-kbs.ts`) so the mapping never
  * forks into a second, driftable copy.
  *
  * The n/a-invariant: a type (or object) the server cannot attest reports the

@@ -1,6 +1,6 @@
 /**
  * bridge-studio-project-preflight-write.ts — the WRITE-side preflight routes (Stage D),
- * carved out of `cli/bridge-studio-writes.ts` (M4 §4 step 2, projects lane,
+ * carved out of `apps/forge/bridge-studio-writes.ts` (M4 §4 step 2, projects lane,
  * worker B):
  *
  *   POST /api/studio/projects/:id/save-repo
@@ -25,7 +25,7 @@
  *
  * `spawnPreflightFix`'s concrete implementation is NOT moved here: it is
  * sessions-owned (budget row 12b) and sessions has not carved yet. It stays,
- * exported, in `cli/bridge-studio-writes.ts` (the same file it always lived
+ * exported, in `apps/forge/bridge-studio-writes.ts` (the same file it always lived
  * in) until the sessions lane relocates it; `handleProjectPreflightFixAgent`
  * below calls it through `deps.spawnPreflightFix` — the SAME injection shape
  * `bridge-studio-project-onboard.ts` uses for `seedProjectBrain` — so this module never
@@ -37,7 +37,7 @@
  * original, which never exported them either).
  *
  * Bodies come from `ctx.readBody()` (T1 ruling 30) — the ORIGINAL fix-agent
- * arm called `readJson(req)` directly (`cli/bridge-studio.ts`'s helper);
+ * arm called `readJson(req)` directly (`apps/forge/bridge-studio.ts`'s helper);
  * that import is exactly the `package-to-legacy` row this carve deletes, so
  * this is the one mandatory, mechanical adaptation in this file. It is
  * called at most once per request, same as before.
@@ -66,7 +66,7 @@ import {
 // `scripts/baselines/boundaries.json`. `dry-bridge.ts` has not moved to
 // kernel; this is a new row of the SAME already-accepted shape, reported for
 // T2's bookkeeping, not a fresh design decision.
-import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '../../apps/forge/dry-bridge.ts';
 
 import { classifyClause, type ClauseClassification } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
@@ -148,7 +148,7 @@ export function classifyPreflightFixAgentClause(
 
 export type PreflightWriteDeps = {
   /**
-   * `cli/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
+   * `apps/forge/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
    * (M4-projects routes budget row 12b), kept in its original file and
    * exported from there rather than moved. Spawns ONE detached `forge
    * preflight fix` agent turn; events stream to

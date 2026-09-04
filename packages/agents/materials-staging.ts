@@ -4,7 +4,7 @@
  * is the ONLY place in this feature that touches the filesystem; the
  * vocabulary/gate/derivation live in `packages/agents/studio/materials.ts`
  * (kept `fs`-free) and every shape/kind/cap check happens in the route
- * BEFORE this function is ever called (see `cli/ui-bridge.ts`'s
+ * BEFORE this function is ever called (see `apps/forge/ui-bridge.ts`'s
  * `POST /api/agents/:slug/run`).
  *
  * PRECONDITION — load-bearing, mirrors `resolveGuardedPath`'s own CONTRACT
@@ -141,10 +141,10 @@ export function detectVolumeCaseFolding(dir: string): boolean {
  *
  * DUPLICATE-TARGET refusal (round 3 adversarial-review amendment) — this
  * function does NOT trust its caller to have deduped. The route
- * (`cli/ui-bridge.ts`'s `validateMaterialsField`) happens to reject a
+ * (`apps/forge/ui-bridge.ts`'s `validateMaterialsField`) happens to reject a
  * duplicate `filename` within one request today, but "the caller already
  * checks this" is precisely the guard-symmetry gap this codebase just
- * closed for `isSafeRunId` (see `cli/ui-bridge.ts`'s run-dir mkdir) — a
+ * closed for `isSafeRunId` (see `apps/forge/ui-bridge.ts`'s run-dir mkdir) — a
  * module must not rely on an assumption about who calls it. Without this
  * check, two entries sharing one filename would each pass Phase 1
  * independently (it is side-effect-free, so neither sees the other), and

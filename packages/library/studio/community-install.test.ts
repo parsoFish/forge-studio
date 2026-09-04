@@ -502,7 +502,7 @@ describe('installCommunityHookPackage', () => {
 // These pin the two COMMUNITY-path defects the q80 spec calls out. They import
 // the SAME symbols the merged tests above already use (installCommunityHookPackage
 // from ./community-install.ts; communityItem/listCommunityIndex from
-// ./community-index.ts — the exact functions cli/bridge-studio-community.ts
+// ./community-index.ts — the exact functions packages/library/bridge-studio-community.ts
 // serves at POST/GET /api/studio/community/:kind/:id) — so both are asserted on
 // the real surface, in a test home the CI glob (orchestrator/studio/*.test.ts)
 // actually runs.
@@ -721,7 +721,7 @@ describe('AT-q80-7 (SEC-05 q80 leaf): community-index vendored leaf reads follow
 // (readVendoredSkillMeta/readVendoredHookMeta — name/description) through the
 // shared realpath guard, but readVendoredPackage — which reads the LARGER
 // `files` payload surfaced via GET /api/studio/community/:kind/:id (see
-// cli/bridge-studio-community.ts: `files: readVendoredPackage(...)`) — still
+// packages/library/bridge-studio-community.ts: `files: readVendoredPackage(...)`) — still
 // read every leaf by name with a raw `readFileSync(absPath)` and NO leaf
 // identity/hardlink check. `vendoredPackageDir` realpath-checks only the package
 // DIRECTORY, never the leaves inside it.

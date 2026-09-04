@@ -147,7 +147,7 @@ export function writeInstallLedgerEntry(forgeRoot: string, entry: InstalledSkill
  * `provenance-tampered`: a fresh, legitimate skill instantly distrusted for
  * an edit it never made. This is the ONE function every skill-destroying call
  * site should call before removing the package directory — see
- * cli/bridge-studio-skills.ts's DELETE route, its only production caller
+ * packages/library/bridge-studio-skills.ts's DELETE route, its only production caller
  * today.
  *
  * Tolerant / idempotent by design: removing an id with no row (the common

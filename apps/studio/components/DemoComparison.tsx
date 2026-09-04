@@ -233,7 +233,7 @@ function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element 
   );
 }
 
-/** Shape-aware checkpoints heading — mirrors cli/demo-model.ts so the in-UI demo
+/** Shape-aware checkpoints heading — mirrors packages/factory/demo-model.ts so the in-UI demo
  *  and the derived DEMO.md present the same section structure (no phantom label). */
 function checkpointsHeading(checkpoints: DemoModelCheckpoint[]): string {
   if (checkpoints.some((c) => c.kind === 'screenshot' || c.kind === 'video')) return 'Visual Changes';

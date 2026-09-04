@@ -45,7 +45,7 @@ import { subDirs } from './bridge-studio-kbs.ts';
 // Lint-resolution helpers (the guided-resolution UI)
 // ---------------------------------------------------------------------------
 //
-// `findingUnderDir`/`scopeFindingsToKb` moved to cli/kb-lint-summary.ts
+// `findingUnderDir`/`scopeFindingsToKb` moved to packages/knowledge/kb-lint-summary.ts
 // (forge-2am) — imported back above for the consolidate path (below) and
 // the fix-auto op, which both still need the exact-dir write scope.
 
@@ -242,7 +242,7 @@ export async function handleKbIngestActivity(
   // ---- GET /api/studio/kbs/:id/ingest-activity (R6-08 WI-2) — READ-ONLY -----
   // Lists real `reflect.kb-ingest` events (orchestrator/kb-health.ts) for this
   // KB, discovered via a listCycles-style walk of `_logs/<cycleId>/events.jsonl`
-  // (mirroring cli/metrics.ts's summariseCycle: guardedReadFile with cycleId as
+  // (mirroring packages/flows/metrics.ts's summariseCycle: guardedReadFile with cycleId as
   // its OWN segments[] element, never folded into the root). The kbId filter is
   // applied AFTER the guarded read, on the parsed event's own metadata — never
   // folded into the filesystem path. GET-only: no dispatch branch exists on

@@ -24,6 +24,6 @@ What stays forbidden, unchanged: storing a derived value in a manifest/status fi
 
 ## Consequences
 
-- P1 (`cli/run-list-cache.ts`) memoizes per-manifest run derivation; terminal runs parse once per process. P2 memoizes the full-tree lint behind a cheap stat-walk key. P5 may share one events-read memo. All live in `cli/` (uncapped); the only orchestrator change is additive-optional params on already-exported derivation fns (ADR-042 disclose-not-park).
+- P1 (`packages/flows/run-list-cache.ts`) memoizes per-manifest run derivation; terminal runs parse once per process. P2 memoizes the full-tree lint behind a cheap stat-walk key. P5 may share one events-read memo. All live in `cli/` (uncapped); the only orchestrator change is additive-optional params on already-exported derivation fns (ADR-042 disclose-not-park).
 - The theme gains a pointer to this ADR ("bounded memoization corollary") in the same PR that lands P1.
 - Persisted snapshots/archival were considered and **rejected** (new on-disk format + migration + a stored copy that can drift — the exact failure class the theme names) — revisit only if cold-pass cost becomes operator-visible in practice.

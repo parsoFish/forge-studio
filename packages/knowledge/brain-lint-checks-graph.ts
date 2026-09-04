@@ -57,7 +57,7 @@ export function collectThemeSlugTargets(brainRoot: string): Map<string, string[]
  * The same universe as a bare slug SET.
  *
  * DERIVED from `collectThemeSlugTargets`, never a second walk: the KB drain's
- * edit-soundness audit (cli/kb-drain-edit-soundness.ts) needs the target PATHS
+ * edit-soundness audit (packages/knowledge/kb-drain-edit-soundness.ts) needs the target PATHS
  * to decide whether an edit destroyed a real edge, and a second, narrower
  * derivation answering "does this theme exist?" is exactly how drain-to-green
  * came to delete a valid `related_themes` edge whose target sat in the same

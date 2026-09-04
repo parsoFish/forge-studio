@@ -1,7 +1,7 @@
 /**
- * Tests for cli/bridge-hooks.ts — POST /api/hooks/:hookId (R2-04, ADR-041).
+ * Tests for packages/flows/bridge-hooks.ts — POST /api/hooks/:hookId (R2-04, ADR-041).
  *
- * Spins up the real bridge (startBridge, mirroring cli/ui-bridge-sendback.test.ts)
+ * Spins up the real bridge (startBridge, mirroring apps/forge/ui-bridge-sendback.test.ts)
  * against a temp forgeRoot with a fixture flow declaring a webhook trigger, and
  * drives the route with real fetch() calls + a real HMAC signature (node:crypto) —
  * no mocking of the HTTP layer.
@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 const SECRET_ENV = 'TEST_BRIDGE_HOOK_SECRET';
 const FLOW_ID = 'hook-fixture-flow';

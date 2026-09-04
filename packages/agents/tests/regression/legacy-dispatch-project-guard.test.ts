@@ -1,6 +1,6 @@
 /**
  * SEC-06 acceptance pins: the legacy `forge agent run <agent-id> <session-id>
- * --project <name>` dispatch skeleton in `cmdAgentRun` (`cli/agent-run.ts`)
+ * --project <name>` dispatch skeleton in `cmdAgentRun` (`packages/agents/agent-run.ts`)
  * must guard an untrusted `--project` value the same way the newer turnSpec
  * road in the same file already does (`runTurnSpecAgent`) — as its OWN
  * guarded path segment against the trusted projects root, never folded into
@@ -34,14 +34,14 @@ import { join } from 'node:path';
 
 import { cmdAgentRun } from '../../agent-run.ts';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 
 /** A rejection reason naming the offending shape — mirrors the containment
  *  vocabulary already established by `resolveGuardedPath`'s own `reason`
  *  strings and `runTurnSpecAgent`'s own error text (both `cli/
- *  studio-path-guard.ts` / `cli/agent-run.ts`), not invented wording. */
+ *  studio-path-guard.ts` / `packages/agents/agent-run.ts`), not invented wording. */
 const CONTAINMENT_RE = /is not a valid project name|unsafe path segment|identity mismatch|containment|escapes/i;
 
 // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ test('regression lock: a name starting with ".." but containing no separator is 
 // ---------------------------------------------------------------------------
 // Bridge regression lock — `POST /api/architect/start` already guards its
 // own request-supplied `project` field via `guardedSessionDir`
-// (`cli/ui-bridge.ts`) before any mkdir/write/spawn, independent of the
+// (`apps/forge/ui-bridge.ts`) before any mkdir/write/spawn, independent of the
 // legacy CLI-dispatch fix this file otherwise pins. Included here because it
 // is the call-site family the SEC-06 sweep names as the OTHER way an
 // untrusted project value reaches the CLI (a detached `orchestrator/cli.ts

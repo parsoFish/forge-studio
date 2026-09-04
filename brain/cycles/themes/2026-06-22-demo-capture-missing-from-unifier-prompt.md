@@ -28,7 +28,7 @@ Two forge gaps combined:
 
 1. **`forge demo capture` absent from unifier prompt.** The unifier-invocation logic instructs the unifier to run `forge demo render` — never `forge demo capture`. Without an explicit capture step, every checkpoint falls back to prose `beforeNote`/`afterNote`.
 
-2. **`captureCheckpoints` silently skips on non-zero build.** `cli/demo.ts:captureCheckpoints` did `if (!status.ok) continue`, so a fresh-worktree `npm run build` failure zeroed ALL capture — even though the committed `dist/` in the worktree runs fine. CLI-output capture should run independently of the build result.
+2. **`captureCheckpoints` silently skips on non-zero build.** `packages/factory/demo.ts:captureCheckpoints` did `if (!status.ok) continue`, so a fresh-worktree `npm run build` failure zeroed ALL capture — even though the committed `dist/` in the worktree runs fine. CLI-output capture should run independently of the build result.
 
 ## Why it matters
 

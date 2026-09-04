@@ -29,7 +29,7 @@ import {
 // project, phase (with a needs-you chip), model tier, updated, resume
 // link. `sessions` arrives ALREADY sorted needs-you-first-then-updated-desc
 // off the bridge (`GET /api/studio/sessions?active=1` ->
-// `sortAndCapSessionIndexRows`, cli/ui-bridge.ts) — this component renders
+// `sortAndCapSessionIndexRows`, apps/forge/ui-bridge.ts) — this component renders
 // that order verbatim, never re-sorting client-side. W7-B1 adds a FILTER
 // bar (home-sessions-07): pure derivation via `lib/sessions-index-filter.ts`
 // — filtering only REMOVES rows, never re-orders them, and the current
@@ -68,7 +68,7 @@ const filterSelectStyle: CSSProperties = {
 };
 
 /** `''` (honest-absent — the wire never fabricates a timestamp; see
- *  `SessionIndexRow.updatedAt`'s own header, cli/ui-bridge.ts) and a
+ *  `SessionIndexRow.updatedAt`'s own header, apps/forge/ui-bridge.ts) and a
  *  malformed value both render as "—", never a garbage `Invalid Date`
  *  string on screen. */
 function formatUpdatedAt(iso: string): string {

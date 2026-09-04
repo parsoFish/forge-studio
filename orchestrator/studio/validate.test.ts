@@ -1093,7 +1093,7 @@ describe('validateFlow — trigger-agent-complete (R2-08-F2, T1 ruling #1)', () 
  * precedent already established for `flowIds`/`flowProjectOf`). `checkFlowTriggers`
  * gains a new finding, check id `trigger-projects`, `surface/enum` shape: an
  * error naming both the offending value and the full allowed set, exactly as
- * `readiness`'s `surface/enum` check does for `def.surface`. `cli/studio-lint.ts`
+ * `readiness`'s `surface/enum` check does for `def.surface`. `apps/forge/studio-lint.ts`
  * already computes the exact enumeration this needs at line ~389
  * (`const projectIds = new Set(discoveredProjects.map((p) => p.id));`,
  * currently used only for the KB `binding-ref` check) — F1 threads that SAME
@@ -1607,7 +1607,7 @@ describe('validateFlow — trigger-webhook', () => {
   });
 
   // trigger-webhook-unique (cross-flow id uniqueness) is enforced in
-  // cli/studio-lint.ts, which sees the full flow roster — validateFlow only
+  // apps/forge/studio-lint.ts, which sees the full flow roster — validateFlow only
   // sees one flow at a time and cannot check it.
 });
 
@@ -1876,7 +1876,7 @@ describe('validateCatalog — unique-ids', () => {
 // validateCatalog — community-skills tests REMOVED (W6-CR-1 reviewer fix):
 // catalog.yaml's `community-skills:` section and `Catalog.communitySkills`
 // are both gone (moved to studio/community/registry.yaml — see
-// validateCommunityRegistry's own tests, cli/studio-lint-community-registry.test.ts
+// validateCommunityRegistry's own tests, apps/forge/studio-lint-community-registry.test.ts
 // + this file's registry.ts coverage). These tests exercised a shape
 // `loadCatalog` can no longer produce.
 

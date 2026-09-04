@@ -123,7 +123,7 @@ test('contract: every entry carries a dry classification — a carved route that
  * `POST /api/agents/runs/:runId/cancel` — with every test still green.
  */
 test('contract (HOST ORDERING): the carved table is dispatched AFTER handleHttp applies the CSRF gate', () => {
-  const host = readFileSync(join(FORGE_ROOT, 'cli', 'ui-bridge.ts'), 'utf8');
+  const host = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'ui-bridge.ts'), 'utf8');
   const csrfAt = host.indexOf('missing or invalid CSRF header');
   const dispatchAt = host.indexOf('dispatchRoute(ctx.routeTable');
   assert.ok(csrfAt > 0, 'the CSRF refusal must still exist in cli/ui-bridge.ts');

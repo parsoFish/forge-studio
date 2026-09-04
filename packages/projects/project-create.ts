@@ -76,7 +76,7 @@ export type ScaffoldResult = {
  * (M4-library PR 2): they are layout facts, and
  * `packages/library/studio/template-library.ts` surfaces project scaffolds as
  * a template kind but may not import this package (same rank). Re-exported
- * here so every existing importer — `cli/bridge-studio.ts`,
+ * here so every existing importer — `apps/forge/bridge-studio.ts`,
  * `apps/forge/cli.ts`, `project-create.test.ts` — is unchanged.
  */
 export { projectStartersDir, listProjectStarters };

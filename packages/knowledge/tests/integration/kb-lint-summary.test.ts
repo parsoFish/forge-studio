@@ -2,7 +2,7 @@
  * ACCEPTANCE TESTS (bead forge-2am, exit row 12) — must be RED until the
  * per-KB lint summary is implemented.
  *
- * Pins the seam `cli/kb-lint-summary.ts` (extracted from `cli/bridge-studio-kbs.ts`,
+ * Pins the seam `packages/knowledge/kb-lint-summary.ts` (extracted from `packages/knowledge/bridge-studio-kbs.ts`,
  * which must SHRINK, not grow):
  *
  *   export type KbLintSummary = {
@@ -19,11 +19,11 @@
  * brain/cycles/themes/derive-status-dont-store-it.md).
  *
  * Every finding count below was hand-verified against the REAL check
- * functions in cli/brain-lint.ts (checkFrontmatter, checkIndexSync,
+ * functions in packages/knowledge/brain-lint.ts (checkFrontmatter, checkIndexSync,
  * checkOrphans, checkProjectBrainIndexes, CHECK_SCOPE, LINT_THEME_FILE_CHECKS)
  * — see the per-fixture comments for the arithmetic.
  *
- * RUN: node --test --experimental-strip-types cli/kb-lint-summary.test.ts
+ * RUN: node --test --experimental-strip-types packages/knowledge/tests/integration/kb-lint-summary.test.ts
  */
 
 import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
@@ -48,7 +48,7 @@ import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 import { CHECK_NAMES, runBrainLint } from '../../brain-lint.ts';
 // The module under test. This import throws at load time (module not found)
-// until cli/kb-lint-summary.ts exists — the intended "module missing" RED
+// until packages/knowledge/kb-lint-summary.ts exists — the intended "module missing" RED
 // for the WHOLE file, not a syntax error.
 import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from '../../kb-lint-summary.ts';
 import type { KbLintSummary } from '../../kb-lint-summary.ts';
@@ -269,7 +269,7 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
     const alpha = kbs.find((k) => k.id === 'alpha');
     assert.ok(alpha?.lint, `expected lint for "alpha", got ${JSON.stringify(alpha)}`);
 
-    // Arithmetic (CHECK_SCOPE + LINT_THEME_FILE_CHECKS, cli/brain-lint.ts):
+    // Arithmetic (CHECK_SCOPE + LINT_THEME_FILE_CHECKS, packages/knowledge/brain-lint.ts):
     // alpha's brainDir is brain/projects/alpha. Of the CHECK_NAMES.length=10
     // full-scope checks, only checkProjectBrainIndexes has
     // CHECK_SCOPE==='project-indexes' AND dirname(brainDir)===brain/projects
@@ -484,7 +484,7 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
   });
 
   // Reviewer-flagged (W6-P2 round 2, 2026-08-15): a direct `runBrainLint(`
-  // call anywhere in cli/bridge-studio-kbs.ts would bypass BOTH the memo
+  // call anywhere in packages/knowledge/bridge-studio-kbs.ts would bypass BOTH the memo
   // (runBrainLintFullMemoized) and the mandatory-fresh path
   // (runBrainLintFullFresh) — this pins the file to going through one or the
   // other, always, mirroring AT-4a's regex-pin style one level up the call
@@ -546,7 +546,7 @@ describe('kb-lint-summary — a throwing lint fails HONEST (AT-5)', () => {
 
     // KB "throwkb" (project brain) — patterns.md planted as a DIRECTORY, the
     // known repro documented in buildKbHealth's RULING-3 comment
-    // (cli/bridge-studio-kbs.ts): readIndexEntries' readFileSync throws
+    // (packages/knowledge/bridge-studio-kbs.ts): readIndexEntries' readFileSync throws
     // EISDIR inside checkProjectBrainIndexes, uncaught by runBrainLint.
     // Mirrors cli/bridge-studio-kbs.test.ts's
     // seedProjectBrain(..., {patternsAsDir:true}) fixture shape.

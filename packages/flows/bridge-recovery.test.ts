@@ -1,5 +1,5 @@
 /**
- * Tests for cli/bridge-recovery.ts — the DEC-6 operator recovery routes that
+ * Tests for packages/flows/bridge-recovery.ts — the DEC-6 operator recovery routes that
  * replace `forge review --inspect/--abandon`, `forge requeue`, `forge enqueue`.
  *
  * The recovery LOGIC (recoveryInspect / recoveryAbandon) is exercised directly on a

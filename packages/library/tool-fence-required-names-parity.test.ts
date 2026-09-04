@@ -1,7 +1,7 @@
 /**
  * forge-6gv.19 (W8-B4) — the CROSS-CHECK for the tool-fence "required names"
  * rule (`Task`, `Agent` — the two names a SKILL.md's `disallowed-tools:`
- * must list before `cli/studio-lint-tool-fence.ts`'s
+ * must list before `packages/library/studio-lint-tool-fence.ts`'s
  * `skill-tool-fence/task-agent-not-disallowed` check stops firing).
  *
  * This value is hand-copied on BOTH sides of the cli/orchestrator <->
@@ -12,16 +12,16 @@
  * `apps/studio/app/agents/[id]/page.tsx`'s `BLANK_STATE` shipped
  * `disallowedTools: []` with NOTHING tying it to the lint's own required
  * names — a hand-copy with no cross-check, the exact shape of bug
- * `cli/authoring-package-shape-parity.test.ts` (W8-B4 FIX-1) already exists
+ * `packages/sessions/tests/contract/authoring-package-shape-parity.test.ts` (W8-B4 FIX-1) already exists
  * to prevent for the authoring-package-shape rule. This test is that SAME
  * pattern applied to the tool-fence required-names rule.
  *
  * A plain, framework-free TS module under apps/studio/lib/ (no JSX, no
  * 'use client', no Next-only API) IS importable directly by a `node
  * --experimental-strip-types --test` file under cli/ — see
- * cli/id-rule.test.ts's and cli/authoring-package-shape-parity.test.ts's own
+ * apps/forge/id-rule.test.ts's and packages/sessions/tests/contract/authoring-package-shape-parity.test.ts's own
  * precedent. This test imports the REAL lint-side array
- * (cli/studio-lint-tool-fence.ts's exported `TOOL_FENCE_REQUIRED_NAMES`)
+ * (packages/library/studio-lint-tool-fence.ts's exported `TOOL_FENCE_REQUIRED_NAMES`)
  * alongside the REAL client-side array
  * (apps/studio/lib/tool-fence-required-names.ts) and asserts they are
  * IDENTICAL — so a name added/removed on one side and forgotten on the

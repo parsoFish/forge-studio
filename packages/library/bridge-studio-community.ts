@@ -21,7 +21,7 @@
  * mutates trust for anything — every branch below either materialises a
  * quarantined draft (the owning pipeline's own contract) or 400/404s. No
  * function in this file can turn an installed-but-unreviewed object into a
- * trusted one (`cli/community-no-trust-decisions.test.ts` scans this file's
+ * trusted one (`packages/library/community-no-trust-decisions.test.ts` scans this file's
  * source text for the five functions that could).
  *
  * WIRE PROJECTION — WI-1's `CommunityItem` (orchestrator/studio/
@@ -74,7 +74,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
   hubCountsFrom,
@@ -385,7 +385,7 @@ async function handleInstall(ctx: RouteContext, res: ServerResponse, origin: str
  *   registry mutex, so this pass discarded its verified facts rather than race
  *   them onto a document someone else is mid-way through changing. Transient
  *   and retryable, the same status the verdict mutex in
- *   cli/bridge-studio-runs.ts answers for its own contention, and deliberately
+ *   packages/flows/bridge-studio-runs.ts answers for its own contention, and deliberately
  *   NOT a 500: nothing is broken and nothing was written.
  * - `write-failed` → **500**: an unexpected I/O condition, and the only reason
  *   here that genuinely is a server fault. The registry on disk is untouched.
@@ -498,7 +498,7 @@ export async function handleCommunityRefresh(req: IncomingMessage, res: ServerRe
 
   // This route holds NO refresh logic of its own: it calls the same
   // `runCommunityRefresh` that `forge community refresh` calls
-  // (cli/community-refresh-run.ts) and renders the typed result as HTTP. That
+  // (packages/library/community-refresh-run.ts) and renders the typed result as HTTP. That
   // sharing IS the deliverable — two hand-rolled load→refresh→write copies
   // would drift, and a byte-parity test pins the two surfaces together.
   //

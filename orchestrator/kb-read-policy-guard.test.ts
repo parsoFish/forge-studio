@@ -16,7 +16,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runStudioLint } from '../cli/studio-lint.ts';
+import { runStudioLint } from '../apps/forge/studio-lint.ts';
 
 test('F1: runStudioLint over the REAL repo brain emits no read-policy error (the 4 project KBs + the real top-level KBs all pass through the production check)', () => {
   const result = runStudioLint(process.cwd());

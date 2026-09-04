@@ -139,7 +139,7 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
 // ===========================================================================
 // R4-21 phase 2, amendment round 2, correction B (_wave5/unit-specs/
 // R4-21-phase2.md's own T2 spec does not cover this — the T3 amendment brief
-// does): `runTurnSpecAgent` (cli/agent-run.ts) resolves the projects root
+// does): `runTurnSpecAgent` (packages/agents/agent-run.ts) resolves the projects root
 // with a HARDCODED `resolveGuardedPath(resolve('projects'), [projectArg])` —
 // `<cwd>/projects`, ignoring `forge.config.json`'s `projectsDir` and the
 // `FORGE_PROJECTS_DIR` env var entirely. Every bridge route instead resolves
@@ -295,7 +295,7 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
 // independently:
 //   - apps/studio/app/sessions/[kind]/[sessionId]/page.tsx:158,
 //     `cycleId = \`_${kind}-${sessionId}\``, handed to useCycleEvents;
-//   - cli/ui-bridge.ts's spawnAgentTurn (~L2044-2062) writes a turn's
+//   - apps/forge/ui-bridge.ts's spawnAgentTurn (~L2044-2062) writes a turn's
 //     stderr.log into `_logs/_${logPrefix}-${sessionId}/`
 //     (SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring');
 //   - the 4 legacy runners' own createLogger cycleId's

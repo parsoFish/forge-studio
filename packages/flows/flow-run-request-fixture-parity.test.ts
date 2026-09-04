@@ -10,7 +10,7 @@
  * never supersede the `origin` fallback).
  *
  * THE DEFECT: the hand-built cron `FlowRunRequest` literal used as a test
- * fixture in cli/bridge-studio-triggers.test.ts:155-165 ("current hand-built
+ * fixture in apps/forge/bridge-studio-triggers.test.ts:155-165 ("current hand-built
  * shape") does NOT carry the same field set a REAL cron fire actually
  * stages via `stageFlowRunRequest` (orchestrator/cron-triggers.ts's
  * `makeFireFn`, lines 154-172). The hand-built literal is missing
@@ -24,7 +24,7 @@
  * mirroring the real-path pattern in orchestrator/cron-triggers.test.ts's
  * "a fire stages a flow-run request" test (lines 169-210) — and diffs the
  * staged request's field-path set against the hand-built literal replicated
- * VERBATIM below. cli/bridge-studio-triggers.test.ts itself is NOT modified;
+ * VERBATIM below. apps/forge/bridge-studio-triggers.test.ts itself is NOT modified;
  * this is a read-only parity copy for comparison only.
  */
 import { test } from 'node:test';

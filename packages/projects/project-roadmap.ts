@@ -20,7 +20,7 @@
  * `PACKAGE_RANK` (kernel=1 < {library,knowledge,projects}=2 < agents=3 <
  * sessions=4 < flows=5 — "a package may import only strictly lower ranks")
  * found that `buildProjectRoadmap` and its helper cluster are NOT
- * projects-shaped code that happens to sit in `cli/bridge-studio.ts` — they
+ * projects-shaped code that happens to sit in `apps/forge/bridge-studio.ts` — they
  * are `@forge/flows` consumers throughout:
  *
  *   - `scanProjectManifests` (and therefore `buildProjectRoadmap` AND
@@ -39,7 +39,7 @@
  * `@forge/flows` explicitly as forbidden). `scripts/check-boundaries.mjs`'s
  * violation baseline is a shrink-only ratchet — `compareBaseline()` hard-fails
  * a NEW `(rule, from, to)` triple and there is no `--write-baseline` — so this
- * is not a debt this carve can quietly incur the way `cli/bridge-studio.ts`'s
+ * is not a debt this carve can quietly incur the way `apps/forge/bridge-studio.ts`'s
  * many pre-existing `legacy-to-package-not-via-shim` edges already are
  * (grandfathered, 300+ entries in `scripts/baselines/boundaries.json`).
  *
@@ -57,11 +57,11 @@
  * `isCompletenessFlagged` and `discoverCycleIdFromLogs` (also named in the
  * assignment) are themselves flows-free (`node:fs`/`node:path` only) — but
  * both exist only to serve `scanProjectManifests`'s callers, which cannot
- * move, so they stayed with it in `cli/bridge-studio.ts` rather than being
+ * move, so they stayed with it in `apps/forge/bridge-studio.ts` rather than being
  * split out here to orphan half a cluster.
  *
  * `GET /api/studio/projects/:id/roadmap` therefore still lives in
- * `cli/bridge-studio.ts`'s `handleStudioRoutes`, unchanged in behaviour.
+ * `apps/forge/bridge-studio.ts`'s `handleStudioRoutes`, unchanged in behaviour.
  * RECOMMENDATION (not a decision this worker is positioned to make): either
  * `@forge/flows` — which CAN import `@forge/projects` freely (5 > 2) — takes
  * ownership of this route and its helper cluster, or T1 rules the five new

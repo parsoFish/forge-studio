@@ -1,7 +1,7 @@
 /**
  * Structural teeth for R3-07's founding constraint: "this initiative owns
  * ZERO trust decisions" (`_wave5/specs/R3-07.md`, D2). Mirrors
- * `cli/connections-no-authoring.test.ts`'s role for R3-04's D1 — that file
+ * `packages/library/connections-no-authoring.test.ts`'s role for R3-04's D1 — that file
  * proved the "no authoring" AC three independent ways (page-absence,
  * bridge-export-surface, client-export-surface) so a future PR cannot
  * reintroduce the forbidden capability by a side door. This file does the

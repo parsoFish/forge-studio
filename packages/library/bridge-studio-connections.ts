@@ -3,7 +3,7 @@
  * `_wave5/specs/R3-04.md`).
  *
  * Owns EVERY `/api/studio/connections*` route, mirroring the one-module-
- * per-category precedent (cli/bridge-studio-hooks.ts, cli/bridge-studio-
+ * per-category precedent (packages/library/bridge-studio-hooks.ts, cli/bridge-studio-
  * templates.ts):
  *
  *   GET  /api/studio/connections           → { connections: ConnectionWire[] }
@@ -25,7 +25,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT DECISIONS made here that the spec did not fully dictate (mirrors
- * the AT file's own header — see cli/bridge-studio-connections.test.ts):
+ * the AT file's own header — see packages/library/bridge-studio-connections.test.ts):
  *
  *  D-1. Response envelope: `{ connections: [...] }` (list) / a flat
  *       `ConnectionWire` object (detail) — same shape at both depths (D5:
@@ -71,7 +71,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { isDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge } from '../../apps/forge/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';

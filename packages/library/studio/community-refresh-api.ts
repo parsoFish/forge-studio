@@ -19,7 +19,7 @@
  * the filesystem: THE CALLER OWNS THE WRITE. That keeps the whole thing unit
  * testable without a network (no test in this repo makes a real request) and
  * mirrors `migrateProjectConfig`'s own compute-then-hand-back contract
- * (cli/project-migrate.ts).
+ * (packages/projects/project-migrate.ts).
  *
  * THE CREDENTIAL. `process.env.GH_TOKEN`, read by the ORCHESTRATOR PROCESS,
  * never by a spawned agent. It is deliberately absent from
@@ -53,7 +53,7 @@ export const GH_TOKEN_ENV = 'GH_TOKEN';
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** Default per-request budget. `AbortSignal.timeout(ms)` is the house idiom
- *  (cli/demo-runtime.ts:103) — no new dependency, no hand-rolled timer race. */
+ *  (packages/factory/demo-runtime.ts:103) — no new dependency, no hand-rolled timer race. */
 export const DEFAULT_REFRESH_TIMEOUT_MS = 10_000;
 
 /** Bounded redirect following. GitHub 301s a renamed repo (still on

@@ -2,7 +2,7 @@
  * routes.ts — `@forge/agents`' HTTP routes, as a table.
  *
  * M4 §4 step 2 / exit row 2. These handlers used to be inline `if` arms inside
- * `cli/ui-bridge.ts`'s `handleHttp`, interleaved with two dozen other route
+ * `apps/forge/ui-bridge.ts`'s `handleHttp`, interleaved with two dozen other route
  * families. What moved is the dispatch; `apps/forge/routes.ts` assembles this
  * table with every other package's.
  *
@@ -22,7 +22,7 @@
  * 200, which no status-code assertion catches. That is why the order is pinned
  * by asserting which entry claims each colliding URL, not by reading the list.
  *
- * CSRF IS INHERITED BY DISPATCH ORDER, NOT RE-IMPLEMENTED. `cli/ui-bridge.ts`'s
+ * CSRF IS INHERITED BY DISPATCH ORDER, NOT RE-IMPLEMENTED. `apps/forge/ui-bridge.ts`'s
  * `handleHttp` applies the `x-forge-csrf` gate to every non-GET request BEFORE
  * it calls `dispatchRoute`. Neither mutating route below does its own check —
  * so a future change that moved the table's dispatch ABOVE that gate would

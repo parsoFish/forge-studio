@@ -129,7 +129,7 @@ function themeDescription(themeFile: string): string {
   try {
     // `{}` — no-cache parse (W7 FIX-B-KB): gray-matter's module-level cache
     // is poisoned to `data: {}` by any THROWING parse of the same content
-    // elsewhere in this process (see cli/brain-lint.ts parseTheme).
+    // elsewhere in this process (see packages/knowledge/brain-lint.ts parseTheme).
     const { data } = matter(readFileSync(themeFile, 'utf8'), {});
     return String((data as Record<string, unknown>).description ?? '').replace(/\s+/g, ' ').trim();
   } catch {
@@ -137,9 +137,9 @@ function themeDescription(themeFile: string): string {
   }
 }
 
-/** The exact link-line shape `readIndexEntries` (cli/brain-lint.ts) scans
+/** The exact link-line shape `readIndexEntries` (packages/knowledge/brain-lint.ts) scans
  *  for, mirroring the deterministic auto-fixer's own `linkLine` convention
- *  (cli/brain-fix-auto.ts) — so a pre-computed line is indistinguishable from
+ *  (packages/knowledge/brain-fix-auto.ts) — so a pre-computed line is indistinguishable from
  *  one a human or the auto-fixer would have written. */
 function themeLinkLine(themeFile: string): string {
   const slug = basename(themeFile, '.md');
@@ -208,7 +208,7 @@ function deferToNextTick(): Promise<void> {
 
 /**
  * Exported (cli-side, uncapped — ADR 042) for the R4-19-F2 DEFECT-A fix:
- * the kb-cleanup `apply` route (cli/ui-bridge.ts) must route its own
+ * the kb-cleanup `apply` route (apps/forge/ui-bridge.ts) must route its own
  * `runBrainConsolidateNow` dispatch through this SAME per-kbId queue the
  * `maintenance` op=consolidate route already uses — see `runBrainConsolidateNow`'s
  * own doc comment above ("Always invoked via enqueueConsolidate, never
@@ -246,7 +246,7 @@ export function isDeterministicNotListedFinding(f: AgentFinding): boolean {
 /**
  * R1-06 WI-3 CI-safety fix: resolve every deterministically-repairable
  * finding IN-PROCESS — zero child spawns, zero SDK turns — by reusing
- * `ensureLinkedAt` (cli/brain-fix-auto.ts), the SAME idempotent
+ * `ensureLinkedAt` (packages/knowledge/brain-fix-auto.ts), the SAME idempotent
  * append-link-line convention `op=fix-auto` already uses for the top-level
  * brains' `index.not-listed` kind. For the pin fixture (all
  * `checkProjectBrainIndexes` "not listed" findings) this clears every
@@ -291,7 +291,7 @@ export function applyDeterministicConsolidateFixes(
  * the genuinely-ambiguous residual gets a real agent turn, and ONLY when
  * neither `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active —
  * mirroring `spawnAgentTurn`'s own `FORGE_ARCHITECT_NO_SPAWN` guard
- * (cli/ui-bridge.ts) so this route can never spawn a real `forge brain fix` /
+ * (apps/forge/ui-bridge.ts) so this route can never spawn a real `forge brain fix` /
  * SDK turn under the harness env CI runs `npm test` with. The single
  * terminal event is always written (even when the loop below is skipped
  * entirely), so a CI run with residual findings still reaches a terminal

@@ -11,7 +11,7 @@
  *
  * D2 — this file owns ZERO trust decisions: it never references
  * approve/override/re-pin machinery, not even in a comment
- * (cli/community-no-trust-decisions.test.ts scans this file's source text).
+ * (packages/library/community-no-trust-decisions.test.ts scans this file's source text).
  *
  * W6-CR-2 adds `sortCommunityItems` (operator-locked: SIMPLE SORTS ONLY —
  * name / stars / updated / source, no search/facets/tags sort) and
@@ -542,7 +542,7 @@ function baseRefreshOutcomeView(result: CommunityRefreshResult): CommunityRefres
           state: 'no-op',
           // W8-B5b hostile-review FINDING 4 — `postCommunityRefresh` (this
           // function's ONE production caller, via the /community page's
-          // "Refresh registry" button) POSTs cli/bridge-studio-community.ts's
+          // "Refresh registry" button) POSTs packages/library/bridge-studio-community.ts's
           // route, whose handler calls `runCommunityRefresh({ forgeRoot })`
           // with NO `dryRun` key — so a 200 reaching the UI always carries
           // `dryRun: false`, and the `result.dryRun` arm below is

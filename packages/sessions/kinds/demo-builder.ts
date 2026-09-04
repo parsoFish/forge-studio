@@ -665,7 +665,7 @@ function readBaseCss(forgeRoot: string): string {
 
 // ---------------------------------------------------------------------------
 // question-form — demo (the briefing phase: operator brief -> generating).
-// Mirrors `POST /api/demo-builder/brief` (`cli/ui-bridge.ts:4623`). W6-B10 —
+// Mirrors `POST /api/demo-builder/brief` (`apps/forge/ui-bridge.ts:4623`). W6-B10 —
 // added alongside `studio/session-kinds.yaml`'s new `briefing` row (that
 // file's own comment explains why the row was missing until now: every demo
 // session is minted straight into `briefing`, so without this handler a
@@ -722,7 +722,7 @@ export async function handleDemoBrief(
 // ---------------------------------------------------------------------------
 // verdict — demo (approve => lock; reject => abandon). Mirrors
 // `POST /api/demo-builder/lock` / `POST /api/demo-builder/abandon`
-// (`cli/ui-bridge.ts:4618`/`4661`).
+// (`apps/forge/ui-bridge.ts:4618`/`4661`).
 // ---------------------------------------------------------------------------
 
 export async function handleDemoVerdict(
@@ -739,7 +739,7 @@ export async function handleDemoVerdict(
 ): Promise<void> {
   // SYNC INVARIANT: no await between the caller's status read and either
   // write below — an await here reopens the double-spawn race; see
-  // kb-cleanup's now-fixed `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
+  // kb-cleanup's now-fixed `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) —
   // this file's header note.
   if (verdict === 'reject') {
     if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {

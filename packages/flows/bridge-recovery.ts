@@ -26,9 +26,9 @@ import { join } from 'node:path';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../cli/bridge-studio.ts';
+import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../apps/forge/bridge-studio.ts';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 import {
   validateManifestPathFields,
   isContainedWorktreePath,
@@ -41,7 +41,7 @@ import {
  * process's lifetime. Threaded verbatim into every containment check on these
  * routes so a live `forge.config.json` edit cannot make the guard re-derive a
  * DIFFERENT root than the bridge is actually running against (see
- * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`).
+ * `packages/flows/manifest-path-guard.ts`'s `ProjectsRootOpt`).
  */
 export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string; projectsRoot: string };
 

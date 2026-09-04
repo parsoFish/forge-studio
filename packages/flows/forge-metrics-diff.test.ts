@@ -1,5 +1,5 @@
 /**
- * Regression test for computeDeliveredDiff (cli/forge-metrics.ts).
+ * Regression test for computeDeliveredDiff (packages/flows/forge-metrics.ts).
  *
  * Guards the recurring "report diff inverted on a pr-open / resumed cycle" bug:
  * the report's "What landed" section rendered files the cycle ADDED as

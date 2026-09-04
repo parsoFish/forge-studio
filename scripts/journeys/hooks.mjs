@@ -55,7 +55,7 @@ function realHookUsage(hookId) {
  *  present locally is excluded from the union) and the real source
  *  `fetchCommunityIndex('hook')` reads from — vendored packages under
  *  `studio/community/hooks/*`, never a network fetch (see
- *  cli/bridge-studio-writes.ts's own comment: "hooks are vendored packages
+ *  apps/forge/bridge-studio-writes.ts's own comment: "hooks are vendored packages
  *  under studio/community/hooks/"). Used to cross-check `data-hook-count`
  *  now that it counts BOTH the local list and this not-yet-installed
  *  community union (W8-B4 fix for library-38) instead of the local list

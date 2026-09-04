@@ -5,7 +5,7 @@
  *
  * hook-client.ts mirrors skill-client.ts's role exactly — client-side fetch
  * helpers + types for the `/api/studio/hooks*` bridge routes (see
- * cli/bridge-studio-hooks.ts's own header for the transport shapes this
+ * packages/library/bridge-studio-hooks.ts's own header for the transport shapes this
  * carries through verbatim) — extracted straight into its own file (not
  * added to studio-client.ts, which already has zero headroom under this
  * repo's file-size discipline) the same way skill-client.ts and
@@ -31,7 +31,7 @@
  * it: `resolveBridgeUrl()` requires `window`, which does not exist under
  * plain node — testing the async fetchers end-to-end would require stubbing
  * globals with no precedent anywhere in this codebase, so it is left to the
- * bridge-route tests (cli/bridge-studio-hooks.test.ts) to pin the over-the-
+ * bridge-route tests (packages/library/bridge-studio-hooks.test.ts) to pin the over-the-
  * wire behaviour, and to this file to pin the parse boundary in isolation).
  * ---------------------------------------------------------------------------
  */

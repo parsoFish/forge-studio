@@ -32,7 +32,7 @@ import type { EventLogEntry } from '@forge/kernel';
 import type { QueueState } from './queue.ts';
 import { normalizeProjectId } from '@forge/kernel';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
 import type { TriggerKindId } from './flow-trigger.ts';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import {
@@ -332,7 +332,7 @@ export function aggregateRun(args: {
   manifestPath: string;
   nowMs: number;
   /**
-   * ADR-044 P1 (`cli/run-list-cache.ts`) additive-optional escape hatch: a
+   * ADR-044 P1 (`packages/flows/run-list-cache.ts`) additive-optional escape hatch: a
    * caller deriving MANY runs in one pass (the mtime-keyed cached list
    * builder) can build buildNodeMapping/buildFlowNodeSets/
    * buildAgentSlugToNodeId ONCE for the whole pass instead of once per
@@ -798,7 +798,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
  *
  * ADR-042 disclosure: exported per the ratified boundary "a pure function
  * with an explicit error contract may be exported for direct tests" — its
- * second caller is `cli/run-list-cache.ts`'s `deriveFresh` fail path, which
+ * second caller is `packages/flows/run-list-cache.ts`'s `deriveFresh` fail path, which
  * needs the IDENTICAL degraded shape `listRuns` produces rather than a
  * hand-duplicated twin that can drift from this one.
  */

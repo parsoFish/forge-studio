@@ -9,7 +9,7 @@
  *
  * M4 §4 step 2 RESIDUE carve: these arms, `mutateCommunityRegistry` (the ONE
  * writer all three share) and its W7-B3 comment block MOVED VERBATIM from
- * `cli/bridge-studio-writes.ts` (`:583` `:615` `:654`, helper `~:483` +
+ * `apps/forge/bridge-studio-writes.ts` (`:583` `:615` `:654`, helper `~:483` +
  * comment `~:340`) — see the comment on the function for the mutex it shares
  * with `runCommunityRefresh`/`commitRegistryDraft`. The old hoisted
  * `registryItemMatch` is now `REGISTRY_ROW_RE` (`bridge-studio-community.ts`,
@@ -168,7 +168,7 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
  *  corrupt file) and on a produced document the loader itself refuses.
  *
  *  W8-B5 security review, FINDING 1: the WHOLE read-modify-write runs under
- *  the shared registry mutex (cli/community-registry-lock.ts), and the load
+ *  the shared registry mutex (packages/library/community-registry-lock.ts), and the load
  *  below happens INSIDE it — the same lock, on the same path, that
  *  `runCommunityRefresh` and `commitRegistryDraft` take. A lock only one of
  *  three writers honours is not a lock, which is why there is exactly one

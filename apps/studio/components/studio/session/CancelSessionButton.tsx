@@ -11,7 +11,7 @@ import { cancelStudioSession } from '@/lib/session-lifecycle-client';
 // `data-confirming="true"`, label "Confirm cancel"; second click POSTs;
 // an inline "keep" link disarms) so a stray click never kills a live turn.
 // POSTs the generic `POST /api/studio/sessions/:kind/:sessionId/cancel`
-// (cli/bridge-studio-session-cancel.ts) via `cancelStudioSession`; the
+// (packages/sessions/bridge-studio-session-cancel.ts) via `cancelStudioSession`; the
 // server's own error text (409 already-terminal naming the phase, 404, 400)
 // renders verbatim in `[data-cancel-error]`, never swallowed. On success the
 // caller's `onCancelled` fires so it can refetch — this component never

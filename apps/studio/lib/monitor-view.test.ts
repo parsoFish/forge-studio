@@ -80,7 +80,7 @@ test('every live-status token in the closed set counts, and nothing else does', 
   // 'running' vocabulary the standalone-agent rows actually use (and the
   // 'retrying' a mid-retry flow phase carries).
   // W8-F4 review round 2: `linkKind: 'standalone'` is on this list on purpose.
-  // It is the literal value `collectRecentAgentRuns` (cli/ui-bridge.ts) stamps
+  // It is the literal value `collectRecentAgentRuns` (apps/forge/ui-bridge.ts) stamps
   // on EVERY real standalone agent run — the only agent-sourced linkKind that
   // actually reaches Home's and Monitor's ledger (`use-everything-ledger.ts`
   // asks for `kind: 'standalone'`) — and no fixture in this file used it, so

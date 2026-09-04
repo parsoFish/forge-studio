@@ -4,7 +4,7 @@
  * A sibling module to bridge-studio-writes.ts (that file is already past the
  * 800-line hard cap — see its header — so this route, which carries its own
  * substantial security section, lives here instead and is delegated from
- * cli/ui-bridge.ts, matching how bridge-studio-sessions.ts is delegated).
+ * apps/forge/ui-bridge.ts, matching how bridge-studio-sessions.ts is delegated).
  *
  * Composes a deterministic instructions-draft charter from the CURRENT
  * (possibly unsaved) builder state carried in the request body — never from
@@ -21,7 +21,7 @@
  * 4xx/5xx JSON body.
  *
  * Security — the SAME bar as the sibling PUT /api/studio/agents/:slug route
- * (cli/bridge-studio-writes.ts) — both routes resolve their SKILL.md path
+ * (apps/forge/bridge-studio-writes.ts) — both routes resolve their SKILL.md path
  * through the ONE shared, generalized choke point, `resolveGuardedPath`
  * (cli/studio-path-guard.ts; generalized 2026-08-06, R2-09 WI-fix2, from the
  * SKILL.md-only `resolveGuardedSkillMdPath` this route originally called).
@@ -47,10 +47,10 @@
  *   - A missing agent and an escaping symlink are collapsed into the SAME
  *     404 "unknown agent" response — an attacker can never distinguish "no
  *     such slug" from "blocked escape" from the response shape.
- *   - The bridge's global anti-CSRF guard (`x-forge-csrf`, cli/ui-bridge.ts)
+ *   - The bridge's global anti-CSRF guard (`x-forge-csrf`, apps/forge/ui-bridge.ts)
  *     fires before route dispatch for every non-GET path, so this route
  *     inherits it for free — confirmed empirically by
- *     cli/bridge-studio-instructions-draft.test.ts's CSRF-parity cases, not
+ *     packages/library/bridge-studio-instructions-draft.test.ts's CSRF-parity cases, not
  *     just assumed.
  */
 

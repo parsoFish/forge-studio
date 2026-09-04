@@ -94,7 +94,7 @@
  * WHAT IT DOES
  * ============================================================================
  *
- * Step 1 — REACHABILITY. Entry modules = cli/ui-bridge.ts plus every
+ * Step 1 — REACHABILITY. Entry modules = apps/forge/ui-bridge.ts plus every
  * cli/bridge-*.ts that is not a *.test.ts. From those, walk relative imports
  * transitively (`import … from './x.ts'`, `import … from '../y/z.ts'`,
  * `export … from '…'`, and `import('…')` with a string literal), restricted
@@ -222,7 +222,7 @@ function isCommentLine(line) {
  * identity / charset / symlink containment. Every caller must instead route the
  * request-derived project + sessionId through
  * resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)
- * (cli/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
+ * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
  * to the reader/writer — never a bare join.
  */
 export const DESIGNATED_UNGUARDED_FUNCTIONS = {
@@ -235,7 +235,7 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
     why: 'Writes status.json into a caller-supplied sessionDir; same contract as readSessionStatus — the dir must already be guarded.',
   },
   architectSessionDir: {
-    defModule: 'cli/ui-bridge.ts',
+    defModule: 'apps/forge/ui-bridge.ts',
     why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId; folds untrusted segments into a path with no guard.',
   },
   instructionsSessionDir: {
@@ -262,15 +262,15 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
     why: 'Reads status.json from a caller-supplied architect sessionDir; no containment of its own — the dir it is handed must already be resolveGuardedPath-guarded (GET /api/architect/sessions disclosed an out-of-root status.json through this + a symlinked _architect).',
   },
   sessionPaths: {
-    defModule: 'cli/architect-plan.ts',
+    defModule: 'packages/sessions/kinds/architect-plan.ts',
     why: 'Bare resolve(projectRoot, "_architect", sessionId) — folds a request-derived sessionId into a session-dir path with no per-segment containment; callers must guard "_architect" + sessionId as their own segments before reading through it (the architect runner leg read an out-of-root status.json through this).',
   },
   _architectSessionDir: {
-    defModule: 'cli/bridge-studio-runs.ts',
+    defModule: 'packages/flows/bridge-studio-runs.ts',
     why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId (the plan-verdict routes\' private copy); folds untrusted segments into a path with no guard — a valid-charset project+sessionId still resolves through a symlinked _architect (AT-47).',
   },
   _readStatus: {
-    defModule: 'cli/bridge-studio-runs.ts',
+    defModule: 'packages/flows/bridge-studio-runs.ts',
     why: 'Reads (and its sibling _writeStatus mutates) status.json from a caller-supplied architect sessionDir (the plan-verdict routes\' private copy); no containment of its own — the dir must already be guarded.',
   },
 };

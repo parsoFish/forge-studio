@@ -149,7 +149,7 @@ export function materialKindForFilename(filename: string): MaterialKind | undefi
 /**
  * Caps for one agent-kickoff `materials:` upload (R6-04-F2 contract point
  * 6), derived from the bridge's fixed request-body ceiling
- * (`MAX_BODY_BYTES = 1 MiB`, `cli/ui-bridge.ts` ~line 3207) rather than
+ * (`MAX_BODY_BYTES = 1 MiB`, `apps/forge/ui-bridge.ts` ~line 3207) rather than
  * picked as round numbers in isolation. This module stays `fs`-free (it is
  * the vocabulary owner, imported by the loader/lint/wire projection too) and
  * deliberately does NOT import `MAX_BODY_BYTES` — it is a module-private

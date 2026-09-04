@@ -11,10 +11,10 @@
  * `=== 'one-shot'`, from when the legacy path had no budget wiring.
  *
  * WHY this fact, computed HERE: the bridge route `POST /api/agents/:slug/run`
- * (cli/ui-bridge.ts, R6-04 WI-2) already refuses an operator-supplied
+ * (apps/forge/ui-bridge.ts, R6-04 WI-2) already refuses an operator-supplied
  * `costCeilingUsd` for any agent whose `runtime.loopStrategy !== 'one-shot'`
  * (14 of 19 real dispatchable roster agents take that legacy path, which has
- * no budget concept at all — see cli/ui-bridge-agent-run-ceiling.test.ts's
+ * no budget concept at all — see apps/forge/ui-bridge-agent-run-ceiling.test.ts's
  * round-7/8 header). Today the kickoff UI has NO way to know this in advance:
  * it can only find out by submitting a ceiling and getting a 400 back. This
  * fact closes that gap — it must be computed ONCE, server-side, and threaded

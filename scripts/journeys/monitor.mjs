@@ -24,7 +24,7 @@
  *     table maps to run status `failed`.
  *   - MON_AGENT_RUN_ID (W8-F4) — a STANDALONE agent run: `_logs/_agent-…/
  *     events.jsonl` with a dispatch marker and no `end` event, which is
- *     exactly what `collectRecentAgentRuns` (cli/ui-bridge.ts) reads to emit a
+ *     exactly what `collectRecentAgentRuns` (apps/forge/ui-bridge.ts) reads to emit a
  *     `linkKind:'standalone'` row -> `data-ledger-kind="agent"`.
  *   - MON_SESSION_SID (W8-F4) — a NON-TERMINAL interactive session:
  *     `projects/<scratch>/_onboarding/<sid>/status.json` with `phase: running`
@@ -84,7 +84,7 @@ const MON_AGENT_RUN_DIR = join(FORGE_ROOT, '_logs', MON_AGENT_RUN_ID);
 
 // W8-F4 — the INTERACTIVE session. `onboarding` is a registry-generic kind, so
 // the session index finds it by scanning `projects/*/_onboarding/<sid>/
-// status.json` (cli/ui-bridge.ts) — no central log dir needed. `running` is its
+// status.json` (apps/forge/ui-bridge.ts) — no central log dir needed. `running` is its
 // real in-flight phase (studio/session-kinds.yaml): NON-terminal, and
 // deliberately NOT a needs-you phase, which is the point of the heading
 // assertion in MONITOR.2 — this section lists every live session, not only the
@@ -194,7 +194,7 @@ function cleanMonitorFixture() {
 /**
  * Keep the seeded standalone run LIVE across the beats that assert it is live.
  *
- * `readStandaloneLivenessFacts` (cli/ui-bridge.ts) derives `idleMs` from the
+ * `readStandaloneLivenessFacts` (apps/forge/ui-bridge.ts) derives `idleMs` from the
  * newest mtime among the run dir's `events.jsonl` / `stderr.log` / `turn.pid`,
  * and `applyStandaloneStaleness` flips `running` -> `stalled` past
  * `DEFAULT_STALL_CEILING_MS` (180 s). A real in-flight run's log is being

@@ -1,7 +1,7 @@
 /**
  * W7-B4 review finding 2 — RESTORED SUITE. This file is the R4-21 finalize
  * acceptance suite, recovered verbatim from `d85f462c^`. W7-B4's own
- * library-authoring tests were written OVER cli/bridge-studio-authoring.test.ts
+ * library-authoring tests were written OVER packages/library/bridge-studio-authoring.test.ts
  * rather than beside it, deleting every pin below: for one wave,
  * `git grep 'authoring/finalize' -- '*.test.ts'` matched NOTHING while the
  * live POST /api/studio/authoring/finalize route still shipped. The route was
@@ -9,7 +9,7 @@
  * is exactly why the loss was invisible. The W7-B4 tests keep the original
  * filename; this suite gets its own, so neither can silently replace the other.
  *
- * Acceptance tests for cli/bridge-studio-authoring.ts (R4-21 phase 2, WI-2,
+ * Acceptance tests for packages/library/bridge-studio-authoring.ts (R4-21 phase 2, WI-2,
  * AMENDMENT ROUND 2 — `_wave5/unit-specs/R4-21-phase2.md`, D5: finalize route
  * = the operator commit act). This is a T3 amendment-round-2 REWRITE, not an
  * incremental patch: round 1's own body (commit `4a8b6257`) pinned a request
@@ -91,7 +91,7 @@
  *      module's source, not guessed).
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * cli/bridge-studio-skills.test.ts / cli/bridge-studio-hooks.test.ts's
+ * packages/library/bridge-studio-skills.test.ts / packages/library/bridge-studio-hooks.test.ts's
  * tmp-forge-root harness exactly (unchanged from round 1).
  */
 
@@ -113,8 +113,8 @@ import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
-// Does not exist in the NEW shape yet — the current cli/bridge-studio-authoring.ts
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
+// Does not exist in the NEW shape yet — the current packages/library/bridge-studio-authoring.ts
 // still implements the phase-1 {kind,id,entries,upstream} contract (round 1
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
@@ -281,7 +281,7 @@ test('WI2-1: finalize at phase:"analyzing" -> 409, body naming the required phas
 // replacement of the gate with something permissive (e.g. accepting any
 // non-empty string) is caught by THIS suite. 'connection' names the ONE
 // object kind forge deliberately keeps NON-authorable
-// (cli/connections-no-authoring.test.ts) — this is the enforcement for the
+// (packages/library/connections-no-authoring.test.ts) — this is the enforcement for the
 // authoring finalize route specifically; 'flow' is a second, unrelated
 // non-package object kind, proving the gate is a closed enum, not a
 // one-off "not connection" special case.
@@ -1153,7 +1153,7 @@ test('P7-3-empty: an empty (or whitespace-only) finalize id is refused at the ro
 //
 // THE RE-CORRECTED CONTRACT (library-37): `_interactive-library/<id>/` is
 // removed in a `finally` after every finalize attempt — success OR failure
-// (`cli/bridge-studio-authoring.ts`'s file header, "LANDED-PACKAGE CLEANUP").
+// (`packages/library/bridge-studio-authoring.ts`'s file header, "LANDED-PACKAGE CLEANUP").
 // This does NOT delete the collision check — it stops the check firing on a
 // GHOST: each kind-specific install step (`finalizeSkillFromLanded` /
 // `finalizeHookFromLanded` / `finalizeTemplateFromLanded`) still 409s on a
@@ -1279,7 +1279,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
 // ===========================================================================
 // PIN F / PIN G (2026-08-28 hostile review) — counter-repro C: an
 // agent-authored MULTI-FILE hook package is silently truncated by
-// `finalizeHookFromLanded` (cli/bridge-studio-authoring.ts), which hardcodes
+// `finalizeHookFromLanded` (packages/library/bridge-studio-authoring.ts), which hardcodes
 // reading only `hook.yaml` and `scripts/run.sh` off the landed
 // `_interactive-library/<id>/` tree and writes back exactly those two files
 // — any other staged file (a README, a sourced `scripts/lib.sh`, ...) is

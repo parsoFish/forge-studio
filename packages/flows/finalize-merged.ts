@@ -34,7 +34,8 @@ import { createLogger, type EventLogger } from '@forge/kernel';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
-import { loadFlowDefinition, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
@@ -330,7 +331,7 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       }
       // SEC-02: this sweep reads `cycle_id` straight off a ready-for-review
       // manifest that never necessarily passed through ingest validation (the
-      // same manifest-poisoning threat model `cli/forge-requeue-containment.test.ts`
+      // same manifest-poisoning threat model `packages/flows/forge-requeue-containment.test.ts`
       // covers for `runRequeue`) — an entry point independent of
       // `applyReviewVerdict`. `createLogger` and `writeVerdictJson` further
       // down both do `resolve(logsRoot, cycleId)`, so validate before either

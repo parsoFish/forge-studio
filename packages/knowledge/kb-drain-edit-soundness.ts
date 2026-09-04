@@ -2,7 +2,7 @@
  * kb-drain-edit-soundness.ts (W8-B2, forge-d8l / knowledge-36) — the drain's
  * SEMANTIC audit of a structural edit.
  *
- * `cli/kb-drain-structural.ts` answers "is this edit SHAPED like a structural
+ * `packages/knowledge/kb-drain-structural.ts` answers "is this edit SHAPED like a structural
  * change?" — a pure string comparison that never touches the filesystem. That
  * question turned out to be necessary and not sufficient. Two edits landed
  * unattended on the operator's real tree on 2026-08-22, both correctly
@@ -37,7 +37,7 @@
  *     decides **draft-vs-auto-apply** at the call site; it never decides
  *     whether soundness is checked.
  *   - **The slug universe is the SAME derivation `checkDanglingEdges` lints
- *     against** — `collectThemeSlugTargets` (cli/brain-lint.ts), brain-wide, one
+ *     against** — `collectThemeSlugTargets` (packages/knowledge/brain-lint.ts), brain-wide, one
  *     walk. Two derivations of "does this theme exist" disagreeing is the
  *     original forge-d8l failure shape and must not be reintroduced here.
  *   - **A repair is synthesized only where refusal ALONE would leave a
@@ -139,7 +139,7 @@ function normalizeSlug(entry: string): string {
  * The `Array.isArray` tolerance clause is NOT enough on its own (adversarial
  * round 1). `parseThemeRaw`'s lenient fallback fires whenever gray-matter
  * rejects the YAML — an unquoted `:` in a description, which
- * `cli/theme-frontmatter.ts`'s own header calls "a real, common theme shape",
+ * `packages/knowledge/theme-frontmatter.ts`'s own header calls "a real, common theme shape",
  * and which one live theme has today — and that fallback is line-based, so a
  * BLOCK-style list decodes to `''`, not an array. The audit then saw zero
  * edges and an edge deletion on such a theme landed ungated: this lane's own

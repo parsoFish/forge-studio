@@ -389,7 +389,7 @@ test('runAgent one-shot + SELF lifecycle: ctx.kickoffCeilingUsd reaches options.
 // field and thread it through to runAgent's ctx unchanged. The OTHER half —
 // the CLI-argv boundary (`spawnAgentDispatch`'s pure arg-builder →
 // `cmdAgentDispatch`'s parse → this same `dispatchAgentRun` call) — is pinned
-// in the sibling `cli/ui-bridge-agent-run-ceiling.test.ts`, because both
+// in the sibling `apps/forge/ui-bridge-agent-run-ceiling.test.ts`, because both
 // `buildAgentDispatchArgs` and `cmdAgentDispatch` are cli/-layer symbols;
 // importing them here would invert forge's cli/ → orchestrator/ dependency
 // direction.
@@ -418,7 +418,7 @@ test('runAgent one-shot + SELF lifecycle: ctx.kickoffCeilingUsd reaches options.
 //   - `runAgent` throws when `ctx.kickoffCeilingUsd` is set and
 //     `def.runtime.loopStrategy !== 'one-shot'` — pinned directly below.
 //   - The bridge route ALSO refuses (400) before any spawn — pinned in
-//     cli/ui-bridge-agent-run-ceiling.test.ts, since `forge agent dispatch
+//     apps/forge/ui-bridge-agent-run-ceiling.test.ts, since `forge agent dispatch
 //     --cost-ceiling-usd` is a real second entry point that never passes
 //     through the bridge at all; a route-only guard would leave the CLI
 //     silently ignoring the ceiling — the same defect, one door over.
@@ -544,7 +544,7 @@ test('runAgent: ctx.kickoffCeilingUsd on an undeclared-loopStrategy agent THREAD
 // ---------------------------------------------------------------------------
 // (C) A ceiling-stopped run surfaces as a DISTINCT terminal state — the
 // run-agent-level half. The GET /api/agents/runs/:runId half (the bridge's
-// derived `state` token) is pinned in cli/ui-bridge-agent-run-ceiling.test.ts.
+// derived `state` token) is pinned in apps/forge/ui-bridge-agent-run-ceiling.test.ts.
 // Here we pin what runAgent itself records into `_logs/<runId>/events.jsonl`.
 // ---------------------------------------------------------------------------
 

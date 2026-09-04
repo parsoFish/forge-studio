@@ -1,6 +1,6 @@
 /**
  * bridge-studio-project-onboard.ts — the create/onboard/update project routes, carved out
- * of `cli/bridge-studio-writes.ts` (M4 §4 step 2, projects lane, worker B):
+ * of `apps/forge/bridge-studio-writes.ts` (M4 §4 step 2, projects lane, worker B):
  *
  *   POST /api/studio/projects/create   (greenfield scaffold, R4-03)
  *   POST /api/studio/projects          (onboard an existing checkout)
@@ -17,7 +17,7 @@
  * 200, nothing status-code-visible catches it wrong.
  *
  * `handleProjectPut` ANSWERS BOTH PUT AND POST (carve-rules.md, verified at
- * the original `cli/bridge-studio-writes.ts:2030`): its entry gate is
+ * the original `apps/forge/bridge-studio-writes.ts:2030`): its entry gate is
  * `if (projectMatch && method !== 'DELETE')`, kept verbatim below as
  * defense-in-depth even though the route table (T2's job) should only ever
  * register PUT and POST rows against this handler and never a DELETE row.
@@ -46,7 +46,7 @@
  * this exact code.
  *
  * `readJson(req)` → `ctx.readBody()`: the ORIGINAL handlers called
- * `readJson` imported from `cli/bridge-studio.ts` — that import is exactly
+ * `readJson` imported from `apps/forge/bridge-studio.ts` — that import is exactly
  * the `package-to-legacy` row this carve deletes. `ctx.readBody()` is the
  * seam's replacement (T1 ruling 30); each handler still calls it AT MOST
  * ONCE per request, same as before — a second call hangs forever, no
@@ -78,7 +78,7 @@ import {
 // module (see `bridge-studio-project-preflight-write.ts`'s header for the full precedent
 // list). Only `handleProjectPut` needs it — `create`/onboard are
 // `exempt-local` and never refuse under a dry bridge.
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 
 import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';
@@ -253,7 +253,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
       const projectRoot = resolve(ctx.forgeRoot, repoPathRel);
-      // Real per-segment IDENTITY containment (cli/manifest-path-guard.ts's
+      // Real per-segment IDENTITY containment (packages/flows/manifest-path-guard.ts's
       // isContainedProjectRepoPath, itself built on cli/studio-path-guard.ts's
       // resolveGuardedPath) — NOT a lexical resolve().startsWith() check. That
       // shape is blind to a symlinked segment whose on-disk TARGET sits
@@ -314,7 +314,7 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // `mkdirSync(projectRoot)` left a fully-formed, orphaned
       // `brain/projects/<id>/kb.yaml` behind — a phantom KB, invisible to
       // `discoverProjects` (scans `projects/` only) but VISIBLE to
-      // `loadKbDescriptors` (`cli/bridge-studio-kbs.ts`), which walks
+      // `loadKbDescriptors` (`packages/knowledge/bridge-studio-kbs.ts`), which walks
       // `brain/projects/` as its own second containment root. Moving the
       // orphan is not removing it. Separating the CHECK from the WRITE
       // removes the ordering question entirely: no write on this route can

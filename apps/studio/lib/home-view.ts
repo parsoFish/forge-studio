@@ -180,7 +180,7 @@ export function deriveFlowHomeStatus(flowId: string, runs: Run[]): HomeStatus {
 // helpers fold the already-fetched sessions index (the SAME
 // `fetchStudioSessions()` read Home already makes) into hex derivation —
 // through the session's own bridge-derived `state`/`needsYou`
-// (cli/bridge-studio-lifecycle.ts, never re-derived here) and the
+// (packages/sessions/bridge-studio-lifecycle.ts, never re-derived here) and the
 // yaml-parity-pinned kind→agent mapping (`session-kind-meta.ts`).
 // ---------------------------------------------------------------------------
 
@@ -474,7 +474,7 @@ export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
  * DERIVED, with nothing added to the wire. A drain-gated edit is parked as a
  * `kb-cleanup` session in `awaiting-approval`, and the bridge already computes
  * the truthful `needsYou` verdict for every session row
- * (`cli/bridge-studio-lifecycle.ts`). So the condition is exactly "a kb-cleanup
+ * (`packages/sessions/bridge-studio-lifecycle.ts`). So the condition is exactly "a kb-cleanup
  * session that needs you" — read off the SAME already-fetched sessions array
  * Home's constellation and sessions strip use. No new fetch, no new poll, and
  * no `pendingDraft` boolean for some writer to forget to set.
@@ -657,7 +657,7 @@ export type HomeSessionsStrip = {
   /** At most `limit` rows, needs-you first — a straight `.slice`, never
    *  re-sorted here: the bridge's aggregate sessions-index route already
    *  returns rows needs-you-first-then-newest
-   *  (`sortAndCapSessionIndexRows`, cli/ui-bridge.ts), and this derivation
+   *  (`sortAndCapSessionIndexRows`, apps/forge/ui-bridge.ts), and this derivation
    *  stays pure by trusting that server-side order rather than re-deriving
    *  it (declared-data-fails-open discipline: don't re-sort by a field this
    *  module would have to re-implement the SAME derivation for). */

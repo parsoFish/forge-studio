@@ -1,5 +1,5 @@
 /**
- * Tests for cli/forge-requeue.ts — F2.I3.
+ * Tests for packages/flows/forge-requeue.ts — F2.I3.
  *
  * Validates: manifest moves to pending/, verdicts deleted, worktree
  * removed, retry_count handled per flag, previous_failure_modes appended.

@@ -110,13 +110,13 @@ export const DEFAULT_KICKOFF_COST_CEILING_USD = 10;
 export const MAX_KICKOFF_COST_CEILING_USD = 500;
 
 // ---------------------------------------------------------------------------
-// Bridge — SSOT for `cli/forge-watch.ts`
+// Bridge — SSOT for `apps/forge/forge-watch.ts`
 // ---------------------------------------------------------------------------
 
 /**
  * The fixed bridge port, so one browser tab stays pinned across re-runs
  * (CLAUDE.md, ADR 031). Previously pinned by a SOURCE-TEXT comparison because
- * `cli/forge-watch.ts` is a CLI entry point the UI cannot safely import; a
+ * `apps/forge/forge-watch.ts` is a CLI entry point the UI cannot safely import; a
  * shared constant replaces a text pin with a real import.
  */
 export const DEFAULT_BRIDGE_PORT = 4123;

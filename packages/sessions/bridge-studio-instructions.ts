@@ -1,6 +1,6 @@
 /**
  * bridge-studio-instructions.ts — the instructions session kind's
- * `/api/instructions/*` routes, carved out of `cli/ui-bridge.ts` (M4 §4 step 2).
+ * `/api/instructions/*` routes, carved out of `apps/forge/ui-bridge.ts` (M4 §4 step 2).
  *
  * Same shape and the same rules as `bridge-studio-architect.ts`: the six arms
  * are VERBATIM, the only edits are `readJson(req)` → `ctx.readBody()`
@@ -9,7 +9,7 @@
  * arriving through the injected context.
  *
  * `listInstructionsSessions` travels with these routes rather than staying in
- * the host: after the carve its only remaining caller in `cli/ui-bridge.ts` is
+ * the host: after the carve its only remaining caller in `apps/forge/ui-bridge.ts` is
  * the session index collector, which is itself sessions-owned and carves too.
  *
  * A behaviour note worth carrying, because it looks like a bug and is not: the

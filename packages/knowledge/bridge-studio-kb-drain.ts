@@ -6,11 +6,11 @@
  * module is the BRIDGE JOB + its routes; W6-B13 adds the Studio button/UI that
  * dispatches it. Nothing here is imported by forge-ui — no UI wiring in this file.
  *
- * New file (not folded into cli/bridge-studio-kbs.ts, already at the 800-line
+ * New file (not folded into packages/knowledge/bridge-studio-kbs.ts, already at the 800-line
  * cap) — follows that module's conventions: never imports ./ui-bridge.ts,
  * reuses its shared helpers (sendJson/allowedOrigin/sanitizeError/pathOnly/
  * StudioContext from ./bridge-studio.ts), and reuses ITS per-kbId serialization
- * queue (`enqueueConsolidate`, exported from cli/bridge-studio-kbs.ts precisely
+ * queue (`enqueueConsolidate`, exported from packages/knowledge/bridge-studio-kbs.ts precisely
  * so a second caller can share the same lock — see that export's own doc
  * comment) so a drain run and a consolidate run against the SAME kb can never
  * race real agent turns against each other's files.
@@ -307,7 +307,7 @@ export async function runKbDrain(
   const lint = opts.lint ?? runBrainLintFullFresh;
   const applyAutoFixes = opts.applyAutoFixes ?? applyAutoFixesUntilStable;
   // CI-safety seam (mirrors runBrainConsolidateNow's own noSpawn guard,
-  // cli/bridge-studio-kbs.ts:440): under FORGE_ARCHITECT_NO_SPAWN=1 or
+  // packages/knowledge/bridge-studio-kbs.ts:440): under FORGE_ARCHITECT_NO_SPAWN=1 or
   // dry-bridge the DEFAULT fix-turn (a real SDK spawn) is replaced by a no-op
   // that leaves the finding uncleared. A caller-INJECTED opts.runFixTurn is by
   // definition not a real spawn (it is how the termination matrix is unit-
@@ -339,7 +339,7 @@ export async function runKbDrain(
   // honest 'failed' terminal. Before this fix, the initial persist/emit and
   // the success-path final emit sat OUTSIDE the try: a throw there rejected
   // runKbDrain, enqueueConsolidate's queue continuation SWALLOWS that
-  // rejection (cli/bridge-studio-kbs.ts's `.catch(() => {})`), and
+  // rejection (packages/knowledge/bridge-studio-kbs.ts's `.catch(() => {})`), and
   // status.json was left at 'running' forever — a silent-forever path no
   // poller could ever resolve out of. `status` is seeded here, BEFORE the
   // try, so the catch block always has a real value to fall back to even if

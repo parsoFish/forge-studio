@@ -1,5 +1,5 @@
 /**
- * Tests for cli/bridge-studio-kb-drain.ts (W6-B12 — KB drain-to-green bridge job).
+ * Tests for packages/knowledge/bridge-studio-kb-drain.ts (W6-B12 — KB drain-to-green bridge job).
  *
  * Part A — the state-machine termination matrix: calls `runKbDrain` DIRECTLY
  * with injected `lint`/`applyAutoFixes`/`runFixTurn` fakes, so each terminal

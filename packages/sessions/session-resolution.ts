@@ -55,7 +55,7 @@ export function decodeSegment(raw: string): string {
   return decodeURIComponent(raw);
 }
 
-// Exported (cli-side, uncapped — ADR 042) so cli/ui-bridge.ts's kb-cleanup
+// Exported (cli-side, uncapped — ADR 042) so apps/forge/ui-bridge.ts's kb-cleanup
 // apply route (R4-19-F2 adversarial-review fix) can validate its own
 // `project`/`sessionId` body fields against this file's own stated
 // convention (length cap + charset, before any fs call) WITHOUT
@@ -210,7 +210,7 @@ export function findSessionProject(
 ): { ok: true; project: string } | { ok: false; reason: 'not-found' | 'ambiguous' } {
   // `projectsRoot` is the config-derived trusted root (never request data);
   // enumerating it raw mirrors `collectStudioSessionIndexRows`
-  // (cli/ui-bridge.ts) exactly — the per-candidate check below is what is
+  // (apps/forge/ui-bridge.ts) exactly — the per-candidate check below is what is
   // guarded, and every candidate name is server-enumerated.
   let names: string[];
   try {
@@ -407,10 +407,10 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  * only stops when the LAST WS client of the whole bridge disconnects (there
  * is no per-tail teardown), not when this one session is done. Mirrors the
  * legacy per-kind list routes' existing terminal-phase filter
- * (`cli/ui-bridge.ts`'s four `if (s.phase !== ...) ctx.ensureSessionTail(...)`
+ * (`apps/forge/ui-bridge.ts`'s four `if (s.phase !== ...) ctx.ensureSessionTail(...)`
  * guards) — this is the SAME gate, applied at this route's own choke point,
  * not a re-invented one. Exported (W6-B11) so the aggregate sessions-index
- * collector (`cli/ui-bridge.ts`'s `collectStudioSessionIndexRows`) reuses
+ * collector (`apps/forge/ui-bridge.ts`'s `collectStudioSessionIndexRows`) reuses
  * this SAME derivation for its own `terminal` field — no second, hand-kept
  * terminal-phase notion.
  *
@@ -434,7 +434,7 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  *      actually reached via step 2 for either kind.
  *   2. A descriptor with NEITHER table (architect, project-brain — the two
  *      kinds that predate both) falls back to `LEGACY_SESSION_TERMINAL_PHASES`
- *      (cli/bridge-studio.ts) — the SAME constant the legacy list routes
+ *      (apps/forge/bridge-studio.ts) — the SAME constant the legacy list routes
  *      import instead of hand-writing their own inline literals.
  *   3. Any OTHER kind with neither source has no terminal-phase signal at
  *      all — treated as never-terminal (`false`), never a guess.
@@ -456,7 +456,7 @@ export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string
   // terminal phase, checked FIRST for every kind: written only by the
   // generic cancel route (packages/sessions/bridge-studio-lifecycle.ts), never by any
   // runner, and deliberately absent from every per-kind table (see
-  // CANCELLED_PHASE's own doc comment, cli/bridge-studio.ts).
+  // CANCELLED_PHASE's own doc comment, apps/forge/bridge-studio.ts).
   if (phase === CANCELLED_PHASE) return true;
   const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;
   if (phases !== undefined) {

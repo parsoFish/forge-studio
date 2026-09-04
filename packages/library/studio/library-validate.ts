@@ -8,7 +8,7 @@
  * carve, Part 1) — `validateLibraryFlag`, `validateArtifactTemplate`,
  * `validateInstructionSeed`, `validateCatalog`, `validateCommunityRegistry`.
  * `validate.ts` re-exports all five so its existing importers (chiefly
- * `cli/studio-lint.ts`) stay untouched. `validateArtifactRef` — flow-edge
+ * `apps/forge/studio-lint.ts`) stay untouched. `validateArtifactRef` — flow-edge
  * validation, `object: 'flow:<id>'` — is NOT one of library's kinds and
  * stays in `validate.ts`.
  *
@@ -188,7 +188,7 @@ export function validateCatalog(c: Catalog): Finding[] {
  * former `community-skills:` section. Schema shape, the kind vocabulary, and
  * `fetchedBy` presence are all enforced at LOAD time — `loadCommunityRegistry`
  * (registry.ts) throws on any of those violations, and the caller
- * (cli/studio-lint.ts) surfaces the throw as a `load` finding naming the real
+ * (apps/forge/studio-lint.ts) surfaces the throw as a `load` finding naming the real
  * underlying error. This function covers the semantic checks that need the
  * full item roster instead: (kind, id) uniqueness across the registry, and
  * the recommended-tier vocabulary (mirrors validateCatalog's now-retired

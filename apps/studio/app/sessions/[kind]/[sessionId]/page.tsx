@@ -77,7 +77,7 @@ const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 
  * it whatever hint it has (the per-kind summary's `.project`, else the
  * optional `?project=` query param) and otherwise omits it; the bridge
  * resolves the anchor project server-side (`findSessionProject`,
- * cli/bridge-studio-sessions.ts) and echoes it on the payload, so a bare
+ * packages/sessions/bridge-studio-sessions.ts) and echoes it on the payload, so a bare
  * `/sessions/<kind>/<sid>` deep link is a working address for every kind.
  * "Session not found" is ONLY the shell route's own 404 — never a missing
  * query param, never an infinite loading spinner.

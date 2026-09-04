@@ -35,7 +35,7 @@ Direct execution, NOT a forge cycle (operator instruction:
 
 11 commits across 3 stages:
 
-- **M2-A**: Next.js workspace, `cli/ui-bridge.ts` (WebSocket + HTTP), `cli/forge-watch.ts` subcommand. State machine + cycles tab + live event tail.
+- **M2-A**: Next.js workspace, `apps/forge/ui-bridge.ts` (WebSocket + HTTP), `apps/forge/forge-watch.ts` subcommand. State machine + cycles tab + live event tail.
 - **M2-B**: per-phase activity sidebar (Sidebar.tsx), state-transition toasts (Toasts.tsx), WI dependency graph (parsed mermaid client-side, no mermaid lib), cycle-id mapping fix (use `_logs/` dirs as source of truth, not queue filenames).
 - **M2-C**: structured verdict form (approve / send-back + GIVEN/WHEN/THEN editor); POST `/api/verdict` with `proper-lockfile` guard on the in-flight manifest; scheduler-stopped banner with `Start it` button (POST spawns `forge start` detached).
 

@@ -44,7 +44,7 @@ export type AutoFixResult = {
 
 type ParsedTheme = { data: Record<string, unknown>; content: string };
 
-/** The SAME lenient parse the lint checks use (cli/theme-frontmatter.ts,
+/** The SAME lenient parse the lint checks use (packages/knowledge/theme-frontmatter.ts,
  *  W7 FIX-B-KB) — a strict copy here made the fixer refuse ("theme
  *  unparseable") the very unquoted-colon theme lint had just flagged as
  *  missing its index link, so consolidate could never clear the finding. */
@@ -115,7 +115,7 @@ function linkedSlugs(body: string): string[] {
  * EXACT index file path (rather than deriving it from `category` via
  * `categoryIndexPath`/`CATEGORY_TO_BRAIN_SUBDIR`, which only covers the
  * top-level cycles/forge-dev brains). Exported so a caller that already knows
- * its target index file by another means — e.g. `cli/bridge-studio-kbs.ts`'s
+ * its target index file by another means — e.g. `packages/knowledge/bridge-studio-kbs.ts`'s
  * `op:'consolidate'` obligation, which reads the exact path straight out of a
  * `checkProjectBrainIndexes` finding's own message for a project brain under
  * `brain/projects/<id>/` — can apply the SAME deterministic, no-LLM repair

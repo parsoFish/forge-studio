@@ -30,7 +30,7 @@
  *
  * The client-side materials/cost-ceiling gates
  * (`../../../lib/run-panel-view.ts`) are a CONVENIENCE MIRROR of the
- * server's own checks (cli/ui-bridge.ts) — the server remains the
+ * server's own checks (apps/forge/ui-bridge.ts) — the server remains the
  * authority and re-validates both regardless of what this component does.
  *
  * KNOWN GAP (documented, not closed here): this file cannot be exercised by
@@ -42,7 +42,7 @@
  * clicking Run actually calls `dispatchAgentRun` with the chosen values.
  *
  * W6-B7 adds the shared `ActivityLog` bottom drawer, mounted once `runId` is
- * set. `runId` doubles as the run's cycle id (`cli/ui-bridge.ts` mints it
+ * set. `runId` doubles as the run's cycle id (`apps/forge/ui-bridge.ts` mints it
  * `_agent-<slug>-<stamp>` and logs straight into `_logs/<runId>/` — see the
  * `useCycleEvents` call site's own comment below), so no extra id derivation
  * is needed to wire the drawer's live event subscription.
@@ -308,7 +308,7 @@ export function RunPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, pollNonce]);
 
-  // W6-B7: `runId` (minted `_agent-<slug>-<stamp>` — `cli/ui-bridge.ts`'s
+  // W6-B7: `runId` (minted `_agent-<slug>-<stamp>` — `apps/forge/ui-bridge.ts`'s
   // `POST /api/agents/:slug/run`) IS the run's cycle id — `createLogger`
   // there writes straight to `_logs/<runId>/events.jsonl`, the exact path
   // `GET /api/events/<cycleId>` reads. So the shared live drawer just

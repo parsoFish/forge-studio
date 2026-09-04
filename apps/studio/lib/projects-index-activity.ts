@@ -11,7 +11,7 @@
  * request by the server, from the queue and the cycle log:
  *
  *   · `ProjectAttentionItem[]` — `GET /api/studio/projects/attention`, which
- *     `buildProjectAttention` (`cli/bridge-studio.ts:1377`) rebuilds by
+ *     `buildProjectAttention` (`apps/forge/bridge-studio.ts:1377`) rebuilds by
  *     re-scanning `_queue/` on EVERY call. No new bridge route was needed for
  *     this WI; the aggregate has existed since R4-11-F4.
  *   · `Cycle[]` — `GET /api/cycles`'s live + recent snapshot.

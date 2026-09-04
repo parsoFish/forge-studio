@@ -55,7 +55,7 @@ export async function handleKbCleanupVerdict(
   // handler above, reading the SAME `affordance.meta.verdicts`
   // `studio/session-kinds.yaml`'s `awaiting-approval` row declares.
   //
-  // Delegates WHOLESALE to `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
+  // Delegates WHOLESALE to `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) —
   // the phase re-check (belt-and-suspenders on top of the caller's own
   // affordance-membership check AND the generic verdicts gate above), the
   // kb_id presence check, the ATOMIC phase:'applying' claim, the drain, and

@@ -1,7 +1,7 @@
 /**
  * Client-side fetch + parse helpers for the Studio hooks-library bridge
  * routes (R3-03-F4). Mirrors skill-client.ts's role — see
- * cli/bridge-studio-hooks.ts's own header for the transport shapes this
+ * packages/library/bridge-studio-hooks.ts's own header for the transport shapes this
  * carries through verbatim.
  *
  * Split out of studio-client.ts the same way skill-client.ts and
@@ -25,7 +25,7 @@
 import { bridgeFetch } from './bridge-client';
 
 // ---------------------------------------------------------------------------
-// Types mirroring server shapes (cli/bridge-studio-hooks.ts)
+// Types mirroring server shapes (packages/library/bridge-studio-hooks.ts)
 // ---------------------------------------------------------------------------
 
 export const HOOK_LIFECYCLE_EVENTS = [

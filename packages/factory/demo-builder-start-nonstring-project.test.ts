@@ -3,7 +3,7 @@
  * must reject a structurally invalid `project` (any non-string JSON shape,
  * e.g. an array) with its ORDINARY 400 rejection, never a 500.
  *
- * The route (`cli/ui-bridge.ts`, ~L4180) calls `resolveDemoSessionDir`,
+ * The route (`apps/forge/ui-bridge.ts`, ~L4180) calls `resolveDemoSessionDir`,
  * which calls `resolveGuardedPath(projectsRoot, [project, '_demo',
  * sessionId])` (`cli/studio-path-guard.ts`). `project` is typed
  * `project?: string` in the handler's local cast of the parsed JSON body,
@@ -14,14 +14,14 @@
  * guard's own `SLUG_RE` project-shape check (`RegExp.test` coerces its
  * argument to a string first — `String(['abc'])` is `'abc'`, a
  * SLUG_RE-legal value), then reaches `resolveGuardedPath` as a non-string
- * `segments[0]`, which throws (see `cli/studio-path-guard-nonstring-segment.test.ts`
+ * `segments[0]`, which throws (see `packages/kernel/studio-path-guard-nonstring-segment.test.ts`
  * for the unit-level pin of the underlying defect). The route's own
  * `catch` block turns that uncaught exception into a 500 — the WRONG
  * SHAPE for a structurally invalid request, which must be a 400.
  *
  * HARNESS: copied verbatim from the established containment-test pattern
- * (`cli/bridge-studio-demo-builder-containment.test.ts`,
- * `cli/sec04-projectbrain-demo-containment.test.ts`) — `startBridge` on an
+ * (`apps/forge/bridge-studio-demo-builder-containment.test.ts`,
+ * `apps/forge/sec04-projectbrain-demo-containment.test.ts`) — `startBridge` on an
  * ephemeral port against a temp `projectsRoot`, `fetch()` with the
  * mandatory `x-forge-csrf` header for every state-changing POST.
  */
@@ -32,7 +32,7 @@ import { mkdirSync, mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;
 

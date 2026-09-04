@@ -110,7 +110,7 @@ export type LintFinding = Finding;
  *  list* tolerances; `communitySkillsFromRegistry` already returns [] for a
  *  missing file). A registry that FAILS to load (malformed YAML, bad kind
  *  vocab, ...) is likewise tolerated here: `runStudioLint`'s own
- *  community-registry section (cli/studio-lint.ts) already loads the same
+ *  community-registry section (apps/forge/studio-lint.ts) already loads the same
  *  file and surfaces the real error as a `studio:community-registry`/`load`
  *  finding; this function's job is only to extract communitySkills for the
  *  skill-trust pipeline, so re-throwing the SAME load error a second time
@@ -145,7 +145,7 @@ function paletteVisibleFor(trust: SkillTrust, hasError: boolean): boolean {
  * Studio agents, tolerating a malformed one — mirrors listSkillLibrary's own
  * AT-7 resilience (a single bad sibling must not crash the whole scan).
  * registry.ts's `listAgentDefinitions` is NOT resilient (by design — its own
- * callers, e.g. cli/studio-lint.ts's section 1, catch per-entry to produce a
+ * callers, e.g. apps/forge/studio-lint.ts's section 1, catch per-entry to produce a
  * Finding); the trust/usage/ref derivation here only needs the WELL-FORMED
  * agents, so a load failure is skipped rather than propagated — the failing
  * agent's own load error is already surfaced elsewhere as a lint Finding.
@@ -349,7 +349,7 @@ export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// Lint — consumed by cli/studio-lint.ts (forge studio lint)
+// Lint — consumed by apps/forge/studio-lint.ts (forge studio lint)
 // ---------------------------------------------------------------------------
 
 function lintFinding(object: string, check: string, message: string): Finding {

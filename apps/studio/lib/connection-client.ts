@@ -1,7 +1,7 @@
 /**
  * Client-side fetch + parse helpers for the Studio connections-library bridge
  * routes (R3-04-F2/F3). Mirrors hook-client.ts's / template-client.ts's role
- * exactly — see cli/bridge-studio-connections.ts's own header for the
+ * exactly — see packages/library/bridge-studio-connections.ts's own header for the
  * transport shapes this carries through verbatim.
  *
  * `parseConnection` is EXPORTED (not private), same rationale as
@@ -18,14 +18,14 @@
  * (this repo's forge-ui vitest config is `environment: 'node'`, a standing
  * decision; the transport, `bridgeFetch`, requires `window`). The over-the-wire
  * behaviour (list/detail/probe/install round trips, the security core) is
- * pinned by cli/bridge-studio-connections.test.ts instead.
+ * pinned by packages/library/bridge-studio-connections.test.ts instead.
  */
 
 import { bridgeFetch } from './bridge-client.ts';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (orchestrator/studio/connection-library.ts,
-// orchestrator/studio/connection-probe.ts, cli/bridge-studio-connections.ts)
+// orchestrator/studio/connection-probe.ts, packages/library/bridge-studio-connections.ts)
 // ---------------------------------------------------------------------------
 
 export type ConnectionKind = 'tool' | 'mcp';
@@ -223,7 +223,7 @@ function parseCapability(raw: unknown): ConnectionCapability {
 
 /**
  * Parse one connection entry (list row or detail — same shape, D-1 in
- * cli/bridge-studio-connections.ts's header). THROWS on any malformed or
+ * packages/library/bridge-studio-connections.ts's header). THROWS on any malformed or
  * missing REQUIRED field, or an unrecognised enum token, rather than
  * coercing it to a plausible default — the refusal discipline this whole
  * module exists to enforce.
@@ -285,7 +285,7 @@ export function parseConnection(raw: unknown): ConnectionWire {
 
 // ---------------------------------------------------------------------------
 // Fetch helpers — over-the-wire behaviour pinned by
-// cli/bridge-studio-connections.test.ts, not by this file's own test (see
+// packages/library/bridge-studio-connections.test.ts, not by this file's own test (see
 // module header: no window/fetch under this repo's node-environment vitest).
 // ---------------------------------------------------------------------------
 

@@ -96,7 +96,7 @@ test('cmdAgentDispatch: happy path under the no-spawn seam → suppressed, no ex
 // Re-homed (R4-17 pin 3, item 2 — mechanical amendment, forced by a T2
 // ruling): the only REAL caller of `--session-dir`, `POST /api/studio/
 // onboarding/start`, always builds `<projectsRoot>/<project>/_onboarding/
-// <sessionId>` (cli/ui-bridge.ts) — a fixture under `<ROOT>/_logs/…` is not
+// <sessionId>` (apps/forge/ui-bridge.ts) — a fixture under `<ROOT>/_logs/…` is not
 // a shape any real session dir ever occupies. This constant + helper now
 // mirror the real shape exactly; every assertion in the tests below is
 // unchanged, only the fixture's directory moved. Swept via the module-level
@@ -167,7 +167,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-3 (D6 — byte-identical without the flag) �
 
 // ---------------------------------------------------------------------------
 // R4-17 pin 3, item 3 (NEW — T2 ruling, binding): the containment root for
-// `writeSessionTerminalPhase` (cli/agent-run.ts:193) must be `projectsRoot`,
+// `writeSessionTerminalPhase` (packages/agents/agent-run.ts:193) must be `projectsRoot`,
 // not `forgeRoot`. The round-1 fix widened the boundary to `forgeRoot`
 // solely to keep the D7-1/2/3 fixtures above passing while they still lived
 // under `<ROOT>/_logs/…` — disclosed honestly in that function's own header,
@@ -282,17 +282,17 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown s
 // R4-17 pin 4, item 1 (BLOCKER, round-2 adversarial review): `writeSessionTerminalPhase`
 // (agent-run.ts:194, exercised here via `cmdAgentDispatch`) resolves
 // `projectsRoot` via `resolveProjectsDir(resolve(forgeRoot), loadConfig())`
-// (cli/agent-run.ts:201) — config-aware, honouring BOTH `FORGE_PROJECTS_DIR`
+// (packages/agents/agent-run.ts:201) — config-aware, honouring BOTH `FORGE_PROJECTS_DIR`
 // (env) and `forge.config.json`'s `projectsDir` (file), per
 // `orchestrator/config.ts:106-121`'s documented precedence. The BLOCKER is
-// that `cli/ui-bridge.ts:222` — `POST /api/studio/onboarding/start`, the ONE
+// that `apps/forge/ui-bridge.ts:222` — `POST /api/studio/onboarding/start`, the ONE
 // real producer of `--session-dir` — does NOT: it hardcodes `resolve(forgeRoot,
 // 'projects')`, never consulting either mechanism. When an operator
 // configures a custom projects root, the producer keeps building sessions
 // under the OLD hardcoded literal while this guard now checks containment
 // against the CONFIGURED root, and the two disagree.
 //
-// `cli/ui-bridge-onboarding-start.test.ts`'s AT-10 kills the PRODUCER half
+// `apps/forge/ui-bridge-onboarding-start.test.ts`'s AT-10 kills the PRODUCER half
 // directly (RED now: the route can't even find a project that only exists
 // under a configured root, so it 404s instead of placing the session there).
 // The tests below pin the CONSUMER half this function owns: fed a

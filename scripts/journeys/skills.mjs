@@ -585,7 +585,7 @@ export const journey = defineJourney({
               // ── SK-4: agentic skill authoring (the demo-design contract clause) ───────
               // mdtoc genuinely fails DEMO-SKILL (demoProcess declared, no generated
               // .forge/skills/demo-design/SKILL.md), classified agent-tier → route
-              // demo-builder (cli/preflight-resolve.ts). The resolve click is REAL
+              // demo-builder (packages/projects/preflight-resolve.ts). The resolve click is REAL
               // (fix-agent dispatch + demo-builder session + navigation); only the LLM
               // turn is suppressed (FORGE_ARCHITECT_NO_SPAWN=1) and its artifact seeded.
               console.log('\n[SK-4] Agentic skill authoring (demo-design contract clause)');

@@ -1,7 +1,7 @@
 /**
  * Per-KB lint summary (forge-2am, R6-07 option (b)).
  *
- * Extracted from cli/bridge-studio-kbs.ts (which must SHRINK, not grow) so the
+ * Extracted from packages/knowledge/bridge-studio-kbs.ts (which must SHRINK, not grow) so the
  * per-check itemization logic `buildKbHealth` already used has ONE home, and
  * so the EXISTING `GET /api/studio/kbs` list route can fold a cheap per-KB
  * lint summary into its response — Home reads it through the SAME existing
@@ -10,7 +10,7 @@
  *
  * The findings-scoping helpers below (`findingUnderDir`, `scopeFindingsToKb`)
  * and the `CheckHealthStatus`/`CheckHealthEntry` types moved here from
- * cli/bridge-studio-kbs.ts — `buildKbHealth` there calls `computeKbLintChecks`
+ * packages/knowledge/bridge-studio-kbs.ts — `buildKbHealth` there calls `computeKbLintChecks`
  * instead of carrying its own copy of the itemization logic, so there is
  * exactly ONE derivation.
  */
@@ -23,7 +23,7 @@ import { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
 import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, type Finding, type RunBrainLintResult } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
-// Findings-scoping helpers (moved verbatim from cli/bridge-studio-kbs.ts)
+// Findings-scoping helpers (moved verbatim from packages/knowledge/bridge-studio-kbs.ts)
 // ---------------------------------------------------------------------------
 
 /**
@@ -101,7 +101,7 @@ export function collectKbFindings(
 }
 
 // ---------------------------------------------------------------------------
-// Per-check itemization (moved verbatim from cli/bridge-studio-kbs.ts)
+// Per-check itemization (moved verbatim from packages/knowledge/bridge-studio-kbs.ts)
 // ---------------------------------------------------------------------------
 
 /** R6-08 WI-1 — per-check itemization row. `status` is 'unknown' only when
@@ -124,7 +124,7 @@ export type CheckHealthEntry = { check: string; status: CheckHealthStatus; error
 /**
  * Itemize ALREADY-COMPUTED findings (from a single `runBrainLint` call) per
  * CHECK_NAMES for one KB. This is the exact logic `buildKbHealth`
- * (cli/bridge-studio-kbs.ts) used to carry inline — lifted out so both
+ * (packages/knowledge/bridge-studio-kbs.ts) used to carry inline — lifted out so both
  * `buildKbHealth` (per-KB detail route) and `attachKbLintSummaries` (list
  * route, one lint run for the WHOLE list) share ONE derivation.
  *
@@ -147,7 +147,7 @@ export function computeKbLintChecks(
   const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings, backend);
 
   // Is this KB's brain dir within a given check's CHECK_SCOPE domain? Every
-  // arm DERIVES the answer from cli/brain-lint.ts — this function holds no
+  // arm DERIVES the answer from packages/knowledge/brain-lint.ts — this function holds no
   // copy of what the scan covers. It used to hardcode the two forge sub-wikis
   // here, which stayed silently correct only for as long as `readThemeFiles`
   // walked exactly those two.
@@ -200,7 +200,7 @@ export function computeKbLintChecks(
 
 /**
  * COMPLETENESS TABLE — every `FULL_SCOPE_CHECKS` function's fs reads
- * (cli/brain-lint.ts), enumerated from each check's OWN code, not assumed
+ * (packages/knowledge/brain-lint.ts), enumerated from each check's OWN code, not assumed
  * from a walk. Re-verify this table by hand whenever a check in that
  * registry changes what it reads — it is the proof that `statWalkFingerprint`
  * below actually covers the derivation's real inputs (ADR 044 rule 2), not
@@ -213,7 +213,7 @@ export function computeKbLintChecks(
  *                              File), relLink)) for every markdown-link target in
  *                              a theme body, PLUS findThemeBySlug(brain/) for
  *                              wikilinks (:539)                                   → relLink resolution is
- *                              UNBOUNDED BY DESIGN (cli/brain-lint.ts:525): a
+ *                              UNBOUNDED BY DESIGN (packages/knowledge/brain-lint.ts:525): a
  *                              theme author's relative link can climb `../` any
  *                              number of times and land anywhere under forgeRoot.
  *                              The real corpus today (verified by grep,
@@ -226,7 +226,7 @@ export function computeKbLintChecks(
  *                              rather than a hand-picked root list.
  *   checkStaleness             readThemeFiles + existsSync(resolve(forgeRoot,p))
  *                              for p prefixed docs/ orchestrator/ skills/ loops/
- *                              (cli/brain-lint.ts:601)                           → bounded to exactly
+ *                              (packages/knowledge/brain-lint.ts:601)                           → bounded to exactly
  *                              those 4 prefixes; brain/-prefixed and any other
  *                              prefix are explicitly skipped (:596/:600/:613) —
  *                              already a subset of what checkSourceLinks forces
@@ -244,7 +244,7 @@ export function computeKbLintChecks(
  *   checkDanglingEdges         collectAllThemeSlugs(brain/{cycles,forge-dev,
  *                              projects/*}/themes) + readThemeFiles;
  *                              related_themes is tested by SET MEMBERSHIP only
- *                              (cli/brain-lint.ts:970), never resolved to a path → confined to brain/
+ *                              (packages/knowledge/brain-lint.ts:970), never resolved to a path → confined to brain/
  *   checkDuplicateThemes       pure — operates on readThemeFiles' already-parsed
  *                              results, no fs read of its own                    → confined to brain/
  *   checkCleanupCandidates     brain/cycles/_raw                                 → EXCLUDED: only runs
@@ -379,7 +379,7 @@ const brainLintFullMemoByRoot = new Map<string, { key: string; result: RunBrainL
  * 'full' })` (ADR 044). Every full-scope read path behind the Studio bridge
  * — `GET /api/studio/kbs` (via `attachKbLintSummaries` below), the per-KB
  * detail/health route, the kb-cleanup session's live findings, and the KB
- * maintenance `op:'lint'` action, all in cli/bridge-studio-kbs.ts — shares
+ * maintenance `op:'lint'` action, all in packages/knowledge/bridge-studio-kbs.ts — shares
  * this ONE memo keyed by forgeRoot, so a long-lived bridge process serving
  * many requests against an unchanged brain tree pays the full ~500-file lint
  * once, not once per request.
@@ -392,7 +392,7 @@ const brainLintFullMemoByRoot = new Map<string, { key: string; result: RunBrainL
  * and does NOT update the memo — a memo can never be the only way to
  * produce the value (rule 4).
  *
- * The CLI's own `forge brain lint` command (cli/brain-lint.ts's `main`) and
+ * The CLI's own `forge brain lint` command (packages/knowledge/brain-lint.ts's `main`) and
  * `applyAutoFixesUntilStable`'s internal fixed-point re-lint loop are
  * DELIBERATELY not routed through this: the CLI runs as its own short-lived
  * process (never imports this module, so it can't touch this memo even by
@@ -434,7 +434,7 @@ export function runBrainLintFullMemoized(forgeRoot: string): RunBrainLintResult 
  * with this fresh result, keyed on a fingerprint computed AFTER the fresh
  * run. Reviewer-flagged (2026-08-15): a post-mutation re-lint that runs
  * moments after a PRE-mutation `runBrainLintFullMemoized` read in the same
- * function (`runBrainConsolidateNow`, cli/bridge-studio-kbs.ts) cannot trust
+ * function (`runBrainConsolidateNow`, packages/knowledge/bridge-studio-kbs.ts) cannot trust
  * the memo it may have just seeded — a size-neutral write landing in the
  * same millisecond as the pre-mutation read is exactly the blind spot
  * `statWalkFingerprint` accepts by design (same trade-off ADR 044 names for

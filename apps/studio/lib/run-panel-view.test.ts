@@ -14,7 +14,7 @@
  * the implementer creates it with the exact exports this file names.
  *
  * ASSUMED EXPORTS from `./run-panel-view.ts` (mirrors the precedent set by
- * cli/ui-bridge-agent-run-ceiling.test.ts's header, which pins
+ * apps/forge/ui-bridge-agent-run-ceiling.test.ts's header, which pins
  * `buildAgentDispatchArgs`/`parseAgentDispatchArgs` the same way):
  *
  *   export function validateMaterialsClientSide(
@@ -36,7 +36,7 @@
  * WHY these three, and not a single monolithic "buildDispatchOptions": each is
  * independently the exact decision point the task brief calls out —
  * (1) "refusing an undeclared kind client-side with the SAME MESSAGE SHAPE
- * the server uses" (mirrors cli/ui-bridge.ts's `materialsNoKindMessage` /
+ * the server uses" (mirrors apps/forge/ui-bridge.ts's `materialsNoKindMessage` /
  * `materialsUndeclaredKindMessage` / the three cap messages — message text
  * pinned CHARACTER-FOR-CHARACTER below, matching that file's own "wording is
  * pinned character-for-character... do not reword" convention),
@@ -132,7 +132,7 @@ test('resolveCostCeilingForDispatch: enforceable=true, a normal positive value -
 // ---------------------------------------------------------------------------
 // resolveCostCeilingForDispatch — VALIDITY HARDENING (round-2 defense in
 // depth). AMENDS this file's earlier "value 0 -> still returns 0" pin, which
-// is now WRONG: the server's own bounds check (cli/ui-bridge.ts,
+// is now WRONG: the server's own bounds check (apps/forge/ui-bridge.ts,
 // `v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD`) refuses `0` — it was never a
 // legitimate ceiling, only a truthiness-check red herring at the time that
 // test was written. `0` is exactly the value the real defect (see this
@@ -214,7 +214,7 @@ test('resolveCeilingFieldValue: a manual override of exactly 0 still wins over t
 
 // ---------------------------------------------------------------------------
 // validateMaterialsClientSide — kind gate, mirroring the server's EXACT
-// message shape (cli/ui-bridge.ts materialsNoKindMessage /
+// message shape (apps/forge/ui-bridge.ts materialsNoKindMessage /
 // materialsUndeclaredKindMessage). "declares: (none)" is the server's own
 // literal for an empty declared-kinds list (declaredMaterialKindsClause).
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ test('validateMaterialsClientSide: a single file over 262144 bytes -> refused wi
 
 test('validateMaterialsClientSide: files summing over 524288 bytes (each individually AT OR UNDER the per-file cap) -> refused with the total-cap message shape, not the per-file one', () => {
   // Mirrors the server's per-entry, running-total order exactly
-  // (validateMaterialsField in cli/ui-bridge.ts): two files sitting exactly
+  // (validateMaterialsField in apps/forge/ui-bridge.ts): two files sitting exactly
   // AT the 262144-byte per-file cap (never exceeding it individually) sum to
   // exactly 524288 — the total boundary itself, not yet exceeding — so a
   // third, tiny file is what actually pushes the running total over. If any
@@ -318,7 +318,7 @@ test('validateMaterialsClientSide: files summing over 524288 bytes (each individ
 // ---------------------------------------------------------------------------
 // Ordering: the kind gate must fire ONLY on entries that pass the caps —
 // mirrors the server's own per-entry, first-failure-wins order
-// (validateMaterialsField in cli/ui-bridge.ts).
+// (validateMaterialsField in apps/forge/ui-bridge.ts).
 // ---------------------------------------------------------------------------
 
 test('validateMaterialsClientSide: an oversized file with an undeclared kind is refused for its SIZE, not its kind — caps are checked before the kind gate, same order as the server', () => {

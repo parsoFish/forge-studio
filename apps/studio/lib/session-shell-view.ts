@@ -460,8 +460,8 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
 // "." is NEVER a real registered project: `discoverProjects`
 // (orchestrator/studio/registry.ts) categorically filters every dot-prefixed
 // directory out of the real project list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX,
-// cli/bridge-studio-kbs.ts) and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR
-// below, mirroring cli/bridge-studio-sessions.ts's own
+// packages/knowledge/bridge-studio-kbs.ts) and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR
+// below, mirroring packages/sessions/bridge-studio-sessions.ts's own
 // COMMUNITY_REFRESH_PROJECT_ANCHOR literal) are the two known anchor shapes;
 // a THIRD, unrecognised dot-prefixed anchor still trips `isPseudoProjectAnchor`
 // (the general leading-"." check), it just has no known destination —
@@ -478,7 +478,7 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
 // forge-ui never imports cli/ at runtime (see this repo's SSOT-parity-test
 // convention, e.g. forge-ui/lib/trigger-kind-parity.test.ts) — this is a
 // small, independently-declared mirror of `isPseudoProjectAnchor` and the
-// two anchor literals (cli/bridge-studio-sessions.ts), kept honest by a
+// two anchor literals (packages/sessions/bridge-studio-sessions.ts), kept honest by a
 // parity test in this file's own .test.ts sibling.
 // ---------------------------------------------------------------------------
 
