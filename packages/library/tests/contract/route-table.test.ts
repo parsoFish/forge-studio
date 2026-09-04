@@ -61,7 +61,7 @@ import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';
 
 // The table's SHAPE is what this file pins, and no entry's shape depends on
 // what the deps carry — one built table serves every case here.
-const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-root') });
+const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-root'), isSdkAvailable: () => false });
 
 /**
  * The 31 routes the seven dispatchers matched at `c323dc04`, in the order
@@ -86,6 +86,12 @@ const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-
  * route lives in a sibling file from birth; see that file's own header).
  */
 const PINNED: ReadonlyArray<readonly [string, string]> = [
+  // ---- bridge-studio-catalog.ts (1) ----
+  // The LAST library route to leave the bridge (M4 6d, ruling 49). It stayed
+  // behind because it reconciles catalog SDKs against the live adapter
+  // registry, and `isSdkAvailable` is `@forge/agents`' — a real rank
+  // violation until the table became a factory that can take it injected.
+  ['GET', '/api/studio/catalog'],
   // ---- bridge-studio-skills.ts (7) ----
   ['GET', '/api/studio/skills'],
   ['POST', '/api/studio/skills'],
@@ -141,7 +147,7 @@ function concreteUrl(path: string): string {
 
 const key = (method: string, path: string): string => `${method} ${path}`;
 
-test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains dispatched plus the 3 residue routes', () => {
+test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains dispatched, plus the 3 residue routes, plus the catalog route (6d)', () => {
   const tabled = TABLE.map((e) => key(e.method, e.path));
   const pinned = PINNED.map(([m, p]) => key(m, p));
 
@@ -150,7 +156,7 @@ test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains
 
   assert.deepEqual(missing, [], `routes that left an if-chain without arriving in the table:\n${missing.join('\n')}`);
   assert.deepEqual(extra, [], `table entries with no if-chain arm behind them:\n${extra.join('\n')}`);
-  assert.equal(TABLE.length, PINNED.length, 'the table must carry exactly 35 entries — a duplicate is as wrong as a gap');
+  assert.equal(TABLE.length, PINNED.length, 'the table must carry exactly 36 entries — a duplicate is as wrong as a gap');
 });
 
 test('theProbeIsNotVacuous: every entry matches the concrete URL built from its own path', () => {
