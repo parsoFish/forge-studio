@@ -16,7 +16,13 @@
 #       Extract the first ```text block under the heading matching <heading-regex> into
 #       <out-file>; fill each PARAM ("PARAMETER — set before pasting" line + every "$PARAM").
 #   lanes.sh launch <campaign-dir> <lane> <prompt-file> [--model M] [--permission-mode P]
-#                   [--cwd DIR] [--t1 NAME] [--attended] [--open]
+#                   [--cwd DIR | --branch NAME] [--skill NAME ...] [--mcp FILE]
+#                   [--t1 NAME] [--attended] [--open]
+#       Preflight first, and a failure leaves nothing running: MemAvailable >= 4 GiB · every
+#       --skill openable from the lane's tree · the prompt carries `flock <campaign>/.suite-lock`
+#       · the MCP config declares no tokensave · with --branch, the worktree ~/forge-<lane> is cut
+#       from LANES_BASE_REF (parsoFish/main), installed into, and its kernel link proven to be its
+#       own — else the worktree is removed again.
 #       Start tmux forge-<lane> in DIR (default /home/parso/forge), pane piped to
 #       <campaign-dir>/heartbeat/<lane>.tmux.log, run the named claude session with the lane
 #       protocol appended to its system prompt (lane-protocol.md) and the AskUserQuestion block
@@ -37,11 +43,15 @@
 #                                    `waiting`, with waitingFor) · LANE_IDLE (idle + heartbeat
 #                                    > 10 min: the relay hole).
 # Env: LANES_MODEL (opus) · LANES_PERMISSION_MODE (auto) · LANES_CWD (/home/parso/forge) ·
-#      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60).
+#      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60) ·
+#      LANES_BASE_REF (parsoFish/main) · LANES_INSTALL_CMD · LANES_MEMINFO (both test seams).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${LANES_SESSION_PREFIX:-forge-}"
+# COMMON §1: 4 GiB available before any suite or story run. §15.17 measured suites dying mid-run
+# under load with no OOM; the floor was a line in a brief until launch enforced it.
+LANES_MEM_FLOOR_GIB_DEFAULT=4
 REPO="${LANES_CWD:-/home/parso/forge}"
 
 die() { echo "lanes.sh: $*" >&2; exit 2; }
@@ -207,11 +217,15 @@ die_launch() {
 cmd_launch() {
   local camp="$1" lane="$2" prompt="$3"; shift 3
   local model="${LANES_MODEL:-opus}" pm="${LANES_PERMISSION_MODE:-auto}" cwd="$REPO" t1="" attended=0 open=0
+  local branch="" mcp="$HERE/../lane-mcp.json" skills=() cwd_set=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --model) model="$2"; shift 2 ;;
       --permission-mode) pm="$2"; shift 2 ;;
-      --cwd) cwd="$2"; shift 2 ;;
+      --cwd) cwd="$2"; cwd_set=1; shift 2 ;;
+      --branch) branch="$2"; shift 2 ;;
+      --mcp) mcp="$2"; shift 2 ;;
+      --skill) skills+=("$2"); shift 2 ;;
       --t1) t1="$2"; shift 2 ;;
       --attended) attended=1; shift ;;
       --open) open=1; shift ;;
@@ -240,11 +254,70 @@ cmd_launch() {
   sed -e "s|\$CAMPAIGN|$camp|g; s|\$LANE|$lane|g; s|\$T1|$t1|g" "$HERE/../lane-protocol.md" > "$proto"
   local settings=""
   [ "$attended" = 1 ] || settings="--settings '$HERE/../lane-settings.json'"
+  # ---- PREFLIGHT (bead forge-8vfn.6.8.1) ----------------------------------------------------
+  # Every check here is a rule that used to live in a brief and be applied by a human. Each one
+  # fails LOUD, names what it read, and undoes anything it created — before a single token is
+  # spent, which is the difference between this and bead 2.32's undo-after-the-fact.
+
+  # (a) memory floor. Suites died mid-run under load with no OOM (§15.17); COMMON §1 sets 4 GiB
+  # and nothing enforced it. LANES_MEMINFO is the seam — a red is plantable without a small host.
+  local mem_kb floor_kb=$((LANES_MEM_FLOOR_GIB_DEFAULT * 1024 * 1024))
+  mem_kb="$(awk '/^MemAvailable:/ {print $2}' "${LANES_MEMINFO:-/proc/meminfo}" 2>/dev/null || true)"
+  [ -n "$mem_kb" ] || die "cannot read MemAvailable from ${LANES_MEMINFO:-/proc/meminfo} — a floor that cannot be measured is not a floor"
+  if [ "$mem_kb" -lt "$floor_kb" ]; then
+    die "$(printf 'MemAvailable %.1f GiB is below the %d GiB floor (COMMON §1) — a suite started here dies mid-run; free memory or wait' \
+      "$(awk -v k="$mem_kb" 'BEGIN{print k/1048576}')" "$LANES_MEM_FLOOR_GIB_DEFAULT")"
+  fi
+
+  # (c) the rendered prompt must carry the campaign's suite lock. A lane that never saw the line
+  # runs its suite outside the lock (COMMON §1), and nothing downstream can tell.
+  local lockline="flock $camp/.suite-lock"
+  grep -qF "$lockline" "$prompt" || die "the rendered prompt $prompt does not contain the literal '$lockline' — a lane that never saw the suite-lock line runs its suite outside it"
+
+  # (d) MCP: ruling 140 removed tokensave for a systemic RSS leak and cache-busting tool defs, and
+  # holds today only because ~/.claude.json happens to be clean. --strict-mcp-config plus a file
+  # this script can read makes it hold by flag.
+  [ -f "$mcp" ] || die "no MCP config at $mcp"
+  local ts; ts="$(grep -c tokensave "$mcp" || true)"
+  [ "$ts" = 0 ] || die "$mcp declares tokensave ($ts line(s)) — ruling 140 removed it; a lane must not start with it"
+
+  # (b) the worktree, cut and PROVEN. Ruling 144 did exactly this by hand for the first M5 lane.
+  # §15.148: a tree running another tree's install measures the other tree.
+  if [ -n "$branch" ]; then
+    [ "$cwd_set" = 0 ] || die "--branch and --cwd are exclusive: --branch cuts the worktree the lane runs in"
+    local base="${LANES_BASE_REF:-parsoFish/main}"
+    git -C "$REPO" rev-parse --verify --quiet "$base" >/dev/null || die "no such base ref '$base' in $REPO (set LANES_BASE_REF)"
+    cwd="${LANES_WORKTREE_ROOT:-$HOME}/forge-$lane"
+    [ -e "$cwd" ] && die "worktree $cwd already exists — retire the old lane first (lanes.sh kill)"
+    git -C "$REPO" worktree add -b "$branch" "$cwd" "$base" >/dev/null 2>&1 || die "could not cut worktree $cwd on $branch from $base"
+    undo_worktree() { git -C "$REPO" worktree remove --force "$cwd" >/dev/null 2>&1 || rm -rf "$cwd"; git -C "$REPO" worktree prune; }
+    ( cd "$cwd" && eval "${LANES_INSTALL_CMD:-npm install --no-audit --no-fund}" ) >/dev/null 2>&1 \
+      || { undo_worktree; die "install failed in $cwd — worktree removed, nothing left running"; }
+    local klink; klink="$(cd "$cwd" && readlink -f node_modules/@forge/kernel 2>/dev/null || true)"
+    case "$klink" in
+      "$cwd"/*) echo "kernel link: $klink" ;;
+      *) undo_worktree; die "kernel link resolves to '${klink:-<none>}', not inside $cwd — this tree would run another tree's install (§15.148); worktree removed" ;;
+    esac
+  fi
+  # (f) the skills a brief tells this lane to use must be openable FROM THE TREE IT LAUNCHES INTO
+  # (ruling 151): `.claude/skills/*` was gitignored except two entries, so no lane worktree since
+  # M0 carried `immutable-gates` — briefs cited a skill the lane could not open. This runs LAST,
+  # against the FINAL cwd: with --branch that tree does not exist until the block above cut it.
+  local sk
+  for sk in "${skills[@]+"${skills[@]}"}"; do
+    if [ ! -f "$cwd/.claude/skills/$sk/SKILL.md" ] && [ ! -f "$HOME/.claude/skills/$sk/SKILL.md" ]; then
+      [ -n "$branch" ] && undo_worktree
+      die "--skill $sk: no SKILL.md at $cwd/.claude/skills/$sk/ or \$HOME/.claude/skills/$sk/ — this lane could not open the skill its brief names"
+    fi
+  done
+
+  # ---- end preflight -------------------------------------------------------------------------
+
   local t0; t0="$(date +%s)"
   tmux new-session -d -s "$s" -c "$cwd" -x 200 -y 50
   tmux pipe-pane -o -t "$s" "cat >> '$camp/heartbeat/$lane.tmux.log'"
   # LANES_* reach the hook; `; exit` ends the tmux session when the claude session ends.
-  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
+  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
   # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
   local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
   while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -260,6 +333,17 @@ cmd_launch() {
   if row_is_waiting "$row"; then
     die_launch "$camp" "$lane" "$s" "$cwd" "$t0" \
       "launch NOT CONFIRMED for $lane: $s is up but waiting on a dialog [$row]. The second field is waitingFor — 'permission prompt' or 'input needed'. Attach with 'tmux attach -t $s' to answer it."
+  fi
+  # Confirmed by effect, then PROVEN on the live process: the flags are in its own cmdline, and
+  # no tokensave reached it. A config that is right on disk and wrong in argv is the fail-open
+  # this whole preflight exists to close.
+  local pid cmdline
+  pid="$(roster_pid "$s")"
+  if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ]; then
+    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+    case "$cmdline" in *--strict-mcp-config*) ;; *) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline carries no --strict-mcp-config" ;; esac
+    case "$cmdline" in *tokensave*) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: tokensave in /proc/$pid/cmdline (ruling 140)" ;; esac
+    echo "preflight: MemAvailable ok · prompt carries '$lockline' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
   fi
   active_add "$camp" "$lane"
   printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"

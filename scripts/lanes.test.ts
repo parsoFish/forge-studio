@@ -176,6 +176,19 @@ function waitGone(pid: number, ms = 12000) {
   while (Date.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
   return !alive(pid);
 }
+/**
+ * A rendered kickoff carries the campaign's suite lock line — `launch` refuses one that does
+ * not, because a lane that never saw the lock runs its suite outside it (COMMON §1).
+ */
+function kickoff(body: string) {
+  return `${body}\nSuites: flock ${camp}/.suite-lock npm test\n`;
+}
+/** A /proc/meminfo the memory floor can be pointed at — no 4 GiB host required to plant a red. */
+function meminfo(availableKb: number) {
+  const p = join(dir, `meminfo-${availableKb}`);
+  writeFileSync(p, `MemTotal:       16000000 kB\nMemFree:         1000000 kB\nMemAvailable:   ${availableKb} kB\n`);
+  return p;
+}
 function argvOf(name: string) {
   return readFileSync(join(dir, `${name}.argv`), 'utf8').replace(/\0$/, '').split('\0');
 }
@@ -196,7 +209,13 @@ before(() => {
   repo = join(dir, 'repo');
   mkdirSync(repo);
   git(repo, 'init', '-q', '-b', 'main');
-  git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'root');
+  // The skill is COMMITTED in the fixture repo, because that is the property ruling 151 is
+  // about: a worktree cut from a ref carries only what the ref carries, and `.claude/skills/*`
+  // was gitignored, so no lane worktree since M0 had the skills its brief cited.
+  mkdirSync(join(repo, '.claude', 'skills', 'tiered-orchestration'), { recursive: true });
+  writeFileSync(join(repo, '.claude', 'skills', 'tiered-orchestration', 'SKILL.md'), '# skill\n');
+  git(repo, 'add', '.claude/skills/tiered-orchestration/SKILL.md');
+  git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'root');
 });
 after(() => {
   killAll();
@@ -212,7 +231,7 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     const s = `${PREFIX}${lane}`;
     sessions.add(s);
     const prompt = join(dir, 'prompt.md');
-    writeFileSync(prompt, 'KICKOFF HEAD LINE\nbody\n');
+    writeFileSync(prompt, kickoff('KICKOFF HEAD LINE\nbody'));
     // T1 is found by walking this process's ancestry against the roster — no flag needed.
     setRoster([{ name: 't1-under-test', pid: process.pid, kind: 'interactive', status: 'busy' }]);
 
@@ -229,7 +248,7 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     assert.match(proto, /You are lane ok/, 'the lane protocol names the lane');
     assert.match(proto, /named t1-under-test/, 'the lane protocol names T1 so the lane can message it');
     assert.match(proto, new RegExp(camp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'the lane protocol names the campaign dir');
-    assert.equal(argv[argv.length - 1], 'KICKOFF HEAD LINE\nbody', 'the rendered prompt is the last argument, whole');
+    assert.equal(argv[argv.length - 1], kickoff('KICKOFF HEAD LINE\nbody').trimEnd(), 'the rendered prompt is the last argument, whole');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8').trim(), lane, 'the lane is registered in ACTIVE by launch');
     assert.ok(existsSync(join(camp, 'heartbeat', `${lane}.session`)), 'the session id is recorded for claude --resume');
     assert.ok(existsSync(join(camp, 'prompts', `${lane}.protocol.md`)), 'the rendered protocol is a file a successor can read');
@@ -246,13 +265,13 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     sessions.add(`${PREFIX}${lane}`);
     const laneCwd = join(dir, 'cwd-rel');
     mkdirSync(laneCwd, { recursive: true });
-    writeFileSync(join(dir, 'rel-prompt.md'), 'RELATIVE KICKOFF\n');
+    writeFileSync(join(dir, 'rel-prompt.md'), kickoff('RELATIVE KICKOFF'));
 
     const r = lanes(['launch', camp, lane, 'rel-prompt.md', '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }, 30000, dir);
 
     assert.equal(r.status, 0, r.stderr);
     const argv = argvOf('lane-rel');
-    assert.equal(argv[argv.length - 1], 'RELATIVE KICKOFF', 'the prompt is resolved to an absolute path before send-keys');
+    assert.equal(argv[argv.length - 1], kickoff('RELATIVE KICKOFF').trimEnd(), 'the prompt is resolved to an absolute path before send-keys');
   });
 
   test('--attended launches without the AskUserQuestion hook', () => {
@@ -260,7 +279,7 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     const lane = 'att';
     sessions.add(`${PREFIX}${lane}`);
     const prompt = join(dir, 'prompt-att.md');
-    writeFileSync(prompt, 'narrate\n');
+    writeFileSync(prompt, kickoff('narrate'));
 
     const r = lanes(['launch', camp, lane, prompt, '--cwd', dir, '--attended', '--t1', 'named-t1'], { LANES_CLAUDE_BIN: bin });
 
@@ -288,7 +307,7 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     const s = `${PREFIX}${lane}`;
     sessions.add(s);
     const prompt = join(dir, 'prompt-deaf.md');
-    writeFileSync(prompt, 'never consumed\n');
+    writeFileSync(prompt, kickoff('never consumed'));
     const before = readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8');
 
     const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
@@ -315,7 +334,7 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     const lane = 'waiting';
     sessions.add(`${PREFIX}${lane}`);
     const prompt = join(dir, 'prompt-waiting.md');
-    writeFileSync(prompt, 'trust me?\n');
+    writeFileSync(prompt, kickoff('trust me?'));
 
     const r = lanes(['launch', camp, lane, prompt, '--cwd', dir, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
 
@@ -323,6 +342,163 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     assert.match(r.stderr, /waiting on a dialog/, 'the failure says what a terminal must answer');
     assert.match(r.stderr, /permission prompt/, 'and quotes waitingFor, the field that says WHICH dialog');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8').includes(lane), false, 'a lane on a dialog is not registered');
+  });
+});
+
+/**
+ * Bead forge-8vfn.6.8.1 — the preflight T1 ran by hand for every lane of M4, as code.
+ *
+ * Each predicate is a rule that lived in a brief and was applied by a human: the 4 GiB floor
+ * (COMMON §1, after suites died under load), the worktree cut + `npm install` + kernel-link proof
+ * (ruling 144 did it by hand for this very lane; §15.148 — a tree without its own install
+ * measures a different question), the suite-lock line in the rendered prompt, an MCP config with
+ * no tokensave (ruling 140 holds today only because ~/.claude.json happens to be clean), and the
+ * skills a brief tells the lane to use actually existing in the tree it is launched into.
+ *
+ * Every failure is loud, named, and undoes what it started — the same rule as bead 2.32, applied
+ * before anything is started rather than after.
+ */
+describe('lanes.sh launch — preflight, before a single token is spent', () => {
+  function prep(lane: string) {
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const laneCwd = join(dir, `cwd-${lane}`);
+    mkdirSync(join(laneCwd, '.claude', 'skills', 'tiered-orchestration'), { recursive: true });
+    writeFileSync(join(laneCwd, '.claude', 'skills', 'tiered-orchestration', 'SKILL.md'), '# skill\n');
+    const prompt = join(dir, `prompt-${lane}.md`);
+    writeFileSync(prompt, kickoff(`work ${lane}`));
+    return { s, laneCwd, prompt };
+  }
+  const noTmux = (s: string) => assert.notEqual(tmux('has-session', '-t', s).status, 0, 'nothing was started');
+
+  test('below the 4 GiB floor, launch refuses by name and starts nothing', () => {
+    const { s, laneCwd, prompt } = prep('mem');
+    const bin = laneBin('lane-mem', { register: 'busy' });
+
+    const r = lanes(['launch', camp, 'mem', prompt, '--cwd', laneCwd, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_MEMINFO: meminfo(2 * 1024 * 1024),
+    });
+
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /MemAvailable/, 'the failure names the predicate');
+    assert.match(r.stderr, /2\.0 GiB/, 'and the number it read, so it can be checked');
+    noTmux(s);
+  });
+
+  test('above the floor it proceeds — the floor is a gate, not a wall', () => {
+    const { s, laneCwd, prompt } = prep('memok');
+    const bin = laneBin('lane-memok', { register: 'busy' });
+
+    const r = lanes(['launch', camp, 'memok', prompt, '--cwd', laneCwd, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_MEMINFO: meminfo(9 * 1024 * 1024),
+    });
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^launched /m);
+    assert.ok(s.length > 0);
+  });
+
+  test('a rendered prompt with no suite-lock line is refused — a lane that never saw the lock runs outside it', () => {
+    const { s, laneCwd } = prep('nolock');
+    const bin = laneBin('lane-nolock', { register: 'busy' });
+    const prompt = join(dir, 'prompt-nolock-bare.md');
+    writeFileSync(prompt, 'work with no lock line\n');
+
+    const r = lanes(['launch', camp, 'nolock', prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /suite-lock/, 'the failure names what the prompt is missing');
+    assert.match(r.stderr, new RegExp(camp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'and quotes the exact literal it looked for');
+    noTmux(s);
+  });
+
+  test('the session is started with --strict-mcp-config and a lane MCP file carrying no tokensave', () => {
+    const { laneCwd, prompt } = prep('mcp');
+    const bin = laneBin('lane-mcp', { register: 'busy' });
+
+    const r = lanes(['launch', camp, 'mcp', prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+
+    assert.equal(r.status, 0, r.stderr);
+    const argv = argvOf('lane-mcp');
+    assert.ok(argv.includes('--strict-mcp-config'), 'ruling 140 holds by flag, not by the user config happening to be clean');
+    const mcp = argv[argv.indexOf('--mcp-config') + 1];
+    assert.match(mcp, /lane-mcp\.json$/);
+    assert.equal(readFileSync(mcp, 'utf8').includes('tokensave'), false, 'the file it points at declares no tokensave server');
+  });
+
+  test('a tokensave server in the MCP file is refused by name (ruling 140)', () => {
+    const { s, laneCwd, prompt } = prep('tokensave');
+    const bin = laneBin('lane-tokensave', { register: 'busy' });
+    const bad = join(dir, 'bad-mcp.json');
+    writeFileSync(bad, JSON.stringify({ mcpServers: { tokensave: { command: 'tokensave' } } }));
+
+    const r = lanes(['launch', camp, 'tokensave', prompt, '--cwd', laneCwd, '--t1', 't1', '--mcp', bad], { LANES_CLAUDE_BIN: bin });
+
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /tokensave/, 'the failure names the server it found');
+    noTmux(s);
+  });
+
+  test('--skill names a skill the lane must be able to open, and dies when it cannot', () => {
+    const { s, laneCwd, prompt } = prep('skill');
+    const bin = laneBin('lane-skill', { register: 'busy' });
+
+    const bad = lanes(['launch', camp, 'skill', prompt, '--cwd', laneCwd, '--t1', 't1', '--skill', 'immutable-gates'], { LANES_CLAUDE_BIN: bin, HOME: dir });
+
+    assert.notEqual(bad.status, 0, 'a brief that cites a skill the tree does not carry is a launch that cannot do its job');
+    assert.match(bad.stderr, /immutable-gates/, 'the failure names the skill');
+    noTmux(s);
+
+    const good = lanes(['launch', camp, 'skill', prompt, '--cwd', laneCwd, '--t1', 't1', '--skill', 'tiered-orchestration'], { LANES_CLAUDE_BIN: bin });
+    assert.equal(good.status, 0, good.stderr);
+  });
+
+  test('--branch cuts the worktree, installs into it, and proves the kernel link is its own', () => {
+    const lane = 'wt';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const bin = laneBin('lane-wt', { register: 'busy' });
+    const prompt = join(dir, 'prompt-wt.md');
+    writeFileSync(prompt, kickoff('work wt'));
+    const wt = join(dir, 'wt', `forge-${lane}`);
+
+    const r = lanes(['launch', camp, lane, prompt, '--branch', `lane/${lane}`, '--t1', 't1', '--skill', 'tiered-orchestration'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_BASE_REF: 'main',
+      // The install is a seam: what is under test is that the launch RUNS one and then proves
+      // the link, not npm itself. This one plants the link a real install would create.
+      LANES_INSTALL_CMD: `mkdir -p node_modules/@forge packages/kernel && ln -sfn ${wt}/packages/kernel node_modules/@forge/kernel`,
+    });
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(wt), 'the worktree was cut');
+    assert.match(r.stdout, new RegExp(`cwd=${wt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), 'and the lane was launched into it');
+    assert.match(r.stdout, /kernel link/, 'the proof is printed, not assumed');
+  });
+
+  test('a kernel link that resolves outside the worktree kills the launch AND removes the worktree it cut', () => {
+    const lane = 'wtbad';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const bin = laneBin('lane-wtbad', { register: 'busy' });
+    const prompt = join(dir, 'prompt-wtbad.md');
+    writeFileSync(prompt, kickoff('work wtbad'));
+    const wt = join(dir, 'wt', `forge-${lane}`);
+    const elsewhere = join(dir, 'borrowed-kernel');
+    mkdirSync(elsewhere, { recursive: true });
+
+    const r = lanes(['launch', camp, lane, prompt, '--branch', `lane/${lane}`, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_BASE_REF: 'main',
+      LANES_INSTALL_CMD: `mkdir -p node_modules/@forge && ln -sfn ${elsewhere} node_modules/@forge/kernel`,
+    });
+
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /kernel/, 'the failure names the link it could not prove');
+    assert.ok(!existsSync(wt), 'a failed preflight leaves nothing behind — including the worktree it created');
+    noTmux(s);
   });
 });
 
