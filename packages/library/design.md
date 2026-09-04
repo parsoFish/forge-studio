@@ -50,9 +50,74 @@ Two things follow from the boundary rather than from taste. Library's own tests 
 
 What the palette unions, and why each half is real rather than declared: community skills come from `studio/community/registry.yaml`, not `catalog.yaml` (W6-CR-1); local plain skills are filesystem-scanned, so one authored through `/skills/new` appears on the next fetch with no bridge restart (R3-01-F2); and library hooks are scanned from `studio/hooks/<id>/` rather than read from a catalog list (R3-03-F4). Community entries win an id collision because they carry the provenance and stars metadata. Only well-formed (`ok: true`) hooks are offered — a malformed one has nothing safe to bind. An SDK's availability is the one field in the response that is not on disk, which is precisely why it is the one field that has to be injected.
 
+### The template library's seven decisions
+
+Moved verbatim from `studio/template-library.ts`'s header, where they were 48 lines of a 60-line preamble. Nothing is lost by relocating them; a reader looking for why this package decides what it decides looks here.
+
+```
+D1 — category is STRUCTURAL (which directory a definition lives in), never
+sniffed from its content. A `kind`/`phase` field varies WITHIN a category; it
+never decides the category itself.
+
+D2 — studio/starters/ also holds `agents/` and `flows/` — agent/flow
+DEFINITIONS already first-class in their own pillars (the Agent Builder's
+StarterPicker / the flow builder's loadStarterFlow), deliberately excluded
+from this library. `STARTERS_NON_TEMPLATE_DIRS` names the exclusion with a
+reason; `lintTemplateLibrary` errors on any OTHER unmapped starters/
+subdirectory, so a future addition must be triaged by a human, not silently
+swept in or silently dropped.
+
+D3 — `usedBy` is DERIVED from a real on-disk source, and that source is
+NAMED on every entry (`usedByDerivation`), so an empty `usedBy` reads as
+"scanned N sources, found none" rather than "unknown". Planning usage comes
+from the real flow graph (edges); demo-output usage comes from projects'
+`.forge/project.json` `demoProcess[].element`; project-scaffold usage is
+HONESTLY EMPTY — `appType` is validated at creation (project-create.ts) but
+persisted nowhere, so attributing a scaffold to a project would require a
+file-shape heuristic, which is exactly the anti-pattern this module refuses
+to reintroduce (a prior initiative's fabricated `usedBy` was caught in
+review; see AT-23's regression guard).
+
+D4 — declared `producer:`/`consumer:` frontmatter (unlike a deleted, wholly
+fabricated `composedBy`) are mostly true, so the fix is cross-validation, not
+deletion: surfaced verbatim as `declaredProducer`/`declaredConsumer`, checked
+against the resolved flow-edge endpoints. Edge-backed + agreeing ⇒
+`endpointsVerified: true`; edge-backed + contradicting ⇒ a lint ERROR;
+zero-edge (today: verdict/work-items/demo-fix-spec travel by orchestrator-band
+re-entry, not a DAG edge) ⇒ `endpointsVerified: false` + a lint FLAG (the
+claim is unverifiable, not wrong). A gate node (no `agent`) matches a
+declared value equal to either its bare node id or the resolved `gate:<id>`
+form — the frontmatter is never "fixed" to invent an agent that isn't there.
+
+D5/D6 — `format`/`provenance`/`previewKind` are DERIVED from existing fields,
+never new frontmatter. `previewKind` is a total function over the source's
+validated enum (`ArtifactKind` / `DemoStepKind`) with a throwing default arm —
+belt-and-braces, since `loadArtifactTemplate`/`loadDemoElement` already
+reject an invalid enum value before previewKind ever sees it.
+
+D7 — a malformed definition surfaces as an entry carrying `error`, never
+dropped (the skill-library.ts precedent: a silently dropped entry is an
+invisible failure, not a fixed one). This means `listArtifactTemplates` /
+`listDemoElements` (registry.ts) — which throw on the FIRST malformed file in
+a directory, failing the whole batch — are NOT reused here; this module reads
+the directory itself and calls the single-file loaders
+(`loadArtifactTemplate` / `loadDemoElement`) per file, catching per-file so
+one bad sibling never hides the rest.
+```
+
+### The Flow kind arrives by injection too
+
+`studio/template-library.ts` derives each planning template's `usedBy` from the flow graph, which meant reading the Flow kind's loaders — `@forge/flows` is rank 5, this package is rank 2, and they were reached through `orchestrator/studio/registry.ts`'s re-export hub. Library now declares its own `FlowSource` port (`listFlowIds` + `loadFlowDefinition`, in terms of the `FlowDefinition` that already lives in `@forge/contracts`, so nothing is lifted) and `apps/forge/library-flow-source.ts` binds it. Four exported functions take it: `listTemplateLibrary`, `templateDetail`, `lintTemplateLibrary` and `deriveArtifactTemplateUsage`.
+
+**Not five.** `deriveDemoElementUsage` was named as a consumer in the handoff, but it derives from discovered PROJECTS, not from flows, and never touches the index — measured from the code, which is why it takes no port.
+
 ### A catalog read that scans no agents
 
-`listConnections` decorates the catalog with `usedBy`, which costs a full agent-roster walk. Measured across its eleven call sites, exactly two read that field: the connections list and detail routes. The community index, the install router, the probe and install routes and agents' run gate all read `kind`/`id`/`name`/`provenance` and the install fields — so they take `listCatalogConnections`, which reads `studio/catalog.yaml` and nothing else. The alternative was handing them a `ConnectionDefinition` with a fabricated empty `usedBy`, which is exactly what `usedByDerivation` exists to make impossible.
+The same shape appears twice in this package, and the rule is one rule: **a caller that only needs to know a thing EXISTS should not pay for the scan that computes who uses it.**
+
+`listTemplateIds` is the second instance. The create route's uniqueness check and the authoring finalizer's were calling `listTemplateLibrary` — walking every flow on disk to build a `usedBy` neither reads — to answer a boolean. Worse, it forced the `FlowSource` port up a call chain that runs `handleAuthoringVerdict` → `runFinalize` and reaches `packages/sessions`, making a rank-2 port a rank-4 concern for an id lookup. The flow-free read removes both the walk and the thread. `usedBy` on a template entry is genuinely read in exactly one place — the DELETE route's 409 — plus the list and detail surfaces that render it.
+
+The first instance: `listConnections` decorates the catalog with `usedBy`, which costs a full agent-roster walk. Measured across its eleven call sites, exactly two read that field: the connections list and detail routes. The community index, the install router, the probe and install routes and agents' run gate all read `kind`/`id`/`name`/`provenance` and the install fields — so they take `listCatalogConnections`, which reads `studio/catalog.yaml` and nothing else. The alternative was handing them a `ConnectionDefinition` with a fabricated empty `usedBy`, which is exactly what `usedByDerivation` exists to make impossible.
 
 ## Deferred, on purpose
 

@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import matter from 'gray-matter';
 import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
 import { isReservedId } from '@forge/kernel/ids.ts';
-import { listTemplateLibrary } from './studio/template-library.ts';
+import { listTemplateIds } from './studio/template-library.ts';
 import {
   writableCategoryOrReason,
   WRITABLE_CATEGORY_DIRS,
@@ -106,7 +106,7 @@ export function finalizeTemplateFromLanded(
   // Library-wide uniqueness — the SAME check POST /api/studio/templates
   // runs, against the REAL library (never the ghost _interactive-library
   // copy — see the file header's LANDED-PACKAGE CLEANUP note / library-37).
-  if (listTemplateLibrary(forgeRoot).some((e) => e.id === id)) {
+  if (listTemplateIds(forgeRoot).includes(id)) {
     return { ok: false, status: 409, error: `template "${id}" already exists` };
   }
 

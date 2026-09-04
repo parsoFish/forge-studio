@@ -1,70 +1,26 @@
 /**
  * Template library — union registry over the three template sources (R3-06).
  *
- * Mirrors skill-library.ts's pattern (load → derive → union → lint) applied to
- * a DIFFERENT set of sources: three structurally-distinct on-disk collections
- * that were never before presented as one library —
+ * Load → derive → union → lint, the `skill-library.ts` pattern applied to three
+ * structurally-distinct on-disk collections never before presented as one:
  *
  *   planning         studio/artifact-templates/*.md   (ArtifactTemplate)
  *   demo-output      studio/demo-elements/*.md         (DemoElementDefinition)
  *   project-scaffold studio/starters/projects/<id>/    (a whole file tree)
  *
- * D1 — category is STRUCTURAL (which directory a definition lives in), never
- * sniffed from its content. A `kind`/`phase` field varies WITHIN a category; it
- * never decides the category itself.
- *
- * D2 — studio/starters/ also holds `agents/` and `flows/` — agent/flow
- * DEFINITIONS already first-class in their own pillars (the Agent Builder's
- * StarterPicker / the flow builder's loadStarterFlow), deliberately excluded
- * from this library. `STARTERS_NON_TEMPLATE_DIRS` names the exclusion with a
- * reason; `lintTemplateLibrary` errors on any OTHER unmapped starters/
- * subdirectory, so a future addition must be triaged by a human, not silently
- * swept in or silently dropped.
- *
- * D3 — `usedBy` is DERIVED from a real on-disk source, and that source is
- * NAMED on every entry (`usedByDerivation`), so an empty `usedBy` reads as
- * "scanned N sources, found none" rather than "unknown". Planning usage comes
- * from the real flow graph (edges); demo-output usage comes from projects'
- * `.forge/project.json` `demoProcess[].element`; project-scaffold usage is
- * HONESTLY EMPTY — `appType` is validated at creation (project-create.ts) but
- * persisted nowhere, so attributing a scaffold to a project would require a
- * file-shape heuristic, which is exactly the anti-pattern this module refuses
- * to reintroduce (a prior initiative's fabricated `usedBy` was caught in
- * review; see AT-23's regression guard).
- *
- * D4 — declared `producer:`/`consumer:` frontmatter (unlike a deleted, wholly
- * fabricated `composedBy`) are mostly true, so the fix is cross-validation, not
- * deletion: surfaced verbatim as `declaredProducer`/`declaredConsumer`, checked
- * against the resolved flow-edge endpoints. Edge-backed + agreeing ⇒
- * `endpointsVerified: true`; edge-backed + contradicting ⇒ a lint ERROR;
- * zero-edge (today: verdict/work-items/demo-fix-spec travel by orchestrator-band
- * re-entry, not a DAG edge) ⇒ `endpointsVerified: false` + a lint FLAG (the
- * claim is unverifiable, not wrong). A gate node (no `agent`) matches a
- * declared value equal to either its bare node id or the resolved `gate:<id>`
- * form — the frontmatter is never "fixed" to invent an agent that isn't there.
- *
- * D5/D6 — `format`/`provenance`/`previewKind` are DERIVED from existing fields,
- * never new frontmatter. `previewKind` is a total function over the source's
- * validated enum (`ArtifactKind` / `DemoStepKind`) with a throwing default arm —
- * belt-and-braces, since `loadArtifactTemplate`/`loadDemoElement` already
- * reject an invalid enum value before previewKind ever sees it.
- *
- * D7 — a malformed definition surfaces as an entry carrying `error`, never
- * dropped (the skill-library.ts precedent: a silently dropped entry is an
- * invisible failure, not a fixed one). This means `listArtifactTemplates` /
- * `listDemoElements` (registry.ts) — which throw on the FIRST malformed file in
- * a directory, failing the whole batch — are NOT reused here; this module reads
- * the directory itself and calls the single-file loaders
- * (`loadArtifactTemplate` / `loadDemoElement`) per file, catching per-file so
- * one bad sibling never hides the rest.
+ * The seven decisions this module rests on — why category is structural, why
+ * `usedBy` is derived and named, why declared producer/consumer endpoints are
+ * cross-validated rather than deleted, and why a malformed definition surfaces
+ * as an entry carrying `error` instead of being dropped — are in `design.md`
+ * §"The template library's seven decisions", moved there verbatim.
  */
+
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 import { listProjectStarters } from '@forge/kernel';
 import { discoverProjects, type DiscoveredProject } from '@forge/kernel';
-import { listFlowIds, loadFlowDefinition } from '../../../orchestrator/studio/registry.ts';
 import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
 import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
@@ -221,14 +177,22 @@ function nodeMatchesDeclared(node: FlowNode, declared: string): boolean {
   return !node.agent && declared === node.id;
 }
 
-function buildFlowEdgeIndex(root: string): { scanned: number; byArtifact: Map<string, ResolvedEdge[]> } {
-  const flowIds = listFlowIds(root);
+/** The Flow kind's loaders, as library's own port (ruling 113) — `@forge/flows`
+ *  is rank 5 and this package is rank 2. Bound at `apps/forge`; never a
+ *  module-level setter, never a default. `design.md` carries the why. */
+export type FlowSource = {
+  listFlowIds(forgeRoot: string): readonly string[];
+  loadFlowDefinition(flowYamlPath: string): FlowDefinition;
+};
+
+function buildFlowEdgeIndex(root: string, flows: FlowSource): { scanned: number; byArtifact: Map<string, ResolvedEdge[]> } {
+  const flowIds = flows.listFlowIds(root);
   const byArtifact = new Map<string, ResolvedEdge[]>();
   for (const flowId of flowIds) {
     const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
     let flow: FlowDefinition;
     try {
-      flow = loadFlowDefinition(flowYamlPath);
+      flow = flows.loadFlowDefinition(flowYamlPath);
     } catch {
       continue; // malformed flow — already surfaced by the flow's own lint
     }
@@ -347,8 +311,8 @@ function sortedUsageMap(usage: Map<string, Set<string>>): Map<string, string[]> 
   return out;
 }
 
-export function deriveArtifactTemplateUsage(forgeRoot: string): Map<string, string[]> {
-  const { byArtifact } = buildFlowEdgeIndex(resolve(forgeRoot));
+export function deriveArtifactTemplateUsage(forgeRoot: string, flows: FlowSource): Map<string, string[]> {
+  const { byArtifact } = buildFlowEdgeIndex(resolve(forgeRoot), flows);
   const out = new Map<string, string[]>();
   for (const [id, edges] of byArtifact) out.set(id, usedByLabelsFor(edges));
   return out;
@@ -479,9 +443,22 @@ function listScaffoldEntries(root: string, discoveredProjectCount: number): Temp
 // Public API
 // ---------------------------------------------------------------------------
 
-export function listTemplateLibrary(forgeRoot: string): TemplateLibraryEntry[] {
+/** Every template id, from the same three sources `listTemplateLibrary` reads,
+ *  with NO flow scan — existence is all two callers ask. See `design.md`
+ *  §"A catalog read that scans no agents". */
+export function listTemplateIds(forgeRoot: string): string[] {
   const root = resolve(forgeRoot);
-  const flowIndex = buildFlowEdgeIndex(root);
+  const discovered = discoverProjectsIn(root);
+  return [
+    ...listPlanningEntries(root, { scanned: 0, byArtifact: new Map() }),
+    ...listDemoOutputEntries(root, buildDemoElementUsageMap(discovered), discovered.length),
+    ...listScaffoldEntries(root, discovered.length),
+  ].map((e) => e.id).sort((a, b) => a.localeCompare(b));
+}
+
+export function listTemplateLibrary(forgeRoot: string, flows: FlowSource): TemplateLibraryEntry[] {
+  const root = resolve(forgeRoot);
+  const flowIndex = buildFlowEdgeIndex(root, flows);
   const discovered = discoverProjectsIn(root);
   const demoUsage = buildDemoElementUsageMap(discovered);
 
@@ -511,9 +488,9 @@ function readScaffoldFiles(absDir: string): PackageFile[] {
   return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-export function templateDetail(forgeRoot: string, id: string): TemplateDetail | null {
+export function templateDetail(forgeRoot: string, id: string, flows: FlowSource): TemplateDetail | null {
   const root = resolve(forgeRoot);
-  const entry = listTemplateLibrary(root).find((e) => e.id === id);
+  const entry = listTemplateLibrary(root, flows).find((e) => e.id === id);
   if (!entry) return null;
 
   if (entry.category === 'project-scaffold') {
@@ -596,10 +573,10 @@ function lintEndpointVerification(root: string, flowIndex: { byArtifact: Map<str
   return findings;
 }
 
-export function lintTemplateLibrary(forgeRoot: string): Finding[] {
+export function lintTemplateLibrary(forgeRoot: string, flows: FlowSource): Finding[] {
   const root = resolve(forgeRoot);
-  const entries = listTemplateLibrary(root);
-  const flowIndex = buildFlowEdgeIndex(root);
+  const entries = listTemplateLibrary(root, flows);
+  const flowIndex = buildFlowEdgeIndex(root, flows);
 
   return [...lintStartersGap(root), ...lintDuplicateIds(entries), ...lintEndpointVerification(root, flowIndex)];
 }

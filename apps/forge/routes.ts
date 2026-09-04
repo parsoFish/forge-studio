@@ -27,6 +27,7 @@ import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 import { realKbDrainFixTurn } from './brain-fix-turn.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
 import { libraryAgentFacts } from './library-agent-facts.ts';
+import { libraryFlowSource } from './library-flow-source.ts';
 import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
@@ -147,7 +148,7 @@ const knowledgeSessionStatusIo: SessionStatusIoPort = {
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
     ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
-    ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable }),
+    ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource }),
     ...projectsRoutes({
       seedBrain: seedProjectBrain,
       checkBrainSeedContainment: checkProjectBrainSeedContainment,

@@ -72,7 +72,7 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { startBridge } from '../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from './tests/test-fixtures/flow-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -663,7 +663,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false, flowSource: fixtureFlowSource }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-hooks URL must return false');
 });
 

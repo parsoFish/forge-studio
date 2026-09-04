@@ -63,7 +63,7 @@ import {
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { SLUG_RE } from '@forge/kernel';
-import { listTemplateLibrary, templateDetail, type TemplateCategory } from './studio/template-library.ts';
+import { listTemplateIds, listTemplateLibrary, templateDetail, type FlowSource, type TemplateCategory } from './studio/template-library.ts';
 import { loadArtifactTemplate, loadDemoElement } from './studio/artifact-registry.ts';
 import { MAX_SKILL_ID_LENGTH, isReservedId } from '@forge/kernel/ids.ts';
 
@@ -193,7 +193,7 @@ export function invalidTemplateContentReason(
  */
 export const TEMPLATE_ID_RE = /^\/api\/studio\/templates\/([^/]+)$/;
 
-export async function handleTemplateCreate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleTemplateCreate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string, flows: FlowSource): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -220,7 +220,7 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
 
       // Library-wide uniqueness (the duplicate-id lint is an error) — not
       // just this category's directory.
-      if (listTemplateLibrary(ctx.forgeRoot).some((e) => e.id === id)) {
+      if (listTemplateIds(ctx.forgeRoot).includes(id)) {
         sendJson(res, 409, { error: `template "${id}" already exists` }, origin);
         return true;
       }
@@ -232,7 +232,7 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
       if (duplicateOf) {
         const invalidSource = invalidTemplateIdReason(duplicateOf);
         if (invalidSource) { sendJson(res, 400, { error: invalidSource }, origin); return true; }
-        const source = templateDetail(ctx.forgeRoot, duplicateOf);
+        const source = templateDetail(ctx.forgeRoot, duplicateOf, flows);
         if (!source) { sendJson(res, 404, { error: `unknown template "${duplicateOf}"` }, origin); return true; }
         if (source.category !== category) {
           sendJson(res, 400, { error: `duplicateOf "${duplicateOf}" is a ${source.category} template — the duplicate must stay in the same category` }, origin);
@@ -280,6 +280,7 @@ async function handleTemplateMutation(
   origin: string,
   method: string,
   rawId: string,
+  flows: FlowSource,
 ): Promise<boolean> {
   try {
     let id: string;
@@ -287,7 +288,7 @@ async function handleTemplateMutation(
     const invalidId = invalidTemplateIdReason(id);
     if (invalidId) { sendJson(res, 400, { error: invalidId }, origin); return true; }
 
-    const entry = listTemplateLibrary(ctx.forgeRoot).find((e) => e.id === id);
+    const entry = listTemplateLibrary(ctx.forgeRoot, flows).find((e) => e.id === id);
     if (!entry) { sendJson(res, 404, { error: `unknown template "${id}"` }, origin); return true; }
     if (entry.category === 'project-scaffold') {
       sendJson(res, 400, { error: SCAFFOLD_READONLY }, origin);
@@ -336,30 +337,30 @@ async function handleTemplateMutation(
 
 /** PUT /api/studio/templates/:id — overwrite content (W7-B4). Thin wrapper
  *  around the shared `handleTemplateMutation` — see its own header. */
-export async function handleTemplatePut(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleTemplatePut(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string, flows: FlowSource): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   const writeMatch = url.match(TEMPLATE_ID_RE);
-  if (writeMatch && method === 'PUT') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1]);
+  if (writeMatch && method === 'PUT') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1], flows);
 
   return false;
 }
 
 /** DELETE /api/studio/templates/:id — remove (W7-B4). Thin wrapper around
  *  the shared `handleTemplateMutation` — see its own header. */
-export async function handleTemplateDeleteRoute(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleTemplateDeleteRoute(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string, flows: FlowSource): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   const writeMatch = url.match(TEMPLATE_ID_RE);
-  if (writeMatch && method === 'DELETE') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1]);
+  if (writeMatch && method === 'DELETE') return handleTemplateMutation(res, ctx, origin, method, writeMatch[1], flows);
 
   return false;
 }
 
 /** GET /api/studio/templates — the library listing. */
-export async function handleTemplatesList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleTemplatesList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, flows: FlowSource): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -367,7 +368,7 @@ export async function handleTemplatesList(req: IncomingMessage, res: ServerRespo
 
   if (url === '/api/studio/templates') {
     try {
-      const templates = listTemplateLibrary(ctx.forgeRoot).map((e) => toClientEntry(e));
+      const templates = listTemplateLibrary(ctx.forgeRoot, flows).map((e) => toClientEntry(e));
       sendJson(res, 200, { templates }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -379,7 +380,7 @@ export async function handleTemplatesList(req: IncomingMessage, res: ServerRespo
 }
 
 /** GET /api/studio/templates/:id — detail. */
-export async function handleTemplateDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleTemplateDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, flows: FlowSource): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -402,7 +403,7 @@ export async function handleTemplateDetail(req: IncomingMessage, res: ServerResp
         return true;
       }
 
-      const detail = templateDetail(ctx.forgeRoot, id);
+      const detail = templateDetail(ctx.forgeRoot, id, flows);
       if (!detail) {
         sendJson(res, 404, { error: `unknown template "${id}"` }, origin);
         return true;

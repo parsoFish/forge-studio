@@ -194,7 +194,6 @@
   "package-to-legacy|packages/flows/cycle.ts|orchestrator/phases/executor-table.ts",
   "package-to-legacy|packages/flows/tests/contract/flow-run-request-fixture-parity.test.ts|orchestrator/test-fixtures/flow-run-request.ts",
   "package-to-legacy|packages/flows/tests/integration/trigger-provenance.test.ts|orchestrator/test-fixtures/flow-run-request.ts",
-  "package-to-legacy|packages/library/studio/template-library.ts|orchestrator/studio/registry.ts",
   "package-to-legacy|packages/projects/tests/contract/demo-descriptor-parity.test.ts|orchestrator/studio/registry.ts",
   "package-to-legacy|packages/sessions/tests/regression/interactive-runners-golden.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "studio-beyond-contracts|apps/studio/components/studio/session/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds-affordances.ts",
