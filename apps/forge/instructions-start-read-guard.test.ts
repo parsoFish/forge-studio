@@ -34,7 +34,7 @@ import { join } from 'node:path';
 // the whole difference between a guard that still watches the ordering and one
 // that reads a file where the code no longer is and passes vacuously.
 const SRC = readFileSync(
-  join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
+  join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
   'utf8',
 );
 

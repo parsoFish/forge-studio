@@ -40,11 +40,11 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, loadFlowDefinition, discoverProjects, serializeAgentDefinition, serializeFlowDefinition, listFlowIds } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, loadFlowDefinition, discoverProjects, serializeAgentDefinition, serializeFlowDefinition, listFlowIds } from '../../orchestrator/studio/registry.ts';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
-import { SLUG_RE, isReservedId, validateFlow } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, isReservedId, validateFlow } from '../../orchestrator/studio/validate.ts';
 import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isDryBridge } from './dry-bridge.ts';

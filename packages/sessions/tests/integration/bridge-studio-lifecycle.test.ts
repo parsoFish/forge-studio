@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-import { startBridge } from '../../../../cli/ui-bridge.ts';
+import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
 // SessionIndexRow carved with the session index (M4 routes carve) — it is this
 // package's own type now, so the test stops reaching into the host for it.
 import type { SessionIndexRow } from '../../bridge-studio-session-index.ts';

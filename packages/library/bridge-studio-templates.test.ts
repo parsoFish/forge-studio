@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------

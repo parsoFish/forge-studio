@@ -94,7 +94,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './studio/community-source-url.ts';
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 import { skillPath } from './skill-path.ts';
 import { listSkillLibrary, skillTrustState } from './studio/skill-trust.ts';

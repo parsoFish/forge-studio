@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;

@@ -66,7 +66,7 @@ import {
 // `scripts/baselines/boundaries.json`. `dry-bridge.ts` has not moved to
 // kernel; this is a new row of the SAME already-accepted shape, reported for
 // T2's bookkeeping, not a fresh design decision.
-import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '../../apps/forge/dry-bridge.ts';
 
 import { classifyClause, type ClauseClassification } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';

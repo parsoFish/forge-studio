@@ -50,7 +50,7 @@ import matter from 'gray-matter';
 import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
 let forgeRoot: string;

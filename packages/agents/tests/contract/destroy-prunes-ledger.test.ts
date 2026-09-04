@@ -154,7 +154,7 @@ const DESTROY_VERBS_NOT_SKILL_SCOPED = new Map<string, RegExp>([
   // M4-agents routes carve: its agent-DELETE route moved to
   // `packages/agents/bridge-agents-studio.ts` (registered in the census below,
   // with its prune). What remains is the FLOW delete.
-  ['cli/bridge-studio-writes.ts', /rmSync\(dirname\(flowYamlPath\)/],
+  ['apps/forge/bridge-studio-writes.ts', /rmSync\(dirname\(flowYamlPath\)/],
 ]);
 
 const GUARD_CALL_NAMES = ['resolveGuardedPath', 'guardedFile'];
@@ -350,7 +350,9 @@ function scanFile(absPath: string): FileScan {
 }
 
 function scanTree(): FileScan[] {
-  const files = [...listTsFiles(join(REPO_ROOT, 'cli')), ...listTsFiles(join(REPO_ROOT, 'orchestrator')), ...listTsFiles(join(REPO_ROOT, 'packages')), ...listTsFiles(join(REPO_ROOT, 'apps', 'forge'))];
+  // The `cli` root is gone with the M4-flows host carve and `apps/forge` was
+  // already scanned below — adding it here would double-count every host file.
+  const files = [...listTsFiles(join(REPO_ROOT, 'orchestrator')), ...listTsFiles(join(REPO_ROOT, 'packages')), ...listTsFiles(join(REPO_ROOT, 'apps', 'forge'))];
   return files.map(scanFile);
 }
 
@@ -417,7 +419,7 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
   // deliberately, as this guard's own message instructs.
   const expected = [
     'packages/library/bridge-studio-skills.ts',
-    'cli/bridge-studio-writes.ts',
+    'apps/forge/bridge-studio-writes.ts',
     'packages/agents/bridge-agents-studio.ts',
   ].sort();
   assert.deepEqual(

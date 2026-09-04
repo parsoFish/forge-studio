@@ -78,7 +78,7 @@ import {
 // module (see `bridge-studio-project-preflight-write.ts`'s header for the full precedent
 // list). Only `handleProjectPut` needs it — `create`/onboard are
 // `exempt-local` and never refuse under a dry bridge.
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 
 import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';

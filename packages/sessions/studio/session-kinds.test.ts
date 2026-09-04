@@ -189,7 +189,7 @@ import type { Finding } from '@forge/kernel';
 // (.github/workflows/ci.yml: `node --experimental-strip-types
 // apps/forge/cli.ts studio lint`). This import is STATIC (not dynamic)
 // because runStudioLint already exists and works today — no RED risk here.
-import { runStudioLint } from '../../../cli/studio-lint.ts';
+import { runStudioLint } from '../../../apps/forge/studio-lint.ts';
 // SLUG_RE is the SAME regex CHECK_SLUG already applies one screen up in
 // validateSessionKinds (`d.id` — the sibling field to `turnSpec.kindDir`).
 // Imported directly (not re-derived) so AT-R422-12's sanity precondition

@@ -30,7 +30,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 

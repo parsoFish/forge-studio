@@ -57,7 +57,7 @@ export const OLD_FORM = join(dirname(fileURLToPath(import.meta.url)), '..', '..'
  * `['packages','cli','orchestrator','apps']` and would have "proved" something
  * about a list neither lock uses (§15.93 — a fixture pointing at nothing).
  */
-const LOCK_SCANNED_DIRS = ['orchestrator', 'loops', 'cli', 'packages', 'apps/forge'] as const;
+const LOCK_SCANNED_DIRS = ['orchestrator', 'loops', 'packages', 'apps/forge'] as const;
 
 /** Where `join(dirname, '..', '..')` lands for a file at `<pkg>/tests/<bucket>/`. */
 const POST_MOVE_WRONG_ROOT = join(FORGE_ROOT, 'packages', 'agents');

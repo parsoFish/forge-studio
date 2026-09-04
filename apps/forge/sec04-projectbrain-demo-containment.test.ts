@@ -78,8 +78,8 @@ import { request as httpRequest } from 'node:http';
 import { URL } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
-import { projectBrainSessionDir } from '../packages/sessions/kinds/project-brain.ts';
-import type { ProjectBrainStatus } from '../packages/sessions/kinds/project-brain.ts';
+import { projectBrainSessionDir } from '../../packages/sessions/kinds/project-brain.ts';
+import type { ProjectBrainStatus } from '../../packages/sessions/kinds/project-brain.ts';
 import { demoSessionDir } from '@forge/sessions/kinds/demo-builder.ts';
 import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
 

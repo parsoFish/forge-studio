@@ -63,7 +63,7 @@ import {
   allowedOrigin,
   CSRF_HEADER,
 } from './bridge-studio.ts';
-import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from '../apps/forge/routes.ts';
+import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './routes.ts';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
@@ -95,7 +95,7 @@ import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnM
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
-import type { BridgeIdentity } from '../apps/forge/forge-watch.ts';
+import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { reconcileReflectFeedback, type RerunReflectorFn } from '@forge/factory/reflect-reconcile.ts';
@@ -1798,17 +1798,24 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
  *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
  *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
  *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
-// Exported (W6-B4) so cli/bridge-studio-affordances.ts's generic session-
-// affordance write endpoint can DELEGATE to this SAME spawn helper instead of
-// reimplementing it, injected via its AffordanceRouteContext (mirrors
-// SessionsRouteContext's ensureSessionTail injection, cli/bridge-studio-
-// sessions.ts) — bridge-studio-*.ts modules never import FROM ui-bridge.ts
-// (see that file's own header for the reasoning), so this stays exported and
-// passed by reference at the wiring call site, never imported directly.
+// Exported (W6-B4) so packages/sessions/bridge-studio-sessions-affordances.ts's
+// generic session-affordance write endpoint can DELEGATE to this SAME spawn
+// helper instead of reimplementing it, injected via its AffordanceRouteContext
+// (mirrors SessionsRouteContext's ensureSessionTail injection, in
+// packages/sessions/bridge-studio-sessions.ts) — the sessions route modules
+// never import FROM this file (see its own header for the reasoning), so this
+// stays exported and passed by reference at the wiring call site, never
+// imported directly.
+//
+// Both paths above were `cli/bridge-studio-{affordances,sessions}.ts` until the
+// sessions carve moved them and ruling 87 deleted the affordances host file
+// outright. The comment kept naming files that no longer existed; repointed
+// with the M4-flows host carve.
 export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
   // W7-C2 T1 review (A7) — this helper no longer swallows. Its outcome is
-  // REPORTED to the caller (`SpawnTurnOutcome`, cli/bridge-studio-
-  // affordances.ts) so a route can refuse to claim `{ok:true, phase:
+  // REPORTED to the caller (`SpawnTurnOutcome`, in
+  // packages/sessions/bridge-studio-sessions-affordances.ts) so a route can
+  // refuse to claim `{ok:true, phase:
   // 'analyzing'}` for a turn that never started; a session left in a working
   // phase with no log dir can never be derived as `stalled`
   // (cli/bridge-studio-lifecycle.ts), so a swallowed failure showed the

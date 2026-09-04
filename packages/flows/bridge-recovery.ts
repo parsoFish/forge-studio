@@ -26,9 +26,9 @@ import { join } from 'node:path';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../cli/bridge-studio.ts';
+import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../apps/forge/bridge-studio.ts';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 import {
   validateManifestPathFields,
   isContainedWorktreePath,

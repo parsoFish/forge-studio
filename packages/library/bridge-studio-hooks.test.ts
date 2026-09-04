@@ -71,7 +71,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
 
 // ---------------------------------------------------------------------------

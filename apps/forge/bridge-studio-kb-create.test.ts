@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { loadKbDescriptor } from '../../orchestrator/studio/registry.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

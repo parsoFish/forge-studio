@@ -42,7 +42,7 @@ import {
   loadStarterFlow,
   listStarterAgents,
   discoverProjects,
-} from '../orchestrator/studio/registry.ts';
+} from '../../orchestrator/studio/registry.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import {
   lintArtifactTemplates,
@@ -63,7 +63,7 @@ import {
   validateDiscoveredProjects,
   validateLibraryFlag,
   type Finding,
-} from '../orchestrator/studio/validate.ts';
+} from '../../orchestrator/studio/validate.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';

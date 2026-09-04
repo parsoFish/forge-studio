@@ -113,7 +113,7 @@ import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 // Does not exist in the NEW shape yet — the current cli/bridge-studio-authoring.ts
 // still implements the phase-1 {kind,id,entries,upstream} contract (round 1
 // already proved this RED; this amendment additionally proves the NARROWER

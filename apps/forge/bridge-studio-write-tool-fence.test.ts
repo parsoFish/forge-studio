@@ -45,7 +45,7 @@ import { join } from 'node:path';
 
 import { startBridge } from './ui-bridge.ts';
 import { lintSkillToolFence } from '@forge/library/studio-lint-tool-fence.ts';
-import { BLANK_STATE, buildAgentPutBody, type AgentBuilderState } from '../apps/studio/lib/agent-authoring-view.ts';
+import { BLANK_STATE, buildAgentPutBody, type AgentBuilderState } from '../../apps/studio/lib/agent-authoring-view.ts';
 
 const CHECK = 'skill-tool-fence/task-agent-not-disallowed';
 

@@ -124,7 +124,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { runStudioLint } from './studio-lint.ts';
 import { runBrainLint } from '@forge/knowledge/brain-lint.ts';
-import { serializeKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { serializeKbDescriptor } from '../../orchestrator/studio/registry.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

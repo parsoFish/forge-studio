@@ -40,7 +40,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { mintTriggeredInitiative } from '@forge/flows/mint-triggered-initiative.ts';
-import { buildCronFlowRunRequest } from '../orchestrator/test-fixtures/flow-run-request.ts';
+import { buildCronFlowRunRequest } from '../../orchestrator/test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from '@forge/flows/flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------
