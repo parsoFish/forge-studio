@@ -37,6 +37,18 @@
 // are 91 before and 91 after, with 0 unguarded and 0 stale on both sides. A
 // residual total that FALLS after a pure refactor is a blinded scanner reading as
 // progress, which is the failure §15.41 was minted for.
+//
+// AND THE REASON THIS BLOCK IS REGENERATED, NOT PATCHED. The first remap was
+// computed, the gate was run green, and then a COMMENT-ONLY commit trimmed two
+// doc blocks by two lines each — which moved the very lines this file keys on and
+// re-staled sixteen rows. CI caught it (PR #408, `build-and-test` red on five
+// raw-fs tests) after a local gate that had been green on the previous tree. Two
+// rules come out of it: a gate verdict belongs to the exact tree it ran on, and
+// nothing — not even a comment — may land after it without re-running; and the
+// remap is always recomputed FROM `parsoFish/main`'s copy of this file against
+// the current worktree, never patched forward from an already-remapped one, so
+// running it twice is idempotent instead of doubly-applied.
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // ALLOWLIST — audited-trusted residuals. EVERY entry is keyed by file + line +
@@ -122,19 +134,19 @@ export const ALLOWLIST = [
     reason: 'LOGDIR-CREATE: _spawnArchitectTurn — sessionId is SAFE_ID_RE-gated at line 116 (early return); `_architect-<sessionId>` single segment under trusted forgeRoot/_logs.' },
   { file: 'packages/flows/bridge-studio-runs.ts', line: 70, sink: 'openSync',
     reason: 'LOGDIR-CREATE (W7-C3 forge-i9w, fd-sink family joins the scan): _spawnArchitectTurn\'s stderr.log append-open — the SAME logDir the mkdirSync row directly above audits (sessionId SAFE_ID_RE-gated at the function head, early return; `_architect-<sessionId>` single segment + literal stderr.log leaf under trusted forgeRoot/_logs). Newly VISIBLE, not newly written: this open predates the sink-list extension.' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 105, sink: 'existsSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 103, sink: 'existsSync',
     reason: 'QUEUE-PROBE: initiativeId is INIT_ID_RE-gated at line 162 BEFORE any path construction (C1); both probes are boolean under trusted ctx.queueRoot.' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 112, sink: 'existsSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 110, sink: 'existsSync',
     reason: 'QUEUE-PROBE: manifestPath ternary — INIT_ID_RE-validated (line 162) `<id>.md` under trusted queueRoot; boolean.' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 115, sink: 'readFileSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 113, sink: 'readFileSync',
     reason: 'QUEUE-READ: reads a manifest at join(queueRoot, {in-flight|ready-for-review}, <INIT_ID_RE id>.md) — validated single segment under trusted queueRoot.' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 139, sink: 'existsSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 137, sink: 'existsSync',
     reason: 'WORKTREE-GUARDED: approveWorktreePath is validated by isContainedWorktreePath (per-segment realpath containment, manifest-path-guard) at line ~208, strictly BEFORE this existence probe (SEC-02 round-5 ordering).' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 290, sink: 'readFileSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 288, sink: 'readFileSync',
     reason: 'QUEUE-READ: send-back manifest read at the same INIT_ID_RE-validated `<id>.md` under trusted queueRoot as line 191.' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 330, sink: 'existsSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 328, sink: 'existsSync',
     reason: 'WORKTREE-GUARDED: worktreePath validated by isContainedWorktreePath at line ~390 before this probe (guard symmetry with the approve branch).' },
-  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 351, sink: 'existsSync',
+  { file: 'packages/flows/bridge-studio-runs-review.ts', line: 349, sink: 'existsSync',
     reason: 'WORKTREE-GUARDED: boolean package.json probe under worktreePath, already isContainedWorktreePath-validated above.' },
   { file: 'packages/flows/bridge-studio-runs.ts', line: 308, sink: 'existsSync',
     reason: 'QUEUE-PROBE: filename = `${initiativeId}.md`, initiativeId INIT_ID_RE-gated at line 789; boolean under trusted queuePaths.inFlight.' },
@@ -379,23 +391,23 @@ export const ALLOWLIST = [
   // (`/^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/`) blocks `/`
   // and `..` but is symlink-BLIND — the same disclosed residual the other
   // INIT_ID_RE rows in this list carry (migrate-to-guardedFile follow-up).
-  { file: 'packages/flows/bridge-recovery.ts', line: 80, sink: 'existsSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 78, sink: 'existsSync',
     reason: 'ID-CHARSET GATE + BOOL-PROBE: locate() probes `join(<queue state dir>, `${initiativeId}.md`)` across the six trusted getPaths(ctx.queueRoot) dirs. `initiativeId` is INIT_ID_RE-gated at every route entry (:182/:196/:212, early 400) and is a single segment; the probe is boolean (no bytes flow through this path).' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 110, sink: 'readFileSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 108, sink: 'readFileSync',
     reason: 'ID-CHARSET GATE: recoveryInspect reads `located.path`, which is locate()\'s own output — a trusted queue-state dir joined with the INIT_ID_RE-gated `<id>.md` leaf (:69), never a caller-supplied path. Same construction the allowlisted packages/flows/bridge-studio-runs.ts INIT_ID_RE rows audit.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 121, sink: 'existsSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 119, sink: 'existsSync',
     reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `wt` is the manifest\'s worktree_path, and this existsSync sits INSIDE `if (wt && wtContained && existsSync(wt))` — `wtContained` is isContainedWorktreePath(wt, {forgeRoot, projectsRoot, initiativeId}) evaluated on the line above (SEC-02 forge-d1f). The scanner cannot see that predicate as a guard producer; the containment is real and short-circuits before the probe.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 127, sinks: ['existsSync', 'readFileSync'],
+  { file: 'packages/flows/bridge-recovery.ts', line: 125, sinks: ['existsSync', 'readFileSync'],
     reason: 'MANIFEST-PATH-GUARD: `prPath = join(wt, ".forge", "pr-description.md")` — two LITERAL leaf segments under a `wt` already proven contained by isContainedWorktreePath in the enclosing branch condition (:108-109). The read only measures `.length` (prDraftChars); the guard is what stops the arbitrary-file-length oracle SEC-02 closed.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 138, sink: 'readFileSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 136, sink: 'readFileSync',
     reason: 'ID-CHARSET GATE: recoveryAbandon\'s manifest read of `located.path` — identical construction and identical gate to the :99 row (locate() output, INIT_ID_RE-gated leaf under a trusted queue dir).' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 153, sink: 'existsSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 151, sink: 'existsSync',
     reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `projectRepoPath` is the manifest\'s project_repo_path; recoveryAbandon RETURNS EARLY at :137-139 unless isContainedProjectRepoPath(projectRepoPath, {forgeRoot, projectsRoot}) holds, so the probe is unreachable for an out-of-bounds path. Boolean only — it gates the git invocations below, which take the same proven path.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 154, sink: 'existsSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 152, sink: 'existsSync',
     reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `wt` — recoveryAbandon returns early at :133-135 unless isContainedWorktreePath holds (SEC-02 forge-d1f, "refuse the whole abandon rather than run git -C <wt> against an out-of-bounds path"). Boolean only.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 163, sink: 'renameSync',
+  { file: 'packages/flows/bridge-recovery.ts', line: 161, sink: 'renameSync',
     reason: 'ID-CHARSET GATE (both path arguments): source `located.path` is locate()\'s INIT_ID_RE-gated output (see :99); destination `join(failedDir, `${initiativeId}.md`)` is the trusted getPaths(ctx.queueRoot).failed dir plus the same INIT_ID_RE-gated single segment. This is the queue state move the recovery route exists to perform; both endpoints stay inside queueRoot by charset.' },
-  { file: 'packages/flows/bridge-recovery.ts', line: 168, sinks: ['existsSync', 'rmSync'],
+  { file: 'packages/flows/bridge-recovery.ts', line: 166, sinks: ['existsSync', 'rmSync'],
     reason: 'ID-CHARSET GATE: `p = join(inFlight, `${initiativeId}${suffix}`)` where `suffix` iterates a LITERAL array ([".verdict-prompt.md", ".verdict-response.md"]) and `inFlight` is the trusted getPaths(ctx.queueRoot).inFlight. INIT_ID_RE-gated id, single segment, no recursion on the rm (`{force:true}` only) — a stale-sidecar cleanup, not a tree delete.' },
 
   // ---- orchestrator/flow-run-requests.ts (NEW IN SCOPE, W8-F5 sweep tier) ----
