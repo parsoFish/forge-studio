@@ -156,7 +156,11 @@ function main() {
   if (violations.length) {
     console.error(`check-adr-index: FAIL (${violations.length} violation${violations.length === 1 ? '' : 's'})`);
     for (const v of violations) console.error(`  ✗ ${v}`);
-    process.exit(1);
+    // `process.exitCode` + `return`, never `process.exit()`: the violation list
+    // above is unbounded and `process.exit()` tears the process down before a
+    // piped stdout has drained (see check-raw-fs-guarded.mjs).
+    process.exitCode = 1;
+    return;
   }
 
   console.log(`check-adr-index: PASS — ${onDisk.length} on-disk ADRs, ${active.length} active rows, ${retired.length} retired rows, next free **${expectedNextFreeStr}**`);

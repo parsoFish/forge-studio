@@ -1366,4 +1366,6 @@ function main() {
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) process.exit(main());
+// `process.exitCode`, never `process.exit()` — this `--json` document is ~313 KB
+// and exiting truncates an undrained pipe (scripts/guard-stdout-flush.test.ts).
+if (isMain) process.exitCode = main();
