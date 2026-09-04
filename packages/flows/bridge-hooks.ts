@@ -25,7 +25,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join, resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, pathOnly } from '../../apps/forge/bridge-studio.ts';
+import { sendJson, allowedOrigin, pathOnly } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts/studio/types.ts';
 import { verifyWebhookSignature } from './webhook-verify.ts';
