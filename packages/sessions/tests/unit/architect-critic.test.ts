@@ -1,5 +1,5 @@
 /**
- * Tests for completeness-critic-runner.ts.
+ * Tests for packages/sessions/kinds/architect-critic.ts.
  *
  * The critic is a one-shot structured-output SDK turn (no session-dir state
  * machine of its own) — so these tests exercise `runCompletenessCritic`
