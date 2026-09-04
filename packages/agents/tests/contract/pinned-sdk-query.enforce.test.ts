@@ -71,7 +71,12 @@ const ROOT = FORGE_ROOT;
 const WRAPPER_RELATIVE_PATH = 'packages/agents/pinned-sdk-query.ts';
 
 /** Directories scanned for the SDK-reference invariant. */
-const SCANNED_DIRS = ['orchestrator', 'loops', 'cli', 'packages', 'apps/forge'];
+// `cli` is absent since the M4-flows host carve — its five modules are in
+// `apps/forge`, already scanned below. It is REMOVED rather than filtered by
+// existsSync so that `anchor-depth.test.ts`'s anti-typo assertion (every name
+// in this list exists at the real root) stays exact; a resurrected `cli/` file
+// is caught immediately by check-boundaries, whose LEGACY regex still names it.
+const SCANNED_DIRS = ['orchestrator', 'loops', 'packages', 'apps/forge'];
 
 /**
  * The SDK module specifier, assembled so this file's own source never

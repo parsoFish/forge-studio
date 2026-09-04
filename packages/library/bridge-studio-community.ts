@@ -74,7 +74,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { isDryBridge, refuseDryBridge } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
   hubCountsFrom,

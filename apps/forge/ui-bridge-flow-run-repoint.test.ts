@@ -34,7 +34,7 @@ import { startBridge } from './ui-bridge.ts';
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(HERE, '..');
+const REPO_ROOT = join(HERE, '..', '..');
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
 /** Queued under the ARCHITECT flow — the real shape of every planned initiative. */

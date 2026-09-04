@@ -31,11 +31,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import { discoverProjects, normalizeProjectId } from '../orchestrator/studio/registry.ts';
-import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
+import { discoverProjects, normalizeProjectId } from '../../orchestrator/studio/registry.ts';
+import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../../orchestrator/studio/validate.ts';
 import { invalidProjectReason } from '@forge/sessions/session-resolution.ts';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
-import { buildProjectSavePayload } from '../apps/studio/lib/project-save-payload.ts';
+import { buildProjectSavePayload } from '../../apps/studio/lib/project-save-payload.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;

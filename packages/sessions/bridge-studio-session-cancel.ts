@@ -50,7 +50,7 @@ import { CANCELLED_PHASE } from './interactive-session.ts';
 // `readJson` stays with the host: body policy is the host's (T1 ruling 30).
 // This import dies when the route takes its body from `ctx.readBody` in the
 // routes carve — it is the last thing holding this file's legacy row open.
-import { readJson } from '../../cli/bridge-studio.ts';
+import { readJson } from '../../apps/forge/bridge-studio.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';

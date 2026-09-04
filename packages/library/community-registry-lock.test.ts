@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { runCommunityRefresh } from './community-refresh-run.ts';
 import {
   COMMUNITY_REGISTRY_LOCK_STALE_MS,

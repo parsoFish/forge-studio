@@ -32,7 +32,7 @@ import { mkdirSync, mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;
 

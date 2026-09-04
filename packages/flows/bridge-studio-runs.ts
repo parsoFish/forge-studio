@@ -43,7 +43,7 @@ import { PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from '../../cli/dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from '../../apps/forge/dry-bridge.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -52,7 +52,7 @@ import {
   readJson,
   pathOnly,
   type StudioContext,
-} from '../../cli/bridge-studio.ts';
+} from '../../apps/forge/bridge-studio.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by POST routes

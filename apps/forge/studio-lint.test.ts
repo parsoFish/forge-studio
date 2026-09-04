@@ -17,8 +17,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runStudioLint } from './studio-lint.ts';
-import { loadKbDescriptor, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
-import { validateKb } from '../orchestrator/studio/validate.ts';
+import { loadKbDescriptor, resolveKbProcesses } from '../../orchestrator/studio/registry.ts';
+import { validateKb } from '../../orchestrator/studio/validate.ts';
 import type { KbBinding } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

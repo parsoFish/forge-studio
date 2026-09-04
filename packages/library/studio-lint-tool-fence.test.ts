@@ -21,7 +21,7 @@ import { join } from 'node:path';
 
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
-import { runStudioLint } from '../../cli/studio-lint.ts';
+import { runStudioLint } from '../../apps/forge/studio-lint.ts';
 
 const CHECK = 'skill-tool-fence/task-agent-not-disallowed';
 

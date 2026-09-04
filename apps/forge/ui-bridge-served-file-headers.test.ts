@@ -380,19 +380,19 @@ test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites re
   // moved — a defense-in-depth lint has to follow the dispatch it backstops.
   // So the pin now spans both files and states the split.
   const FILES = [
-    { path: join(import.meta.dirname, 'ui-bridge.ts'), rel: 'cli/ui-bridge.ts', expected: 1 },
+    { path: join(import.meta.dirname, 'ui-bridge.ts'), rel: 'apps/forge/ui-bridge.ts', expected: 1 },
     {
-      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-architect.ts'),
+      path: join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'bridge-studio-architect.ts'),
       rel: 'packages/sessions/bridge-studio-architect.ts',
       expected: 1,
     },
     {
-      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
+      path: join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'bridge-studio-instructions.ts'),
       rel: 'packages/sessions/bridge-studio-instructions.ts',
       expected: 1,
     },
     {
-      path: join(import.meta.dirname, '..', 'packages', 'sessions', 'bridge-studio-demo.ts'),
+      path: join(import.meta.dirname, '..', '..', 'packages', 'sessions', 'bridge-studio-demo.ts'),
       rel: 'packages/sessions/bridge-studio-demo.ts',
       expected: 4,
     },

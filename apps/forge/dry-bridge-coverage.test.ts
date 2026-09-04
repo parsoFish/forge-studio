@@ -102,13 +102,13 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRIDGE_ROUTE_CLASSIFICATION, type RouteClassification } from './dry-bridge.ts';
 
-const CLI_DIR = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(CLI_DIR, '..');
+const HOST_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(HOST_DIR, '..', '..');
 const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 
 // The dispatch-file set is DERIVED from the directories that hold dispatch
@@ -120,7 +120,22 @@ const DRY_BRIDGE_TABLE_PATH = 'cli/dry-bridge.ts';
 // harmless (zero candidates) or visibly red (unclassified candidates) — never
 // silent. The containment test below pins the currently-known dispatch files
 // as a floor so an accidental narrowing of this filter also goes red.
-const DISPATCH_SCAN_DIRS = ['cli', 'packages/agents', 'packages/flows', 'packages/knowledge', 'packages/library', 'packages/projects', 'packages/sessions'];
+//
+// M4-flows host carve: DERIVED, not hand-listed. The list above named `'cli'`
+// and seven packages by hand, and the carve moved every dispatch file out of
+// `cli/` into `apps/forge/` — the scan would have found nothing and every
+// direction-1 assertion would have passed vacuously on an empty set. That is
+// §15.82's blind spot (a scanner's directory list is a blind spot waiting for
+// the next package) and it is the same fix `BRIDGE_SCAN_DIRS` took in #367:
+// enumerate `packages/` from disk and add whichever host trees exist, so a
+// package that carves its routes tomorrow is picked up with no edit here.
+const DISPATCH_SCAN_DIRS: readonly string[] = [
+  ...['apps/forge', 'cli'].filter((d) => existsSync(join(REPO_ROOT, d))),
+  ...readdirSync(join(REPO_ROOT, 'packages'), { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => `packages/${e.name}`)
+    .sort(),
+];
 
 function discoverDispatchFiles(): readonly string[] {
   const out: string[] = [];
@@ -151,9 +166,9 @@ const KNOWN_DISPATCH_FILES = [
   'packages/knowledge/bridge-studio-kb-routes-lifecycle.ts',
   'packages/knowledge/bridge-studio-kb-routes-maintenance.ts',
   'packages/flows/bridge-studio-runs.ts',
-  'cli/bridge-studio-writes.ts',
-  'cli/bridge-studio.ts',
-  'cli/ui-bridge.ts',
+  'apps/forge/bridge-studio-writes.ts',
+  'apps/forge/bridge-studio.ts',
+  'apps/forge/ui-bridge.ts',
   'packages/knowledge/routes.ts',
   // M4 §4 step 2 — agents' carved table and the two handler modules behind it.
   // `packages/agents` had to be ADDED to DISPATCH_SCAN_DIRS above for any of
@@ -444,7 +459,7 @@ test('sanity: dispatch-file discovery contains every currently-known dispatch fi
   assert.deepEqual(
     missing,
     [],
-    `dispatch-file discovery lost known bridge dispatch files: ${missing.join(', ')} — was the cli/ filename filter in this test narrowed?`,
+    `dispatch-file discovery lost known bridge dispatch files: ${missing.join(', ')} — was the filename filter in this test narrowed?`,
   );
 });
 

@@ -40,7 +40,7 @@ import { startBridge } from './ui-bridge.ts';
 
 // Real repo SKILL.md, located relative to THIS test file (not a hardcoded
 // absolute path) — the golden file for the byte-faithful round-trip ATs.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REAL_DEV_RALPH_PATH = join(REPO_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
 
 // ---------------------------------------------------------------------------

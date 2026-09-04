@@ -47,7 +47,7 @@ import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

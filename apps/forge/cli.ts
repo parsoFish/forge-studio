@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows/scheduler.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
-import { runStudioLint } from '../../cli/studio-lint.ts';
+import { runStudioLint } from './studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
 import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';

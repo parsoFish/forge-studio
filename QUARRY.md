@@ -140,8 +140,8 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-resolution.ts | sessions | rewritten | 466 |
 | packages/library/bridge-studio-skills.ts | library | verbatim | 578 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 348 |
-| cli/bridge-studio-writes.ts | projects | rewritten | 2482 |
-| cli/bridge-studio.ts | apps/forge | rewritten | 1750 |
+| apps/forge/bridge-studio-writes.ts | projects | rewritten | 2482 |
+| apps/forge/bridge-studio.ts | apps/forge | rewritten | 1750 |
 | packages/library/community-refresh-cmd.ts | library | verbatim | 104 |
 | packages/library/community-refresh-run.ts | library | verbatim | 454 |
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
@@ -154,7 +154,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/demo-runtime.ts | factory | verbatim | 184 |
 | packages/factory/demo-types.ts | factory | verbatim | 59 |
 | packages/factory/demo.ts | factory | verbatim | 232 |
-| cli/dry-bridge.ts | kernel | rewritten | 428 |
+| apps/forge/dry-bridge.ts | kernel | rewritten | 428 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 67 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 782 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 273 |
@@ -204,12 +204,12 @@ operator-ratified new cap — never a silent raise.
 | packages/library/skill-staging.ts | library | verbatim | 136 |
 | packages/library/studio-lint-library-passes.ts | library | verbatim | 239 |
 | packages/library/studio-lint-tool-fence.ts | library | verbatim | 149 |
-| cli/studio-lint.ts | kernel | rewritten | 662 |
+| apps/forge/studio-lint.ts | kernel | rewritten | 662 |
 | packages/kernel/provenance.ts | kernel | rewritten | 54 |
 | packages/kernel/dry-bridge.ts | kernel | rewritten | 86 |
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| cli/ui-bridge.ts | apps/forge | rewritten | 2265 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
 | packages/agents/_adapters/claude/index.ts | agents | verbatim | 29 |
 | packages/agents/_adapters/conformance.ts | agents | verbatim | 203 |

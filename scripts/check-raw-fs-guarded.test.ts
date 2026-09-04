@@ -45,9 +45,14 @@ import { listEntryModules } from './check-request-path-sinks.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The pre-W8-F5 hand list the derivation must never silently drop. */
+/** The pre-W8-F5 hand list the derivation must never silently drop.
+ *  `ui-bridge.ts` is keyed at `apps/forge/` since the M4-flows host carve: the
+ *  module is byte-identical, only the tree changed. RE-POINTED, never deleted —
+ *  this list is the net that catches a derivation quietly losing coverage, and
+ *  dropping the entry for the file the carve moved is exactly the blinding it
+ *  exists to catch. */
 const CHARTER_MODULES = [
-  'cli/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
+  'apps/forge/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
   'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
   'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',

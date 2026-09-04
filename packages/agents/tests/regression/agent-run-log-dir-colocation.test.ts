@@ -57,7 +57,7 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 // walks an EMPTY tree and reports zero findings, which reads as a pass.
 const REPO_ROOT = FORGE_ROOT;
 const INTERACTIVE_RUNNER_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-runner.ts');
-const UI_BRIDGE_PATH = join(REPO_ROOT, 'cli', 'ui-bridge.ts');
+const UI_BRIDGE_PATH = join(REPO_ROOT, 'apps', 'forge', 'ui-bridge.ts');
 
 const AUTHORING_ID = 'authoring';
 

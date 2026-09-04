@@ -84,7 +84,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { handleStudioSessionsRoutes, type SessionsRouteContext } from './bridge-studio-sessions.ts';
 import { isPseudoProjectAnchor } from './session-resolution.ts';
 import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';

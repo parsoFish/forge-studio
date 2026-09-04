@@ -297,7 +297,7 @@ test('AT-2 n/a-invariant: unstamped kb + agent + project report the literal "unk
 // than a second copy, which is a fact about this tree, not about the mapping.
 
 test('AT-3b: cli/bridge-studio.ts derives provenance via the shared provenanceOfOrigin — no local copy of the mapping', () => {
-  const src = readFileSync(join(process.cwd(), 'cli', 'bridge-studio.ts'), 'utf8');
+  const src = readFileSync(join(process.cwd(), 'apps', 'forge', 'bridge-studio.ts'), 'utf8');
   assert.match(
     src,
     /provenanceOfOrigin[^;]*from ['"]@forge\/kernel['"]/s,

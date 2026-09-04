@@ -46,7 +46,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../cli/ui-bridge.ts';
+import { startBridge } from '../../apps/forge/ui-bridge.ts';
 
 const SECRET_ENV = 'TEST_BRIDGE_PR_MERGED_HOOK_SECRET';
 const FLOW_ID = 'pr-merged-fixture-flow';

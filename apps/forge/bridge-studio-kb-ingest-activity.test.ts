@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
 
-const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** The KB SURFACE. M4 PR 4b split `bridge-studio-kbs.ts` five ways, and the
  *  ingest-activity route travelled to the maintenance heir. The obligation this
  *  file pins is a property of the whole surface — "no POST gate anywhere near an
