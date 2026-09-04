@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from '@forge/kernel';
+import { defaultConfigPath, guardedFile, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from '@forge/kernel';
 import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
@@ -27,11 +27,22 @@ export type MintTriggeredResult = {
   detail?: string;
 };
 
-/** True if `<id>.md` already exists in ANY queue state dir (collision guard). */
+/**
+ * True if `<id>.md` already exists in ANY queue state dir (collision guard).
+ *
+ * Bead forge-8vfn.5.36 widened the raw-fs lint's taint set with the bare
+ * parameter name `id`, which made this site visible for the first time. It was
+ * already safe — `id` reaches here only from `idToken()`, which slugifies to
+ * `[a-z0-9-]` and caps at 24 characters, so no separator and no dot can
+ * survive — but "safe because a slugify forty lines up says so" is an
+ * invariant held by a comment. Routed through `guardedFile` so the guard holds
+ * it instead: the id rides as a SEGMENT under a config-derived queue root,
+ * never folded into the root.
+ */
 function idExistsInQueue(paths: ReturnType<typeof getPaths>, id: string): boolean {
   const file = `${id}.md`;
   return [paths.pending, paths.inFlight, paths.readyForReview, paths.merged, paths.done, paths.failed].some(
-    (d) => existsSync(join(d, file)),
+    (d) => guardedFile(d, [file], 'read') !== null,
   );
 }
 
