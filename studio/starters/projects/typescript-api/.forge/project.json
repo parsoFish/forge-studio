@@ -3,32 +3,10 @@
   "northStar": "{{NORTH_STAR}}",
   "instructions": "Managed by forge. See AGENTS.md for project-specific rules.",
   "demoProcess": [
-    {
-      "kind": "capture",
-      "text": "Start the server and note the before state of the endpoint."
-    },
-    {
-      "kind": "verify",
-      "text": "GET the endpoint (e.g. /health) and assert the JSON response."
-    }
+    { "kind": "capture", "text": "Start the server and note the before state of the endpoint." },
+    { "kind": "verify", "text": "GET the endpoint (e.g. /health) and assert the JSON response." }
   ],
-  "testProcess": {
-    "local": {
-      "cmd": [
-        "npm",
-        "test"
-      ]
-    },
-    "ci": {
-      "cmd": [
-        "npm",
-        "run",
-        "ci"
-      ]
-    }
-  },
-  "skills": [
-    "api-conventions"
-  ],
+  "testProcess": { "local": { "cmd": ["npm", "test"] }, "ci": { "cmd": ["npm", "run", "ci"] } },
+  "skills": ["api-conventions"],
   "kb": "{{NAME}}"
 }
