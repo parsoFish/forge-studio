@@ -91,7 +91,7 @@ import {
   type ReleaseFinalizeHookInput,
 } from '@forge/flows/bridge-studio-runs.ts';
 import { runReleaseFinalize } from '@forge/factory/phases/release-finalize.ts';
-import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
@@ -1226,7 +1226,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
-  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot }, url, method)) return;
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot, readBody: () => readJson(req) }, url, method)) return;
   if (await handleStudioRoutes(req, res, {
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
@@ -1277,6 +1277,7 @@ async function handleHttp(
   // of the seven. Both are in `packages/library/routes.ts` now.
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
   const studioPostCtx: StudioPostContext = {
+    readBody: () => readJson(req),
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
     queueRoot: ctx.queueRoot,
@@ -2038,6 +2039,7 @@ async function handleArchitect(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const planCtx: StudioPostContext = {
+        readBody: async () => body,
         forgeRoot: ctx.forgeRoot,
         logsRoot: ctx.logsRoot,
         queueRoot: ctx.queueRoot,
