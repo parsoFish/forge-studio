@@ -21,7 +21,9 @@
  */
 
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -51,6 +53,12 @@ import { ArtifactPicker } from './ArtifactPicker';
 import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
 import { NodeMiniPanel } from './NodeMiniPanel';
 import { decodeDragPayload } from './AgentPalette';
+import {
+  stationIdForRef,
+  edgeIdFor,
+  nextStationPosition,
+  canConnect,
+} from '@/lib/flow-builder-acts';
 
 // ---------------------------------------------------------------------------
 // Layout constants (from the mockup autolayout logic)
@@ -123,6 +131,42 @@ type FlowNodeData = {
   selected?: boolean;
 };
 
+/**
+ * The two acts that draw an edge, published to the node component.
+ *
+ * `NODE_TYPES` is a module constant, so a node cannot take canvas callbacks as
+ * props, and the node's `data` is SERIALISED on save — putting a callback there
+ * would write it into `flow.yaml`. A context is the one channel that is neither.
+ */
+type ConnectActs = {
+  /** Arm this station as the edge's source. */
+  armFrom: (nodeId: string) => void;
+  /** Draw the armed edge into this station. */
+  completeInto: (nodeId: string) => void;
+};
+const ConnectActsContext = createContext<ConnectActs | null>(null);
+
+/**
+ * Every field an edge between two stations carries, in ONE place. The
+ * port-drag and the declared handle both build their edge from it, so an edge
+ * drawn by keyboard-reachable handle and an edge drawn by pointer cannot come
+ * out different — the divergence that would make S4's verdict a lie about what
+ * an operator gets.
+ */
+function stationEdgeShape(source: string, target: string) {
+  return {
+    id: edgeIdFor(source, target),
+    source,
+    target,
+    sourceHandle: 'out',
+    targetHandle: 'in',
+    type: 'smoothstep',
+    animated: true,
+    style: { stroke: 'var(--line-2, #39455f)', strokeWidth: 2 },
+    data: { artifact: undefined },
+  };
+}
+
 const HEX_CLIP = 'polygon(25% 3%, 75% 3%, 98% 50%, 75% 97%, 25% 97%, 2% 50%)';
 const HANDLE_VISIBLE_STYLE: React.CSSProperties = {
   width: 12,
@@ -132,6 +176,7 @@ const HANDLE_VISIBLE_STYLE: React.CSSProperties = {
 };
 
 function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNodeData>): JSX.Element {
+  const connectActs = useContext(ConnectActsContext);
   const truncate = (s: string, max: number) =>
     s && s.length > max ? `${s.slice(0, max - 1)}…` : s;
 
@@ -158,6 +203,11 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNodeData>): JSX
         id="in"
         type="target"
         position={Position.Left}
+        // The declared handle for "wire a station INTO this one". It sits on the
+        // very element the pointer act drops onto, so the automated act and the
+        // operator's act are the same element, not two parallel affordances.
+        data-action={`connect-into-${data.agentRef}`}
+        onClick={() => connectActs?.completeInto(id)}
         style={{
           ...HANDLE_VISIBLE_STYLE,
           background: 'var(--steel, #5cc8ff)',
@@ -239,6 +289,13 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNodeData>): JSX
         id="out"
         type="source"
         position={Position.Right}
+        // The declared handle for "wire FROM this station". Pressing it arms the
+        // source; the next `connect-into-<agent>` draws the edge. Two presses,
+        // because that is what the pointer act is — grab the out-port, release
+        // on an in-port — and a single action naming both ends would need one
+        // element per ordered pair.
+        data-action={`connect-from-${data.agentRef}`}
+        onClick={() => connectActs?.armFrom(id)}
         style={{
           ...HANDLE_VISIBLE_STYLE,
           background: 'var(--ember, #ff9e4a)',
@@ -382,6 +439,12 @@ function FitOnChange({ count }: { count: number }): null {
 export type CanvasHandle = {
   getNodes: () => Node<FlowNodeData>[];
   getEdges: () => Edge<BuilderEdgeData>[];
+  /**
+   * Place an agent on the canvas by ref. The palette's declared
+   * `place-station-<ref>` handle crosses into the canvas through here — the
+   * canvas owns the node state, so there is nowhere else the act can live.
+   */
+  placeStation: (agentRef: string) => void;
 };
 
 type Props = {
@@ -432,10 +495,15 @@ export function FlowBuilderCanvas({
   // Expose current state via handle
   const nodesRef = useRef(rfNodes);
   const edgesRef = useRef(rfEdges);
+  // The handle is published once (its effect depends on `onRef` alone), so the
+  // placement act reaches it through a ref that is re-pointed every render
+  // rather than by re-publishing the handle on every dependency change.
+  const placeStationAtRef = useRef<(agentRef: string) => void>(() => {});
   nodesRef.current = rfNodes;
   edgesRef.current = rfEdges;
   useEffect(() => {
     onRef?.({
+      placeStation: (agentRef: string) => placeStationAtRef.current(agentRef),
       getNodes: () => nodesRef.current,
       getEdges: () => edgesRef.current,
     });
@@ -479,13 +547,7 @@ export function FlowBuilderCanvas({
       // ReactFlow's auto-generated id would not match (B1).
       setRfEdges((eds) => addEdge({
         ...connection,
-        id: `${connection.source ?? ''}__${connection.target ?? ''}`,
-        sourceHandle: 'out',
-        targetHandle: 'in',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: 'var(--line-2, #39455f)', strokeWidth: 2 },
-        data: { artifact: undefined },
+        ...stationEdgeShape(connection.source ?? '', connection.target ?? ''),
       }, eds));
       // Stash the connection; onConnectEnd will open the picker at the real cursor position
       pendingConnectionRef.current = connection;
@@ -583,14 +645,48 @@ export function FlowBuilderCanvas({
     if (dropRejectTimeoutRef.current) clearTimeout(dropRejectTimeoutRef.current);
   }, []);
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const raw = e.dataTransfer.getData('text/plain');
-      const payload = decodeDragPayload(raw);
-      if (!payload || payload.kind !== 'agent') return;
+  /**
+   * The armed edge source, set by `connect-from-<agent>` and consumed by the
+   * next `connect-into-<agent>`. A ref, not state: arming is not a rendered
+   * condition, and making it one would re-render every node on each press.
+   */
+  const armedSourceRef = useRef<string | null>(null);
 
-      const agentRef = payload.ref;
+  const connectActs = useMemo<ConnectActs>(
+    () => ({
+      armFrom: (nodeId: string) => {
+        armedSourceRef.current = nodeId;
+      },
+      completeInto: (targetId: string) => {
+        const sourceId = armedSourceRef.current;
+        if (sourceId === null) {
+          // Named, not silent: a press that draws nothing has to say why, or a
+          // story reads "the product refused" as "the product did nothing".
+          rejectDrop('press a station\'s out-port ("connect-from-…") before wiring into another one.');
+          return;
+        }
+        armedSourceRef.current = null;
+        const verdict = canConnect(nodesRef.current, edgesRef.current, sourceId, targetId);
+        if (!verdict.ok) {
+          rejectDrop(verdict.reason);
+          return;
+        }
+        setRfEdges((eds) => [...eds, stationEdgeShape(sourceId, targetId) as Edge<BuilderEdgeData>]);
+      },
+    }),
+    [rejectDrop],
+  );
+
+
+  /**
+   * Place an agent as a station. ONE implementation, called by the pointer drop
+   * and by the palette's declared `place-station-<ref>` handle — the drop's
+   * only extra is the cursor position it can supply and a press cannot.
+   * Keeping the interactive-agent refusal here is the point: a second placement
+   * path would be one refactor away from not having it (§15.80).
+   */
+  const placeStationAt = useCallback(
+    (agentRef: string, position?: { x: number; y: number }) => {
       const agent = agents.find((a) => a.id === agentRef);
 
       // R2-02-F3: an interactive agent (per the F1 capability descriptor)
@@ -601,31 +697,44 @@ export function FlowBuilderCanvas({
         return;
       }
 
+      const newId = `fn-${Date.now().toString(36)}`;
+      setRfNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: 'flowNode',
+          position: position ?? nextStationPosition(nds),
+          data: {
+            agentRef,
+            agentName: agent?.name ?? agentRef,
+            selected: false,
+          },
+          width: 96,
+          height: 106,
+        },
+      ]);
+    },
+    [agents, rejectDrop],
+  );
+  placeStationAtRef.current = placeStationAt;
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData('text/plain');
+      const payload = decodeDragPayload(raw);
+      if (!payload || payload.kind !== 'agent') return;
+
       // Convert screen coords to ReactFlow coords
       const wrapper = reactFlowWrapper.current;
       if (!wrapper || !rfInstance) return;
       const rect = wrapper.getBoundingClientRect();
-      const position = rfInstance.project({
+      placeStationAt(payload.ref, rfInstance.project({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
-      });
-
-      const newId = `fn-${Date.now().toString(36)}`;
-      const newNode: Node<FlowNodeData> = {
-        id: newId,
-        type: 'flowNode',
-        position,
-        data: {
-          agentRef,
-          agentName: agent?.name ?? agentRef,
-          selected: false,
-        },
-        width: 96,
-        height: 106,
-      };
-      setRfNodes((nds) => [...nds, newNode]);
+      }));
     },
-    [agents, rfInstance, rejectDrop],
+    [rfInstance, placeStationAt],
   );
 
   // ---------------------------------------------------------------------------
@@ -673,6 +782,7 @@ export function FlowBuilderCanvas({
   // Render
   // ---------------------------------------------------------------------------
   return (
+    <ConnectActsContext.Provider value={connectActs}>
     <div
       ref={reactFlowWrapper}
       data-component="flow-builder-canvas"
@@ -834,6 +944,7 @@ export function FlowBuilderCanvas({
         />
       )}
     </div>
+    </ConnectActsContext.Provider>
   );
 }
 

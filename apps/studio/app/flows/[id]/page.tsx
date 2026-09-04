@@ -628,7 +628,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           </div>
           {/* BUILD canvas */}
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
-            <AgentPalette />
+            <AgentPalette
+              onPlace={(ref) => canvasRef.current?.placeStation(ref)}
+            />
             <FlowBuilderCanvas
               initialNodes={buildFlow?.nodes ?? []}
               initialEdges={buildFlow?.edges ?? []}
