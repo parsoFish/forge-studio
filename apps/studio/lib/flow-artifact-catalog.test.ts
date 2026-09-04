@@ -33,7 +33,7 @@ function onDiskTemplateIds(): string[] {
   // README.md documents the directory (R3-06) — it is not a template
   // definition, so it is excluded by name, mirroring the identical exclusion
   // in the two production loaders that scan this same directory
-  // (orchestrator/studio/registry.ts's listArtifactTemplates and
+  // (`@forge/library/studio/artifact-registry.ts`'s listArtifactTemplates and
   // orchestrator/studio/template-library.ts's listPlanningEntries). Matched
   // case-insensitively (a readme.md/Readme.md variant would otherwise slip
   // the exact-name check and, if it ever carried valid frontmatter, become a

@@ -1233,7 +1233,7 @@ export async function fetchStudioAgentsWithMeta(): Promise<{ agents: Agent[]; de
  * type carries every key the server descriptor has, `allowedTiers` included.
  *
  * Exists because `/api/studio/agents`' roster (`fetchStudioAgents`) filters
- * out every `library: false` agent (orchestrator/studio/registry.ts's
+ * out every `library: false` agent (`@forge/agents/studio/agent-registry.ts`'s
  * `isStudioAgent`) — every kickoff-only system agent (demo-builder,
  * instructions-creator, brain-maintenance, creation-agent,
  * project-brain-builder) sets that flag, so NONE of them were ever

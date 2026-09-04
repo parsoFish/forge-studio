@@ -267,7 +267,7 @@ The flow engine dispatches nodes via a data-table + node-executor registry (ADR-
 **Directory:** `skills/<slug>/`
 **Required file:** `skills/<slug>/SKILL.md`
 **Types:** `orchestrator/studio/types.ts` (`AgentDefinition`)
-**Loader:** `orchestrator/studio/registry.ts` (`loadAgentDefinition`)
+**Loader:** `@forge/agents/studio/agent-registry.ts` (`loadAgentDefinition`)
 **Spec derivation:** `orchestrator/studio/derive.ts` (`deriveAgentSpec`)
 
 ### SKILL.md structure

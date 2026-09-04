@@ -211,7 +211,7 @@ export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
     // second is the exact class this lane exists to stop.
     //
     // The bead's own remedy is to cross-reference `discoverProjects`
-    // (orchestrator/studio/registry.ts), and that cannot live here: `projects/`
+    // (`discoverProjects`, `@forge/kernel`), and that cannot live here: `projects/`
     // is gitignored, so on a fresh checkout and in CI it is absent, and every
     // project brain would flag on every run. An empty brain dir and a
     // freshly-seeded one are indistinguishable from the brain alone — which is

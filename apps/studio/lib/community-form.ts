@@ -58,7 +58,7 @@ export const EMPTY_REGISTRY_FORM: RegistryFormState = {
 
 /**
  * THE required set — the same five the bridge's own validator enforces
- * (`orchestrator/studio/registry.ts`'s `reqString` calls for id/name/category/
+ * (`@forge/library/studio/community-registry.ts`'s `reqString` calls for id/name/category/
  * sourceUrl/provenance). `label` is the operator-facing name: it is what the
  * field's own `<Field label=…>` renders AND what the disabled reason says, so
  * the two cannot describe the same field differently.

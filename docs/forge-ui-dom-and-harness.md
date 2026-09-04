@@ -3844,7 +3844,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `fetchStudioAgents()`'s roster: every kickoff-only system agent
   (`instructions-creator`/`demo-builder`/`brain-maintenance`/
   `creation-agent`/`project-brain-builder`) declares `library: false`
-  (`orchestrator/studio/registry.ts`'s `isStudioAgent`), so the roster never
+  (`@forge/agents/studio/agent-registry.ts`'s `isStudioAgent`), so the roster never
   carries them at all — the W6-B6 fix (wave-6 final gate, journey
   demo-builder DB-4) — a radio group
   (`[data-field="kickoff-model-tier-option"]`) for a `strategy:range` skill,

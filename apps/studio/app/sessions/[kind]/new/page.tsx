@@ -33,7 +33,7 @@ import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/ki
 // fetched via `fetchAgentCapability(spec.agentSlug)` — the UNFILTERED
 // per-slug route (`GET /api/studio/agents/:slug/capability`) — NEVER
 // `fetchStudioAgents()`'s roster, which drops every `library:false` agent
-// (orchestrator/studio/registry.ts's `isStudioAgent`). Every kickoff-only
+// (`@forge/agents/studio/agent-registry.ts`'s `isStudioAgent`). Every kickoff-only
 // system agent this page dispatches (instructions-creator, demo-builder,
 // brain-maintenance, creation-agent, project-brain-builder) sets that flag,
 // so the roster lookup never found any of them and the picker always fell
@@ -146,7 +146,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       // W6-B6 fix — the UNFILTERED per-slug capability route, resolved
       // directly against `spec.agentSlug`. NOT the roster `fetchStudioAgents()`
       // returns: that roster drops every `library:false` agent
-      // (orchestrator/studio/registry.ts's `isStudioAgent`), which is every
+      // (`@forge/agents/studio/agent-registry.ts`'s `isStudioAgent`), which is every
       // kickoff-only system agent this page's KICKOFF_KINDS names — so the
       // roster lookup NEVER found them and the picker always fell back to the
       // read-only 'fixed' chip, even for a real strategy:range SKILL.md.
