@@ -16,8 +16,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { runFlow } from './flow-runner.ts';
-import { createPhaseExecutor, registeredBandIds } from './phases/executor-table.ts';
+import { runFlow } from '@forge/flows/flow-runner.ts';
+import { createPhaseExecutor, registeredBandIds } from '../../orchestrator/phases/executor-table.ts';
 import { BAND_GUARD_IDS } from '@forge/contracts';
 import type { PhaseExecutor } from '@forge/kernel';
 import type { NodeExecContext } from '@forge/flows/flow-node-context.ts';
@@ -159,7 +159,10 @@ test('a ProjectGate that PASSES lets the flow finish — the positive control th
 });
 
 test('the runner source imports no phase and no preflight — the exit row, asserted rather than trusted (kills: a re-export shim that keeps the import alive while the grep looks clean)', () => {
-  const src = readFileSync(new URL('./flow-runner.ts', import.meta.url), 'utf8');
+  // The runner now lives in the package; this test stayed at the assembly
+  // because it builds a real executor. Resolve the subject through the same
+  // specifier the rest of the file imports it by, never a sibling-file guess.
+  const src = readFileSync(new URL('../../packages/flows/flow-runner.ts', import.meta.url), 'utf8');
   assert.equal((src.match(/from '\.\/phases\//g) ?? []).length, 0, "flow-runner.ts must import nothing from './phases/'");
   // The IMPORT form, not the word: the runner's own doc comment names
   // `cli/preflight.ts` to explain why it does not import it, and a test that

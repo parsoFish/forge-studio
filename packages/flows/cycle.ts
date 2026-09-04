@@ -65,7 +65,7 @@ export {
 } from './cycle-helpers.ts';
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
-import { runFlow, flowPathForId } from '../../orchestrator/flow-runner.ts';
+import { runFlow, flowPathForId } from './flow-runner.ts';
 import { createPhaseExecutor } from '../../orchestrator/phases/executor-table.ts';
 import { createProjectGate, defaultRunClosure } from '../../orchestrator/phases/executor-deps.ts';
 import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';

@@ -15,10 +15,10 @@
  * The port itself — a stub executor that touches no phase — is exercised
  * directly by `orchestrator/flow-runner.port-conformance.test.ts`.
  */
-import { runFlow, type FlowRunArgs } from '../flow-runner.ts';
-import { createPhaseExecutor, type NodeExecutor } from '../phases/executor-table.ts';
-import { createProjectGate, defaultRunClosure } from '../phases/executor-deps.ts';
-import type { FlowRunnerDeps } from '../phases/executor-deps.ts';
+import { runFlow, type FlowRunArgs } from '@forge/flows/flow-runner.ts';
+import { createPhaseExecutor, type NodeExecutor } from '../../../orchestrator/phases/executor-table.ts';
+import { createProjectGate, defaultRunClosure } from '../../../orchestrator/phases/executor-deps.ts';
+import type { FlowRunnerDeps } from '../../../orchestrator/phases/executor-deps.ts';
 import type { NodeKind } from '@forge/flows/flow-node-kind.ts';
 
 export type { NodeExecutor, FlowRunnerDeps };
