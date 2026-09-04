@@ -24,7 +24,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactName } from './demo-types.ts';
 import { MAX_CAPTURED_OUTPUT_BYTES } from './demo-model.ts';
 
 export type WorktreeAtRef = { path: string; repo: string };
@@ -202,7 +202,7 @@ export async function captureCheckpoints(
       // prose-only demos with no visual verification.
       for (const { label, command } of input.checkpointCommands ?? []) {
         const out = captureCommandOutput(wt.path, command);
-        writeFileSync(join(capDir, `${label}.out`), out);
+        writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
       }
 
@@ -212,7 +212,7 @@ export async function captureCheckpoints(
         if (!server) continue;
         try {
           for (const label of input.checkpointLabels) {
-            const outPath = join(capDir, `${label}.png`);
+            const outPath = join(capDir, checkpointArtifactName(label, 'png'));
             if (await screenshotUrl(server.url, outPath)) captured.push(label);
           }
         } finally {
