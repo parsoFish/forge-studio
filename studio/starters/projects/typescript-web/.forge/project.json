@@ -3,10 +3,32 @@
   "northStar": "{{NORTH_STAR}}",
   "instructions": "Managed by forge. See AGENTS.md for project-specific rules.",
   "demoProcess": [
-    { "kind": "capture", "text": "Start the server and note the before state of the page." },
-    { "kind": "verify", "text": "GET the page (e.g. /) and assert the HTML contains the expected heading." }
+    {
+      "kind": "capture",
+      "text": "Start the server and note the before state of the page."
+    },
+    {
+      "kind": "verify",
+      "text": "GET the page (e.g. /) and assert the HTML contains the expected heading."
+    }
   ],
-  "testProcess": { "local": { "cmd": ["npm", "test"] } },
-  "skills": ["web-conventions"],
+  "testProcess": {
+    "local": {
+      "cmd": [
+        "npm",
+        "test"
+      ]
+    },
+    "ci": {
+      "cmd": [
+        "npm",
+        "run",
+        "ci"
+      ]
+    }
+  },
+  "skills": [
+    "web-conventions"
+  ],
   "kb": "{{NAME}}"
 }

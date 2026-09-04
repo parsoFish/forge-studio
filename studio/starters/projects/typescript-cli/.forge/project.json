@@ -3,10 +3,32 @@
   "northStar": "{{NORTH_STAR}}",
   "instructions": "Managed by forge. See AGENTS.md for project-specific rules.",
   "demoProcess": [
-    { "kind": "capture", "text": "Build the CLI (npm run build) and note the before state." },
-    { "kind": "verify", "text": "Run npm run acceptance — the built binary vs a checked-in fixture." }
+    {
+      "kind": "capture",
+      "text": "Build the CLI (npm run build) and note the before state."
+    },
+    {
+      "kind": "verify",
+      "text": "Run npm run acceptance \u2014 the built binary vs a checked-in fixture."
+    }
   ],
-  "testProcess": { "local": { "cmd": ["npm", "test"] } },
-  "skills": ["cli-conventions"],
+  "testProcess": {
+    "local": {
+      "cmd": [
+        "npm",
+        "test"
+      ]
+    },
+    "ci": {
+      "cmd": [
+        "npm",
+        "run",
+        "ci"
+      ]
+    }
+  },
+  "skills": [
+    "cli-conventions"
+  ],
   "kb": "{{NAME}}"
 }

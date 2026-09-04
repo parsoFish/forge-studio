@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --experimental-strip-types --test",
     "build": "tsc -p tsconfig.json",
+    "ci": "npm run build && npm test",
     "start": "node dist/server.js"
   },
   "devDependencies": {

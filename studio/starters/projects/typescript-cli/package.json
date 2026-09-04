@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "description": "{{NORTH_STAR}}",
   "type": "module",
-  "bin": { "{{NAME}}": "dist/index.js" },
+  "bin": {
+    "{{NAME}}": "dist/index.js"
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test",
     "build": "tsc -p tsconfig.json",
+    "ci": "npm run build && npm test",
     "acceptance": "npm run build && node --test test/acceptance"
   },
   "devDependencies": {
