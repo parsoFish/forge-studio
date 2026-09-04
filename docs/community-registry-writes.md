@@ -9,7 +9,7 @@ normal git flow; the browser shows the uncommitted state.*
 
 `studio/community/registry.yaml` is the declared-list source of truth for
 community items (W6-CR-1) and is **repo-tracked** — its history is its audit
-trail. Structural schema lives in `orchestrator/studio/registry.ts`
+trail. Structural schema lives in `@forge/library/studio/community-registry.ts`
 (`loadCommunityRegistry`); `forge studio lint` re-validates it on every run.
 
 ### Schema v2 (W8-B5) — repo facts are keyed by repo
@@ -55,7 +55,7 @@ kind (W6-CR-3) is retired outright in favour of the deterministic
 LLM-in-the-loop path to this file.
 
 Both remaining programmatic writers converge on the ONE serializer
-(`serializeCommunityRegistry`, orchestrator/studio/registry.ts) — which is
+(`serializeCommunityRegistry`, `@forge/library/studio/community-registry.ts`) — which is
 exactly why the comment-preservation fix lives there and not in either
 writer — and temp-then-rename with a re-parse through the ONE loader before
 the real file is replaced — a write that cannot be re-loaded never lands.

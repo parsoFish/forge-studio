@@ -714,7 +714,7 @@ test('F6: sessionShellState: the ready state\'s dataAttrs carry "data-session-le
 // W6-B9 reviewer fix — pseudo-project anchors: the generic terminal "back to
 // project" link must be honest for EVERY value `project` can hold, including
 // a pseudo-project session anchor (".kb-<id>", ".community-registry") that
-// discoverProjects (orchestrator/studio/registry.ts) categorically filters
+// discoverProjects (`@forge/kernel`) categorically filters
 // out of the real project list — /projects/.kb-x would be a dead end.
 // ===========================================================================
 

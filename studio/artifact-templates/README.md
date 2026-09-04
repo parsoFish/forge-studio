@@ -4,7 +4,7 @@ The **planning** category of the Studio templates library (R3-06): every artifac
 `FlowEdge.artifact` label can name, documented as gray-matter markdown — `id` (matching the
 edge label), `name`, `kind` (`file | git-state`), optional `producer`/`consumer`, a `schema`
 block (`requiredFiles` / `requiredFields` / `gitInvariants`), and a prose contract body. Loaded
-by `orchestrator/studio/registry.ts`'s `loadArtifactTemplate` / `listArtifactTemplates`;
+by `@forge/library/studio/artifact-registry.ts`'s `loadArtifactTemplate` / `listArtifactTemplates`;
 validated by `validateArtifactTemplate` (`orchestrator/studio/validate.ts`). Surfaced in the
 Studio UI at `/templates` (category `planning`) and `/templates/[id]`, alongside
 `studio/demo-elements/` (`demo-output`) and `studio/starters/projects/` (`project-scaffold`) —

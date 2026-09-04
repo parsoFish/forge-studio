@@ -458,7 +458,7 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
 // ---------------------------------------------------------------------------
 // Pseudo-project anchors (W6-B9 reviewer fix) — a project id starting with
 // "." is NEVER a real registered project: `discoverProjects`
-// (orchestrator/studio/registry.ts) categorically filters every dot-prefixed
+// (`discoverProjects`, `@forge/kernel`) categorically filters every dot-prefixed
 // directory out of the real project list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX,
 // packages/knowledge/bridge-studio-kbs.ts) and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR
 // below, mirroring packages/sessions/bridge-studio-sessions.ts's own

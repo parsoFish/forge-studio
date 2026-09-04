@@ -13,7 +13,7 @@
  * proposal was rejected). It mirrors the existing ADR-027/R2-04 precedent
  * already in this codebase — `parseFlowTrigger` fails loud on a stale `flow:`
  * key, no back-compat parsing. The contract: `loadAgentDefinition`
- * (`orchestrator/studio/registry.ts`) itself THROWS when a SKILL.md's
+ * (`@forge/agents/studio/agent-registry.ts`) itself THROWS when a SKILL.md's
  * `composition:` block still carries a `hooks:` key. The thrown message must
  * name the offending file, name `composition.hooks`, and point at
  * `composition.guards`.
