@@ -32,7 +32,7 @@ import type { EventLogEntry } from '@forge/kernel';
 import type { QueueState } from './queue.ts';
 import { normalizeProjectId } from '@forge/kernel';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
 import type { TriggerKindId } from './flow-trigger.ts';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import {

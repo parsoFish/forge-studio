@@ -393,6 +393,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/skill-md-fidelity.ts | agents | verbatim | 224 |
 | packages/library/studio/template-library.ts | library | verbatim | 610 |
 | packages/contracts/studio/types.ts | contracts | verbatim | 738 |
+| packages/flows/studio/flow-registry.ts | flows | verbatim | 280 |
 | packages/flows/studio/validate-triggers.ts | flows | verbatim | 431 |
 | orchestrator/studio/validate.ts | kernel | rewritten | 868 |
 | packages/library/studio/yaml-comments.ts | library | verbatim | 132 |

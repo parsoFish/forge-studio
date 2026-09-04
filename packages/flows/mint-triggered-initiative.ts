@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import { defaultConfigPath, guardedFile, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from '@forge/kernel';
 import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 import { FLOW_ID_RE } from './enqueue-flow-run.ts';
 

@@ -15,7 +15,8 @@
  */
 import { join, resolve } from 'node:path';
 
-import { loadFlowDefinition, loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 
