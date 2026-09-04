@@ -229,10 +229,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
   const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const mergePrFn = opts.mergePr ?? mergePullRequest;
-  // ADR 048: `packages/flows` declares the reflector port and imports no factory,
-  // so the assembly supplies it here — the same seam `factory-wiring.ts` owns.
-  const finalizeAfterMergeFn =
-    opts.finalizeAfterMerge ??
+  // ADR 048: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
+  const finalizeAfterMergeFn = opts.finalizeAfterMerge ??
     ((deps: { queueRoot: string; logsRoot: string }) =>
       finalizeMergedReadyForReview({ ...deps, runReflector: factoryPhaseWiring().runReflector }));
   // WS-A (release): the default release-finalize hook constructs a per-cycle

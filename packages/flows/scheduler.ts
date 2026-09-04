@@ -1,10 +1,8 @@
 /**
- * The unattended scheduler. Per ADR 011, this is a ~150-line loop that:
- *   - claims pending initiatives,
- *   - spawns each as a cycle in its own git worktree,
- *   - heartbeats while the cycle runs,
- *   - moves the manifest to ready-for-review on success or failed on failure,
- *   - fires notifications.
+ * The unattended scheduler (ADR 011): claims pending initiatives, spawns each as
+ * a cycle in its own git worktree, heartbeats while it runs, moves the manifest
+ * to ready-for-review or failed, and fires notifications. ADR 011 describes it as
+ * "a ~150-line loop"; it is over a thousand — bead forge-8vfn.15 owns the split.
  *
  * `forge serve` runs this forever. `forge serve --once` claims one initiative
  * and exits — used in tests and for one-shot runs.
@@ -450,9 +448,8 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
  * Currently links Node's `node_modules`. Generalise here when forge picks up
  * Python (`.venv`) or Rust (`target`) projects that need similar.
  */
-// Exported (not just module-local) so orchestrator/wi-worktree.ts (Phase 4
-// per-WI worktree bootstrap) can reuse it verbatim rather than duplicating
-// the node_modules symlink + git-exclude dance.
+// Exported so wi-worktree.ts's per-WI bootstrap reuses the node_modules
+// symlink + git-exclude dance verbatim rather than duplicating it.
 export function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
   for (const dir of ['node_modules']) {
     const src = resolve(projectRepoPath, dir);

@@ -214,10 +214,9 @@ async function cmdServe(rest: string[]): Promise<void> {
 }
 
 // M7-5 (ADR-031): `forge start` / `stop` / `pause` / `resume` / `status` were
-// removed — the Studio UI bridge is the operator API now. The daemon-spawn
-// logic moved to `spawnServeDetached` in orchestrator/daemon.ts (called by the
-// bridge's POST /api/scheduler/start); pause/resume/stop/status are bridge
-// routes that call the shared daemon helpers directly.
+// removed — the Studio UI bridge is the operator API now. Daemon spawn is
+// `spawnServeDetached` in packages/flows/daemon.ts (POST /api/scheduler/start);
+// pause/resume/stop/status are bridge routes onto the same helpers.
 
 function printLatestReportHint(): void {
   const logsRoot = resolve('_logs');

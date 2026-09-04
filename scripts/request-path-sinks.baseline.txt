@@ -27,9 +27,9 @@ apps/forge/ui-bridge.ts readdirSync 4
 apps/forge/ui-bridge.ts readFileSync 2
 apps/forge/ui-bridge.ts spawn 2
 apps/forge/ui-bridge.ts statSync 4
-orchestrator/phases/executor-deps.ts readFileSync 1
-orchestrator/phases/executor-table.ts existsSync 1
-orchestrator/phases/executor-table.ts readFileSync 3
+packages/factory/phases/executor-deps.ts readFileSync 1
+packages/factory/phases/executor-table.ts existsSync 1
+packages/factory/phases/executor-table.ts readFileSync 3
 packages/agents/_adapters/aider/index.ts execFile 1
 packages/agents/_adapters/aider/index.ts execFileSync 4
 packages/agents/_adapters/aider/index.ts readFileSync 1
