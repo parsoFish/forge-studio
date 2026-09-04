@@ -65,7 +65,6 @@
   "packages/sessions/interactive-finalizers.test.ts": 1255,
   "packages/sessions/interactive-runner.test.ts": 1848,
   "packages/sessions/interactive-session.ts": 993,
-  "packages/sessions/kinds/architect.ts": 1584,
   "packages/sessions/studio/session-kinds.test.ts": 2398,
   "packages/sessions/studio/session-transcript.test.ts": 2400,
   "scripts/check-raw-fs-guarded.mjs": 1371,
