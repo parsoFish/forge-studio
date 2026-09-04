@@ -29,6 +29,7 @@ import {
 } from '../../ci-gate.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeManifest, DERIVED_CEILING_MARGIN_USD, type InitiativeManifest } from '../../manifest.ts';
+import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cycle-test-'));
@@ -459,7 +460,7 @@ test('P4: runCycle emits architect end event with real cost_usd + duration_ms fr
       worktreePath: root,
       cycleId,
       dryRun: true,
-    });
+    }, UNREACHED_PHASE_WIRING);
 
     // The cycle emits into the real _logs/ dir (same pattern as snapshotCycleArtefacts test).
     const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
@@ -502,7 +503,7 @@ test('P4: runCycle emits architect end event without cost/duration for legacy ma
       worktreePath: root,
       cycleId,
       dryRun: true,
-    });
+    }, UNREACHED_PHASE_WIRING);
 
     const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
     assert.ok(existsSync(logPath), `expected events.jsonl at ${logPath}`);

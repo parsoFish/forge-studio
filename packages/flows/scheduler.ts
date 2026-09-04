@@ -1,10 +1,8 @@
 /**
- * The unattended scheduler. Per ADR 011, this is a ~150-line loop that:
- *   - claims pending initiatives,
- *   - spawns each as a cycle in its own git worktree,
- *   - heartbeats while the cycle runs,
- *   - moves the manifest to ready-for-review on success or failed on failure,
- *   - fires notifications.
+ * The unattended scheduler (ADR 011): claims pending initiatives, spawns each as
+ * a cycle in its own git worktree, heartbeats while it runs, moves the manifest
+ * to ready-for-review or failed, and fires notifications. ADR 011 describes it as
+ * "a ~150-line loop"; it is over a thousand — bead forge-8vfn.15 owns the split.
  *
  * `forge serve` runs this forever. `forge serve --once` claims one initiative
  * and exits — used in tests and for one-shot runs.
@@ -31,6 +29,7 @@ import { runCycle } from './cycle.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
+import type { PhaseWiring } from './phase-wiring.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
@@ -78,7 +77,7 @@ const DEFAULT_NOTIFY: NotifyConfig = { desktop: true, webhook_url: null };
 
 export type RunMode = 'forever' | 'once';
 
-export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 'forever' }): Promise<void> {
+export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & SchedulerConfig): Promise<void> {
   // F-10 / F-18: layer per-machine config from forge.config.json under
   // explicit opts. Order: opts > forge.config.json > DEFAULTS. Missing
   // config file is fine — empty object falls through to DEFAULTS.
@@ -126,10 +125,10 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
 
   // F-W5-7: at startup, finalize any ready-for-review cycle whose PR was merged
   // while the daemon was down (operator merged, nothing re-confirmed it).
-  await runFinalizeSweep();
+  await runFinalizeSweep(opts.phaseWiring);
   // ADR 026: at startup, drain any review work-items appended while the daemon
   // was down (the operator sent back; the cycle must re-run them in place).
-  await runDrainSweep();
+  await runDrainSweep(opts.phaseWiring);
   // Stage C: dispatch any flow-trigger run-requests staged while down.
   runFlowTriggerSweep();
   // R2-04 (ADR-041): arm the cron triggers declared across studio/flows/*.
@@ -204,7 +203,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
       // Capture the filename for the closure so a later loop iteration's
       // reassignment of `claimedFilename` can't shadow this entry's cleanup.
       const fn: string = claimedFilename;
-      const promise = runOne(claimed, fn, cfg, tee).finally(() => {
+      const promise = runOne(claimed, fn, cfg, tee, opts.phaseWiring).finally(() => {
         inFlight.delete(fn);
       });
       inFlight.set(fn, promise);
@@ -268,7 +267,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     void runRecoverySweep(cfg);
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
     // then (ADR 026) drain any review work-items appended since the last sweep.
-    void runFinalizeSweep().then(() => runDrainSweep()).then(() => runCronSync());
+    void runFinalizeSweep(opts.phaseWiring).then(() => runDrainSweep(opts.phaseWiring)).then(() => runCronSync());
     // Stage C: dispatch any flow-trigger run-requests (on:complete chaining).
     runFlowTriggerSweep();
   }, cfg.recoverIntervalMs);
@@ -449,9 +448,8 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
  * Currently links Node's `node_modules`. Generalise here when forge picks up
  * Python (`.venv`) or Rust (`target`) projects that need similar.
  */
-// Exported (not just module-local) so orchestrator/wi-worktree.ts (Phase 4
-// per-WI worktree bootstrap) can reuse it verbatim rather than duplicating
-// the node_modules symlink + git-exclude dance.
+// Exported so wi-worktree.ts's per-WI bootstrap reuses the node_modules
+// symlink + git-exclude dance verbatim rather than duplicating it.
 export function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
   for (const dir of ['node_modules']) {
     const src = resolve(projectRepoPath, dir);
@@ -521,9 +519,9 @@ function formatDur(ms: number): string {
  * merged — closure aligns local↔remote + deletes the branch + moves to done/,
  * and the reflector fires (reflection becomes available in the UI). Best-effort.
  */
-async function runFinalizeSweep(): Promise<void> {
+async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
   try {
-    for (const r of await finalizeMergedReadyForReview()) {
+    for (const r of await finalizeMergedReadyForReview({ runReflector: wiring.runReflector })) {
       if (r.status === 'finalized') {
         console.log(`[serve] finalized ${r.initiativeId} — operator merged the PR → done + reflection`);
       } else if (r.status === 'error') {
@@ -544,9 +542,9 @@ async function runFinalizeSweep(): Promise<void> {
  * drain skips merged PRs — a merge always wins). Best-effort — never throws
  * out of the timer.
  */
-async function runDrainSweep(): Promise<void> {
+async function runDrainSweep(wiring: PhaseWiring): Promise<void> {
   try {
-    for (const r of await drainPendingFixWorkItems({ notify: (m) => console.log(`[serve] ${m}`) })) {
+    for (const r of await drainPendingFixWorkItems({ notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
       if (r.status === 'drained') {
         console.log(`[serve] fix loop ${r.initiativeId} — fix work items run in the same cycle (${r.detail})`);
       } else if (r.status === 'error') {
@@ -641,6 +639,7 @@ async function runOne(
   filename: string,
   cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig },
   tee: ((entry: EventLogEntry) => void) | undefined,
+  wiring: PhaseWiring,
 ): Promise<void> {
   const paths = getPaths(cfg.queueRoot);
   const heartbeat = setInterval(() => {
@@ -783,7 +782,7 @@ async function runOne(
       // out-of-band as a UI action. ADR 026: a send-back appends UWIs the drain
       // runs in place; the cycle never blocks waiting on an operator. The
       // review phase opens the PR and stops at ready-for-review.
-    });
+    }, wiring);
 
     if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
     // F-28 + Phase 6: any cycle outcome that ends with the manifest in

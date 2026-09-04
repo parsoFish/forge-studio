@@ -13,6 +13,7 @@ import { drainPendingFixWorkItems, type FixLoopDrainStatus } from '../../drain-f
 import { writeReviewCapExhaustedMarker } from '../../fix-work-items.ts';
 import { writeWorkItem, type WorkItem } from '../../work-item.ts';
 import type { CycleInput } from '../../cycle-context.ts';
+import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 
 const GATE = ['go', 'test', './...'];
 const ID = 'INIT-2026-07-25-drain-fix-loop';
@@ -136,7 +137,7 @@ test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFr
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ', reviewRounds: 1 });
     const logsRoot = join(root, '_logs');
     const calls: CycleInput[] = [];
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot,
       confirmMerge: () => false,
@@ -176,7 +177,7 @@ test('drain: no pending fix WIs → no-pending (a pending PM WI without origin d
     writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'pending' }), wt); // no origin
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -195,7 +196,7 @@ test('drain: merged PR → pr-merged (finalize-merged domain), runDrainCycle NOT
     seedDrainableQueue(wt);
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => true,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -214,7 +215,7 @@ test('drain: a failed fix work-item → needs-operator (never auto-retry), runDr
     writeWorkItem(baseWi({ work_item_id: 'WI-2', status: 'failed', origin: 'review-fix' }), wt);
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -235,7 +236,7 @@ test('drain: REVIEW-CAP-EXHAUSTED marker present → needs-operator, notify NOT 
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
     let notified = false;
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -261,7 +262,7 @@ test('drain: manifest review_rounds > FORGE_REVIEW_MAX_SEND_BACK_ROUNDS → cap-
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ', reviewRounds: 2 });
     const notifications: string[] = [];
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -291,7 +292,7 @@ test('drain: fix-WI count > FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS → cap-exceed
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
     const notifications: string[] = [];
     let called = false;
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => { called = true; return { status: 'pr-open' }; },
@@ -314,7 +315,7 @@ test('drain: a thrown drain cycle returns the manifest to ready-for-review (neve
   try {
     seedDrainableQueue(wt);
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => false,
@@ -341,7 +342,7 @@ test('drain: cycle_id falls back to the latest _logs dir when the manifest lacks
     const logsRoot = join(root, '_logs');
     mkdirSync(join(logsRoot, `2026-07-25T01-02-03_${ID}`), { recursive: true });
     const calls: CycleInput[] = [];
-    await drainPendingFixWorkItems({
+    await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot,
       confirmMerge: () => false,
@@ -365,7 +366,7 @@ test('drain: no worktree → no-worktree, skipped', async () => {
     // status from 'no-worktree' to 'error' for a reason unrelated to what it
     // tests. See the round-4 fixture note in `setup()`'s docstring.)
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: 'CYCLE-XYZ' });
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       confirmMerge: () => false,
       runDrainCycle: async () => ({ status: 'pr-open' }),
@@ -413,7 +414,7 @@ test('(RED) [SEC-02 round 4] worktree_path outside the forge root: sweep does no
 
     const confirmCalls: string[] = [];
     const drainCalls: CycleInput[] = [];
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: (wt: string) => { confirmCalls.push(wt); return false; },
@@ -464,7 +465,7 @@ test('(RED) [SEC-02 round 4] project_repo_path outside <forgeRoot>/projects: swe
     });
 
     const drainCalls: CycleInput[] = [];
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => false,
@@ -510,7 +511,7 @@ test('(RED) [SEC-02 round 4] traversing cycle_id: no file or directory may be cr
       cycleId, // THE ATTACK
     });
 
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot,
       confirmMerge: () => false,
@@ -544,7 +545,7 @@ test('non-regression [SEC-02 round 4]: legitimate worktree_path + project_repo_p
     seedDrainableQueue(wt);
     writeManifest(queueRoot, 'ready-for-review', wt, repo, { cycleId: `2026-07-25T01-02-03_${ID}` });
     const drainCalls: CycleInput[] = [];
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => false,
@@ -582,7 +583,7 @@ test('(RED) [SEC-02 round 4] mixed sweep: a poisoned manifest degrades to status
 
     const confirmCalls: string[] = [];
     const drainCalls: CycleInput[] = [];
-    const results = await drainPendingFixWorkItems({
+    const results = await drainPendingFixWorkItems({ phaseWiring: UNREACHED_PHASE_WIRING,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: (w: string) => { confirmCalls.push(w); return false; },

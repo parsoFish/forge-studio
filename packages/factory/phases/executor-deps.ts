@@ -8,7 +8,7 @@
  * files move to `@forge/factory` with the phases they wire.
  */
 
-import { resolve, basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
@@ -177,6 +177,22 @@ function readCostBudgetUsd(input: CycleInput): number | undefined {
   }
 }
 
+/**
+ * A1 (handoff, agents s4): this was `resolve('_logs')` at the two call sites
+ * below — relative to the PROCESS's cwd, so a cycle started from anywhere but
+ * the repo root wrote its demo and review evidence into a `_logs` tree beside
+ * whatever directory the operator happened to be in, and every later reader
+ * looked in the checkout and found nothing. Same class as 5.37.
+ *
+ * `FORGE_ROOT` resolves from this module's own dirname, so it is the checkout
+ * whatever the cwd. Named once here rather than inlined twice: two call sites
+ * computing the same path independently is how the first one drifted.
+ * `executor-deps-logs-root.test.ts` pins it from a child process with a
+ * different cwd, which is the only vantage point that can tell the two
+ * implementations apart.
+ */
+export const DEFAULT_LOGS_ROOT = join(FORGE_ROOT, '_logs');
+
 export const DEFAULT_DEPS: FlowRunnerDeps = {
   // Thread the optional wedge-abort signal into real phase functions.
   runProjectManager: (input, logger, signal?) =>
@@ -189,7 +205,7 @@ export const DEFAULT_DEPS: FlowRunnerDeps = {
         initiativeId: input.initiativeId,
         worktreePath: input.worktreePath,
         cycleId: input.cycleId ?? input.initiativeId,
-        logsRoot: resolve('_logs'),
+        logsRoot: DEFAULT_LOGS_ROOT,
         costBudgetUsd: readCostBudgetUsd(input),
         forgeRoot: FORGE_ROOT,
       },
@@ -202,7 +218,7 @@ export const DEFAULT_DEPS: FlowRunnerDeps = {
         initiativeId: input.initiativeId,
         worktreePath: input.worktreePath,
         cycleId: input.cycleId ?? input.initiativeId,
-        logsRoot: resolve('_logs'),
+        logsRoot: DEFAULT_LOGS_ROOT,
         costBudgetUsd: readCostBudgetUsd(input),
         projectName: basename(input.projectRepoPath),
         forgeRoot: FORGE_ROOT,
