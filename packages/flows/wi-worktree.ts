@@ -45,6 +45,7 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
 import { linkProjectDeps } from './scheduler.ts';
@@ -304,7 +305,7 @@ export function pruneStaleWiWorktrees(opts: {
 
   if (prunedPaths.length > 0 || prunedBranches.length > 0) {
     try {
-      createLogger(opts.initiativeId, opts.logsRoot ?? '_logs').emit({
+      createLogger(opts.initiativeId, opts.logsRoot ?? join(FORGE_ROOT, '_logs')).emit({
         initiative_id: opts.initiativeId,
         phase: 'orchestrator',
         skill: 'scheduler',

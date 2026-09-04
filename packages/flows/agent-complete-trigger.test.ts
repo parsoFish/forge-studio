@@ -58,6 +58,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { FORGE_ROOT } from '@forge/kernel';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,7 +68,11 @@ import { dispatchAgentRun } from '@forge/agents/agent-dispatch.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
 
-const ROOT = process.cwd();
+// Bead forge-8vfn.5.53: anchored on kernel's FORGE_ROOT, not the process cwd.
+// This test dispatches a REAL agent run, and the agent roster is discovered
+// from `<root>/skills`; with cwd = packages/flows the roster came back empty
+// and the failure read as a product defect ("no runnable agent … (known: )").
+const ROOT = FORGE_ROOT;
 
 /** Mirrors `fakeQueryFn` in run-agent.test.ts — the canonical stub for the
  *  locked `RunContext.queryFn` shape: a fake SDK query() yielding one

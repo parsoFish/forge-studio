@@ -33,6 +33,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { getPaths } from './queue.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
@@ -93,7 +94,7 @@ export function runRequeue(
   initInput: string,
   opts: RequeueOptions = {},
 ): RequeueResult {
-  const forgeRoot = opts.forgeRoot ?? process.cwd();
+  const forgeRoot = opts.forgeRoot ?? FORGE_ROOT;
   const queuePaths = getPaths(join(forgeRoot, '_queue'));
 
   const resolved = resolveInitiativeId(initInput, { queueRoot: queuePaths.root });

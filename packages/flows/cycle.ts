@@ -12,7 +12,8 @@
  */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogger } from '@forge/kernel';
 import { createLogger } from '@forge/kernel';
@@ -167,7 +168,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
   if (!input.dryRun && !input.cycleId && !persistedCycleId) {
     persistManifestCycleId(input.manifestPath, cycleId);
   }
-  const logger = createLogger(cycleId, '_logs', {
+  const logger = createLogger(cycleId, join(FORGE_ROOT, '_logs'), {
     tee: input.eventTee,
   });
 
@@ -336,8 +337,7 @@ export async function snapshotCycleArtefacts(
   input: CycleInput,
   cycleId: string,
 ): Promise<void> {
-  const forgeRoot = resolve(import.meta.dirname, '..', '..');
-  const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
+  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
   if (!existsSync(cycleLogDir)) mkdirSync(cycleLogDir, { recursive: true });
 
   // Work-item specs: the PM's output, valuable evidence for the report's

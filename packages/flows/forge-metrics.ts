@@ -23,6 +23,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry } from '@forge/kernel';
 import { summariseCycle, type CycleMetrics } from './metrics.ts';
@@ -42,7 +43,7 @@ export type CycleReportInput = {
  * persists to `_logs/<cycleId>/report.md`.
  */
 export function buildCycleReport(input: CycleReportInput): string {
-  const forgeRoot = resolve(input.forgeRoot ?? process.cwd());
+  const forgeRoot = resolve(input.forgeRoot ?? FORGE_ROOT);
   const cycleId = input.cycleId;
   const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
 

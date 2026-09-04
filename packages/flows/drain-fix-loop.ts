@@ -24,6 +24,7 @@
 import { existsSync, readdirSync, readFileSync, renameSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
+import { FORGE_ROOT } from '@forge/kernel';
 import lockfile from 'proper-lockfile';
 
 import { parseManifest } from './manifest.ts';
@@ -99,7 +100,7 @@ export async function drainPendingFixWorkItems(
   deps: FixLoopDrainDeps = {},
 ): Promise<FixLoopDrainResult[]> {
   const paths = getPaths(deps.queueRoot);
-  const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve('_logs');
+  const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve(FORGE_ROOT, '_logs');
   const confirmMerge = deps.confirmMerge ?? confirmPrMerged;
   const runDrainCycle = deps.runDrainCycle ?? defaultRunDrainCycle;
   const caps = resolveReviewLoopCaps();
