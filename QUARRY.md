@@ -315,7 +315,9 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 509 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 87 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
-| packages/flows/pr.ts | flows | verbatim | 1132 |
+| packages/flows/pr.ts | flows | verbatim | 431 |
+| packages/flows/pr-branch-sync.ts | flows | verbatim | 556 |
+| packages/flows/pr-ci-watch.ts | flows | verbatim | 203 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 132 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 421 |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 179 |
