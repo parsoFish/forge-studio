@@ -17,14 +17,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
 import { compileFixWorkItems, writeReviewCapExhaustedMarker, hasReviewCapExhaustedMarker, FixLoopCapError, FixConcernInvalidError } from './fix-work-items.ts';
-import { loadConfig, resolveReviewLoopCaps } from '@forge/kernel';
+import { loadConfig, resolveReviewLoopCaps, sendJson, allowedOrigin, type StudioContext } from '@forge/kernel';
 import { notify } from './notify.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { isDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from '../../apps/forge/dry-bridge.ts';
-import { sendJson, allowedOrigin, type StudioContext } from '../../apps/forge/bridge-studio.ts';
 
 /** Default per-WI iteration budget for compiled review-fix work items (was the
  *  unifier's default cap before R4-01-F4 retired that module). */
