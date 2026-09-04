@@ -82,6 +82,19 @@ const DISCLOSED_INJECTIONS = new Map([
   ],
 ]);
 
+/** A `test-fixtures/` directory is NOT production. This filter used to test the
+ *  FILE NAME only, so a helper under `test-fixtures/` was scanned as production
+ *  because it does not end in `.test.ts` — disagreeing with the campaign's
+ *  ratified definition of a production file (`productionFiles()` in
+ *  `scripts/check-owner.mjs`, M4 ruling 94/101: code extensions MINUS `.test.*`
+ *  files AND `test-fixtures/` directories).
+ *
+ *  Nothing had tripped it because no fixture happened to contain a `queryFn:`
+ *  property until the M4 exit-row-5 test split created one. The mismatch was
+ *  latent, not new. Narrowed to the ruled definition rather than exempting the
+ *  one file, which would leave the next fixture to rediscover this. */
+const FIXTURE_DIR_RE = /(^|\/)test-fixtures(\/|$)/;
+
 function collectSourceFiles(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true, recursive: true });
   return entries
@@ -90,7 +103,8 @@ function collectSourceFiles(dir: string): string[] {
         e.isFile() &&
         SOURCE_FILE_RE.test(e.name) &&
         !DECLARATION_FILE_RE.test(e.name) &&
-        !TEST_FILE_RE.test(e.name),
+        !TEST_FILE_RE.test(e.name) &&
+        !FIXTURE_DIR_RE.test((e as unknown as { parentPath: string }).parentPath.split('\\').join('/')),
     )
     .map((e) => join((e as unknown as { parentPath: string }).parentPath, e.name));
 }
