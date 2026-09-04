@@ -346,8 +346,19 @@ function driftRow(
   // also matches none, and is preserved rather than refreshed. That is the
   // trade the bead buys, and it is visible — the row is reported as
   // `'hand-authored'`, never silently kept.
+  //
+  // It covers `'fillOnly'` as well as `'unconditional'` because the rule is
+  // about the VALUE's provenance, not about which mode carries it — and
+  // `'fillOnly'`'s formula (`starterValue !== undefined ? starterValue :
+  // current`) OVERWRITES rather than fills. That was harmless only while no
+  // starter declared a `fillOnly` section; clause C1b makes every starter
+  // declare `testProcess.ci`, and measured before this widened
+  // (`_1.0/evidence/m5-b-probe-c1b/`) it rewrote a live Go provider's
+  // `make test && golangci-lint run ./azuredevops/…`, its `fixCmd` and its
+  // `unsetEnv: ["TF_ACC"]`, to `npm run ci`. `'protected'` is excluded because
+  // the starter is never consulted there, so provenance cannot arise.
   if (
-    mode === 'unconditional' &&
+    mode !== 'protected' &&
     current !== undefined &&
     everyStarterValue.length > 0 &&
     !everyStarterValue.some((value) => jsonEqual(value, current))
@@ -482,15 +493,15 @@ export function computeContractDrift(
 
   const rows: DriftRow[] = [
     driftRow('testProcess.local', config?.testProcess.local, starter?.testProcess.local, mode('unconditional'), across((s) => s.testProcess.local)),
-    driftRow('testProcess.ci', config?.testProcess.ci, starter?.testProcess.ci, mode('fillOnly')),
+    driftRow('testProcess.ci', config?.testProcess.ci, starter?.testProcess.ci, mode('fillOnly'), across((s) => s.testProcess.ci)),
     // Secret NAMES carve-out (Q3): never sourced from a starter — no starter
     // declares `acceptance` at all, and even if one did, a template cannot
     // know which env vars THIS project's live-acceptance tier needs.
     driftRow('testProcess.acceptance', config?.testProcess.acceptance, undefined, 'protected'),
-    driftRow('standing_work_item_acs', config?.standing_work_item_acs, starter?.standing_work_item_acs, mode('fillOnly')),
+    driftRow('standing_work_item_acs', config?.standing_work_item_acs, starter?.standing_work_item_acs, mode('fillOnly'), across((s) => s.standing_work_item_acs)),
     driftRow('demoProcess', config?.demoProcess, starter?.demoProcess, mode('unconditional'), across((s) => s.demoProcess)),
     driftRow('releaseProcess', config?.releaseProcess, starter?.releaseProcess, mode('unconditional'), across((s) => s.releaseProcess)),
-    driftRow('buildProcess', config?.buildProcess, starter?.buildProcess, mode('fillOnly')),
+    driftRow('buildProcess', config?.buildProcess, starter?.buildProcess, mode('fillOnly'), across((s) => s.buildProcess)),
   ];
 
   const { row: skillsRow, skillMoves } = computeSkillsDrift(dir, config?.skills, config?.artifactRoot);

@@ -91,6 +91,18 @@ function betteradoShapedProject(): string {
         artifactRoot: 'forge',
         testProcess: {
           local: { cmd: ['go', 'test', '-tags', 'all', '-count=1', './...'] },
+          // A hand-authored CI net, matching no starter. `testProcess.ci` is
+          // RegenMode 'fillOnly', whose formula is
+          // `starterValue !== undefined ? starterValue : current` — the starter
+          // does not fill an absence, it OVERWRITES. It was harmless only while
+          // no starter declared one; the moment a starter does (clause C1b),
+          // this value is rewritten. Measured live before the fix:
+          // `_1.0/evidence/m5-b-probe-c1b/`.
+          ci: {
+            cmd: ['bash', '-c', 'make test && golangci-lint run ./azuredevops/...'],
+            fixCmd: ['bash', '-c', 'make fmt && make terrafmt'],
+            unsetEnv: ['TF_ACC'],
+          },
           acceptance: { match: 'TF_ACC', required: true, requiresEnv: [SECRET_NAME] },
         },
         demoProcess: [{ kind: 'capture', text: 'a stale, pre-current-template demo step' }],
@@ -204,6 +216,22 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
       rawAfter.demoProcess,
       [{ kind: 'capture', text: 'a stale, pre-current-template demo step' }],
       'a demoProcess matching no starter is hand-authored and must survive verbatim',
+    );
+
+    // A hand-authored section under 'fillOnly' survives too. The rule is about
+    // the VALUE's provenance, not about which RegenMode happens to carry it —
+    // and C1b makes every starter declare `testProcess.ci`, so without this the
+    // clause that fills a starter's own CI net would silently destroy a real
+    // project's (`_1.0/evidence/m5-b-probe-c1b/`: this exact value became
+    // `{"cmd":["npm","run","ci"]}`).
+    assert.deepEqual(
+      (rawAfter.testProcess as { ci?: unknown }).ci,
+      {
+        cmd: ['bash', '-c', 'make test && golangci-lint run ./azuredevops/...'],
+        fixCmd: ['bash', '-c', 'make fmt && make terrafmt'],
+        unsetEnv: ['TF_ACC'],
+      },
+      'a hand-authored testProcess.ci must survive a starter that declares one',
     );
 
     // …and the report says WHICH kind of preservation it is, so "the starter
