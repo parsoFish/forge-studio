@@ -70,6 +70,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { architectFailurePhase } from './architect-phase.mjs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
@@ -787,7 +788,8 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
     const status = readJsonFileSafe(join(sessionDir, 'status.json'));
     const phase = status?.phase;
     if (phase === 'awaiting-verdict') { log('architect drafted a PLAN — at the plan gate'); break; }
-    if (phase === 'rejected') throw new Error('architect session was rejected');
+    const failed = architectFailurePhase(status);
+    if (failed) throw new Error(failed);
     if (phase === 'awaiting-answers' && !answeredRounds.has(status.round)) {
       const qs = readJsonFileSafe(join(sessionDir, 'questions.json')) ?? [];
       const answers = (Array.isArray(qs) ? qs : []).map((q) => ({
@@ -826,7 +828,8 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   while (Date.now() < finalizeDeadline) {
     const status = readJsonFileSafe(join(sessionDir, 'status.json'));
     if (status?.phase === 'committed') { committed = true; break; }
-    if (status?.phase === 'rejected') throw new Error('architect session rejected during finalize');
+    const failedAtFinalize = architectFailurePhase(status, 'during finalize');
+    if (failedAtFinalize) throw new Error(failedAtFinalize);
     const findings = status?.completenessCritic?.findings ?? [];
     if (status?.phase === 'awaiting-verdict' && findings.length > 0 && !criticAcknowledged) {
       criticAcknowledged = true;
