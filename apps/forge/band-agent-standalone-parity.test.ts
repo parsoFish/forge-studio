@@ -18,6 +18,8 @@
  */
 
 import assert from 'node:assert/strict';
+import { AGENT_DISPATCH_DEPS, architectManifestPorts } from './session-kind-deps.ts';
+import { bandAgentDeps } from './band-agent-deps.ts';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,7 +29,6 @@ import { test } from 'node:test';
 import { runBandAgentStandalone } from '@forge/agents/band-agent-run.ts';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { bandAgentDeps } from './band-agent-deps.ts';
 
 const INIT = 'INIT-2026-08-02-standalone-demo';
 const RUN = 'RUN-2026-08-02-band-standalone';
@@ -138,19 +139,21 @@ test('ASSEMBLY: cli.ts hands the production band deps to cmdAgent — without th
   // assert the binding IS on the path. Its negative twin — a dispatch with no
   // `deps.band` refusing rather than falling back — is in the package's
   // `agent-run-band-deps.test.ts`.
+  // THE BAG IS ASSERTED BY VALUE, NOT BY SOURCE TEXT. A regex over
+  // `session-kind-deps.ts` looked equivalent and was not: commenting the line
+  // out as `// band: bandAgentDeps,` left the text intact, so the pattern still
+  // matched and the control passed against code with the binding REMOVED — a
+  // control whose victim does not exist. Importing the real object cannot be
+  // fooled that way, and it is strictly stronger than what this test asserted
+  // before the G1 P1 moved the bag out of the `agent` case.
+  assert.equal(AGENT_DISPATCH_DEPS.band, bandAgentDeps,
+    'AGENT_DISPATCH_DEPS must carry the production band binding — every standalone band dispatch refuses without it');
+  assert.equal(AGENT_DISPATCH_DEPS.sessionKind.manifestPorts, architectManifestPorts,
+    'AGENT_DISPATCH_DEPS must carry the architect manifest ports (M4 ruling 77/81)');
+
+  // The one thing that IS structural: the bag reaching the single production
+  // entry to `forge agent`. There is no value to inspect for that.
   const src = readFileSync(new URL('./cli.ts', import.meta.url), 'utf8');
-  assert.match(src, /import \{ bandAgentDeps \} from '\.\/band-agent-deps\.ts';/,
-    'cli.ts must import the production band binding');
-  // Asserts the BINDING is on the path, not that it is the only key in the bag:
-  // M4 ruling 81 added `sessionKind` (architect's manifest ports) to the same
-  // literal, and an exact-shape regex would have failed for a reason that has
-  // nothing to do with the band binding this test exists to protect.
-  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{[^}]*band: bandAgentDeps/,
-    'cli.ts must pass the band deps to cmdAgent — the `agent` case is the only production entry to `forge agent dispatch`');
-  // The sibling binding, pinned the same way and for the same reason: without
-  // it every architect turn refuses at its manifest work (M4 ruling 77/81).
-  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, \{[^}]*sessionKind: \{ manifestPorts: architectManifestPorts \}/,
-    'cli.ts must pass the architect manifest ports to cmdAgent');
-  assert.match(src, /import \{ architectManifestPorts \} from '\.\/session-kind-deps\.ts';/,
-    'cli.ts must import the production manifest-ports binding');
+  assert.match(src, /cmdAgent\(args\.slice\(1\), FORGE_ROOT, AGENT_DISPATCH_DEPS\)/,
+    'cli.ts must pass AGENT_DISPATCH_DEPS to cmdAgent — the `agent` case is the only production entry to `forge agent`')
 });
