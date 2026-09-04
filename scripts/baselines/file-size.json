@@ -67,7 +67,7 @@
   "packages/sessions/interactive-runner.test.ts": 1848,
   "packages/sessions/interactive-runner.ts": 883,
   "packages/sessions/interactive-session.ts": 993,
-  "packages/sessions/kinds/architect-plan.ts": 862,
+  "packages/sessions/kinds/architect-plan.ts": 878,
   "packages/sessions/kinds/architect.ts": 1584,
   "packages/sessions/studio/session-kinds.test.ts": 2398,
   "packages/sessions/studio/session-kinds.ts": 1389,
