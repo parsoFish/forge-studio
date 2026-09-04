@@ -180,18 +180,22 @@ export type DraftInitiative = {
 };
 
 // ---------------------------------------------------------------------------
-// SEC-04 — guarded leaf siblings of readStatus / writeStatus.
+// SEC-04 — the ONLY architect status accessors.
 //
-// The raw pair above raw-appends the `status.json` leaf to an already-built
-// `sessionDir` (`join(sessionDir, 'status.json')`) — the "guard the dir,
-// raw-append the leaf" shape SEC-04 closes. These siblings take the TRUSTED
-// `projectsRoot` plus the request-derived directory segments (`project`,
-// `'_architect'`, `sessionId`) as their OWN `segments[]` elements — never
-// folded into the root — and route the WHOLE path, `status.json` leaf
-// included, through `guardedFile`, so a symlinked/hardlinked status leaf is
-// rejected. Raw pair retained; Phase-1 appliers switch the architect route
-// call sites onto these. Returns `null` on a containment rejection (fail
-// closed), matching `readStatus`'s existing "null when unavailable" contract.
+// These take the TRUSTED `projectsRoot` plus the request-derived directory
+// segments (`project`, `'_architect'`, `sessionId`) as their OWN `segments[]`
+// elements — never folded into the root — and route the WHOLE path,
+// `status.json` leaf included, through `guardedFile`, so a symlinked or
+// hardlinked status leaf is rejected. Return `null` on a containment rejection
+// (fail closed).
+//
+// They replaced a raw `readStatus`/`writeStatus` pair in `kinds/architect.ts`
+// that raw-appended the `status.json` leaf to an already-built `sessionDir`
+// — the "guard the dir, raw-append the leaf" shape SEC-04 closes. The
+// Phase-1 appliers moved every production call site onto these; the raw pair
+// then survived as test-fixture scaffolding only, and was deleted with the M4
+// exit door (ruling 129). `kind-turn-log-contract.test.ts` locks the property
+// that `kinds/architect.ts` names no `status.json` leaf of its own.
 // ---------------------------------------------------------------------------
 
 export function guardedReadStatus(
