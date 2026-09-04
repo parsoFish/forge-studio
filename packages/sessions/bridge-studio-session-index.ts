@@ -32,7 +32,7 @@ import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
 import { listArchitectSessions } from './kinds/architect.ts';
 import type { SessionLifecycleState } from './bridge-studio-lifecycle.ts';
-import { sessionShellHref } from './bridge-studio-sessions.ts';
+import { sessionShellHref } from './session-resolution.ts';
 import {
   deriveRowLifecycle,
   guardedSessionDir,

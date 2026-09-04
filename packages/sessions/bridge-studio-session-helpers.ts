@@ -36,7 +36,7 @@ import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/library/skill-path.ts';
 
 import { deriveSessionLifecycleFor, sessionHeartbeatMtimeMs } from './bridge-studio-lifecycle.ts';
-import { isTerminalPhase } from './bridge-studio-sessions.ts';
+import { isTerminalPhase } from './session-resolution.ts';
 import type { SessionLifecycle } from './bridge-studio-lifecycle.ts';
 import { loadSessionKinds } from './studio/session-kinds.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';

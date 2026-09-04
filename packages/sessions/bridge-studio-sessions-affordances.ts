@@ -45,7 +45,7 @@ import {
 } from './studio/session-kinds.ts';
 import { guardedReadSessionStatus } from './interactive-session.ts';
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
-import { invalidProjectReason } from './bridge-studio-sessions.ts';
+import { invalidProjectReason } from './session-resolution.ts';
 import {
   unhandledAffordanceBody,
   handleGenericRevise,
