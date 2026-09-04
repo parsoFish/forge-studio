@@ -244,8 +244,11 @@ packages/flows/phases/ralph-spec-lint.ts readdirSync 1
 packages/flows/phases/ralph-spec-lint.ts statSync 2
 packages/flows/phases/wi-spec-compile.ts writeFileSync 2
 packages/flows/planned-initiatives.ts readFileSync 1
-packages/flows/pr.ts execFileSync 35
-packages/flows/pr.ts existsSync 6
+packages/flows/pr-branch-sync.ts execFileSync 21
+packages/flows/pr-branch-sync.ts existsSync 2
+packages/flows/pr-ci-watch.ts execFileSync 4
+packages/flows/pr.ts execFileSync 10
+packages/flows/pr.ts existsSync 4
 packages/flows/pr.ts mkdirSync 1
 packages/flows/pr.ts readFileSync 1
 packages/flows/pr.ts readdirSync 1
