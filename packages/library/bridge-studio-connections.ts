@@ -71,8 +71,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { isDryBridge } from '../../apps/forge/dry-bridge.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { catalogConnectionById, connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
