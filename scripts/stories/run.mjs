@@ -33,7 +33,14 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { spendGateVerdict } from './spend.mjs';
 import { memoryVerdict, readAvailableMb, acquireHostLock } from './preflight.mjs';
-import { sweepStoryResidue } from './sweep.mjs';
+import {
+  applyFence,
+  describeFence,
+  fenceBreaches,
+  readGitPorcelain,
+  sweepProductFixtures,
+  sweepStoryResidue,
+} from './sweep.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
 import { driveBeat } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -178,6 +185,10 @@ async function main() {
 }
 
 async function runStory(story, uiUrl, startedMs) {
+  // The fence's baseline, taken before this story touches anything and after
+  // the leading sweep, so a previous run's residue is never charged to this one
+  // and an operator's work-in-progress is never charged to it either.
+  const treeBefore = readGitPorcelain(ROOT);
   const outDir = join(ROOT, 'demos', 'stories', story.id);
   const framesDir = join(outDir, 'frames');
   const clipTmp = join(outDir, '_clip');
@@ -231,7 +242,20 @@ async function runStory(story, uiUrl, startedMs) {
   const reap = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
   for (const line of describeReap(reap)) console.log(line);
 
-  const result = { story, beats, reap };
+  // §3.1's trailing duty: the fixtures this story CREATED in the product. Not
+  // its own output — `demos/stories/<id>` IS the artifact. The comment that
+  // used to stand here ("the smoke story creates none") was true of `smoke` and
+  // false of `proof`, S2 and S4, which left `projects/story-<id>`,
+  // `brain/projects/story-<id>` and a saved flow behind every run.
+  const sweep = sweepProductFixtures(story.id, ROOT);
+  for (const p of sweep.removed) console.log(`[stories] trailing sweep removed ${p}`);
+  for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
+
+  // And the fence, over everything the product wrote that carries no story id.
+  const fence = applyFence(fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id), ROOT);
+  for (const line of describeFence(fence)) console.log(line);
+
+  const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);
 
   const docPath = docPathFor(story, ROOT);
@@ -245,9 +269,6 @@ async function runStory(story, uiUrl, startedMs) {
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
 
-  // Trailing sweep is deliberately NOT a residue sweep of this story's own
-  // output — that output IS the artifact. §3.1's trailing duty is the fixtures
-  // a story CREATED in the product, and the smoke story creates none.
   return row.status === 'green' ? 0 : 1;
 }
 

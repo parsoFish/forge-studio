@@ -28,7 +28,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fixturePathsFor, sweepStoryResidue } from './sweep.mjs';
+import {
+  fenceBreaches,
+  fixturePathsFor,
+  parseGitPorcelain,
+  productFixturePathsFor,
+  sweepStoryResidue,
+} from './sweep.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-'));
 const plant = (p) => {
@@ -186,4 +192,107 @@ test('the sweep can never reach a REAL flow, whatever a story is called', () => 
     const paths = fixturePathsFor(id, '/root');
     assert.ok(!paths.includes(`/root/studio/flows/${id}`), paths.join(' | '));
   }
+});
+
+// ── M5-B s2: a story run leaves the tree as it found it (beads forge-8vfn.6.3,
+// the trailing-sweep half of `run.mjs`).
+//
+// TWO MEASURED HOLES, one property.
+//
+//   1. There is no trailing sweep. `run.mjs` justified its absence with "the
+//      smoke story creates none" — true of `smoke`, false of `proof`, S2 and
+//      S4. A green `proof` run left `brain/projects/story-proof` behind twice
+//      in one session (M5-B s1). The trailing duty is the PRODUCT fixtures a
+//      story minted; the run's own clip, doc and `story.json` ARE its output
+//      and must survive.
+//
+//   2. A story drives the product into writing REPO-TRACKED files outside its
+//      own namespace, and nothing puts them back. S8 beat 8 writes a row into
+//      `studio/community/registry.yaml`, beat 4 rewrites that file's
+//      `meta.lastRefresh` from a live network refresh, and beat 14 vendors a
+//      package into `studio/hooks/` (S8.story.mjs:93-100, bead 6.3). A second
+//      run then meets a registry that already carries `story-s8-skill`, and
+//      live upstream numbers sit in the working tree waiting to be committed.
+//
+// The fence is by DELTA, never by name. A pattern-kill ("remove `skills/*/
+// SKILL.md`") is the §15.100/.150 shape — it would let a story delete a skill
+// the operator authored. A file that was not there when the run started, and
+// is not the run's artifact, is the run's residue; a file that was already
+// dirty is the operator's and is never touched.
+
+const porcelainZ = (...entries: string[]) => `${entries.join('\0')}\0`;
+
+test('the trailing sweep owns the product fixtures a story minted, never the artifact it exists to produce', () => {
+  const product = productFixturePathsFor('S4', '/r');
+  assert.ok(!product.includes('/r/demos/stories/S4'), product.join(' | '));
+  for (const p of ['/r/projects/story-s4', '/r/brain/projects/story-s4', '/r/studio/flows/story-s4']) {
+    assert.ok(product.includes(p), `${p} missing from ${product.join(' | ')}`);
+  }
+  // The leading sweep's contract is unchanged: it still owns everything.
+  assert.deepEqual(fixturePathsFor('S4', '/r'), ['/r/demos/stories/S4', ...product]);
+});
+
+test('porcelain is read from the NUL-delimited stream, so a path carrying a space survives', () => {
+  // S15.155: a field containing a space breaks every positional reader
+  // downstream of it. `git status --porcelain` QUOTES such a path; the `-z`
+  // form does not, and is the only form a split can be trusted on.
+  const rows = parseGitPorcelain(porcelainZ(' M studio/my flows/a.yaml', '?? skills/plan/SKILL.md'));
+  assert.deepEqual(rows, [
+    { xy: ' M', path: 'studio/my flows/a.yaml' },
+    { xy: '??', path: 'skills/plan/SKILL.md' },
+  ]);
+});
+
+test('a rename entry does not swallow the path that follows it', () => {
+  // In `-z`, a rename emits the destination and then the SOURCE as its own
+  // field. A reader that does not consume the source reads it as an entry with
+  // no status and mis-attributes every path after it.
+  const rows = parseGitPorcelain(porcelainZ('R  new.ts', 'old.ts', ' M kept.ts'));
+  assert.deepEqual(rows, [
+    { xy: 'R ', path: 'new.ts' },
+    { xy: ' M', path: 'kept.ts' },
+  ]);
+});
+
+test('a tracked file the RUN dirtied is restored, and an untracked file the run created is removed', () => {
+  const before = parseGitPorcelain(porcelainZ());
+  const after = parseGitPorcelain(
+    porcelainZ(' M studio/community/registry.yaml', '?? studio/hooks/block-protected-branch-push/', '?? skills/plan/SKILL.md'),
+  );
+  assert.deepEqual(fenceBreaches(before, after, 'S8'), {
+    restore: ['studio/community/registry.yaml'],
+    remove: ['studio/hooks/block-protected-branch-push/', 'skills/plan/SKILL.md'],
+  });
+});
+
+test('a file that was ALREADY dirty before the run is the operator\'s, and is never touched', () => {
+  // Kills the fence-as-tree-cleaner. The lane commits before every run, but an
+  // operator watching a run must not have their work-in-progress reverted by
+  // a gate they only meant to observe.
+  const dirty = porcelainZ(' M packages/projects/reset.ts', '?? notes.md');
+  const breaches = fenceBreaches(parseGitPorcelain(dirty), parseGitPorcelain(dirty), 'S8');
+  assert.deepEqual(breaches, { restore: [], remove: [] });
+});
+
+test('the run\'s OWN artifacts are never a breach, wherever the fence is called', () => {
+  // The clip, the story.json, the generated doc and the gallery index are the
+  // run's output. Listing all four makes the fence independent of where in the
+  // run it is called — there is no ordering left to remember (S15.80).
+  const after = parseGitPorcelain(
+    porcelainZ('?? demos/stories/S8/', ' M demos/stories/index.html', ' M docs/how-to/S8.md', '?? docs/tutorials/S8.md'),
+  );
+  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [] });
+});
+
+test('another story\'s artifact IS a breach — the allowance is this run\'s id, not the gallery', () => {
+  const after = parseGitPorcelain(porcelainZ(' M demos/stories/S2/story.json', ' M docs/how-to/S2.md'));
+  assert.deepEqual(fenceBreaches([], after, 'S8'), {
+    restore: ['demos/stories/S2/story.json', 'docs/how-to/S2.md'],
+    remove: [],
+  });
+});
+
+test('the fence refuses an unsafe story id before it interpolates one into a path', () => {
+  assert.throws(() => fenceBreaches([], [], '../../etc'), /unsafe story id/);
+  assert.throws(() => productFixturePathsFor('..', '/r'), /unsafe story id/);
 });
