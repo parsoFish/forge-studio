@@ -8,7 +8,7 @@
  *   sessions ← flows ← factory ← apps/{forge, studio}
  *   apps/studio imports contracts only.
  *   packages never import orchestrator/ cli/ loops/.
- *   legacy imports a package only via orchestrator/_pkg/<pkg>.ts.
+ *   legacy never imports a package at all.
  *
  * The spec calls this "enforced by dependency-cruiser; the violation
  * baseline may only shrink". This script is that enforcement.
@@ -59,7 +59,6 @@ export const PACKAGE_RANK = Object.freeze({
 /** The three legacy trees packages may never reach into. */
 const LEGACY = /^(orchestrator|cli|loops)\//;
 /** The one greppable shim per package through which legacy may reach a package. */
-const LEGACY_SHIM = /^orchestrator\/_pkg\//;
 /** The studio app. `forge-ui/` was its path until the M2 move. */
 const STUDIO = /^apps\/studio\//;
 /**
@@ -106,8 +105,17 @@ export function classify(from, to) {
     if (toPkg && toPkg !== 'contracts') return 'studio-beyond-contracts';
   }
 
-  // 3. legacy imports a package only via orchestrator/_pkg/<pkg>.ts
-  if (LEGACY.test(from) && !LEGACY_SHIM.test(from) && toPkg) return 'legacy-to-package-not-via-shim';
+  // 3. legacy never imports a package.
+  //
+  // The rule once exempted imports routed through `orchestrator/_pkg/<pkg>.ts`.
+  // The M3 cutover deleted that directory and `git ls-files` matches ZERO files
+  // under it, so the exemption suppressed nothing on any real tree — and its
+  // only remaining proof was a unit case classifying a SYNTHETIC path that
+  // cannot exist, which would have passed forever whatever the tree did
+  // (COMMON 15.140's shape). Retired by M4-library B2 because its subject is
+  // gone, not because the check got weaker: the rule name is unchanged and
+  // every real row it produces is unchanged.
+  if (LEGACY.test(from) && toPkg) return 'legacy-to-package-not-via-shim';
 
   // 4. the chain: a package imports only strictly lower ranks
   if (fromPkg && toPkg && fromPkg !== toPkg) {

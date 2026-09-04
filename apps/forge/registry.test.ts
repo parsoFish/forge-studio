@@ -12,25 +12,13 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import {
-  isStudioAgent,
-  isUnfilteredStudioAgent,
-  loadAgentDefinition,
-  serializeAgentDefinition,
-  listAgentDefinitions,
-  listPlainSkills,
-  loadFlowDefinition,
-  serializeFlowDefinition,
-  loadKbDescriptor,
-  serializeKbDescriptor,
-  resolveKbProcesses,
-  loadCatalog,
-  loadCommunityRegistry,
-  communitySkillsFromRegistry,
-  communityRegistryPath,
-  resolveCommunitySource,
-  discoverProjects,
-} from './registry.ts';
+import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, serializeAgentDefinition, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition, serializeFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { discoverProjects } from '@forge/kernel';
+import { loadKbDescriptor, serializeKbDescriptor, resolveKbProcesses } from '@forge/knowledge/studio/kb-descriptor.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadCommunityRegistry, communitySkillsFromRegistry, communityRegistryPath, resolveCommunitySource } from '@forge/library/studio/community-registry.ts';
+import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
 import type { KbBinding, KbDescriptor } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

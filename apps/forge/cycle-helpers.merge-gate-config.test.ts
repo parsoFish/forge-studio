@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { runMergeBoundaryGate } from '@forge/flows/cycle-helpers.ts';
 import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { runFlowT, type TestDeps, type FlowRunnerDeps } from './test-fixtures/flow-runner-port.ts';
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';

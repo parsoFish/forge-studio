@@ -49,7 +49,8 @@ import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
 import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { listStarterAgents, loadStarterFlow, listFlowIds } from '../../orchestrator/studio/registry.ts';
+import { listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects/routes.ts';
@@ -67,7 +68,7 @@ import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.t
 import { agentsRoutes } from '@forge/agents/routes.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
-import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
 import { validateAgent } from '../../orchestrator/studio/validate.ts';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,

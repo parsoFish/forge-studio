@@ -38,8 +38,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { loadCatalog } from './registry.ts';
-import { validateCatalog } from './validate.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { validateCatalog } from '../../orchestrator/studio/validate.ts';
 import { loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
 import type { Catalog } from '@forge/contracts/studio/types.ts';
