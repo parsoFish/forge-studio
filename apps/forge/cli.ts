@@ -40,11 +40,10 @@ import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
 const args = process.argv.slice(2);
 const cmd = args[0];
 
-// F-33: resolve all queue/log paths relative to the forge install root, NOT
-// the user's CWD. Without this, `forge status` / `forge review` from inside
-// `projects/<name>/` would look for `_queue/` under the project repo and
-// silently miss the real one. The forge root is the parent of `orchestrator/`
-// where this file sits.
+// F-33: resolve all queue/log paths relative to the forge install root, NOT the
+// user's CWD — otherwise `forge status` / `forge review` run from inside
+// `projects/<name>/` look for `_queue/` under the project repo and silently miss
+// the real one. Two levels up from `apps/forge/`, where this file sits.
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 // Capture the caller's CWD BEFORE chdir to FORGE_ROOT. `forge demo render` (run by
 // the developer-unifier agent from its worktree) resolves a relative demo dir against
@@ -793,11 +792,10 @@ async function cmdDemo(rest: string[]): Promise<void> {
     }
     const projectArg = flagValue(rest, '--project');
     // CONTAINMENT (SEC-07): an escaping `--project` must be refused BEFORE it is
-    // resolved into a repo path (a folded `resolve('projects', projectArg)` gives
-    // the guard nothing to vet — see cli/studio-path-guard.ts's CONTRACT). The
-    // untrusted value rides as a guarded SEGMENT under the config-derived
-    // projects root; an unsafe value is a usage error → exit 2 (consistent with
-    // the missing-initiativeId exit 2 above).
+    // resolved into a repo path — a folded `resolve('projects', projectArg)` gives
+    // the guard nothing to vet (packages/kernel/path-guard.ts's CONTRACT). The
+    // untrusted value rides as a guarded SEGMENT under the config-derived projects
+    // root; an unsafe value is a usage error → exit 2, as above.
     let projectRepoPath: string;
     if (projectArg) {
       const projectsRoot = resolveProjectsDir(resolve(FORGE_ROOT), loadConfig(defaultConfigPath(FORGE_ROOT)));
@@ -846,9 +844,11 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const r = renderDemoBundle(demoDir, projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
-      console.error(`forge demo capture: best-effort capture failed (${err instanceof Error ? err.message : String(err)}); demo.json left notes-only.`);
+      // bead forge-8vfn.17 — see apps/forge/demo-capture-fails-loud.test.ts.
+      console.error(`forge demo capture: FAILED — ${err instanceof Error ? err.message : String(err)}; demo.json is NOT stamped, so this run produced no evidence.`);
+      process.exit(1);
     }
-    return; // never a hard failure
+    return;
   }
 
   console.error('forge demo: usage: demo render <initiative-id> [--dir <demoDir>]');

@@ -57,3 +57,54 @@ export type TestResultRow = {
   result: 'pass' | 'fail' | 'skip';
   delta?: string;
 };
+
+/**
+ * The on-disk basename for a checkpoint's artifact.
+ *
+ * bead forge-8vfn.17 (the G1 gate failure, 2026-09-04). Checkpoint labels come
+ * from the initiative's `demo.json`, which an agent authors, and they used to be
+ * interpolated straight into a path. A label containing `/` crashed the capture
+ * with ENOENT — the parent directory does not exist — and, in a directory tree
+ * where it did, would have written the artifact OUTSIDE the capture directory.
+ *
+ * A SAFE LABEL IS RETURNED UNCHANGED, deliberately: every `demo.json` already on
+ * disk pairs its checkpoints with these filenames, and renaming them would break
+ * bundles this fix is not supposed to touch. Only a label that needs slugging is
+ * slugged — and then it carries a short digest of the ORIGINAL, so two labels
+ * that slug to the same stem keep distinct artifacts instead of one silently
+ * overwriting the other's evidence.
+ */
+const MAX_STEM = 120;
+
+export function checkpointArtifactStem(label: string): string {
+  // A safe label carries no separator, so the ONLY traversal-capable values left
+  // are the literal `.` and `..`. An earlier draft of this function also tested
+  // `label.split('.').includes('..')`; that can never be true (a dotted safe
+  // string splits into empty strings, never into `..`) and is exactly the
+  // decorative guard an adversarial pass is meant to find, so it is gone.
+  //
+  // MAX_STEM caps the safe branch too. Without it a 300-character label returned
+  // unchanged and the write failed with ENAMETOOLONG — the same class as the
+  // defect this function was written for, reached through a different errno.
+  // A capped label is slugged, which appends a digest, so it still cannot
+  // collide; `mergeCapturedMedia` pairs by stem, so the bundle still pairs.
+  const SAFE = /^[A-Za-z0-9._-]+$/;
+  const isSafe = SAFE.test(label) && label !== '.' && label !== '..' && label.length <= MAX_STEM;
+  if (isSafe) return label;
+  const stem = label
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/\.{2,}/g, '.')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, MAX_STEM);
+  // A digest of the original, so `a/b` and `a-b` never name the same file.
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (Math.imul(31, h) + label.charCodeAt(i)) | 0;
+  const digest = (h >>> 0).toString(36).slice(0, 6);
+  return `${stem || 'checkpoint'}-${digest}`;
+}
+
+/** `checkpointArtifactStem` plus the extension — what actually lands on disk. */
+export function checkpointArtifactName(label: string, ext: string): string {
+  return `${checkpointArtifactStem(label)}.${ext}`;
+}

@@ -28,7 +28,7 @@ import type {
   DemoApiDiffEntry,
   TestResultRow,
 } from './demo-types.ts';
-import { MAX_INLINE_IMAGE_BYTES } from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
@@ -415,9 +415,14 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
   const byLabel = new Map(captured.map((c) => [c.label, c]));
   const matchedLabels = new Set<string>();
   const checkpoints = model.checkpoints.map((cp) => {
-    const cap = byLabel.get(cp.label);
+    // `collectCapturedMedia` derives its label from the FILENAME, and a label that
+    // needed slugging (bead forge-8vfn.17) does not produce its own name. Recompute
+    // the stem so the checkpoint the operator declared gets its evidence, instead
+    // of showing nothing while a duplicate is appended under the slugged name.
+    const cap = byLabel.get(cp.label) ?? byLabel.get(checkpointArtifactStem(cp.label));
     if (!cap) return cp;
     matchedLabels.add(cp.label);
+    matchedLabels.add(cap.label);
     const hasImage = cap.beforeImage || cap.afterImage;
     return {
       ...cp,
