@@ -1,7 +1,7 @@
 /**
  * Per-project configuration loader. Implements CONTRACTS.md C1 + C2 + C26 +
  * C27 + C28: each managed project declares its quality gate, optional holistic
- * metrics, and optional parameter-sweep plug-in points in
+ * and the optional plug-in points in
  * `<project-root>/.forge/project.json`.
  *
  * The loader is **fail-closed** per council 04 F8 + plan 04 Open Q4: any
@@ -48,8 +48,6 @@ export { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
 export type { ReleaseStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';
 
 export type {
-  MetricsConfig,
-  SweepConfig,
   LoggingConfig,
   AcceptanceGateConfig,
   TestProcessLocal,
@@ -71,11 +69,9 @@ import {
   parseInstructions,
   parseKb,
   parseLogging,
-  parseMetrics,
   parseNorthStar,
   parseReleaseProcess,
   parseSkills,
-  parseSweep,
   parseTestProcess,
   optionalArgv,
 } from './project-config-validate.ts';
@@ -223,8 +219,6 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     'standing_work_item_acs',
   );
 
-  const metrics = parseMetrics(obj.metrics);
-  const sweep = parseSweep(obj.sweep);
   const logging = parseLogging(obj.logging);
 
   // M2 optional fields
@@ -247,8 +241,6 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(ci_gate_unset_env ? { ci_gate_unset_env } : {}),
     ...(standing_work_item_acs ? { standing_work_item_acs } : {}),
     ...(acceptance_gate ? { acceptance_gate } : {}),
-    ...(metrics ? { metrics } : {}),
-    ...(sweep ? { sweep } : {}),
     ...(logging ? { logging } : {}),
     ...(northStar !== undefined ? { northStar } : {}),
     ...(instructions !== undefined ? { instructions } : {}),

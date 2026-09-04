@@ -4,7 +4,7 @@
  * `project-config-validate.ts` parsers (`parseTestProcess`, `parseNorthStar`,
  * `parseInstructions`, `parseDemoProcess`, `parseSkills`, `parseKb`,
  * `parseArtifactRoot`, `parseReleaseProcess`, `parseBuildProcess`,
- * `parseMetrics`, `parseSweep`, `parseLogging`, `optionalArgv`) plus the
+ * `parseLogging`, `optionalArgv`) plus the
  * derived flat-accessor equality and the flat-gate-key migration rejection
  * that `validateProjectConfig` itself owns (see project-config.ts's header —
  * that function stays in the BARREL to avoid a circular import, but every

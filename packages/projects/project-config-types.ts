@@ -11,24 +11,6 @@
 
 import type { DemoStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';
 
-export type MetricsConfig = {
-  /** Argv-style command emitting one or more scalar metrics on stdout. */
-  command: string[];
-  /** Directory holding locked baseline markdown files. */
-  baselines_dir: string;
-  /** Allowable percentage drift before flagging regression. */
-  tolerance_pct: number;
-};
-
-export type SweepConfig = {
-  /** Argv-style command that brings the testbed up. */
-  start_command: string[];
-  /** Path (worktree-relative) to a module exporting a sample-draw function. */
-  draw_function: string;
-  /** Path (worktree-relative) to a module that parses `metrics.command` output. */
-  measurement_extractor: string;
-};
-
 /**
  * S7 / C13 — optional logging block. Currently surfaces
  * `heartbeat_seconds` so a project can tune the agent_heartbeat cadence
@@ -153,8 +135,6 @@ export type ProjectConfig = {
   standing_work_item_acs?: string[];
   /** @deprecated derived from `testProcess.acceptance` at load — never written to JSON. */
   acceptance_gate?: AcceptanceGateConfig;
-  metrics?: MetricsConfig;
-  sweep?: SweepConfig;
   logging?: LoggingConfig;
   /**
    * M2 Studio fields — all optional so existing project.json files without
