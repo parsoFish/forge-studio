@@ -27,6 +27,7 @@ import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
 import { realKbDrainFixTurn } from './brain-fix-turn.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
 import { libraryAgentFacts } from './library-agent-facts.ts';
+import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
 // these nine dependencies STRUCTURALLY rather than importing their real
@@ -146,7 +147,7 @@ const knowledgeSessionStatusIo: SessionStatusIoPort = {
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
     ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
-    ...libraryRoutes({ agentFacts: libraryAgentFacts }),
+    ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable }),
     ...projectsRoutes({
       seedBrain: seedProjectBrain,
       checkBrainSeedContainment: checkProjectBrainSeedContainment,

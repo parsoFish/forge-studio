@@ -35,18 +35,12 @@ import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { loadFlowDefinition, listFlowIds } from '../../orchestrator/studio/registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { communitySkillsFromRegistry } from '@forge/library/studio/community-registry.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
-import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
-import { listHookLibrary } from '@forge/library/studio/hook-library.ts';
-import { libraryAgentFacts } from './library-agent-facts.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
-import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
@@ -742,52 +736,6 @@ export async function handleStudioRoutes(
       const projects = loadProjectsWithMeta(ctx.forgeRoot, projectKbBindings);
       const attention = projects.map((p) => buildProjectAttention(p.id, p.name, ctx.forgeRoot, ctx.logsRoot));
       sendJson(res, 200, { attention }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- /api/studio/catalog ------------------------------------------------
-  if (url === '/api/studio/catalog') {
-    try {
-      const catalogPath = join(resolve(ctx.forgeRoot), 'studio', 'catalog.yaml');
-      if (!existsSync(catalogPath)) {
-        sendJson(res, 404, { error: 'catalog.yaml not found' }, origin);
-        return true;
-      }
-      const catalog = loadCatalog(catalogPath);
-      // Reconcile the static yaml `available` flag with the live adapter registry.
-      // An SDK is selectable iff a registered adapter reports available — this is
-      // the source of truth. When a real Codex/Gemini adapter is registered later,
-      // isSdkAvailable flips its flag to true automatically.
-      const reconciledSdks = catalog.sdks.map((sdk) => ({
-        ...sdk,
-        available: isSdkAvailable(sdk.id),
-      }));
-      // A1: surface the curated community skills as the agent-builder Skills
-      // library (the palette reads catalog.skills) so skills are draggable too.
-      // R3-01-F2: union in filesystem plain skills (SKILL.md, no runtime block)
-      // — e.g. one authored via `/skills/new` — so it appears in the palette on
-      // the next fetch with no bridge restart (known-gaps §4.11). Community
-      // entries win on an id collision (they carry provenance/stars metadata).
-      // W6-CR-1: community skills are declared in studio/community/registry.yaml,
-      // not catalog.yaml — tolerant of a missing registry (mirrors loadCatalog's
-      // own tolerance a few lines up: a MISSING file degrades gracefully, a
-      // MALFORMED one surfaces its real error rather than a silent []).
-      const community = communitySkillsFromRegistry(ctx.forgeRoot).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
-      const seen = new Set(community.map((s) => s.id));
-      const local = listPlainSkills(ctx.forgeRoot).filter((s) => !seen.has(s.id));
-      const skills = [...community, ...local];
-      // R3-03-F4: real library hooks (studio/hooks/<id>/) are filesystem-
-      // scanned, not catalog rows — union them into the palette the same way
-      // listPlainSkills is unioned into `skills` above, so the palette offers
-      // REAL hooks, never a fabricated catalog list. Only well-formed (ok:true)
-      // hooks are palette-visible — a malformed one has nothing safe to bind.
-      const hooks = listHookLibrary(ctx.forgeRoot, libraryAgentFacts)
-        .filter((h) => h.ok)
-        .map((h) => ({ id: h.id, name: h.name, desc: h.description }));
-      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills, hooks } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -66,6 +66,7 @@
  * `FORGE_DRY_BRIDGE=1`; the contract test asserts every entry carries one.
  */
 import type { AgentFacts } from './studio/agent-facts.ts';
+import { createCatalogHandler, CATALOG_URL, type SdkAvailabilityFn } from './bridge-studio-catalog.ts';
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
 
 import {
@@ -159,11 +160,24 @@ const pathOf = pathOnly;
 export type LibraryRouteDeps = {
   /** Agent facts, bound at `apps/forge` — library is rank 2 and agents rank 3. */
   readonly agentFacts: AgentFacts;
+  /** Live SDK availability, same reason: the adapter registry is agents'. */
+  readonly isSdkAvailable: SdkAvailabilityFn;
 };
 
 export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteContext> {
   const { agentFacts } = deps;
+  const handleCatalog = createCatalogHandler(deps);
   return [
+  // ---- bridge-studio-catalog.ts (1 route, the last to leave the bridge)
+  {
+    method: 'GET',
+    path: CATALOG_URL,
+    matches: (url) => pathOf(url) === CATALOG_URL,
+    // exempt-local BY CONSTRUCTION: reads on-disk catalog/registry/skill/hook
+    // state only — no spawn, no remote, no write.
+    dryClassification: 'exempt-local',
+    handler: handleCatalog,
+  },
   // ---- bridge-studio-skills.ts (7 routes, was :105 :122 :186 :273 :360 :420 :473)
   {
     method: 'GET',
