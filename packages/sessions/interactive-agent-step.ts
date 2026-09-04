@@ -26,14 +26,8 @@ import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
-import {
-  runAgentTurn,
-  guardedWriteSessionStatus,
-  statusWriteRefusalReason,
-  CANCELLED_PHASE,
-  type QueryFn,
-  type BashFenceMode,
-} from './interactive-session.ts';
+import { runAgentTurn, type QueryFn, type BashFenceMode } from './interactive-session.ts';
+import { guardedWriteSessionStatus, statusWriteRefusalReason, CANCELLED_PHASE } from './session-status-io.ts';
 
 /**
  * Named error type for this module (mirrors `interactive-finalizers.ts`'s

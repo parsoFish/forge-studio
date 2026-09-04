@@ -7,6 +7,7 @@
  * package's only writes to a KB's own directory, which is why the path guard
  * travels with them rather than staying in the base module.
  */
+import type { SessionStatusIoPort } from './kb-drain-model.ts';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -81,10 +82,14 @@ export type KbCreateDeps = {
   listFlowIds: (forgeRoot: string) => string[];
   /** `@forge/flows/flow-band-vocab.ts`'s `listFlowBandIds`. */
   listFlowBandIds: (forgeRoot: string, flowId: string) => string[];
+  /** The guarded session-status writer, as a port (ruling 99) — the create
+   *  route mints a project-brain seeding session and this package may not
+   *  import `@forge/sessions` to write its status. */
+  sessionStatusIo: SessionStatusIoPort;
 };
 
 export function createKbCreateHandler(deps: KbCreateDeps) {
-  const { listFlowIds, listFlowBandIds } = deps;
+  const { listFlowIds, listFlowBandIds, sessionStatusIo } = deps;
   return async function handleKbCreate(
   req: IncomingMessage,
   res: ServerResponse,
@@ -286,13 +291,12 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
       // status there (via the anchored `projectRoot`).
       const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const sessionProject = binding.kind === 'project' ? binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${id}`;
-      // The write itself lives in `bridge-studio-kbs.ts`, which already owns
-      // this package's coupling to `@forge/sessions` (approveKbCleanup reads
-      // and writes session status there). Keeping the create route's one
-      // session write in the same module means the KB surface has ONE edge to
-      // sessions rather than one per file that happens to need a session —
-      // the split must not multiply the package's boundary rows.
-      const sessionId = mintProjectBrainSeedingSession(projectsRoot, sessionProject, id, binding);
+      // The write itself lives in `bridge-studio-kbs.ts`. That module used to
+      // own this package's IMPORT of `@forge/sessions`; since ruling 99 there
+      // is no such import anywhere in the package — the guarded writer arrives
+      // as a port the assembly supplies, so the KB surface has ZERO edges to
+      // sessions rather than one shared one.
+      const sessionId = mintProjectBrainSeedingSession(projectsRoot, sessionProject, id, binding, sessionStatusIo.write);
 
       // W7-B2 (knowledge-23): `project` (the seeding session's anchor) rides
       // along so the create form can LINK the operator to the session it

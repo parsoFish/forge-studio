@@ -24,6 +24,7 @@
  * and after the request.
  */
 
+import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -178,6 +179,7 @@ after(async () => {
  * it was over HTTP.
  */
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

@@ -37,7 +37,7 @@ import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge/kb-job-stat
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
 
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 
 import {
   invalidGenerationProjectReason,

@@ -11,7 +11,8 @@ import {
   PROJECT_BRAIN_MODEL,
   type ProjectBrainStatus,
 } from '../../kinds/project-brain.ts';
-import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from '../../interactive-session.ts';
+import { REDACTED_THINKING_MARKER, type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 // COMMON §15.43: the legacy `orchestrator/studio/registry.ts` only
 // re-exports this — the real owner is `@forge/knowledge`, which sessions
 // (rank 4) may import directly, so the move costs no boundary row.

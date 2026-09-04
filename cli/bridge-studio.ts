@@ -143,10 +143,10 @@ export {
  *  no affordance without any table change.
  *
  *  W7-FIX-A2 (W7A2-01): the constant now LIVES at the status-write seam
- *  (`orchestrator/interactive-session.ts`), which enforces the sticky-cancel
+ *  (`packages/sessions/session-status-io.ts`), which enforces the sticky-cancel
  *  rule (`cancelledPhaseWins`) for every writer; re-exported here so the
  *  bridge modules keep their one import. */
-export { CANCELLED_PHASE } from '@forge/sessions/interactive-session.ts';
+export { CANCELLED_PHASE } from '@forge/sessions/session-status-io.ts';
 
 
 

@@ -41,7 +41,8 @@ import {
   instructionsSessionDir,
   type InstructionsStatus,
 } from '@forge/sessions/kinds/instructions.ts';
-import { writeSessionStatus, type QueryFn } from '@forge/sessions/interactive-session.ts';
+import { type QueryFn } from '@forge/sessions/interactive-session.ts';
+import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 
 /** Write `content` to a fresh tmpdir under `<name>` and return the file path.

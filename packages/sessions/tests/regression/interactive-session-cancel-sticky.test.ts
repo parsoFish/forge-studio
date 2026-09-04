@@ -41,15 +41,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  guardedWriteSessionStatus,
-  guardedReadSessionStatus,
-  writeSessionStatus,
-  readSessionStatus,
-  cancelledPhaseWins,
-  CANCELLED_PHASE,
-  type QueryFn,
-} from '../../interactive-session.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { guardedWriteSessionStatus, guardedReadSessionStatus, cancelledPhaseWins, CANCELLED_PHASE } from '../../session-status-io.ts';
+import { writeSessionStatus, readSessionStatus } from '../../interactive-session.ts';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { loadSessionKinds } from '../../studio/session-kinds.ts';
 import { createLogger } from '@forge/kernel';

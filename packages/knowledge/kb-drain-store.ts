@@ -10,12 +10,13 @@
  * were re-keyed from a real `--json` run. Every path is built from a
  * server-minted `runId` under the trusted `_logs` root.
  */
+import { requireSessionStatusIo } from './kb-drain-model.ts';
+import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
-import { guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
@@ -333,7 +334,12 @@ export function mintKbCleanupDraftSession(
   proseChanges: readonly KbEditChange[],
   runId: string,
   round: number,
+  /** Ruling 99: the guarded status writer arrives as a PORT this package
+   *  declares (`SessionStatusIoPort`), never as an import of `@forge/sessions`
+   *  — rank 2 may not reach rank 4. Absent, the mint refuses by name. */
+  guardedWriteSessionStatus?: GuardedWriteSessionStatusFn,
 ): { id: string; project: string } | null {
+  const write = requireSessionStatusIo(guardedWriteSessionStatus, 'mintKbCleanupDraftSession');
   try {
     // W8-F1 — FAIL CLOSED, in the second layer. The caller already filters out
     // everything the gate refused; this re-derives the same verdict rather
@@ -372,7 +378,7 @@ export function mintKbCleanupDraftSession(
     }
     if (draftApply.length === 0) return null;
 
-    const written = guardedWriteSessionStatus(projectsRoot, [project, '_kb-cleanup', sessionId], {
+    const written = write(projectsRoot, [project, '_kb-cleanup', sessionId], {
       session_id: sessionId,
       project,
       phase: 'awaiting-approval',

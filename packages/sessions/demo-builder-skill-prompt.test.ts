@@ -59,14 +59,11 @@ import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import {
-  runDemoBuilderTurn,
-  demoSessionDir,
-  demoTaskLines,
-  DEMO_SKILL_REL_PATH,
-  DEMO_HTML_REL_PATH,
-  type DemoBuilderStatus,
+  runDemoBuilderTurn, demoSessionDir, demoTaskLines,
+  DEMO_SKILL_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus,
 } from './kinds/demo-builder.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+import { type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';

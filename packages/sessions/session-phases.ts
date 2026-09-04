@@ -28,7 +28,7 @@
  *  `isTerminalPhase` consults the universal phase and the per-kind table below
  *  as one decision: a reader of session phase vocabulary should need one door,
  *  and the enforcement should stay where the writes are. */
-export { CANCELLED_PHASE } from './interactive-session.ts';
+export { CANCELLED_PHASE } from './session-status-io.ts';
 
 /** The per-kind terminal phases for the four kinds whose runners predate the
  *  ADR-043 phase table (architect, instructions, demo and project-brain —

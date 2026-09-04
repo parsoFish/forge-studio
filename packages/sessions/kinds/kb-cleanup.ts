@@ -5,7 +5,7 @@ import type { ServerResponse } from 'node:http';
 
 import { sendJson } from '@forge/kernel';
 import { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
-import { guardedWriteSessionStatus } from '../interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../session-status-io.ts';
 import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordance-shell.ts';
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,12 @@ export async function handleKbCleanupVerdict(
   // adversarial-review fix — this used to be duplicated, non-atomic
   // choreography here; W6-B9 deleted the last other caller, the bespoke
   // `/cleanup/apply` route).
-  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, { runFixTurn: ctx.runFixTurn });
+  // Ruling 99: knowledge declares the guarded status IO as a port and cannot
+  // import it; sessions owns those functions, so this kind supplies them.
+  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, {
+    runFixTurn: ctx.runFixTurn,
+    sessionStatusIo: { read: guardedReadSessionStatus, write: guardedWriteSessionStatus },
+  });
   if (!outcome.ok) {
     sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
     return;

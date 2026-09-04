@@ -29,11 +29,7 @@ import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 
 import { DRAFT_FILENAME, type InstructionsStatus } from './kinds/instructions.ts';
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';
-import {
-  guardedReadSessionStatus,
-  guardedWriteSessionStatus,
-  type InterviewQuestion,
-} from './interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus, type InterviewQuestion } from './session-status-io.ts';
 import { MAX_ANSWER_FIELD_BYTES } from './session-answer-limits.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import {

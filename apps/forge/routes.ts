@@ -70,6 +70,8 @@ import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
 import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
+import type { SessionStatusIoPort } from '@forge/knowledge/kb-drain-model.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 
 /**
@@ -125,9 +127,24 @@ export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath
 /** The assembled table's type, named so the host states it in one word. */
 export type AssembledRouteTable = RouteTable<RouteContext>;
 
+/**
+ * Knowledge's session-status port (M4 ruling 99), bound here because this is
+ * the assembly: `@forge/knowledge` is rank 2 and `@forge/sessions` is rank 4,
+ * so the package declares the shape and the app supplies the functions.
+ *
+ * The `SessionStatusIoPort` annotation is the drift check between the two
+ * sides — exactly as `KbDrainRunFixTurnFn` is for `realKbDrainFixTurn`. If
+ * either real function's signature moves, this line fails to compile rather
+ * than silently satisfying a port that no longer describes it.
+ */
+const knowledgeSessionStatusIo: SessionStatusIoPort = {
+  read: guardedReadSessionStatus,
+  write: guardedWriteSessionStatus,
+};
+
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
-    ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn }),
+    ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
     ...libraryRoutes,
     ...projectsRoutes({
       seedBrain: seedProjectBrain,
