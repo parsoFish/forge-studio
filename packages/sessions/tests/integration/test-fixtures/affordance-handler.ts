@@ -18,6 +18,9 @@ import { join } from 'node:path';
 
 import { dispatchRoute, type RouteContext } from '@forge/kernel';
 import { sessionsRoutes, type SessionsRouteDeps } from '../../../routes.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../../../session-status-io.ts';
+import { InteractiveFinalizerError } from '../../../interactive-finalizers.ts';
+import { loadSessionKinds } from '../../../studio/session-kinds.ts';
 
 /** A complete inert deps set. The three the affordance arms actually read are
  *  overridable: the spawn outcome, the per-kind broadcast, and the brain-fix
@@ -41,6 +44,20 @@ export function affordanceDeps(root: string, over: Partial<SessionsRouteDeps> = 
     servedFileHeaders: () => ({}),
     dryBridgeAgentTurnMarker: () => ({}),
     isContainedProjectRepoPath: () => true,
+  authoringSession: {
+    // The REAL guarded status IO: the authoring-finalize cases below drive it
+    // end to end, and an inert stub 404s them on a status the tree really has.
+    // The turn itself stays refused — no case here expects one dispatched.
+    readStatus: guardedReadSessionStatus,
+    writeStatus: guardedWriteSessionStatus,
+    runAuthoringTurn: async (input) => {
+      const descriptor = loadSessionKinds(input.forgeRoot).find((d) => d.id === 'authoring');
+      if (!descriptor) return null;
+      const { runInteractiveTurn } = await import('../../../interactive-runner.ts');
+      return runInteractiveTurn(descriptor, input);
+    },
+    isFinalizerError: (err) => err instanceof InteractiveFinalizerError,
+  },
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     ...over,
   };

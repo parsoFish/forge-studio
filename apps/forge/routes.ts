@@ -28,6 +28,7 @@ import { realKbDrainFixTurn } from './brain-fix-turn.ts';
 import { libraryRoutes } from '@forge/library/routes.ts';
 import { libraryAgentFacts } from './library-agent-facts.ts';
 import { libraryFlowSource } from './library-flow-source.ts';
+import { authoringSessionPort } from './library-authoring-session.ts';
 import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
@@ -101,7 +102,7 @@ export { dispatchRoute } from '@forge/kernel';
  * for `projectsRoutes`, so the host never names a symbol from a package above
  * the one it is wiring.
  */
-export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath' | 'runFixTurn'> & {
+export type RouteTableDeps = Omit<SessionsRouteDeps, 'isContainedProjectRepoPath' | 'runFixTurn' | 'authoringSession'> & {
   /** The bridge's OWN `ensureTailFor`/`stopTailFor` closures — the same pair
    *  that backs session and live-cycle tailing. The agent-run detail and start
    *  routes arm and release a tail on them; injecting rather than duplicating
@@ -149,7 +150,7 @@ const knowledgeSessionStatusIo: SessionStatusIoPort = {
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
     ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
-    ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource }),
+    ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource, authoringSession: authoringSessionPort }),
     ...projectsRoutes({
       seedBrain: seedProjectBrain,
       checkBrainSeedContainment: checkProjectBrainSeedContainment,
@@ -187,6 +188,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       releaseAgentRunTail: deps.releaseAgentRunTail,
     }),
     ...sessionsRoutes({
+      authoringSession: authoringSessionPort,
       parseManifest: parseManifestPort,
       ensureSessionTail: deps.ensureSessionTail,
       broadcastKindChanged: deps.broadcastKindChanged,

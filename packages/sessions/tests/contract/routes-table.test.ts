@@ -50,6 +50,12 @@ function stubDeps(over: Partial<SessionsRouteDeps> = {}): SessionsRouteDeps {
     servedFileHeaders: () => ({}),
     dryBridgeAgentTurnMarker: () => ({}),
     isContainedProjectRepoPath: () => true,
+  authoringSession: {
+    readStatus: () => null,
+    writeStatus: () => null,
+    runAuthoringTurn: async () => null,
+    isFinalizerError: () => false,
+  },
     ...over,
   };
 }
