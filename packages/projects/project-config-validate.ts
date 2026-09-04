@@ -39,8 +39,6 @@ import type {
 } from '@forge/contracts/studio/types.ts';
 import type {
   LoggingConfig,
-  MetricsConfig,
-  SweepConfig,
   TestProcess,
   TestProcessAcceptance,
   TestProcessCi,
@@ -295,54 +293,6 @@ export function parseLogging(raw: unknown): LoggingConfig | undefined {
   }
   if (heartbeat_seconds === undefined) return undefined;
   return { heartbeat_seconds };
-}
-
-export function parseMetrics(raw: unknown): MetricsConfig | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object') {
-    throw new Error('project-config: metrics must be an object when present');
-  }
-  const m = raw as Record<string, unknown>;
-  const command = optionalArgv(m.command, 'metrics.command');
-  if (!command) {
-    throw new Error('project-config: metrics.command is required when metrics block is present');
-  }
-  const baselines_dir = optionalString(m.baselines_dir, 'metrics.baselines_dir');
-  if (!baselines_dir) {
-    throw new Error('project-config: metrics.baselines_dir is required when metrics block is present');
-  }
-  const tolerance_pct =
-    typeof m.tolerance_pct === 'number' ? m.tolerance_pct : Number.NaN;
-  if (!Number.isFinite(tolerance_pct)) {
-    throw new Error('project-config: metrics.tolerance_pct must be a finite number');
-  }
-  return { command, baselines_dir, tolerance_pct };
-}
-
-export function parseSweep(raw: unknown): SweepConfig | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object') {
-    throw new Error('project-config: sweep must be an object when present');
-  }
-  const s = raw as Record<string, unknown>;
-  const start_command = optionalArgv(s.start_command, 'sweep.start_command');
-  if (!start_command) {
-    throw new Error('project-config: sweep.start_command is required when sweep block is present');
-  }
-  const draw_function = optionalString(s.draw_function, 'sweep.draw_function');
-  if (!draw_function) {
-    throw new Error('project-config: sweep.draw_function is required when sweep block is present');
-  }
-  const measurement_extractor = optionalString(
-    s.measurement_extractor,
-    'sweep.measurement_extractor',
-  );
-  if (!measurement_extractor) {
-    throw new Error(
-      'project-config: sweep.measurement_extractor is required when sweep block is present',
-    );
-  }
-  return { start_command, draw_function, measurement_extractor };
 }
 
 // empty string is allowed here; the business-level emptiness check lives in validateProject.

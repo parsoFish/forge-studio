@@ -110,6 +110,11 @@ export type DriftRow = {
   /** What the reset WOULD write. */
   after: unknown;
   action: DriftAction;
+  /** Why a `'preserve'` row is preserved — absent on every other action.
+   *  `'starter-silent'`: the matched starter declares nothing here (ruling 38
+   *  fix b). `'hand-authored'`: the value matches NO starter forge ships, so
+   *  it was never template-derived (bead `forge-8vfn.6.4`). */
+  reason?: 'starter-silent' | 'hand-authored';
 };
 
 export type SkillMove = {
@@ -315,8 +320,40 @@ function jsonEqual(a: unknown, b: unknown): boolean {
  */
 type RegenMode = 'unconditional' | 'fillOnly' | 'protected';
 
-function driftRow(section: ContractSection, current: unknown, starterValue: unknown, mode: RegenMode): DriftRow {
+function driftRow(
+  section: ContractSection,
+  current: unknown,
+  starterValue: unknown,
+  mode: RegenMode,
+  everyStarterValue: readonly unknown[] = [],
+): DriftRow {
   const proposed = mode === 'protected' ? current : mode === 'unconditional' ? starterValue : (starterValue !== undefined ? starterValue : current);
+
+  // BEAD forge-8vfn.6.4 — SECTION-LEVEL preservation. Ruling 38 fix (b) below
+  // asks "is the matched starter silent on this section?", which cannot reach
+  // a section the starter DOES declare. Measured on the real ground
+  // (`_1.0/evidence/M4-projects-s3-S3/reset-dryrun-typescript-cli.txt`): a Go
+  // provider's `go test -tags all -count=1 ./azuredevops/...` became
+  // `npm test`, and its hand-authored 3-step Go/ADO `demoProcess` became the
+  // 2-step npm one, because `typescript-cli` has an opinion on both.
+  //
+  // The question that discriminates is not "does it differ from the starter we
+  // are resetting TO" — every regeneration differs from that — but "does it
+  // match ANY starter forge ships". A value matching none was never
+  // template-derived, so it is the operator's and survives verbatim.
+  //
+  // The cost, stated: a value drifted from a starter that has since changed
+  // also matches none, and is preserved rather than refreshed. That is the
+  // trade the bead buys, and it is visible — the row is reported as
+  // `'hand-authored'`, never silently kept.
+  if (
+    mode === 'unconditional' &&
+    current !== undefined &&
+    everyStarterValue.length > 0 &&
+    !everyStarterValue.some((value) => jsonEqual(value, current))
+  ) {
+    return { section, before: current, after: current, action: 'preserve', reason: 'hand-authored' };
+  }
 
   // RULING 38 fix (b), M4-projects-reset — ROW-LEVEL INVARIANT: no row may
   // ever carry `action: 'regenerate'` with an `after` of `undefined` — that
@@ -331,7 +368,7 @@ function driftRow(section: ContractSection, current: unknown, starterValue: unkn
   // `'preserve'`, not `'unchanged'`, so a caller can tell "the starter agreed"
   // apart from "the starter was silent and this was protected".
   if (proposed === undefined && current !== undefined) {
-    return { section, before: current, after: current, action: 'preserve' };
+    return { section, before: current, after: current, action: 'preserve', reason: 'starter-silent' };
   }
 
   const after = proposed;
@@ -433,16 +470,26 @@ export function computeContractDrift(
   // runs against a starter-less forgeRoot).
   const mode = (m: RegenMode): RegenMode => (starter ? m : 'protected');
 
+  // Every starter forge ships, not only the matched one — bead 6.4's question
+  // ("does this value match ANY template?") is not answerable from one.
+  // `undefined`s are dropped: a starter that is silent on a section offers no
+  // basis to judge against, and an empty basis never claims hand-authored.
+  const everyStarter = listProjectStarters(forgeRoot)
+    .map((id) => loadStarterConfig(forgeRoot, id))
+    .filter((s): s is ProjectConfig => s !== null);
+  const across = (pick: (s: ProjectConfig) => unknown): unknown[] =>
+    everyStarter.map(pick).filter((value) => value !== undefined);
+
   const rows: DriftRow[] = [
-    driftRow('testProcess.local', config?.testProcess.local, starter?.testProcess.local, mode('unconditional')),
+    driftRow('testProcess.local', config?.testProcess.local, starter?.testProcess.local, mode('unconditional'), across((s) => s.testProcess.local)),
     driftRow('testProcess.ci', config?.testProcess.ci, starter?.testProcess.ci, mode('fillOnly')),
     // Secret NAMES carve-out (Q3): never sourced from a starter — no starter
     // declares `acceptance` at all, and even if one did, a template cannot
     // know which env vars THIS project's live-acceptance tier needs.
     driftRow('testProcess.acceptance', config?.testProcess.acceptance, undefined, 'protected'),
     driftRow('standing_work_item_acs', config?.standing_work_item_acs, starter?.standing_work_item_acs, mode('fillOnly')),
-    driftRow('demoProcess', config?.demoProcess, starter?.demoProcess, mode('unconditional')),
-    driftRow('releaseProcess', config?.releaseProcess, starter?.releaseProcess, mode('unconditional')),
+    driftRow('demoProcess', config?.demoProcess, starter?.demoProcess, mode('unconditional'), across((s) => s.demoProcess)),
+    driftRow('releaseProcess', config?.releaseProcess, starter?.releaseProcess, mode('unconditional'), across((s) => s.releaseProcess)),
     driftRow('buildProcess', config?.buildProcess, starter?.buildProcess, mode('fillOnly')),
   ];
 
@@ -633,7 +680,7 @@ function printDriftReport(drift: DriftReport): void {
   console.log('');
   console.log('drift report:');
   for (const row of drift.rows) {
-    console.log(`  [${row.action}] ${row.section}`);
+    console.log(`  [${row.action}] ${row.section}${row.reason === undefined ? '' : ` — ${row.reason === 'hand-authored' ? 'matches no starter; this is yours' : 'the matched starter declares nothing here'}`}`);
     if (row.action !== 'unchanged') {
       console.log(`      before: ${JSON.stringify(row.before)}`);
       console.log(`      after:  ${JSON.stringify(row.after)}`);

@@ -76,8 +76,6 @@ test('loadProjectConfig: happy path — minimal valid config', () => {
     const cfg = loadProjectConfig(root);
     assert.ok(cfg);
     assert.deepEqual(cfg.quality_gate_cmd, ['npm', 'test']);
-    assert.equal(cfg.metrics, undefined);
-    assert.equal(cfg.sweep, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -88,53 +86,6 @@ test('loadProjectConfig: throws when testProcess is missing', () => {
   try {
     writeConfig(root, JSON.stringify({}));
     assert.throws(() => loadProjectConfig(root), /missing required `testProcess`/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('loadProjectConfig: optional metrics block round-trips', () => {
-  const root = newTempDir();
-  try {
-    writeConfig(
-      root,
-      JSON.stringify({
-        testProcess: { local: { cmd: ['true'] } },
-        metrics: {
-          command: ['bash', '-lc', 'node bench.js'],
-          baselines_dir: 'docs/baselines/',
-          tolerance_pct: 1.5,
-        },
-      }),
-    );
-    const cfg = loadProjectConfig(root);
-    assert.ok(cfg?.metrics);
-    assert.deepEqual(cfg.metrics.command, ['bash', '-lc', 'node bench.js']);
-    assert.equal(cfg.metrics.baselines_dir, 'docs/baselines/');
-    assert.equal(cfg.metrics.tolerance_pct, 1.5);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('loadProjectConfig: optional sweep block round-trips', () => {
-  const root = newTempDir();
-  try {
-    writeConfig(
-      root,
-      JSON.stringify({
-        testProcess: { local: { cmd: ['go', 'test', './...'] } },
-        sweep: {
-          start_command: ['bash', '-lc', 'npm run preview'],
-          draw_function: 'src/sweep/draw.ts',
-          measurement_extractor: 'src/sweep/extract.ts',
-        },
-      }),
-    );
-    const cfg = loadProjectConfig(root);
-    assert.ok(cfg?.sweep);
-    assert.equal(cfg.sweep.draw_function, 'src/sweep/draw.ts');
-    assert.equal(cfg.sweep.measurement_extractor, 'src/sweep/extract.ts');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
