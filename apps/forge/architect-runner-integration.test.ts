@@ -38,8 +38,6 @@ import { join } from 'node:path';
 
 import {
   runArchitectTurn,
-  writeStatus,
-  readStatus,
   listArchitectSessions,
   readArchitectSessionStats,
   architectAgentSpec,
@@ -57,6 +55,30 @@ import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-por
  *  produces. That is why it keeps its `@forge/flows` row deliberately. */
 const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests };
 import { REDACTED_THINKING_MARKER } from '@forge/sessions/interactive-session.ts';
+
+// The architect's raw `readStatus`/`writeStatus` pair was deleted with the M4
+// exit door (ruling 129): it had no production caller and was the unguarded
+// `join(sessionDir, 'status.json')` shape that `guardedWriteStatus` (SEC-04)
+// exists to close. This fixture only PLANTS a status file, so it writes one
+// directly — behaviour identical to the deleted helper, `updated_at` stamp
+// included — rather than keeping a production symbol alive for tests.
+function writeStatus(sessionDir: string, status: ArchitectStatus): string {
+  mkdirSync(sessionDir, { recursive: true });
+  const p = join(sessionDir, 'status.json');
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
+function readStatus(sessionDir: string): ArchitectStatus | null {
+  const p = join(sessionDir, 'status.json');
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as ArchitectStatus;
+  } catch {
+    return null;
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // Fakes — async generators yielding SDK-shaped `result` messages.

@@ -39,7 +39,7 @@
 import { readResolvedDecisions, writeQuestions } from './architect-session.ts';
 import { runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
 import type { ArchitectStepArgs } from './architect-steps.ts';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
 import { archiveSessionDir, sessionPaths } from './architect-plan.ts';
@@ -56,35 +56,17 @@ import type { ArchitectStatus, RunArchitectTurnInput, RunArchitectTurnResult } f
 // ---- The kind's public door -----------------------------------------------
 // `kinds/architect.ts` is the module every consumer outside this directory
 // imports; the three-way split (M4 exit row 5, ruling 96) moved most of these
-// declarations into its leaves but must not move the door with them. Fifteen
+// declarations into its leaves but must not move the door with them. Thirteen
 // names are imported from here across the repo — re-exported, never re-declared,
 // so there is exactly one definition of each and this list cannot silently
-// diverge from it. `readStatus` and `writeStatus` are DECLARED here rather
-// than re-exported — see the note above them (ruling 114).
+// diverge from it. Every name here is RE-EXPORTED; this module declares no
+// session-dir file helper of its own. The raw `readStatus`/`writeStatus` pair
+// that used to be declared below was deleted with the M4 exit door — it was an
+// unguarded `join(sessionDir, 'status.json')` write with no production caller,
+// superseded by `guardedReadStatus`/`guardedWriteStatus` (SEC-04).
 export { ARCHITECT_MODEL, architectAgentSpec, guardedReadStatus, guardedWriteStatus, listArchitectSessions, readArchitectSessionStats } from './architect-session.ts';
 export type { ArchitectQuestion, ArchitectStatus, DraftInitiative } from './architect-session.ts';
 export { buildManifest } from './architect-manifest.ts';
-
-// ---------------------------------------------------------------------------
-// Session-dir file helpers
-// ---------------------------------------------------------------------------
-
-export function readStatus(sessionDir: string): ArchitectStatus | null {
-  const p = join(sessionDir, 'status.json');
-  if (!existsSync(p)) return null;
-  try {
-    return JSON.parse(readFileSync(p, 'utf8')) as ArchitectStatus;
-  } catch {
-    return null;
-  }
-}
-
-export function writeStatus(sessionDir: string, status: ArchitectStatus): string {
-  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-  const p = join(sessionDir, 'status.json');
-  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
-  return p;
-}
 export type { QueryFn };
 
 

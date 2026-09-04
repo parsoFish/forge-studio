@@ -100,7 +100,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runArchitectTurn, writeStatus, type ArchitectStatus } from '../../kinds/architect.ts';
+import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
 import {
   runDemoBuilderTurn,
@@ -114,6 +114,20 @@ import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+
+// The architect's raw `readStatus`/`writeStatus` pair was deleted with the M4
+// exit door (ruling 129): it had no production caller and was the unguarded
+// `join(sessionDir, 'status.json')` shape that `guardedWriteStatus` (SEC-04)
+// exists to close. This fixture only PLANTS a status file, so it writes one
+// directly — behaviour identical to the deleted helper, `updated_at` stamp
+// included — rather than keeping a production symbol alive for tests.
+function writeStatus(sessionDir: string, status: ArchitectStatus): string {
+  mkdirSync(sessionDir, { recursive: true });
+  const p = join(sessionDir, 'status.json');
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
 
 const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture');
 const FIXTURE_ARCHITECT = join(FIXTURES_DIR, 'interactive-architect.json');
