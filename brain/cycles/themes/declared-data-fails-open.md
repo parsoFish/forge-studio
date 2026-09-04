@@ -60,7 +60,7 @@ Named the campaign's recurring TOP finding and logged as a brain gap twelve time
 - [`packages/flows/flow-trigger.ts`](../../../packages/flows/flow-trigger.ts) — the trigger producer; carries `projects` onto the staged request since R2-08.
 - [`apps/studio/lib/studio-client.ts`](../../../apps/studio/lib/studio-client.ts) — `parseRun`, the last client hop where `trigger` and `reflectionLost` were dropped.
 - [`apps/studio/lib/agent-ledger.ts`](../../../apps/studio/lib/agent-ledger.ts) — the R6-06 row validator and `deriveAgentLedgerRows`.
-- [`packages/sessions/bridge-studio-sessions.ts`](../../../packages/sessions/bridge-studio-sessions.ts) — the documented session-dir guard its siblings did not call.
+- [`packages/sessions/session-resolution.ts`](../../../packages/sessions/session-resolution.ts) — the documented session-dir guard its siblings did not call; it lived in `bridge-studio-sessions.ts` when this theme was written and moved here with the M4-sessions row-5 split.
 - `_wave5/ledger.md` (gitignored campaign state) — all `L…` citations above; batch C is the region after `# ============ BATCH C ============`.
 
 ## See also

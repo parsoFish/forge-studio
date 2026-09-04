@@ -105,10 +105,7 @@ import type { SessionShellPayload, SessionShellFetchResult } from './session-cli
 // `isPseudoProjectAnchor` mirrors (imported directly, not re-typed/
 // re-declared, mirroring trigger-kind-parity.test.ts's precedent — inert at
 // module-load time, no I/O until a function is actually called).
-import {
-  isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor,
-  COMMUNITY_REFRESH_PROJECT_ANCHOR as SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR,
-} from '../../../packages/sessions/bridge-studio-sessions.ts';
+import { isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor, COMMUNITY_REFRESH_PROJECT_ANCHOR as SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR } from '../../../packages/sessions/session-resolution.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
