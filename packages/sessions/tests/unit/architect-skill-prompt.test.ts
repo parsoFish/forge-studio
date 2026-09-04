@@ -61,7 +61,20 @@ import { createLogger } from '@forge/kernel';
  *  was a `HERE/../..` chain until the M4 row-5 re-bucket moved this file two
  *  levels deeper; re-anchoring it on FORGE_ROOT removes the chain rather than
  *  re-counting it, which is what §15.14 asks for. */
-const ARCHITECT_RUNNER_TS = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect.ts');
+/** EVERY module the M4 exit-row-5 three-way split scattered the architect kind
+ *  across, read as ONE source. Two of the three tests below assert ABSENCE
+ *  ("this prose left the TS", "the fail-open fallback is deleted"), and an
+ *  absence assertion against a single file is satisfied for free the moment a
+ *  split moves the text into a sibling — the control would keep passing while
+ *  the thing it forbids sat one import away. Reading the whole set keeps both
+ *  the presence and the absence assertions meaning what they meant before. */
+const ARCHITECT_KIND_TS = [
+  join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect.ts'),
+  join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect-session.ts'),
+  join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect-steps.ts'),
+  join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'architect-manifest.ts'),
+];
+const readArchitectKindSrc = (): string => ARCHITECT_KIND_TS.map((f) => readFileSync(f, 'utf8')).join('\n');
 const ARCHITECT_SKILL_MD = join(FORGE_ROOT, 'skills', 'architect', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
@@ -164,7 +177,7 @@ function normalizeProse(text: string): string {
 }
 
 test('AT-1 (prose-left-the-TS): 5 distinctive instruction sentences — covering all 4 turns — are absent from kinds/architect.ts and present in SKILL.md', () => {
-  const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
+  const runnerSrc = readArchitectKindSrc();
   const skillMd = readFileSync(ARCHITECT_SKILL_MD, 'utf8');
   const normRunner = normalizeProse(runnerSrc);
   const normSkill = normalizeProse(skillMd);
@@ -205,7 +218,7 @@ test('AT-1 (prose-left-the-TS): 5 distinctive instruction sentences — covering
 // ---------------------------------------------------------------------------
 
 test('AT-2 (no-fail-open-remains): kinds/architect.ts deletes the "You are the forge architect." fallback and its private loadSkillPrompt', () => {
-  const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
+  const runnerSrc = readArchitectKindSrc();
   assert.ok(
     !runnerSrc.includes('You are the forge architect.'),
     'the fail-open fallback prompt string must be deleted — after this lane the task instructions live ' +
@@ -661,8 +674,8 @@ test('AT-9 (Round-2, Part A): frozen no-content-loss set — every distinct pre-
 // it per the design's untouched-region allowance. This content legitimately
 // STAYS in TypeScript (it is conditionally rendered from `edge-cases.json`,
 // not static instruction prose) — checked against the runner .ts, not SKILL.md.
-test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (renderExploreBlock) survives verbatim in kinds/architect.ts', () => {
-  const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
+test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (renderExploreBlock) survives verbatim in the architect kind modules', () => {
+  const runnerSrc = readArchitectKindSrc();
   const samples = [
     "Edge cases you enumerated — every one MUST land per its disposition:",
     'Brain-sourced constraints — shape the matching acceptance criteria and',
@@ -670,7 +683,7 @@ test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (r
   for (const s of samples) {
     assert.ok(
       runnerSrc.includes(s),
-      `untouched renderExploreBlock prose must still be present verbatim in architect-runner.ts: "${s}"`,
+      `untouched renderExploreBlock prose must still be present verbatim in the architect kind modules: "${s}"`,
     );
   }
 });
