@@ -129,8 +129,15 @@ test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', (
   // silently re-open the UI/server disagreement about a flowless manifest that
   // round 1's S3-8 closed — the UI would offer a confirmation to move an
   // initiative off a flow the server does not think it is on.
-  const src = readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'flows', 'run-model.ts'), 'utf8');
+  // The constant moved to `run-model-flow-graph.ts` when `run-model.ts` was
+  // split under the 800-line cap (M4-flows exit row 4): it is flow-graph
+  // vocabulary, not run vocabulary. RE-POINTED, never deleted — this pin is the
+  // only thing linking the client copy to the server's value.
+  const src = readFileSync(
+    resolve(__dirname, '..', '..', '..', 'packages', 'flows', 'run-model-flow-graph.ts'),
+    'utf8',
+  );
   const match = /const FALLBACK_FLOW_ID = '([^']+)'/.exec(src);
-  expect(match, 'FALLBACK_FLOW_ID must still be declared in orchestrator/run-model.ts').not.toBeNull();
+  expect(match, 'FALLBACK_FLOW_ID must still be declared in packages/flows/run-model-flow-graph.ts').not.toBeNull();
   expect(NO_FLOW_SENTINEL).toBe(match![1]);
 });
