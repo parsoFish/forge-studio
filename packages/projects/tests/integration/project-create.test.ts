@@ -31,6 +31,8 @@ import { discoverProjects } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */
+import { runPreflight } from '../../preflight.ts';
+
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pcreate-'));
   const startersDest = join(root, 'studio', 'starters', 'projects');
@@ -377,3 +379,35 @@ test('(RED) [SEC-03 round 4] an UNRELATED EACCES failure after seedProjectBrain 
   }
 });
 
+
+// ── Bead forge-8vfn.6.5, clause C1b (ruling 164) ─────────────────────────────
+//
+// S2 beat 5 reds `data-resolution-failing-count: expected "0", got "4"`. The
+// four were measured (`_1.0/stories/S2.md`, 2026-09-05): C1b, C6, DEMO-SKILL
+// and DEMO-ALIGN. C1b is the one a starter can answer from what it already
+// ships — every shipped starter has a `test` and a `build` script, so it can
+// declare the whole-module CI net that keeps a red baseline from shipping,
+// rather than leaving the merge decision on the per-WI gate alone.
+//
+// Stated, because it is a real tension: `preflight-resolve.ts` classifies C1b
+// `resolution: 'user'` — "the CI net + acceptance tier are operator-declared
+// gate policy". A starter default does not take that decision away (a project
+// may edit it), but it does answer it by template, which is what the
+// 2026-08-30 ruling asks templates to do.
+
+test('C1b: every shipped starter declares the CI net it already ships, so a created project is not left advisory', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    for (const appType of listProjectStarters(forgeRoot)) {
+      const out = scaffoldGreenfieldProject({
+        manifest: manifest({ appType, name: `c1b ${appType}` }),
+        forgeRoot,
+      });
+      const report = runPreflight(out.projectDir, { forgeRoot });
+      const c1b = report.clauses.find((c) => c.clause === 'C1b');
+      assert.equal(c1b?.pass, true, `${appType}: C1b did not pass — ${c1b?.detail}`);
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

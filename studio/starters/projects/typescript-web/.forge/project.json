@@ -6,7 +6,7 @@
     { "kind": "capture", "text": "Start the server and note the before state of the page." },
     { "kind": "verify", "text": "GET the page (e.g. /) and assert the HTML contains the expected heading." }
   ],
-  "testProcess": { "local": { "cmd": ["npm", "test"] } },
+  "testProcess": { "local": { "cmd": ["npm", "test"] }, "ci": { "cmd": ["npm", "run", "ci"] } },
   "skills": ["web-conventions"],
   "kb": "{{NAME}}"
 }

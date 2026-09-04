@@ -74,7 +74,8 @@ export type { ScaffoldResult } from './project-create.ts';
 export { ensureStudioBranch, commitStudioChange, withStudioWrite } from './project-repo-tx.ts';
 
 // --- the reset: `forge project reset` / studio "Rebuild contract" ---------
-export { cmdProjectReset, computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';
+export { computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';
+export { cmdProjectReset } from './reset-cli.ts';
 export type { ContractSection, DriftAction, DriftRow, SkillMove, DriftReport, ResetResult } from './reset.ts';
 
 // --- constraint blocks: bound-skill constraints, authored and applied -----

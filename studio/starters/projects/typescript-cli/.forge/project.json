@@ -6,7 +6,7 @@
     { "kind": "capture", "text": "Build the CLI (npm run build) and note the before state." },
     { "kind": "verify", "text": "Run npm run acceptance — the built binary vs a checked-in fixture." }
   ],
-  "testProcess": { "local": { "cmd": ["npm", "test"] } },
+  "testProcess": { "local": { "cmd": ["npm", "test"] }, "ci": { "cmd": ["npm", "run", "ci"] } },
   "skills": ["cli-conventions"],
   "kb": "{{NAME}}"
 }
