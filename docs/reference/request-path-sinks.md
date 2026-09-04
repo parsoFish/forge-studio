@@ -2043,17 +2043,19 @@ session-transcript.ts       realpathSync 6 -> 0     session-artifact-derivers.ts
 
 **Total sink CALLS are conserved exactly: 1,366 at merged main, 1,366 here** —
 the reading that matters (§15.73), because a "verbatim" move that quietly copies
-rather than moves shows up here and nowhere else. Reachable modules 303 → 307
-and `check-raw-fs-guarded`'s sweep 383 → 387: the four new modules in both, which
+rather than moves shows up here and nowhere else. Reachable modules 304 → 308
+and `check-raw-fs-guarded`'s sweep 384 → 388: the four new modules in both, which
 is the direction §15.85 asks for. `(file, sink)` rows are 604 on both sides; the
 full-model tier stays at 80 modules and the allowlisted residual at 93, unmoved.
 
-Both figures were measured on a disposable worktree at merged main and on this
-head, not carried from the branch's pre-rebase body: the numbers this section
-originally quoted (1,349 calls, 295 → 299 modules) were true at `b3f728c0` and
-were made stale by two sibling merges — flows' #359 and #363, which widened
-`listEntryModules`' seed. A conservation claim re-based rather than re-measured
-proves conservation against a tree that no longer exists (§15.88, §15.105).
+Every figure was measured on a disposable worktree at merged main and on this
+head, and measured TWICE — the first pass read 1,366 / 303 → 307 / 383 → 387
+against `79462612`, and flows' #365 landed between that pass and this one,
+moving merged main's own baseline. The branch's original numbers (1,349 calls,
+295 → 299 modules) were true at `b3f728c0` and were staled the same way by #359
+and #363. Three sibling merges, three re-measurements: a conservation claim
+re-based rather than re-measured proves conservation against a tree that no
+longer exists (§15.88, §15.105).
 
 The six `realpathSync` calls are `safeReadFileInSession`'s realpath-guarded
 choke point. It travelled with the derivers because eleven call sites in that
