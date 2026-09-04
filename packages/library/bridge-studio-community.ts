@@ -73,8 +73,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { isDryBridge, refuseDryBridge } from '../../apps/forge/dry-bridge.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, refuseDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import {
   hubCountsFrom,
