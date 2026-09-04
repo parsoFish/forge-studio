@@ -147,6 +147,8 @@
   "package-to-assembly|packages/flows/bridge-recovery.ts|apps/forge/bridge-studio.ts",
   "package-to-assembly|packages/flows/bridge-recovery.ts|apps/forge/dry-bridge.ts",
   "package-to-assembly|packages/flows/bridge-studio-runs-gate-id.test.ts|apps/forge/ui-bridge.ts",
+  "package-to-assembly|packages/flows/bridge-studio-runs-review.ts|apps/forge/bridge-studio.ts",
+  "package-to-assembly|packages/flows/bridge-studio-runs-review.ts|apps/forge/dry-bridge.ts",
   "package-to-assembly|packages/flows/bridge-studio-runs-verdict-containment.test.ts|apps/forge/ui-bridge.ts",
   "package-to-assembly|packages/flows/bridge-studio-runs.ts|apps/forge/bridge-studio.ts",
   "package-to-assembly|packages/flows/bridge-studio-runs.ts|apps/forge/dry-bridge.ts",

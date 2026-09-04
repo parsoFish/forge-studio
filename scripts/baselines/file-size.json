@@ -41,7 +41,6 @@
   "packages/factory/phases/project-manager.ts": 859,
   "packages/factory/phases/reflector.test.ts": 866,
   "packages/factory/phases/reflector.ts": 981,
-  "packages/flows/bridge-studio-runs.ts": 947,
   "packages/flows/manifest-path-fields.test.ts": 1029,
   "packages/flows/phases/wi-spec-compile.test.ts": 1059,
   "packages/flows/run-model-derive.ts": 988,
