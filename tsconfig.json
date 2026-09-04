@@ -21,7 +21,6 @@
   "include": [
     "orchestrator/**/*.ts",
     "cli/**/*.ts",
-    "loops/**/*.ts",
     "skills/**/*.ts",
     "packages/**/*.ts",
     "apps/forge/**/*.ts"

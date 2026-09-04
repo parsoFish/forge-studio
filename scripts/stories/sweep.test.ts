@@ -136,3 +136,54 @@ test('the sweep can never reach a REAL project, whatever a story is called', () 
     assert.ok(!paths.includes(`/root/brain/projects/${id}`));
   }
 });
+
+// ---------------------------------------------------------------------------
+// M5-B: two fixtures a story authors that the sweep did not own. Both measured
+// on this lane's own runs (2026-09-04, `_1.0/evidence/m5-b-S{2,4}-run1/`).
+// ---------------------------------------------------------------------------
+
+test('a story that saves a flow owns that flow file, and the sweep reaches it', () => {
+  // Measured on S4 run 1: the run left `studio/flows/story-s4/flow.yaml`, which
+  // no path in this list covered. A `/flows/new` save carries `create: true`,
+  // so the SECOND run of the same story 409s on the name and every beat after
+  // the save reds for a FIXTURE reason wearing a product failure's clothes —
+  // the `forge-8vfn.2.19` class through the flows door. Bead `forge-8vfn.2.26`.
+  const paths = fixturePathsFor('S4', '/root');
+  assert.ok(paths.includes('/root/studio/flows/story-s4'), paths.join(' | '));
+});
+
+test('the project fixture is swept under the id the PRODUCT mints, not the one the story declares', () => {
+  // Bead `forge-8vfn.2.21`, measured on S2 run 1: `create` slugs the typed name
+  // to lower case, so a story declared `S2` mints `projects/story-s2` while the
+  // sweep asked for `projects/story-S2`. On a case-sensitive filesystem those
+  // are different directories, so the sweep could NEVER own the ground it made
+  // and the next run reds at the create beat with "already exists".
+  const paths = fixturePathsFor('S2', '/root');
+  assert.ok(paths.includes('/root/projects/story-s2'), paths.join(' | '));
+  assert.ok(paths.includes('/root/brain/projects/story-s2'), paths.join(' | '));
+});
+
+test('the namespacing invariant holds for an UPPERCASE id too', () => {
+  // The safety property is unchanged by the case fix, only restated: every path
+  // still carries the owning story's id — case-insensitively, because the
+  // product lower-cases and the story does not.
+  for (const p of fixturePathsFor('S4', '/r')) assert.match(p.toLowerCase(), /s4/);
+});
+
+test('the sweep removes a saved flow left by a previous interrupted run', () => {
+  const root = scratch();
+  plant(join(root, 'studio', 'flows', 'story-s4', 'flow.yaml'));
+  const report = sweepStoryResidue('S4', root);
+  assert.equal(existsSync(join(root, 'studio', 'flows', 'story-s4')), false);
+  assert.ok(report.removed.some((p) => p.endsWith(join('studio', 'flows', 'story-s4'))));
+});
+
+test('the sweep can never reach a REAL flow, whatever a story is called', () => {
+  // The `story-` prefix guard, carried to the flows namespace: the two shipped
+  // starters (`develop`, `forge-architect`) and any flow the operator authored
+  // must be unreachable however a story is named.
+  for (const id of ['develop', 'forge-architect', 'gitpulse']) {
+    const paths = fixturePathsFor(id, '/root');
+    assert.ok(!paths.includes(`/root/studio/flows/${id}`), paths.join(' | '));
+  }
+});

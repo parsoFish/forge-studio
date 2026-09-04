@@ -18,8 +18,8 @@ import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
-import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '../../apps/forge/dry-bridge.ts';
-import { sendJson, allowedOrigin, sanitizeError, SAFE_ID_RE, readJson, pathOnly } from '../../apps/forge/bridge-studio.ts';
+import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, SAFE_ID_RE, pathOnly } from '@forge/kernel';
 
 import {
   applyReviewVerdict,
@@ -287,7 +287,7 @@ export async function handleStudioPostRoutes(
     try {
       let body: unknown;
       try {
-        body = await readJson(req);
+        body = await ctx.readBody();
       } catch {
         sendJson(res, 400, { error: 'invalid JSON body' }, origin);
         return true;
@@ -391,7 +391,7 @@ export async function handleStudioPostRoutes(
 
     let body: unknown;
     try {
-      body = await readJson(req);
+      body = await ctx.readBody();
     } catch {
       sendJson(res, 400, { error: 'invalid JSON body' }, origin);
       return true;

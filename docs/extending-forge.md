@@ -8,16 +8,16 @@ The RuntimeAdapter worked examples are the second implementations that shipped i
 
 ## 1. RuntimeAdapter — plug in a new LLM SDK or agentic coder
 
-**Interface:** `loops/_adapters/types.ts`
+**Interface:** `packages/agents/_adapters/types.ts`
 **Conformance suite:** `packages/agents/_adapters/conformance.ts`
 **Registry:** `packages/agents/_adapters/registry.ts`
 **Catalog:** `studio/catalog.yaml` (`sdks:` list)
-**Worked examples:** `packages/agents/_adapters/gemini/index.ts`, `loops/_adapters/aider/index.ts`
+**Worked examples:** `packages/agents/_adapters/gemini/index.ts`, `packages/agents/_adapters/aider/index.ts`
 
 ### The interface
 
 ```typescript
-// loops/_adapters/types.ts
+// packages/agents/_adapters/types.ts
 export type RuntimeAdapter = {
   id: string;           // sdk id registered in catalog.yaml
   available: boolean;   // dep + creds gate; false = registered but not selectable
@@ -30,7 +30,7 @@ export type RuntimeAdapter = {
 
 ### Step 1 — implement
 
-Create `loops/_adapters/<sdk>/index.ts`. The minimal shape:
+Create `packages/agents/_adapters/<sdk>/index.ts`. The minimal shape:
 
 ```typescript
 import type { RuntimeAdapter, AdapterAgentOptions, QueryFn } from '../types.ts';
@@ -90,7 +90,7 @@ The Claude adapter does this; the Gemini and Aider adapters follow the same patt
 
 ### Step 2 — run the conformance suite
 
-The conformance suite in `packages/agents/_adapters/conformance.ts` is the admission gate. Create `loops/_adapters/<sdk>/<sdk>.test.ts`:
+The conformance suite in `packages/agents/_adapters/conformance.ts` is the admission gate. Create `packages/agents/_adapters/<sdk>/<sdk>.test.ts`:
 
 ```typescript
 import { describe } from 'node:test';
@@ -106,7 +106,7 @@ describe('my-sdk adapter conformance', () => {
 
 The suite checks: `id` is a non-empty string, `available` is a boolean, `createAgent` returns a callable, and `query` returns an AsyncIterable that yields at least one message with a `result`-type terminal. All four must pass before registration.
 
-See `loops/_adapters/gemini/gemini.test.ts` and `aider/aider.test.ts` for complete examples including mock construction.
+See `packages/agents/_adapters/gemini/gemini.test.ts` and `aider/aider.test.ts` for complete examples including mock construction.
 
 ### Step 3 — register
 

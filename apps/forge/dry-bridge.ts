@@ -29,7 +29,6 @@
  * `createLogger` pattern rather than inventing a new logging path.
  */
 
-import { createLogger, type EventLogger, isDryBridge, DRY_BRIDGE_ENV, DRY_BRIDGE_LOG_BUCKET } from '@forge/kernel';
 
 // The env gate and the typed refusal moved to `@forge/kernel` (M4-knowledge
 // s5): five packages consumed them and could only reach them by importing
@@ -48,12 +47,6 @@ export {
 } from '@forge/kernel';
 import type { DryBridgeAction } from '@forge/kernel';
 
-/** The real-acting sub-steps a `stub-actions` route can individually skip in
- *  dry-bridge mode. The first three are `applyReviewVerdict`'s approve chain —
- *  exactly the actions that self-merged the PR on 2026-07-16. `agent-turn` is
- *  the spawn families' suppressed SDK-agent/runner turn (architect,
- *  instructions, project-brain, demo-builder, preflight-fix). */
-export type DryBridgeStubAction = 'release-finalize' | 'merge-pr' | 'finalize-after-merge' | 'agent-turn';
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
 
@@ -309,120 +302,3 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },
 ] as const;
-
-// ---------------------------------------------------------------------------
-// emitDryBridgeSkip — the stub-actions per-skip JSONL event (verdict-approve)
-// ---------------------------------------------------------------------------
-
-/**
- * Emit one JSONL event for a single skipped stub-action, into the SAME
- * cycle's events.jsonl the rest of that cycle's history lives in (the caller
- * already has a `createLogger`-derived logger for this cycle — reused here,
- * not re-derived). `extra` merges additional metadata (e.g. the route for
- * agent-turn skips, which log into the shared bucket). Never throws —
- * best-effort, matching its siblings (`emitDryBridgeRefusal`,
- * `dryBridgeAgentTurnMarker`): a logging failure must never fail the caller's
- * response (e.g. a verdict approve/merge already in flight).
- */
-export function emitDryBridgeSkip(
-  logger: EventLogger,
-  initiativeId: string,
-  action: DryBridgeStubAction,
-  extra: Record<string, unknown> = {},
-): void {
-  try {
-    logger.emit({
-      initiative_id: initiativeId,
-      phase: 'orchestrator',
-      skill: 'dry-bridge',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: 'dry-bridge.skip',
-      metadata: { action, ...extra },
-    });
-  } catch { /* best-effort — never break the caller on a logging failure */ }
-}
-
-// ---------------------------------------------------------------------------
-// dryBridgeAgentTurnMarker — the stub-actions marker for the spawn families
-// ---------------------------------------------------------------------------
-
-/**
- * bead forge-8nw — the ONE `dryBridgeAgentTurnMarker` caller (POST
- * `/api/agents/:slug/run`, `apps/forge/ui-bridge.ts`) whose 3rd argument is not a
- * session id at all but the STANDALONE dispatch's own `runId` (minted
- * `` `_agent-${slug}-${stamp}` ``, then handed to this function verbatim as
- * `sessionId`). `runId` doubles as the run's OWN `_logs/` directory NAME —
- * the exact string `deriveStandaloneRunState`/`GET /api/agents/runs/:runId`
- * (`apps/forge/ui-bridge.ts`) reads back. Every OTHER call site (architect/
- * instructions/demo-builder/project-brain/onboarding/authoring/kb-cleanup —
- * see this file's `BRIDGE_ROUTE_CLASSIFICATION` table) passes a session id
- * whose own terminal state lives in `status.json`
- * (`writeSessionTerminalPhase`, `packages/agents/agent-run.ts`), not in an
- * events.jsonl any standalone-run deriver ever reads — so only THIS route
- * gets the extra write below.
- */
-const STANDALONE_DISPATCH_ROUTE = '/api/agents/:slug/run';
-
-/**
- * For the spawn-route families (classification 'stub-actions', guard
- * 'spawn-helper'): when dry-bridge is active, emit one `dry-bridge.skip`
- * agent-turn event and return the `dryBridge` fragment to spread into the
- * route's 200 body. When inactive — including under
- * FORGE_ARCHITECT_NO_SPAWN-only, whose legacy silent-skip semantics stay
- * byte-identical — returns `{}` and emits nothing. Call exactly once per
- * response, only on branches that would have spawned.
- *
- * bead forge-8nw / forge-720 — beyond the shared-bucket skip event above,
- * a standalone dispatch (`STANDALONE_DISPATCH_ROUTE`) ALSO gets a terminal
- * marker written into ITS OWN `<logsRoot>/<runId>/events.jsonl` — the file
- * `deriveStandaloneRunState` (`apps/forge/ui-bridge.ts`) actually reads to derive
- * `GET /api/agents/runs/:runId`'s state. Without this, a dispatch under
- * dry-bridge wrote only into the shared `DRY_BRIDGE_LOG_BUCKET`, so its own
- * run directory never recorded a terminal fact and the run derived
- * `state: 'running'` FOREVER — the measured root cause of the zombie
- * `_agent-onboarding-agent-*` / `_agent-w7-throwaway-agent-*` directories
- * bead forge-720 found on disk. The message reuses the EXACT literal
- * `'run-agent.spawn-suppressed'` a REAL (non-dry-bridge) suppressed spawn
- * already writes into this same run's log (`orchestrator/run-agent.ts`,
- * its own `FORGE_DRY_BRIDGE_ENV`/`FORGE_ARCHITECT_NO_SPAWN_ENV` early
- * return) — no new marker vocabulary, exactly what
- * `deriveStandaloneStateFromEvents` (`apps/forge/ui-bridge.ts`) already checks via
- * `parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed')` to
- * derive `state: 'suppressed'`. `createLogger` appends (never truncates),
- * so this lands safely after the route's own t0 `agent-run.dispatched`
- * marker (`apps/forge/ui-bridge.ts`, written the instant `runId` is minted, before
- * this function is ever called).
- */
-export function dryBridgeAgentTurnMarker(
-  logsRoot: string,
-  route: string,
-  sessionId?: string,
-): { dryBridge?: { skipped: DryBridgeStubAction[] } } {
-  if (!isDryBridge()) return {};
-  try {
-    const logger = createLogger(DRY_BRIDGE_LOG_BUCKET, logsRoot);
-    emitDryBridgeSkip(logger, DRY_BRIDGE_LOG_BUCKET, 'agent-turn', {
-      route,
-      ...(sessionId ? { sessionId } : {}),
-    });
-  } catch { /* best-effort — never break the route response on a logging failure */ }
-
-  if (sessionId && route === STANDALONE_DISPATCH_ROUTE) {
-    try {
-      createLogger(sessionId, logsRoot).emit({
-        initiative_id: sessionId,
-        phase: 'orchestrator',
-        skill: 'dry-bridge',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'run-agent.spawn-suppressed',
-        metadata: { reason: DRY_BRIDGE_ENV, route },
-      });
-    } catch { /* best-effort — never break the route response on a logging failure */ }
-  }
-
-  return { dryBridge: { skipped: ['agent-turn'] } };
-}

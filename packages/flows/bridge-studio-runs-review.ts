@@ -23,7 +23,7 @@ import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
-import { isDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from '../../apps/forge/dry-bridge.ts';
+import { isDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from '@forge/kernel';
 
 /** Default per-WI iteration budget for compiled review-fix work items (was the
  *  unifier's default cap before R4-01-F4 retired that module). */
@@ -33,6 +33,10 @@ const REVIEW_FIX_DEFAULT_ITERATIONS = 15;
 // ---------------------------------------------------------------------------
 
 export type StudioPostContext = StudioContext & {
+  /** The RESULT of the host's body policy, never the policy itself — the closure
+   *  `kernel/route-entry.ts` declares as `RouteContext.readBody`, whose header
+   *  carries T1 ruling 30's reasoning. */
+  readBody: () => Promise<unknown>;
   queueRoot: string;
   projectsRoot: string;
   mergePr: (worktreePath: string) => boolean;

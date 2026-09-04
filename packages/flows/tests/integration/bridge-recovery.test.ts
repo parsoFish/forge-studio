@@ -87,7 +87,7 @@ test('recoveryInspect: a manifest with a preserved worktree reports its branch +
     execFileSync('git', ['-C', wt, 'commit', '-q', '-m', 'feat: the work']);
 
     seed(queueRoot, 'ready-for-review', ID, { worktree_path: wt, project_repo_path: repo });
-    const got = recoveryInspect(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') });
+    const got = recoveryInspect(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => ({}) });
     assert.equal(got.found, true);
     assert.equal(got.state, 'ready-for-review');
     assert.equal(got.branch, `forge/${ID}`);
@@ -99,7 +99,7 @@ test('recoveryInspect: a manifest with a preserved worktree reports its branch +
 test('recoveryInspect: an unknown initiative returns found:false', () => {
   withTmp((root, queueRoot) => {
     mkdirSync(join(queueRoot, 'pending'), { recursive: true });
-    assert.deepEqual(recoveryInspect('INIT-2026-06-21-nope', { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') }), {
+    assert.deepEqual(recoveryInspect('INIT-2026-06-21-nope', { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => ({}) }), {
       found: false, initiativeId: 'INIT-2026-06-21-nope',
     });
   });
@@ -108,7 +108,7 @@ test('recoveryInspect: an unknown initiative returns found:false', () => {
 test('recoveryAbandon: moves the manifest to failed/', () => {
   withTmp((root, queueRoot) => {
     seed(queueRoot, 'ready-for-review', ID, { project_repo_path: join(root, 'projects', 'gitpulse') });
-    const got = recoveryAbandon(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') });
+    const got = recoveryAbandon(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => ({}) });
     assert.equal(got.ok, true);
     assert.ok(existsSync(join(queueRoot, 'failed', `${ID}.md`)), 'manifest now in failed/');
     assert.ok(!existsSync(join(queueRoot, 'ready-for-review', `${ID}.md`)), 'removed from ready-for-review/');
@@ -118,7 +118,7 @@ test('recoveryAbandon: moves the manifest to failed/', () => {
 test('handleRecoveryRoutes: GET /api/recovery/<traversal> → 400 (id guard, no path escape)', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/recovery/..%2f..%2fetc'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') }, '/api/recovery/..%2f..%2fetc', 'GET');
+    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/recovery/..%2f..%2fetc'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => ({}) }, '/api/recovery/..%2f..%2fetc', 'GET');
     assert.equal(handled, true);
     assert.equal(captured.status, 400);
   });
@@ -127,7 +127,8 @@ test('handleRecoveryRoutes: GET /api/recovery/<traversal> → 400 (id guard, no 
 test('handleRecoveryRoutes: POST /api/initiatives with an invalid manifest → 400', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: 'not a manifest' }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') }, '/api/initiatives', 'POST');
+    const body = { manifest: 'not a manifest' };
+    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', body), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => body }, '/api/initiatives', 'POST');
     assert.equal(handled, true);
     assert.equal(captured.status, 400);
   });
@@ -136,17 +137,40 @@ test('handleRecoveryRoutes: POST /api/initiatives with an invalid manifest → 4
 test('handleRecoveryRoutes: POST /api/initiatives with a valid manifest → 201 + writes pending', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: manifestText(ID, { project_repo_path: join(root, 'projects', 'gitpulse') }) }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') }, '/api/initiatives', 'POST');
+    const body = { manifest: manifestText(ID, { project_repo_path: join(root, 'projects', 'gitpulse') }) };
+    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', body), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => body }, '/api/initiatives', 'POST');
     assert.equal(handled, true);
     assert.equal(captured.status, 201);
     assert.ok(existsSync(join(queueRoot, 'pending', `${ID}.md`)), 'manifest written to pending/');
   });
 });
 
+// M5-A (bead forge-8vfn.24): the arms take a PARSED body from `ctx.readBody()`
+// instead of calling the assembly's request reader themselves (T1 ruling 30).
+// The reader can still REJECT — an oversize or malformed body — and the arm must
+// answer 400, not propagate. Without the `.catch`, this test throws out of the
+// handler; with it, the response is the same 400 the direct `readJson(req)` path
+// produced. It is the reason the seam is safe to move, so it is asserted here.
+test('handleRecoveryRoutes: POST /api/initiatives when readBody() REJECTS → 400, never a throw', async () => {
+  await withTmpAsync(async (root, queueRoot) => {
+    const { res, captured } = mockRes();
+    const handled = await handleRecoveryRoutes(
+      mockReq('POST', '/api/initiatives'), res,
+      {
+        forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'),
+        readBody: async () => { throw new Error('request body too large'); },
+      },
+      '/api/initiatives', 'POST',
+    );
+    assert.equal(handled, true);
+    assert.equal(captured.status, 400);
+  });
+});
+
 test('handleRecoveryRoutes: an unrelated url returns false (not handled)', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/cycles'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects') }, '/api/cycles', 'GET');
+    const handled = await handleRecoveryRoutes(mockReq('GET', '/api/cycles'), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs'), projectsRoot: join(root, 'projects'), readBody: async () => ({}) }, '/api/cycles', 'GET');
     assert.equal(handled, false);
   });
 });
@@ -160,7 +184,7 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses recovery abandon/requeue with the typ
       const abandonRes = mockRes();
       const abandonHandled = await handleRecoveryRoutes(
         mockReq('POST', `/api/recovery/${ID}/abandon`), abandonRes.res,
-        { forgeRoot: root, queueRoot, logsRoot, projectsRoot: join(root, 'projects') }, `/api/recovery/${ID}/abandon`, 'POST',
+        { forgeRoot: root, queueRoot, logsRoot, projectsRoot: join(root, 'projects'), readBody: async () => ({}) }, `/api/recovery/${ID}/abandon`, 'POST',
       );
       assert.equal(abandonHandled, true);
       assert.equal(abandonRes.captured.status, 409);
@@ -171,7 +195,7 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses recovery abandon/requeue with the typ
       const requeueRes = mockRes();
       const requeueHandled = await handleRecoveryRoutes(
         mockReq('POST', `/api/recovery/${ID}/requeue`), requeueRes.res,
-        { forgeRoot: root, queueRoot, logsRoot, projectsRoot: join(root, 'projects') }, `/api/recovery/${ID}/requeue`, 'POST',
+        { forgeRoot: root, queueRoot, logsRoot, projectsRoot: join(root, 'projects'), readBody: async () => ({}) }, `/api/recovery/${ID}/requeue`, 'POST',
       );
       assert.equal(requeueHandled, true);
       assert.equal(requeueRes.captured.status, 409);
