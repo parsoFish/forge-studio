@@ -2007,8 +2007,28 @@ changed path and nothing else.
 |---|---|---|---|
 | `orchestrator/flow-runner.ts` | `packages/flows/flow-runner.ts` | `readFileSync` 1 | the runner is flows' runtime; `SPEC.md` §2 puts the Station engine in the package, and the move is what lets it stop importing `orchestrator/` |
 
-**The proof that this is a re-key and not growth is the guard's own totals: 605
-`(file, sink)` rows and 1,371 sink calls before, and 605 / 1,371 after.**
+**The proof that this is a re-key and not growth is the guard's own totals,
+re-derived from the checker on merged main (`node
+scripts/check-request-path-sinks.mjs` at `544f6621`): 604 `(file, sink)` rows
+and 1,366 sink calls, unchanged across the move.**
+
+> **Correction (M4-flows s2).** This paragraph first read "605 rows and 1,371
+> sink calls before, and 605 / 1,371 after". Both figures were wrong in the same
+> way — neither was measured on the tree the sentence describes. **605 is the
+> BASELINE FILE's line count** (`wc -l scripts/request-path-sinks.baseline.txt`),
+> not the row count: one of its lines,
+> `packages/sessions/kinds/architect-plan.ts existsSync 4`, matches nothing live
+> since sessions' #362 and is reported as tightenable, so the checker finds
+> **604** rows. **1,371** was measured during M4-flows PR 4 and carried forward
+> without re-deriving; the same #362 fix took the call total to **1,366**
+> (`existsSync 4 → 0`, `mkdirSync 2 → 1`). The conservation CLAIM was and is
+> true — the row changed path and nothing else — but the evidence quoted for it
+> came from two different trees. Both tightenable lines are another lane's slack
+> and are deliberately left un-harvested (bead `forge-8vfn.5.19`).
+>
+> Also recorded here so the next lane does not revert it: **#365 re-sorted
+> `scripts/request-path-sinks.baseline.txt` into `LC_ALL=C` order.** A re-sort
+> under a different locale is a whole-file diff that hides the real change.
 Accepted by hand-editing the single affected line, NOT by `--write`: bead
 `forge-8vfn.5.19` records that `--write` harvests unrelated baseline slack, and
 the tightenable line this produced (`orchestrator/flow-runner.ts readFileSync
