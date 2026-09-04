@@ -16,7 +16,7 @@
  * test. The list below is that measured surface, not a wish.
  *
  * WHAT IS DELIBERATELY NOT HERE. The phase executors themselves
- * (`orchestrator/phases/*`) are factory's, not flows'; this package declares
+ * (`packages/factory/phases/*`) are factory's, not flows'; this package declares
  * the PORT they satisfy and never names one. `InitiativeManifest` and its two
  * unions live in `@forge/contracts` (ruling 81) and are re-exported by
  * `manifest.ts` for its own callers — the manifest TYPE is shared vocabulary

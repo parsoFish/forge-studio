@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -260,6 +260,7 @@ test('runBandAgentStandalone: the review arm passes projectName from the manifes
 
 test('exit row 4 (STRUCTURAL): no file under packages/agents imports a factory phase or an orchestrator/ module', () => {
   const pkg = join(FORGE_ROOT, 'packages', 'agents');
+  const FACTORY_DIR = join(FORGE_ROOT, 'packages', 'factory');
   const offenders: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
@@ -269,7 +270,15 @@ test('exit row 4 (STRUCTURAL): no file under packages/agents imports a factory p
       const src = readFileSync(full, 'utf8');
       for (const m of src.matchAll(/from\s+'([^']+)'/g)) {
         const spec = m[1]!;
-        if (spec.includes('orchestrator/phases') || spec.startsWith('@forge/factory')) {
+        // Resolve before judging. A bare substring test misses the RELATIVE
+        // form — `'../factory/phases/reflector.ts'` from inside this package
+        // reaches the same file and contains neither `@forge/factory` nor
+        // `packages/factory`. Measured: a planted relative import passed a
+        // substring check and failed this one. (M5-A: the legacy
+        // `orchestrator/phases` disjunct this replaced went dead when those two
+        // modules moved into `packages/factory`.)
+        const target = spec.startsWith('.') ? resolve(dirname(full), spec) : spec;
+        if (target.startsWith(FACTORY_DIR) || target.startsWith('@forge/factory')) {
           offenders.push(`${full.slice(FORGE_ROOT.length + 1)} → ${spec}`);
         }
       }

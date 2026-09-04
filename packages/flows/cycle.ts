@@ -66,8 +66,7 @@ export {
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
 import { runFlow, flowPathForId } from './flow-runner.ts';
-import { createPhaseExecutor } from '../../orchestrator/phases/executor-table.ts';
-import { createProjectGate, defaultRunClosure } from '../../orchestrator/phases/executor-deps.ts';
+import type { PhaseWiring } from './phase-wiring.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 // S4: computeAdaptiveReviewIterationCap removed alongside the Ralph reviewer.
 // The unifier sub-phase owns iteration in dev-loop space; the review phase is
@@ -155,7 +154,7 @@ export function emitSyntheticArchitectEvents(
   });
 }
 
-export async function runCycle(input: CycleInput): Promise<CycleResult> {
+export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<CycleResult> {
   const started = Date.now();
   // ADR 026: keep one initiative on ONE cycleId for its whole life. Prefer an
   // explicitly threaded id (the review→unifier drain + the merge finalizer pass
@@ -246,7 +245,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       }
       const flow = loadFlowDefinition(flowPath);
       const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, executor: createPhaseExecutor(), projectGate: createProjectGate(), runClosure: defaultRunClosure });
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

@@ -1,7 +1,7 @@
 /**
  * Shared cycle context: the types + cross-runner helpers used by the
  * orchestration spine (`cycle.ts`) and every phase runner under
- * `orchestrator/phases/`.
+ * `packages/factory/phases/`.
  *
  * This module is dependency-free with respect to `cycle.ts` and the phase
  * runners: phase modules import from here, never from `cycle.ts`, and this

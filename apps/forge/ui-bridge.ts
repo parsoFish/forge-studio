@@ -107,6 +107,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
+import { factoryPhaseWiring } from './factory-wiring.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -228,7 +229,12 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
   const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const mergePrFn = opts.mergePr ?? mergePullRequest;
-  const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
+  // ADR 048: `packages/flows` declares the reflector port and imports no factory,
+  // so the assembly supplies it here — the same seam `factory-wiring.ts` owns.
+  const finalizeAfterMergeFn =
+    opts.finalizeAfterMerge ??
+    ((deps: { queueRoot: string; logsRoot: string }) =>
+      finalizeMergedReadyForReview({ ...deps, runReflector: factoryPhaseWiring().runReflector }));
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.

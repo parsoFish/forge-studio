@@ -31,6 +31,7 @@ import { parseManifest } from './manifest.ts';
 import { getPaths, moveTo, writeHeartbeat } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { runCycle } from './cycle.ts';
+import type { PhaseWiring } from './phase-wiring.ts';
 import { latestCycleId } from './finalize-merged.ts';
 import { createLogger } from '@forge/kernel';
 import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
@@ -76,12 +77,14 @@ export type FixLoopDrainDeps = {
    * terminal status. Injectable for tests; defaults to the real `runCycle`
    * with `resumeFrom: 'develop'` threading the persisted `cycle_id`.
    */
-  runDrainCycle?: (input: CycleInput) => Promise<{ status: string }>;
+  runDrainCycle?: (input: CycleInput, wiring: PhaseWiring) => Promise<{ status: string }>;
+  /** The installed factory's phase wiring (ADR 048) — threaded to `runCycle`, never imported. */
+  phaseWiring: PhaseWiring;
   notify?: (msg: string) => void;
 };
 
-async function defaultRunDrainCycle(input: CycleInput): Promise<{ status: string }> {
-  const result = await runCycle(input);
+async function defaultRunDrainCycle(input: CycleInput, wiring: PhaseWiring): Promise<{ status: string }> {
+  const result = await runCycle(input, wiring);
   return { status: result.status };
 }
 
@@ -97,7 +100,7 @@ function worktreeHeadSha(worktreePath: string): string | null {
 }
 
 export async function drainPendingFixWorkItems(
-  deps: FixLoopDrainDeps = {},
+  deps: FixLoopDrainDeps,
 ): Promise<FixLoopDrainResult[]> {
   const paths = getPaths(deps.queueRoot);
   const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve(FORGE_ROOT, '_logs');
@@ -250,7 +253,7 @@ export async function drainPendingFixWorkItems(
         resumeFrom: 'develop',
       };
       try {
-        const result = await runDrainCycle(input);
+        const result = await runDrainCycle(input, deps.phaseWiring);
         deps.notify?.(`${initiativeId} · fix loop ran ${pending.length} fix work-item(s) → ${result.status}`);
         // Round evidence for the verdict surface's stale-findings comparison:
         // the round that just completed + the branch tip it produced.

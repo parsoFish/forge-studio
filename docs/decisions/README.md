@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **047**).
+number (next free: **049**).
 
 ## Active
 
@@ -51,6 +51,7 @@ number (next free: **047**).
 | [044](./044-read-path-memoization.md) | Read-path memoization: mtime-keyed memos of the single derivation (memory-only, fail-open, byte-identical proof) | The wave-6 perf posture — the derived-never-stored corollary |
 | [045](./045-operator-workspace-and-promotion.md) | The operator workspace (`_local/`, provenance by root) and promotion into forge core (branch + PR, never a commit or a merge) | The ON-2 round-trip design — splits non-committed settings from promote-to-core; re-ratifies no-auto-commit |
 | [046](./046-package-layout-and-boundary-lint.md) | Nine packages + two apps, the §0 allow-graph enforced by dependency-cruiser as a shrinking ratchet, and three caps (per-package LOC, the 800-line file cap, one owner per file) | Supersedes ADR 042's `orchestrator/` surface cap — the cap needs an object smaller than a 136-file directory, and a machine that fails a PR |
+| [048](./048-deletable-example-factory.md) | The example factory is a deletable package: no package imports `@forge/factory`, the assembly reaches it through one resolution seam that treats absence as a supported state, and deletability is proven by a CI job rather than claimed | Amends ADR 038 — it made the Scope 1 / Scope 2 split a north star and enforced it nowhere; spec §7 clause 2 needs a machine |
 
 ## Retired / folded (numbers stay reserved)
 

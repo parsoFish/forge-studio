@@ -18,6 +18,7 @@
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows/scheduler.ts';
+import { factoryPhaseWiring } from './factory-wiring.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
 import { runStudioLint } from './studio-lint.ts';
@@ -195,7 +196,7 @@ function cmdInit(): void {
 async function cmdServe(rest: string[]): Promise<void> {
   const once = rest.includes('--once');
   console.log(once ? 'forge serve --once: claiming one initiative…' : 'forge serve: starting…');
-  await serve({ mode: once ? 'once' : 'forever' });
+  await serve({ mode: once ? 'once' : 'forever', phaseWiring: factoryPhaseWiring() });
   if (once) {
     // Once-mode is the showcase / debug entry point — surface the most
     // recent cycle's report path as a breadcrumb. The forever-mode

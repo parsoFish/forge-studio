@@ -303,8 +303,10 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/adversarial-review.ts | factory | verbatim | 393 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
-| orchestrator/phases/executor-deps.ts | factory | rewritten | 284 |
-| orchestrator/phases/executor-table.ts | factory | rewritten | 676 |
+| packages/factory/phases/executor-deps.ts | factory | rewritten | 284 |
+| packages/factory/phases/executor-table.ts | factory | rewritten | 676 |
+| packages/flows/phase-wiring.ts | flows | verbatim | 48 |
+| apps/forge/factory-wiring.ts | apps/forge | verbatim | 27 |
 | packages/factory/phases/decompose-completeness.ts | factory | verbatim | 197 |
 | packages/factory/phases/demo-agent-binding.ts | factory | verbatim | 214 |
 | packages/factory/phases/demo-agent.ts | factory | verbatim | 740 |
