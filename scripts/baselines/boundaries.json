@@ -29,7 +29,6 @@
   "assembly-to-legacy|apps/forge/test-fixtures/flow-runner-port.ts|orchestrator/phases/executor-deps.ts",
   "assembly-to-legacy|apps/forge/test-fixtures/flow-runner-port.ts|orchestrator/phases/executor-table.ts",
   "assembly-to-legacy|apps/forge/ui-bridge-agent-run-ceiling.test.ts|orchestrator/studio/registry.ts",
-  "legacy-to-package-not-via-shim|cli/bridge-studio.ts|packages/sessions/session-status-io.ts",
   "legacy-to-package-not-via-shim|orchestrator/phases/executor-deps.ts|packages/agents/skill-path.ts",
   "legacy-to-package-not-via-shim|orchestrator/phases/executor-deps.ts|packages/factory/phases/adversarial-review.ts",
   "legacy-to-package-not-via-shim|orchestrator/phases/executor-deps.ts|packages/factory/phases/demo-agent.ts",
