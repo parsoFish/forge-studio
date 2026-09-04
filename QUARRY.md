@@ -344,6 +344,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-create.ts | projects | verbatim | 364 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 201 |
 | packages/projects/reset.ts | projects | verbatim | 583 |
+| packages/projects/reset-cli.ts | projects | verbatim | 145 |
 | packages/flows/promote-manifests.ts | flows | verbatim | 76 |
 | packages/flows/queue.ts | flows | verbatim | 231 |
 | packages/factory/reflector-rerun.ts | factory | verbatim | 112 |
