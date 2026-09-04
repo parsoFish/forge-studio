@@ -46,7 +46,7 @@
  * `./skill-install.ts`.
  */
 
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import matter from 'gray-matter';
 
@@ -58,11 +58,11 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { guardedSkillMdPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
-import { isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { guardedSkillMdPath, listSkillDirs } from '../skill-path.ts';
+import type { AgentFacts } from './agent-facts.ts';
 import { communitySkillsFromRegistry } from './community-registry.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
-import type { AgentDefinition, CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 import type { Finding } from '@forge/kernel';
 import { extractProvenance, readSkillPackage, hashSkillPackage, type SkillProvenance } from './skill-package.ts';
 
@@ -141,48 +141,6 @@ function paletteVisibleFor(trust: SkillTrust, hasError: boolean): boolean {
   return trust === 'ready' && !hasError;
 }
 
-/**
- * Studio agents, tolerating a malformed one — mirrors listSkillLibrary's own
- * AT-7 resilience (a single bad sibling must not crash the whole scan).
- * registry.ts's `listAgentDefinitions` is NOT resilient (by design — its own
- * callers, e.g. apps/forge/studio-lint.ts's section 1, catch per-entry to produce a
- * Finding); the trust/usage/ref derivation here only needs the WELL-FORMED
- * agents, so a load failure is skipped rather than propagated — the failing
- * agent's own load error is already surfaced elsewhere as a lint Finding.
- */
-function listAgentDefinitionsResilient(skillsDirPath: string): AgentDefinition[] {
-  const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(skillsDirPath)) {
-    const mdPath = join(dir, 'SKILL.md');
-    if (!isStudioAgent(mdPath)) continue;
-    try {
-      defs.push(loadAgentDefinition(mdPath));
-    } catch {
-      /* malformed studio agent — already reported elsewhere; skip here */
-    }
-  }
-  return defs.sort((a, b) => a.slug.localeCompare(b.slug));
-}
-
-// ---------------------------------------------------------------------------
-// deriveSkillUsage — usedBy is derived from real agent specs ONLY (D3)
-// ---------------------------------------------------------------------------
-
-export function deriveSkillUsage(agents: readonly AgentDefinition[]): Map<string, string[]> {
-  const bySkill = new Map<string, Set<string>>();
-  for (const agent of agents) {
-    for (const skillId of new Set(agent.composition.skills)) {
-      if (!bySkill.has(skillId)) bySkill.set(skillId, new Set());
-      bySkill.get(skillId)!.add(agent.slug);
-    }
-  }
-  const out = new Map<string, string[]>();
-  for (const [skillId, slugs] of bySkill) {
-    out.set(skillId, [...slugs].sort((a, b) => a.localeCompare(b)));
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // skillTrustState — the single trust computation, reused by listSkillLibrary,
 // registry.ts's listPlainSkills palette filter, and the lint checks below.
@@ -257,10 +215,13 @@ export function skillTrustState(forgeRoot: string, id: string): SkillTrust {
 // listSkillLibrary — the union view (local plain skills ∪ catalog community)
 // ---------------------------------------------------------------------------
 
-export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
+export function listSkillLibrary(forgeRoot: string, facts: AgentFacts): SkillLibraryEntry[] {
   const catalog = loadCommunitySkillsSafely(forgeRoot);
-  const agents = listAgentDefinitionsResilient(skillsDir(forgeRoot));
-  const usage = deriveSkillUsage(agents);
+  // `usage`, not `compositions`: this is exactly the id → carriers map the
+  // private roster walk used to build here (rulings 13/73/127).
+  const index = facts.usage('skill', forgeRoot).byId;
+  const usage = new Map<string, string[]>();
+  for (const [id, slugs] of index) usage.set(id, [...slugs]);
 
   const byId = new Map<string, SkillLibraryEntry>();
 
@@ -273,7 +234,7 @@ export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
     // that pair, and either alone would leave the other's gap open.
     const mdPath = guardedSkillMdPath(id, forgeRoot);
     if (mdPath === null) continue; // not readable inside the library — never read through the link
-    if (isStudioAgent(mdPath)) continue; // studio agents are not skill-library entries (AT-5)
+    if (facts.isAgentSkillMd(mdPath)) continue; // studio agents are not skill-library entries (AT-5)
 
     let data: Record<string, unknown>;
     try {
@@ -400,9 +361,9 @@ function findInstalledAgentShapeViolations(forgeRoot: string): Finding[] {
  *  `skillTrustDetail`'s reason) + `skill-trust/draft-unapproved` (an agent
  *  composes a still-draft skill) + `skill-trust/installed-agent-shape` (D4
  *  roster-level escalation attempt). See the trust vocabulary table. */
-export function lintSkillTrust(forgeRoot: string): Finding[] {
+export function lintSkillTrust(forgeRoot: string, facts: AgentFacts): Finding[] {
   const findings: Finding[] = [...findInstalledAgentShapeViolations(forgeRoot)];
-  const entries = listSkillLibrary(forgeRoot);
+  const entries = listSkillLibrary(forgeRoot, facts);
   const draftIds = new Set(entries.filter((e) => e.trust === 'draft').map((e) => e.id));
 
   for (const entry of entries) {
@@ -437,7 +398,10 @@ export function lintSkillTrust(forgeRoot: string): Finding[] {
     }
   }
 
-  const agents = listAgentDefinitionsResilient(skillsDir(forgeRoot));
+  // `compositions`, not `usage`: these findings are one per agent per
+  // composition ENTRY, in slug order — the index is the inverse map with
+  // duplicates already collapsed.
+  const agents = facts.compositions(forgeRoot);
   for (const agent of agents) {
     for (const skillId of agent.composition.skills) {
       if (draftIds.has(skillId)) {
@@ -459,10 +423,10 @@ export function lintSkillTrust(forgeRoot: string): Finding[] {
  *  local skill directory (plain or agent-shaped) nor a catalog community entry.
  *  Uses the SAME id union listSkillLibrary is built from (allKnownSkillIds),
  *  not a second divergent copy of "what counts as resolvable". */
-export function lintSkillRefs(forgeRoot: string): Finding[] {
+export function lintSkillRefs(forgeRoot: string, facts: AgentFacts): Finding[] {
   const findings: Finding[] = [];
   const resolvable = allKnownSkillIds(forgeRoot);
-  const agents = listAgentDefinitionsResilient(skillsDir(forgeRoot));
+  const agents = facts.compositions(forgeRoot);
   for (const agent of agents) {
     for (const skillId of agent.composition.skills) {
       if (!resolvable.has(skillId)) {

@@ -10,6 +10,7 @@
  * mkdtempSync (no mocking of node:fs), mirroring registry.test.ts.
  */
 
+import { fixtureAgentFacts, writeFixtureAgent } from '../tests/test-fixtures/agent-fixture.ts';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -29,13 +30,11 @@ import yaml from 'js-yaml';
 import { communitySourceKey } from './community-source-url.ts';
 
 import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
-import { isStudioAgent, listAgentDefinitions } from '../../../orchestrator/studio/registry.ts';
 import { listPlainSkills } from './skill-registry.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
 
 import { MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES, EXECUTABLE_EXTENSIONS, readSkillPackage, hashSkillPackage, scanSkillPackage } from './skill-package.ts';
-import { listSkillLibrary, deriveSkillUsage, skillTrustState, lintSkillTrust, lintSkillRefs } from './skill-trust.ts';
+import { listSkillLibrary, skillTrustState, lintSkillTrust, lintSkillRefs } from './skill-trust.ts';
 import { installSkillPackage, SkillIdOccupiedError, approveSkillDraft, repinSkillPackage } from './skill-install.ts';
 
 // ---------------------------------------------------------------------------
@@ -135,23 +134,6 @@ function writeCatalogYaml(root: string, communitySkills: Array<Record<string, un
 }
 
 /** A minimal, valid studio-agent AgentDefinition fixture (no disk I/O). */
-function makeAgentDef(slug: string, composedSkills: string[]): AgentDefinition {
-  return {
-    slug,
-    name: slug,
-    description: `Agent ${slug}.`,
-    purpose: 'Test purpose.',
-    composition: { skills: composedSkills, tools: [], mcps: [], hooks: [], guards: [] },
-    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-    brainAccess: 'none',
-    interactivity: 'Fully autonomous.',
-    budgets: {},
-    allowedTools: [],
-    disallowedTools: [],
-    body: 'Body.',
-    path: `/unused/${slug}/SKILL.md`,
-  };
-}
 
 /** Read back the frontmatter data of a skill's SKILL.md. */
 function readFrontmatter(root: string, id: string): Record<string, unknown> {
@@ -205,7 +187,7 @@ function snapshotSkillsTree(root: string): string[] {
 }
 
 // ===========================================================================
-// Union + source discrimination — listSkillLibrary(forgeRoot)  (AT 1-7)
+// Union + source discrimination — listSkillLibrary(forgeRoot, fixtureAgentFacts(forgeRoot))  (AT 1-7)
 // ===========================================================================
 
 describe('listSkillLibrary — union + source discrimination', () => {
@@ -215,7 +197,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
     writeSkillMd(root, 'local-a', { name: 'Local A', description: 'a' });
     writeSkillMd(root, 'local-b', { name: 'Local B', description: 'b' });
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     const local = entries.filter((e) => e.source === 'local');
     assert.deepEqual(local.map((e) => e.id).sort(), ['local-a', 'local-b']);
   });
@@ -227,7 +209,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
       { id: 'security-review', name: 'Security Review', provenance: 'ToB', source: 'https://y', category: 'review' },
     ]);
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     const community = entries.filter((e) => e.source === 'community');
     assert.deepEqual(community.map((e) => e.id).sort(), ['handoff', 'security-review']);
   });
@@ -246,7 +228,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
     ]);
     writeSkillMd(root, 'handoff', { name: 'Handoff (local copy)', description: 'compress session' });
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     const matches = entries.filter((e) => e.id === 'handoff');
     assert.equal(matches.length, 1, 'must appear exactly once, not duplicated across sources');
     assert.equal(matches[0].source, 'local', 'filesystem wins on existence');
@@ -261,7 +243,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
       { id: 'ghost-skill', name: 'Ghost', provenance: 'nobody', source: 'https://z', category: 'meta' },
     ]);
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     const ghost = entries.find((e) => e.id === 'ghost-skill');
     assert.ok(ghost, 'catalog-only entry must appear');
     assert.equal(ghost!.installed, false);
@@ -278,7 +260,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
       { id: 'browse-only', name: 'Browse Only', provenance: 'someone', source: 'https://z', category: 'meta' },
     ]);
 
-    const entry = listSkillLibrary(root).find((e) => e.id === 'browse-only');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'browse-only');
     assert.ok(entry, 'the reference entry must still appear (browseable)');
     assert.equal(entry!.reference, true, 'no local bytes = a reference, stated as a real field');
     assert.equal(entry!.paletteVisible, false, 'nothing composable exists — it must never surface in the agent-builder palette');
@@ -291,7 +273,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
       { id: 'handoff', name: 'Handoff', provenance: 'obra/superpowers', source: 'https://x', category: 'memory' },
     ]);
     writeSkillMd(root, 'handoff', { name: 'Handoff (local copy)', description: 'compress session' });
-    const entry = listSkillLibrary(root).find((e) => e.id === 'handoff');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'handoff');
     assert.ok(entry);
     assert.notEqual(entry!.reference, true, 'an on-disk skill is never a browse-only reference');
   });
@@ -300,21 +282,11 @@ describe('listSkillLibrary — union + source discrimination', () => {
     const root = makeForgeRoot();
     writeCatalogYaml(root);
     writeSkillMd(root, 'plain-one', { name: 'Plain One', description: 'plain' });
-    writeSkillMd(root, 'studio-agent-one', {
-      name: 'Studio Agent',
-      description: 'an agent',
-      phase: 'tester',
-      purpose: 'test',
-      brainAccess: 'none',
-      interactivity: 'auto',
-      composition: { skills: [], tools: [], mcps: [], guards: [] },
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': [],
-      'disallowed-tools': [],
-      budgets: {},
-    });
+    // Declared through the fixture so the injected `AgentFacts` roster carries
+    // it — the same SKILL.md on disk, plus the record the port answers from.
+    writeFixtureAgent(root, 'studio-agent-one', {});
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     assert.ok(entries.some((e) => e.id === 'plain-one'));
     assert.ok(!entries.some((e) => e.id === 'studio-agent-one'), 'studio agents must be excluded from the skill library');
   });
@@ -326,7 +298,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
     writeSkillMd(root, 'alpha-skill', { name: 'Alpha', description: 'a' });
     writeSkillMd(root, 'mike-skill', { name: 'Mike', description: 'm' });
 
-    const ids = listSkillLibrary(root).map((e) => e.id);
+    const ids = listSkillLibrary(root, fixtureAgentFacts(root)).map((e) => e.id);
     assert.deepEqual(ids, [...ids].sort((a, b) => a.localeCompare(b)));
   });
 
@@ -340,7 +312,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
     writeFileSync(join(brokenDir, 'SKILL.md'), '---\nname: [unterminated\n---\nBody.\n', 'utf8');
 
     let entries: ReturnType<typeof listSkillLibrary> = [];
-    assert.doesNotThrow(() => { entries = listSkillLibrary(root); }, 'a single malformed skill must not throw the whole listing');
+    assert.doesNotThrow(() => { entries = listSkillLibrary(root, fixtureAgentFacts(root)); }, 'a single malformed skill must not throw the whole listing');
 
     assert.ok(entries.some((e) => e.id === 'clean-skill'), 'the clean skill must still be reported');
     const broken = entries.find((e) => e.id === 'broken-skill');
@@ -353,19 +325,28 @@ describe('listSkillLibrary — union + source discrimination', () => {
 // Used-by derivation — deriveSkillUsage(agents) / the usedBy field  (AT 8-10)
 // ===========================================================================
 
-describe('deriveSkillUsage — used-by derivation', () => {
+describe('usedBy — the injected index, plumbed through the listing', () => {
   it('AT-8: usedBy for brain-query contains exactly the composing agent slugs, sorted and deduped', () => {
-    const agents = [
-      makeAgentDef('architect', ['brain-query']),
-      makeAgentDef('project-manager', ['brain-query']),
-      // brain-query listed twice within one agent's own composition — must dedupe.
-      makeAgentDef('brain-ingest', ['brain-query', 'brain-query']),
-      makeAgentDef('reflector', ['brain-query']),
-      makeAgentDef('developer-ralph', ['tdd-workflow']),
-    ];
+    // Re-expressed end-to-end (M4-library s3): the derivation itself moved
+    // behind the `AgentFacts` port and is asserted against the REAL provider in
+    // `packages/agents/tests/unit/agent-usage.test.ts` ("slugs are sorted and
+    // de-duplicated within one agent"). What is library's to prove — and what
+    // this case now proves — is that the answer reaches the listing's `usedBy`
+    // unchanged. The fixture writes each agent AND records what it composes,
+    // including the deliberate duplicate.
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    writeSkillMd(root, 'brain-query', { name: 'Brain Query', description: 'x' });
+    writeFixtureAgent(root, 'architect', { skills: ['brain-query'] });
+    writeFixtureAgent(root, 'project-manager', { skills: ['brain-query'] });
+    // brain-query listed twice within one agent's own composition — must dedupe.
+    writeFixtureAgent(root, 'brain-ingest', { skills: ['brain-query', 'brain-query'] });
+    writeFixtureAgent(root, 'reflector', { skills: ['brain-query'] });
+    writeFixtureAgent(root, 'developer-ralph', { skills: ['tdd-workflow'] });
 
-    const usage = deriveSkillUsage(agents);
-    assert.deepEqual(usage.get('brain-query'), ['architect', 'brain-ingest', 'project-manager', 'reflector']);
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'brain-query');
+    assert.ok(entry);
+    assert.deepEqual(entry!.usedBy, ['architect', 'brain-ingest', 'project-manager', 'reflector']);
   });
 
   it('AT-9: a skill no agent composes has usedBy: [] (checked at the listSkillLibrary entry level)', () => {
@@ -373,7 +354,7 @@ describe('deriveSkillUsage — used-by derivation', () => {
     writeCatalogYaml(root);
     writeSkillMd(root, 'unused-skill', { name: 'Unused', description: 'nobody composes this' });
 
-    const entry = listSkillLibrary(root).find((e) => e.id === 'unused-skill');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'unused-skill');
     assert.ok(entry);
     assert.deepEqual(entry!.usedBy, []);
   });
@@ -395,7 +376,7 @@ describe('deriveSkillUsage — used-by derivation', () => {
     ]);
     // No skills/ dir with studio agents at all — usedBy must be empty regardless.
 
-    const entry = listSkillLibrary(root).find((e) => e.id === 'stale-composed');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'stale-composed');
     assert.ok(entry);
     assert.deepEqual(entry!.usedBy, [], 'a catalog composedBy claim must contribute nothing to usedBy');
     assert.ok(!('composedBy' in entry!), 'SkillLibraryEntry must never carry a composedBy field');
@@ -523,18 +504,6 @@ describe('installSkillPackage', () => {
     assert.equal(quarantined['library'], true, 'the SOURCE package library value is preserved verbatim in quarantine');
   });
 
-  it('AT-17: isStudioAgent() returns false for the installed draft (no runtime:)', () => {
-    const root = makeForgeRoot();
-    const packageDir = makePackageDir({
-      name: 'Vendored Agent',
-      description: 'x',
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-    });
-
-    installSkillPackage({ forgeRoot: root, id: 'not-an-agent', packageDir, upstream: { source: 'https://x' } });
-
-    assert.equal(isStudioAgent(skillPath('not-an-agent', root)), false);
-  });
 
   it('AT-18: upstream.ref supplied → provenance.upstreamRef; omitted → key ABSENT (no placeholder)', () => {
     const root = makeForgeRoot();
@@ -661,29 +630,6 @@ describe('installSkillPackage', () => {
     assert.equal(readFileSync(skillPath('occupied-id', root), 'utf8'), before, 'the unrelated local skill must stay byte-identical');
   });
 
-  it('AT-25: unbound on land — no agent definition composition.skills mentions the new id', () => {
-    const root = makeForgeRoot();
-    writeSkillMd(root, 'consumer-agent', {
-      name: 'Consumer Agent',
-      description: 'x',
-      phase: 'tester',
-      purpose: 'test',
-      brainAccess: 'none',
-      interactivity: 'auto',
-      composition: { skills: ['some-other-skill'], tools: [], mcps: [], guards: [] },
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': [],
-      'disallowed-tools': [],
-      budgets: {},
-    });
-
-    installSkillPackage({ forgeRoot: root, id: 'unbound-skill', packageDir: makePackageDir(), upstream: { source: 'https://x' } });
-
-    const agents = listAgentDefinitions(skillsDir(root));
-    for (const agent of agents) {
-      assert.ok(!agent.composition.skills.includes('unbound-skill'), `agent ${agent.slug} must not compose the freshly installed skill`);
-    }
-  });
 });
 
 // ===========================================================================
@@ -717,7 +663,7 @@ describe('palette exclusion (listPlainSkills / listSkillLibrary)', () => {
 
   it('AT-28: listSkillLibrary INCLUDES both with trust draft/needs-review and paletteVisible: false', () => {
     const root = makeDraftAndDriftRoot();
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
 
     const draft = entries.find((e) => e.id === 'draft-skill');
     assert.ok(draft, 'library must show the draft skill');
@@ -764,21 +710,6 @@ describe('approveSkillDraft', () => {
     assert.equal((after['provenance'] as Record<string, unknown>)['contentHash'], hashBefore);
   });
 
-  it('AT-30: does NOT restore runtime/allowed-tools — quarantined preserved verbatim, isStudioAgent stays false (D4)', () => {
-    const root = makeForgeRoot();
-    installDraft(root, 'approve-agent-shaped', {
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': ['Read'],
-    });
-    const quarantinedBefore = readFrontmatter(root, 'approve-agent-shaped')['quarantined'];
-
-    approveSkillDraft({ forgeRoot: root, id: 'approve-agent-shaped' });
-
-    const after = readFrontmatter(root, 'approve-agent-shaped');
-    assert.ok(!('runtime' in after), 'runtime must remain absent from top level after approval');
-    assert.deepEqual(after['quarantined'], quarantinedBefore, 'quarantined block preserved verbatim');
-    assert.equal(isStudioAgent(skillPath('approve-agent-shaped', root)), false);
-  });
 
   it('AT-31: approved skill becomes palette-visible', () => {
     const root = makeForgeRoot();
@@ -797,30 +728,6 @@ describe('approveSkillDraft', () => {
     assert.throws(() => approveSkillDraft({ forgeRoot: root, id: 'already-ready' }));
   });
 
-  it('AT-33: approval does not bind the skill to any agent (compositions unchanged)', () => {
-    const root = makeForgeRoot();
-    writeSkillMd(root, 'binding-check-agent', {
-      name: 'Binding Check Agent',
-      description: 'x',
-      phase: 'tester',
-      purpose: 'test',
-      brainAccess: 'none',
-      interactivity: 'auto',
-      composition: { skills: ['some-other-skill'], tools: [], mcps: [], guards: [] },
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': [],
-      'disallowed-tools': [],
-      budgets: {},
-    });
-    installDraft(root, 'approve-unbound');
-
-    approveSkillDraft({ forgeRoot: root, id: 'approve-unbound' });
-
-    const agents = listAgentDefinitions(skillsDir(root));
-    for (const agent of agents) {
-      assert.ok(!agent.composition.skills.includes('approve-unbound'));
-    }
-  });
 });
 
 // ===========================================================================
@@ -969,21 +876,11 @@ describe('lintSkillTrust / lintSkillRefs', () => {
   it('AT-43: an agent composing a draft skill → error skill-trust/draft-unapproved', () => {
     const root = makeForgeRoot();
     writeSkillMd(root, 'some-draft-skill', { name: 'Some Draft', description: 'd', status: 'draft' });
-    writeSkillMd(root, 'composer-agent', {
-      name: 'Composer Agent',
-      description: 'x',
-      phase: 'tester',
-      purpose: 'test',
-      brainAccess: 'none',
-      interactivity: 'auto',
-      composition: { skills: ['some-draft-skill'], tools: [], mcps: [], guards: [] },
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': [],
-      'disallowed-tools': [],
-      budgets: {},
-    });
+    // Declared through the fixture so the injected `AgentFacts` roster carries
+    // it — the same SKILL.md on disk, plus the record the port answers from.
+    writeFixtureAgent(root, 'composer-agent', { skills: ['some-draft-skill'] });
 
-    const findings = lintSkillTrust(root);
+    const findings = lintSkillTrust(root, fixtureAgentFacts(root));
     assert.ok(findings.some((f) => f.check === 'skill-trust/draft-unapproved' && f.level === 'error'));
   });
 
@@ -995,28 +892,18 @@ describe('lintSkillTrust / lintSkillRefs', () => {
       provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
     });
 
-    const findings = lintSkillTrust(root);
+    const findings = lintSkillTrust(root, fixtureAgentFacts(root));
     assert.ok(findings.some((f) => f.check === 'skill-trust/hash-drift' && f.level === 'error'));
   });
 
   it('AT-45: an agent composing an unresolvable skill id → error agent/skill-ref naming the agent + the id', () => {
     const root = makeForgeRoot();
     writeCatalogYaml(root);
-    writeSkillMd(root, 'dangling-ref-agent', {
-      name: 'Dangling Ref Agent',
-      description: 'x',
-      phase: 'tester',
-      purpose: 'test',
-      brainAccess: 'none',
-      interactivity: 'auto',
-      composition: { skills: ['totally-unknown-skill-id'], tools: [], mcps: [], guards: [] },
-      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
-      'allowed-tools': [],
-      'disallowed-tools': [],
-      budgets: {},
-    });
+    // Declared through the fixture so the injected `AgentFacts` roster carries
+    // it — the same SKILL.md on disk, plus the record the port answers from.
+    writeFixtureAgent(root, 'dangling-ref-agent', { skills: ['totally-unknown-skill-id'] });
 
-    const findings = lintSkillRefs(root);
+    const findings = lintSkillRefs(root, fixtureAgentFacts(root));
     const f = findings.find((x) => x.check === 'agent/skill-ref');
     assert.ok(f, 'expected an agent/skill-ref finding');
     assert.ok(f!.message.includes('dangling-ref-agent'), 'message must name the agent');
@@ -1024,8 +911,8 @@ describe('lintSkillTrust / lintSkillRefs', () => {
   });
 
   it('AT-46: the real shipped repo state passes both (guard against shipping a red lint)', () => {
-    const trustFindings = lintSkillTrust(REPO_ROOT).filter((f) => f.level === 'error');
-    const refFindings = lintSkillRefs(REPO_ROOT).filter((f) => f.level === 'error');
+    const trustFindings = lintSkillTrust(REPO_ROOT, fixtureAgentFacts(REPO_ROOT)).filter((f) => f.level === 'error');
+    const refFindings = lintSkillRefs(REPO_ROOT, fixtureAgentFacts(REPO_ROOT)).filter((f) => f.level === 'error');
     assert.deepEqual(trustFindings, [], `lintSkillTrust must be clean on the real repo: ${JSON.stringify(trustFindings)}`);
     assert.deepEqual(refFindings, [], `lintSkillRefs must be clean on the real repo: ${JSON.stringify(refFindings)}`);
   });
@@ -1224,14 +1111,14 @@ describe('install ledger — the second source of truth (studio/installed-skills
     writeFileSync(mdPath, matter.stringify('\nMALICIOUS INJECTED BODY\n', data), 'utf8');
 
     assert.equal(skillTrustState(root, 'victim-provenance-deleted'), 'needs-review');
-    const entry = listSkillLibrary(root).find((e) => e.id === 'victim-provenance-deleted');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'victim-provenance-deleted');
     assert.ok(entry);
     assert.equal(entry!.paletteVisible, false);
     assert.ok(
       !listPlainSkills(root).map((s) => s.id).includes('victim-provenance-deleted'),
       'must be excluded via the palette enumeration, not just a status field',
     );
-    const findings = lintSkillTrust(root);
+    const findings = lintSkillTrust(root, fixtureAgentFacts(root));
     assert.ok(findings.some((f) => f.check === 'skill-trust/provenance-tampered'));
   });
 
@@ -1248,11 +1135,11 @@ describe('install ledger — the second source of truth (studio/installed-skills
     writeFileSync(mdPath, matter.stringify('\n' + content.replace(/^\n+/, ''), data), 'utf8');
 
     assert.equal(skillTrustState(root, 'victim-hash-field-deleted'), 'needs-review');
-    const entry = listSkillLibrary(root).find((e) => e.id === 'victim-hash-field-deleted');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'victim-hash-field-deleted');
     assert.ok(entry);
     assert.equal(entry!.paletteVisible, false);
     assert.ok(!listPlainSkills(root).map((s) => s.id).includes('victim-hash-field-deleted'));
-    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/provenance-tampered'));
+    assert.ok(lintSkillTrust(root, fixtureAgentFacts(root)).some((f) => f.check === 'skill-trust/provenance-tampered'));
   });
 
   it('AT-75: TAMPER — contentHash present but altered to a different valid-looking sha: needs-review + provenance-tampered', () => {
@@ -1273,7 +1160,7 @@ describe('install ledger — the second source of truth (studio/installed-skills
     // so the specific, load-bearing assertion here is the FINDING CHECK ID —
     // the ledger cross-check must recognise this as tampering against its own
     // recorded pin, not merely as generic drift.
-    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/provenance-tampered'));
+    assert.ok(lintSkillTrust(root, fixtureAgentFacts(root)).some((f) => f.check === 'skill-trust/provenance-tampered'));
   });
 
   it('AT-76: UNREGISTERED — full, internally-consistent provenance block with NO matching ledger entry → needs-review + unregistered-install', () => {
@@ -1282,7 +1169,7 @@ describe('install ledger — the second source of truth (studio/installed-skills
     writeUnregisteredButConsistentSkill(root, 'unregistered-skill');
 
     assert.equal(skillTrustState(root, 'unregistered-skill'), 'needs-review');
-    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/unregistered-install'));
+    assert.ok(lintSkillTrust(root, fixtureAgentFacts(root)).some((f) => f.check === 'skill-trust/unregistered-install'));
   });
 
   it('AT-77: deleting the ledger ENTRY while on-disk provenance survives → needs-review (case 76, arrived at from the other direction)', () => {
@@ -1294,7 +1181,7 @@ describe('install ledger — the second source of truth (studio/installed-skills
     removeLedgerEntry(root, 'orphaned-ledger-entry');
 
     assert.equal(skillTrustState(root, 'orphaned-ledger-entry'), 'needs-review');
-    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/unregistered-install'));
+    assert.ok(lintSkillTrust(root, fixtureAgentFacts(root)).some((f) => f.check === 'skill-trust/unregistered-install'));
   });
 
   it('AT-78: a hand-authored skill (no provenance, no ledger entry) stays ready + palette-visible after arbitrary edits (AT-37 survives the ledger)', () => {
@@ -1308,7 +1195,7 @@ describe('install ledger — the second source of truth (studio/installed-skills
     writeSkillFile(root, 'hand-authored-with-ledger', 'notes.md', 'v2 — an arbitrary edit');
 
     assert.equal(skillTrustState(root, 'hand-authored-with-ledger'), 'ready');
-    const entry = listSkillLibrary(root).find((e) => e.id === 'hand-authored-with-ledger');
+    const entry = listSkillLibrary(root, fixtureAgentFacts(root)).find((e) => e.id === 'hand-authored-with-ledger');
     assert.ok(entry);
     assert.equal(entry!.paletteVisible, true);
     assert.ok(listPlainSkills(root).map((s) => s.id).includes('hand-authored-with-ledger'));
@@ -1321,13 +1208,13 @@ describe('install ledger — the second source of truth (studio/installed-skills
     writeSkillMd(root, 'fresh-checkout-skill-b', { name: 'B', description: 'hand-authored' });
     assert.equal(existsSync(join(root, 'studio', 'installed-skills.yaml')), false, 'sanity: no ledger file exists at all');
 
-    assert.doesNotThrow(() => listSkillLibrary(root));
-    assert.doesNotThrow(() => lintSkillTrust(root));
+    assert.doesNotThrow(() => listSkillLibrary(root, fixtureAgentFacts(root)));
+    assert.doesNotThrow(() => lintSkillTrust(root, fixtureAgentFacts(root)));
 
-    const entries = listSkillLibrary(root);
+    const entries = listSkillLibrary(root, fixtureAgentFacts(root));
     assert.equal(entries.find((e) => e.id === 'fresh-checkout-skill-a')!.trust, 'ready');
     assert.equal(entries.find((e) => e.id === 'fresh-checkout-skill-b')!.trust, 'ready');
-    assert.deepEqual(lintSkillTrust(root), []);
+    assert.deepEqual(lintSkillTrust(root, fixtureAgentFacts(root)), []);
   });
 
   it('AT-80: a malformed/unparseable studio/installed-skills.yaml FAILS LOUD — never silently treated as empty', () => {
@@ -1476,7 +1363,9 @@ describe('assertSkillSlug — length cap', () => {
   });
 });
 
-describe('isStudioAgent / listAgentDefinitions — an installed package is never an agent (D4)', () => {
+
+
+describe('installed-agent shape is a lint finding (D4)', () => {
   const FULL_AGENT_FRONTMATTER = {
     name: 'tester',
     description: 'A test agent.',
@@ -1491,33 +1380,6 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
     budgets: {},
   };
 
-  it('AT-85: a SKILL.md with BOTH a top-level runtime: AND a provenance: block → isStudioAgent is false AND listAgentDefinitions excludes it', () => {
-    const root = makeForgeRoot();
-    writeSkillMd(root, 'fake-installed-agent-provenance', {
-      ...FULL_AGENT_FRONTMATTER,
-      provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
-    });
-
-    assert.equal(isStudioAgent(skillPath('fake-installed-agent-provenance', root)), false);
-    const defs = listAgentDefinitions(skillsDir(root));
-    assert.ok(
-      !defs.some((d) => d.slug === 'fake-installed-agent-provenance'),
-      'must be excluded from the roster ENUMERATION, not merely fail the predicate in isolation',
-    );
-  });
-
-  it('AT-86: a SKILL.md with a quarantined: block PLUS a top-level runtime: → excluded from listAgentDefinitions', () => {
-    const root = makeForgeRoot();
-    writeSkillMd(root, 'fake-installed-agent-quarantined', {
-      ...FULL_AGENT_FRONTMATTER,
-      quarantined: { runtime: { sdk: 'claude', strategy: 'fixed' }, library: true },
-    });
-
-    assert.equal(isStudioAgent(skillPath('fake-installed-agent-quarantined', root)), false);
-    const defs = listAgentDefinitions(skillsDir(root));
-    assert.ok(!defs.some((d) => d.slug === 'fake-installed-agent-quarantined'));
-  });
-
   it('AT-87: lintSkillTrust reports skill-trust/installed-agent-shape for that skill, naming it', () => {
     const root = makeForgeRoot();
     writeCatalogYaml(root);
@@ -1526,45 +1388,10 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
       provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
     });
 
-    const findings = lintSkillTrust(root);
+    const findings = lintSkillTrust(root, fixtureAgentFacts(root));
     const f = findings.find((x) => x.check === 'skill-trust/installed-agent-shape');
     assert.ok(f, `expected a skill-trust/installed-agent-shape finding, got: ${JSON.stringify(findings)}`);
     assert.ok(f!.message.includes('fake-installed-agent-lint'), 'message must name the offending skill');
-  });
-
-  it('AT-88: REGRESSION GUARD — a normal shipped agent (no provenance, no quarantined) stays isStudioAgent + in listAgentDefinitions; the real repo roster count is pinned', () => {
-    const root = makeForgeRoot();
-    writeSkillMd(root, 'normal-agent', FULL_AGENT_FRONTMATTER);
-
-    assert.equal(isStudioAgent(skillPath('normal-agent', root)), true);
-    assert.ok(listAgentDefinitions(skillsDir(root)).some((d) => d.slug === 'normal-agent'));
-
-    // Pinned against the REAL repo (captured 2026-08-04 against commit
-    // 23f414fe: `listAgentDefinitions(skillsDir())` → 10 agents; bumped to 11
-    // for R4-18's `contract-check` def. W6-CR-3 briefly bumped it to 12 for
-    // its `community-refresh` def (the first interactive session-kind agent
-    // to declare `library: true`); W8-B5b retired that whole kind — SKILL.md
-    // included — so the count reverts to 11) so the fix cannot quietly
-    // delete agents from the roster while closing the hole.
-    const REAL_AGENT_COUNT = 11;
-    assert.equal(
-      listAgentDefinitions(skillsDir(REPO_ROOT)).length,
-      REAL_AGENT_COUNT,
-      'the real shipped agent roster count must not change from closing this hole',
-    );
-  });
-});
-
-describe('SLUG_RE relocation regression guard', () => {
-  // Survived two relocations; now asserts IDENTITY, which equal `.source` did not.
-  it('AT-89: SLUG_RE reaches validate.ts as the SAME object kernel defines — one definition, not two with matching sources', async () => {
-    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
-    const validateModule = (await import('../../../orchestrator/studio/validate.ts')) as Record<string, unknown>;
-
-    const fromKernel = idsModule['SLUG_RE'] as RegExp | undefined;
-    const fromValidate = validateModule['SLUG_RE'] as RegExp;
-
-    assert.equal(fromKernel, fromValidate, '@forge/kernel/ids.ts must define SLUG_RE and validate.ts must RE-EXPORT that object — not a second regex with a matching source');
   });
 });
 

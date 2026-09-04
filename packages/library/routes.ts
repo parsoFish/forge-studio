@@ -65,6 +65,7 @@
  * that lost its classification would be a route that acts for real under
  * `FORGE_DRY_BRIDGE=1`; the contract test asserts every entry carries one.
  */
+import type { AgentFacts } from './studio/agent-facts.ts';
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
 
 import {
@@ -150,7 +151,19 @@ const pathOf = pathOnly;
  * disjointness invariant holds — it is preserved because reproducing the
  * pre-carve sequence is what makes this a move rather than a redesign.
  */
-export const libraryRoutes: RouteTable<LibraryRouteContext> = [
+/**
+ * What the host supplies that this package may not import (rulings 13/59/73).
+ * Built PER BRIDGE INSTANCE — there is no module-level holder, because two
+ * bridges in one process must not share one.
+ */
+export type LibraryRouteDeps = {
+  /** Agent facts, bound at `apps/forge` — library is rank 2 and agents rank 3. */
+  readonly agentFacts: AgentFacts;
+};
+
+export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteContext> {
+  const { agentFacts } = deps;
+  return [
   // ---- bridge-studio-skills.ts (7 routes, was :105 :122 :186 :273 :360 :420 :473)
   {
     method: 'GET',
@@ -158,7 +171,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => pathOf(url) === '/api/studio/skills',
     // exempt-local BY CONSTRUCTION: lists the on-disk skill library.
     dryClassification: 'exempt-local',
-    handler: handleSkillsList,
+    handler: (req, res, ctx, url, method) => handleSkillsList(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'POST',
@@ -186,14 +199,14 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     path: '/api/studio/skills/:id',
     matches: (url) => SKILL_ID_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:252, verbatim
-    handler: handleSkillUpdate,
+    handler: (req, res, ctx, url, method) => handleSkillUpdate(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'DELETE',
     path: '/api/studio/skills/:id',
     matches: (url) => SKILL_ID_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:253, verbatim
-    handler: handleSkillDelete,
+    handler: (req, res, ctx, url, method) => handleSkillDelete(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'GET',
@@ -201,7 +214,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => SKILL_ID_RE.test(pathOf(url)),
     // exempt-local BY CONSTRUCTION: reads one on-disk SKILL.md.
     dryClassification: 'exempt-local',
-    handler: handleSkillDetail,
+    handler: (req, res, ctx, url, method) => handleSkillDetail(req, res, ctx, url, method, agentFacts),
   },
 
   // ---- bridge-studio-hooks.ts (8 routes, was :275 :286 :389 :430 :475 :500 :595 :630)
@@ -212,7 +225,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => pathOf(url) === '/api/studio/hooks',
     // exempt-local BY CONSTRUCTION: lists on-disk hook packages + the ledger.
     dryClassification: 'exempt-local',
-    handler: handleHooksList,
+    handler: (req, res, ctx, url, method) => handleHooksList(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'POST',
@@ -261,7 +274,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     path: '/api/studio/hooks/:id',
     matches: (url) => HOOK_ID_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:255, verbatim
-    handler: handleHookDelete,
+    handler: (req, res, ctx, url, method) => handleHookDelete(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'GET',
@@ -269,7 +282,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => HOOK_ID_RE.test(pathOf(url)),
     // exempt-local BY CONSTRUCTION: reads one on-disk hook package.
     dryClassification: 'exempt-local',
-    handler: handleHookDetail,
+    handler: (req, res, ctx, url, method) => handleHookDetail(req, res, ctx, url, method, agentFacts),
   },
 
   // ---- bridge-studio-authoring.ts (1 route, was :471-474)
@@ -350,7 +363,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => pathOf(url) === '/api/studio/connections',
     // exempt-local BY CONSTRUCTION: lists the on-disk connection catalog.
     dryClassification: 'exempt-local',
-    handler: handleConnectionsList,
+    handler: (req, res, ctx, url, method) => handleConnectionsList(req, res, ctx, url, method, agentFacts),
   },
   {
     method: 'POST',
@@ -374,7 +387,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     matches: (url) => CONNECTION_DETAIL_RE.test(pathOf(url)),
     // exempt-local BY CONSTRUCTION: reads one on-disk connection definition.
     dryClassification: 'exempt-local',
-    handler: handleConnectionsDetail,
+    handler: (req, res, ctx, url, method) => handleConnectionsDetail(req, res, ctx, url, method, agentFacts),
   },
 
   // ---- bridge-studio-community.ts (5 routes, was :406 :440 :469 :533 :539)
@@ -445,4 +458,5 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:306, verbatim
     handler: handleCommunityRegistryItemDelete,
   },
-];
+  ];
+}

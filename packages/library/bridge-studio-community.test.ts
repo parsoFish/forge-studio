@@ -95,7 +95,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import { startBridge } from '../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts';
 import { skillPath } from './skill-path.ts';
 import { listSkillLibrary, skillTrustState } from './studio/skill-trust.ts';
 import { hookYamlPath } from './studio/hook-library.ts';
@@ -609,7 +609,7 @@ test('HEADLINE AC (skill): driving the community install route leaves the skill 
     'D4: exactly the three quarantined keys — a community install can never grant a runtime or its own tool permissions',
   );
 
-  const paletteVisibleIds = listSkillLibrary(forgeRoot).filter((e) => e.paletteVisible).map((e) => e.id);
+  const paletteVisibleIds = listSkillLibrary(forgeRoot, fixtureAgentFacts(forgeRoot)).filter((e) => e.paletteVisible).map((e) => e.id);
   assert.ok(!paletteVisibleIds.includes('headline-trust-skill'), 'a pre-approval draft must NEVER be palette-visible, asserted from THIS surface (the community install route), not just skill-library.ts in isolation');
 
   assert.equal(skillTrustState(forgeRoot, 'headline-trust-skill'), 'draft');
@@ -816,7 +816,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
   } as unknown as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
-  const handled = await dispatchRoute(libraryRoutes, mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot) }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-community URL must return false');
 });
 

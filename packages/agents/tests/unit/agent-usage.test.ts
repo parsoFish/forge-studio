@@ -203,37 +203,22 @@ test('agentsUsing answers one id over the same index', () =>
 // The tests above pin behaviour against planted fixtures. This one pins the
 // only thing library s3 actually needs: that swapping its private walks for
 // this index changes NO answer. Run against the real `skills/` tree, so it
-// covers shapes no fixture would think to plant, and it fails the moment the
-// two derivations drift — whichever side moves.
+// covers shapes no fixture would think to plant.
 //
-// Importing library from agents is legal (agents is rank 3, library rank 2)
-// and mints no boundary row.
+// The library-side half of that pair moved out with the inversion — see the
+// note below.
 // ---------------------------------------------------------------------------
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { deriveHookUsage } from '@forge/library/studio/hook-library.ts';
-import { deriveConnectionUsage } from '@forge/library/studio/connection-library.ts';
 
-function sameMap(a: Map<string, string[]>, b: Map<string, string[]>): string | null {
-  if (a.size !== b.size) return `sizes differ: ${a.size} vs ${b.size}`;
-  for (const [k, v] of a) {
-    const other = b.get(k);
-    if (other === undefined) return `missing id ${k}`;
-    if (v.join(',') !== other.join(',')) return `id ${k}: [${v}] vs [${other}]`;
-  }
-  return null;
-}
 
-test('PARITY: the hook index equals library deriveHookUsage on the real roster', () => {
-  const mine = agentUsageIndex('hook', FORGE_ROOT).byId;
-  const theirs = deriveHookUsage(FORGE_ROOT);
-  assert.equal(sameMap(mine, theirs), null, 'the hook derivation drifted from library\'s');
-});
-
-test('PARITY: the connection index equals library deriveConnectionUsage on the real roster', () => {
-  const mine = agentUsageIndex('connection', FORGE_ROOT).byId;
-  const theirs = deriveConnectionUsage(FORGE_ROOT);
-  assert.equal(sameMap(mine, theirs), null, 'the connection derivation drifted from library\'s');
-});
+// The two PARITY tests that stood here compared this index against library's
+// own `deriveHookUsage` / `deriveConnectionUsage` while library still walked
+// the agent roster itself. M4-library s3 removed those walks — both functions
+// now READ this index through library's `AgentFacts` port — so comparing the
+// two would compare the index with itself. The drift that still matters is
+// between this index and the assembly's `compositions` binding, which serves
+// the two lint paths the index cannot; that guard lives where both sides are
+// importable: `apps/forge/library-agent-facts.test.ts`.
 
 test('PARITY: the index is not vacuously equal — the real roster composes something', () => {
   // Two empty maps compare equal. If the roster ever stops carrying hooks or

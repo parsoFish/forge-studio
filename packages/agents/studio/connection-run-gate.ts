@@ -21,7 +21,7 @@
  */
 
 import { connectionsReadinessFor, type UnreadyConnection } from '@forge/library/studio/connection-readiness.ts';
-import { connectionById } from '@forge/library/studio/connection-library.ts';
+import { catalogConnectionById } from '@forge/library/studio/connection-library.ts';
 import { probeConnection as probeConnectionReal, type ProbeResult } from '@forge/library/studio/connection-probe.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
@@ -34,7 +34,7 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
  * as ready.
  */
 export function defaultProbeConnection(forgeRoot: string, id: string): ProbeResult {
-  const conn = connectionById(forgeRoot, id);
+  const conn = catalogConnectionById(forgeRoot, id);
   return conn ? probeConnectionReal(forgeRoot, conn) : { state: 'not-installed' };
 }
 

@@ -155,6 +155,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/demo-runtime.ts | factory | verbatim | 184 |
 | packages/factory/demo-types.ts | factory | verbatim | 59 |
 | packages/factory/demo.ts | factory | verbatim | 232 |
+| apps/forge/library-agent-facts.ts | apps/forge | rewritten | 58 |
 | apps/forge/dry-bridge.ts | kernel | rewritten | 428 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 67 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 782 |
@@ -365,6 +366,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/community-source-url.ts | library | verbatim | 164 |
 | packages/library/studio/connection-catalog.ts | library | verbatim | 163 |
 | packages/library/studio/connection-install.ts | library | verbatim | 101 |
+| packages/library/studio/agent-facts.ts | library | rewritten | 36 |
 | packages/library/studio/connection-library.ts | library | verbatim | 230 |
 | packages/library/studio/connection-probe.ts | library | verbatim | 417 |
 | packages/library/studio/connection-readiness.ts | library | verbatim | 49 |

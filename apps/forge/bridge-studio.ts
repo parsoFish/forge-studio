@@ -40,6 +40,7 @@ import { communitySkillsFromRegistry } from '@forge/library/studio/community-reg
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
 import { listHookLibrary } from '@forge/library/studio/hook-library.ts';
+import { libraryAgentFacts } from './library-agent-facts.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
@@ -783,7 +784,7 @@ export async function handleStudioRoutes(
       // listPlainSkills is unioned into `skills` above, so the palette offers
       // REAL hooks, never a fabricated catalog list. Only well-formed (ok:true)
       // hooks are palette-visible — a malformed one has nothing safe to bind.
-      const hooks = listHookLibrary(ctx.forgeRoot)
+      const hooks = listHookLibrary(ctx.forgeRoot, libraryAgentFacts)
         .filter((h) => h.ok)
         .map((h) => ({ id: h.id, name: h.name, desc: h.description }));
       sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills, hooks } }, origin);

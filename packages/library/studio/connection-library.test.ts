@@ -31,7 +31,7 @@
  *       ConnectionUsedByDerivation, ConnectionDefinition,
  *       CONNECTION_USAGE_SOURCE, listConnections, connectionById,
  *       deriveConnectionUsage.
- *  D-B. `listConnections(forgeRoot)` reads `studio/catalog.yaml` via the
+ *  D-B. `listConnections(forgeRoot, facts)` reads `studio/catalog.yaml` via the
  *       ALREADY-SHIPPED `loadCatalog` (registry.ts) — WI-1 extends
  *       `Catalog.tools`/`Catalog.mcps` to a richer `CatalogConnectionEntry`
  *       (install/config/probe/provenance/capabilities), parsed by
@@ -82,13 +82,14 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
+import { fixtureAgentFacts, writeFixtureAgent } from '../tests/test-fixtures/agent-fixture.ts';
 import {
   CONNECTION_KINDS,
+  listCatalogConnections,
   listConnections,
   connectionById,
   deriveConnectionUsage,
   CONNECTION_USAGE_SOURCE,
-  type ConnectionDefinition,
 } from './connection-library.ts';
 
 // ---------------------------------------------------------------------------
@@ -176,36 +177,12 @@ function writeConnectionsCatalog(root: string, opts: { tools?: RawToolFixture[];
 }
 
 function writeAgentSkillMd(root: string, slug: string, tools: string[] = [], mcps: string[] = []): void {
-  const dir = join(root, 'skills', slug);
-  mkdirSync(dir, { recursive: true });
-  const content = `---
-name: ${slug}
-description: Test agent ${slug}.
-purpose: Test purpose.
-composition:
-  skills: []
-  tools: [${tools.join(', ')}]
-  mcps: [${mcps.join(', ')}]
-  guards: []
-  hooks: []
-runtime:
-  sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
-brainAccess: none
-interactivity: Fully autonomous.
-allowed-tools: []
-disallowed-tools: []
-budgets:
-  iterationCap: 5
----
-
-Process body.
-`;
-  writeFileSync(join(dir, 'SKILL.md'), content, 'utf8');
+  // The shared fixture writes the SKILL.md AND records what it composes, so
+  // `fixtureAgentFacts(root)` below can never disagree with the tree here.
+  writeFixtureAgent(root, slug, { tools, mcps });
 }
 
-function byId(entries: readonly ConnectionDefinition[], id: string): ConnectionDefinition {
+function byId<T extends { id: string }>(entries: readonly T[], id: string): T {
   const e = entries.find((x) => x.id === id);
   assert.ok(e, `expected connection "${id}" to be present, got ids: ${entries.map((x) => x.id).join(', ')}`);
   return e!;
@@ -232,7 +209,7 @@ describe('listConnections: kind is derived from the catalog section, never conte
       tools: [{ id: 'git' }],
       mcps: [{ id: 'memory' }],
     });
-    const entries = listConnections(root);
+    const entries = listConnections(root, fixtureAgentFacts(root));
     assert.equal(byId(entries, 'git').kind, 'tool');
     assert.equal(byId(entries, 'memory').kind, 'mcp');
   });
@@ -243,7 +220,7 @@ describe('listConnections: kind is derived from the catalog section, never conte
       tools: [{ id: 'git' }, { id: 'node' }],
       mcps: [{ id: 'memory' }],
     });
-    const ids = listConnections(root).map((e) => e.id).sort();
+    const ids = listConnections(root, fixtureAgentFacts(root)).map((e) => e.id).sort();
     assert.deepEqual(ids, ['git', 'memory', 'node']);
   });
 });
@@ -257,7 +234,7 @@ describe('listConnections: installable derivation (D13 — npm ONLY)', () => {
   it('system-provided → installable: false', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { tools: [{ id: 'git', install: SYSTEM_PROVIDED }] });
-    assert.equal(byId(listConnections(root), 'git').installable, false);
+    assert.equal(byId(listConnections(root, fixtureAgentFacts(root)), 'git').installable, false);
   });
 
   it('external → installable: false (D13: "Forge does not install these" — NOT the same as installable)', () => {
@@ -265,13 +242,13 @@ describe('listConnections: installable derivation (D13 — npm ONLY)', () => {
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'sqlite', install: SQLITE_EXTERNAL_INSTALL, probe: SQLITE_PRESENCE_PROBE }],
     });
-    assert.equal(byId(listConnections(root), 'sqlite').installable, false);
+    assert.equal(byId(listConnections(root, fixtureAgentFacts(root)), 'sqlite').installable, false);
   });
 
   it('an npm install method → installable: true', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { mcps: [{ id: 'memory' }] }); // mcpEntry's default is npm
-    assert.equal(byId(listConnections(root), 'memory').installable, true);
+    assert.equal(byId(listConnections(root, fixtureAgentFacts(root)), 'memory').installable, true);
   });
 });
 
@@ -294,7 +271,7 @@ describe('listConnections: extended metadata (install/config/probe/provenance) r
         },
       ],
     });
-    const entry = byId(listConnections(root), 'memory');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'memory');
     assert.deepEqual(entry.install, MEMORY_NPM_INSTALL);
     assert.deepEqual(entry.probe, { kind: 'npm-package' });
     assert.equal('command' in entry.probe, false, 'an npm-package probe must carry no command — it is never spawned (D15)');
@@ -308,7 +285,7 @@ describe('listConnections: extended metadata (install/config/probe/provenance) r
     writeConnectionsCatalog(root, {
       tools: [{ id: 'git', probe: { kind: 'command', command: 'git', args: ['--version'] } }],
     });
-    const entry = byId(listConnections(root), 'git');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'git');
     assert.deepEqual(entry.probe, { kind: 'command', command: 'git', args: ['--version'] });
   });
 
@@ -317,7 +294,7 @@ describe('listConnections: extended metadata (install/config/probe/provenance) r
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'sqlite', install: SQLITE_EXTERNAL_INSTALL, probe: SQLITE_PRESENCE_PROBE }],
     });
-    const entry = byId(listConnections(root), 'sqlite');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'sqlite');
     assert.deepEqual(entry.probe, { kind: 'command-presence', command: 'mcp-server-sqlite' });
     assert.equal('args' in entry.probe, false, 'command-presence never carries args — it is never invoked (D15)');
   });
@@ -327,7 +304,7 @@ describe('listConnections: extended metadata (install/config/probe/provenance) r
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'sqlite', install: SQLITE_EXTERNAL_INSTALL, probe: SQLITE_PRESENCE_PROBE }],
     });
-    const entry = byId(listConnections(root), 'sqlite');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'sqlite');
     assert.deepEqual(entry.install, { method: 'external', upstream: 'https://pypi.org/project/mcp-server-sqlite/' });
     assert.equal('package' in entry.install, false);
     assert.equal('version' in entry.install, false);
@@ -338,7 +315,7 @@ describe('listConnections: extended metadata (install/config/probe/provenance) r
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'github', install: { method: 'external', upstream: 'https://github.com/github/github-mcp-server' }, probe: { kind: 'command', command: 'github-mcp-server', args: ['--version'] }, config: [{ env: 'GITHUB_PERSONAL_ACCESS_TOKEN', required: true, purpose: 'GitHub API auth.' }] }],
     });
-    const entry = byId(listConnections(root), 'github');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'github');
     assert.equal(entry.config.length, 1);
     assert.deepEqual(Object.keys(entry.config[0]!).sort(), ['env', 'purpose', 'required']);
   });
@@ -354,7 +331,7 @@ describe('capabilities: curated, self-naming, MCP-only', () => {
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'memory', capabilities: [{ name: 'create_entities', summary: 'Create graph entities.' }, { name: 'read_graph', summary: 'Read the whole graph.' }] }],
     });
-    const entry = byId(listConnections(root), 'memory');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'memory');
     assert.deepEqual(entry.capabilities, [
       { name: 'create_entities', summary: 'Create graph entities.' },
       { name: 'read_graph', summary: 'Read the whole graph.' },
@@ -365,7 +342,7 @@ describe('capabilities: curated, self-naming, MCP-only', () => {
   it('a tool entry NEVER carries capabilities or capabilitiesSource — undefined, not a fabricated empty array', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
-    const entry = byId(listConnections(root), 'git');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'git');
     assert.equal(entry.capabilities, undefined);
     assert.equal(entry.capabilitiesSource, undefined);
     assert.equal('capabilities' in entry, false, 'a tool entry must not carry a "capabilities" key at all');
@@ -381,7 +358,7 @@ describe('usedBy: derived from real agent composition.tools/composition.mcps, se
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
     writeAgentSkillMd(root, 'unrelated-agent', [], []);
-    const entry = byId(listConnections(root), 'git');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'git');
     assert.deepEqual(entry.usedBy, []);
     assert.equal(entry.usedByDerivation.scanned, 1);
     assert.equal(entry.usedByDerivation.source, CONNECTION_USAGE_SOURCE);
@@ -392,7 +369,7 @@ describe('usedBy: derived from real agent composition.tools/composition.mcps, se
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
     writeAgentSkillMd(root, 'git-user-agent', ['git'], []);
     writeAgentSkillMd(root, 'bystander-agent', [], []);
-    const entry = byId(listConnections(root), 'git');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'git');
     assert.deepEqual(entry.usedBy, ['git-user-agent']);
     assert.equal(entry.usedByDerivation.scanned, 2);
   });
@@ -401,7 +378,7 @@ describe('usedBy: derived from real agent composition.tools/composition.mcps, se
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { mcps: [{ id: 'memory' }] });
     writeAgentSkillMd(root, 'memory-user-agent', [], ['memory']);
-    const entry = byId(listConnections(root), 'memory');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'memory');
     assert.deepEqual(entry.usedBy, ['memory-user-agent']);
   });
 
@@ -410,15 +387,15 @@ describe('usedBy: derived from real agent composition.tools/composition.mcps, se
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
     writeAgentSkillMd(root, 'z-agent', ['git'], []);
     writeAgentSkillMd(root, 'a-agent', ['git'], []);
-    const entry = byId(listConnections(root), 'git');
+    const entry = byId(listConnections(root, fixtureAgentFacts(root)), 'git');
     assert.deepEqual(entry.usedBy, ['a-agent', 'z-agent']);
   });
 
-  it('deriveConnectionUsage(forgeRoot) exposes the same fact as a standalone Map', () => {
+  it('deriveConnectionUsage(forgeRoot, fixtureAgentFacts(forgeRoot)) exposes the same fact as a standalone Map', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { mcps: [{ id: 'memory' }] });
     writeAgentSkillMd(root, 'map-carrier', [], ['memory']);
-    const usage = deriveConnectionUsage(root);
+    const usage = deriveConnectionUsage(root, fixtureAgentFacts(root));
     assert.deepEqual(usage.get('memory'), ['map-carrier']);
   });
 });
@@ -431,7 +408,7 @@ describe('connectionById', () => {
   it('returns the entry for a known id', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
-    const entry = connectionById(root, 'git');
+    const entry = connectionById(root, 'git', fixtureAgentFacts(root));
     assert.ok(entry);
     assert.equal(entry!.id, 'git');
   });
@@ -439,7 +416,7 @@ describe('connectionById', () => {
   it('returns undefined (never throws) for an unknown id', () => {
     const root = makeForgeRoot();
     writeConnectionsCatalog(root, { tools: [{ id: 'git' }] });
-    assert.equal(connectionById(root, 'no-such-connection'), undefined);
+    assert.equal(connectionById(root, 'no-such-connection', fixtureAgentFacts(root)), undefined);
   });
 });
 
@@ -456,7 +433,7 @@ describe('secret-safety: a config env-var VALUE never appears in the serialized 
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'github', install: { method: 'external', upstream: 'https://github.com/github/github-mcp-server' }, probe: { kind: 'command', command: 'github-mcp-server', args: ['--version'] }, config: [{ env: 'FORGE_CONN_TEST_SECRET', required: true, purpose: 'auth token' }] }],
     });
-    const entries = listConnections(root);
+    const entries = listConnections(root, fixtureAgentFacts(root));
     const serialized = JSON.stringify(entries);
     assert.ok(!serialized.includes(SENTINEL), 'a live env-var VALUE must never appear in the serialized connection payload — only the NAME may');
     assert.ok(serialized.includes('FORGE_CONN_TEST_SECRET'), 'the env-var NAME itself is expected to appear (that is the whole point of config)');
@@ -479,7 +456,7 @@ describe('install: closed THREE-value discriminated union (D13, round 3 — supe
     writeConnectionsCatalog(root, {
       tools: [{ id: 'bad-binary-tool', install: { method: 'binary', url: 'https://example.com/bad-binary-tool' } }],
     });
-    assert.throws(() => listConnections(root));
+    assert.throws(() => listConnections(root, fixtureAgentFacts(root)));
   });
 
   it('an unrecognised method ("brew") THROWS — the set is exactly three, not "whatever curation feels like this week"', () => {
@@ -487,7 +464,7 @@ describe('install: closed THREE-value discriminated union (D13, round 3 — supe
     writeConnectionsCatalog(root, {
       tools: [{ id: 'bad-brew-tool', install: { method: 'brew', package: 'bad-brew-tool' } }],
     });
-    assert.throws(() => listConnections(root));
+    assert.throws(() => listConnections(root, fixtureAgentFacts(root)));
   });
 
   it('an "external" entry missing its required "upstream" field THROWS — the whole point of external is naming the real upstream', () => {
@@ -495,7 +472,7 @@ describe('install: closed THREE-value discriminated union (D13, round 3 — supe
     writeConnectionsCatalog(root, {
       mcps: [{ id: 'bad-external-mcp', install: { method: 'external' }, probe: SQLITE_PRESENCE_PROBE }],
     });
-    assert.throws(() => listConnections(root));
+    assert.throws(() => listConnections(root, fixtureAgentFacts(root)));
   });
 
   it('"system-provided", "npm", AND "external" are ALL accepted without throwing (the three real members of the closed set)', () => {
@@ -507,7 +484,7 @@ describe('install: closed THREE-value discriminated union (D13, round 3 — supe
         { id: 'sqlite', install: SQLITE_EXTERNAL_INSTALL, probe: SQLITE_PRESENCE_PROBE },
       ],
     });
-    assert.doesNotThrow(() => listConnections(root));
+    assert.doesNotThrow(() => listConnections(root, fixtureAgentFacts(root)));
   });
 });
 
@@ -519,7 +496,7 @@ describe('install: closed THREE-value discriminated union (D13, round 3 — supe
 
 describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carries the VERIFIED extended metadata', () => {
   it('exactly the 3 real tool ids {git, node, gh} + 6 real mcp ids {filesystem, memory, playwright, github, fetch, sqlite}', () => {
-    const entries = listConnections(REPO_ROOT);
+    const entries = listCatalogConnections(REPO_ROOT);
     const toolIds = entries.filter((e) => e.kind === 'tool').map((e) => e.id).sort();
     const mcpIds = entries.filter((e) => e.kind === 'mcp').map((e) => e.id).sort();
     assert.deepEqual(toolIds, ['gh', 'git', 'node']);
@@ -527,7 +504,7 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
   });
 
   it('every entry carries a non-empty install/probe/provenance and a config array (may be empty)', () => {
-    const entries = listConnections(REPO_ROOT);
+    const entries = listCatalogConnections(REPO_ROOT);
     for (const e of entries) {
       assert.ok(e.install, `"${e.id}" must carry an install method`);
       assert.ok(e.probe && e.probe.kind, `"${e.id}" must carry a kind-tagged probe`);
@@ -537,7 +514,7 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
   });
 
   it('every real mcp entry carries at least one capability, labelled curated', () => {
-    const mcps = listConnections(REPO_ROOT).filter((e) => e.kind === 'mcp');
+    const mcps = listCatalogConnections(REPO_ROOT).filter((e) => e.kind === 'mcp');
     for (const e of mcps) {
       assert.ok(Array.isArray(e.capabilities) && e.capabilities.length > 0, `"${e.id}" must carry ≥1 capability (F1/D8 lint requirement)`);
       assert.equal(e.capabilitiesSource, 'curated');
@@ -546,7 +523,7 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
 
   it('all 3 tools are system-provided with a KIND:"command" probe (D13/D15)', () => {
     for (const id of ['git', 'node', 'gh']) {
-      const entry = byId(listConnections(REPO_ROOT), id);
+      const entry = byId(listCatalogConnections(REPO_ROOT), id);
       assert.equal(entry.install.method, 'system-provided');
       assert.equal(entry.probe.kind, 'command');
     }
@@ -554,7 +531,7 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
 
   it('filesystem/memory/playwright are npm-installed with a KIND:"npm-package" probe (D13/D15)', () => {
     for (const id of ['filesystem', 'memory', 'playwright']) {
-      const entry = byId(listConnections(REPO_ROOT), id);
+      const entry = byId(listCatalogConnections(REPO_ROOT), id);
       assert.equal(entry.install.method, 'npm', `"${id}" must be npm-installed per Appendix A`);
       assert.equal(entry.probe.kind, 'npm-package');
       assert.equal(entry.installable, true);
@@ -563,7 +540,7 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
 
   it('github/fetch/sqlite are ALL "external" — none has a working npm install path (D13, the whole point of this round\'s correction)', () => {
     for (const id of ['github', 'fetch', 'sqlite']) {
-      const entry = byId(listConnections(REPO_ROOT), id);
+      const entry = byId(listCatalogConnections(REPO_ROOT), id);
       assert.equal(entry.install.method, 'external', `"${id}" must be external per Appendix A — it has no working npm install path`);
       assert.equal(entry.installable, false, `"${id}" must never present as forge-installable`);
       assert.ok('upstream' in entry.install && typeof (entry.install as { upstream: string }).upstream === 'string' && (entry.install as { upstream: string }).upstream.startsWith('http'), `"${id}" must carry a real upstream URL`);
@@ -571,20 +548,20 @@ describe('the real repo (F1 AC, Appendix A): every existing tool/mcp entry carri
   });
 
   it('REGRESSION GUARD: the "fetch" entry never declares an npm package — the npm name "mcp-server-fetch" is a security-research typosquat canary (D13)', () => {
-    const fetchEntry = byId(listConnections(REPO_ROOT), 'fetch');
+    const fetchEntry = byId(listCatalogConnections(REPO_ROOT), 'fetch');
     assert.notEqual(fetchEntry.install.method, 'npm', 'fetch must never be npm-installed — the only npm package with this name is a canary/squat, not the real server');
     assert.equal('package' in fetchEntry.install, false);
   });
 
   it('sqlite\'s description honestly says the upstream is archived — an operator must not read this entry as live software (D16)', () => {
-    const sqliteEntry = byId(listConnections(REPO_ROOT), 'sqlite');
+    const sqliteEntry = byId(listCatalogConnections(REPO_ROOT), 'sqlite');
     assert.ok(sqliteEntry.desc, 'sqlite must carry a desc');
     assert.match(sqliteEntry.desc!.toLowerCase(), /archiv/, 'sqlite\'s desc must plainly say the upstream is archived, not silently present it as live');
   });
 
   it('github/fetch/sqlite (command | command-presence probes) never carry an "args" key when their kind is command-presence', () => {
     for (const id of ['fetch', 'sqlite']) {
-      const entry = byId(listConnections(REPO_ROOT), id);
+      const entry = byId(listCatalogConnections(REPO_ROOT), id);
       assert.equal(entry.probe.kind, 'command-presence', `"${id}" has no verified probe flag per Appendix A — must be command-presence`);
       assert.equal('args' in entry.probe, false);
     }

@@ -40,6 +40,7 @@
  * is caught here and reported as 400 (never a 500, never a raw stack trace).
  */
 
+import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -57,7 +58,6 @@ import { resolveGuardedPath } from '@forge/kernel';
 import { skillPath, skillsDir } from './skill-path.ts';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
-import { isStudioAgent } from '../../orchestrator/studio/registry.ts';
 import { listSkillLibrary, skillTrustDetail, type SkillLibraryEntry } from './studio/skill-trust.ts';
 import { readSkillPackage, scanSkillPackage } from './studio/skill-package.ts';
 import { installSkillPackage, approveSkillDraft, repinSkillPackage } from './studio/skill-install.ts';
@@ -114,13 +114,13 @@ function decodeIdSegment(raw: string): string {
 export const SKILL_APPROVE_RE = /^\/api\/studio\/skills\/([^/]+)\/approve$/;
 export const SKILL_ID_RE = /^\/api\/studio\/skills\/([^/]+)$/;
 
-export async function handleSkillsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleSkillsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   if (method === 'GET' && url === '/api/studio/skills') {
     try {
-      const skills = listSkillLibrary(ctx.forgeRoot).map(toClientEntry);
+      const skills = listSkillLibrary(ctx.forgeRoot, facts).map(toClientEntry);
       sendJson(res, 200, { skills }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -406,7 +406,7 @@ export async function handleSkillApprove(req: IncomingMessage, res: ServerRespon
  * is legitimate; the trust pipeline already answers honestly (the pinned
  * content hash no longer matches ⇒ needs-review), nothing here launders it.
  */
-export async function handleSkillUpdate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleSkillUpdate(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -436,7 +436,7 @@ export async function handleSkillUpdate(req: IncomingMessage, res: ServerRespons
       const mdPath = pathGuard.realPath;
       // Studio AGENTS are edited via PUT /api/studio/agents/:slug — mirroring
       // the GET exclusion so this route cannot silently rewrite an agent.
-      if (isStudioAgent(mdPath)) {
+      if (facts.isAgentSkillMd(mdPath)) {
         sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill` }, origin);
         return true;
       }
@@ -476,7 +476,7 @@ export async function handleSkillUpdate(req: IncomingMessage, res: ServerRespons
  * Refuses (409, naming them) while any agent still composes the skill —
  * the same real `usedBy` derivation the listing renders, one source.
  */
-export async function handleSkillDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleSkillDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -501,11 +501,11 @@ export async function handleSkillDelete(req: IncomingMessage, res: ServerRespons
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
         return true;
       }
-      if (isStudioAgent(pathGuard.realPath)) {
+      if (facts.isAgentSkillMd(pathGuard.realPath)) {
         sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill — delete it from the agent builder` }, origin);
         return true;
       }
-      const entry = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const entry = listSkillLibrary(ctx.forgeRoot, facts).find((e) => e.id === id);
       const usedBy = entry?.usedBy ?? [];
       if (usedBy.length > 0) {
         sendJson(res, 409, {
@@ -537,7 +537,7 @@ export async function handleSkillDelete(req: IncomingMessage, res: ServerRespons
 }
 
 /** GET /api/studio/skills/:id — detail. */
-export async function handleSkillDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleSkillDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -584,7 +584,7 @@ export async function handleSkillDetail(req: IncomingMessage, res: ServerRespons
       // (SKILL.md with a `runtime:` block, AT-5) — mirror that exclusion here
       // so this route cannot confidently report a fabricated `usedBy: []` for
       // an id the library union never carries a real answer for.
-      if (isStudioAgent(mdPath)) {
+      if (facts.isAgentSkillMd(mdPath)) {
         sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill` }, origin);
         return true;
       }
@@ -609,7 +609,7 @@ export async function handleSkillDetail(req: IncomingMessage, res: ServerRespons
       // gate above), so `source` is always 'local' and a matching library
       // entry MUST exist — if it doesn't, that is an internal inconsistency
       // between this route and listSkillLibrary, not a value to guess at.
-      const libraryEntry = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const libraryEntry = listSkillLibrary(ctx.forgeRoot, facts).find((e) => e.id === id);
       if (!libraryEntry) {
         throw new Error(`skill "${id}" resolved on disk but is absent from listSkillLibrary — internal inconsistency`);
       }

@@ -28,7 +28,7 @@
 import { resolve } from 'node:path';
 
 import { CONNECTIONS_DIR, probeConnection, type ProbeResult } from './connection-probe.ts';
-import type { ConnectionDefinition } from './connection-library.ts';
+import type { CatalogConnection } from './connection-library.ts';
 
 export interface InstallArgv {
   readonly command: string;
@@ -43,7 +43,7 @@ export interface InstallArgv {
  * npm lifecycle scripts execute on install — the roadmap places the trust
  * decision at curation time, and this narrows what curation has to trust.
  */
-export function installArgvFor(connection: ConnectionDefinition, connectionsRoot: string): InstallArgv {
+export function installArgvFor(connection: CatalogConnection, connectionsRoot: string): InstallArgv {
   if (connection.install.method !== 'npm') {
     throw new Error(
       `installArgvFor: connection "${connection.id}" has install.method "${connection.install.method}" — only an "npm" entry has a forge-driven install path (D13: "system-provided" and "external" both have none)`,
@@ -92,7 +92,7 @@ export interface InstallPreview {
 
 /** Throws under the identical condition `installArgvFor` does (D13) — never
  *  a second, independently-maintained "is this installable" check. */
-export function installPreviewFor(connection: ConnectionDefinition, connectionsRoot: string): InstallPreview {
+export function installPreviewFor(connection: CatalogConnection, connectionsRoot: string): InstallPreview {
   const argv = installArgvFor(connection, connectionsRoot);
   const { install } = connection;
   if (install.method !== 'npm') {
@@ -139,7 +139,7 @@ export interface InstallConnectionResult {
  */
 export function installConnection(
   forgeRoot: string,
-  connection: ConnectionDefinition,
+  connection: CatalogConnection,
   opts: InstallConnectionOptions,
 ): InstallConnectionResult {
   const connectionsRoot = resolve(forgeRoot, CONNECTIONS_DIR);
