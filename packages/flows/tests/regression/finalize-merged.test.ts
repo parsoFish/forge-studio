@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path';
 import { finalizeMergedReadyForReview } from '../../finalize-merged.ts';
 import { runClosure as realRunClosure } from '../../phases/closure.ts';
 import { writeWorkItem, type WorkItem } from '../../work-item.ts';
+import { UNREACHED_RUN_REFLECTOR } from '../test-fixtures/phase-wiring.ts';
 
 // Captured ONCE at module load — the stable cwd to restore to after the
 // real-runClosure integration test's chdir (real `runClosure`/
@@ -68,7 +69,7 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-merged', wt);
     const calls: string[] = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => true,
@@ -286,7 +287,7 @@ test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 02
     ].join('\n');
     writeFileSync(join(queueRoot, 'ready-for-review', `${id}.md`), body);
     let threaded: string | undefined;
-    await finalizeMergedReadyForReview({
+    await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => true,
@@ -305,7 +306,7 @@ test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', a
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-open', wt);
     let called = false;
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       confirmMerge: () => false,
       finalizeOne: async () => { called = true; return true; },
@@ -343,7 +344,7 @@ test('finalize: merged with pending fix work-items still finalizes, but surfaces
     writeManifest(queueRoot, 'ready-for-review', id, wt);
     let finalized = false;
     const notes: string[] = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => true, // operator merged despite pending concerns
@@ -370,7 +371,7 @@ test('finalize: worktree gone → no-worktree, skipped (no re-claim)', async () 
     // correctly reports as `error` — a different case from "it was cleaned up",
     // which is what this test is about.
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nowt', join(root, '_worktrees', 'INIT-2026-05-30-nowt'));
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       confirmMerge: () => true,
       finalizeOne: async () => true,
@@ -471,7 +472,7 @@ test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-revie
     // Real runClosure/promoteMergedToDone default to a cwd-relative `_queue`.
     process.chdir(root);
     try {
-      const results = await finalizeMergedReadyForReview({
+      const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
         queueRoot,
         logsRoot: join(root, '_logs'),
         confirmMerge: () => true, // outer gate: treat the PR as merged, re-claim
@@ -565,7 +566,7 @@ test('(RED) [SEC-02 round 3] worktree_path outside the forge root: sweep does no
 
     const confirmCalls: string[] = [];
     const finalizeCalls: unknown[] = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: (wt: string) => { confirmCalls.push(wt); return true; },
@@ -613,7 +614,7 @@ test('(RED) [SEC-02 round 3] project_repo_path outside <forgeRoot>/projects: swe
     });
 
     const finalizeCalls: Array<{ projectRepoPath: string }> = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: () => true,
@@ -656,7 +657,7 @@ test('non-regression [SEC-02 round 3]: a legitimate worktree_path + project_repo
     });
 
     const confirmCalls: string[] = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: (w: string) => { confirmCalls.push(w); return true; },
@@ -694,7 +695,7 @@ test('(RED) [SEC-02 round 3] mixed sweep: a poisoned manifest degrades to status
     });
 
     const confirmCalls: string[] = [];
-    const results = await finalizeMergedReadyForReview({
+    const results = await finalizeMergedReadyForReview({ runReflector: UNREACHED_RUN_REFLECTOR,
       queueRoot,
       logsRoot: join(root, '_logs'),
       confirmMerge: (w: string) => { confirmCalls.push(w); return true; },

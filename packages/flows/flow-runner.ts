@@ -5,8 +5,8 @@
  * ONE port: `PhaseExecutor { run(nodeId, ctx) -> CycleOutcome }`
  * ([SPEC.md](../SPEC.md) §2 Station, `docs/roadmaps/1.0.md` §4 M2 Lane B). This
  * file imports no phase and no preflight; the executors, the injectable phase
- * set and the band registrations live in `orchestrator/phases/executor-table.ts`
- * and `executor-deps.ts`, and `orchestrator/flow-runner.port-conformance.test.ts`
+ * set and the band registrations live in `packages/factory/phases/executor-table.ts`
+ * and `executor-deps.ts`, and `apps/forge/flow-runner.port-conformance.test.ts`
  * asserts that this source keeps neither import.
  *
  * What the runner still owns, because none of it is a station:
@@ -168,14 +168,14 @@ export type FlowRunArgs = {
    * The one port every station executes through (SPEC.md §2 Station,
    * `docs/roadmaps/1.0.md` §4 M2 Lane B). The runner imports no phase; the
    * caller supplies the table — `createPhaseExecutor()` in
-   * `orchestrator/phases/executor-table.ts` builds the shipped one.
+   * `@forge/factory`'s `createPhaseExecutor()` builds the shipped one; `packages/flows/phase-wiring.ts` is the port it arrives through (ADR 048).
    */
   executor: PhaseExecutor<NodeExecContext>;
   /**
    * The project contract's preflight, injected (SPEC.md §6 Project). The runner
    * declares the port and never imports `packages/projects/preflight.ts`; the caller supplies
    * the implementation — `createProjectGate()` in
-   * `orchestrator/phases/executor-deps.ts` builds the shipped one.
+   * `@forge/factory`'s `createProjectGate()` builds the shipped one; it arrives through `packages/flows/phase-wiring.ts` (ADR 048).
    */
   projectGate: ProjectGate;
   /**
@@ -183,8 +183,8 @@ export type FlowRunArgs = {
    * RUNNER's act, not a station's — the walk stops here — so it stays outside
    * the port and outside the node's try/catch, where a closure failure keeps
    * being classified as itself and never as the node's rate-limit error. The
-   * runner imports no phase, so it is injected: `DEFAULT_DEPS.runClosure` in
-   * `orchestrator/phases/executor-deps.ts` is the shipped one.
+   * runner imports no phase, so it is injected: `@forge/factory`'s
+   * `defaultRunClosure` is the shipped one, injected through `phase-wiring.ts` (ADR 048).
    */
   runClosure: (
     input: CycleInput,

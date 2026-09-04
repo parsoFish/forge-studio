@@ -28,7 +28,6 @@ import { getPaths } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
 import { pendingFixWorkItems } from './fix-work-items.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
-import { runReflector } from '@forge/factory/phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
 import { writeVerdictJson } from './flow-artifacts.ts';
@@ -65,7 +64,12 @@ export type FinalizeDeps = {
   /** Closure step. Injectable so a trigger-firing test needn't run real git/gh. */
   runClosure?: (input: CycleInput, logger: EventLogger, reviewerOutcome: ReviewerOutcome) => Promise<ClosureResult>;
   /** Reflector action an `on: merged` agent-target dispatches to. Injectable. */
-  runReflector?: (input: CycleInput, logger: EventLogger) => Promise<void>;
+  /**
+   * The factory's reflection turn (ADR 048). REQUIRED and injected: this package
+   * declares the port and never imports `@forge/factory`, so that deleting the
+   * example package leaves the platform running. Tests inject their own.
+   */
+  runReflector: (input: CycleInput, logger: EventLogger) => Promise<unknown>;
   /**
    * Resolve an agent-target `ref` (slug) to its `AgentDefinition` so the
    * dispatch can read its declared band guard (R4-09-F1: registry-driven, not a
@@ -165,7 +169,7 @@ function makeDefaultFinalizeOne(
   deps: FinalizeDeps,
 ): (input: CycleInput, logger: EventLogger) => Promise<boolean> {
   const runClosureFn = deps.runClosure ?? runClosure;
-  const runReflectorFn = deps.runReflector ?? runReflector;
+  const runReflectorFn = deps.runReflector;
   const loadFlowTriggers = deps.loadFlowTriggers ?? defaultLoadFlowTriggers;
   const loadAgentDef = deps.loadAgentDef ?? defaultLoadAgentDef;
   const promoteMergedToDoneFn = deps.promoteMergedToDone ?? promoteMergedToDone;
@@ -294,7 +298,7 @@ function makeDefaultFinalizeOne(
   };
 }
 
-export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Promise<FinalizeResult[]> {
+export async function finalizeMergedReadyForReview(deps: FinalizeDeps): Promise<FinalizeResult[]> {
   const paths = getPaths(deps.queueRoot);
   const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve('_logs');
   const confirmMerge = deps.confirmMerge ?? confirmPrMerged;

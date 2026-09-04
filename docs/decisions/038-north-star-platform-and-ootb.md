@@ -1,5 +1,10 @@
 # ADR 038 — North-star reframe: modular platform (Scope 1) vs. shipped ideas machine (Scope 2 OOTB)
 
+**Amended by:** [ADR 048](./048-deletable-example-factory.md) (2026-09-05) — this ADR made the Scope 1 / Scope 2
+split a north star for judgement and enforced it nowhere; ADR 048 supplies the mechanism (no package imports
+`@forge/factory`; deletability is a CI test) after measuring that `packages/flows` and `apps/forge` both reached
+into the example package, so deleting it failed to resolve rather than degrading to "no example installed".
+
 **Status:** Accepted (operator decision 2026-07-17 — [roadmap README §8, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)).
 **Date:** 2026-07-17
 **References:** [docs/repo-map.md](../repo-map.md) (the three-scope contributor map this

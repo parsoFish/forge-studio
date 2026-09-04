@@ -1047,7 +1047,7 @@ function buildProjectAttention(
 
 /**
  * Whether an initiative's LATEST `plan.completeness` event (R4-05-F6, emitted
- * by orchestrator/phases/project-manager.ts on the PM pass's success path)
+ * by packages/factory/phases/project-manager.ts on the PM pass's success path)
  * has `metadata.flagged === true`.
  *
  * Bound: exactly ONE file read per initiative — `_logs/<cycleId>/events.jsonl`

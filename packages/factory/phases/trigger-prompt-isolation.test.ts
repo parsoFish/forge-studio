@@ -14,7 +14,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { triggeredRunContextLine } from './phases/executor-table.ts';
+import { triggeredRunContextLine } from './executor-table.ts';
 import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { TriggerPayload } from '@forge/flows/trigger-payload.ts';

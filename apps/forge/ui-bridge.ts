@@ -107,6 +107,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
+import { factoryPhaseWiring } from './factory-wiring.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -118,10 +119,9 @@ const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
-// Feature #8 — daemon-stall liveness. Mirrors orchestrator/scheduler.ts's
-// staleHeartbeatMs default (5min). The UI flips to `daemon-stalled` only at a
-// GENEROUS multiple of that so a slow-but-alive cycle never false-alarms — the
-// stall surface is for "the daemon process is wedged / dead", not slowness.
+// Feature #8 — daemon-stall liveness. Mirrors packages/flows/scheduler.ts's
+// staleHeartbeatMs default (5min); the UI flips to `daemon-stalled` only at a
+// GENEROUS multiple, because the surface means "wedged or dead", not "slow".
 const DEFAULT_STALE_HEARTBEAT_MS = 5 * 60_000;
 const STALL_MULTIPLE = 6;
 
@@ -212,8 +212,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // R4-17 round-2 BLOCKER: this was a hardcoded `resolve(forgeRoot,'projects')`
   // — the ONE module of eight that never consulted config, while 23 sites
   // elsewhere resolve through `resolveProjectsDir` (which honours
-  // `FORGE_PROJECTS_DIR` and `forge.config.json`'s documented `projectsDir`,
-  // orchestrator/config.ts). With that config set, this producer and
+  // `FORGE_PROJECTS_DIR` and `forge.config.json`'s `projectsDir`,
+  // packages/kernel/config.ts). With that config set, this producer and
   // `writeSessionTerminalPhase`'s containment guard resolved DIFFERENT roots, so
   // a legitimately-created session dir failed the guard and the terminal phase
   // was silently never written — a finished run reading `running` forever. A
@@ -228,7 +228,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
   const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const mergePrFn = opts.mergePr ?? mergePullRequest;
-  const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
+  // ADR 048: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
+  const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? ((deps: { queueRoot: string; logsRoot: string }) =>
+    finalizeMergedReadyForReview({ ...deps, runReflector: factoryPhaseWiring().runReflector }));
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
