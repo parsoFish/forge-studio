@@ -348,7 +348,8 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/run-agent.ts | agents | verbatim | 665 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 276 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 988 |
-| packages/flows/run-model.ts | flows | verbatim | 817 |
+| packages/flows/run-model.ts | flows | verbatim | 596 |
+| packages/flows/run-model-flow-graph.ts | flows | verbatim | 254 |
 | packages/flows/run-view-types.ts | flows | verbatim | 189 |
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 1031 |
