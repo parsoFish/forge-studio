@@ -174,9 +174,52 @@ active_drop() {
 }
 active_lanes() { tr ',' ' ' < "$1/heartbeat/ACTIVE" 2>/dev/null | tr -s ' \n' ' ' | sed 's/\bNONE\b//g'; }
 
+# The rendered-prompt ceiling, in bytes. MEASURED, 2026-09-04, from this campaign's own session
+# transcripts (~/.claude/projects/<slug>/<sessionId>.jsonl, usage summed per lane) — not guessed:
+#
+#   * Turn-one input is 66–72 k tokens for EVERY lane, whatever the prompt size: m2-b's 6,040 B
+#     prompt cost 68,361 and flows' 15,128 B cost 66,289. The prompt is 2–5 % of turn one.
+#   * Total input tracks TURNS, not prompt bytes: flows 1,828 API calls → 915 M input tokens,
+#     harness 212 → 44 M. Everything admitted to context is re-read on every later call.
+#   * What the prompt's READ line NAMED is the cost. On `61491050`: 1.0.md 45,213 + spec 26,157
+#     + SPEC.md 13,390 + QUARRY.md 63,498 + M4-COMMON 101,767 + the lane brief ~17,000 +
+#     `_1.0/ledger.md` 1,686,743 = 1,953,768 B ≈ 488 k tokens — 130× the prompt it arrived in,
+#     and 88 % of it the ledger alone.
+#
+# So the ceiling is not about prompt bytes being expensive; it is the fence that keeps a corpus
+# out. 24,576 B = the good case's prompt (flows, 15,128 B) plus headroom for an OUTCOME file
+# (~6 KiB) and two ledger sections (~2 KiB): ≈ 6.1 k tokens, ≈ 9 % of a 67 k turn-one context,
+# against 488 k for the corpus an M4 READ line named. A render that exceeds it is asking for a
+# corpus, which is the thing this replaces. The table is in reference/measured-lessons.md.
+RENDER_MAX_BYTES_DEFAULT=24576
+
+# section <file> <heading-regex> → the heading line and everything to the next `## `, or nothing.
+render_section() {
+  awk -v re="${2//\\/\\\\}" '
+    !found && $0 ~ re { found=1; print; next }
+    found && /^## / { exit }
+    found { print }
+  ' "$1"
+}
+
 cmd_render() {
   local src="$1" re="$2" out="$3"; shift 3
   [ -f "$src" ] || die "no such file: $src"
+  local outcome="" ledger="" max="${LANES_RENDER_MAX_BYTES:-$RENDER_MAX_BYTES_DEFAULT}"
+  local sections=() params=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --outcome)   outcome="$2"; shift 2 ;;
+      --ledger)    ledger="$2"; shift 2 ;;
+      --section)   sections+=("$2"); shift 2 ;;
+      --max-bytes) max="$2"; shift 2 ;;
+      *)           params+=("$1"); shift ;;
+    esac
+  done
+  [ -z "$outcome" ] || [ -f "$outcome" ] || die "no such OUTCOME file: $outcome"
+  [ ${#sections[@]} -eq 0 ] || [ -n "$ledger" ] || die "--section needs --ledger <file>"
+  [ -z "$ledger" ] || [ -f "$ledger" ] || die "no such ledger: $ledger"
+
   # A heading regex that matches nothing used to leave `found` false, so the FIRST ```text block
   # in the file won — two wave-3 renders of kickoffs §11 silently produced the T1 kickoff block
   # (bead forge-uowf, §15.59). A miss is an error, and the file asked for is never written.
@@ -191,14 +234,35 @@ cmd_render() {
     inblock { print }
   ' "$src" > "$tmp"
   if [ ! -s "$tmp" ]; then rm -f "$tmp"; die "no \`\`\`text block found under /$re/ in $src (heading matched: $heading)"; fi
-  mv "$tmp" "$out"
   local kv k v
-  for kv in "$@"; do
+  for kv in "${params[@]+"${params[@]}"}"; do
     k="${kv%%=*}"; v="${kv#*=}"
-    sed -i -E "s/^PARAMETER — set before pasting: $k = .*/PARAMETER: $k = $v/; s/\\\$$k\\b/$v/g" "$out"
+    sed -i -E "s/^PARAMETER — set before pasting: $k = .*/PARAMETER: $k = $v/; s/\\\$$k\\b/$v/g" "$tmp"
   done
-  # The matched heading is printed so a render can be checked BEFORE a launch (§15.59).
-  echo "rendered $out from heading: $heading ($(wc -l < "$out") lines)"
+
+  # OUTCOME-only inputs: the predecessor's OUTCOME file and the NAMED ledger sections, each under
+  # a header that says what it is and where it came from — never the ledger, never the corpus.
+  if [ -n "$outcome" ]; then
+    { echo; echo "## OUTCOME — $outcome"; echo; cat "$outcome"; } >> "$tmp"
+  fi
+  local sec body
+  for sec in "${sections[@]+"${sections[@]}"}"; do
+    body="$(render_section "$ledger" "$sec")"
+    # A section that matched nothing is the §15.59 shape through a second door: a render that
+    # silently drops what was asked for is worse than no render.
+    [ -n "$body" ] || { rm -f "$tmp"; die "no section matching /$sec/ in $ledger"; }
+    { echo; echo "## LEDGER SECTION — $ledger /$sec/"; echo; printf '%s\n' "$body"; } >> "$tmp"
+  done
+
+  local bytes; bytes="$(wc -c < "$tmp")"
+  if [ "$bytes" -gt "$max" ]; then
+    rm -f "$tmp"
+    die "rendered $bytes B exceeds the $max B ceiling — nothing written. A prompt over this budget is asking for a corpus; send the OUTCOME and the named sections instead (see the derivation in this script's header)."
+  fi
+  mv "$tmp" "$out"
+  # The matched heading is printed so a render can be checked BEFORE a launch (§15.59); the size
+  # is printed so the budget is observable rather than a silent refusal.
+  echo "rendered $out from heading: $heading ($(wc -l < "$out") lines, $bytes B / $max B ceiling)"
 }
 
 # die_launch <camp> <lane> <session> <lane-cwd> <t0> <message>
