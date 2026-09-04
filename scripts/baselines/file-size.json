@@ -68,7 +68,7 @@
   "packages/sessions/kinds/architect.ts": 1584,
   "packages/sessions/studio/session-kinds.test.ts": 2398,
   "packages/sessions/studio/session-transcript.test.ts": 2400,
-  "scripts/check-raw-fs-guarded.mjs": 1369,
+  "scripts/check-raw-fs-guarded.mjs": 1371,
   "scripts/check-raw-fs-guarded.test.ts": 1027,
   "scripts/journeys/agents.mjs": 2230,
   "scripts/journeys/community.mjs": 1599,

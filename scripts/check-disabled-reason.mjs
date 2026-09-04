@@ -105,7 +105,9 @@ Each must be either:
        {...disabledAttrs(cond ? 'why the operator cannot do this yet' : null)}
      (apps/studio/lib/disabled-reason.ts — drives disabled + title + data-disabled-reason together).
   2. Or added to the ALLOWLIST in scripts/check-disabled-reason.mjs (file + data-action + reason).`);
-  process.exit(1);
+  // `process.exitCode`, never `process.exit()` — the offender list above is
+  // unbounded and `process.exit()` truncates a piped stdout mid-line.
+  process.exitCode = 1;
 } else {
   console.log(`check-disabled-reason: PASS — ${checked} disabled primary CTA(s), every one carries its reason, ${ALLOWLIST.length} allowlisted residual(s)`);
 }

@@ -641,5 +641,7 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const write = process.argv.includes('--write');
-  process.exit(runCheck({ write }));
+  // `process.exitCode`, never `process.exit()` — a FAIL list is unbounded and a
+  // piped reader would lose its tail.
+  process.exitCode = runCheck({ write });
 }

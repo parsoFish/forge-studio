@@ -159,4 +159,6 @@ function main(argv) {
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) process.exit(main(process.argv.slice(2)));
+// `process.exitCode`, never `process.exit()` — see check-raw-fs-guarded.mjs's
+// note: `process.exit()` truncates a piped stdout that has not drained.
+if (import.meta.url === `file://${process.argv[1]}`) process.exitCode = main(process.argv.slice(2));
