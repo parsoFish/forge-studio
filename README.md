@@ -100,10 +100,10 @@ Every path belongs to one of **three scopes** — framework (1), cycles/agents/f
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
 | [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
 | [`docs/`](./docs/) | — | Docs — [repo map](./docs/repo-map.md), ADRs, phase docs, guides |
-| [`orchestrator/`](./orchestrator/) | 1 | Scheduler, cycle runner, flow engine, the KB backend seam, logging (+ the Studio engine) |
-| [`cli/`](./cli/) | 1 | Operator utilities, `forge` subcommands, the UI bridge |
-| [`loops/`](./loops/) | 1 | Agentic loop runtimes + the runtime-adapter seam (`loops/_adapters/`) |
-| [`forge-ui/`](./forge-ui/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
+| [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← factory` |
+| [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
+| [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
+| [`orchestrator/`](./orchestrator/) | 1 | Legacy residue still being quarried (`phases/`, `studio/validate.ts`, fixtures) |
 | [`studio/`](./studio/) | 2 | Studio definitions as data — flows, agents, catalog, KBs |
 | [`skills/`](./skills/) | 2 | Claude Code skills — the agent surface |
 | [`brain/`](./brain/) | 2·3 | The compounding engineering wiki (three scoped graphs) |
@@ -111,7 +111,7 @@ Every path belongs to one of **three scopes** — framework (1), cycles/agents/f
 
 ## Extending Forge
 
-Forge grows by plugging components into its seams, not by forking the core. To add a runtime/model, implement `RuntimeAdapter` in `loops/_adapters/<sdk>/index.ts`, pass the conformance suite (`loops/_adapters/conformance.ts`), register it in `loops/_adapters/registry.ts`, and add it to `studio/catalog.yaml`. KB backends ([ADR 027](./docs/decisions/027-studio-object-model.md)) and flow node executors ([ADR 028](./docs/decisions/028-flow-engine.md)) follow the same implement-the-interface-then-register pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and the per-seam extension recipes.
+Forge grows by plugging components into its seams, not by forking the core. To add a runtime/model, implement `RuntimeAdapter` in `packages/agents/_adapters/<sdk>/index.ts`, pass the conformance suite (`packages/agents/_adapters/conformance.ts`), register it in `packages/agents/_adapters/registry.ts`, and add it to `studio/catalog.yaml`. KB backends ([ADR 027](./docs/decisions/027-studio-object-model.md)) and flow node executors ([ADR 028](./docs/decisions/028-flow-engine.md)) follow the same implement-the-interface-then-register pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and the per-seam extension recipes.
 
 ## License
 

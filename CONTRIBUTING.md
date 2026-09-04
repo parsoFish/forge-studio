@@ -21,7 +21,7 @@ forge studio lint      # validate agents/flows/catalog/kb defs; exits non-zero o
 forge brain lint       # 8 structural integrity checks on brain/; exits non-zero on error
 ```
 
-Run the UI journey if you touch `forge-ui/` or any Studio surface:
+Run the UI journey if you touch `apps/studio/` or any Studio surface:
 
 ```bash
 npm run ui:journey     # headless end-to-end operator journey (video + DOM assertions)
@@ -56,8 +56,8 @@ If your change conflicts with or supersedes a decision in `docs/decisions/`, **u
 
 The three seams that accept new implementations without touching core orchestration are documented in [`docs/extending-forge.md`](./docs/extending-forge.md):
 
-1. **RuntimeAdapter** — plug in a new LLM SDK or agentic coder (`loops/_adapters/`).
-2. **KbBackend** — the brain's storage seam (`orchestrator/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the seam is present for a future second backend.
+1. **RuntimeAdapter** — plug in a new LLM SDK or agentic coder (`packages/agents/_adapters/`).
+2. **KbBackend** — the brain's storage seam (`packages/knowledge/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the seam is present for a future second backend.
 3. **Flow** — add a new agent workflow (`studio/flows/`).
 4. **Skill/agent** — define a new phase agent (`skills/`).
 

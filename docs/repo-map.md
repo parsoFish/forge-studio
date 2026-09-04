@@ -17,12 +17,23 @@ particular project or a specific cycle-agent here.** Cross-scope concerns belong
 
 | Path | What lives here |
 |---|---|
-| `orchestrator/` | Scheduler, cycle runner, flow engine, KB-backend seam, logging |
-| `orchestrator/studio/` | Studio **engine** code (definition loading, lint, registry) — not the definitions |
-| `cli/` | Operator utilities, `forge` subcommand handlers, the UI bridge |
-| `loops/` (+ `loops/_adapters/`) | Agentic loop runtimes + the runtime-adapter seam |
-| `forge-ui/` | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
-| `bin/`, `scripts/` | Entry point + build / test / harness tooling |
+| `packages/contracts/` | Shared types only — the bottom of the allow-graph |
+| `packages/kernel/` | HTTP envelope, ids, the dry-bridge gate, logger, config, route entries — what every package may reach |
+| `packages/library/` · `packages/knowledge/` · `packages/projects/` | The objects a factory is built from · the Brain (Knowledge outward, the three scoped graphs, `KbBackend`) · the project seam and its contract preflight |
+| `packages/agents/` | Runs **one agent** under a pinned SDK seam; the runtime-adapter registry (`packages/agents/_adapters/`) |
+| `packages/sessions/` | The ADR 043 interactive spine — session kinds, turnSpec, transcript, lifecycle, finalizers |
+| `packages/flows/` | Runs **one flow** — walks a `FlowDefinition` node by node; runs, recovery, hooks, review loops |
+| `packages/factory/` | The shipped develop factory — phase executors and their deps seam |
+| `apps/forge/` | The **assembly**: the `forge` CLI entry, the UI bridge and its route tables, and every assembly-side binding (dry-bridge route classification, session-kind and authoring-port deps) |
+| `apps/studio/` | Forge Studio — the Next.js operator UI (launched by `forge studio`); imports `contracts` only |
+| `orchestrator/` | Legacy residue still being quarried (`phases/`, `studio/validate.ts`, spawn-capture fixtures) — no package may import it |
+| `bin/`, `scripts/` | Entry point + build / test / harness tooling, including the `check-*.mjs` guards CI runs |
+
+Allow-graph (enforced by `scripts/check-boundaries.mjs` against `scripts/baselines/boundaries.json`):
+`contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← factory ← apps/{forge, studio}`.
+A lower-rank package never imports a higher one; what a package needs from above arrives by
+injection at `apps/forge`. Per-package production-line caps are ratified in [`QUARRY.md`](../QUARRY.md)
+and enforced by `scripts/check-package-caps.mjs`.
 
 ## Scope 2 — Cycles / agents / flows (OOTB + authoring new ones)
 
@@ -39,7 +50,7 @@ a particular managed project.**
 ## Scope 3 — Projects forge develops
 
 The managed projects and their per-project knowledge. **Rule: respect the forge↔project
-contract; never edit `orchestrator`/`cli`/`loops` from here.**
+contract; never edit `packages/`, `apps/` or `orchestrator/` from here.**
 
 | Path | What lives here |
 |---|---|

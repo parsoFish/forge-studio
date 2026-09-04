@@ -8,10 +8,10 @@
 
 # ── Scope 1 — Framework / seams / orchestration (the hot path) ───────────────
 # Rule: never special-case a project or a specific cycle-agent.
-/orchestrator/   @parsoFish
-/cli/            @parsoFish
-/loops/          @parsoFish
+/packages/       @parsoFish
+/apps/forge/     @parsoFish
 /apps/studio/    @parsoFish
+/orchestrator/   @parsoFish
 /bin/            @parsoFish
 /scripts/        @parsoFish
 
@@ -23,7 +23,7 @@
 /brain/cycles/      @parsoFish
 
 # ── Scope 3 — Projects forge develops ────────────────────────────────────────
-# Rule: respect the forge↔project contract; never edit orchestrator/cli/loops.
+# Rule: respect the forge↔project contract; never edit packages/, apps/ or orchestrator/.
 /projects/                       @parsoFish
 /brain/projects/                 @parsoFish
 /docs/forge-project-contract.md  @parsoFish

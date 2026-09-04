@@ -25,7 +25,7 @@
 > **Note (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)):**
 > the phases below are the shipped OOTB suite (Scope 2) riding Scope 1's
 > engine/seams, not the whole of what forge is — forge's platform (Scope 1:
-> `orchestrator/`, `cli/`, `loops/`, `forge-ui/`, the seams) is generic to any
+> `packages/*`, `apps/forge`, `apps/studio`, the seams) is generic to any
 > agentic flow. A full rewrite of this document to lead with the platform view
 > is deliberately deferred to R4-01.
 
@@ -72,8 +72,8 @@ flowchart TB
 
     subgraph SEAMS["Swappable seams · ADR 032"]
         direction LR
-        RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>loops/_adapters/registry.ts"]
-        KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>orchestrator/kb-backend.ts"]
+        RA["Runtime adapter registry<br/>claude (live) · gemini · aider<br/>packages/agents/_adapters/registry.ts"]
+        KB["KbBackend seam<br/>FilesystemKbBackend (live, only impl)<br/>packages/knowledge/kb-backend.ts"]
         FE["Flow engine node executors<br/>DEFAULT_NODE_EXECUTORS map<br/>inject overrides via createPhaseExecutor({overrides})"]
     end
 
@@ -218,7 +218,7 @@ loop:
 ```
 
 Key properties:
-- **Runtime adapter seam (ADR 029)** — agents are created via `getAdapter(sdkId).createAgent`, not `createClaudeAgent` directly. The registry (`loops/_adapters/registry.ts`) holds `claudeAdapter` (live), `geminiAdapter`, and `aiderAdapter` (both DEP+CREDS-GATED; `available:false` until provisioned). A second adapter is a one-file drop-in that passes the conformance suite.
+- **Runtime adapter seam (ADR 029)** — agents are created via `getAdapter(sdkId).createAgent`, not `createClaudeAgent` directly. The registry (`packages/agents/_adapters/registry.ts`) holds `claudeAdapter` (live), `geminiAdapter`, and `aiderAdapter` (both DEP+CREDS-GATED; `available:false` until provisioned). A second adapter is a one-file drop-in that passes the conformance suite.
 - **Parallel work** = N git worktrees × N Ralph instances, coordinated by the orchestrator's scheduler.
 - **The developer loop is *complete* for an initiative** when all work items have landed in the initiative branch with all checks passing.
 - **Merge conflict handling** is part of the loop, not the orchestrator.
@@ -322,8 +322,8 @@ engine** is registry-driven (any node type is a data-table entry).
 
 | Seam | Interface / registry | 1st impl (live) | 2nd impl |
 |---|---|---|---|
-| **Runtime adapter** (ADR 029) | `RuntimeAdapter` · `loops/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) — DEP-gated |
-| **KbBackend** (ADR 027) | `KbBackend` · `orchestrator/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
+| **Runtime adapter** (ADR 029) | `RuntimeAdapter` · `packages/agents/_adapters/registry.ts` | `claudeAdapter` — Claude Agent SDK | `geminiAdapter` (`@google/genai`), `aiderAdapter` (Aider CLI) — DEP-gated |
+| **KbBackend** (ADR 027) | `KbBackend` · `packages/knowledge/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
 | **Dev-loop runtime** | via RuntimeAdapter seam | Ralph + Claude Agent SDK | Aider CLI via `aiderAdapter` — DEP-gated |
 
 The closure is `orchestrator/subsumption-proof.test.ts`: asserts the runtime adapter seam resolves a second implementation.

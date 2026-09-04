@@ -1,43 +1,13 @@
-# Loops
+# `loops/` — retired directory
 
-> **Scope 1 — framework** ([repo map](../docs/repo-map.md)). Agentic loop runtimes. Default: `ralph/` (Ralph loop pattern over Claude Agent SDK).
+> **Scope 1 — framework** ([repo map](../docs/repo-map.md)). Until M4 this directory held the
+> agentic loop runtimes and the runtime-adapter seam. Both now live in
+> [`packages/agents/`](../packages/agents/) — the adapter registry is
+> `packages/agents/_adapters/registry.ts`, the conformance suite
+> `packages/agents/_adapters/conformance.ts`, and the SDK wrapper sits beside them.
 
-## Why a loop abstraction at all
-
-The developer phase needs an **iterative agent runtime**: write code, run gates, fix what's broken, repeat. Rather than hand-roll this, we adopt the Ralph loop pattern (a community pattern, not a library) over the Claude Agent SDK.
-
-We keep it behind a thin abstraction so we can A/B-test alternative loop runtimes when they look promising — see [ADR 002](../docs/decisions/002-ralph-loop-pattern.md).
-
-## The loop interface
-
-Every loop runtime under `loops/<name>/` exposes the same shape:
-
-```ts
-type LoopInput = {
-  workItemSpecPath: string;           // path to the work item markdown
-  worktreePath: string;               // git worktree to operate in
-  initiativeBudget: { iterations: number; usd: number };
-  brainQueryResults: string;          // initial institutional memory
-  cycleId: string;                    // for event-log correlation
-  initiativeId: string;
-};
-
-type LoopResult = {
-  status: 'complete' | 'failed';
-  iterations: number;
-  cost_usd: number;
-  duration_ms: number;
-  artifacts: { agentMdPath: string; fixPlanPath: string };
-};
-
-export async function run(input: LoopInput): Promise<LoopResult>;
-```
-
-`developer-ralph` skill calls into the configured runtime (Ralph by default) via this interface.
-
-## Runtimes
-
-### `ralph/` — Default
-
-Ralph loop over Claude Agent SDK. See [`ralph/README.md`](./ralph/README.md).
-
+There is no code here. The directory remains only because four spawn-site locks in the
+test suite enumerate the directories they scan by name and still list `loops` — removing
+the directory makes their `scandir` throw (by design: a missing scan root fails loud, not
+vacuous). Dropping `loops` from that list and deleting this directory is bead `forge-8vfn.25`
+(agents-owned, M5-A). Until then, nothing may be added here.
