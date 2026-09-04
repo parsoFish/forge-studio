@@ -157,12 +157,12 @@ import {
   SESSION_ARTIFACT_KINDS,
   sessionArtifactKindState,
   loadSessionKinds,
-  validateSessionKinds,
   FINALIZER_IDS,
   VERDICT_VALUES,
-  deriveSessionAffordances,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
+import { validateSessionKinds } from './session-kinds-validate.ts';
+import { deriveSessionAffordances } from './session-kinds-affordances.ts';
 // R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
 // session kind must ride the EXISTING generic runInteractiveTurn spine, never
 // a new AGENT_RUNNERS entry. Imported directly from the real production

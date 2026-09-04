@@ -70,7 +70,7 @@
   "legacy-to-package-not-via-shim|cli/studio-lint.ts|packages/library/studio/hook-library.ts",
   "legacy-to-package-not-via-shim|cli/studio-lint.ts|packages/library/studio/skill-trust.ts",
   "legacy-to-package-not-via-shim|cli/studio-lint.ts|packages/library/studio/template-library.ts",
-  "legacy-to-package-not-via-shim|cli/studio-lint.ts|packages/sessions/studio/session-kinds.ts",
+  "legacy-to-package-not-via-shim|cli/studio-lint.ts|packages/sessions/studio/session-kinds-validate.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge-agent-dispatch-projects-root.test.ts|packages/agents/agent-dispatch-cmd.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge-agent-run-ceiling.test.ts|packages/agents/agent-dispatch-cmd.ts",
   "legacy-to-package-not-via-shim|cli/ui-bridge-agent-run-ceiling.test.ts|packages/agents/agent-dispatch.ts",
@@ -302,6 +302,7 @@
   "package-to-legacy|packages/sessions/tests/integration/bridge-studio-agent-capability.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts|cli/ui-bridge.ts",
   "package-to-legacy|packages/sessions/tests/regression/interactive-runners-golden.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
+  "studio-beyond-contracts|apps/studio/components/studio/session/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds-affordances.ts",
   "studio-beyond-contracts|apps/studio/components/studio/session/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds.ts",
   "studio-beyond-contracts|apps/studio/lib/session-shell-view.test.ts|packages/sessions/session-resolution.ts",
   "studio-beyond-contracts|apps/studio/lib/studio-client.test.ts|packages/flows/studio/validate-triggers.ts"

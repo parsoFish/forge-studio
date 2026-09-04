@@ -22,15 +22,12 @@ import { resolve } from 'node:path';
 import { SessionInteractivePanel } from './SessionInteractivePanel';
 import type { SessionAffordance, SessionArtifactPayload } from '@/lib/session-client';
 import type { EventLogEntry } from '@/lib/bridge-client';
-// community-14 (historical) — the real session-kind loader + affordance
-// derivation, originally so the community-refresh regression tests at the
-// bottom of this file drove the SAME wire affordance the bridge sends rather
-// than a hand-written stand-in. That kind is retired (W8-B5b WI-3) and no
-// longer in the registry those tests can load, so they now use a hand-built
-// affordance like every other fixture in this file — but the `authoring`
-// counterpart test still exercises this real loader/deriver pair against the
-// live registry, so the import stays live.
-import { loadSessionKinds, deriveSessionAffordances } from '../../../../../packages/sessions/studio/session-kinds.ts';
+// The REAL loader/deriver pair, against the live registry: the `authoring`
+// test below drives the same wire affordance the bridge sends rather than a
+// hand-written stand-in. (Its community-14 counterpart did too until that kind
+// was retired in W8-B5b WI-3; those tests now use hand-built fixtures.)
+import { loadSessionKinds } from '../../../../../packages/sessions/studio/session-kinds.ts';
+import { deriveSessionAffordances } from '../../../../../packages/sessions/studio/session-kinds-affordances.ts';
 
 const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..', '..');
 

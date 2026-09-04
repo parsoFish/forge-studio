@@ -54,7 +54,7 @@ import {
 import { lintTemplateLibrary } from '@forge/library/studio/template-library.ts';
 import { lintHookComposition, lintHookDefinitions } from '@forge/library/studio/hook-library.ts';
 import { lintCommunityIndex } from '@forge/library/studio/community-index.ts';
-import { validateSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-validate.ts';
 import {
   validateAgent,
   validateArtifactRef,
