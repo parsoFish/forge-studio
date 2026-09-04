@@ -27,8 +27,10 @@
  * NOT A COMPLETE FENCE, and the difference matters: this check proves the two
  * names are DECLARED. Whether a declaration is ENFORCED depends on the spawn
  * site threading `disallowedTools` into the SDK options at all — W8-C2a found
- * three that did not (`architect-runner`, `completeness-critic-runner`,
- * `instructions-runner`, all via `runStructuredTurn`) and fixed them. A new
+ * three that did not (the architect, critic and instructions runners — now
+ * `packages/sessions/kinds/`'s `architect.ts`, `architect-critic.ts` and
+ * `instructions.ts`; `runStructuredTurn` is
+ * `packages/sessions/interactive-session.ts`) and fixed them. A new
  * spawn site that drops the field would make every declaration decorative
  * again without this lint noticing.
  *

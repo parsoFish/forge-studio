@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 
 const REAL_ROOT = process.cwd();
 const STARTER_SLUGS = ['plan', 'dev', 'review'] as const;

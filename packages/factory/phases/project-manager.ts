@@ -34,7 +34,7 @@ import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-conte
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects/gate-recipes.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
-import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';

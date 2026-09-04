@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { checkDemo } from '../../preflight.ts';
+import { checkDemo } from '@forge/projects/preflight.ts';
 import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
 import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
 // `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
@@ -27,7 +27,7 @@ import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-bind
 // the file's existing `package-to-legacy` debt (already baselined against
 // `registry.ts`) for a NEW `package-layer-order` violation not covered by the
 // carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
-import { listDemoElements } from '../../../../orchestrator/studio/registry.ts';
+import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 

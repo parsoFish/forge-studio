@@ -25,7 +25,9 @@ import { FORGE_ROOT } from '@forge/kernel';
 
 import { resolveNodeKind } from '@forge/flows/flow-runner.ts';
 import { runFlowT, type TestDeps } from './test-fixtures/flow-runner-port.ts';
-import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from '../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { validateFlow, validateAgent } from '../../orchestrator/studio/validate.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';
 import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents/agent-bands.ts';

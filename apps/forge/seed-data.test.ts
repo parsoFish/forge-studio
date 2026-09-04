@@ -11,8 +11,12 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 
-import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
-import { validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
+import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { discoverProjects } from '@forge/kernel';
+import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from '../../orchestrator/studio/validate.ts';
 import { resolveProjectsDir } from '@forge/kernel';
 import { MODEL_BY_TIER } from '@forge/agents/phase-agent.ts';
 import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';

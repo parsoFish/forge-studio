@@ -36,15 +36,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
-import {
-  isStudioAgent,
-  loadAgentDefinition,
-  loadFlowDefinition,
-  loadKbDescriptor,
-  loadStarterFlow,
-  listStarterAgents,
-  discoverProjects,
-} from '../../orchestrator/studio/registry.ts';
+import { isStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
+import { discoverProjects } from '@forge/kernel';
+import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import {
   lintArtifactTemplates,

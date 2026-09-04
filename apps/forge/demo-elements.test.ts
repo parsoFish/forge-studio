@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { listDemoElements, loadDemoElement } from './registry.ts';
+import { listDemoElements, loadDemoElement } from '@forge/library/studio/artifact-registry.ts';
 import { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');

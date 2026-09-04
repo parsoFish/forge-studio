@@ -187,7 +187,7 @@ import { cmdAgentDispatch, parseAgentDispatchArgs } from '@forge/agents/agent-di
 import { DRY_BRIDGE_LOG_BUCKET } from './dry-bridge.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { listAgentDefinitions } from '../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { DispatchAgentRunOpts, DispatchAgentRunResult } from '@forge/agents/agent-dispatch.ts';

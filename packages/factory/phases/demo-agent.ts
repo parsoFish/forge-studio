@@ -49,7 +49,7 @@ import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
-import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
 import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';

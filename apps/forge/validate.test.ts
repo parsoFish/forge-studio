@@ -14,7 +14,7 @@ import type {
   KbDescriptor,
   ProjectDefinition,
 } from '@forge/contracts/studio/types.ts';
-import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from '@forge/agents/studio/agent-registry.ts';
 import { TRIGGER_KIND_IDS } from '@forge/flows/flow-trigger.ts';
 import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
 import {
@@ -29,7 +29,7 @@ import {
   validateLibraryFlag,
   validateProject,
   validateDiscoveredProjects,
-} from './validate.ts';
+} from '../../orchestrator/studio/validate.ts';
 import type { InstructionSeed } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

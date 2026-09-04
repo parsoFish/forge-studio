@@ -19,10 +19,10 @@ import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from '
 import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { WedgeKillError, CostCeilingError } from '@forge/flows/flow-budgets.ts';
-import { loadFlowDefinition, discoverProjects } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import type { EventLogger } from '@forge/kernel';
+import { discoverProjects, type EventLogger } from '@forge/kernel';
 import type { AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

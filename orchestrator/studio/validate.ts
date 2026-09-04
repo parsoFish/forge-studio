@@ -18,7 +18,7 @@ import { isSafeProjectName } from '@forge/flows/manifest-path-guard.ts';
 // copy without the runner importing orchestrator/. No re-export: measured, the
 // only consumers were this file and the runner.
 import { findFanOutViolations } from '@forge/flows/flow-fanout.ts';
-import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from '@forge/agents/studio/agent-registry.ts';
 import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from '@forge/flows/studio/validate-triggers.ts';
