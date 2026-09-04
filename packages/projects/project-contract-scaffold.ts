@@ -1,6 +1,6 @@
 /**
  * project-contract-scaffold.ts — the C4 contract-artifact scaffolding pure
- * helpers (B3), carved out of `cli/bridge-studio-writes.ts` (M4 §4 step 2,
+ * helpers (B3), carved out of `apps/forge/bridge-studio-writes.ts` (M4 §4 step 2,
  * projects lane, worker B).
  *
  * PURE HELPERS ONLY — no route handler lives here. `checkContractArtifactContainment`
@@ -169,7 +169,7 @@ export function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
 // w8-a1 (bead forge-7pa) — the package.json CONDITIONAL FOURTH scaffold
 // target.
 //
-// cli/preflight.ts's checkC1 (READ ONLY from this module — that file is
+// packages/projects/preflight.ts's checkC1 (READ ONLY from this module — that file is
 // outside this worker's fence) now fails a package-manager-shaped quality
 // gate (`npm`/`yarn`/`pnpm`/`npx`/`bun`/`bunx` as the first token) when the
 // project dir has no package.json: with none there, npm's own ancestor-
@@ -178,10 +178,10 @@ export function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
 // false green on the wrong repo, the exact defect this campaign closes. The
 // onboarding form's own default gate is `npm test`, so tightening C1 alone
 // left every from-scratch JS project born hard-failing (bd forge-7pa,
-// `cli/onboard-born-green.test.ts`).
+// `apps/forge/onboard-born-green.test.ts`).
 //
 // `isPackageManagerShaped`/`resolveScriptName` below are DELIBERATE,
-// byte-for-byte mirrors of the same-named functions in `cli/preflight.ts`
+// byte-for-byte mirrors of the same-named functions in `packages/projects/preflight.ts`
 // (its own `checkC1`, `PACKAGE_MANAGER_TOKENS`, `PM_NATIVE_SUBCOMMANDS`).
 // preflight.ts does not export either — it is outside this worker's fence
 // and must not be edited — so this is a deliberate, narrow duplication
@@ -191,14 +191,14 @@ export function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
 const PACKAGE_MANAGER_TOKENS = new Set(['npm', 'yarn', 'pnpm', 'npx', 'bun', 'bunx']);
 
 /** True iff `cmd`'s first token invokes a package manager (case-insensitive).
- *  Mirrors `cli/preflight.ts`'s `isPackageManagerShaped` exactly. */
+ *  Mirrors `packages/projects/preflight.ts`'s `isPackageManagerShaped` exactly. */
 function isPackageManagerShaped(cmd: string): boolean {
   const first = cmd.trim().split(/\s+/)[0] ?? '';
   return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
 }
 
 // pm-native verbs a bare `yarn <token>` / `pnpm <token>` must NOT be mistaken
-// for a project script name. Mirrors `cli/preflight.ts`'s
+// for a project script name. Mirrors `packages/projects/preflight.ts`'s
 // `PM_NATIVE_SUBCOMMANDS` exactly.
 export const PM_NATIVE_SUBCOMMANDS = new Set([
   'run', 'install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'update', 'upgrade', 'up',
@@ -211,7 +211,7 @@ export const PM_NATIVE_SUBCOMMANDS = new Set([
 
 /**
  * Resolves the package.json `scripts` key a declared gate would invoke, or
- * `null` when the shape can't be mapped to one. Mirrors `cli/preflight.ts`'s
+ * `null` when the shape can't be mapped to one. Mirrors `packages/projects/preflight.ts`'s
  * `resolveScriptName` exactly — SAME mapped shapes: bare `npm test`/
  * `yarn test`/`pnpm test` → "test"; `npm run <name>`/`yarn run <name>`/
  * `pnpm run <name>` → "<name>"; `yarn <name>`/`pnpm <name>` (name not a known

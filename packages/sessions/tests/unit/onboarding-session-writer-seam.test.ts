@@ -11,7 +11,7 @@
  * they were written at the seam rather than over HTTP.
  *
  * WHY THEY MOVED. The writer carved into this package with the four
- * session-minting routes, which left `cli/ui-bridge-onboarding-start.test.ts`
+ * session-minting routes, which left `apps/forge/ui-bridge-onboarding-start.test.ts`
  * importing `@forge/sessions` — a `legacy-to-package` edge. The split follows
  * the line the tests already drew: seam-level tests of a package function come
  * to the package (COMMON §5), and the HTTP-level acceptance tests stay in

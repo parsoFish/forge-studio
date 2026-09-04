@@ -245,7 +245,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // the project id; for a KB-anchored kind, the KB's OWN binding decides —
   // a `project`-bound KB nests its sessions under that real project, every
   // other binding under the `.kb-<id>` dot-anchor (`POST /api/studio/kbs/
-  // :id/cleanup/start`, cli/ui-bridge.ts — mirrored here, never guessed
+  // :id/cleanup/start`, apps/forge/ui-bridge.ts — mirrored here, never guessed
   // from the id alone); `COMMUNITY_REGISTRY_ANCHOR` (`.community-registry`)
   // remains the dot-anchor for any selector-less kind — the retired
   // community-refresh kind was its one real consumer (W8-B5b WI-3); the two

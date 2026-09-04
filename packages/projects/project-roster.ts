@@ -2,7 +2,7 @@
  * The project roster — `GET /api/studio/starters`,
  * `GET /api/studio/projects/starters` and `GET /api/studio/projects`.
  *
- * M4 §4 (projects routes carve). Moved out of `cli/bridge-studio.ts`'s
+ * M4 §4 (projects routes carve). Moved out of `apps/forge/bridge-studio.ts`'s
  * `handleStudioRoutes` if-chain into standalone handlers with the
  * `RouteEntry` handler signature — `packages/projects/routes.ts` (T2's
  * assembly, not this file) drops them into the projects route table. Code is
@@ -10,7 +10,7 @@
  * to change moved with it — see the two dependency-injection notes below.
  *
  * `GET /api/studio/projects/attention` and `GET /api/studio/projects/:id/
- * roadmap` did NOT carve (still in `cli/bridge-studio.ts`): their helpers
+ * roadmap` did NOT carve (still in `apps/forge/bridge-studio.ts`): their helpers
  * (`buildProjectAttention` → `scanProjectManifests`, `buildProjectRoadmap`)
  * read `@forge/flows` (queue/manifest/scheduler/work-item/run-list-cache), a
  * STRICTLY HIGHER package rank than `projects`
@@ -19,7 +19,7 @@
  * them here would be a NEW, unbaselinable `package-layer-order` violation
  * (the baseline is a shrink-only ratchet; there is no `--write-baseline`).
  * `loadProjectsWithMeta` below has NO flows dependency and DID move; the
- * attention route (staying in `cli/bridge-studio.ts`) imports it back from
+ * attention route (staying in `apps/forge/bridge-studio.ts`) imports it back from
  * here for its one remaining call.
  *
  * TWO INJECTED DEPENDENCIES, both because a rank-2 `projects` package may not
@@ -164,7 +164,7 @@ export type ProjectConfigHealth = {
  * exported helper the loader uses (`injectSidecarIntoTestProcess`, whose own
  * docstring calls itself "the ONE sidecar-injection rule ... shared by the
  * loader and the bridge's PUT-validation copy") — never a re-implementation.
- * `cli/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
+ * `apps/forge/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
  * third fixture: for every shape, `state === 'ok'` iff `loadProjectConfig`
  * accepts it, because a disagreement in EITHER direction is the defect.
  *
@@ -375,7 +375,7 @@ export type StudioStartersDeps = {
 /**
  * GET /api/studio/starters — the curated OOTB starter agents (ADR-033) the
  * New-Agent picker offers. Same capability-descriptor threading as
- * `GET /api/studio/agents` (R2-02-F1, which stays in `cli/bridge-studio.ts`)
+ * `GET /api/studio/agents` (R2-02-F1, which stays in `apps/forge/bridge-studio.ts`)
  * — starters carry a real AgentDefinition the builder reads via the same
  * client parser, so the fact must be present here too.
  *

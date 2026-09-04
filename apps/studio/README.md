@@ -4,7 +4,7 @@
 > **sole operator surface** ([ADR 031](../docs/decisions/031-studio-consolidation.md)).
 > Every load-bearing state is mirrored to `data-*` attributes (DOM-as-metrics) so
 > automation can drive the page by reading structured state. It talks to the
-> orchestrator **only** through the bridge (`cli/bridge-studio.ts`) — it never imports
+> orchestrator **only** through the bridge (`apps/forge/bridge-studio.ts`) — it never imports
 > orchestrator internals directly.
 
 Run it via `forge studio` (fixed ports: bridge 4123, UI 4124). The `data-*` convention

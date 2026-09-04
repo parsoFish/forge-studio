@@ -524,7 +524,7 @@ test(
 // scripts/check-kb-ingest-affordance.mjs:168-171's
 // `Array.isArray(composition.skills) ? composition.skills : []` — zero
 // violations, not a false catch but a real, undisclosed miss. Nothing else in
-// the repo catches this for a `library:false` agent: cli/studio-lint.ts:
+// the repo catches this for a `library:false` agent: apps/forge/studio-lint.ts:
 // 223-235 skips `validateAgent` for those. RED TODAY against the real script.
 // =============================================================================
 

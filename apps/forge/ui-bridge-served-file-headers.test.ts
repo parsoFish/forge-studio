@@ -10,8 +10,8 @@
  * easily (approve-and-merge, scheduler start, plan verdicts). No live
  * exploit exists — this pins a MISSING DEFENCE, not a demonstrated breach.
  *
- * `contentTypeFor` (cli/ui-bridge.ts) has SEVEN call sites across FIVE route
- * families — re-derived by `grep -n "contentTypeFor" cli/ui-bridge.ts`
+ * `contentTypeFor` (apps/forge/ui-bridge.ts) has SEVEN call sites across FIVE route
+ * families — re-derived by `grep -n "contentTypeFor" apps/forge/ui-bridge.ts`
  * before writing this file, not copied from any brief unverified:
  *
  *   GET /api/artifact/<cycleId>/<filename>
@@ -28,7 +28,7 @@
  *      helper called directly, so a route that forgets to wire the helper
  *      in shows up here, not just in the source ratchet).
  *   2. A source-level ENUMERATION RATCHET: `contentTypeFor` must have no
- *      direct caller anywhere in cli/ui-bridge.ts outside the one hardening
+ *      direct caller anywhere in apps/forge/ui-bridge.ts outside the one hardening
  *      helper (`servedFileHeaders`) — this is what catches the EIGHTH route
  *      a future change adds, which the seven fixtures above structurally
  *      cannot.
@@ -145,7 +145,7 @@ before(async () => {
   // Route 6 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>.
   // Minted through the real /start route (so status.json + project_repo_path
   // are exactly what a real session carries), then the generation snapshot is
-  // written directly onto disk — mirrors cli/ui-bridge-demo-generations.test.ts.
+  // written directly onto disk — mirrors apps/forge/ui-bridge-demo-generations.test.ts.
   const { json } = await post('/api/demo-builder/start', { project: 'demo' });
   genSid = json.sessionId as string;
   const genDir = join(repoDir(), '_demo', genSid, 'generations', '1');
@@ -374,7 +374,7 @@ test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites re
   // the CSP / x-content-type-options / content-disposition hardening rides along.
   //
   // M4's session-routes carve moved one of the seven call sites out of
-  // `cli/ui-bridge.ts` and into `@forge/sessions`, where the helper arrives
+  // `apps/forge/ui-bridge.ts` and into `@forge/sessions`, where the helper arrives
   // injected and so reads `ctx.servedFileHeaders(`. Decrementing this count to 6
   // would have kept the test green while the guard went BLIND to the route that
   // moved — a defense-in-depth lint has to follow the dispatch it backstops.

@@ -13,7 +13,7 @@
  *
  * Real staging sites mirrored (T1 ruling, forge-76y):
  *  - cron:           orchestrator/cron-triggers.ts:154-172 (`makeFireFn`)
- *  - webhook:         cli/bridge-hooks.ts:373-394 (the `/api/hooks/:hookId` route)
+ *  - webhook:         packages/flows/bridge-hooks.ts:373-394 (the `/api/hooks/:hookId` route)
  *  - agent-complete:  orchestrator/flow-trigger.ts:149-166 (`fireAgentCompleteTriggers`)
  *
  * Test-only: NOT a production export (T1 ruling Q8) — lives beside the
@@ -49,7 +49,7 @@ export function buildCronFlowRunRequest(overrides: Partial<FlowRunRequest> = {})
 }
 
 /**
- * Mirrors `cli/bridge-hooks.ts`'s webhook route: every field a real webhook
+ * Mirrors `packages/flows/bridge-hooks.ts`'s webhook route: every field a real webhook
  * receipt ALWAYS sets (`target`, `origin`, `triggeredBy`, `sourceFlowId`,
  * `triggerKind`, `payload`, `eventProject`) gets a realistic default;
  * `projects` is conditional at the real call site too (present only when the

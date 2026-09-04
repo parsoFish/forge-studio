@@ -35,7 +35,7 @@ export const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = 
 
 // W7-FIX-B-PROJ (review F4): the generic, language-agnostic build-output
 // globs the onboarding scaffold writes into a freshly-created repo's
-// .gitignore (`scaffoldContractArtifacts`, cli/bridge-studio-writes.ts). At
+// .gitignore (`scaffoldContractArtifacts`, apps/forge/bridge-studio-writes.ts). At
 // birth the project dir may be empty, so no language is detectable — this is
 // the deps + common-build-output cover set, kept HERE, beside
 // BUILD_ARTIFACT_HINTS, so the scaffold and the ARTIFACTS advisory (+ its

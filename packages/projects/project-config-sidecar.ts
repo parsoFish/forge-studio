@@ -13,7 +13,7 @@ import { guardedReadFile } from '@forge/kernel';
 /**
  * The `quality_gate_cmd` sidecar — `.forge/quality_gate_cmd`, a single
  * whitespace-separated command line. Preflight already reads it
- * (`cli/preflight.ts`); `loadProjectConfig` reads it too so a project can
+ * (`packages/projects/preflight.ts`); `loadProjectConfig` reads it too so a project can
  * declare the gate in ONE place. When `project.json` omits `quality_gate_cmd`,
  * the sidecar is the source of truth; when both are present, the JSON wins
  * (explicit override). The two were kept in lockstep by hand before — now the
@@ -26,7 +26,7 @@ const QUALITY_GATE_SIDECAR_REL_PATH = '.forge/quality_gate_cmd';
  * whitespace-separated command line) into an argv array. Returns `null` when the
  * file is absent, unreadable, or empty — the caller falls back to the JSON field
  * (or throws if neither is present). Whitespace-splitting mirrors how preflight
- * already consumes the sidecar (`cli/preflight.ts readQualityGateCmd`).
+ * already consumes the sidecar (`packages/projects/preflight.ts readQualityGateCmd`).
  */
 export function readQualityGateSidecar(projectRoot: string): string[] | null {
   // SEC-04 leaf: route the WHOLE `.forge/quality_gate_cmd` path (leaf included)

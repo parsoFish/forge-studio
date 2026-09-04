@@ -76,7 +76,7 @@ export function architectHexMeta(phase: HexPhase): HexMeta {
  * 7) — including inside the very lifecycle primitive built to fix it. This
  * function has NO settable "failed" field anywhere: `lifecycleState` is
  * re-derived fresh on every read (`deriveSessionLifecycleFor`,
- * cli/bridge-studio-lifecycle.ts) by the CALLER and passed in here as a
+ * packages/sessions/bridge-studio-lifecycle.ts) by the CALLER and passed in here as a
  * plain argument — nothing is stored by this module or by this function.
  * Pure: same phase + lifecycle in, same {@link HexMeta} out, always.
  *

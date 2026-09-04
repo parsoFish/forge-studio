@@ -55,7 +55,7 @@
  *
  * Design decisions this file pins:
  *
- *   - `sessionId` is validated with SAFE_ID_RE (cli/bridge-studio.ts), NOT
+ *   - `sessionId` is validated with SAFE_ID_RE (apps/forge/bridge-studio.ts), NOT
  *     SLUG_RE — real session ids are ISO-ish timestamps
  *     (`2026-08-05T10-00-00`) with an uppercase `T`, which SLUG_RE (strict
  *     lowercase-kebab) rejects. `project` is validated with SLUG_RE. This
@@ -320,7 +320,7 @@ function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, project: st
 }
 
 /** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly on
- *  disk — mirrors `cli/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
+ *  disk — mirrors `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
  *  idiom verbatim (that file's own AT-3/AT-4/AT-5 prove this exact minimal
  *  shape is sufficient for `computeAgentCleanupFindings`'s live
  *  `runBrainLint` pass to complete without throwing — no INDEX.md or other
@@ -1529,7 +1529,7 @@ test('R4-19-F2: GET /api/studio/sessions/kb-cleanup/<id>?project=<p> whose store
 // ONLY `descriptor.turnSpec` before falling back to
 // `LEGACY_SESSION_TERMINAL_PHASES` — a descriptor carrying `panel` instead
 // (onboarding, demo, instructions) fell straight to the legacy table, which
-// has NO 'onboarding' entry at all (see that table, cli/bridge-studio.ts),
+// has NO 'onboarding' entry at all (see that table, apps/forge/bridge-studio.ts),
 // so onboarding was *always* reported non-terminal, at every phase including
 // its own declared-terminal 'complete'/'failed' rows. The fix derives from
 // `descriptor.turnSpec?.phases ?? descriptor.panel?.phases` first, exactly

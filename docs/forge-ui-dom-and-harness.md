@@ -198,7 +198,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   and is dropped from the KB roster and from the derived project↔KB
   binding — never silently (W7-FIX-A4): `GET /api/studio/kbs` carries
   `unroutable: [{dir,id,path,reason}]` and `forge studio lint` reports the
-  same predicate (`unroutableKbReason`, `cli/kb-sites.ts`) as an error
+  same predicate (`unroutableKbReason`, `packages/knowledge/kb-sites.ts`) as an error
   finding `kb:<id>` / `dir-name`. The `.kb-<id>` session anchor is
   validated with the SAME `KB_ID_RE` (mixed-case / digit-leading KB ids
   reach their seeding + cleanup sessions). The project editor's Save
@@ -480,7 +480,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     surface the n/a-invariant (only SOME of forge's brain-lint checks actually
     inspect a given KB, e.g. a project-brain KB is only ever scanned by
     `checkProjectBrainIndexes`'s `project-indexes` scope — see
-    `cli/brain-lint.ts`'s `CHECK_SCOPE`) so `checksRun < checksTotal` reaching
+    `packages/knowledge/brain-lint.ts`'s `CHECK_SCOPE`) so `checksRun < checksTotal` reaching
     the operator honestly says "N of M checks actually ran", never implying a
     full clean sweep. A KB with `lint === null` (no data yet) or an all-zero
     clean lint renders NO row at all — absence is honest, a fabricated "clean"
@@ -723,7 +723,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   and from a secondary-nav link on the Agents index
   (`a[data-nav="sessions-secondary"]`, `components/studio/AgentsIndexView.tsx`,
   next to the "+ New agent" CTA). Data: `GET /api/studio/sessions?active=1`
-  (`cli/ui-bridge.ts`'s `handleStudioSessionsIndex` — flattens every
+  (`apps/forge/ui-bridge.ts`'s `handleStudioSessionsIndex` — flattens every
   registered session kind, `studio/session-kinds.yaml`, across every
   project; the four legacy kinds — architect/instructions/demo/project-brain
   — reuse their OWN existing `list*Sessions` readers verbatim, no second
@@ -1408,7 +1408,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   when it IS blocked — approval can never launder a blocked verdict.
   **PIN E (2026-08-28 hostile review) — the file package is now the WHOLE
   package, not a hardcoded pair.** `GET /api/studio/hooks/:id`
-  (`cli/bridge-studio-hooks.ts`) used to hand-build `files` from exactly two
+  (`packages/library/bridge-studio-hooks.ts`) used to hand-build `files` from exactly two
   reads — `hook.yaml` and the declared entry script — so a sibling file the
   entry script sources (e.g. `scripts/lib.sh`) was on disk, covered by the
   approval ledger's `packageHash` pin, and completely invisible to the
@@ -1670,7 +1670,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `button[type="button"][data-action="refresh-community-registry"]`
   ("Refresh registry", rendered via `StudioPage`'s `actions` header slot)
   POSTs the deterministic, LLM-free `POST /api/studio/community/refresh`
-  (`cli/bridge-studio-community.ts` → `orchestrator/studio/community-refresh-api.ts`
+  (`packages/library/bridge-studio-community.ts` → `orchestrator/studio/community-refresh-api.ts`
   → `runCommunityRefresh`) — real outbound GitHub/npm calls, no agent turn,
   no operator verdict step. The button disables while a refresh is already in
   flight (`disabledAttrs`), and is otherwise the ONLY thing on this browser
@@ -1872,7 +1872,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     run (`'not-found'` = never ran is NOT counted). Home's activity section
     carries the same root attribute + notice. **⚑ W7-B5 (agents-03/04/39):
     the aggregate bridge route now exists** — `GET /api/agents/runs/recent
-    [?limit=1..100][&kind=flow|standalone|all]` (`cli/ui-bridge.ts`) joins flow runs (ONE row per run,
+    [?limit=1..100][&kind=flow|standalone|all]` (`apps/forge/ui-bridge.ts`) joins flow runs (ONE row per run,
     RUN-level status/cost + `agents: [<slugs whose nodes the run reached>]`)
     and standalone dispatches (each attributed to its own slug off its own
     events — the D4 exact-match identity) server-side, newest-first, bounded
@@ -2741,7 +2741,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   honestly (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`) to the
   project's in-flight demo session (`/sessions/demo/<sid>`) or the kickoff
   screen, tying demo upkeep to initiative state without a fake tab switch.
-  Server-side, `RoadmapInitiative.completedAt` (`cli/bridge-studio.ts`'s
+  Server-side, `RoadmapInitiative.completedAt` (`apps/forge/bridge-studio.ts`'s
   `buildProjectRoadmap`) is threaded from `Run.completedAt`
   (`orchestrator/run-model.ts`) — the `started_at` of a cycle's
   `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event (falling
@@ -2750,7 +2750,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   standalone reflector rerun, e.g. the 2026-07-10 boot-reconcile flood, from
   smearing a stale cycle's date onto its rerun date) — via the SAME memoized
   per-manifest derivation `GET /api/runs` already uses
-  (`cli/run-list-cache.ts`'s `cachedListRuns`), so the roadmap's completedAt
+  (`packages/flows/run-list-cache.ts`'s `cachedListRuns`), so the roadmap's completedAt
   column costs nothing beyond what that route already pays: no second
   events.jsonl parser.
   A brand-new project renders `NewProjectSurface` instead — **ONE
@@ -2842,7 +2842,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   re-home can't drop a click-gated affordance)
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
-  API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
+  API itself (`packages/flows/bridge-recovery.ts`) is unchanged — only the UI moved.
   **The editor's inputs declare `data-field` (M1-G, `forge-8vfn.5.9`).** The
   page rendered fifteen inputs and not one carried a declared handle — only its
   buttons did — so nothing could review-and-change a contract element, the act
@@ -2868,7 +2868,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   REAL bound KB id — the `kb` state `KbBind.tsx` owns, threaded into the
   panel as its `boundKbId` prop, NEVER derived from the project id (a
   project's KB binding is operator-rebindable to any KB, or unbound
-  entirely — `cli/bridge-studio-writes.ts` deliberately leaves it `null`
+  entirely — `apps/forge/bridge-studio-writes.ts` deliberately leaves it `null`
   when no KB seed landed on create). When `boundKbId` is `null` the
   brain-fix button renders `data-resolve-blocked="true"` and disabled, with
   an honest `[data-component="brain-fix-unbound-hint"]` row explaining why,
@@ -3310,7 +3310,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   session lives on `/skills/new` and `/hooks/new` (see those pages' entries,
   above) — `AuthoringLauncher`, POSTing `POST /api/studio/authoring/start`,
   which spawns `forge agent run authoring <sid> --project <p>` (the generic
-  dispatch fork, `cli/agent-run.ts`'s `cmdAgentRun`) rather than the generic
+  dispatch fork, `packages/agents/agent-run.ts`'s `cmdAgentRun`) rather than the generic
   one-shot dispatch host.
   **`/architect/new` stays** as the native "start a run" entry that replaced
   the retired `/dashboard` launcher —
@@ -3465,7 +3465,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `RunPanel`
   (`components/studio/agent-builder/RunPanel.tsx`) — for a standalone
   dispatched agent run, whose `runId` (minted `_agent-<slug>-<stamp>`,
-  `cli/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
+  `apps/forge/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
   (`createLogger(runId, ...)` writes straight to `_logs/<runId>/
   events.jsonl`, the exact path `GET /api/events/<cycleId>` reads), so
   `RunPanel` opens its own `useCycleEvents(runId)` socket with no extra id
@@ -3474,7 +3474,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   additions, 2026-08-15) — the API side.**
   The session routes above converge on one shared shell. Its data comes
   from a single read route, `GET /api/studio/sessions/:kind/:sessionId[?project=<p>]`
-  (`cli/bridge-studio-sessions.ts`), which returns
+  (`packages/sessions/bridge-studio-sessions.ts`), which returns
   `{ok, kind, title, sessionId, project, phase, stages, defaultStage, turns,
   artifact, affordances, modelTier, terminal, lifecycle, [kbId]}`. **W7-A2:**
   `?project=` is OPTIONAL — absent, the bridge resolves the anchor project
@@ -3482,7 +3482,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   dot-anchors included, and probes `<name>/_<kind>/<sid>` through
   `resolveGuardedPath`; 0 hits → 404, ≥2 → 409 asking for `?project=`) and
   echoes it on the payload. `lifecycle` (W7-A2, ALWAYS present) is
-  `deriveSessionLifecycleFor(...)` (`cli/bridge-studio-lifecycle.ts`):
+  `deriveSessionLifecycleFor(...)` (`packages/sessions/bridge-studio-lifecycle.ts`):
   `{state: working|awaiting-operator|crashed|stalled|terminal, needsYou,
   error, idleMs, cancellable}` — DERIVED at read time, never stored on
   status.json: `terminal` first (incl. the universal `cancelled` phase);
@@ -3528,7 +3528,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   the surface that attaches it lands with the shell route itself.
 - **The generic session CANCEL route (W7-A2) — the API side.**
   `POST /api/studio/sessions/:kind/:sessionId/cancel` `{project?}`
-  (`cli/bridge-studio-session-cancel.ts`; dispatched in `handleHttp` BEFORE
+  (`packages/sessions/bridge-studio-session-cancel.ts`; dispatched in `handleHttp` BEFORE
   the affordance write route below, whose regex would otherwise swallow
   `cancel` as an affordance id) — for EVERY registered kind, architect
   included. Chain: kind → registry (404 naming the set); `sessionId` →
@@ -3543,7 +3543,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   fail-closed ownership; SIGTERM to the detached runner's process group,
   then the pid) and writes `{...status, phase: 'cancelled', cancelled_at,
   cancelled_from}` via `guardedWriteSessionStatus` — `cancelled` is the ONE
-  universal reserved terminal phase (`CANCELLED_PHASE`, `cli/bridge-studio.ts`;
+  universal reserved terminal phase (`CANCELLED_PHASE`, `apps/forge/bridge-studio.ts`;
   ADR-043 2026-08-19 amendment), read as terminal by `isTerminalPhase` for
   every kind BEFORE the per-kind tables, and never a per-kind yaml row.
   Response `{ok, kind, sessionId, project, phase:'cancelled', previousPhase,
@@ -3610,7 +3610,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   rendered inside `[data-section="session-affordance"][data-affordance-kind=…]`:
   `question-form` → **W7-C2 (sessions-kinds-17/19, bead forge-lzv): when the
   bridge attaches the pending questions (`meta.questions`, awaiting-answers
-  only — `attachPendingQuestions`, `cli/bridge-studio-sessions.ts`), the
+  only — `attachPendingQuestions`, `packages/sessions/bridge-studio-sessions.ts`), the
   panel renders ONE control per question by reusing `ArchitectQuestionForm`
   (`[data-section="session-interview"]`, per-question
   `[data-question-index]`/`[data-option-label]`/`[data-question-freetext]`
@@ -3619,7 +3619,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `"Operator response"` placeholder. **W7-C2 T1 review (A3): each answer
   also carries its question's `questionId`** — the bridge derives one per
   pending question from its POSITION in the round's questions.json
-  (`q1`, `q2`, … — `pendingQuestionId`, `cli/bridge-studio-sessions.ts`) and
+  (`q1`, `q2`, … — `pendingQuestionId`, `packages/sessions/bridge-studio-sessions.ts`) and
   the write route re-derives the same ids to cross-check, refusing an answer
   whose id is unknown or whose text does not match that id's question.
   Answers bound by TEXT alone mis-bind the moment a round repeats or rewords
@@ -4276,7 +4276,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     not a fabricated default). Submit is `[data-action="create-kb"]`
     (disabled until name + binding are filled); on success the server
     validates `binding.band` against that SAME real vocabulary
-    (`POST /api/studio/kbs`, `cli/bridge-studio-kbs.ts`) and writes it into
+    (`POST /api/studio/kbs`, `packages/knowledge/bridge-studio-kbs.ts`) and writes it into
     `kb.yaml`'s `binding.band` — never silently dropped between the picker
     and the descriptor.
   - **Create hand-off → a real seeding session (R1-06-F2).** A successful
@@ -4299,13 +4299,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     - any other binding kind (`flow`, `unique`) has no natural project home,
       so the session is nested under a **dot-prefixed anchor**:
       `projects/.kb-<kbId>/_project-brain/<sessionId>/status.json`
-      (`KB_SEEDING_ANCHOR_PREFIX = '.kb-'`, `cli/bridge-studio-kbs.ts`). Both
+      (`KB_SEEDING_ANCHOR_PREFIX = '.kb-'`, `packages/knowledge/bridge-studio-kbs.ts`). Both
       `discoverProjects` and the KB descriptor walk (`subDirs`) already skip
       dot-prefixed dirs — a real project/KB id is slug-validated with no
       leading dot — so this keeps the session on disk and runner-reachable
       while never surfacing as a phantom project on the library. **Since
       R4-19 WI-2** it is also **reachable through the session-shell route**:
-      `invalidProjectReason` (`cli/bridge-studio-sessions.ts`) carries a
+      `invalidProjectReason` (`packages/sessions/bridge-studio-sessions.ts`) carries a
       bounded carve-out — `project=.kb-<id>` passes when the post-prefix
       remainder matches the SAME `SLUG_RE` every other project id is checked
       against, so `/`, `..`, NUL, and an empty slug still reject (general
@@ -4349,7 +4349,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     (knowledge-05/32: the old header buttons, the maintenance panel, and the
     drain panel's own dispatch button all converged here). Mutually gated by
     the KB-level active-job fact: `GET /api/studio/kbs/:id/active-job`
-    (`cli/kb-job-state.ts`'s `deriveKbActiveJob` — the SAME derivation every
+    (`packages/knowledge/kb-job-state.ts`'s `deriveKbActiveJob` — the SAME derivation every
     mutating bridge route 409s with), any running job disables the rest and
     `[data-component="kb-action-gate-reason"]` shows the server's own
     wording. Actions (each with inline explanatory copy, knowledge-32/33):
@@ -4379,7 +4379,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     **`project` the route itself returns**, never one re-derived from
     `kbId` — a non-project-bound KB anchors its session under a
     server-minted `.kb-<id>` scratch project
-    (`KB_SEEDING_ANCHOR_PREFIX`, `cli/ui-bridge.ts`), so building the URL
+    (`KB_SEEDING_ANCHOR_PREFIX`, `apps/forge/ui-bridge.ts`), so building the URL
     from `kbId` instead would 404 for every such KB. A start failure
     surfaces verbatim on the kickoff form, never swallowed. Render-tested:
     `lib/kb-action-group-render.test.ts`. Consolidate is genuinely
@@ -4403,7 +4403,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   - **KB drain-to-green panel (Health tab, W6-B13; reshaped W7-B2).**
     `KbDrainPanel.tsx` replaces `LintResolutionPanel.tsx` (deleted) — the
     drain drives every auto- and agent-tier lint finding to a fixed point,
-    entirely server-side (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`,
+    entirely server-side (`packages/knowledge/bridge-studio-kb-drain.ts`'s `runKbDrain`,
     W6-B12): the component is a pure OBSERVER of
     `_logs/_kb-drain-<runId>/status.json`, never the owner of the run —
     W7-B2 moved the DISPATCH button into `KbActionGroup` above it. Root:
@@ -4481,7 +4481,7 @@ is what this contract reads — but it cannot be the only distinguisher.
       `'pending'` (W8-B2) is the honest IN-FLIGHT value: the turn has run and
       this round's post-fix lint — the sole authority on whether a finding
       cleared — has not. Every terminal value is DERIVED there
-      (`finalizeRoundRows`, `cli/bridge-studio-kb-drain.ts`), never from the
+      (`finalizeRoundRows`, `packages/knowledge/bridge-studio-kb-drain.ts`), never from the
       agent's own `cleared` self-report.
     - **What the turn PROPOSED (W8-B2, ON-3).** Each row additionally carries
       `[data-drain-finding-disposition="applied"|"repaired"|"refused"|"drafted"|"mixed"|"none"]`
@@ -4514,7 +4514,7 @@ is what this contract reads — but it cannot be the only distinguisher.
       plain text and no link, never a link that lands on the shared NotFound.
       Stated as the DIRECTORY rule rather than a name list on purpose: a name
       list here would be a second, narrower copy of
-      `cli/kb-drain-structural.ts`'s `INDEX_PAGE_NAMES`, and two derivations
+      `packages/knowledge/kb-drain-structural.ts`'s `INDEX_PAGE_NAMES`, and two derivations
       disagreeing is the defect this lane exists to close. The reverse wiring exists too: selecting a
       node in the graph writes `?node=` back to the URL
       (`app/knowledge/page.tsx`'s `syncSelectionToUrl`, `router.replace`), so
@@ -4639,7 +4639,7 @@ is what this contract reads — but it cannot be the only distinguisher.
       `checks: KbHealthCheck[]` renders one row per named check —
       `[data-check=<name>][data-check-status="pass"|"warn"|"fail"|"unknown"|"n/a"][data-check-count]`
       (`errorCount+flagCount`) — for the 12 checks in `CHECK_NAMES`
-      (`cli/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
+      (`packages/knowledge/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
       `checkSourceLinks`, `checkStaleness`, `checkOrphans`,
       `checkProjectBrainIndexes`, `checkLengthSoftCap`,
       `checkCategoryScope`, `checkReflectorLoss`, `checkDanglingEdges`,
@@ -4674,7 +4674,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     real `reflect.kb-ingest` event (`orchestrator/kb-health.ts`'s post-reflect
     `runPostReflectionKbHealth`) found in this KB's own
     `_logs/<cycleId>/events.jsonl` history
-    (`GET /api/studio/kbs/:id/ingest-activity`, `cli/bridge-studio-kbs.ts` — a
+    (`GET /api/studio/kbs/:id/ingest-activity`, `packages/knowledge/bridge-studio-kbs.ts` — a
     plain filesystem scan over `listCycles`, never a synthetic in-memory
     list): `[data-ingest-kb=<kb>]`, `[data-ingest-fresh-themes=<n>]`,
     `[data-ingest-impl="builtin"|"cmd"]`. **The invariant survives

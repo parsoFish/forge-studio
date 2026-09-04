@@ -86,7 +86,7 @@
 // `emitDryBridgeSkip`/`dryBridgeAgentTurnMarker` call sites with no fixed
 // argument shape to grep) are NOT parity-checked here; their red-on-regression
 // coverage instead lives in the per-route unit tests
-// (cli/ui-bridge-dry-spawn.test.ts, cli/ui-bridge-reflect.test.ts, FIX 3).
+// (apps/forge/ui-bridge-dry-spawn.test.ts, apps/forge/ui-bridge-reflect.test.ts, FIX 3).
 // Review carries that residual divergence risk. Scanner-precision limits
 // beyond dispatch-shape (two-value method gates collapsing to the ambiguous
 // '*', the inline-regex-literal requirement for match-var routes, the
@@ -174,7 +174,7 @@ const KNOWN_DISPATCH_FILES = [
   // `packages/agents` had to be ADDED to DISPATCH_SCAN_DIRS above for any of
   // them to be discovered at all: without it this file reported the two
   // `/api/agents/*` rows in `cli/dry-bridge.ts` as STALE the moment their
-  // handlers left `cli/ui-bridge.ts`, and the obvious "fix" — deleting those
+  // handlers left `apps/forge/ui-bridge.ts`, and the obvious "fix" — deleting those
   // rows — would have silently stopped enforcing the classification on a
   // route that SPAWNS. Pinned here for the same reason as the rows above: a
   // file that stops being discovered must fail loudly, not shrink the scan.
@@ -620,7 +620,7 @@ test('fixture: a block-bodied method check (e.g. the CSRF gate shape) is not tra
 
 // ===========================================================================
 // R4-19-F2 — the kb-cleanup session's two new real-acting routes. RED at
-// branch base: neither route exists in cli/ui-bridge.ts yet, so
+// branch base: neither route exists in apps/forge/ui-bridge.ts yet, so
 // BRIDGE_ROUTE_CLASSIFICATION carries no row for either — the automatic
 // direction-1/2 scans above cannot catch this gap on their own (a route that
 // doesn't exist yet has no derived dispatch candidate to compare against —

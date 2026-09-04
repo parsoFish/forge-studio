@@ -297,7 +297,7 @@ export type WriteOptions = {
    * the guard re-read `forge.config.json` from disk. A long-lived caller (the
    * bridge, which snapshots `ctx.projectsRoot` once at server start) must be
    * validated against the root it is actually using — see
-   * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by
+   * `packages/flows/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by
    * `promote-manifests` and `mint-triggered-initiative`, which resolve the
    * root and validate it in the SAME synchronous call and so cache no root to
    * diverge from; the guard then self-resolves exactly as before.
@@ -316,7 +316,7 @@ export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): s
   // its parent is the one trusted anchor this choke point can derive without
   // a new parameter. writeManifest is the single write choke point for a
   // manifest's path-shaped fields (worktree_path / project_repo_path /
-  // cycle_id / project) — see cli/manifest-path-guard.ts's module docstring
+  // cycle_id / project) — see packages/flows/manifest-path-guard.ts's module docstring
   // for why validation belongs HERE rather than at the dozen downstream read
   // sites. Throws (fails closed) rather than writing an unsafe manifest.
   const forgeRoot = dirname(queueRoot);

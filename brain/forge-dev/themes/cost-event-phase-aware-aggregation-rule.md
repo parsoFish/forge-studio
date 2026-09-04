@@ -10,7 +10,7 @@ related_themes: [jsonl-event-log, holistic-metrics-onboarding]
 
 # Cost aggregation from events.jsonl must be phase-aware
 
-- **Evidence**: betterado 2026-07 cost-autopsy (git history). `cli/metrics.ts::aggregate()` is the one correct implementation; `per_skill` and `orchestrator/run-model-derive.ts::buildNodeMeta()` both summed unconditionally and inflated dev-loop/unifier cost 2–3× (they feed Studio's `data-phase-cost-usd` badges) — fixed 2026-07-11.
+- **Evidence**: betterado 2026-07 cost-autopsy (git history). `packages/flows/metrics.ts::aggregate()` is the one correct implementation; `per_skill` and `orchestrator/run-model-derive.ts::buildNodeMeta()` both summed unconditionally and inflated dev-loop/unifier cost 2–3× (they feed Studio's `data-phase-cost-usd` badges) — fixed 2026-07-11.
 
 For a phase with an internal iteration loop (developer-loop, unifier), iteration
 events, per-WI-end events, and phase-rollup-end events can each carry `cost_usd`

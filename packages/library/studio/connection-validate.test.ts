@@ -483,7 +483,7 @@ guards: []
   // T2 ruling (round 2, item 5): install: is a CLOSED two-method
   // discriminated union — an unrecognised method value THROWS at load,
   // surfaced by forge studio lint's ALREADY-SHIPPED catalog try/catch
-  // (cli/studio-lint.ts section 3 — `catch (err) { push a 'load' finding }`)
+  // (apps/forge/studio-lint.ts section 3 — `catch (err) { push a 'load' finding }`)
   // — never a bespoke connection/* finding of its own. This is the "closed
   // set, no silent binary/brew/curl escape hatch" acceptance criterion.
   it('an unrecognised install method (e.g. "binary") THROWS at catalog load — surfaced by runStudioLint\'s EXISTING catalog try/catch as a "load" finding, never a fabricated connection/* finding', () => {

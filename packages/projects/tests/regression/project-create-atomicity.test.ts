@@ -279,7 +279,7 @@ test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment
 //   seedProjectBrain (:233) — writes brain/projects/<id>/{kb.yaml,profile.md,
 //                    themes/README.md}; can throw EACCES on a brain write.
 //   runPreflight   (:235) — a PURE, non-throwing reporter (every readFileSync in
-//                    cli/preflight.ts is existsSync-guarded or try/caught, and
+//                    packages/projects/preflight.ts is existsSync-guarded or try/caught, and
 //                    loadProjectConfig is wrapped), so it can NEVER itself orphan;
 //                    the tail-most REPRODUCIBLE Phase-2 throw is seedProjectBrain's
 //                    final write, which AT-4on-5 pins.
@@ -304,7 +304,7 @@ test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment
 // at the function level; reading its source confirms it adds no cleanup of its
 // own beyond the bare `try { scaffoldGreenfieldProject } catch { print+exit }`.
 // The bridge greenfield route IS driven end-to-end in
-// cli/bridge-studio-writes.test.ts (AT-4on-4 + AT-4on-6).
+// apps/forge/bridge-studio-writes.test.ts (AT-4on-4 + AT-4on-6).
 // ===========================================================================
 
 /** True iff creating a child under `dir` is ACTUALLY blocked by permissions in

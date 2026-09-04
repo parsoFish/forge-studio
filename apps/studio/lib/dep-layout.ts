@@ -1,7 +1,7 @@
 /**
  * Topological-level layout — forge-ui's own pure topological-level module.
  * There is no server-side counterpart today: `orchestrator/dep-levels.ts`
- * does not exist anywhere in this repo, and `cli/architect-plan.ts`'s
+ * does not exist anywhere in this repo, and `packages/sessions/kinds/architect-plan.ts`'s
  * PLAN.html dependency graph carries no level algorithm of its own (verified
  * by reading both, not assumed) — this corrects a stale header claim that
  * had drifted from the as-built code.

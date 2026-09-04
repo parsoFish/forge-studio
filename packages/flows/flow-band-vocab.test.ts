@@ -1,5 +1,5 @@
 /**
- * R1-06 WI-1 group A pin — cli/flow-band-vocab.ts (T1 ruling Q8) does not
+ * R1-06 WI-1 group A pin — packages/flows/flow-band-vocab.ts (T1 ruling Q8) does not
  * exist yet. Once it lands, `listFlowBandIds(forgeRoot, flowId)` must
  * return the flow's real band vocabulary: the distinct BAND_GUARD_IDS
  * declared by the SKILL.md `composition.guards` of every agent-bearing node
@@ -21,7 +21,7 @@
  * So the real expected vocabulary for forge-develop is exactly
  * {demo-band, review-band}.
  *
- * RED today: cli/flow-band-vocab.ts does not exist — the import below fails
+ * RED today: packages/flows/flow-band-vocab.ts does not exist — the import below fails
  * (module not found), which IS the RED proof for this pin. Once the helper
  * lands, the assertion below is the real behavior it must satisfy against
  * this repo's actual forge-develop flow and actual SKILL.md files — a real

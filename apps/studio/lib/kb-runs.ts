@@ -1,6 +1,6 @@
 /**
  * kb-runs.ts (W7-B2, knowledge-20) — map the KB run-history rows
- * (`GET /api/studio/kbs/:id/runs`, cli/bridge-studio-kb-drain.ts's
+ * (`GET /api/studio/kbs/:id/runs`, packages/knowledge/bridge-studio-kb-drain.ts's
  * `listKbRuns`) onto the shared `LedgerRow` shape `HistoryLedger` renders,
  * exactly the way `agent-ledger.ts` maps agent history. Pure — directly
  * unit-testable (./kb-runs.test.ts).

@@ -1,6 +1,6 @@
 /**
  * ACCEPTANCE TESTS (must be RED until SEC-02 lands) — defence-in-depth pin at
- * `runRequeue` (`cli/forge-requeue.ts`) itself, the actual destructive call
+ * `runRequeue` (`packages/flows/forge-requeue.ts`) itself, the actual destructive call
  * site (`rmSync(worktreePath, {recursive:true, force:true})` /
  * `git -C <projectRepoPath> branch -D` / `push origin --delete`).
  *
@@ -11,7 +11,7 @@
  * poisoned by some other writer. `runRequeue` re-serializes via
  * `serializeManifest` without validating anything today, so this is a
  * genuinely independent choke point from the bridge-route fix in
- * `cli/bridge-recovery-manifest-containment.test.ts`.
+ * `packages/flows/bridge-recovery-manifest-containment.test.ts`.
  */
 
 import { test, before, after } from 'node:test';

@@ -24,7 +24,7 @@
  * and `demoProcessChanged` below are now thin re-exports of the moved
  * implementations in `@forge/projects/project-contract-scaffold.ts` and
  * `@forge/projects/bridge-studio-project-onboard.ts` — kept ONLY because two existing test
- * files (`cli/onboard-git-init.test.ts`, `cli/bridge-studio-writes-demo-
+ * files (`apps/forge/onboard-git-init.test.ts`, `cli/bridge-studio-writes-demo-
  * design.test.ts`) import them directly from this module; every other
  * projects-only helper (`checkContractArtifactContainment`,
  * `resolveManagedProject`, `toClauseDto`, `needsGitInit`, …) moved with no
@@ -64,7 +64,7 @@ import {
 // wired to the real @forge/knowledge implementation (already an accepted,
 // baselined `legacy-to-package-not-via-shim` edge for this legacy file —
 // see scripts/baselines/boundaries.json), ONLY because
-// cli/onboard-git-init.test.ts imports it directly from this module. Every
+// apps/forge/onboard-git-init.test.ts imports it directly from this module. Every
 // other helper that used to live here (ScaffoldContainmentError,
 // contractArtifactTargets, needsGitInit, isPackageManagerShaped,
 // PM_NATIVE_SUBCOMMANDS, resolveScriptName, needsPackageJsonScaffold,
@@ -89,7 +89,7 @@ export function scaffoldContractArtifacts(
 
 // `demoProcessChanged` MOVED to @forge/projects/bridge-studio-project-onboard.ts (M4-projects
 // carve, worker B). Re-exported here ONLY because
-// cli/bridge-studio-writes-demo-design.test.ts imports it directly from this
+// apps/forge/bridge-studio-writes-demo-design.test.ts imports it directly from this
 // module.
 export { demoProcessChanged } from '@forge/projects/bridge-studio-project-onboard.ts';
 
@@ -560,7 +560,7 @@ export async function handleStudioWriteRoutes(
       // forge-develop), so a run of THIS flow is locked while in flight.
       // Pre-S8 manifests with no flow_id stamp as 'unknown' (never matches a real
       // editable flow id) — correct, an unknowable archival flow is not editable.
-      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
       const activeRun = cachedListRuns(ctx.forgeRoot, Date.now()).find(
         (r) => r.flowId === id && r.status === 'active',
       );

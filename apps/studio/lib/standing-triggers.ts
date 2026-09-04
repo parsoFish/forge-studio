@@ -2,7 +2,7 @@
  * Standing-trigger selection (R6-01 WI-4, the rider parked by R6-04).
  *
  * SOURCE OF TRUTH is the server: `GET /api/triggers` (handler
- * `cli/bridge-studio.ts`) scans every registered flow's OWN `triggers:`
+ * `apps/forge/bridge-studio.ts`) scans every registered flow's OWN `triggers:`
  * declarations and emits `{on, target:{kind,ref}, projects, sourceFlowId}`.
  * Nothing here re-derives a trigger fact — this module only SELECTS and
  * VALIDATES what the wire already said.
@@ -101,7 +101,7 @@ export function parseStandingTrigger(raw: unknown): StandingTrigger | null {
  * Parse the whole `{triggers: [...]}` payload. A single malformed row is
  * dropped rather than sinking the listing — the same rule the server applies
  * to a malformed `flow.yaml` when building this very payload ("one malformed
- * flow.yaml must not sink the whole listing", cli/bridge-studio.ts). A
+ * flow.yaml must not sink the whole listing", apps/forge/bridge-studio.ts). A
  * non-array payload yields an empty list.
  */
 export function parseStandingTriggers(raw: unknown): StandingTrigger[] {

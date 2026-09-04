@@ -93,7 +93,7 @@ function setupSession(overrides?: Partial<ArchitectStatus>): {
   // SEC-02: project_repo_path must be genuinely contained under
   // <forgeRoot>/projects/ (forgeRoot here is `root`, the queue root's
   // parent) — mirrors production's `join(ctx.projectsRoot, body.project)`
-  // default (cli/ui-bridge.ts). This also makes `join(projectRoot, '..')`
+  // default (apps/forge/ui-bridge.ts). This also makes `join(projectRoot, '..')`
   // below a genuine `projects/` dir, not just `root` itself.
   const projectRoot = join(root, 'projects', 'project');
   const logsRoot = join(root, '_logs');

@@ -225,7 +225,7 @@ function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.El
 
   // W8-A2 (ON-7 defect 2) — `lifecycle.error` is the runner's OWN crash
   // message (the last non-stack line of stderr.log —
-  // `cli/bridge-studio-lifecycle.ts::extractErrorMessage`), reached now
+  // `packages/sessions/bridge-studio-lifecycle.ts::extractErrorMessage`), reached now
   // that `GET /api/architect/sessions` finally wires the lifecycle in (ON-7
   // defect 1). Naming a LOG FILE PATH was never an error message — the
   // operator had to go open a terminal and cat it themselves. Falls back to

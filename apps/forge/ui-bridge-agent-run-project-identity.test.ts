@@ -1,6 +1,6 @@
 /**
  * SEC-07 acceptance pins: the bridge route `POST /api/agents/<slug>/run`
- * (`cli/ui-bridge.ts`) must validate an untrusted `body.project` by realpath
+ * (`apps/forge/ui-bridge.ts`) must validate an untrusted `body.project` by realpath
  * IDENTITY, not merely by shape (`SAFE_PROJECT_NAME_RE`) + existence
  * (`existsSync(join(projectsRoot, body.project))`). An in-root project NAME
  * whose real location resolves OUTSIDE the projects root (a symlink) passes
@@ -11,10 +11,10 @@
  * `FORGE_ARCHITECT_NO_SPAWN=1` keeps the route from launching a real agent
  * process (see `spawnAgentDispatch`) — the pin is the PRE-spawn refusal.
  *
- * Fixture mirrors `cli/ui-bridge-agent-run.test.ts` (its `studioAgent`
+ * Fixture mirrors `apps/forge/ui-bridge-agent-run.test.ts` (its `studioAgent`
  * generator, `test-runnable` unattended slug, and CSRF headers) and the
  * per-test `startBridge({ forgeRoot, port: 0 })` shape used by the last test
- * in `cli/legacy-dispatch-project-guard.test.ts`.
+ * in `packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts`.
  *
  * PUBLIC-REPO NOTE: neutral naming — these describe what the route REJECTS (a
  * project name whose directory identity does not match its expected in-root
@@ -45,7 +45,7 @@ delete process.env.FORGE_PROJECTS_DIR;
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
 /** A non-interactive (dispatchable) roster agent — mirrors the `test-runnable`
- *  fixture the sibling `cli/ui-bridge-agent-run.test.ts` dispatches successfully
+ *  fixture the sibling `apps/forge/ui-bridge-agent-run.test.ts` dispatches successfully
  *  (surface: unattended, empty composition ⇒ no unready connections). */
 function studioAgent(slug: string, surface: string): string {
   return `---

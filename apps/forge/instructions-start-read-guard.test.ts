@@ -8,7 +8,7 @@
  * rejects an out-of-root `project` a few lines later, so two requests that
  * differ only in whether the read escaped return the SAME response — the oracle
  * is not observable through the wire. And a call-record spy is not available
- * here: this repo has empirically verified (see cli/ui-bridge-authoring-start.test.ts's
+ * here: this repo has empirically verified (see apps/forge/ui-bridge-authoring-start.test.ts's
  * spawn note) that node:test's mock.method cannot redefine ui-bridge's named ESM
  * imports. The only honest, RED-at-base assertion left is a structural one, the
  * same shape roadmap-serpentine-retired.test.ts uses to pin the ABSENCE of code.
@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // M4 session-routes carve: the /api/instructions/start handler moved verbatim
-// out of cli/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING
+// out of apps/forge/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING
 // gate, so it has to read the file the handler now lives in — repointing it is
 // the whole difference between a guard that still watches the ordering and one
 // that reads a file where the code no longer is and passes vacuously.

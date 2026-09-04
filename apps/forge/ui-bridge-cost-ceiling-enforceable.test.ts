@@ -3,7 +3,7 @@
  * new `costCeilingEnforceable` capability fact (orchestrator/studio/derive.ts
  * `agentCapabilityDescriptor`) on each agent's `capability` object — the SAME
  * wire shape the route already uses for `interactive`/`runtimeSdks`/
- * `fanoutCapable`/`materials` (cli/bridge-studio.ts:
+ * `fanoutCapable`/`materials` (apps/forge/bridge-studio.ts:
  * `agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) }))`).
  *
  * This is a BRIDGE-LAYER test (independent of
@@ -17,12 +17,12 @@
  *
  * Placement: `node --test` home (package.json test glob includes
  * `cli/*.test.ts`). Mirrors the harness pattern established in
- * `cli/ui-bridge-agent-run-ceiling.test.ts` section (D) — reimplemented
+ * `apps/forge/ui-bridge-agent-run-ceiling.test.ts` section (D) — reimplemented
  * locally (not imported) since these are independently-owned test files, the
  * same convention that file's own header documents for
  * DRY_BRIDGE_LOG_BUCKET-adjacent helpers.
  *
- * RUN: node --test --experimental-strip-types cli/ui-bridge-cost-ceiling-enforceable.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/ui-bridge-cost-ceiling-enforceable.test.ts
  */
 
 import { test } from 'node:test';

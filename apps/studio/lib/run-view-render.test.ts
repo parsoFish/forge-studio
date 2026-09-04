@@ -22,14 +22,14 @@
  * wiring is today.
  *
  * REAL DATA SHAPES this file's fixtures are grounded in (nothing invented):
- *   - materials reference shape `{path, kind}` — `cli/ui-bridge.ts`'s
+ *   - materials reference shape `{path, kind}` — `apps/forge/ui-bridge.ts`'s
  *     `agent-run.materials-staged` log event
  *     (`metadata.materials: [{path, kind}]`, ~line 1354) and
  *     `orchestrator/agent-dispatch.ts`'s `MaterialReference` type.
  *   - ceiling provenance `kickoff_ceiling_usd` — the `end` event's
  *     `metadata.kickoff_ceiling_usd` (`orchestrator/run-agent.ts` ~line 387),
  *     already pinned to survive into `GET /api/agents/runs/:runId`'s new
- *     `lines` field by `cli/ui-bridge-agent-run.test.ts`'s new tests.
+ *     `lines` field by `apps/forge/ui-bridge-agent-run.test.ts`'s new tests.
  *   - `RunLogLine[]` — `./run-log-line.ts` (this same WI, item 2).
  *
  * ASSUMED EXPORTS from `../components/studio/agent-builder/RunView.tsx`:

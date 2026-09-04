@@ -184,7 +184,7 @@ type DiscoveredMaterials = {
 };
 
 /**
- * DISCOVER whatever `cli/ui-bridge.ts`'s `stageMaterials` already staged
+ * DISCOVER whatever `apps/forge/ui-bridge.ts`'s `stageMaterials` already staged
  * under `<logsRoot>/<runId>/materials/` (R6-04-F2 WI-1 round 3) — the fix
  * for the finding that nothing in the dispatch path ever read materials
  * back off disk, so a staged, referenced-in-the-event-log file never

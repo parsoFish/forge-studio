@@ -5,13 +5,13 @@
  * tests in this package today, kept 0): `startBridge` resolves config, runs a
  * reflect-reconcile startup pass and wires every route family, none of which
  * is under test here. Each handler is called directly with a mock req/res —
- * the whole point of carving the dispatch out of `cli/bridge-studio.ts`.
+ * the whole point of carving the dispatch out of `apps/forge/bridge-studio.ts`.
  *
  * Coverage carried from the bridge-level tests the routes moved out of:
- *   - `cli/bridge-studio.test.ts`'s "GET /api/studio/projects returns
+ *   - `apps/forge/bridge-studio.test.ts`'s "GET /api/studio/projects returns
  *     projects array" / "tolerates project without project.json" /
  *     "sources instructions from AGENTS.md" family.
- *   - `cli/id-rule.test.ts`'s "roster: GET /api/studio/projects lists
+ *   - `apps/forge/id-rule.test.ts`'s "roster: GET /api/studio/projects lists
  *     'trafficGame' verbatim and auto-binds the KB whose binding.ref names
  *     it" — reproduced here via the injected `projectKbBindings` dependency
  *     rather than a real `@forge/knowledge` KB descriptor, since this
@@ -20,7 +20,7 @@
  *     new surface this carve introduced, so it gets its own direct test
  *     (`createProjectsListHandler` deps below) rather than only an indirect
  *     one through `loadProjectsWithMeta`.
- *   - `cli/bridge-studio-writes.test.ts`'s starters coverage, reproduced via
+ *   - `apps/forge/bridge-studio-writes.test.ts`'s starters coverage, reproduced via
  *     the injected `StudioStartersDeps` (dependency-injection note 2).
  */
 import { test } from 'node:test';

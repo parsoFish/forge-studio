@@ -67,7 +67,7 @@
  *    the old closed lookup could not do).
  *
  *    VERIFIED GAP (flagged, not silently assumed away): as of this
- *    amendment the REAL route (cli/bridge-studio-sessions.ts, unchanged
+ *    amendment the REAL route (packages/sessions/bridge-studio-sessions.ts, unchanged
  *    since PR1 — `git diff --stat HEAD` on it is empty) does not yet put
  *    `label` on the artifact it sends; see session-client.test.ts's header
  *    amendment for the full trace. This module's contract is written

@@ -11,12 +11,12 @@
  * readability.ts` must stay an import LEAF — node:*, `./studio-path-guard.ts`,
  * and `../orchestrator/**` only — so it can never validate a project id
  * against `invalidProjectReason` (packages/sessions/bridge-studio-sessions.ts, which itself
- * pulls `SAFE_ID_RE` from cli/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX`
+ * pulls `SAFE_ID_RE` from apps/forge/bridge-studio.ts and `KB_SEEDING_ANCHOR_PREFIX`
  * from packages/knowledge/bridge-studio-kbs.ts — importing either into the leaf would create
  * the bridge module graph's first import cycle). This file therefore covers
  * ONLY the pure derivations and the guarded log-dir resolution:
  *   - `sessionLogDirName`, `parseGuardedEventsJsonl` (the MOVED-verbatim
- *     helper from cli/ui-bridge.ts's private `parseGuardedEventsJsonl`)
+ *     helper from apps/forge/ui-bridge.ts's private `parseGuardedEventsJsonl`)
  *   - `deriveLegacySessionPhase` (pure) — last metadata.phase string
  *   - `deriveLegacySessionProject` (pure, RAW — NOT a validator: returns the
  *     first metadata.project string verbatim, unrejected; validating it

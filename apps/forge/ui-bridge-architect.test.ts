@@ -364,7 +364,7 @@ test('POST /api/architect/start with an out-of-envelope modelTier ("opus") 400s 
 // body.project)` accepts the caller-supplied field with ZERO validation and
 // persists it verbatim — the field every downstream architect/runner call
 // (git ops, file writes under the "repo") trusts. Fix shape (binding): reuse
-// `isContainedProjectRepoPath` (cli/manifest-path-guard.ts, SEC-02) at this
+// `isContainedProjectRepoPath` (packages/flows/manifest-path-guard.ts, SEC-02) at this
 // route too, per the brief's measurement that no legitimate caller
 // (scripts/verify-cycle.mjs's driveArchitect sends
 // join(FORGE_ROOT,'projects',PROJECT), which the guard accepts) is broken by

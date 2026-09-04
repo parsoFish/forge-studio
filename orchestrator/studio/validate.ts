@@ -33,7 +33,7 @@ import { type Finding, err, flag } from '@forge/kernel/findings.ts';
 // The library-owned validators (Catalog/Community/Template/Skill kinds, spec
 // §3.1) moved to `packages/library/studio/library-validate.ts` (M4
 // library-by-kind carve, Part 1); re-exported below so this file's existing
-// importers — chiefly `cli/studio-lint.ts` — stay untouched.
+// importers — chiefly `apps/forge/studio-lint.ts` — stay untouched.
 import {
   validateArtifactTemplate,
   validateCatalog,
@@ -54,7 +54,7 @@ export type { Finding };
 
 // The five library-owned validators (see the import above) moved to
 // `packages/library/studio/library-validate.ts`; re-exported for
-// `cli/studio-lint.ts` and this file's own test suite.
+// `apps/forge/studio-lint.ts` and this file's own test suite.
 export { validateArtifactTemplate, validateCatalog, validateCommunityRegistry, validateInstructionSeed, validateLibraryFlag };
 
 // Definition moved to skill-path.ts (a leaf module) to break the
@@ -470,7 +470,7 @@ export function validateFlow(
   // is layer 2, a charset check catching a poisoned `flow.project` at the
   // PUT/lint boundary, BEFORE it ever reaches a mint. Mirrors the exact
   // predicate the choke point itself uses (`isSafeProjectName`,
-  // cli/manifest-path-guard.ts) so the two layers can never drift apart. Error
+  // packages/flows/manifest-path-guard.ts) so the two layers can never drift apart. Error
   // level, not a flag: a warning here would be the "declared data fails open"
   // shape this campaign has repeatedly found and closed. `null`/absent/`''`
   // are all legal (no project binding) — checkFlowTriggers separately requires
@@ -726,7 +726,7 @@ export function validateKb(kb: KbDescriptor): Finding[] {
   // Note: the `binding` shape (kind enum + ref presence) is already
   // load-guarded in registry (parseKbBinding); we do not duplicate it here.
   // Binding *cross-reference* checks (dangling ref, exactly-one-unique) live
-  // in cli/studio-lint.ts, which has the full KB roster + discovered
+  // in apps/forge/studio-lint.ts, which has the full KB roster + discovered
   // flows/projects needed to check them.
 
   return findings;
@@ -744,7 +744,7 @@ export function validateKb(kb: KbDescriptor): Finding[] {
 // `orchestrator/studio/connection-validate.ts` — this file was 997 lines
 // against the house 800-line hard cap and this initiative alone added 131 of
 // them. Same discipline already applied when `connection-catalog.ts` was
-// extracted out of `registry.ts`. `cli/studio-lint.ts` imports
+// extracted out of `registry.ts`. `apps/forge/studio-lint.ts` imports
 // `validateConnections` from the new module directly (no re-export shim).
 // ---------------------------------------------------------------------------
 

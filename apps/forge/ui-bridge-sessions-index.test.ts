@@ -2,7 +2,7 @@
  * Acceptance + unit tests for W6-B11's aggregate sessions index:
  *   GET /api/studio/sessions[?active=1]
  *
- * Implemented in cli/ui-bridge.ts (`handleStudioSessionsIndex`,
+ * Implemented in apps/forge/ui-bridge.ts (`handleStudioSessionsIndex`,
  * `collectStudioSessionIndexRows`, `sortAndCapSessionIndexRows`) — reuses the
  * SAME per-kind readers the existing `/api/architect/sessions` etc. list
  * routes already call (`listArchitectSessions`, `listInstructionsSessions`,
@@ -12,7 +12,7 @@
  * no bespoke list route exists for these).
  *
  * This file also pins a real behavior fix bundled into this WI:
- * `isTerminalPhase` (cli/bridge-studio-sessions.ts) previously had NO
+ * `isTerminalPhase` (packages/sessions/bridge-studio-sessions.ts) previously had NO
  * terminal-phase source for 'onboarding' (no `turnSpec`, and 'onboarding'
  * carries no row in `LEGACY_SESSION_TERMINAL_PHASES`) and always returned
  * `false` for it — harmless at its original call site (onboarding's tail is
@@ -23,7 +23,7 @@
  * behavior-preserving for the four legacy kinds (see that function's own
  * doc comment) and regression-locked here for onboarding specifically.
  *
- * Test shape mirrors cli/bridge-studio-sessions.test.ts's idiom: a real
+ * Test shape mirrors packages/sessions/bridge-studio-sessions.test.ts's idiom: a real
  * bridge (startBridge) + fetch for the acceptance-level behavior, plus
  * direct import of the pure sort/cap function for isolated unit coverage.
  */

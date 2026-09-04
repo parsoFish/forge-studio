@@ -9,7 +9,7 @@
  * `installSkillPackage` to copy, and rm's `<stagingRoot>/<sourceId>` in a
  * `finally`.
  *
- * A VERBATIM MIRROR of `cli/materials-staging.ts`'s `stageMaterials` — same
+ * A VERBATIM MIRROR of `packages/agents/materials-staging.ts`'s `stageMaterials` — same
  * two-phase check-then-write shape, same shared guard, same throw-not-return
  * convention, same zero-partial-write guarantee — differing only where the
  * skill-install contract differs: the untrusted leaf is an entry `path` (a

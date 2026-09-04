@@ -1,12 +1,12 @@
 /**
- * Acceptance tests for cli/bridge-studio-hooks.ts (R3-03-F4) — DOES NOT EXIST
+ * Acceptance tests for packages/library/bridge-studio-hooks.ts (R3-03-F4) — DOES NOT EXIST
  * YET. This file is RED at branch base (ERR_MODULE_NOT_FOUND on the
  * `./bridge-studio-hooks.ts` import is the expected red). Do not stub the
  * module into existence to turn this green; red is the deliverable of this
  * round.
  *
  * Owns EVERY `/api/studio/hooks*` route — one home, mirroring how
- * cli/bridge-studio-skills.ts owns every `/api/studio/skills*` route:
+ * packages/library/bridge-studio-skills.ts owns every `/api/studio/skills*` route:
  *
  *   GET  /api/studio/hooks               → { hooks: HookLibraryEntry[] }
  *   GET  /api/studio/hooks/:id           → detail: entry fields + files + scan
@@ -15,7 +15,7 @@
  *   POST /api/studio/hooks/:id/override  → distinct recorded override
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * cli/bridge-studio-skills.test.ts, over the ALREADY-SHIPPED core
+ * packages/library/bridge-studio-skills.test.ts, over the ALREADY-SHIPPED core
  * (orchestrator/studio/hook-library.ts F1, hook-scan.ts F2/F3 — read in full
  * before writing this file; every fixture script below reuses the exact
  * bodies pinned in hook-scan.test.ts's own `EXFIL_SCRIPT`/`BENIGN_SCRIPT` so

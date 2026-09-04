@@ -4,16 +4,16 @@
  *
  * The defect lives in `scaffoldGreenfieldProject` (orchestrator/project-create.ts),
  * which is reached ONLY via `POST /api/studio/projects/create` (the greenfield
- * route — cli/bridge-studio-writes.ts:732). `POST /api/studio/projects` is the
+ * route — apps/forge/bridge-studio-writes.ts:732). `POST /api/studio/projects` is the
  * ONBOARD route and does NOT call `scaffoldGreenfieldProject`; the containment
- * ATs for that route live in cli/bridge-studio-project-create-containment.test.ts.
+ * ATs for that route live in apps/forge/bridge-studio-project-create-containment.test.ts.
  * These two ATs drive the /create route because that is the surface the defect
  * is reachable from.
  *
  * Phase 2 of `scaffoldGreenfieldProject` writes copyTemplate → seedProjectBrain
  * → runPreflight with NO unwind on a throw between the first write and the last.
  * A tail throw after `seedProjectBrain` wrote `brain/projects/<id>/kb.yaml`
- * leaves a PHANTOM KB: `loadKbDescriptors` (cli/bridge-studio-kbs.ts:132-133)
+ * leaves a PHANTOM KB: `loadKbDescriptors` (packages/knowledge/bridge-studio-kbs.ts:132-133)
  * walks `brain/projects/` as its own containment root, so GET /api/studio/kbs
  * lists that `<id>` even though the operator was told the create FAILED. The
  * half-created `projects/<id>` is likewise adopted by `discoverProjects`, so GET

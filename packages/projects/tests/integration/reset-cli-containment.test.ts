@@ -18,7 +18,7 @@
  *
  * These cases fail against that version and pass against the fix
  * (`resolveGuardedPath(projectsDir, [id])`, the same remedy
- * `cli/bridge-studio.ts:605` already applies to the same shape).
+ * `apps/forge/bridge-studio.ts:605` already applies to the same shape).
  */
 
 import { test } from 'node:test';

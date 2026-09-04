@@ -132,7 +132,7 @@ test('?run=nope stays NotFound for every type (an unknown id with nothing on dis
 // ---------------------------------------------------------------------------
 // W7-FIX-A3 (round-2 finding 1) — the GATE is keyed on the INITIATIVE id.
 // `POST /api/runs/<id>/gates/<gateId>` (both `plan` and `verdict`) validates
-// its id against INIT_ID_RE (cli/bridge-studio-runs.ts:162 / :788), so a gate
+// its id against INIT_ID_RE (packages/flows/bridge-studio-runs.ts:162 / :788), so a gate
 // posted with a CYCLE id 400s. A3-03 re-keyed the run page's "artifacts →"
 // link onto the run's own id (the cycle id once claimed), which put a cycle id
 // in `?run=` — and GateBar was still passing that raw URL handle straight to

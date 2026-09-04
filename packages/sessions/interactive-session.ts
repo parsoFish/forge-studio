@@ -833,7 +833,7 @@ export function guardedReadSessionStatus<S>(
  *  exists to prevent.
  *
  *  W7-FIX-A2 (W7A2-01): defined HERE, at the status-write seam, because the
- *  seam enforces it (`cancelledPhaseWins` below) — cli/bridge-studio.ts
+ *  seam enforces it (`cancelledPhaseWins` below) — apps/forge/bridge-studio.ts
  *  re-exports this same binding so every bridge module keeps its import. */
 export const CANCELLED_PHASE = 'cancelled';
 

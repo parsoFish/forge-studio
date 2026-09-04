@@ -40,7 +40,7 @@
  *      original `skillsDir(forgeRoot)` wrote into `<forgeRoot>/skills`, the
  *      LIVE tree production agent discovery actually scans
  *      (`listAgentDefinitions`/`discoverRuntimeAgentIds` —
- *      `orchestrator/flow-runner.ts:1285`, `cli/ui-bridge.ts:1678` — promote
+ *      `orchestrator/flow-runner.ts:1285`, `apps/forge/ui-bridge.ts:1678` — promote
  *      ANY dir whose `SKILL.md` carries a `runtime:` key to a dispatchable
  *      agent, no slug gate). Ruling: the destination is now a dedicated,
  *      NON-scanned root, `<forgeRoot>/_interactive-library/<packageId>/...`
@@ -162,7 +162,7 @@ export async function runInteractiveTurn(
   // independently, and which the spine must therefore match rather than invent:
   //   - `apps/studio/app/sessions/[kind]/[sessionId]/page.tsx` builds
   //     `` `_${kind}-${sessionId}` `` and hands it to `useCycleEvents`;
-  //   - `cli/ui-bridge.ts`'s `spawnAgentTurn` writes THIS SAME TURN's
+  //   - `apps/forge/ui-bridge.ts`'s `spawnAgentTurn` writes THIS SAME TURN's
   //     `stderr.log` into `` `_logs/_${logPrefix}-${sessionId}` ``, where
   //     `SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring'`;
   //   - the four legacy `ensure*Tail` helpers use `_architect-` /
@@ -170,7 +170,7 @@ export async function runInteractiveTurn(
   // This previously read `_interactive-<id>-<sid>`, which agreed with NOTHING:
   // an `authoring` turn's events landed in `_interactive-authoring-<sid>` while
   // its own stderr landed in `_authoring-<sid>`, and both the UI and
-  // `readSessionLogFacts` (`cli/ui-bridge.ts`, the session list's `when`/`costUsd`)
+  // `readSessionLogFacts` (`apps/forge/ui-bridge.ts`, the session list's `when`/`costUsd`)
   // looked in the latter and found no events file at all — so a failed turn's two
   // halves sat in different directories and every authoring row reported an
   // honest-absent timestamp.

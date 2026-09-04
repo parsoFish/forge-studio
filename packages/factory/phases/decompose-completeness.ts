@@ -26,7 +26,7 @@
  * also recognises two secondary shapes that are equally real elsewhere in
  * this codebase: a multi-line Gherkin block (Given/When/Then each on their
  * own line, no commas) and the YAML-keyed `given:`/`when:`/`then:` triplet
- * (the shape `cli/architect-plan.ts`'s PLAN.html renderer already parses).
+ * (the shape `packages/sessions/kinds/architect-plan.ts`'s PLAN.html renderer already parses).
  *
  * ## Conservative-by-design
  *

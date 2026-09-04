@@ -6,14 +6,14 @@
  * Before: `assertSkillSlug` (orchestrator/skill-path.ts) hard-coded "invalid
  * skill id" for every caller (hooks/connections both reused it verbatim), and
  * embedded the RegExp LITERAL `/^[a-z]…$/` in the message — whose leading `/`
- * `sanitizeError` (cli/bridge-studio.ts, `/\/[^\s:,'"]+/g` → "[path]") ate,
+ * `sanitizeError` (apps/forge/bridge-studio.ts, `/\/[^\s:,'"]+/g` → "[path]") ate,
  * producing the garbled `must match [path]:-[a-z0-9]+)*$/` the walkthrough
  * captured on the wire.
  *
  * Kills: a message that still says "skill" for a hook/connection; a message
  * whose pattern text does not survive sanitizeError byte-for-byte.
  *
- * RUN: node --test --experimental-strip-types cli/bridge-studio-slug-message.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/bridge-studio-slug-message.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

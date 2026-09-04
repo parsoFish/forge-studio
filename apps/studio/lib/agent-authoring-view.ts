@@ -29,7 +29,7 @@ import type { Agent, AgentCapabilityDescriptor, AgentRuntime } from './studio-cl
 // less siblings fine either way) — this is a VALUE import (unlike the
 // `import type` above, which is erased entirely and needs no runtime
 // resolution), and it must resolve under plain Node ESM too:
-// cli/bridge-studio-write-tool-fence.test.ts imports THIS module directly
+// apps/forge/bridge-studio-write-tool-fence.test.ts imports THIS module directly
 // via `node --experimental-strip-types`, which does not do bundler-style
 // extension-less resolution.
 import { TOOL_FENCE_REQUIRED_NAMES } from './tool-fence-required-names.ts';
@@ -117,7 +117,7 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
  *  fields entirely, so a brand-new agent minted from a fenced starter
  *  (applyStarter, forge-ui/app/agents/[id]/page.tsx) or a duplicate of a
  *  fenced agent (duplicateAgentState below) landed on disk with NO
- *  disallowed-tools — the bridge's PUT merge (cli/bridge-studio-writes.ts)
+ *  disallowed-tools — the bridge's PUT merge (apps/forge/bridge-studio-writes.ts)
  *  has nothing in the body to fall back to `existing` FROM, because there is
  *  no `existing` for a brand-new slug. The bridge still decides
  *  explicit-body-value-wins vs inherit-when-omitted (same convention as
@@ -208,8 +208,8 @@ export const EMPTY_STATE: AgentBuilderState = {
  *
  * The fix seeds `disallowedTools` from `TOOL_FENCE_REQUIRED_NAMES`
  * (forge-ui/lib/tool-fence-required-names.ts) — the SAME array
- * `cli/studio-lint-tool-fence.ts` exports and checks against
- * (`cli/tool-fence-required-names-parity.test.ts` proves the two arrays
+ * `packages/library/studio-lint-tool-fence.ts` exports and checks against
+ * (`packages/library/tool-fence-required-names-parity.test.ts` proves the two arrays
  * cannot drift apart), rather than a bare `['Task', 'Agent']` literal here.
  * `allowedTools` is deliberately left `[]`: the ruling this fixes ("seed
  * BOTH keys' worth of correctness — the enumeration point") means reasoning

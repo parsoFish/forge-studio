@@ -9,7 +9,7 @@
  * but a green that means nothing.
  *
  * So the rule is three-way, and deliberately NOT the launcher's own
- * `decidePortStrategy` (`cli/forge-watch.ts`), whose default is
+ * `decidePortStrategy` (`apps/forge/forge-watch.ts`), whose default is
  * attach-if-healthy — correct for an operator opening a second window, wrong
  * for a gate:
  *

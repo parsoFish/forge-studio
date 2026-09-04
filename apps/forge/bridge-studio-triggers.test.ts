@@ -6,7 +6,7 @@
  * docs/decisions/027-studio-object-model.md "Run-model trigger provenance"):
  *
  *  1. The EXISTING `GET /api/runs` / `GET /api/runs/<id>` routes
- *     (cli/bridge-studio.ts:9-12) must surface `run.trigger` for a
+ *     (apps/forge/bridge-studio.ts:9-12) must surface `run.trigger` for a
  *     triggered run and omit it for one without — no new route for this
  *     half.
  *  2. A NEW `GET /api/triggers` standing-declarations read: every declared
@@ -289,7 +289,7 @@ test('GET /api/triggers performs no write anywhere under forgeRoot', async () =>
 // kills an implementation that crashes (uncaught throw -> 500) on an
 // unexpected/malformed query parameter instead of ignoring it, mirroring
 // every other route in this bridge's "never throws" contract
-// (cli/bridge-studio.ts's own module doc: "Never throws — all errors
+// (apps/forge/bridge-studio.ts's own module doc: "Never throws — all errors
 // caught, returned as JSON").
 test('GET /api/triggers with an unknown/garbage query string never 500s', async () => {
   const res = await fetch(`${bridgeUrl}/api/triggers?${encodeURIComponent('!!not-a-real-param??')}=${encodeURIComponent('%ZZ-garbage-value')}`);

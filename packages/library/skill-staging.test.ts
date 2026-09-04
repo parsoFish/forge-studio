@@ -1,18 +1,18 @@
 /**
- * GUARD-LEVEL ACCEPTANCE TESTS for cli/skill-staging.ts's `stageSkillPackage`
+ * GUARD-LEVEL ACCEPTANCE TESTS for packages/library/skill-staging.ts's `stageSkillPackage`
  * (SEC-05 q80, d1 — the RULED inline-upload folded staging path).
  *
- * NEW MODULE — cli/skill-staging.ts does not exist at branch base. To keep this
+ * NEW MODULE — packages/library/skill-staging.ts does not exist at branch base. To keep this
  * file COLLECTING (so each AT reports its OWN per-test red rather than one
  * import-time collection failure), the module is loaded through a guarded
  * dynamic `import()` inside each test (`loadStaging()` below). At base every
  * test therefore fails with ERR_MODULE_NOT_FOUND at that `await` — an honest
  * "feature not implemented yet" red, one per assertion group; once the verbatim
- * mirror of cli/materials-staging.ts lands, each passes for its own reason.
+ * mirror of packages/agents/materials-staging.ts lands, each passes for its own reason.
  * (`npm run build`/tsc is separately red at base for the same missing module —
  * expected TDD-first, greens when the impl lands.)
  *
- * WHY THIS FILE EXISTS (mirrors cli/materials-staging.test.ts's framing):
+ * WHY THIS FILE EXISTS (mirrors packages/agents/tests/unit/materials-staging.test.ts's framing):
  * `stageSkillPackage(stagingRoot, sourceId, entries)` is the focused write-path
  * the ruled `POST /api/studio/skills/install` fix calls — it stages each
  * inline-uploaded `{ path, contentBase64 }` entry under

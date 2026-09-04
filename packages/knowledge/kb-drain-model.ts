@@ -45,7 +45,7 @@ export const DEFAULT_KB_DRAIN_MAX_COST_USD = 2.0;
 export const KB_DRAIN_HEARTBEAT_MS = 10_000;
 
 /** Staleness cutoff for a 'running' status — SINGLE-SOURCED in
- *  cli/kb-job-state.ts (the active-job derivation shares it); re-exported
+ *  packages/knowledge/kb-job-state.ts (the active-job derivation shares it); re-exported
  *  here for this module's own cancel route and its tests. */
 export { KB_DRAIN_STALE_MS };
 
@@ -152,13 +152,13 @@ export type KbDrainStatus = {
   maxCostUsd: number;
 };
 
-/** Same fresh-lint shape `runBrainLintFullFresh` (cli/kb-lint-summary.ts)
+/** Same fresh-lint shape `runBrainLintFullFresh` (packages/knowledge/kb-lint-summary.ts)
  *  returns — injectable so termination-matrix tests can drive the state
  *  machine with a synthetic finding sequence instead of a real brain-lint
  *  scan. */
 export type KbDrainLintFn = (forgeRoot: string) => { findings: Finding[] };
 
-/** Same signature as `applyAutoFixesUntilStable` (cli/brain-lint.ts) —
+/** Same signature as `applyAutoFixesUntilStable` (packages/knowledge/brain-lint.ts) —
  *  injectable for the same reason as `KbDrainLintFn`. */
 export type KbDrainApplyAutoFixesFn = (
   forgeRoot: string,

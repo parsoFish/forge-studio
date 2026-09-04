@@ -5,7 +5,7 @@
  * of.
  *
  * `sanitizeError` rides in as a parameter (never a direct `cli/` import)
- * because that would make this a NEW importer of `cli/bridge-studio.ts` —
+ * because that would make this a NEW importer of `apps/forge/bridge-studio.ts` —
  * the retained route file already imports it and passes it down.
  */
 

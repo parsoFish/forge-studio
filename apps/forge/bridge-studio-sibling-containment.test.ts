@@ -5,19 +5,19 @@
  * SAME file uses `resolveGuardedPath` (cli/studio-path-guard.ts). Each of the
  * routes below is a dir-symlink escape driven through the REAL bridge
  * (`startBridge`), mirroring the fixture idiom of
- * cli/bridge-studio-write.test.ts / cli/bridge-studio-flows.test.ts.
+ * apps/forge/bridge-studio-write.test.ts / apps/forge/bridge-studio-flows.test.ts.
  *
- *   - GET  /api/studio/flows/:id                — cli/bridge-studio.ts ~L618
+ *   - GET  /api/studio/flows/:id                — apps/forge/bridge-studio.ts ~L618
  *     (lexical `resolve(flowsBase,id,'flow.yaml').startsWith(flowsBase+sep)`
- *     on an UNRESOLVED path). Its PUT sibling (cli/bridge-studio-writes.ts)
+ *     on an UNRESOLVED path). Its PUT sibling (apps/forge/bridge-studio-writes.ts)
  *     IS guarded via resolveGuardedPath — this GET route was never updated.
- *   - GET  /api/studio/skills/:id                — cli/bridge-studio-skills.ts
+ *   - GET  /api/studio/skills/:id                — packages/library/bridge-studio-skills.ts
  *     ~L263 (`skillPath(id, forgeRoot)` — orchestrator/skill-path.ts's
  *     `assertSkillSlug` + a bare `join()`, no realpath identity check at all).
  *   - POST /api/studio/skills/:id/approve        — same file ~L224, same
  *     `skillPath()` call. The POST-create sibling (`POST /api/studio/skills`)
  *     IS guarded via resolveGuardedPath.
- *   - POST /api/studio/hooks                     — cli/bridge-studio-hooks.ts
+ *   - POST /api/studio/hooks                     — packages/library/bridge-studio-hooks.ts
  *     ~L239 (`hookDir(slug, forgeRoot)` — orchestrator/studio/hook-library.ts's
  *     `assertSkillSlug` + bare `join()`).
  *   - POST /api/studio/hooks/:id/approve         — ~L278 (`hookYamlPath`).
@@ -221,7 +221,7 @@ function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
 
 test('FIXED (amendment round): GET /api/studio/flows/escape-flow no longer leaks — the guard rejection is byte-identical to a genuinely unknown flow', async (t) => {
   if (skipIfNoSymlinks(t)) return;
-  // cli/bridge-studio.ts's GET route now resolves through resolveGuardedPath
+  // apps/forge/bridge-studio.ts's GET route now resolves through resolveGuardedPath
   // (the same shared guard its PUT sibling already used) and folds a guard
   // rejection into the SAME `{error:'unknown flow'}` 404 a genuinely absent
   // flow produces — no id is echoed in this particular error message, so the
@@ -414,7 +414,7 @@ test('non-regression: an ordinary real flow still GETs fine (no symlink involved
 // 404s a perfectly valid hook whose `script:` is "scripts//run.sh" (double
 // slash).
 //
-// cli/bridge-studio-hooks.ts:375 —
+// packages/library/bridge-studio-hooks.ts:375 —
 //   resolveGuardedPath(hooksDir(forgeRoot), [id, ...entry.script.split('/')])
 // A hook.yaml declaring `script: "scripts//run.sh"` loads FINE everywhere
 // else: `loadHookDefinition`'s own `resolveHookScriptPath`
@@ -567,7 +567,7 @@ test('security companion [Finding 3]: a hook script path that re-enters a DIFFER
 
 // ---- FINDING A: one malformed hook blanks the ENTIRE library list ---------
 //
-// cli/bridge-studio-hooks.ts:191 —
+// packages/library/bridge-studio-hooks.ts:191 —
 //   listHookLibrary(forgeRoot).map(entry => toClientListEntry(forgeRoot, entry))
 // `toClientListEntry` (same file, ~L119) calls `hookRunState(forgeRoot,
 // entry.id)` with NO per-entry try/catch. `hookRunState` -> `scanHookPackage`
@@ -806,7 +806,7 @@ test('(RED) [Finding A, variant 3/3 — ENOENT]: a hook whose script is "scripts
 // ---- FINDING B: approve/override leak a distinguishable 500 where every ---
 // ---- other route in this PR returns 404 -----------------------------------
 //
-// cli/bridge-studio-hooks.ts:303-314 (approve) and :335-347 (override). Both
+// packages/library/bridge-studio-hooks.ts:303-314 (approve) and :335-347 (override). Both
 // guard `hook.yaml` via `resolveGuardedPath` and correctly collapse THAT
 // rejection into 404 — but they then call `hookRunState(...)` (approve) /
 // `overrideHookBlock(...)` (override), which internally call

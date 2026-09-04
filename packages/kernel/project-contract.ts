@@ -4,7 +4,7 @@
  * These four types are pure data. They live here rather than beside the
  * preflight implementation because the `ProjectGate` port declares them and a
  * flow reaches the preflight only through that port: "a flow does not import
- * the project package" (SPEC.md §6). Moved verbatim from `cli/preflight.ts`,
+ * the project package" (SPEC.md §6). Moved verbatim from `packages/projects/preflight.ts`,
  * which re-exports them so its eight importers are unchanged.
  */
 

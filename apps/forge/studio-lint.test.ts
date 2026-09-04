@@ -508,7 +508,7 @@ desc: Bound to a project that does not exist.
 // actually run under (derived from each node's agent -> composition.guards
 // -> resolveBandGuard, orchestrator/agent-bands.ts) — analogous to the
 // existing dangling binding.ref cross-check above, but one level deeper
-// (flow -> node -> agent -> declared band). Today studio-lint (cli/studio-lint.ts
+// (flow -> node -> agent -> declared band). Today studio-lint (apps/forge/studio-lint.ts
 // ~409+) has ZERO notion of `band` at all — the KB section only cross-checks
 // binding.ref against registered flows/projects — so a mismatched band is
 // silently accepted.

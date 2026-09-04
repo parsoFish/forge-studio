@@ -149,7 +149,7 @@ function bandSkillMd(slug: string, band: string): string {
  * `demo-band` + `review-band` — mirrors the REAL shipped `studio/flows/
  * forge-develop/flow.yaml`'s derived band vocabulary (confirmed live via
  * `listFlowBandIds(repoRoot, 'forge-develop')` -> `['demo-band',
- * 'review-band']`, cli/flow-band-vocab.ts), so the `bands` field this test
+ * 'review-band']`, packages/flows/flow-band-vocab.ts), so the `bands` field this test
  * pins on `GET /api/studio/flows` is checked against a REAL, non-fabricated
  * band vocabulary shape, not an arbitrary made-up one.
  */
@@ -609,7 +609,7 @@ test('PUT /api/studio/flows/UPPERCASE → 400 (must be slug)', async () => {
 // ---------------------------------------------------------------------------
 // PUT /api/studio/flows/:id — symlink/hardlink containment escapes
 // (2026-08-05 adversarial-review round 4, finding A). The guard at
-// cli/bridge-studio-writes.ts (~L911-913) is a LEXICAL
+// apps/forge/bridge-studio-writes.ts (~L911-913) is a LEXICAL
 // `resolve(flowsBase, id, 'flow.yaml').startsWith(flowsBase + sep)` check on
 // an UNRESOLVED path — worse than the agents PUT route's pre-round-2 bug,
 // because this route has NO dirent-type gate anywhere in its path (no
@@ -813,11 +813,11 @@ test('GET /api/studio/flows list still works alongside the single-flow route', a
 // ---------------------------------------------------------------------------
 // ACCEPTANCE TEST (T3, R1-06 WI-2 group A) — GET /api/studio/flows rows must
 // carry a `bands: string[]` field derived from EACH flow's real band
-// vocabulary (cli/flow-band-vocab.ts's `listFlowBandIds`, landed R1-06 WI-1),
+// vocabulary (packages/flows/flow-band-vocab.ts's `listFlowBandIds`, landed R1-06 WI-1),
 // so `/knowledge/new`'s per-flow band picker (apps/studio/app/knowledge/new/
 // page.tsx) has something real to source its options from over the wire.
 //
-// RED today: `loadAllFlows` (cli/bridge-studio.ts ~:361) builds each row from
+// RED today: `loadAllFlows` (apps/forge/bridge-studio.ts ~:361) builds each row from
 // `loadFlowDefinition` alone and the `GET /api/studio/flows` handler
 // (~:679) passes those rows straight through with no per-flow band
 // derivation at all — no `bands` key is ever attached, so every row's
@@ -923,7 +923,7 @@ test('[security] version is always positive integer after write (monotonic)', as
 // `trigger-projects` check (orchestrator/studio/validate-triggers.ts) is
 // gated behind `opts?.projectIds` (`if (trigger.projects !== undefined &&
 // opts?.projectIds)`), but the real `PUT /api/studio/flows/:id` handler
-// (cli/bridge-studio-writes.ts, ~line 1299) calls `validateFlow(merged,
+// (apps/forge/bridge-studio-writes.ts, ~line 1299) calls `validateFlow(merged,
 // agentsMap, { flowIds, flowProjectOf })` — NO `projectIds`. The sibling
 // `trigger-agent-complete` check twelve lines above is unconditional, so this
 // is a real asymmetry, not a shared limitation.

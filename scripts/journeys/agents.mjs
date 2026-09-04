@@ -149,7 +149,7 @@ function seedR6_06FlowNodeFixture() {
  * PRODUCTION EMITTER (`orchestrator/run-agent.ts`'s `runAgent`, lines
  * ~320-382: a `start` event with `metadata: {agent_phase, agent_slug}`, an
  * `end` event with the SAME `metadata.agent_slug` plus a top-level
- * `cost_usd`) — the SAME shape `cli/ui-bridge-agent-run.test.ts`'s own
+ * `cost_usd`) — the SAME shape `apps/forge/ui-bridge-agent-run.test.ts`'s own
  * existing fixtures already encode for the sibling `GET /api/agents/runs/
  * <runId>` route's tests (`{event_type:'start', skill:'test-runnable'}` /
  * `{event_type:'end', skill:'test-runnable', cost_usd:0.42}`) — the closest
@@ -1198,7 +1198,7 @@ export const journey = defineJourney({
               //     aggregate" gap, not a guess.
               //   - standalone: this fixture's exact events, replayed
               //     through the REAL, already-shipped `GET /api/agents/
-              //     runs/<runId>` (`cli/ui-bridge.ts` ~1163-1171 — the SAME
+              //     runs/<runId>` (`apps/forge/ui-bridge.ts` ~1163-1171 — the SAME
               //     status/cost deriver Task 1's new route must reuse, per
               //     the SHARED DERIVATION pin in `cli/ui-bridge-agent-
               //     history.test.ts`), measured `state: 'done'`,
@@ -1820,7 +1820,7 @@ export const journey = defineJourney({
               check(stagedOnDisk, 'agents-kickoff: the attached material is actually staged under _logs/<runId>/materials/ on disk');
 
               // NOT a wait for a terminal state — this seam structurally never
-              // reaches one. `spawnAgentDispatch` (cli/ui-bridge.ts) returns
+              // reaches one. `spawnAgentDispatch` (apps/forge/ui-bridge.ts) returns
               // BEFORE the child `agent dispatch` process is ever spawned
               // whenever FORGE_ARCHITECT_NO_SPAWN=1 or FORGE_DRY_BRIDGE=1 (both
               // set on this harness's own bridge process, scripts/e2e-
@@ -1943,7 +1943,7 @@ export const journey = defineJourney({
               //
               // ⚑ LOUD FINDING (measured this round, not assumed): this
               // run's ONLY event is the dispatch route's own synchronous
-              // `agent-run.materials-staged` bookkeeping (cli/ui-bridge.ts
+              // `agent-run.materials-staged` bookkeeping (apps/forge/ui-bridge.ts
               // ~1370-1389, confirmed by the log-line check above) — it sets
               // `skill: slug` (here, KICKOFF_AGENT_SLUG) but carries NO
               // `metadata.agent_slug` at all (its `metadata` is only

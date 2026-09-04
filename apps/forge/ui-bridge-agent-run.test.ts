@@ -221,7 +221,7 @@ test('GET /api/agents/runs/<runId>: spawn-suppressed marker → suppressed', asy
 
 // ---- GET /api/agents/runs/<runId>: `lines` (R6-04 WI-4) --------------------
 //
-// Today's route (cli/ui-bridge.ts ~line 1116) computes `events` as
+// Today's route (apps/forge/ui-bridge.ts ~line 1116) computes `events` as
 // `parsed.length` — a COUNT — and never surfaces the parsed records
 // themselves. WI-4 adds a `lines` array (the run's own parsed event records,
 // capped) so the new standalone run view can render a live log without a
@@ -229,7 +229,7 @@ test('GET /api/agents/runs/<runId>: spawn-suppressed marker → suppressed', asy
 // either (a) pins that the THREE EXISTING fields (state/costUsd/events) keep
 // their EXACT current meaning now that `lines` exists alongside them — a
 // regression pin, since RunPanel.tsx polls this route today and
-// cli/ui-bridge-agent-run-ceiling.test.ts already depends on `state` — or
+// apps/forge/ui-bridge-agent-run-ceiling.test.ts already depends on `state` — or
 // (b) pins a genuinely NEW behaviour `lines` itself must have.
 
 test('GET /api/agents/runs/<runId>: REGRESSION — state/costUsd/events keep their CURRENT meaning once `lines` is added — kills "repurposed events:count into events:lines, breaking every existing caller of this route"', async () => {

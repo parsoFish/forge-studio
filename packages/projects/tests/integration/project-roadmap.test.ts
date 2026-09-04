@@ -8,10 +8,10 @@
  * did NOT carve into this package; see `project-roadmap.ts`'s file header for
  * the confirmed `package-layer-order` blocker (`@forge/flows`, a strictly
  * higher package rank). Its bridge-level test
- * (`cli/bridge-studio-roadmap.test.ts`) is unaffected — the route still lives
- * in, and is still tested against, `cli/bridge-studio.ts`.
+ * (`apps/forge/bridge-studio-roadmap.test.ts`) is unaffected — the route still lives
+ * in, and is still tested against, `apps/forge/bridge-studio.ts`.
  *
- * Coverage carried from `cli/bridge-studio-contract-stages.test.ts`'s AT-1
+ * Coverage carried from `apps/forge/bridge-studio-contract-stages.test.ts`'s AT-1
  * (malformed id), AT-2/AT-3 (traversal, percent-encoded and literal), AT-4
  * (unknown project), AT-5 (happy path, five stages in order) and AT-6
  * (malformed project.json → non-200, never a smoothed-over 200).

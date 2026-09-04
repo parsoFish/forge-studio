@@ -1,7 +1,7 @@
 /**
  * bridge-agents-runs.ts — the three `/api/agents/runs/*` handlers.
  *
- * Carved out of `cli/ui-bridge.ts` (M4-agents, exit row 2), converted from
+ * Carved out of `apps/forge/ui-bridge.ts` (M4-agents, exit row 2), converted from
  * if-chain arms returning `void` into `RouteEntry` handlers returning
  * `Promise<boolean>`: every `return;` that answered the request is now
  * `return true;`, and an arm that declines returns `false` so dispatch
@@ -13,7 +13,7 @@
  * `cancel` suffix as run ids. The if-chain relied on the same order; the table
  * preserves it rather than re-deriving it.
  *
- * CSRF is NOT re-implemented here. `cli/ui-bridge.ts`'s `handleHttp` applies
+ * CSRF is NOT re-implemented here. `apps/forge/ui-bridge.ts`'s `handleHttp` applies
  * the `x-forge-csrf` gate to every non-GET request BEFORE it calls
  * `dispatchRoute`, so the cancel POST inherits that check by dispatch order.
  * The ordering is asserted by a test, not trusted to a comment.

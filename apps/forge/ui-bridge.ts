@@ -790,7 +790,7 @@ type HttpContext = {
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
  *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
  *  else stays `text/plain`. Module-private and, by convention enforced in
- *  `cli/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
+ *  `apps/forge/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
  *  this file), callable ONLY from `servedFileHeaders` below — every route
  *  that serves a file on the bridge origin must go through the hardened
  *  helper, never this alone. */
@@ -850,7 +850,7 @@ function sanitizeHeaderFilename(filename: string): string {
  *
  *  Deliberately STRUCTURAL, not per-site: this is the only function in the
  *  file allowed to call `contentTypeFor` (enforced by the source-level
- *  ratchet in `cli/ui-bridge-served-file-headers.test.ts`), so a content-type
+ *  ratchet in `apps/forge/ui-bridge-served-file-headers.test.ts`), so a content-type
  *  can never be obtained here without the hardening headers riding along —
  *  the eighth route someone adds next year gets this for free by using the
  *  helper, and the ratchet fails loudly if they reach for `contentTypeFor`
@@ -1009,7 +1009,7 @@ async function handleHttp(
     // or one whose turn never ran) is 200 `{events: []}` — never a console
     // 404 on the operator's first screen. A guard-REJECTED path (traversal,
     // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
-    // (cli/sec04-cycleid-containment.test.ts) hold.
+    // (apps/forge/sec04-cycleid-containment.test.ts) hold.
     const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
     if (eventsGuard.ok && !eventsGuard.exists) {
       sendJson(res, 200, { cycleId, events: [] }, origin);
@@ -1174,7 +1174,7 @@ async function handleHttp(
     // `guardedReadFile` below. Legitimate names with spaces, parentheses,
     // em-dashes and a leading `..` pass; separators, `.`/`..` segments, empty
     // segments, control characters, NUL, DEL and encoded separators do not.
-    // Pinned both ways in cli/sec04-cycleid-containment.test.ts (a real
+    // Pinned both ways in apps/forge/sec04-cycleid-containment.test.ts (a real
     // `.capture` name serves 200; every escape shape still refused) and per
     // predicate in cli/studio-path-guard.test.ts.
     if (!isSafeSubPath(filename)) {
@@ -1231,7 +1231,7 @@ async function handleHttp(
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
     // W8-F6 (bead forge-6gv.27) — this file is the one place that imports BOTH
-    // cli/bridge-studio.ts and cli/bridge-studio-sessions.ts, so it wires the
+    // apps/forge/bridge-studio.ts and packages/sessions/bridge-studio-sessions.ts, so it wires the
     // readability predicate in rather than letting the runs routes import it
     // and close a module cycle. Same seam, same reason, as `ensureSessionTail`.
     sessionIsReadable: ({ kind, sessionId }) => sessionIsReadable({
@@ -1743,7 +1743,7 @@ function newRunStamp(): string {
  *  R4-21 phase 2, WI-2 (D5's sibling concern): `authoring` is the first row
  *  that does NOT go through a bespoke `<verb> run <sid> --project <p>` CLI
  *  command — it rides the GENERIC `forge agent run <agent-id> <sid> --project
- *  <p>` dispatch fork (ADR-043 §3, `cli/agent-run.ts`'s `cmdAgentRun`), so its
+ *  <p>` dispatch fork (ADR-043 §3, `packages/agents/agent-run.ts`'s `cmdAgentRun`), so its
  *  argvPrefix is `['agent', 'run', 'authoring']` rather than `['<verb>',
  *  'run']`. The 4 legacy rows carry an EXPLICIT argv prefix instead of the
  *  former `{verb}` + implicit `'run'` shape specifically so this one row can
@@ -1754,7 +1754,7 @@ function newRunStamp(): string {
  *  construction produced, just spelled as a literal array.
  *
  *  W6-B2 review fix (MEDIUM 1) — exported (with SPAWN_AGENT_SPECS below) so
- *  cli/session-tail-kind-parity.test.ts can import the real table directly
+ *  packages/sessions/tests/contract/session-tail-kind-parity.test.ts can import the real table directly
  *  and assert, for every studio/session-kinds.yaml descriptor with a
  *  corresponding entry here, that `logPrefix === descriptor.id` — the
  *  coincidence ensureSessionTail's `_${kind}-${sessionId}` derivation
@@ -1818,7 +1818,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
   // refuse to claim `{ok:true, phase:
   // 'analyzing'}` for a turn that never started; a session left in a working
   // phase with no log dir can never be derived as `stalled`
-  // (cli/bridge-studio-lifecycle.ts), so a swallowed failure showed the
+  // (packages/sessions/bridge-studio-lifecycle.ts), so a swallowed failure showed the
   // operator `working` forever with `needsYou:false`. A DELIBERATE no-spawn
   // (FORGE_ARCHITECT_NO_SPAWN / the dry bridge) is `ok` with
   // `spawned:false` — not a failure. Callers that genuinely have nothing to
@@ -1841,7 +1841,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     closeSync(stderrFd);
     proc.unref();
     // W7-A2 — track the turn's pid so the generic cancel route
-    // (cli/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
+    // (packages/sessions/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
     // live turn, and the lifecycle derivation can tell "re-run in flight"
     // from "crashed" (isTurnAlive additionally proves ownership via the
     // sessionId in the process's own argv above). Same logDir, same guard
@@ -1870,7 +1870,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
 /**
  * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
  * (R6-04 WI-2 extraction, mirrors `parseAgentDispatchArgs`'s pure argv PARSER
- * on the other side of the CLI boundary, cli/agent-run.ts). Extracted from
+ * on the other side of the CLI boundary, packages/agents/agent-run.ts). Extracted from
  * `spawnAgentDispatch` so the argv-building itself becomes independently
  * testable (no spawn, no mock) — this function has no side effects and
  * performs no safety checks of its own (`spawnAgentDispatch` still owns the
@@ -1899,7 +1899,7 @@ export function buildAgentDispatchArgs(
    *  it today. `sessionDir` is always OUR OWN already-created, already-
    *  realpath-verified directory (never request-derived text folded in
    *  here), so no extra validation is needed at this spawn-arg boundary; the
-   *  process on the receiving end (`cmdAgentDispatch`, cli/agent-run.ts)
+   *  process on the receiving end (`cmdAgentDispatch`, packages/agents/agent-run.ts)
    *  guards its own write through it regardless.
    */
   sessionDir?: string,
@@ -1910,7 +1910,7 @@ export function buildAgentDispatchArgs(
   /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.projectsRoot` (resolved
    *  once at `startBridge`), threaded through as `forge agent dispatch`'s
    *  `--projects-root <abs>` so the spawned subprocess's
-   *  `writeSessionTerminalPhase` (cli/agent-run.ts) can honour THIS exact
+   *  `writeSessionTerminalPhase` (packages/agents/agent-run.ts) can honour THIS exact
    *  root verbatim instead of re-deriving its own from `forge.config.json`/
    *  env at write time — the re-derivation was the defect (see that
    *  function's docstring). `cmdAgentDispatch` re-validates this value
@@ -1979,7 +1979,7 @@ function spawnAgentDispatch(
     // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
     // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
     // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/
-    // turn.pid` (`sessionLogDirName`, cli/bridge-studio-lifecycle.ts — the
+    // turn.pid` (`sessionLogDirName`, packages/sessions/bridge-studio-lifecycle.ts — the
     // SAME template `spawnAgentTurn` uses). Before this, onboarding was the
     // one kind `killTrackedTurn` could never find, so cancel returned
     // `killed:false` and left the agent running. `isTurnAlive` proves

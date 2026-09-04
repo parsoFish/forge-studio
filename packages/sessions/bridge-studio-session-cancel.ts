@@ -4,7 +4,7 @@
  *   POST /api/studio/sessions/:kind/:sessionId/cancel   { project?: string }
  *     → 200 { ok: true, kind, sessionId, project, phase: 'cancelled', previousPhase, killed }
  *     | 400 malformed sessionId / project
- *     | 403 (the bridge's global x-forge-csrf guard, cli/ui-bridge.ts — this
+ *     | 403 (the bridge's global x-forge-csrf guard, apps/forge/ui-bridge.ts — this
  *            route is a plain non-GET, so it is covered without any per-route
  *            wiring)
  *     | 404 unknown kind (naming the registry) / unknown or escaping session
@@ -16,7 +16,7 @@
  *
  * Semantics (operator-locked, README §4 Wave 7 + ADR-043 2026-08-19
  * amendment §1): cancel writes the ONE universal reserved terminal phase
- * `CANCELLED_PHASE` (cli/bridge-studio.ts) onto status.json —
+ * `CANCELLED_PHASE` (apps/forge/bridge-studio.ts) onto status.json —
  * `{ ...status, phase: 'cancelled', cancelled_at, cancelled_from }` — through
  * `guardedWriteSessionStatus` (the SAME primitive every affordance write
  * uses), after signalling the session's tracked turn process if one is
@@ -26,7 +26,7 @@
  * gave up at), not a mirror of anything derivable — every DERIVED signal
  * (terminal, needsYou, state) is recomputed from `phase` on read.
  *
- * DISPATCH ORDER (load-bearing): cli/ui-bridge.ts's `handleHttp` must call
+ * DISPATCH ORDER (load-bearing): apps/forge/ui-bridge.ts's `handleHttp` must call
  * this handler BEFORE `handleStudioAffordanceRoutes` — that route's regex
  * (`/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/`) would otherwise
  * swallow the literal `cancel` segment as an affordance id and 409 it as
@@ -74,7 +74,7 @@ export async function handleSessionCancelRoute(
 ): Promise<boolean> {
   if (method !== 'POST') return false;
   const url = pathOnly(rawUrl);
-  // Inline regex (not a named const) so cli/dry-bridge-coverage.test.ts's
+  // Inline regex (not a named const) so apps/forge/dry-bridge-coverage.test.ts's
   // dispatch scanner can pair this route with its BRIDGE_ROUTE_CLASSIFICATION
   // row (`/api/studio/sessions/:kind/:sessionId/cancel`, exempt-local).
   const routeMatch = url.match(/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/);

@@ -110,7 +110,7 @@ test('POST /api/project-brain/start with an out-of-envelope modelTier ("opus") 4
 // `repoPath = body.projectRepoPath ?? join(...)` → persisted verbatim as
 // `project_repo_path` into ProjectBrainStatus), no containment at all, while
 // the other three siblings (architect/instructions/demo-builder) already
-// reuse `invalidProjectRepoPath` (cli/ui-bridge.ts, wrapping the shipped
+// reuse `invalidProjectRepoPath` (apps/forge/ui-bridge.ts, wrapping the shipped
 // SEC-02 guard `isContainedProjectRepoPath`). `project_repo_path` becomes the
 // `cwd` for a real agentic `runAgentTurn`
 // (packages/sessions/kinds/project-brain.ts). ATs below mirror
@@ -216,7 +216,7 @@ test('R4-16 PIN 5, AT-PB5 (Finding B): POST /api/project-brain/start with projec
 // pin for the required END STATE (400, named, no leak) once Finding A's fix
 // wires the same guard in here too; the genuine TypeError-leak reproduction
 // (proving the message-absence assertion isn't vacuous) lives in
-// cli/ui-bridge-demo-generations.test.ts, where the guard is already wired.
+// apps/forge/ui-bridge-demo-generations.test.ts, where the guard is already wired.
 for (const bad of [0, {}]) {
   test(`R4-16 PIN 5, AT-PB6 (Finding C): POST /api/project-brain/start with projectRepoPath=${JSON.stringify(bad)} (non-string) → 400 naming the offending value, never a 500 leaking a Node TypeError`, async () => {
     const before_ = listProjectBrainSessionIds();

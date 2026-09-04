@@ -7,7 +7,7 @@
  * fallthrough — see the RED-proof report for the exact per-test reason).
  *
  * Wire-level rule (path-shaped param — mirrors the R4-16 precedent in
- * cli/bridge-studio-sessions.test.ts's own header): a real `fetch()` client
+ * packages/sessions/bridge-studio-sessions.test.ts's own header): a real `fetch()` client
  * normalizes a LITERAL `..` path segment away before the request ever leaves
  * the client, so that shape can only be exercised by handing the raw url
  * straight to the dispatcher — which is what AT-3 did. The M4 routes carve
@@ -132,7 +132,7 @@ test('R4-17 AT-6: a project with a malformed .forge/project.json → deriveContr
  * (R4-12-F1) must never regress to:
  *
  *   (a) a SERVER-side cached/memoized `deriveContractStages` result (e.g. the
- *       route handler in cli/bridge-studio.ts memoizing by projectId and
+ *       route handler in apps/forge/bridge-studio.ts memoizing by projectId and
  *       serving the first computed rows on every subsequent request) — this
  *       test's second call, after mutating the on-disk fixture, would still
  *       observe the FIRST call's stale `requiresEnv`/`bytes` and fail;

@@ -23,7 +23,7 @@ import {
 //
 // Renders EXCLUSIVELY from the GET session-shell route's own `affordances[]`
 // (`orchestrator/studio/session-kinds.ts`'s `deriveSessionAffordances`,
-// threaded onto the wire by `cli/bridge-studio-sessions.ts`, parsed by
+// threaded onto the wire by `packages/sessions/bridge-studio-sessions.ts`, parsed by
 // `forge-ui/lib/session-client.ts`) — it NEVER re-derives an affordance from
 // `phase` itself. Availability is recomputed server-side on every GET AND
 // re-checked server-side on every POST (`cli/bridge-studio-affordances.ts`,
@@ -734,7 +734,7 @@ function FinalizedLink({ finalized }: { finalized: { kind: string; id: string; e
     : finalized.kind === 'kb' ? `Cleanup applied to knowledge base "${finalized.id}"`
     : `Committed as ${finalized.kind} "${finalized.id}"`;
   // W7-C2 T1 review (P0-4) — `exists` is DERIVED server-side on every read
-  // (cli/bridge-studio-sessions.ts's `finalizedObjectExists`). A pointer at
+  // (packages/sessions/bridge-studio-sessions.ts's `finalizedObjectExists`). A pointer at
   // an object that has since been deleted or renamed renders the honest
   // record WITHOUT a link — this used to emit `/skills/<id>` with no
   // existence check at all, so a stale pointer left the operator a dead link

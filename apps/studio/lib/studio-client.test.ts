@@ -53,7 +53,7 @@ import {
   // (a) whether the band field renders at all (gated on binding `kind`) and
   // (b) what options it populates (the bound flow's real `bands`, sourced
   // from the new GET /api/studio/flows `bands:` field this same WI adds —
-  // see cli/bridge-studio-flows.test.ts's companion route pin). Colocated
+  // see apps/forge/bridge-studio-flows.test.ts's companion route pin). Colocated
   // here, not as a new lib file, matching this module's existing convention
   // of exporting small pure derivation helpers alongside the `Flow` type
   // they read (parseCapability/parseFanout/buildTriggerDeclaration/etc.).
@@ -63,7 +63,7 @@ import {
   // `undefined` under this repo's vitest module runner (not a collection-time
   // throw), so only the tests that actually CALL these two go red. These are
   // the typed client caller for the kb-cleanup session's kickoff route
-  // (`POST /api/studio/kbs/:id/cleanup/start`, cli/ui-bridge.ts) — placed
+  // (`POST /api/studio/kbs/:id/cleanup/start`, apps/forge/ui-bridge.ts) — placed
   // alongside runKbMaintenance/deleteKb/createKb (this module) rather than
   // bridge-client.ts's startAuthoring/finalizeAuthoring, because every OTHER
   // `/api/studio/kbs/:id/...` route caller already lives here, and this one
@@ -74,7 +74,7 @@ import {
   // its one caller (SessionCleanupPanel.tsx) was deleted, this client
   // function had no production caller left.
   startKbCleanup,
-  // W6-B13: the KB drain-to-green client (cli/bridge-studio-kb-drain.ts's
+  // W6-B13: the KB drain-to-green client (packages/knowledge/bridge-studio-kb-drain.ts's
   // routes) — dispatch + the two read routes (specific-run poll and
   // active-or-latest reattach).
   dispatchKbDrain,
@@ -436,7 +436,7 @@ test('companion: buildTriggerDeclaration for flow-complete/merged/cron carries n
 // issue-raised must build a REAL "webhook" block, not the bare {on,target}
 // fallback.
 //
-// cli/bridge-hooks.ts's `findWebhookTrigger` (~:94-115) resolves an incoming
+// packages/flows/bridge-hooks.ts's `findWebhookTrigger` (~:94-115) resolves an incoming
 // delivery ONLY by scanning every flow for a trigger whose
 // `webhook.id === hookId` (WEBHOOK_FAMILY_KIND_IDS covers webhook/pr-merged/
 // issue-raised alike). Before this fix, `buildTriggerDeclaration` only built
@@ -920,8 +920,8 @@ test("W7-C3 (forge-cv9): the client Run type admits every server-producible orig
 // [data-checklist-row][data-checklist-status]/[data-detail-line] vocabulary in
 // docs/forge-ui-dom-and-harness.md:794-821) has no data source until this
 // lands. The route + its 200 body already exist and are server-tested
-// (cli/bridge-studio.ts's `contractStagesMatch` branch, built from
-// cli/contract-stages.ts's `deriveContractStages`); the missing seam is the
+// (apps/forge/bridge-studio.ts's `contractStagesMatch` branch, built from
+// packages/projects/contract-stages.ts's `deriveContractStages`); the missing seam is the
 // CLIENT fetch. This test pins that seam BEFORE it is written.
 //
 // REUSE, not a third mirror: the rows parse into session-client.ts's exported
@@ -933,18 +933,18 @@ test("W7-C3 (forge-cv9): the client Run type admits every server-producible orig
 // inside studio-client.ts, diverges here and fails.
 //
 // CAPTURED_CONTRACT_STAGES is the REAL 200-body SHAPE of the route
-// (`{ ok, project, stages, sourcesScanned }`, cli/bridge-studio.ts's
+// (`{ ok, project, stages, sourcesScanned }`, apps/forge/bridge-studio.ts's
 // `sendJson(res, 200, { ok:true, project:id, stages:result.rows,
 // sourcesScanned:result.sourcesScanned })`), with rows in the canonical
 // `deriveContractStages` order (contract, instructions, secrets, demo,
-// roadmap — cli/contract-stages.ts:305-311) and each row's real per-field
+// roadmap — packages/projects/contract-stages.ts:305-311) and each row's real per-field
 // shape:
 //   - secrets.detail is a `string[]` of env-var NAMES ONLY (D3, load-bearing:
-//     cli/contract-stages.ts:165-169 — `[...requiresEnv]`, never a value).
+//     packages/projects/contract-stages.ts:165-169 — `[...requiresEnv]`, never a value).
 //     `GITHUB_TOKEN` here is a fake IDENTIFIER used as a name; this is a
 //     public repo, so it is never a real secret value.
 //   - instructions.bytes is a real `number` (the byte length read off disk,
-//     cli/contract-stages.ts:146-156), while the config/lock-JSON-backed
+//     packages/projects/contract-stages.ts:146-156), while the config/lock-JSON-backed
 //     stages (contract, secrets, demo) carry `bytes: null`.
 //
 // Fetch harness matches lib/agent-ledger.test.ts: `resolveBridgeUrl` is
@@ -1051,7 +1051,7 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
 
 // ---------------------------------------------------------------------------
 // W6-B11 — fetchStudioSessions: the client read for the aggregate in-flight
-// sessions index (cli/ui-bridge.ts's GET /api/studio/sessions).
+// sessions index (apps/forge/ui-bridge.ts's GET /api/studio/sessions).
 // ---------------------------------------------------------------------------
 
 const SESSION_INDEX_ROWS = [
@@ -1098,9 +1098,9 @@ test('fetchStudioSessions() REJECTS with BridgeReadError{status:500, message:"bo
 
 // ---------------------------------------------------------------------------
 // R4-19-F2 T3 — startKbCleanup: the typed client caller for the kb-cleanup
-// session's kickoff route (cli/ui-bridge.ts):
+// session's kickoff route (apps/forge/ui-bridge.ts):
 //   POST /api/studio/kbs/:id/cleanup/start  -> {ok:true, sessionId, project}
-// (route body verified by direct reading of cli/ui-bridge.ts's own
+// (route body verified by direct reading of apps/forge/ui-bridge.ts's own
 // kbCleanupStartMatch handler — the sendJson shapes pinned below are its
 // REAL success/error bodies, not invented ones).
 //
@@ -1338,8 +1338,8 @@ test('RED (R1-06 WI-2 group B, T1 Q3): bootstrapKb must be REMOVED from studio-c
 const BANDED_FLOWS: Pick<Flow, 'id' | 'name' | 'bands'>[] = [
   // Mirrors the REAL shipped forge-develop flow's derived band vocabulary
   // (confirmed live via listFlowBandIds(repoRoot, 'forge-develop') ->
-  // ['demo-band', 'review-band'], cli/flow-band-vocab.ts) — same ground
-  // truth cli/bridge-studio-flows.test.ts's companion route pin uses.
+  // ['demo-band', 'review-band'], packages/flows/flow-band-vocab.ts) — same ground
+  // truth apps/forge/bridge-studio-flows.test.ts's companion route pin uses.
   { id: 'forge-develop', name: 'Forge Develop', bands: ['demo-band', 'review-band'] },
   { id: 'forge-architect', name: 'Forge Architect', bands: [] },
 ];

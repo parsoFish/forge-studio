@@ -76,7 +76,7 @@ import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
  * Re-exported so the host imports its whole routing surface from one module:
  * `import { routeTable, dispatchRoute } from './routes.ts'`. The
  * table and the function that consumes it are one API, and keeping them
- * together costs `cli/ui-bridge.ts` exactly one import line — which matters,
+ * together costs `apps/forge/ui-bridge.ts` exactly one import line — which matters,
  * because that file is 6,602 lines against an 800-line cap and `check-file-size`
  * treats its baseline as a ceiling, not a licence. The carve must not grow it.
  */
@@ -176,7 +176,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       safeInputKeyRe: deps.safeInputKeyRe,
       broadcastDemoChanged: deps.broadcastDemoChanged,
       projectsRoot: deps.projectsRoot,
-      // The host's spawn/serve surface. It stays in `cli/ui-bridge.ts` because
+      // The host's spawn/serve surface. It stays in `apps/forge/ui-bridge.ts` because
       // host code that does not carve still calls it (see the sessions helper
       // module's header); injecting it here is what keeps the carve at zero new
       // boundary rows in either direction.

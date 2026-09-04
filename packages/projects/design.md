@@ -91,7 +91,7 @@ scheduler, work-item, run-list-cache) through their handlers
 strictly higher rank than `projects`. Carving them here would mint a new
 `package-layer-order` violation with no baseline to absorb it (the baseline is a
 shrink-only ratchet; there is no `--write-baseline`). Both routes stay,
-unchanged, in `cli/bridge-studio.ts`'s legacy dispatcher, and were handed to the
+unchanged, in `apps/forge/bridge-studio.ts`'s legacy dispatcher, and were handed to the
 M4-flows lane rather than carved into a package not allowed to hold them.
 
 **`preflight-fix-runner.ts`'s session half.** The interactive, agent-driven side

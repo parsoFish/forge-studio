@@ -5,7 +5,7 @@
  * `loadProjectConfig(projectRoot)` (orchestrator/project-config.ts) reads
  * `<projectRoot>/.forge/project.json`. The dir-level containment its callers do
  * — the POST /api/verdict send-back validates `manifest.project_repo_path` with
- * `isContainedProjectRepoPath` (cli/bridge-studio-runs.ts:397) BEFORE calling
+ * `isContainedProjectRepoPath` (packages/flows/bridge-studio-runs.ts:397) BEFORE calling
  * `loadProjectConfig(manifest.project_repo_path)` (line 423) — blesses the
  * DIRECTORY. But the loader used to RAW-APPEND the leaf
  * (`readFileSync(join(projectRoot, '.forge/project.json'))`) and follow whatever

@@ -18,7 +18,7 @@
  * SAME `mdtoc` reference project
  * every instructions-touching journey already writes into, at phase
  * `awaiting-verdict` (a REAL `deriveSessionAffordances` verdict affordance —
- * mirrors cli/ui-bridge-sessions-index.test.ts's own AT fixture shape) so
+ * mirrors apps/forge/ui-bridge-sessions-index.test.ts's own AT fixture shape) so
  * both the strip's needs-you dot AND the index's `data-needs-you="true"` are
  * driven by an honest, derivable condition, never a hand-poked flag.
  */

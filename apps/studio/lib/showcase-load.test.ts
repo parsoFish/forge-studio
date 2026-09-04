@@ -87,7 +87,7 @@ import type { Cycle, DemoModel } from '@/lib/bridge-client';
 
 /** A real, non-empty DemoModel: >=1 real checkpoint, testEvidence, and a
  *  summary carrying prUrl/branch/commitSha — the exact shape the unifier's
- *  demo.json produces (cli/demo-model.ts) and DemoComparison already
+ *  demo.json produces (packages/factory/demo-model.ts) and DemoComparison already
  *  renders natively. Four acEvaluations (2 met / 1 partial / 1 missed) so
  *  the verdict-count assertion below is not a degenerate all-one-value case. */
 const NON_EMPTY_MODEL: DemoModel = {

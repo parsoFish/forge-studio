@@ -13,7 +13,7 @@
  * SIGKILLs the holder, which can hard-reset another lane's in-flight cycle.
  *
  * The identity probe itself is NOT re-implemented here — `probeBridgeIdentity`
- * in `cli/forge-watch.ts` already does it and is unit-tested.
+ * in `apps/forge/forge-watch.ts` already does it and is unit-tested.
  */
 import { readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';

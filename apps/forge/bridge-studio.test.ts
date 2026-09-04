@@ -272,7 +272,7 @@ let closeBridge: () => Promise<void>;
 
 before(async () => {
   // ADR-044 P1: this file's /api/runs + findRun assertions route through
-  // cachedListRuns's module-level memo (cli/run-list-cache.ts). Reset it
+  // cachedListRuns's module-level memo (packages/flows/run-list-cache.ts). Reset it
   // before building this file's fixture so no residual entry from an
   // earlier test/module use can leak a stale hit into this file's (fresh
   // tmp forgeRoot, therefore fresh manifest paths) assertions — including

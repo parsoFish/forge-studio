@@ -1,5 +1,5 @@
 /**
- * Tests for cli/run-list-cache.ts — ADR-044 P1: a keyed memo of the single
+ * Tests for packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single
  * run derivation (docs/decisions/044-read-path-memoization.md).
  *
  * Structure mirrors orchestrator/run-model.test.ts's fixture helpers (small

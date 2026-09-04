@@ -25,7 +25,7 @@
  *  5. `GET /api/agents//history` (agents-02) — an empty/invalid slug is a
  *     400, never a 200 that quietly matched nothing.
  *
- * Harness pattern copied from `cli/ui-bridge-agent-history.test.ts`
+ * Harness pattern copied from `apps/forge/ui-bridge-agent-history.test.ts`
  * (`startBridge({ forgeRoot, port: 0 })`, FORGE_ARCHITECT_NO_SPAWN=1).
  */
 
@@ -455,7 +455,7 @@ test('cancel: a live tracked pid whose argv carries the runId is signalled (kill
 
   // Wait until the child has actually EXEC'd, i.e. until the very thing the
   // bridge's ownership proof reads (`/proc/<pid>/cmdline`, whole argv
-  // elements — cli/bridge-studio-lifecycle.ts) reports this runId. Between
+  // elements — packages/sessions/bridge-studio-lifecycle.ts) reports this runId. Between
   // `spawn()` returning a pid and the exec landing, cmdline is still the
   // FORKING process's — so cancelling in that window legitimately reports
   // `killed:false` ("not provably ours"), and the test would be asserting a
@@ -578,7 +578,7 @@ test('dispatch: the ONBOARDING start route mints a runId on the same shared iden
   // an onboarding run 404'd on both shared surfaces until its spawned child
   // got far enough to write its own `start` event — the onboarding panel's
   // first poll read "no such run" for a run it had just started. The
-  // status-EQUIVALENCE pin lives in cli/ui-bridge-onboarding-start.test.ts
+  // status-EQUIVALENCE pin lives in apps/forge/ui-bridge-onboarding-start.test.ts
   // (AT-6); this one pins the ABSOLUTE state, so both routes going 404
   // together could never satisfy it.
   const { status, body } = await postJson('/api/studio/onboarding/start', { project: 'w7b5proj' });

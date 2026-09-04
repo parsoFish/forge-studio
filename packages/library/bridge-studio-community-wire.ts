@@ -72,7 +72,7 @@ export type WireCtx = {
   /**
    * The caller's error redactor (`sanitizeError`, the bridge transport's).
    * INJECTED rather than imported: this module is below the route layer, and
-   * importing `cli/bridge-studio.ts` from a package is a `package-to-legacy`
+   * importing `apps/forge/bridge-studio.ts` from a package is a `package-to-legacy`
    * boundary violation. Splitting a file that carries baselined legacy imports
    * would otherwise MULTIPLY those rows — one per new module — and this lane's
    * boundary baseline is a ratchet that may only shrink.

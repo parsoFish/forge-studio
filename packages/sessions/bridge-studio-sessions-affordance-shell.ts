@@ -43,7 +43,7 @@ export function unhandledAffordanceBody(kind: SessionAffordanceKind, error: stri
 // Context
 // ---------------------------------------------------------------------------
 
-/** The subset of `SpawnableAgentId` (`cli/ui-bridge.ts`) this route ever
+/** The subset of `SpawnableAgentId` (`apps/forge/ui-bridge.ts`) this route ever
  *  spawns a turn for — never `architect` (no writable affordance) or
  *  `project-brain` (no verdict/question-form row in its panel). W7-C2: the
  *  generic-spine kinds (`authoring`/`kb-cleanup`) joined for the REVISE
@@ -72,7 +72,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  `spawnAgentTurn` is: host machinery, and its kernel move is only
    *  half-done (see `SessionHostSurface`'s own note). */
   dryBridgeAgentTurnMarker: (logsRoot: string, route: string, sessionId: string) => Record<string, unknown>;
-  /** Injected from `cli/ui-bridge.ts` — see this file's header for why this
+  /** Injected from `apps/forge/ui-bridge.ts` — see this file's header for why this
    *  is dependency-injected rather than imported: delegates to the EXACT
    *  SAME `spawnAgentTurn` every bespoke per-kind route already calls, not a
    *  reimplementation. */
@@ -85,7 +85,7 @@ export type AffordanceRouteContext = StudioContext & {
   runFixTurn: NonNullable<Parameters<typeof approveKbCleanup>[3]>['runFixTurn'];
   /** W7-C2 T1 review (A12) — the ONE per-kind live-refresh seam, the SAME
    *  mapping `handleSessionCancelRoute` is already injected with
-   *  (cli/ui-bridge.ts). Replaces the two hand-kept
+   *  (apps/forge/ui-bridge.ts). Replaces the two hand-kept
    *  `broadcastInstructionsChanged`/`broadcastDemoChanged` calls that used
    *  to live inline here: this module no longer keeps its own per-kind list
    *  of which kinds have a list-changed WS event. A kind with no event
@@ -111,7 +111,7 @@ export function safeParseJson<T>(raw: string): T | null {
 // ---------------------------------------------------------------------------
 // question-form — instructions' interview-answer round
 // (`awaiting-answers-question-form` — mirrors `POST /api/instructions/answer`,
-// `cli/ui-bridge.ts:3236`). W6-B9 — instructions' `briefing` phase ALSO
+// `apps/forge/ui-bridge.ts:3236`). W6-B9 — instructions' `briefing` phase ALSO
 // derives a `question-form` row (`briefing-question-form`, same reused
 // `awaits: 'questions'` shape) — dispatched to `handleInstructionsBrief`
 // below instead, by `affordance.phase`, since the two share a `kind` but
@@ -149,10 +149,10 @@ export function answersCapReason(answers: readonly { question: string; answer: s
 // (answer/brief/verdict-instructions/verdict-demo) previously called
 // `ctx.spawnAgentTurn` with no dry-bridge marker at all: `spawnAgentTurn`
 // itself already no-ops under `FORGE_DRY_BRIDGE=1`
-// (`cli/ui-bridge.ts:2124`), so no REAL spawn ever happened — but the 200
+// (`apps/forge/ui-bridge.ts:2124`), so no REAL spawn ever happened — but the 200
 // body silently omitted the `dryBridge:{skipped:['agent-turn']}` disclosure
 // every bespoke per-kind spawn route already gives the same caller (e.g.
-// `POST /api/instructions/brief`, `cli/ui-bridge.ts:3310`), a parity gap
+// `POST /api/instructions/brief`, `apps/forge/ui-bridge.ts:3310`), a parity gap
 // this batch has otherwise been careful to close. ONE shared helper (not
 // four repeated `...dryBridgeAgentTurnMarker(...)` call sites) — `route` is
 // a fixed, literal identifier for this generic dispatch point (mirrors
@@ -255,7 +255,7 @@ export function handleGenericRevise(
   // from, so the session lands back on a real, actionable affordance instead
   // of sitting in a working phase that no turn will ever leave (the
   // `lastActivityMs === null` -> never-`stalled` hole in
-  // cli/bridge-studio-lifecycle.ts). feedback.md deliberately stays: it is
+  // packages/sessions/bridge-studio-lifecycle.ts). feedback.md deliberately stays: it is
   // the operator's pending note, and the retry should carry it.
   const spawn = ctx.spawnAgentTurn(ctx.forgeRoot, agentId, project, sessionId);
   if (!spawn.ok) {

@@ -527,7 +527,7 @@ test('buildKbAttention: checksRun < checksTotal is surfaced on the row verbatim 
   // Kills a row that implies a full clean sweep when most checks never
   // actually inspected this KB (only checkProjectBrainIndexes's
   // project-indexes scope applies to a project-brain KB; the other ~9
-  // forge-themes/global checks never touched it — see cli/brain-lint.ts's
+  // forge-themes/global checks never touched it — see packages/knowledge/brain-lint.ts's
   // CHECK_SCOPE).
   const kbs = [makeKb('kb1', { lint: makeLint({ flags: 1, checksRun: 1, checksTotal: 10 }) })];
   const items = buildKbAttention(kbs);

@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // W6-P4 (redesigned per review): zero-RTT bridge URL discovery WITHOUT
   // trading away static prerendering. `DEFAULT_BRIDGE_PORT` is a plain
   // build-time literal (the fixed-port convention's default — CLAUDE.md,
-  // cli/forge-watch.ts's own `DEFAULT_BRIDGE_PORT`), NOT an env read, so
+  // apps/forge/forge-watch.ts's own `DEFAULT_BRIDGE_PORT`), NOT an env read, so
   // this layout has no per-request data and stays fully static — Next.js
   // prerenders it once, same as main before W6-P4 (a prior version of this
   // change added `dynamic = 'force-dynamic'` here and dynamized all 30

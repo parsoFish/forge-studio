@@ -6,10 +6,10 @@
  * that generalization actually reaches the two kinds that never had a tail
  * at all before this change — authoring and kb-cleanup — which only have
  * ONE read route each: the generic `/api/studio/sessions/:kind/:id`
- * (cli/bridge-studio-sessions.ts), not a per-kind list route like
+ * (packages/sessions/bridge-studio-sessions.ts), not a per-kind list route like
  * `/api/architect/sessions`.
  *
- * Mirrors `cli/ui-bridge-architect.test.ts`'s own "GET /api/architect/
+ * Mirrors `apps/forge/ui-bridge-architect.test.ts`'s own "GET /api/architect/
  * sessions live-tails the session log -> WS event stream (hex bursts)"
  * test: a real bridge (startBridge), a hand-seeded `events.jsonl`, a real WS
  * client, the session-detail GET triggers the tail, the tool_use event
@@ -50,7 +50,7 @@ const KB_ID = 'session-tails-fixture-kb';
 const PROJECT = 'demoproj';
 
 /** Minimal, real skill-agent fixture — mirrors
- *  cli/bridge-studio-sessions.test.ts's own `writeSkillAgent`, which every
+ *  packages/sessions/bridge-studio-sessions.test.ts's own `writeSkillAgent`, which every
  *  session-kinds descriptor's `agent:` field must resolve against
  *  (validateSessionKinds' unknown-agent check). */
 function writeSkillAgent(root: string, slug: string): void {
@@ -115,8 +115,8 @@ function writeSessionKindsYaml(root: string): void {
 }
 
 /** A real, minimal `brain/<id>/kb.yaml` — mirrors
- *  cli/bridge-studio-sessions.test.ts's own `writeResolvableKb` (that file's
- *  sibling `cli/ui-bridge-kb-cleanup.test.ts` AT-3/AT-4/AT-5 already prove
+ *  packages/sessions/bridge-studio-sessions.test.ts's own `writeResolvableKb` (that file's
+ *  sibling `apps/forge/ui-bridge-kb-cleanup.test.ts` AT-3/AT-4/AT-5 already prove
  *  this exact shape is sufficient for `computeAgentCleanupFindings`'s live
  *  brain-lint pass to complete without throwing). */
 function writeResolvableKb(root: string, id: string): void {
@@ -131,7 +131,7 @@ function writeResolvableKb(root: string, id: string): void {
 }
 
 /** Plants a kb-cleanup session directly on disk (never through a route) —
- *  mirrors cli/bridge-studio-sessions.test.ts's `writeCleanupSessionWithResolvableKb`.
+ *  mirrors packages/sessions/bridge-studio-sessions.test.ts's `writeCleanupSessionWithResolvableKb`.
  *  `phase` defaults to 'awaiting-approval' (non-terminal, per the turnSpec
  *  fixture above) — the terminal-phase gating test below plants a SECOND
  *  session at phase 'applied' (the turnSpec's own `step: 'terminal'` row). */
@@ -187,7 +187,7 @@ function writeCleanupSession(projectsRoot: string, project: string, sessionId: s
 }
 
 /** Seeds `_logs/_<kind>-<sessionId>/events.jsonl` with one `tool_use` event
- *  — the exact fixture shape cli/ui-bridge-architect.test.ts's own
+ *  — the exact fixture shape apps/forge/ui-bridge-architect.test.ts's own
  *  "live-tails the session log" test uses. */
 function seedEventLog(root: string, kind: string, sessionId: string): void {
   const logDir = join(root, '_logs', `_${kind}-${sessionId}`);

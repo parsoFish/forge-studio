@@ -1,5 +1,5 @@
 /**
- * SEC-07 acceptance pins: `cmdAgentDispatch` (`cli/agent-run.ts`) must route an
+ * SEC-07 acceptance pins: `cmdAgentDispatch` (`packages/agents/agent-run.ts`) must route an
  * untrusted `--project` value through the shared containment guard as its OWN
  * segment under the trusted projects root, never fold it into the root before
  * any containment check runs. See `cli/studio-path-guard.ts`'s CONTRACT and the

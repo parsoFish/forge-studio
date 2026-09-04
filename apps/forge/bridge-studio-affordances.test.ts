@@ -6,8 +6,8 @@
  *
  * Drives the REAL bridge (`startBridge`) against real on-disk session
  * fixtures seeded directly (never through a route) — mirrors
- * `cli/bridge-studio-sessions.test.ts` / `cli/bridge-studio-authoring.test.ts`
- * / `cli/ui-bridge-kb-cleanup.test.ts`'s own idioms, reusing their fixture
+ * `packages/sessions/bridge-studio-sessions.test.ts` / `packages/library/bridge-studio-authoring.test.ts`
+ * / `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own idioms, reusing their fixture
  * shapes exactly (real, checked-in `studio/session-kinds.yaml`; real
  * `brain/<kb>/kb.yaml` for kb-cleanup's drain).
  *
@@ -67,7 +67,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'studio', 'hooks'), { recursive: true });
   // W8-B4 FIX-1 — TBL-authoring-7/8's template control needs these two
   // single-file template categories to exist as real finalize targets
-  // (mirrors cli/bridge-studio-authoring-finalize.test.ts's own before()).
+  // (mirrors packages/library/bridge-studio-authoring-finalize.test.ts's own before()).
   mkdirSync(join(forgeRoot, 'studio', 'artifact-templates'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'demo-elements'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
@@ -138,7 +138,7 @@ async function postJson(url: string, body: unknown): Promise<Response> {
  *  process, so the server-side guard for that shape can only be exercised
  *  via a client that performs NO normalization. Node's low-level
  *  `http.request({ path })` places `path` directly on the request line —
- *  mirrors `cli/ui-bridge-kb-cleanup.test.ts`'s own `rawPost` exactly. */
+ *  mirrors `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own `rawPost` exactly. */
 function rawPost(rawPath: string, bodyText = '{}'): Promise<{ status: number; text: string }> {
   return new Promise((resolvePromise, reject) => {
     const u = new URL(bridgeUrl);
@@ -260,7 +260,7 @@ test('SEC-8: malformed (non-JSON) body -> 400, session untouched', async () => {
 });
 
 test('SEC-9: oversized body (> 1 MiB) -> rejected (never 200); session untouched', async () => {
-  // Mirrors cli/bridge-studio-write.test.ts's "PUT with oversized body ->
+  // Mirrors apps/forge/bridge-studio-write.test.ts's "PUT with oversized body ->
   // rejected (not 200)": the bridge destroys the socket when readJson's
   // MAX_BODY_BYTES cap is hit — undici may surface this as a thrown
   // TypeError ('fetch failed') OR as a 4xx response depending on how far the
@@ -922,7 +922,7 @@ test('SEC-SYMLINK: the session dir itself is a SYMLINK (not a real directory) po
 
   // The attack: `<projectsRoot>/<project>/_instructions/<sessionId>` is
   // ITSELF a symlink to the victim dir — the exact AT-47 shape
-  // cli/bridge-studio-sessions.ts's own header documents (a symlink whose
+  // packages/sessions/bridge-studio-sessions.ts's own header documents (a symlink whose
   // OWN path is safely inside the requested parent but which resolves to a
   // DIFFERENT session entirely). `resolveGuardedPath`'s per-segment identity
   // walk must catch this at the `sessionId` segment.

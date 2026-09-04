@@ -40,8 +40,8 @@ test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy un
 // R1-06 WI-1 group B (4): the asymmetric brain-read policy (ADR-010 as
 // amended) extends past the 4 phase-binding source files above to KB
 // DESCRIPTORS. The rule is now encoded as ONE pure, exported predicate —
-// `kbReadPolicyViolation` (cli/kb-read-policy.ts) — that BOTH `forge studio
-// lint` (the production wiring, cli/studio-lint.ts) and this guard drive, so
+// `kbReadPolicyViolation` (packages/knowledge/kb-read-policy.ts) — that BOTH `forge studio
+// lint` (the production wiring, apps/forge/studio-lint.ts) and this guard drive, so
 // there is a single source of the policy rather than a hand-rolled helper.
 //
 // The policy (T1 ruling + ADR-010 amendment "R1-06 band-scoped reviewer

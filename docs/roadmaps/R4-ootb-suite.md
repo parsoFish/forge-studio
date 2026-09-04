@@ -135,7 +135,7 @@ R4-01-F2, wave 4):
   (`orchestrator/flow-runner.ts` / `orchestrator/phases/project-manager.ts`). F5 = architect-accept promote
   (existing). F4 = `orchestrator/enqueue-plan-run.ts` (`enqueuePlanRun`, a manifest-move mirror of
   `enqueue-develop-run.ts` repointing to `flow_id: forge-architect`) + `POST /api/initiatives/:id/plan`
-  (`cli/ui-bridge.ts`; `exempt-local` in `cli/dry-bridge.ts`'s route-coverage table). Byte-identical single-pipeline
+  (`apps/forge/ui-bridge.ts`; `exempt-local` in `cli/dry-bridge.ts`'s route-coverage table). Byte-identical single-pipeline
   proof: `orchestrator/project-manager-shared-pipeline.test.ts`. **F4 is a flow-path manifest-move, NOT runAgent**
   (implemented-notes; runAgent-consumption deferred to R4-01-F2).
 - **Completeness (F6):** non-blocking `orchestrator/phases/decompose-completeness.ts` emitting the
@@ -159,10 +159,10 @@ R4-11 landed 2026-07-19 (wave 2, branch `feat/r4-11-roadmap-attention`). The ope
   defense-in-depth follow-up, known-gaps.)
 - **Recovery folded in (F3):** inspect/requeue/abandon affordances (API unchanged) on the roadmap card via
   `forge-ui/lib/recovery-attrs.ts`; `/recovery` → redirect stub (`data-page="recovery-redirect"`); nav item removed.
-- **Cross-project attention strip (F4):** `GET /api/studio/projects/attention` (`cli/bridge-studio.ts`, shared
+- **Cross-project attention strip (F4):** `GET /api/studio/projects/attention` (`apps/forge/bridge-studio.ts`, shared
   `scanProjectManifests`) + a slim `data-section="attention-strip"` on `/` with per-project counts
   (planned/in-flight/gated/merged/completeness-flagged) linking through to `/projects/<id>`.
-- **Architect re-run (F5):** `POST /api/architect/rerun` (`cli/ui-bridge.ts`, re-spawns the stalled session via
+- **Architect re-run (F5):** `POST /api/architect/rerun` (`apps/forge/ui-bridge.ts`, re-spawns the stalled session via
   `spawnAgentTurn`, `isSafeRunId`-guarded, dry-bridge `stub-actions`) + a `data-action="architect-rerun"` button on
   `StuckWarning`.
 
@@ -277,7 +277,7 @@ choosable:
   never mutates an earlier one.
 - **A fourth session kind, declared as data.** `studio/session-kinds.yaml` gains
   `id: demo` (the id IS the `_<kind>` session-dir segment
-  `cli/bridge-studio-sessions.ts` derives, which is why it is not
+  `packages/sessions/bridge-studio-sessions.ts` derives, which is why it is not
   `demo-builder`), `agent: demo-builder`, `stages: [demo]`, artifact
   `generation-gallery` — the R2-10 RESERVED row, now **live**, with
   `deriveGenerationGallery` (`orchestrator/studio/session-transcript.ts`)
@@ -327,7 +327,7 @@ contract produced which artifact.
   that actually observes the run ending, never attributed; without the flag the
   command is byte-identical to before it existed.
 - **The contract build-out is a derivation over the project's own artifacts.**
-  `deriveContractStages` (`cli/contract-stages.ts`) returns one row per stage for
+  `deriveContractStages` (`packages/projects/contract-stages.ts`) returns one row per stage for
   all five of `contract · instructions · secrets · demo · roadmap` — always all
   five, because an absent artifact is a row that names its source, and a dropped
   row is indistinguishable from never having looked. Sources are real and were
@@ -381,7 +381,7 @@ lint-passed and never run the check.
 
 - **The gate runs the REAL preflight, orchestrator-side, with no injection
   seam.** `execOnboardPreflight` (`orchestrator/flow-runner.ts`) calls
-  `runPreflight` (`cli/preflight.ts`) directly, exactly as
+  `runPreflight` (`packages/projects/preflight.ts`) directly, exactly as
   `orchestrator/project-create.ts` already does, against
   `CycleInput.projectRepoPath`. It deliberately adds **no `FlowRunnerDeps`
   field** — the absence of a seam is the design: no stub can occupy it, so
@@ -592,7 +592,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
     `OnboardWithAgent` block (`data-section="onboard-with-agent"`,
     `data-action="run-onboarding-agent"`). Events/cost visible via the F1
     `GET /api/agents/runs/:runId` poll. Roster snapshot updated (11 agents).
-  - **F2 — built.** `cli/contract-compliance-loop.ts`
+  - **F2 — built.** `packages/projects/contract-compliance-loop.ts`
     `runContractComplianceLoop` — a **deterministic, bounded, orchestrator-
     authored** preflight→auto-fix→re-check convergence loop, exposed as
     `forge preflight converge --project <p> [--accept <clause>=<rationale>]`
@@ -603,7 +603,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
     ledger (`passed`/`fixed`/`accepted`/`failed`) makes it never-silent. Reuses
     `applyPreflightAutoFixes` (C2/ARTIFACTS/C4) + the exported `AUTO_ORDER`.
     AC proven by a hermetic broken-fixture test reaching hard-green unattended.
-  - **F3 — built.** The onboard create route (`cli/bridge-studio-writes.ts`)
+  - **F3 — built.** The onboard create route (`apps/forge/bridge-studio-writes.ts`)
     now sets `project.json.kb = <id>` — provably the seeded KB id
     (`buildKbYaml` binds `id`/`ref` to the project id; a fresh create carries
     no divergent kb.yaml). Closes known-gaps §4.3(a)/(d): ContractReadiness
@@ -1197,7 +1197,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
     the first real consumer of `resolveKbProcesses`. Each touched KB's declared
     `ingest`/`consolidate`/`lint` processes run post-reflect; the builtin lint
     is a REAL, project-aware structural check over exactly the fresh theme files
-    (`lintThemeFiles`, `cli/brain-lint.ts`) — so a project KB's own writes are
+    (`lintThemeFiles`, `packages/knowledge/brain-lint.ts`) — so a project KB's own writes are
     validated (the shared `cycle-touched-themes` scan never walks
     `brain/projects/*`) without going repo-wide-red. cmd-shaped processes get
     the R1-01-F1 invocation contract; every process is fail-loud (`failed`

@@ -7,13 +7,13 @@
  * req/res.
  *
  * Coverage carried from:
- *   - `cli/id-rule.test.ts`'s "per-project routes: every :id route the
+ *   - `apps/forge/id-rule.test.ts`'s "per-project routes: every :id route the
  *     walkthrough saw 404/400 now resolves ... / exact match — the
  *     lowercased id is unknown (404)" family, applied to preflight and
  *     repo-status.
- *   - `cli/bridge-studio-preflight-resolve.test.ts`'s
+ *   - `apps/forge/bridge-studio-preflight-resolve.test.ts`'s
  *     "GET preflight/fix-agent/:runId returns a state" test.
- *   - `cli/bridge-studio-save-repo.test.ts`'s repo-status coverage.
+ *   - `apps/forge/bridge-studio-save-repo.test.ts`'s repo-status coverage.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,7 +53,7 @@ function ctxFor(forgeRoot: string): StudioContext {
 }
 
 /** A minimal project fixture `runPreflight` can run against without crashing
- *  (mirrors cli/bridge-studio-preflight-resolve.test.ts's fixture). The exact
+ *  (mirrors apps/forge/bridge-studio-preflight-resolve.test.ts's fixture). The exact
  *  clause verdicts are not under test here — only that the route resolves the
  *  project, runs preflight, and shapes the response. */
 function writePreflightableProject(forgeRoot: string, id: string): string {

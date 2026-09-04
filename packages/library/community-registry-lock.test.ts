@@ -3,7 +3,7 @@
  * TWO independent read-modify-write callers and, before this file existed,
  * not one of them took a lock:
  *
- *   1. `runCommunityRefresh`      (cli/community-refresh-run.ts)
+ *   1. `runCommunityRefresh`      (packages/library/community-refresh-run.ts)
  *   2. `mutateCommunityRegistry`  (bridge-studio-community-crud.ts, the CRUD routes)
  *
  * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
@@ -234,7 +234,7 @@ test('RACE: an item DELETED during the refresh stays deleted, and its now-orphan
   const doc = readDoc();
   assert.deepEqual(doc.items.map((i) => i.id), ['alpha'], 'the refresh resurrected an item the operator deleted');
   assert.equal(doc.sources[A_KEY].fetchedBy, 'api:github');
-  // ORPHAN POLICY (documented in cli/community-refresh-run.ts): a source row
+  // ORPHAN POLICY (documented in packages/library/community-refresh-run.ts): a source row
   // no surviving item resolves to is DROPPED, matching the by-construction
   // pruning refreshCommunityRegistry already performs and the
   // `community-registry/orphan-source` rule `forge studio lint` enforces.

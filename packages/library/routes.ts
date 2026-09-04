@@ -2,7 +2,7 @@
  * routes.ts — `@forge/library`'s HTTP routes, as a table.
  *
  * M4 §4 step 2. Thirty-one of these 34 routes used to reach their handlers
- * through SEVEN monolithic prefix dispatchers that `cli/ui-bridge.ts` called
+ * through SEVEN monolithic prefix dispatchers that `apps/forge/ui-bridge.ts` called
  * in sequence (`:2365` skills, `:2366` hooks, `:2367` authoring, `:2368`
  * templates, `:2418` instructions, `:2422` connections, `:2423` community).
  * Every one of those dispatchers is now DELETED; nothing dispatches those 31
@@ -11,10 +11,10 @@
  * THE OTHER THREE — the community-registry item's POST/PUT/DELETE arms
  * (`bridge-studio-community-crud.ts`) — are an M4 §4 step 2 RESIDUE carve:
  * they left an EIGHTH dispatcher, `handleStudioWriteRoutes`
- * (`cli/bridge-studio-writes.ts`), a separate carve (M4-projects) was already
+ * (`apps/forge/bridge-studio-writes.ts`), a separate carve (M4-projects) was already
  * emptying route by route. Grouped right after the GET arm of the same URL.
  * This table is what `apps/forge/routes.ts` assembles and the host claims at
- * `cli/ui-bridge.ts:2094`, before its own switch.
+ * `apps/forge/ui-bridge.ts:2094`, before its own switch.
  *
  * ORDER. `dispatchRoute` is first-match-wins, and knowledge's table pins its
  * one real collision (`drain/cancel` vs `drain/:runId`) by order. LIBRARY HAS
@@ -144,7 +144,7 @@ export type LibraryRouteContext = RouteContext;
 const pathOf = pathOnly;
 
 /**
- * Ordered, first-match-wins. Sections follow the order `cli/ui-bridge.ts`
+ * Ordered, first-match-wins. Sections follow the order `apps/forge/ui-bridge.ts`
  * called the seven dispatchers in, and within a section the order that
  * dispatcher's if-chain matched its arms in. Order changes nothing while the
  * disjointness invariant holds — it is preserved because reproducing the
@@ -422,7 +422,7 @@ export const libraryRoutes: RouteTable<LibraryRouteContext> = [
   },
 
   // ---- bridge-studio-community-crud.ts (3 routes, RESIDUE — moved from
-  // cli/bridge-studio-writes.ts :583 :615 :654; see file header. Same URL
+  // apps/forge/bridge-studio-writes.ts :583 :615 :654; see file header. Same URL
   // family as the GET above — REGISTRY_ROW_RE reused, not re-declared.)
   {
     method: 'POST',

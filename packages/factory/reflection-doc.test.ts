@@ -1,5 +1,5 @@
 /**
- * Tests for cli/reflection-doc.ts — retro.md → ReflectionDoc parser.
+ * Tests for packages/factory/reflection-doc.ts — retro.md → ReflectionDoc parser.
  *
  * Tests cover:
  *   - Lesson extraction from "### Observation N — …" sections

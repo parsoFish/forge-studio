@@ -22,7 +22,7 @@
  * kind with a distinct `writes: [staging]` InteractiveRunnerError and no
  * live-KB requirement — not a copy of a real operator session.)
  *
- * Test shape mirrors cli/ui-bridge-sessions-index.test.ts: a real bridge
+ * Test shape mirrors apps/forge/ui-bridge-sessions-index.test.ts: a real bridge
  * (startBridge) + fetch for the acceptance level, plus direct import of the
  * pure derivation for the unit matrix. The REAL studio/session-kinds.yaml is
  * copied into the fixture root so the real kinds/tables are exercised (the
@@ -509,7 +509,7 @@ test('W8-B3 shell (ON-5): the payload carries `transcriptSources` — the candid
   // SUPERSEDES W7A2-04's `transcript: descriptor.turnSpec === undefined`
   // assertion. That proxy was a stored per-kind guess, and it was WRONG for
   // `authoring`: authoring declares a turnSpec, yet its start route
-  // (`writeAuthoringSession`, cli/ui-bridge.ts) writes prompt.md before the
+  // (`writeAuthoringSession`, apps/forge/ui-bridge.ts) writes prompt.md before the
   // generic spine ever runs — so the wire claimed "records no turns" for a
   // kind that has one from second zero. What ships is the derived fact.
   //

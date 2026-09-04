@@ -1,6 +1,6 @@
 /**
  * `skill-tool-fence` — one Studio-lint check, in its own module because
- * `cli/studio-lint.ts` sits at this repo's 800-line hard cap.
+ * `apps/forge/studio-lint.ts` sits at this repo's 800-line hard cap.
  *
  * WHY THIS CHECK EXISTS. Per the installed Agent SDK's own `runtimeTypes.d.ts`,
  * `allowedTools` is auto-allow-WITHOUT-PROMPTING, not a restriction ("To
@@ -46,8 +46,8 @@
 
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-// gray-matter has no usable types; treated as `any` like cli/studio-lint.ts,
-// cli/brain-lint.ts and cli/brain-fix-auto.ts, which import it the same way.
+// gray-matter has no usable types; treated as `any` like apps/forge/studio-lint.ts,
+// packages/knowledge/brain-lint.ts and packages/knowledge/brain-fix-auto.ts, which import it the same way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
@@ -56,7 +56,7 @@ import type { Finding } from '@forge/kernel';
 
 // forge-6gv.19 (W8-B4) — exported so `apps/studio/lib/tool-fence-required-
 // names.ts` (the Agent Builder's from-blank compose, `BLANK_STATE`) and
-// `cli/tool-fence-required-names-parity.test.ts` (the cross-boundary
+// `packages/library/tool-fence-required-names-parity.test.ts` (the cross-boundary
 // cross-check) both consume the REAL value, never a hand-copied literal.
 // forge-ui never imports cli/ at runtime (see apps/studio/lib/session-client.ts
 // / session-lifecycle-client.ts's own headers), so the export exists for

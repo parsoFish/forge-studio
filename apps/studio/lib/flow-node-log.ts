@@ -2,7 +2,7 @@
  * Client-side fetch + pure derivation for a run-detail TIMELINE ROW's
  * click-through node log (R6-01 WI-3 / F5) — reads the new `raw=1` mode on
  * the existing `GET /api/runs/<id>/phases/<node>/log` route
- * (`cli/bridge-studio-phase-log-raw.test.ts`, `cli/bridge-studio.ts`) and
+ * (`apps/forge/bridge-studio-phase-log-raw.test.ts`, `apps/forge/bridge-studio.ts`) and
  * maps the node's own raw event records through the SHARED, unmodified
  * `deriveLogLine` (`./run-log-line.ts`) — the same think|tool|out mapper
  * `./run-view-client.ts` already uses for the standalone agent-run surface.

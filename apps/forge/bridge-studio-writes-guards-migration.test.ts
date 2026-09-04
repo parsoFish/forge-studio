@@ -1,11 +1,11 @@
 /**
  * MIGRATION ACCEPTANCE TEST — E1 of the ADR-027-amendment-#2
  * `composition.hooks` → `composition.guards` rename: the agent save/round-trip
- * path in `cli/bridge-studio-writes.ts` (~L379, now maps `guards`) must
+ * path in `apps/forge/bridge-studio-writes.ts` (~L379, now maps `guards`) must
  * preserve `composition.guards` through a PUT /api/studio/agents/:slug
  * write → re-load-from-disk cycle.
  *
- * Mirrors `cli/bridge-studio-write.test.ts`'s existing harness conventions
+ * Mirrors `apps/forge/bridge-studio-write.test.ts`'s existing harness conventions
  * exactly (`startBridge`, `putJson`, a temp forgeRoot fixture with a real
  * `skills/<slug>/SKILL.md`) rather than inventing a new one — this is a
  * SEPARATE new file (not an edit to that existing, currently-green suite)
@@ -35,7 +35,7 @@
  * rollback ===
  *
  * WHAT E1b PROTECTED: for the same transitional window as A3 (see
- * `cli/studio-lint-guards-migration.test.ts`'s "A3 SUPERSEDED" paragraph —
+ * `apps/forge/studio-lint-guards-migration.test.ts`'s "A3 SUPERSEDED" paragraph —
  * same root cause, this file's own product surface), a legacy on-disk
  * `hooks:` key made `loadAgentDefinition` throw; the bridge PUT route wraps
  * that same load call in its own try/catch and turned it into an HTTP 500.
@@ -49,13 +49,13 @@
  *
  * WHICH RULE CARRIES THE GUARANTEE NOW — HONEST GAP, NOT A CLEAN STORY:
  * unlike A3, this is NOT a case of "a more precise rule took over". I
- * checked `cli/bridge-studio-writes.ts`'s PUT handler directly (lines
+ * checked `apps/forge/bridge-studio-writes.ts`'s PUT handler directly (lines
  * ~370-445): its composition-merge block reads `skills`/`tools`/`mcps`/
  * `guards` from the request body but was NOT updated in this PR to read or
  * preserve a `hooks` field at all, and the `validateAgent(merged, ...)` call
  * it runs before writing does NOT include `lintHookComposition`'s
  * `hook-library/guard-in-hooks` check (that check only runs inside
- * `runStudioLint`, cli/studio-lint.ts, a separate read-only entry point).
+ * `runStudioLint`, apps/forge/studio-lint.ts, a separate read-only entry point).
  * The observable, verified consequence: a PUT against ANY agent — legacy-
  * hooks-shaped or not — silently DROPS `composition.hooks` from the written
  * file, and returns 200 with no finding naming the loss. This is a REAL,
@@ -211,7 +211,7 @@ test('E1b (part 1) SUPERSEDED: PUT against a legacy-hooks on-disk SKILL.md now s
     `expected the PUT to now succeed (200) — composition.hooks is valid data again — got ${res.status}: ${JSON.stringify(body)}`,
   );
 
-  // HONEST GAP (verified by reading cli/bridge-studio-writes.ts directly,
+  // HONEST GAP (verified by reading apps/forge/bridge-studio-writes.ts directly,
   // not assumed): the PUT handler's composition-merge block was not updated
   // in this PR to read/preserve a `hooks` field, and its own validateAgent
   // call does not include lintHookComposition's guard-in-hooks check. The

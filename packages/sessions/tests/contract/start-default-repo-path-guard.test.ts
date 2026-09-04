@@ -23,7 +23,7 @@
  * `mkdirSync(status.project_repo_path)` with no second check); and a reordering,
  * or a fifth `/start`-shaped route copied from architect, silently reopens it.
  * So the assertion is structural, the same shape and for the same stated reason
- * as `cli/instructions-start-read-guard.test.ts`: the oracle is not observable
+ * as `apps/forge/instructions-start-read-guard.test.ts`: the oracle is not observable
  * through the wire, and a structural claim is the only honest RED-AT-BASE one.
  *
  * RED AT BASE: both assertions below fail on the arms as they stand before

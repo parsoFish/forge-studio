@@ -2,7 +2,7 @@
  * W8-B5 WI-1 (exit row E3) — SSRF containment for the community refresh.
  *
  * `sourceUrl` is operator-typable through the registry CRUD form
- * (cli/bridge-studio-writes.ts) so it is ATTACKER-CONTROLLED input that would
+ * (apps/forge/bridge-studio-writes.ts) so it is ATTACKER-CONTROLLED input that would
  * otherwise be handed straight to forge's own server process. These tests pin
  * the two halves of the containment:
  *

@@ -41,7 +41,7 @@ import {
  * process's lifetime. Threaded verbatim into every containment check on these
  * routes so a live `forge.config.json` edit cannot make the guard re-derive a
  * DIFFERENT root than the bridge is actually running against (see
- * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`).
+ * `packages/flows/manifest-path-guard.ts`'s `ProjectsRootOpt`).
  */
 export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string; projectsRoot: string };
 

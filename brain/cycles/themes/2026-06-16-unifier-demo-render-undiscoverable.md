@@ -15,7 +15,7 @@ In the unifier phase, the agent attempted multiple invocation paths for `forge d
 2. `cd /home/parso/forge && forge demo render INIT-...` (failed)
 3. `NODE_OPTIONS="" forge demo render INIT-...`
 4. `node /home/parso/forge/bin/forge.mjs demo render INIT-... --dir <worktree>`
-5. Read `forge/orchestrator/cli.ts`, `forge/cli/demo-model.ts`, `forge/cli/demo-html.ts` to discover `demo.json` schema
+5. Read `forge/orchestrator/cli.ts`, `forge/packages/factory/demo-model.ts`, `forge/cli/demo-html.ts` to discover `demo.json` schema
 
 This consumed ~40 Bash calls and read multiple forge source files before the correct invocation was found and the `demo.json` schema was understood.
 

@@ -2,11 +2,11 @@
  * ACCEPTANCE TESTS (must be RED until SEC-02 lands) — real-client-path pin
  * for the manifest-path-fields defect (`forge-d1f`).
  *
- * T2 reproduced this live: `POST /api/initiatives` (`cli/bridge-recovery.ts`)
+ * T2 reproduced this live: `POST /api/initiatives` (`packages/flows/bridge-recovery.ts`)
  * accepts frontmatter `worktree_path` / `project_repo_path` / `cycle_id` /
  * `project` with ZERO validation (`validateManifest`, `orchestrator/
  * manifest.ts`, never checks these fields). `POST /api/recovery/:id/requeue`
- * then calls `runRequeue` (`cli/forge-requeue.ts`), whose default
+ * then calls `runRequeue` (`packages/flows/forge-requeue.ts`), whose default
  * `resume:false` -> `preserveWorktree=false` -> an unconditional
  * `rmSync(worktreePath, {recursive:true, force:true})` on whatever string the
  * attacker put in the manifest. T2's live probe:
@@ -19,7 +19,7 @@
  * exercise the client's manifest serialization at all, which is exactly
  * where this defect lives (the ingest route never validates what it writes).
  *
- * The fix under test is `cli/manifest-path-guard.ts` (does not exist yet as
+ * The fix under test is `packages/flows/manifest-path-guard.ts` (does not exist yet as
  * of this writing — every negative case below is expected to fail RED for
  * that reason: the ingest route currently performs no path validation at
  * all, so `POST /api/initiatives` 201s every one of these attacker manifests

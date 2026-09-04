@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for `POST /api/studio/onboarding/start` (R4-17 — the
- * onboarding session's kickoff route, `cli/ui-bridge.ts`). The route DOES NOT
+ * onboarding session's kickoff route, `apps/forge/ui-bridge.ts`). The route DOES NOT
  * EXIST YET — this file is RED at branch base (every 200/created-dir
  * assertion below fails against a 404 fallthrough on the un-added route;
  * `startBridge` itself exists today so this is NOT a module-not-found red,
@@ -10,7 +10,7 @@
  * campaign's recurring defect family is a route that accepts a
  * caller-supplied repo-path field and never re-validates it before using it
  * as a write/spawn target (SEC-02, SEC-03, the `/start`-family
- * `projectRepoPath` enumeration in `cli/ui-bridge.ts`'s own header). This
+ * `projectRepoPath` enumeration in `apps/forge/ui-bridge.ts`'s own header). This
  * route's answer is to have NO such field to guard at all: body is
  * `{project, inputs?}` — `project` is a slug resolved strictly against
  * `projectsRoot`, nothing else. AT-3 proves this isn't merely "undocumented"
@@ -30,7 +30,7 @@
  * producer bug). AT-13/14/15/18 called `writeOnboardingSession` directly and
  * MOVED with it to packages/sessions/tests/unit/onboarding-session-writer-seam.test.ts
  * in the M4 routes carve; what remains here is the HTTP half. They instead call it
- * (exported from `cli/ui-bridge.ts`) DIRECTLY, with an explicit, known
+ * (exported from `apps/forge/ui-bridge.ts`) DIRECTLY, with an explicit, known
  * `sessionId`, bypassing the route entirely. That split exists because
  * `newArchitectSessionId()` (the id the route generates) gained real
  * entropy in the same fix round that added the three closes AT-13/14/15
@@ -179,7 +179,7 @@ test('R4-17 AT-5: POST /api/studio/onboarding/start — no "inputs" field at all
 // `assert.equal(statusRes.status, 200)`. That assertion was stronger than
 // AT-6's own stated rationale ever required, and it was passing for the
 // WRONG reason. This file's `before()` runs the whole suite under
-// FORGE_ARCHITECT_NO_SPAWN=1 — and `spawnAgentDispatch` (cli/ui-bridge.ts)
+// FORGE_ARCHITECT_NO_SPAWN=1 — and `spawnAgentDispatch` (apps/forge/ui-bridge.ts)
 // returns BEFORE its `mkdirSync(logDir, ...)` call whenever NO_SPAWN (or
 // dry-bridge) is set:
 //
@@ -202,7 +202,7 @@ test('R4-17 AT-5: POST /api/studio/onboarding/start — no "inputs" field at all
 //
 // D22 did not break AT-6's intent; it exposed that the assertion was
 // coupled to a permissiveness this codebase has since removed. Per ruling:
-// leave R5-01-F1 (cli/ui-bridge-dry-spawn.test.ts, the shipped invariant
+// leave R5-01-F1 (apps/forge/ui-bridge-dry-spawn.test.ts, the shipped invariant
 // that dry-bridge must NOT create that same directory) untouched — it is a
 // correct, working detector for its OWN invariant — and amend AT-6 instead
 // to test what its rationale actually claims:
@@ -221,7 +221,7 @@ test('R4-17 AT-5: POST /api/studio/onboarding/start — no "inputs" field at all
 
 test('R4-17 AT-6 (D6, AMENDED — R6-04 D22): the onboarding runId is a REAL run identity on the SAME shared GET /api/agents/runs/<runId> status-poll surface the generic dispatch route uses — proved by STATUS EQUIVALENCE with a runId from POST /api/agents/:slug/run in the SAME harness state, not by either route\'s absolute status code', async () => {
   // A comparable fixture agent for the generic dispatch route — mirrors
-  // cli/ui-bridge-agent-run.test.ts's own `studioAgent()` fixture shape.
+  // apps/forge/ui-bridge-agent-run.test.ts's own `studioAgent()` fixture shape.
   // This slug is used by NO other test in this file.
   const equivSlug = 'onboarding-at6-equivalence-agent';
   mkdirSync(join(forgeRoot, 'skills', equivSlug), { recursive: true });
@@ -289,16 +289,16 @@ Fixture body for ${equivSlug}.
 
 // ---------------------------------------------------------------------------
 // PIN 2 — round-1 BLOCKER: `realProjectDir = realpathSync(join(ctx.
-// projectsRoot, project))` (cli/ui-bridge.ts:~2750) resolves symlinks but
+// projectsRoot, project))` (apps/forge/ui-bridge.ts:~2750) resolves symlinks but
 // NEVER checks the result lands inside `projectsRoot` — unlike the sibling
-// `resolveContainedProjectDir` (cli/contract-stages.ts:94), which the GET
+// `resolveContainedProjectDir` (packages/projects/contract-stages.ts:94), which the GET
 // /api/studio/projects/:id/contract-stages route DOES call and which
 // correctly rejects this exact shape. AT-7/AT-8/AT-9 pin the fix: a real
 // symlink escape is refused (AT-7, RED now — the route currently 200s and
 // writes outside projectsRoot), a symlink that resolves back INSIDE
 // projectsRoot is still accepted (AT-8, the false-rejection control — a
 // guard that rejects every symlink is over-strict, not containment), and the
-// downstream write sink (`writeSessionTerminalPhase`, cli/agent-run.ts) is
+// downstream write sink (`writeSessionTerminalPhase`, packages/agents/agent-run.ts) is
 // guarded independently of this route (AT-9, RED now — that function has no
 // projectsRoot-containment check at all today; see the T3 report for why).
 // ---------------------------------------------------------------------------
@@ -381,7 +381,7 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
     console.log = origLog;
     rmSync(outsideSessionDir, { recursive: true, force: true });
     // The failure path logs a terminal marker via createLogger(runId,
-    // '_logs') — hardcoded CWD-relative in cli/agent-run.ts, not threaded
+    // '_logs') — hardcoded CWD-relative in packages/agents/agent-run.ts, not threaded
     // through the (temp) forgeRoot used elsewhere in this file — so it lands
     // under the REAL repo's _logs/, exactly as cli/agent-run-dispatch.
     // test.ts's own AT-D7-2 fixture already has to clean up.
@@ -391,13 +391,13 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
 
 // ---------------------------------------------------------------------------
 // PIN 4 — round-2 adversarial review, item 1 (BLOCKER): `ctx.projectsRoot`
-// here is computed as `resolve(forgeRoot, 'projects')` (cli/ui-bridge.ts:222)
+// here is computed as `resolve(forgeRoot, 'projects')` (apps/forge/ui-bridge.ts:222)
 // — a hardcoded literal that NEVER consults `FORGE_PROJECTS_DIR` or
 // `forge.config.json`'s `projectsDir`, unlike `writeSessionTerminalPhase`
-// (cli/agent-run.ts:201, the sink AT-9 above guards), which resolves the
+// (packages/agents/agent-run.ts:201, the sink AT-9 above guards), which resolves the
 // SAME concept via `resolveProjectsDir(resolve(forgeRoot), loadConfig())` —
 // the config-aware helper 23 OTHER call sites in this repo already use
-// (cli/ui-bridge.ts:222 is the one outlier). When an operator configures a
+// (apps/forge/ui-bridge.ts:222 is the one outlier). When an operator configures a
 // custom projects root, the producer here keeps building sessions under the
 // OLD hardcoded literal while the guard checks containment against the
 // CONFIGURED root — the two disagree, and a legitimately-produced session's
@@ -410,7 +410,7 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
 // configured root, so it 404s instead of placing the session there). The
 // CONSUMER half (writeSessionTerminalPhase already being config-aware, and
 // staying refuse-outside-the-configured-root even once this producer bug is
-// fixed) is pinned separately, in `cli/agent-run-dispatch.test.ts`'s new
+// fixed) is pinned separately, in `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s new
 // AT-D7-6..9 — that function was never the broken half; this route is.
 // ---------------------------------------------------------------------------
 
@@ -554,7 +554,7 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
 // ---------------------------------------------------------------------------
 // PIN 5 — round-3 adversarial review, item 1 (BLOCKER): the leaf writes
 // `<project>/_onboarding/<sessionId>/{status.json,prompt.md}` are unguarded.
-// `sessionId` (`newArchitectSessionId()`, cli/ui-bridge.ts:1693-1696) has only
+// `sessionId` (`newArchitectSessionId()`, apps/forge/ui-bridge.ts:1693-1696) has only
 // ONE-SECOND granularity — zero entropy. A pre-planted `<sid>/` directory
 // with `status.json`/`prompt.md` as SYMLINKS to an outside target captures
 // both writes (`mkdirSync(..., {recursive:true})` silently reuses the
@@ -584,13 +584,13 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
 //
 // PIN 6 RE-POINT (this round): the paragraph above predicted its own
 // obsolescence, correctly. `newArchitectSessionId()` now carries real
-// entropy (an 8-hex-char suffix, `cli/ui-bridge.ts:1700-1710`), so none of
+// entropy (an 8-hex-char suffix, `apps/forge/ui-bridge.ts:1700-1710`), so none of
 // AT-13/14/15's candidate directories can coincide with the route's real
 // target ever again — their assertions stayed TRUE but became VACUOUS
 // (green for the wrong reason: the route simply never touches the planted
 // fixture, not because it was refused). `writeOnboardingSession` was
 // extracted as its own EXPORTED function specifically to be this follow-up
-// seam (see its own docstring, `cli/ui-bridge.ts:2333-2369`, which names
+// seam (see its own docstring, `apps/forge/ui-bridge.ts:2333-2369`, which names
 // this exact test file as the place a fixed-id unit test would land).
 // AT-13/AT-14/AT-15 below now call it DIRECTLY with an explicit, known
 // `sessionId` instead of guessing at the route's — the three closes below

@@ -6,7 +6,7 @@
  *
  * community-client.ts mirrors connection-client.ts's / hook-client.ts's role
  * — client-side fetch + parse helpers for the `/api/studio/community*`
- * bridge routes (see cli/bridge-studio-community.ts's own header for the
+ * bridge routes (see packages/library/bridge-studio-community.ts's own header for the
  * transport shapes).
  *
  * Tests the pure parse functions directly — no fetch, no window, no jsdom
@@ -29,7 +29,7 @@
  * in DISPATCH (which body to send, which response key to check first), not
  * in a pure parse function, so only a real, mocked-transport round trip
  * proves it. The over-the-wire behaviour itself is pinned by
- * cli/bridge-studio-community.test.ts.
+ * packages/library/bridge-studio-community.test.ts.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 
@@ -306,7 +306,7 @@ test('parseRegistryItemResponse: THROWS when a required string field is missing 
 
 // ---------------------------------------------------------------------------
 // W8-B5b — parseCommunityRefreshResponse (postCommunityRefresh's parse step,
-// cli/bridge-studio-community.ts's `POST /api/studio/community/refresh`).
+// packages/library/bridge-studio-community.ts's `POST /api/studio/community/refresh`).
 // DOES NOT EXIST YET — the import above is the expected RED until
 // community-client.ts exports it. Same refuse-don't-coerce discipline as
 // every parser in this file: a malformed shape THROWS.

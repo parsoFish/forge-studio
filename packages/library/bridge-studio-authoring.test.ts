@@ -20,7 +20,7 @@
  *   flows-11    flows DELETE (seed ⇒ 403, active run ⇒ 423, authored ⇒ 200)
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * cli/bridge-studio-skills.test.ts exactly.
+ * packages/library/bridge-studio-skills.test.ts exactly.
  */
 
 import { test, before, after } from 'node:test';

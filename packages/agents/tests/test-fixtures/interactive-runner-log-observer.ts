@@ -71,7 +71,7 @@ import { cmdAgentRun } from '../../agent-run.ts';
 import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
 
 // ---------------------------------------------------------------------------
-// cmdAgentRun driver — mirrors cli/agent-run-dispatch.test.ts's own `run()`
+// cmdAgentRun driver — mirrors packages/agents/tests/integration/agent-run-dispatch.test.ts's own `run()`
 // helper exactly (the established house pattern for stubbing process.exit +
 // console in this file's sibling test suite): a sentinel thrown from the
 // process.exit stub returns control immediately without tearing down the

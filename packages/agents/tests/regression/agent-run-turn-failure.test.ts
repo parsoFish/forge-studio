@@ -2,11 +2,11 @@
  * Tests for bead forge-poc (WI-2b, defect 1) — "a runner throw wedges a
  * session at its pre-turn phase forever".
  *
- * `cmdAgentRun` (`cli/agent-run.ts`) used to await a runner's turn (either
+ * `cmdAgentRun` (`packages/agents/agent-run.ts`) used to await a runner's turn (either
  * the ADR-043 §3 turnSpec road's `runInteractiveTurn`, or one of the 4
  * legacy `AGENT_RUNNERS`' own `runTurn`) with NO try/catch anywhere between
  * it and the top-level `orchestrator/cli.ts` catch-all, which only prints to
- * stderr and calls `process.exit(1)` — invisible to `cli/ui-bridge.ts`'s
+ * stderr and calls `process.exit(1)` — invisible to `apps/forge/ui-bridge.ts`'s
  * `spawnAgentTurn`, which launches `forge agent run …` as a DETACHED,
  * unref'd child with stdio ignored except stderr→logfile. A throw during a
  * turn therefore left the session's `status.json` at its pre-turn phase
@@ -244,7 +244,7 @@ test('forge-poc AT-4 (legacy AGENT_RUNNERS road, architect): a runArchitectTurn 
 // Enumeration note (not a separate test): architect / instructions /
 // demo-builder / project-brain all share the EXACT SAME cmdAgentRun call
 // site (`const runTurn = await entry.loadRunTurn(); try { result = await
-// runTurn(...) } catch {...}` — cli/agent-run.ts) — there is only ONE
+// runTurn(...) } catch {...}` — packages/agents/agent-run.ts) — there is only ONE
 // try/catch for all four AGENT_RUNNERS entries, not one per runner, so AT-4
 // above (architect) exercises the identical mechanism every other
 // AGENT_RUNNERS entry rides.

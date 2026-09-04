@@ -5,7 +5,7 @@
  *
  * connection-client.ts mirrors hook-client.ts's role — client-side fetch
  * helpers + types for the `/api/studio/connections*` bridge routes (see
- * cli/bridge-studio-connections.ts's own header for the transport shapes).
+ * packages/library/bridge-studio-connections.ts's own header for the transport shapes).
  *
  * Tests the pure `parseConnection` function directly — no fetch, no window,
  * no jsdom needed there (this repo's forge-ui vitest config is

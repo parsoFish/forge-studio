@@ -101,7 +101,7 @@ export function isStudioAgent(skillMdPath: string): boolean {
  * `library:false` for exactly that roster reason, yet still declares a real
  * `runtime:` block the session-kickoff page's model-tier picker needs (W6-B6
  * fix). Used by the capability-only route (`GET
- * /api/studio/agents/:slug/capability`, cli/bridge-studio-agent-capability.ts)
+ * /api/studio/agents/:slug/capability`, packages/sessions/bridge-studio-agent-capability.ts)
  * that resolves ONE named slug directly, never the filtered roster.
  */
 export function isUnfilteredStudioAgent(skillMdPath: string): boolean {
@@ -267,7 +267,7 @@ export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
  * `studio/starters/agents/`. These are templates the New-Agent picker offers,
  * copied into `skills/<name>/` on install rather than run in place — but
  * `forge studio lint` DOES scan this tree directly too (`lintSkillToolFence`
- * of `cli/studio-lint-tool-fence.ts`'s `lintStarterAgentToolFence`, added
+ * of `packages/library/studio-lint-tool-fence.ts`'s `lintStarterAgentToolFence`, added
  * forge-6gv.18): a template that violates the tool-fence rule fails the gate
  * at source, before any operator ever installs it. Returns [] if the dir is
  * absent so a checkout without starters degrades gracefully rather than

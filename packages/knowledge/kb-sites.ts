@@ -4,8 +4,8 @@
  * Two containment roots (ADR 035): the top-level brains `brain/<id>/kb.yaml`
  * (cycles, forge-dev) and the central per-project brains
  * `brain/projects/<id>/kb.yaml` (gitpulse, mdtoc, trafficGame, …). Both
- * `loadKbDescriptors` (cli/bridge-studio-kbs.ts — the roster + every per-KB
- * route) and `projectKbBindings` below (cli/bridge-studio.ts — the project
+ * `loadKbDescriptors` (packages/knowledge/bridge-studio-kbs.ts — the roster + every per-KB
+ * route) and `projectKbBindings` below (apps/forge/bridge-studio.ts — the project
  * roster's derived `kb` field) walk THIS list, so the KB roster and the
  * project↔KB pairing can never disagree about which descriptors exist.
  *
@@ -60,7 +60,7 @@ export function kbSites(forgeRoot: string): KbSite[] {
  * so a descriptor is routable iff its `id` IS its directory name (exact,
  * case-preserving) AND satisfies the id rule (`KB_ID_RE`). Returns null when
  * routable, else the human reason. Shared by the roster (`loadKbDescriptors`,
- * cli/bridge-studio-kbs.ts — which also reports every drop as an
+ * packages/knowledge/bridge-studio-kbs.ts — which also reports every drop as an
  * `UnroutableKb` diagnostic), the derived project↔KB binding
  * (`projectKbBindings` below) and `forge studio lint`'s kb `dir-name` check —
  * so the roster can never silently drop what lint accepts, or vice-versa.

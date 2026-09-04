@@ -41,7 +41,7 @@ import * as ratchet from './check-request-path-sinks.mjs';
 // Group 1 — synthetic fixture tree
 // =============================================================================
 
-/** Build a minimal fixture repo: cli/ui-bridge.ts (the entry point) imports
+/** Build a minimal fixture repo: apps/forge/ui-bridge.ts (the entry point) imports
  *  orchestrator/reached.ts. orchestrator/unreached.ts exists on disk but is
  *  never imported by anything reachable. Returns the fixture root; caller is
  *  responsible for cleanup via rmSync. */
@@ -411,7 +411,7 @@ test('the real repository census is LIVE — the walk reached modules AND found 
 // caller-count dimension is built.
 // =============================================================================
 
-/** Fixture: cli/ui-bridge.ts (entry) imports a def module that DEFINES the
+/** Fixture: apps/forge/ui-bridge.ts (entry) imports a def module that DEFINES the
  *  designated shared fns (with real raw sinks tracked in ITS file), and also
  *  imports a `new-caller.ts` that does NOT exist yet (addNewCaller plants it).
  *  Returns the fixture root. */

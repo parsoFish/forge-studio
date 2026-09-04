@@ -13,7 +13,7 @@
  * makes no initial commit, so the repo is UNBORN (zero commits) →
  * `defaultBranch()` falls back to the literal 'main' (no such ref) →
  * `ensureStudioBranch()` runs `git checkout -b forge-studio main`, fatal →
- * the throw propagates out of `withStudioWrite` (cli/bridge-studio-writes.ts,
+ * the throw propagates out of `withStudioWrite` (apps/forge/bridge-studio-writes.ts,
  * the PUT handler) to the route's outer catch → 500, and the file write inside
  * `applyFn` never runs.
  *
@@ -21,7 +21,7 @@
  * git-init probe was `rev-parse --is-inside-work-tree`, true for ANY dir
  * nested inside forge's own checkout, so `git init` NEVER actually ran and
  * every onboarded project silently inherited forge's already-committed repo.
- * Its tests (cli/onboard-git-init.test.ts) assert only that `git init` ran and
+ * Its tests (apps/forge/onboard-git-init.test.ts) assert only that `git init` ran and
  * a `.gitignore` was scaffolded — which is exactly why this regression shipped
  * unpinned. This AT asserts the OPERATOR outcome instead: the FIRST
  * `PUT /api/studio/projects/:id` after onboarding returns 200 and the edit is

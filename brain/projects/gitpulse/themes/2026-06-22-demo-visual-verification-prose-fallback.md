@@ -39,7 +39,7 @@ the prose `beforeNote`/`afterNote`. Two forge gaps combined:
    `command` field. `skills/demo/SKILL.md` documented capture correctly, but the
    composed skill alone was not reliably reached.
 2. **Capture was silently skipped on an imperfect build.** `captureCheckpoints`
-   (`cli/demo.ts`) did `if (!status.ok) continue`, so a fresh-worktree `npm run
+   (`packages/factory/demo.ts`) did `if (!status.ok) continue`, so a fresh-worktree `npm run
    build` failure zeroed ALL capture — even though gitpulse's committed `dist/`
    runs fine. CLI-output capture now runs independently of the build result.
 

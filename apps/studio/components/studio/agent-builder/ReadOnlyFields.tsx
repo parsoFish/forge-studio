@@ -16,7 +16,7 @@ type Props = {
   // choice. The other half does not: forge-hoq (2026-08-23) found the old
   // wording here — "anything not allowed is implicitly disallowed" — is
   // false at runtime. No production spawn site sets `options.tools`
-  // (cli/studio-lint-tool-fence.ts's docstring verifies this at every
+  // (packages/library/studio-lint-tool-fence.ts's docstring verifies this at every
   // enforcement site), so `allowed-tools` is advisory only and NOTHING is
   // implicitly disallowed; `disallowed-tools` is the only field that
   // actually removes a tool (notably Task/Agent, the subagent-spawn tool)

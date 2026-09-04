@@ -21,7 +21,7 @@
  * These are derivation/route semantics, so they live in `node --test` under
  * the `npm test` glob (`orchestrator/*.test.ts`) rather than forge-ui's
  * vitest — no bridge boot needed, since `listRuns`/`aggregateRun` ARE what
- * `GET /api/runs` and `GET /api/runs/<id>` call (cli/bridge-studio.ts:33).
+ * `GET /api/runs` and `GET /api/runs/<id>` call (apps/forge/bridge-studio.ts:33).
  *
  * The cost fixture below is not invented: `orchestrator/event-cost.ts`'s
  * header documents that a phase emitting ≥1 `iteration` event RESTATES the

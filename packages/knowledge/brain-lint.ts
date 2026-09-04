@@ -157,7 +157,7 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
  * The 12 `check` names a `scope:'full'` run always contributes — DERIVED from
  * `FULL_SCOPE_CHECKS` (never hand-duplicated) so the two can never drift
  * apart. Consumers that need to itemize per-check health (Studio's KB Health
- * tab, `cli/bridge-studio-kbs.ts`'s `buildKbHealth`) import this rather than
+ * tab, `packages/knowledge/bridge-studio-kbs.ts`'s `buildKbHealth`) import this rather than
  * re-hardcoding the list.
  */
 export const CHECK_NAMES = FULL_SCOPE_CHECKS.map(([name]) => name) as readonly string[];
@@ -303,7 +303,7 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
     // W7 FIX-B-KB: this used to fire for ANY non-`projects` location, so a
     // top-level scratch/flow/band KB's category-bearing themes were all
     // flagged mis-routed — an AUTO-tier finding whose fixer (`fixMisRouted`,
-    // cli/brain-fix-auto.ts) git-mv's the file into brain/cycles|forge-dev,
+    // packages/knowledge/brain-fix-auto.ts) git-mv's the file into brain/cycles|forge-dev,
     // i.e. a scratch KB's own themes migrating into the real forge brains.
     const isForgeTheme = (THEME_SUBDIRS as readonly string[]).includes(actualSubdir);
     if (isForgeTheme && ALLOWED_CATEGORIES.has(cat)) {

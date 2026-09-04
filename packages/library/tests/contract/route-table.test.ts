@@ -2,7 +2,7 @@
  * route-table.test.ts — the contract for `packages/library/routes.ts`.
  *
  * M4 §4 step 2 turns SEVEN monolithic prefix dispatchers, which
- * `cli/ui-bridge.ts` called in sequence (`:2365` skills, `:2366` hooks,
+ * `apps/forge/ui-bridge.ts` called in sequence (`:2365` skills, `:2366` hooks,
  * `:2367` authoring, `:2368` templates, `:2417` instructions, `:2422`
  * connections, `:2423` community), into ONE declarative table that
  * `apps/forge/routes.ts` assembles and the host dispatches at `:2094`,
@@ -12,7 +12,7 @@
  * three — the community-registry item's POST/PUT/DELETE arms
  * (`bridge-studio-community-crud.ts`) — are an M4 §4 step 2 RESIDUE carve:
  * they left an EIGHTH legacy dispatcher, `handleStudioWriteRoutes`
- * (`cli/bridge-studio-writes.ts` `:583` `:615` `:654`), that a separate carve
+ * (`apps/forge/bridge-studio-writes.ts` `:583` `:615` `:654`), that a separate carve
  * (M4-projects) had already been pulling routes out of one at a time.
  *
  * WHICH WRONG IMPLEMENTATION EACH TEST KILLS — an if-chain rewritten as a
@@ -60,9 +60,9 @@ import { libraryRoutes } from '../../routes.ts';
 
 /**
  * The 31 routes the seven dispatchers matched at `c323dc04`, in the order
- * their if-chains matched them, grouped in the order `cli/ui-bridge.ts`
+ * their if-chains matched them, grouped in the order `apps/forge/ui-bridge.ts`
  * called the dispatchers, PLUS the 3 residue routes `handleStudioWriteRoutes`
- * (`cli/bridge-studio-writes.ts`) still answered at that same commit.
+ * (`apps/forge/bridge-studio-writes.ts`) still answered at that same commit.
  * Derived by reading every `url === …` / `url.match(…)` arm in all eight
  * files, not from prose:
  *   bridge-studio-skills.ts       :105 :122 :186 :273 :360 :420 :473

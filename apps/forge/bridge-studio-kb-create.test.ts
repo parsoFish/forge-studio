@@ -461,7 +461,7 @@ test('DELETE without CSRF header → 403', async () => {
 // its grant to one of that flow's bands (T1 ruling: the band-role map is
 // ONLY review-band -> reviewer). Today `KbBinding` has no `band` field at
 // all — the create route only reads `binding.kind`/`binding.ref` (see
-// cli/bridge-studio-kbs.ts ~516-551) and `serializeKbDescriptor` only ever
+// packages/knowledge/bridge-studio-kbs.ts ~516-551) and `serializeKbDescriptor` only ever
 // writes `{ kind, ref }` (orchestrator/studio/kb-descriptor.ts ~116-127) — so
 // any `binding.band` sent in the POST body is silently dropped before the
 // kb.yaml is ever written.
@@ -556,13 +556,13 @@ test('F2: POST /api/studio/kbs binding.band=review-band on a registered-but-empt
 // R1-06 WI-2 group B (1): agent-seeded creation hand-off (R1-06-F2).
 // On a successful create, the route must hand off to the project-brain
 // ("brain-creation") session shell for seeding, mirroring the ESTABLISHED
-// `POST /api/project-brain/start` contract (cli/ui-bridge.ts:3797-3826):
+// `POST /api/project-brain/start` contract (apps/forge/ui-bridge.ts:3797-3826):
 // `{ ok: true, sessionId }`, plus a REAL session dir + status.json (phase
 // 'briefing') at <projectsRoot>/<project>/_project-brain/<sessionId> — the
 // exact anchor the generic session-shell route
 // (GET /api/studio/sessions/project-brain/:sessionId?project=<p>,
-// cli/bridge-studio-sessions.ts) resolves against. Today the create route
-// (cli/bridge-studio-kbs.ts ~476-611) only ever returns { ok: true, id } —
+// packages/sessions/bridge-studio-sessions.ts) resolves against. Today the create route
+// (packages/knowledge/bridge-studio-kbs.ts ~476-611) only ever returns { ok: true, id } —
 // no session is started at all, so this is RED on both the wire contract and
 // the on-disk side effect.
 // ---------------------------------------------------------------------------
@@ -592,7 +592,7 @@ test('RED (R1-06 WI-2 group B, F2): POST /api/studio/kbs create hands off a proj
   // session dir + status.json must actually exist on disk, in the 'briefing'
   // phase, exactly like a session started via POST /api/project-brain/start —
   // the shell the UI's /sessions/project-brain/:sessionId page reads through
-  // cli/bridge-studio-sessions.ts.
+  // packages/sessions/bridge-studio-sessions.ts.
   const statusPath = join(forgeRoot, 'projects', 'demo-project', '_project-brain', sessionId, 'status.json');
   assert.ok(existsSync(statusPath), `hand-off session status.json must exist at ${statusPath} — no project-brain session is started by create today`);
   const statusJson = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;

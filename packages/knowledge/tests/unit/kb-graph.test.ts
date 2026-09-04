@@ -517,7 +517,7 @@ test('deleteGuidanceFile — throws on path traversal', () => {
 // poisoned cache hit `{data: {}, content: FULL RAW}` back WITHOUT throwing —
 // the fallback never runs again and the article body leaks the raw
 // frontmatter block. parseMd must pass `{}` to bypass the cache (same
-// poisoning class as cli/theme-frontmatter.ts).
+// poisoning class as packages/knowledge/theme-frontmatter.ts).
 
 test('parseMd cache-poisoning regression — second parse of a gray-matter-rejected theme stays clean', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-kb-poison-'));

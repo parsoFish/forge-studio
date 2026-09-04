@@ -8,7 +8,7 @@
  * by `row.id` — publishing whichever agent's copy of a shared run happened
  * to flatten first ($0.00 "complete" for a run that really cost $4.79 and
  * failed), with no agent name anywhere. The server-side aggregate
- * `GET /api/agents/runs/recent` (cli/ui-bridge.ts) now does the join ONCE:
+ * `GET /api/agents/runs/recent` (apps/forge/ui-bridge.ts) now does the join ONCE:
  * one bounded request; each row carries the RUN-level status/cost plus the
  * participating agent slug(s), which this module maps onto the shared
  * `LedgerRow` shape (`agent` = the new optional attribution field

@@ -173,7 +173,7 @@ export type FlowRunArgs = {
   executor: PhaseExecutor<NodeExecContext>;
   /**
    * The project contract's preflight, injected (SPEC.md §6 Project). The runner
-   * declares the port and never imports `cli/preflight.ts`; the caller supplies
+   * declares the port and never imports `packages/projects/preflight.ts`; the caller supplies
    * the implementation — `createProjectGate()` in
    * `orchestrator/phases/executor-deps.ts` builds the shipped one.
    */

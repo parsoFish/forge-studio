@@ -1,8 +1,8 @@
 /**
  * ACCEPTANCE TESTS (must be RED until fixed) — bd `forge-wze` (P0): KB
  * containment defects, driven through the REAL carved route handlers,
- * mirroring the fixture idiom of cli/bridge-studio-write.test.ts and
- * cli/bridge-studio-flows.test.ts.
+ * mirroring the fixture idiom of apps/forge/bridge-studio-write.test.ts and
+ * apps/forge/bridge-studio-flows.test.ts.
  *
  * Root cause: `orchestrator/brain-paths.ts::resolveKbBrainDir` resolves
  * `brain/<kbId>` (and its `brain/projects/<kbId>` fallback) with `resolve()`
@@ -11,7 +11,7 @@
  * unit-level pins on that function directly). Downstream `kb-graph.ts` then
  * bare-`join()`s nested segments (`themes/`, `_raw/`, `_guidance/`,
  * `INDEX.md`, `profile.md`) off that unresolved dir. The bridge's own
- * lexical checks in cli/bridge-studio-kbs.ts (`resolve(base,id).startsWith(base
+ * lexical checks in packages/knowledge/bridge-studio-kbs.ts (`resolve(base,id).startsWith(base
  * + sep)`) are on an UNRESOLVED path and can never fire for a slug-shaped id —
  * `resolve()` normalizes `..` before the comparison ever runs.
  *
@@ -410,7 +410,7 @@ test('".."-normalization: raw and percent-encoded ".." ids are rejected (400) on
 // disclosure): GET /api/studio/kbs (the LIST route) leaks through a
 // symlinked/hardlinked kb.yaml LEAF.
 //
-// cli/bridge-studio-kbs.ts:87-116 — `loadKbDescriptors()`/`pushFrom()` does
+// packages/knowledge/bridge-studio-kbs.ts:87-116 — `loadKbDescriptors()`/`pushFrom()` does
 // `existsSync(kbYamlPath)` + `loadKbDescriptor(kbYamlPath)` with NO guard at
 // all. This function was never touched by the `resolveKbBrainDir` fix (which
 // only covers the single-kb GET/:id, DELETE, guidance, and bootstrap routes,

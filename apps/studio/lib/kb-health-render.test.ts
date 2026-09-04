@@ -86,7 +86,7 @@ describe('KbHealth — structural data-* hooks (R1-06 WI-3 group B, 2)', () => {
 
 // ---------------------------------------------------------------------------
 // R6-08 WI-1 RED-D — per-check itemization rows. `buildKbHealth` (WI-1,
-// cli/bridge-studio-kbs.ts) gains a `checks: Array<{check,status,errorCount,
+// packages/knowledge/bridge-studio-kbs.ts) gains a `checks: Array<{check,status,errorCount,
 // flagCount}>` field (see cli/bridge-studio-kbs.test.ts's RED-A/B/C for the
 // backend RED pins); this pins the F2 Health tab's RENDER of that field —
 // one `[data-check="<name>"]` row per entry, carrying `data-check-status`

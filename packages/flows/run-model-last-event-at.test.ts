@@ -30,7 +30,7 @@
  * `_logs/<cycleId>/events.jsonl`, driven through the real `aggregateRun`)
  * — not hand-built `RunPhaseMeta` objects that bypass the read path. Case 3
  * additionally seeds a real `studio/flows/<flow-id>/flow.yaml` (the SAME
- * minimal shape `cli/bridge-studio.test.ts`'s `makeGenericFlowYaml()` uses,
+ * minimal shape `apps/forge/bridge-studio.test.ts`'s `makeGenericFlowYaml()` uses,
  * already proven to parse and resolve via `buildAgentSlugToNodeId` in that
  * file's own passing "resolves a generic-agent node's phase:orchestrator
  * events" test) so the generic-agent attribution path is exercised for
@@ -116,7 +116,7 @@ function ev(phase: string, event_type: string, started_at: string, msg?: string,
   };
 }
 
-/** Same minimal shape as cli/bridge-studio.test.ts's makeGenericFlowYaml —
+/** Same minimal shape as apps/forge/bridge-studio.test.ts's makeGenericFlowYaml —
  *  already proven (in that file's own passing test) to parse and populate
  *  buildAgentSlugToNodeId with `demo-agent -> demo`. */
 function writeGenericFlow(root: string): void {

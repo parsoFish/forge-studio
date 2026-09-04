@@ -303,7 +303,7 @@ test('(RED) [SEC-03 round 3] scaffoldGreenfieldProject leaves NO project directo
     // call already fails containment before queuing ANY write — no
     // kb.yaml/profile.md/themes/README.md should ever land on disk here.
     // Asserted on disk only (function level — no HTTP listing route to
-    // drive; see cli/bridge-studio-write.test.ts / cli/bridge-studio-
+    // drive; see apps/forge/bridge-studio-write.test.ts / cli/bridge-studio-
     // project-create-containment.test.ts for the GET /api/studio/kbs
     // assertion on the two HTTP routes).
     assert.ok(
@@ -339,8 +339,8 @@ test('positive control (passes before AND after the SEC-03 round-3 fix): a norma
 // succeeds (e.g. EACCES on copyTemplate's mkdirSync) leaves a complete,
 // valid brain/projects/<id>/kb.yaml behind: a PHANTOM KB, invisible to
 // discoverProjects (it only scans projects/), but VISIBLE to
-// loadKbDescriptors (cli/bridge-studio-kbs.ts), which walks brain/projects/
-// as its OWN second containment root — see cli/bridge-studio-write.test.ts's
+// loadKbDescriptors (packages/knowledge/bridge-studio-kbs.ts), which walks brain/projects/
+// as its OWN second containment root — see apps/forge/bridge-studio-write.test.ts's
 // EACCES test for the live GET /api/studio/kbs confirmation.
 //
 // Failure-injection mechanism: chmod 0o500 (r-x, no write) on the PARENT of

@@ -1,12 +1,12 @@
 /**
- * GUARD-LEVEL ACCEPTANCE TESTS for cli/materials-staging.ts's `stageMaterials`
+ * GUARD-LEVEL ACCEPTANCE TESTS for packages/agents/materials-staging.ts's `stageMaterials`
  * (R6-04-F2 WI-1, round 2 — spawner-directed pin).
  *
- * NEW MODULE — cli/materials-staging.ts does not exist at HEAD, so importing
+ * NEW MODULE — packages/agents/materials-staging.ts does not exist at HEAD, so importing
  * `stageMaterials` below is itself part of this file's RED proof (a genuine
  * "feature not implemented yet" red).
  *
- * WHY THIS FILE EXISTS: cli/ui-bridge-agent-run-materials.test.ts (this WI's
+ * WHY THIS FILE EXISTS: apps/forge/ui-bridge-agent-run-materials.test.ts (this WI's
  * route-level acceptance tests) honestly disclosed that three containment
  * shapes — a pre-existing directory symlink at `<runDir>/materials`, a
  * pre-existing file symlink at `<runDir>/materials/notes.md`, and a
@@ -257,7 +257,7 @@ test('NEGATIVE SPACE: after a refused file-symlink write, <runDir>/materials con
 // This is a guard-symmetry gap: the module's own docstring promises "ZERO
 // partial writes on refusal", but a silent full overwrite is a different,
 // undocumented, unguarded failure mode — a full write is not a partial one.
-// The route happens to dedupe today (cli/ui-bridge.ts's
+// The route happens to dedupe today (apps/forge/ui-bridge.ts's
 // validateMaterialsField, contract point 8), but "the caller already checks
 // this" is exactly the guard-symmetry gap this codebase just closed for
 // isSafeRunId — the module must not trust its caller.

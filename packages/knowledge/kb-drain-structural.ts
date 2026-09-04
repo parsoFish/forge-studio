@@ -23,7 +23,7 @@
  *
  * Everything here is a pure function over strings/paths (plus two thin fs
  * walkers) so the classification matrix is directly unit-testable
- * (cli/kb-drain-structural.test.ts).
+ * (packages/knowledge/tests/unit/kb-drain-structural.test.ts).
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -33,7 +33,7 @@ export type KbEditClass = 'structural' | 'prose';
 
 /** Index/category pages (KB-root level) whose whole PURPOSE is structural
  *  listings — an edit there is never prose. Mirrors
- *  `KB_OWN_THEME_INDEX_FILES` (cli/kb-lint-summary.ts) plus the brain
+ *  `KB_OWN_THEME_INDEX_FILES` (packages/knowledge/kb-lint-summary.ts) plus the brain
  *  meta-index name. `README.md` is included at ANY depth (themes/README.md
  *  is a listing page too). */
 const INDEX_PAGE_NAMES = new Set([

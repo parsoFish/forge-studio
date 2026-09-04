@@ -33,7 +33,7 @@ import {
 
 /** `_logs/_kb-drain-<runId>` — same construction class as
  *  `writeConsolidateTerminalEvent`'s `_logs/_brainfix-<runId>`
- *  (cli/bridge-studio-kbs.ts): a bare `runId` parameter matches the
+ *  (packages/knowledge/bridge-studio-kbs.ts): a bare `runId` parameter matches the
  *  raw-fs-guarded lint's curated taint-list name, but at every real call
  *  site the value is TRUSTED AT CONSTRUCTION — either freshly minted by
  *  `POST /api/studio/kbs/:id/drain` as `` `${kbId}-drain-${Date.now()
@@ -48,7 +48,7 @@ export function kbDrainLogDir(forgeRoot: string, runId: string): string {
 }
 
 /** Atomic write (temp + rename) — mirrors this repo's own convention
- *  (cli/bridge-studio-runs.ts's manifest-move: `writeFileSync(tmpPath, …)`
+ *  (packages/flows/bridge-studio-runs.ts's manifest-move: `writeFileSync(tmpPath, …)`
  *  then `renameSync(tmpPath, toPath)`). `status.json` is read by a SEPARATE
  *  process turn (the GET routes, polled every ~100-250ms by a caller) while
  *  this function is called repeatedly (once per round) by the in-flight
@@ -66,7 +66,7 @@ export function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbD
   renameSync(tmpPath, finalPath);
 }
 
-/** Mirrors `readBrainFixState`'s (cli/bridge-studio-kbs.ts) LOG-READ shape:
+/** Mirrors `readBrainFixState`'s (packages/knowledge/bridge-studio-kbs.ts) LOG-READ shape:
  *  a boolean-existence probe plus a single scoped read, never a directory
  *  walk keyed off caller input. Returns `null` on any missing/unparseable
  *  status file — a genuinely unknown or not-yet-started run, never a thrown
@@ -84,7 +84,7 @@ export function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStat
 /** Every drain run recorded for `kbId`, discovered by enumerating `_logs/`
  *  (SERVER-enumerated directory names, never a caller-supplied path — same
  *  "server-enumerated names, holding no client string" class as
- *  `cli/metrics.ts`'s `listCycles`) and filtering to this kb's own
+ *  `packages/flows/metrics.ts`'s `listCycles`) and filtering to this kb's own
  *  `_kb-drain-<kbId>-drain-*` prefix. Used by BOTH the 409-active check
  *  (`POST /drain`) and the active-or-latest reattach route
  *  (`GET /drain`). */
@@ -141,7 +141,7 @@ export type KbRunRow = {
 };
 
 /** One consolidate run's terminal facts, read from its own events.jsonl
- *  through the SHARED readers in cli/kb-job-state.ts (W7-B2 code-review
+ *  through the SHARED readers in packages/knowledge/kb-job-state.ts (W7-B2 code-review
  *  round) — the same 'end'=done / 'error'=failed definition the active-job
  *  gate uses, so the RecentRuns status and the gate can never disagree about
  *  whether a run has finished. */
@@ -197,7 +197,7 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
 
   // Consolidate runs — `_brainfix-<kbId>-consolidate-*` top-level dirs
   // (per-finding `__<i>` sub-runs excluded, mirroring the consolidate/active
-  // route's own exclusion in cli/bridge-studio-kbs.ts).
+  // route's own exclusion in packages/knowledge/bridge-studio-kbs.ts).
   const logsRoot = join(forgeRoot, '_logs');
   let entries: string[] = [];
   try {
@@ -316,7 +316,7 @@ export function newDraftSessionId(): string {
  * operator approves with a diff — the EXISTING kb-cleanup session kind
  * (studio/session-kinds.yaml), minted directly in `awaiting-approval` (no
  * agent turn needed; the drain already holds the proposal). `status.json`
- * carries `draft_apply` — `approveKbCleanup` (cli/bridge-studio-kbs.ts)
+ * carries `draft_apply` — `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts)
  * applies exactly those drafts (contained to this KB's own brain dir)
  * instead of running a consolidate. Returns null (and the caller records an
  * honest not-cleared) when the session cannot be written — never a throw

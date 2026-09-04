@@ -1,6 +1,6 @@
 /**
  * VOLUME CASE-BEHAVIOUR DETECTION acceptance tests for
- * `cli/materials-staging.ts` (bead forge-qn8, P2).
+ * `packages/agents/materials-staging.ts` (bead forge-qn8, P2).
  *
  * The defect: `stageMaterials`'s within-one-call duplicate-target guard
  * keys `seenTargets` by the LITERAL `realPath` string. On a case-folding

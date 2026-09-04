@@ -2,7 +2,7 @@
  * MIGRATION ACCEPTANCE TESTS (must be RED on today's code) — A3 and part of
  * C4 of the ADR-027-amendment-#2 `composition.hooks` → `composition.guards`
  * rename, both driven through the REAL `forge studio lint` entry point
- * (`runStudioLint`, `cli/studio-lint.ts`) rather than a hand-rolled lint —
+ * (`runStudioLint`, `apps/forge/studio-lint.ts`) rather than a hand-rolled lint —
  * co-located here (not in `orchestrator/studio/`) because both need that
  * entry point directly.
  *
@@ -20,12 +20,12 @@
  *
  * ONE detection point, TWO surfaces (no second implementation):
  *  - direct: `loadAgentDefinition(path)` throws.
- *  - `forge studio lint`: `cli/studio-lint.ts` (~L217-229) already wraps every
+ *  - `forge studio lint`: `apps/forge/studio-lint.ts` (~L217-229) already wraps every
  *    `loadAgentDefinition` call in a try/catch and pushes
  *    `{level:'error', object:'agent:<slug>', check:'load', message}` — so
  *    once the throw exists, the lint surfacing comes free. Driven here
  *    through the REAL `runStudioLint` entry point, reusing the exact fixture
- *    conventions `cli/studio-lint.test.ts` already established
+ *    conventions `apps/forge/studio-lint.test.ts` already established
  *    (`tmpRoot`/`validSkillMd`-shaped SKILL.md content/`validCatalogYaml`/
  *    `seedValidProject`) — never a hand-rolled lint.
  *

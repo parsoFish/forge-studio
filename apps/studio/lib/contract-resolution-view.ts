@@ -36,7 +36,7 @@ export function agentResolveLabel(route: ClauseRoute | undefined): string {
  * threaded into `ContractResolutionPanel` as `boundKbId`), never derived
  * from the project id. A project's KB binding is operator-rebindable (the
  * `KbBind` select) and can be rebound to any KB or unbound entirely
- * (`cli/bridge-studio-writes.ts` deliberately leaves it `null` when no KB
+ * (`apps/forge/bridge-studio-writes.ts` deliberately leaves it `null` when no KB
  * seed landed) — id-equals-projectId is only ever true for the DEFAULT
  * binding a fresh project scaffold happens to create, never a guarantee.
  * Guessing wrong here is not merely a broken link: `/knowledge`'s own

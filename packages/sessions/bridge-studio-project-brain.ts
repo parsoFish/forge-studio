@@ -1,6 +1,6 @@
 /**
  * bridge-studio-project-brain.ts — the project-brain session kind's
- * `/api/project-brain/*` routes, carved out of `cli/ui-bridge.ts`.
+ * `/api/project-brain/*` routes, carved out of `apps/forge/ui-bridge.ts`.
  *
  * Six routes, arms VERBATIM. Same rules as the architect and instructions
  * modules: `readJson(req)` → `ctx.readBody()` (ruling 30), shared helpers from

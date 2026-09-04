@@ -12,7 +12,7 @@
  * proposals are called out inline below, each with its own reasoning.
  *
  * TWO-PHASE, MATCHING THE REST OF THIS PACKAGE'S WRITE PATH (the PUT
- * `/api/studio/projects/:id` route this mirrors, `cli/bridge-studio-writes.ts`):
+ * `/api/studio/projects/:id` route this mirrors, `apps/forge/bridge-studio-writes.ts`):
  * `computeContractDrift` is PURE — it reads the tree and the matched
  * app-type starter, and returns every row the caller would need to render a
  * before/after diff, WITHOUT writing anything. `applyContractReset` takes
@@ -23,7 +23,7 @@
  * defaults to the same dry-run-first behaviour (see `cmdProjectReset` below).
  *
  * SKILL-RESOLUTION SPEC DEVIATION (Q1's own finding, not a guess): the
- * resolver `deriveProjectLocalSkills` (`cli/bridge-studio.ts:480-491`) scans
+ * resolver `deriveProjectLocalSkills` (`apps/forge/bridge-studio.ts:480-491`) scans
  * the LITERAL, hardcoded path `<project>/.forge/skills/<id>/SKILL.md` — one
  * level deep — and `artifactRoot` never enters that function or its caller
  * (independently confirmed three ways in the spec). This module follows the
@@ -703,7 +703,7 @@ export function cmdProjectReset(args: string[]): number {
   // check on its own root. A planted symlink at `projects/<id>` would
   // therefore have been followed by `realpathSync`, and the whole reset would
   // have written outside the projects root with every inner guard passing.
-  // Same shape, same remedy as `cli/bridge-studio.ts:605`.
+  // Same shape, same remedy as `apps/forge/bridge-studio.ts:605`.
   const guardedRoot = resolveGuardedPath(projectsDir, [id]);
   if (!guardedRoot.ok) {
     console.error(`forge project reset: project path containment check failed: ${guardedRoot.reason}`);

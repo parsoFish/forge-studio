@@ -1,13 +1,13 @@
 /**
  * `unroutableKbReason` and `loadKbDescriptors`' unroutable-callback contract.
  *
- * Both cases moved here from `cli/id-rule.test.ts` (M4-knowledge s5). That file
+ * Both cases moved here from `apps/forge/id-rule.test.ts` (M4-knowledge s5). That file
  * boots a bridge and spans four packages — it is the right home for "the roster
  * ROUTE diagnoses a dropped descriptor", and the wrong home for "the predicate
  * says what is unroutable", which is knowledge's own and needs no server.
  *
  * The split is deliberate rather than mechanical: the HTTP half of the original
- * W7A4-04 red-pin stays in `cli/id-rule.test.ts` asserting on
+ * W7A4-04 red-pin stays in `apps/forge/id-rule.test.ts` asserting on
  * `list.body.unroutable`, so the route's diagnostic is still pinned end to end.
  * What comes here is the half that was only ever about these two functions.
  */

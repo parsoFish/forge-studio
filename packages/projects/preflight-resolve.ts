@@ -1,10 +1,10 @@
 /**
  * Stage D — preflight clause resolution classifier.
  *
- * Mirrors the brain-lint guided-resolution pattern (`cli/brain-lint.ts`
+ * Mirrors the brain-lint guided-resolution pattern (`packages/knowledge/brain-lint.ts`
  * `classifyFinding`): each preflight clause is routed to a resolution tier —
  *
- *   - `auto`  — a deterministic, surgical fix exists (`cli/preflight-fix-auto.ts`).
+ *   - `auto`  — a deterministic, surgical fix exists (`packages/projects/preflight-fix-auto.ts`).
  *   - `agent` — an agent resolves it; `route` says which runner (the Stage-A
  *               instructions creator for C8, the Stage-B demo builder for DEMO,
  *               brain-fix for BRAIN, else the generic preflight-fix agent).

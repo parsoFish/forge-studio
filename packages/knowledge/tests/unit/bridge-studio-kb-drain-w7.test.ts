@@ -4,7 +4,7 @@
  *
  * Written RED-FIRST against the pre-W7-B2 drain engine; each test names the
  * finding it encodes. Part A drives `runKbDrain` directly (injected fakes,
- * same harness as cli/bridge-studio-kb-drain.test.ts); Part B exercises the
+ * same harness as packages/knowledge/tests/unit/bridge-studio-kb-drain.test.ts); Part B exercises the
  * HTTP routes against a real isolated bridge.
  */
 
@@ -33,7 +33,7 @@ import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 
 // ---------------------------------------------------------------------------
-// Shared fixtures (mirrors cli/bridge-studio-kb-drain.test.ts Part A)
+// Shared fixtures (mirrors packages/knowledge/tests/unit/bridge-studio-kb-drain.test.ts Part A)
 // ---------------------------------------------------------------------------
 
 function makeDrainRoot(kbId: string): { root: string; brainDir: string } {
@@ -513,7 +513,7 @@ test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel 
 // ---------------------------------------------------------------------------
 // W7-B2 code-review round — ONE terminal-event definition. The active-job
 // gate and the RecentRuns widget read the same `_brainfix-<runId>/
-// events.jsonl` through the same helpers (cli/kb-job-state.ts), so they can
+// events.jsonl` through the same helpers (packages/knowledge/kb-job-state.ts), so they can
 // never disagree about whether a consolidate has finished.
 // ---------------------------------------------------------------------------
 

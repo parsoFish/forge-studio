@@ -2,7 +2,7 @@
  * W7-A2 — the DERIVED session lifecycle: what an interactive session is
  * doing RIGHT NOW, computed at read time from (a) the phase row's own
  * declared shape (`awaits:` / `step:` — studio/session-kinds.yaml, or the
- * two legacy tables in cli/bridge-studio.ts for architect/project-brain) and
+ * two legacy tables in apps/forge/bridge-studio.ts for architect/project-brain) and
  * (b) on-disk liveness facts under `_logs/_<kind>-<sid>/` (stderr.log,
  * .heartbeat, events.jsonl, turn.pid) plus status.json's own mtime.
  *
@@ -203,7 +203,7 @@ export type SessionLifecycleFacts = {
 /** `_logs/_<kind>-<sessionId>`. W8-F6 (bead forge-6gv.27) MOVED the
  *  implementation to packages/sessions/session-readability.ts — that module is an import
  *  leaf and needs this template, while this module imports
- *  cli/bridge-studio.ts and so cannot be imported by it. Re-exported here
+ *  apps/forge/bridge-studio.ts and so cannot be imported by it. Re-exported here
  *  unchanged so every existing importer keeps its one import. */
 export { sessionLogDirName };
 
@@ -391,7 +391,7 @@ export function killTrackedTurn(logsRoot: string, kind: string, sessionId: strin
 /**
  * W7-B5 (agents-30): the standalone-run sibling — a generic agent dispatch's
  * pid lives at `_logs/<runId>/turn.pid` (written by `spawnAgentDispatch`,
- * cli/ui-bridge.ts) and its ownership mark is the runId itself, which the
+ * apps/forge/ui-bridge.ts) and its ownership mark is the runId itself, which the
  * child's argv carries as a whole element (`forge agent dispatch <slug>
  * --run-id <runId>`). Same fail-closed ownership proof as the session path.
  */

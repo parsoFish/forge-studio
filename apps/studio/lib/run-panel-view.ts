@@ -7,7 +7,7 @@
  * that covers the component itself).
  *
  * THE CLIENT GATE IS A CONVENIENCE MIRROR — the server
- * (`cli/ui-bridge.ts`'s `validateMaterialsField` / the `POST
+ * (`apps/forge/ui-bridge.ts`'s `validateMaterialsField` / the `POST
  * /api/agents/:slug/run` costCeilingUsd guard, R6-04 WI-1/WI-2) remains the
  * authority. This module exists so an operator gets an immediate, correctly-
  * worded refusal instead of round-tripping to the server for a mistake this
@@ -62,7 +62,7 @@ function materialKindForFilename(filename: string): string | undefined {
   return MATERIAL_EXTENSION_TO_KIND[ext];
 }
 
-/** Mirrors cli/ui-bridge.ts's declaredMaterialKindsClause — the server's
+/** Mirrors apps/forge/ui-bridge.ts's declaredMaterialKindsClause — the server's
  *  exact literal ("(none)") for an empty declared-kinds list. */
 function declaredMaterialKindsClause(declared: readonly string[]): string {
   return declared.length > 0 ? declared.join(', ') : '(none)';
@@ -72,7 +72,7 @@ export type MaterialEntryMeta = { filename: string; sizeBytes: number };
 export type MaterialsClientValidation = { ok: true } | { ok: false; error: string };
 
 /**
- * Client-side mirror of `validateMaterialsField` (cli/ui-bridge.ts): the
+ * Client-side mirror of `validateMaterialsField` (apps/forge/ui-bridge.ts): the
  * SAME order (count cap, then per-entry: per-file size cap, running-total
  * cap, then the kind gate) and the SAME message shapes, character for
  * character. Never authoritative — see this module's header.
@@ -128,7 +128,7 @@ export function validateMaterialsClientSide(
  * never submits a ceiling that will be refused." Gated on the AGENT's
  * enforceability (a fact about the agent, invariant under the value) AND on
  * the value's own validity — mirroring the server's own bounds check
- * (cli/ui-bridge.ts: `v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD`, plus the
+ * (apps/forge/ui-bridge.ts: `v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD`, plus the
  * shape check `!Number.isFinite(v)`). round-2 hardening (the real defect a
  * full-gate journey run found): `0` is NOT a legitimate dispatch value even
  * for an enforceable agent — treating it as one is exactly what let a stale

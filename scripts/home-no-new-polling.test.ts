@@ -53,7 +53,7 @@ const HOME_VIEW = join(ROOT, 'apps', 'studio', 'lib', 'home-view.ts');
 // W6-B11: `fetchStudioSessions` was deliberately ADDED to this closed set —
 // not a loophole in the guard, the guard's own maintenance contract. It is
 // the EXISTING W6-B11 aggregate-sessions bridge route (`GET /api/studio/
-// sessions`, cli/ui-bridge.ts), composed here exactly like the other six
+// sessions`, apps/forge/ui-bridge.ts), composed here exactly like the other six
 // `fetchStudio*`/`fetchRuns`/`fetchProjectAttention` reads — never a raw
 // fetch, never a hardcoded path inside this hook (the path literal lives
 // inside `fetchStudioSessions` itself, in ./studio-client, same as every

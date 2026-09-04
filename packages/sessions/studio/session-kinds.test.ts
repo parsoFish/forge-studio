@@ -184,7 +184,7 @@ import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
 // broader cast).
 import type { Finding } from '@forge/kernel';
 // Real production call path (Ruling 36): `runStudioLint` is what `forge
-// studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
+// studio lint` actually calls (apps/forge/studio-lint.ts -> cmdStudioLint,
 // apps/forge/cli.ts), and CI invokes exactly that command
 // (.github/workflows/ci.yml: `node --experimental-strip-types
 // apps/forge/cli.ts studio lint`). This import is STATIC (not dynamic)
@@ -1592,8 +1592,8 @@ describe('loadSessionKinds — the six new graph-coherence checks are STRUCTURAL
 // "cleanup-plan" row yet. This block pins the DESCRIPTOR/REGISTRY half of the
 // feature only — the renderer lives in session-transcript.test.ts, the turn
 // spine in interactive-runner.test.ts, the routes in
-// cli/ui-bridge-kb-cleanup.test.ts, and dry-bridge coverage in
-// cli/dry-bridge-coverage.test.ts.
+// apps/forge/ui-bridge-kb-cleanup.test.ts, and dry-bridge coverage in
+// apps/forge/dry-bridge-coverage.test.ts.
 // ===========================================================================
 
 describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup-plan)', () => {

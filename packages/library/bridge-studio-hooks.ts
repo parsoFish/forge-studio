@@ -19,7 +19,7 @@
  * separate core modules; this composition is this bridge module's own job.
  *
  * M4 route-carve: each route above used to be one arm of a single dispatcher,
- * `handleStudioHooksRoutes`, that `cli/ui-bridge.ts` called directly. That
+ * `handleStudioHooksRoutes`, that `apps/forge/ui-bridge.ts` called directly. That
  * dispatcher is now gone — `packages/library/routes.ts` is what dispatches
  * these, as a table. Each handler below keeps the SAME five-parameter
  * contract the dispatcher's arms ran under —
@@ -35,7 +35,7 @@
  * host-supplied reader `RouteContext` carries) instead.
  *
  * ---------------------------------------------------------------------------
- * CONTRACT DECISIONS (mirrored from cli/bridge-studio-hooks.test.ts's own
+ * CONTRACT DECISIONS (mirrored from packages/library/bridge-studio-hooks.test.ts's own
  * header — that file is this module's spec):
  *
  *  D-1. Response envelope: `{ hooks: [...] }` (list) / a flat detail object

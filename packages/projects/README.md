@@ -63,7 +63,7 @@ capability behind two of those routes, `POST .../contract-reset` (dry-run) and
 ## What it does not own
 
 Two routes that would belong here read `@forge/flows` (a strictly higher rank) and
-stay in `cli/bridge-studio.ts` rather than mint an unbaselinable boundary violation.
+stay in `apps/forge/bridge-studio.ts` rather than mint an unbaselinable boundary violation.
 `preflight-fix-runner.ts`'s interactive half is a **sessions** kind and lives in
 `packages/sessions`; this package owns only the deterministic auto-fix loop it
 calls into. See [`design.md`](./design.md) for both, and for why a rank-2 package

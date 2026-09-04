@@ -74,7 +74,7 @@ export function scanVendoredHookPackage(id: string, files: readonly PackageFile[
 // studio/hooks/. A vendored community package is authored by a third party, so
 // it is the LAST place to assume the matcher/event pair is coherent. Checked
 // HERE, in the route, rather than inside `installCommunityHookPackage`, for the
-// same reason `cli/bridge-studio-authoring.ts:80-85` gives about its own copy
+// same reason `packages/library/bridge-studio-authoring.ts:80-85` gives about its own copy
 // step: the install function is a generic COPY primitive and must not grow
 // hook-shape awareness. Same shared predicate as the other four callers.
 // ---------------------------------------------------------------------------

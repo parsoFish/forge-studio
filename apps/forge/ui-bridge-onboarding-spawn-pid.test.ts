@@ -16,7 +16,7 @@
  * in `_logs/_onboarding-<sid>/turn.pid` (the SAME `sessionLogDirName(kind,
  * sid)` template the lifecycle derivation and `killTrackedTurn` read).
  *
- * RUN: node --test --experimental-strip-types cli/ui-bridge-onboarding-spawn-pid.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/ui-bridge-onboarding-spawn-pid.test.ts
  */
 
 import { test, before, after } from 'node:test';

@@ -3,9 +3,9 @@
  *
  * M4 §4 step 2 (projects routes carve, assembly pass). These sixteen routes
  * used to reach their handlers through TWO monolithic if-chain dispatchers —
- * `handleStudioRoutes` (`cli/bridge-studio.ts`, the read side) and
- * `handleStudioWriteRoutes` (`cli/bridge-studio-writes.ts`, the write side) —
- * which `cli/ui-bridge.ts` called in that order (`handleStudioRoutes`
+ * `handleStudioRoutes` (`apps/forge/bridge-studio.ts`, the read side) and
+ * `handleStudioWriteRoutes` (`apps/forge/bridge-studio-writes.ts`, the write side) —
+ * which `apps/forge/ui-bridge.ts` called in that order (`handleStudioRoutes`
  * strictly before `handleStudioWriteRoutes`, still true today for the routes
  * that have not carved). Workers A and B moved the HANDLER BODIES, verbatim,
  * into six files (`project-roster.ts`, `project-preflight-read.ts`,
@@ -24,7 +24,7 @@
  * {library,knowledge,projects}=2 < agents=3 < sessions=4 < flows=5) — moving
  * them would be a NEW, unbaselinable `package-layer-order` violation (the
  * baseline is a shrink-only ratchet; there is no `--write-baseline`). Both
- * routes still live, unchanged, in `cli/bridge-studio.ts`'s
+ * routes still live, unchanged, in `apps/forge/bridge-studio.ts`'s
  * `handleStudioRoutes` — see `project-roadmap.ts`'s header for the full
  * accounting of exactly which helpers block the move.
  *
@@ -38,7 +38,7 @@
  * still a 200, nothing status-code-visible catches it wrong. The table below
  * preserves the ORIGINAL if-chain's order in full (`save-repo` →
  * `preflight/fix-auto` → `preflight/fix-agent` → `create` → onboard →
- * `:id`, verified against `git show HEAD:cli/bridge-studio-writes.ts` before
+ * `:id`, verified against `git show HEAD:apps/forge/bridge-studio-writes.ts` before
  * this file was written) — not only the one collision that matters
  * mechanically, so a future reader diffing this table against the deleted
  * if-chain sees the same sequence.
@@ -70,7 +70,7 @@
  * apply` are NOT part of the original if-chain carve — they are the S3
  * (1.0.md §3) "Rebuild contract" capability, new at M4, carved straight into
  * this table from day one (their handlers, `bridge-studio-project-reset.ts`,
- * never lived in `cli/bridge-studio-writes.ts`). Neither collides with the
+ * never lived in `apps/forge/bridge-studio-writes.ts`). Neither collides with the
  * `create`/`:id` ambiguity above: both require a literal `/contract-reset`
  * (or `/contract-reset/apply`) suffix the `:id` pattern's `[^/]+` cannot
  * match (no further `/`), so their table position is unconstrained by the
@@ -104,7 +104,7 @@
  *
  * The field is non-optional in `RouteEntry` because a carved route that lost
  * its classification would be a route that SPAWNS under `FORGE_DRY_BRIDGE=1`;
- * `tests/contract/routes-table.test.ts` and `cli/dry-bridge-coverage.test.ts`
+ * `tests/contract/routes-table.test.ts` and `apps/forge/dry-bridge-coverage.test.ts`
  * both assert every entry carries one.
  */
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
@@ -161,7 +161,7 @@ export type ProjectsRouteDeps = {
   readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
-  /** `cli/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
+  /** `apps/forge/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
    *  (M4-projects routes budget row 12b), kept in its legacy home until the
    *  sessions lane carves its own routes. */
   spawnPreflightFix: (
@@ -214,11 +214,11 @@ const m = {
 /**
  * Ordered, first-match-wins. The order is the ORIGINAL if-chains' order,
  * preserved whole: `handleStudioRoutes`'s seven read routes (the order fixed
- * at `git show HEAD:cli/bridge-studio.ts`'s now-deleted arms), followed by
+ * at `git show HEAD:apps/forge/bridge-studio.ts`'s now-deleted arms), followed by
  * `handleStudioWriteRoutes`'s seven write routes (same provenance,
- * `cli/bridge-studio-writes.ts`) — matching the host's own original call
+ * `apps/forge/bridge-studio-writes.ts`) — matching the host's own original call
  * order, `handleStudioRoutes` strictly before `handleStudioWriteRoutes`
- * (`cli/ui-bridge.ts`, still true today for the two routes that did not
+ * (`apps/forge/ui-bridge.ts`, still true today for the two routes that did not
  * carve).
  */
 export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext> {
@@ -238,7 +238,7 @@ export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext
     makePreflightWriteHandlers({ spawnPreflightFix: deps.spawnPreflightFix });
 
   return [
-    // ---- read side (cli/bridge-studio.ts's former handleStudioRoutes) ------
+    // ---- read side (apps/forge/bridge-studio.ts's former handleStudioRoutes) ------
     {
       method: 'GET',
       path: '/api/studio/starters',
@@ -289,7 +289,7 @@ export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext
       handler: handleProjectContractStages,
     },
 
-    // ---- write side (cli/bridge-studio-writes.ts's former handleStudioWriteRoutes) ----
+    // ---- write side (apps/forge/bridge-studio-writes.ts's former handleStudioWriteRoutes) ----
     {
       method: 'POST',
       path: '/api/studio/projects/:id/save-repo',

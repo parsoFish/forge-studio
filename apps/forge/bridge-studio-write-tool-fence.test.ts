@@ -2,7 +2,7 @@
  * forge-6gv.19 (W8-B4) — REAL end-to-end pins for the from-blank Agent
  * Builder compose, driven through the ACTUAL bridge PUT route (not a
  * hand-rolled call to `serializeAgentDefinition`/`toolFenceFinding` in
- * isolation — see `cli/studio-lint-tool-fence.test.ts`'s own header for why
+ * isolation — see `packages/library/studio-lint-tool-fence.test.ts`'s own header for why
  * this repo insists on the real entry point).
  *
  * The full chain exercised:
@@ -10,11 +10,11 @@
  *   apps/studio/lib/agent-authoring-view.ts's REAL `BLANK_STATE` (imported, not
  *   hand-copied)
  *     -> REAL `buildAgentPutBody`
- *     -> PUT /api/studio/agents/:slug (cli/bridge-studio-writes.ts)
+ *     -> PUT /api/studio/agents/:slug (apps/forge/bridge-studio-writes.ts)
  *     -> REAL `serializeAgentDefinition` (orchestrator/studio/skill-md-
  *        fidelity.ts)
  *     -> an on-disk SKILL.md
- *     -> REAL `lintSkillToolFence` (cli/studio-lint-tool-fence.ts) — the
+ *     -> REAL `lintSkillToolFence` (packages/library/studio-lint-tool-fence.ts) — the
  *        exported entry point `toolFenceFinding` is reached through.
  *
  * Pin 1 — a from-blank compose (BLANK_STATE + the name a human must type
@@ -34,7 +34,7 @@
  *         the ruling) regression: that shape would move the agent OUT of
  *         `declaresToolFrontmatter`'s scope, and this pin would go red.
  *
- * RUN: node --experimental-strip-types --test cli/bridge-studio-write-tool-fence.test.ts
+ * RUN: node --experimental-strip-types --test apps/forge/bridge-studio-write-tool-fence.test.ts
  */
 
 import { test, before, after } from 'node:test';

@@ -4,7 +4,7 @@
  * managed project starts with a valid, `forge brain lint`-clean, and
  * Studio-KB-graph-visible stub (REFINEMENT-PLAN Phase 5 §8 — "creation seeds
  * it"). Without this, a newly onboarded project has no queryable Brain 3 and
- * immediately fails the C4 preflight clause (`cli/preflight.ts`).
+ * immediately fails the C4 preflight clause (`packages/projects/preflight.ts`).
  *
  * Three files, all idempotent per-file (an existing file is never
  * overwritten — skipped + reported, not clobbered):

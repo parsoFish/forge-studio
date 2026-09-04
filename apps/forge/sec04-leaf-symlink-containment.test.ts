@@ -6,7 +6,7 @@
  * now contained. But the leaf FILE beneath it is NOT: the current callers guard
  * the dir, then RAW-APPEND the leaf and read/write through it:
  *
- *   route  (POST /api/instructions/brief, cli/ui-bridge.ts):
+ *   route  (POST /api/instructions/brief, apps/forge/ui-bridge.ts):
  *     const dir = guardedSessionDir(...)            // dir guarded ✔
  *     readSessionStatus(dir)                        // join(dir,'status.json') — UNguarded
  *     writeFileSync(join(dir, 'prompt.md'), brief)  // leaf — UNguarded

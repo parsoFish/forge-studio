@@ -1068,7 +1068,7 @@ test('status.modelTier mismatching the fixed tier throws naming the value and th
 // Kills: the current `libraryRoot = skillsDir(forgeRoot)` — a finalize that
 // installs a session-produced package into the SAME tree
 // `listAgentDefinitions`/`discoverRuntimeAgentIds` scan for dispatchable
-// agents (orchestrator/flow-runner.ts:1285, cli/ui-bridge.ts:1678). Pins
+// agents (orchestrator/flow-runner.ts:1285, apps/forge/ui-bridge.ts:1678). Pins
 // (a) the correct destination root and (b) that a fresh forgeRoot's
 // (previously absent) skills/ is never auto-created as a side effect of a
 // finalize that should never have touched it. Uses ITS OWN valid-slug
@@ -1483,12 +1483,12 @@ test('P1 (positive control): a declared writes: dir that DOES contain a file sti
 // ---------------------------------------------------------------------------
 // P4 — the operator's description must reach the agent's turn prompt.
 //
-// `POST /api/studio/authoring/start` (cli/ui-bridge.ts) writes the
+// `POST /api/studio/authoring/start` (apps/forge/ui-bridge.ts) writes the
 // operator's free-text prompt to prompt.md, but `buildTurnPrompt` (this
 // module) composes the turn prompt from SKILL.md + the phase row + a JSON
 // dump of status.json — it never reads prompt.md. The intended production
-// fix is that `writeAuthoringSession` (cli/ui-bridge.ts, pinned separately
-// in cli/ui-bridge-authoring-start.test.ts) also persists the prompt into
+// fix is that `writeAuthoringSession` (apps/forge/ui-bridge.ts, pinned separately
+// in apps/forge/ui-bridge-authoring-start.test.ts) also persists the prompt into
 // status.json. This is the OTHER half of that pin: WITH a status carrying a
 // `prompt` field, proves the actual prompt string handed to queryFn contains
 // the operator's text — the end-to-end proof the words actually reach the
@@ -1780,7 +1780,7 @@ test('R4-19-F2 (positive control): the real kb-cleanup descriptor\'s drafting ph
 // refused even though the prompt hands the agent that path directly.
 //
 // Originally driven against the REAL "community-refresh" descriptor, whose
-// live `/api/studio/community-refresh/start` route (cli/ui-bridge.ts) seeded
+// live `/api/studio/community-refresh/start` route (apps/forge/ui-bridge.ts) seeded
 // exactly this shape (an absolute `registryPath` outside the session dir).
 // That kind was retired in W8-B5b, so this now reuses `setupRealAuthoring`
 // (defined above) and seeds a synthetic out-of-root path itself — the point

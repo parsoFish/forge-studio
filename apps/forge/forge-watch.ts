@@ -3,7 +3,7 @@
  * foreground launcher that brings up the operator UI (ADR-031, M7-6).
  *
  * Spawns two children:
- *   1. The forge-ui bridge (cli/ui-bridge.ts) — WebSocket + HTTP API.
+ *   1. The forge-ui bridge (apps/forge/ui-bridge.ts) — WebSocket + HTTP API.
  *   2. The forge-ui Next.js server (forge-ui workspace) — the browser.
  *      Default (W6-P3): a production build (`next build`, once — skipped when
  *      the existing `.next/` output is already fresh, see {@link isBuildFresh})

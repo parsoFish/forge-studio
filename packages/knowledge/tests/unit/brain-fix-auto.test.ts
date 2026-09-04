@@ -1,5 +1,5 @@
 /**
- * Tests for cli/brain-fix-auto.ts — the deterministic AUTO-tier fixers.
+ * Tests for packages/knowledge/brain-fix-auto.ts — the deterministic AUTO-tier fixers.
  * Each asserts: apply → re-lint clears the finding, and a second apply is a no-op.
  */
 

@@ -2,7 +2,7 @@
  * The bridge port has ONE definition, and this test proves it structurally.
  *
  * HISTORY, because the change matters more than the test. This file used to be
- * a SOURCE-TEXT pin: it read `cli/forge-watch.ts` as a string and matched a
+ * a SOURCE-TEXT pin: it read `apps/forge/forge-watch.ts` as a string and matched a
  * `const DEFAULT_BRIDGE_PORT = 4123;` declaration against forge-ui's own
  * literal, because — in that file's words — "the two live in different npm
  * workspaces and can't share a single TS import cleanly". It detected drift

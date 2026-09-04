@@ -25,17 +25,17 @@
  *       export const AGENT_PROVENANCE: Provenance;   // 'unknown'
  *       export const PROJECT_PROVENANCE: Provenance; // 'unknown'
  *   - GET /api/studio/flows, /api/studio/agents, /api/studio/projects
- *     (cli/bridge-studio.ts) and GET /api/studio/kbs
- *     (cli/bridge-studio-kbs.ts) each add `provenance` to every descriptor.
+ *     (apps/forge/bridge-studio.ts) and GET /api/studio/kbs
+ *     (packages/knowledge/bridge-studio-kbs.ts) each add `provenance` to every descriptor.
  *   - orchestrator/studio/kb-descriptor.ts: KbDescriptor gains an OPTIONAL
  *     `origin?: string`; loadKbDescriptor reads it, serializeKbDescriptor
  *     writes it when present.
- *   - POST /api/studio/kbs (cli/bridge-studio-kbs.ts) stamps
+ *   - POST /api/studio/kbs (packages/knowledge/bridge-studio-kbs.ts) stamps
  *     `origin: 'studio'` on create.
  *   - brain/cycles/kb.yaml + brain/forge-dev/kb.yaml (the two shipped OOTB
  *     brains) get `origin: seed` committed.
  *
- * RUN: node --test --experimental-strip-types cli/studio-provenance.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/studio-provenance.test.ts
  */
 
 import { test, before, after } from 'node:test';
@@ -55,7 +55,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
-// Fixture helpers (mirrors cli/bridge-studio.test.ts / cli/bridge-studio-kbs.test.ts)
+// Fixture helpers (mirrors apps/forge/bridge-studio.test.ts / cli/bridge-studio-kbs.test.ts)
 // ---------------------------------------------------------------------------
 
 function makeFlowYaml(id: string, origin: string): string {
@@ -449,9 +449,9 @@ test('AT-7: brain/cycles/kb.yaml and brain/forge-dev/kb.yaml (the two shipped OO
 // AT-8 through AT-11 — forge-3oq review round. The four list routes above
 // (AT-1 through AT-7) all got `provenance`, but there are SECOND construction
 // sites for the same descriptors that were left out: GET /api/studio/kbs/:id
-// (cli/bridge-studio-kbs.ts) builds its own `kbPublic` straight off
+// (packages/knowledge/bridge-studio-kbs.ts) builds its own `kbPublic` straight off
 // `loadKbDescriptors`'s raw result with no `provenanceOfOrigin` call, and
-// GET /api/studio/flows/:id (cli/bridge-studio.ts) returns
+// GET /api/studio/flows/:id (apps/forge/bridge-studio.ts) returns
 // `loadFlowDefinition(...)` directly. Reproduced against commit `aeef037f`.
 // ---------------------------------------------------------------------------
 
@@ -504,7 +504,7 @@ test('AT-9: list and detail AGREE on provenance for every fixture kb — no seco
 
 // ---------------------------------------------------------------------------
 // AT-10 — the loader is the single attachment point (structural). Asserts at
-// the SOURCE level, house precedent: cli/kb-lint-summary.test.ts's AT-4a/
+// the SOURCE level, house precedent: packages/knowledge/tests/integration/kb-lint-summary.test.ts's AT-4a/
 // AT-4b use the exact same comment-stripping + brace-depth function-body
 // extraction to prove a call site lives inside a specific function. Kills: a
 // future route layered over `loadKbDescriptors` forgetting the field, by
@@ -515,7 +515,7 @@ test('AT-9: list and detail AGREE on provenance for every fixture kb — no seco
 /** Strips block + line comments so a doc comment mentioning
  *  `provenanceOfOrigin(` in prose can't masquerade as a real call site, and
  *  can't corrupt brace-depth counting below. Mirrors
- *  cli/kb-lint-summary.test.ts's `stripComments` — same technique,
+ *  packages/knowledge/tests/integration/kb-lint-summary.test.ts's `stripComments` — same technique,
  *  duplicated locally rather than imported across test files. */
 function stripCommentsForCallSiteCheck(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');

@@ -831,7 +831,7 @@ function showcaseManifest({ initId, project, phase }) {
 
 /**
  * Seed the OLDER showcase-worthy cycle: a `done` manifest + a real-shaped
- * demo.json (DemoModel — cli/demo-model.ts) mirroring writeDemoJson's own
+ * demo.json (DemoModel — packages/factory/demo-model.ts) mirroring writeDemoJson's own
  * `--write` TOC-injection story, under distinct clip-only ids.
  */
 export function writeShowcaseCycleOne() {
@@ -1228,7 +1228,7 @@ export function cleanInstructionsSession(sid) {
  * here is their real stderr.log text, transposed to the instructions kind so
  * it lives under the shared mdtoc reference project like every other
  * instructions fixture). The bridge derives `state: crashed` + the error at
- * read time from these two facts (cli/bridge-studio-lifecycle.ts) — nothing
+ * read time from these two facts (packages/sessions/bridge-studio-lifecycle.ts) — nothing
  * is written into status.json to say "crashed".
  */
 export const CRASHED_INSTR_STDERR = [
@@ -1498,7 +1498,7 @@ export const SK_CLIP_SLUG = 'api-contract-review-clip';
  * is a strict no-op; under a scoped `--journey` run without the skills
  * journey, the beat seeds it here so every journey stays self-contained
  * (the ordering contract in scripts/journeys/index.mjs). The written shape
- * mirrors POST /api/studio/skills (cli/bridge-studio-skills.ts): frontmatter
+ * mirrors POST /api/studio/skills (packages/library/bridge-studio-skills.ts): frontmatter
  * name/description/`library: true`, NO runtime block — the exact plain-skill
  * shape orchestrator/studio/registry.ts listPlainSkills unions into the
  * palette, pinned by scripts/journey-scoped-selfcontainment.test.ts against
@@ -1547,7 +1547,7 @@ export function restoreRealSkill() {
 // The agentic-author beat's staged artifact — the EXACT path the real
 // demo-builder agent writes (orchestrator/demo-builder-runner.ts
 // DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md') and the path the
-// preflight DEMO-SKILL clause checks (cli/preflight.ts checkDemoSkill). It is
+// preflight DEMO-SKILL clause checks (packages/projects/preflight.ts checkDemoSkill). It is
 // UNTRACKED in the mdtoc subtree, so the runner-finally `git checkout --
 // projects/<p>` does NOT cover it — it is swept in cleanSkillArtifacts instead.
 export const DEMO_DESIGN_SKILL_DIR = join(projectRoot, '.forge', 'skills', 'demo-design');
@@ -1790,7 +1790,7 @@ export const AUTH_SKILL_DIR = join(FORGE_ROOT, 'skills', AUTH_SKILL_ID);
 export const AUTH_HOOK_ID = 'journey-live-proof-hook';
 export const AUTH_HOOK_DIR = join(FORGE_ROOT, 'studio', 'hooks', AUTH_HOOK_ID);
 // `_interactive-library/<id>/` — the finalize route's own landing root
-// (INTERACTIVE_LIBRARY_DIRNAME, cli/bridge-studio-authoring.ts), gitignored.
+// (INTERACTIVE_LIBRARY_DIRNAME, packages/library/bridge-studio-authoring.ts), gitignored.
 const AUTH_LANDED_SKILL_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_SKILL_ID);
 const AUTH_LANDED_HOOK_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_HOOK_ID);
 

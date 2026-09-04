@@ -1,7 +1,7 @@
 /**
  * Tests for run-model-derive.ts cost derivation (plan item 1.8 + 1.4).
  *
- * Pins the cost-summation rule shared with cli/metrics.ts aggregate()
+ * Pins the cost-summation rule shared with packages/flows/metrics.ts aggregate()
  * (orchestrator/event-cost.ts): iteration-loop phases restate their
  * iteration spend on per-WI 'end' + phase-level 'end' rollup events, so
  * naively summing every event double/triple-counts. buildNodeMeta feeds

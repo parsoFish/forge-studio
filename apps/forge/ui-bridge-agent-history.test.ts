@@ -32,7 +32,7 @@
  *     `metadata: { agent_phase, agent_slug }` (line ~320) and an `end` event
  *     with the SAME `metadata.agent_slug` plus a top-level `cost_usd` (line
  *     ~360-382) — a standalone run's OWN identity proof, independent of its
- *     runId. `cli/ui-bridge.ts`'s EXISTING `GET /api/agents/runs/<runId>`
+ *     runId. `apps/forge/ui-bridge.ts`'s EXISTING `GET /api/agents/runs/<runId>`
  *     (line ~1139) derives `state`/`costUsd` from exactly this shape; D3.5
  *     below pins that the NEW route reuses that SAME derivation rather than
  *     re-implementing it.
@@ -93,7 +93,7 @@
  *         cannot satisfy this with a second, independently-written copy that
  *         happens to agree today but can silently drift tomorrow).
  *
- * Harness pattern copied from `cli/ui-bridge-agent-run.test.ts`:
+ * Harness pattern copied from `apps/forge/ui-bridge-agent-run.test.ts`:
  * `startBridge({ forgeRoot, port: 0 })`.
  */
 
@@ -147,13 +147,13 @@ function seedForgeArchitectFlow(): void {
  * this file) — the ONLY session-kind descriptor the SESSION tests below
  * exercise. `loadSessionKinds` (orchestrator/studio/session-kinds.ts) THROWS
  * when this file is absent — this fixture never seeded it, so
- * `collectSessionRows` (cli/ui-bridge.ts) could only resolve the 'architect'
+ * `collectSessionRows` (apps/forge/ui-bridge.ts) could only resolve the 'architect'
  * agent -> session kind via a hand-maintained `FALLBACK_SESSION_KINDS` table
  * an implementer added purely to fit this gap: a second, independently
  * drifting copy of declared data this project forbids outright (no
  * fallbacks — CLAUDE.md "Never do"). Seeding the REAL registry here (same
- * precedent as `cli/bridge-studio-sessions.test.ts`'s `writeSessionKindsYaml`
- * and `cli/studio-lint.test.ts`'s `tmpRoot`, both of which seed a real
+ * precedent as `packages/sessions/bridge-studio-sessions.test.ts`'s `writeSessionKindsYaml`
+ * and `apps/forge/studio-lint.test.ts`'s `tmpRoot`, both of which seed a real
  * `studio/session-kinds.yaml` into their synthetic forgeRoot rather than
  * relying on any fallback) closes the gap the fallback was built for, so it
  * can be deleted. Mirrors this file's own `FORGE_ARCHITECT_FLOW_YAML`
@@ -270,7 +270,7 @@ function seedStandaloneRun(runId: string, agentSlug: string, costUsd: number): v
  *  `FORGE_ARCHITECT_NO_SPAWN=1` — forge's own universal test/journey
  *  convention (this file's `before()` sets it; every journey harness sets
  *  it too; see the header comment above). Concretely, from
- *  `cli/ui-bridge.ts`:
+ *  `apps/forge/ui-bridge.ts`:
  *    - WITHOUT materials: the route never `mkdirSync`s a run dir at all —
  *      that call lives inside `if (materialsValidation.entries.length > 0)`
  *      (ui-bridge.ts:1341-1362). `spawnAgentDispatch`'s OWN `mkdirSync`
@@ -357,8 +357,8 @@ async function getJson(path: string): Promise<{ status: number; body: unknown }>
  * slug can only be delivered to the REAL `/api/agents/:slug/history` route
  * with a client that puts the path on the wire unmodified. Node's low-level
  * `http.request({ path })` does exactly that (same precedent as
- * `cli/ui-bridge-demo-generations.test.ts`'s `rawGet` and
- * `cli/dry-bridge.test.ts`'s raw-request idiom — read both before writing
+ * `apps/forge/ui-bridge-demo-generations.test.ts`'s `rawGet` and
+ * `apps/forge/dry-bridge.test.ts`'s raw-request idiom — read both before writing
  * this). Returns the raw text (not pre-parsed JSON) so a non-200/non-JSON
  * body can still be inspected by the caller.
  */
@@ -622,7 +622,7 @@ test('AMENDMENT 1 positive control (skill-only shape): agent "skalias-x" queried
 test('SHARED DERIVATION: GET /api/agents/runs/<runId> and this row inside GET /api/agents/:slug/history report BYTE-IDENTICAL status+cost for the SAME real run', async () => {
   // KILLS: an implementer who writes a SECOND, independent copy of the
   // status/cost derivation for the new route instead of extracting and
-  // reusing the existing one (cli/ui-bridge.ts ~1139-1178). Two independently
+  // reusing the existing one (apps/forge/ui-bridge.ts ~1139-1178). Two independently
   // written copies can agree today and silently drift on the next edit to
   // either one — this test can only be satisfied by ONE shared function.
   const runId = '_agent-shared-2026-04-01T00-00-00-000-eeee';
@@ -721,7 +721,7 @@ test("D12: a session's own phase string ('interviewing') is never coerced into a
 // battery's two assertions would have missed entirely, since neither checks
 // rows.length or the response shape, only "no 500" / "no substring".
 //
-// VERIFIED BY EXECUTION (three temporary mutations into cli/ui-bridge.ts,
+// VERIFIED BY EXECUTION (three temporary mutations into apps/forge/ui-bridge.ts,
 // run via `node --test --experimental-strip-types`, then reverted with `git
 // checkout` and confirmed byte-identical via `cmp` — see the task report for
 // the full transcript, exit codes, and grep-confirmed mutation evidence):

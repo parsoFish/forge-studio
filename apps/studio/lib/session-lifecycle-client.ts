@@ -1,7 +1,7 @@
 /**
  * W7-A2 — the session LIFECYCLE wire vocabulary + the ONE cancel client.
  *
- * Mirrors cli/bridge-studio-lifecycle.ts's `SessionLifecycle` shape (a
+ * Mirrors packages/sessions/bridge-studio-lifecycle.ts's `SessionLifecycle` shape (a
  * hand-mirrored copy, never an import — forge-ui never imports cli/ at
  * runtime; kept honest by `parseSessionLifecycle` refusing any token the
  * bridge does not emit). Consumed by the /sessions index rows, Home's
@@ -12,7 +12,7 @@
  *
  * `cancelStudioSession` POSTs the generic
  * `POST /api/studio/sessions/:kind/:sessionId/cancel`
- * (cli/bridge-studio-session-cancel.ts) — every kind, one route; the
+ * (packages/sessions/bridge-studio-session-cancel.ts) — every kind, one route; the
  * server's own error text reaches the caller verbatim (409 already-terminal
  * naming the phase, 404, 400).
  */
@@ -104,7 +104,7 @@ export function describeLifecycle(state: SessionLifecycleState, error: string | 
 }
 
 /** W7-FIX-A2 (W7A2-02) — what a successful cancel POST actually did:
- *  `killed` is the bridge's own answer (cli/bridge-studio-session-cancel.ts
+ *  `killed` is the bridge's own answer (packages/sessions/bridge-studio-session-cancel.ts
  *  → `killTrackedTurn`) — true only when a tracked, provably-ours turn
  *  process was signalled. */
 export type CancelOutcome = { killed: boolean; previousPhase: string };

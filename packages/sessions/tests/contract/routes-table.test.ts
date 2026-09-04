@@ -9,7 +9,7 @@
  * does.
  *
  * The second defect it pins is the one measured across the whole bridge during
- * this carve: the host takes `req.url` RAW (`cli/ui-bridge.ts`) and never
+ * this carve: the host takes `req.url` RAW (`apps/forge/ui-bridge.ts`) and never
  * normalises, so 33 of the 38 session routes 404 today on any appended query
  * string. Every matcher here calls `pathOnly` for itself; the query-string cases
  * below fail against a matcher that does not.
@@ -82,7 +82,7 @@ test('the table is ordered, and every entry declares method, path, matcher and a
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// The architect family, carved from `cli/ui-bridge.ts`. One entry per URL — not
+// The architect family, carved from `apps/forge/ui-bridge.ts`. One entry per URL — not
 // one entry for the family — so `dry-bridge-coverage` keeps a classification per
 // route, and so the query-string bug the host arms carried (`url === '/api/…'`
 // against a raw url, which 404s on `?x=1`) cannot come back: every matcher here

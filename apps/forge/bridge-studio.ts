@@ -89,10 +89,10 @@ import { allowedOrigin, sendJson, sanitizeError, pathOnly, parseQuery, SAFE_ID_R
  * `/sessions/<kind>/<sessionId>`?", INJECTED rather than imported.
  *
  * The one implementation is `sessionIsReadable`
- * (cli/bridge-studio-sessions.ts), which needs this module's own `SAFE_ID_RE`
- * and cli/bridge-studio-kbs.ts's `KB_SEEDING_ANCHOR_PREFIX` — importing it
+ * (packages/sessions/bridge-studio-sessions.ts), which needs this module's own `SAFE_ID_RE`
+ * and packages/knowledge/bridge-studio-kbs.ts's `KB_SEEDING_ANCHOR_PREFIX` — importing it
  * here would make this module the first `bridge-studio.ts` →
- * `bridge-studio-*.ts` edge and close a cycle. `cli/ui-bridge.ts` already
+ * `bridge-studio-*.ts` edge and close a cycle. `apps/forge/ui-bridge.ts` already
  * imports both modules, so it wires the two together in exactly the way it
  * already wires `ensureSessionTail`.
  *
@@ -111,7 +111,7 @@ export type StudioRunsContext = StudioContext & { sessionIsReadable: SessionRead
 // `SLUG_RE`/`PROJECT_ID_RE`) so a carved `packages/projects/` route handler
 // needing it never has to import `cli/` (`package-to-legacy`). Imported above
 // and re-exported here unchanged: this file no longer DEFINES it, but every
-// existing importer (`cli/ui-bridge.ts`, `packages/flows/bridge-studio-runs.ts`,
+// existing importer (`apps/forge/ui-bridge.ts`, `packages/flows/bridge-studio-runs.ts`,
 // `packages/sessions/bridge-studio-sessions.ts`) still reaches it at this path.
 export { SAFE_ID_RE };
 
@@ -132,8 +132,8 @@ export {
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
- *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
- *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
+ *  (packages/sessions/bridge-studio-session-cancel.ts) and read as terminal by
+ *  `isTerminalPhase` (packages/sessions/bridge-studio-sessions.ts) for EVERY kind BEFORE
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
  *  is the same fact for all eight kinds, and eight copies of one fact in
@@ -286,7 +286,7 @@ function classifyEvent(e: EventLogEntry): LogLine {
 // ---------------------------------------------------------------------------
 
 /** Find a Run by id (cycleId or initiativeId). Returns null if not found.
- *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
+ *  ADR-044 P1: routes through the per-manifest memo (packages/flows/run-list-cache.ts)
  *  — same derivation, same contract as listRuns, but terminal runs skip
  *  re-parsing their events.jsonl once cached.
  *
@@ -317,7 +317,7 @@ function findRun(forgeRoot: string, id: string): Run | null {
  *
  * Derived, never stored: the check runs on every read, so restoring a deleted
  * session dir brings the link back with no write anywhere. Immutable: a
- * stripped run is a NEW object; the cached `Run` (cli/run-list-cache.ts) is
+ * stripped run is a NEW object; the cached `Run` (packages/flows/run-list-cache.ts) is
  * never mutated.
  *
  * `kind: 'architect'` is a literal because `architect_session_id`
@@ -383,7 +383,7 @@ function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string
     try {
       const flow = loadFlowDefinition(flowYamlPath);
       // R1-06 WI-2 (group A): attach each flow's REAL derived band vocabulary
-      // (cli/flow-band-vocab.ts's listFlowBandIds, WI-1) so the KB-create
+      // (packages/flows/flow-band-vocab.ts's listFlowBandIds, WI-1) so the KB-create
       // page's per-flow band picker has something real to source options
       // from over the wire. Fails closed to [] for an underivable flow —
       // handled inside the helper, never re-guessed here.
@@ -433,7 +433,7 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const flowFilter = qs.get('flow');
-      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
       let runs = cachedListRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
         // Match by lineage, not just current flowId: a run whose manifest was
@@ -890,7 +890,7 @@ export type RoadmapInitiative = {
    * canvas's completion-time X axis — `Run.completedAt`
    * (orchestrator/run-model.ts) threaded straight through via the SAME
    * memoized derivation `GET /api/runs` already uses (`cachedListRuns`,
-   * cli/run-list-cache.ts) rather than a second events.jsonl parser. Absent
+   * packages/flows/run-list-cache.ts) rather than a second events.jsonl parser. Absent
    * (never fabricated) whenever the run carries no derivable completion —
    * still-open initiatives, and the rare cycle dir with neither a cycle-end
    * event nor ANY non-reflection event at all. An absent completedAt places
@@ -976,12 +976,12 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
  * (R4-11-F2: a pending initiative can already be planned; the roadmap's
  * Plan-trigger lock reads `workItems === undefined` as "unplanned").
  *
- * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
+ * Mirrors the queueStatusFor pattern from apps/forge/ui-bridge.ts:195.
  */
 /**
  * W6-RV-2: initiativeId → real cycle-completion instant, sourced from the
  * SAME memoized run derivation `GET /api/runs` already uses
- * (`cachedListRuns`, cli/run-list-cache.ts) — reusing it here means the
+ * (`cachedListRuns`, packages/flows/run-list-cache.ts) — reusing it here means the
  * roadmap's completedAt column costs nothing beyond what that route already
  * pays (a warm per-manifest cache hits for free; a cold one pays the exact
  * same events.jsonl parse `aggregateRun` performs either way), rather than a

@@ -1,5 +1,5 @@
 /**
- * Tests for cli/reflect-reconcile.ts — the late-feedback reflector auto-rerun.
+ * Tests for packages/factory/reflect-reconcile.ts — the late-feedback reflector auto-rerun.
  */
 
 import { test } from 'node:test';

@@ -3,7 +3,7 @@
  * post-migration adversarial review: `composition/guard-unknown` is INERT
  * on the bridge save path.
  *
- * Root cause: `cli/bridge-studio-writes.ts` (~L422) calls
+ * Root cause: `apps/forge/bridge-studio-writes.ts` (~L422) calls
  * `validateAgent(merged)` with NO second (`validModelIds`) or third
  * (`validGuardIds`) argument, so the `if (validGuardIds) {...}` branch
  * inside `composition/guard-unknown` (`orchestrator/studio/validate.ts`)
@@ -12,9 +12,9 @@
  * and persisted to disk, silently inert until someone happens to run
  * `forge studio lint`. This directly contradicts ADR-027 §6: "The same
  * validation runs at save (bridge PUT) and at spawn." Only
- * `cli/studio-lint.ts` currently computes and supplies the set (mirrors the
+ * `apps/forge/studio-lint.ts` currently computes and supplies the set (mirrors the
  * pre-existing `composition/guard-unknown` real-lint-entry-point pin in
- * `cli/studio-lint-guards-migration.test.ts`, which drives the SAME check
+ * `apps/forge/studio-lint-guards-migration.test.ts`, which drives the SAME check
  * through a DIFFERENT real entry point — the read-only lint scan, not the
  * operator's save request).
  *
@@ -23,7 +23,7 @@
  * `bridge-studio-writes.ts`'s PUT handler runs `validateAgent(merged)` and,
  * when `findings.some(f => f.level === 'error')`, returns
  * `400 {error: 'validation failed', findings}` WITHOUT writing the file —
- * `cli/bridge-studio-write.test.ts`'s "empty purpose → 400 + findings,
+ * `apps/forge/bridge-studio-write.test.ts`'s "empty purpose → 400 + findings,
  * SKILL.md unchanged" test already pins exactly this contract for
  * `readiness/purpose`. `composition/guard-unknown` is an ERROR-level finding
  * (`err(...)`, not `flag(...)` — `orchestrator/studio/validate.ts`), so
@@ -42,11 +42,11 @@
  * Both directions live in this one file so a future reader sees the full
  * contract (reject the bad, accept the good) in one place.
  *
- * Fixture: mirrors `cli/bridge-studio-write.test.ts`'s harness exactly
+ * Fixture: mirrors `apps/forge/bridge-studio-write.test.ts`'s harness exactly
  * (`startBridge`, a real `skills/<slug>/SKILL.md`, minimal `_queue`/`_logs`
  * dirs). ADDITIONALLY writes a real `studio/catalog.yaml` with a `guards:`
  * section (future vocabulary, the 9 real ids) — the existing E1
- * (`cli/bridge-studio-writes-guards-migration.test.ts`) never needed a
+ * (`apps/forge/bridge-studio-writes-guards-migration.test.ts`) never needed a
  * catalog fixture since it doesn't exercise this check; this one does, so
  * the eventual fix's `validGuardIds` set has real ground truth to validate
  * a typo against.

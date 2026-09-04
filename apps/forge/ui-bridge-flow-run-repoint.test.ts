@@ -18,7 +18,7 @@
  *     trigger would still authorise a move off a flow nobody was shown.
  *
  * The route stays a pure forwarder: it maps the body flag and the status onto
- * HTTP, and holds no copy of the rule (see `cli/ui-bridge.ts`'s own comment at
+ * HTTP, and holds no copy of the rule (see `apps/forge/ui-bridge.ts`'s own comment at
  * the handler — the id rule, the state guards and now the repoint guard are
  * all the enqueue's).
  */

@@ -6,7 +6,7 @@
  * MEASURED [exec], against the REAL bridge handler, before writing a line of
  * this file (full trace in the task report):
  *
- *   (a) `GET /api/runs/<id>/phases/<node>/log` (`cli/bridge-studio.ts:459`)
+ *   (a) `GET /api/runs/<id>/phases/<node>/log` (`apps/forge/bridge-studio.ts:459`)
  *       returns `{lines: LogLine[]}` where `LogLine = {at, kind, text,
  *       detail?}` — `kind` is the DRAWER's OWN 6-value vocabulary
  *       (`info|tool|cost|stderr|retry|reasoning`, `classifyEvent`,
@@ -23,7 +23,7 @@
  *       None of those survive (a)'s endpoint.
  *   (c) No other per-node RAW-event path exists for a FLOW run. The only
  *       analogous RAW path in this codebase, `GET /api/agents/runs/:runId`
- *       (`cli/ui-bridge.ts:1139`), returns UNCLASSIFIED `JSON.parse`'d
+ *       (`apps/forge/ui-bridge.ts:1139`), returns UNCLASSIFIED `JSON.parse`'d
  *       records (`lines: parsed.slice(-RUN_LOG_LINES_MAX)`, ui-bridge.ts
  *       :1181) — but for the WHOLE standalone-agent run it backs, never
  *       filtered to one flow node. `grep -rn "phases/.*log" cli/ apps/studio/`
@@ -46,7 +46,7 @@
  *     -> 200 { lines: <node's own raw event records, `event_type` preserved,
  *              capped to the last 200 exactly as the classified path is> }
  *
- * Harness pattern copied from `cli/bridge-studio-flow-run-detail.test.ts`:
+ * Harness pattern copied from `apps/forge/bridge-studio-flow-run-detail.test.ts`:
  * `startBridge({ forgeRoot, port: 0 })` — port 0 only, never 4123/4124.
  */
 

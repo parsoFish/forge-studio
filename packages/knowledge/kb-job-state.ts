@@ -12,7 +12,7 @@
  *   - the UI's action group disables the other buttons with the reason.
  *
  * Standalone on purpose: imports NOTHING from the other cli/bridge modules,
- * so `cli/bridge-studio-kbs.ts` (which `cli/bridge-studio-kb-drain.ts`
+ * so `packages/knowledge/bridge-studio-kbs.ts` (which `packages/knowledge/bridge-studio-kb-drain.ts`
  * imports from) and the drain module can BOTH use it without an import
  * cycle. The two tiny readers below mirror on-disk formats owned elsewhere —
  * `_logs/_kb-drain-<runId>/status.json` (written by bridge-studio-kb-drain's
@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 /** A 'running' drain status whose `updatedAt` stopped moving past this is a
  *  DEAD run — the drain loop heartbeats `updatedAt` every
- *  KB_DRAIN_HEARTBEAT_MS (cli/bridge-studio-kb-drain.ts), so 45s of silence
+ *  KB_DRAIN_HEARTBEAT_MS (packages/knowledge/bridge-studio-kb-drain.ts), so 45s of silence
  *  means the in-process loop is gone (bridge restarted mid-drain). Shared by
  *  the cancel route's forced-terminal branch and the active-job derivation
  *  below. */
@@ -86,13 +86,13 @@ export function findLiveDrain(
 // `_brainfix-<runId>/events.jsonl`'s terminal shape ('end' = done, 'error' =
 // failed, first `ts` = when it started) was parsed independently by the
 // active-job gate below and by `readConsolidateRunRow` (the RecentRuns widget,
-// cli/bridge-studio-kb-drain.ts). Two copies of one on-disk contract means a
+// packages/knowledge/bridge-studio-kb-drain.ts). Two copies of one on-disk contract means a
 // future change to the event shape lands in one and not the other, and the
 // gate and the run history then disagree about whether a run has finished.
 // Both now read through the helpers here — this module is the leaf both
 // importers already depend on.
 //
-// `readBrainFixState` (cli/bridge-studio-kbs.ts) deliberately does NOT use
+// `readBrainFixState` (packages/knowledge/bridge-studio-kbs.ts) deliberately does NOT use
 // these: it scans BACKWARD, recognises two extra legacy message shapes
 // ('brain-fix.end' / 'brain-fix.crashed') and reads `metadata.cleared` for a
 // cleared/not-cleared verdict these two callers have no notion of. Folding it

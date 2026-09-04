@@ -52,7 +52,7 @@ un-root-caused watch SIGKILLs (known-gaps §4.5).
 ### R5-B5 Cost pipeline
 
 Shared aggregation in `orchestrator/event-cost.ts` (the double-count defect
-was fixed twice — 2026-06-08 in `cli/metrics.ts`, re-found 2026-07-10 in
+was fixed twice — 2026-06-08 in `packages/flows/metrics.ts`, re-found 2026-07-10 in
 `per_skill` + `run-model-derive.ts` — hence R5-03's regression-guard posture);
 phase-aware aggregation is a named invariant
 (`brain/forge-dev/themes/cost-event-phase-aware-aggregation-rule.md`).
@@ -82,12 +82,12 @@ theme staleness noted (brain lint 0/0), MVUS cites R4-11-F4.
 `FORGE_DRY_BRIDGE=1` harness-mode seam (`cli/dry-bridge.ts`): a typed
 `BRIDGE_ROUTE_CLASSIFICATION` table (`refuse | stub-actions | exempt-local |
 read-only`) covering every bridge route, consulted by every real-acting path
-in `cli/ui-bridge.ts` + `cli/bridge-studio-*.ts` + `cli/bridge-recovery.ts`.
+in `apps/forge/ui-bridge.ts` + `cli/bridge-studio-*.ts` + `packages/flows/bridge-recovery.ts`.
 Refusals are HTTP 409 + JSONL event; verdict-approve and the spawn/reflect
 routes are `stub-actions` (state bookkeeping proceeds, the agent turn / merge /
 finalize skipped with a `dryBridge:{skipped:[…]}` marker + event), preserving
 the ui:journey emulation contract. F2 drift guard
-(`cli/dry-bridge-coverage.test.ts`) statically derives the route set from the
+(`apps/forge/dry-bridge-coverage.test.ts`) statically derives the route set from the
 dispatch sources (auto-discovered from `cli/`) and reds on both an unclassified
 real route and a classified-but-unguarded `refuse` row. F3 post-run boundary
 (`scripts/lib/post-run-boundary.mjs`, via the guaranteed-to-run
@@ -120,12 +120,12 @@ project's declared `ci_gate_unset_env` in `runGateCapturing` + `runShellGate`
 ### R5-B10 Flow edit-lock verified (R5-04, 2026-07-18)
 
 The flow edit-lock proof artifact exists and is green:
-`cli/bridge-studio-flows.test.ts` ("PUT /api/studio/flows/locked-flow → 423 when
+`apps/forge/bridge-studio-flows.test.ts` ("PUT /api/studio/flows/locked-flow → 423 when
 a run with that flowId is active") proves an operator-authored **non-seed** flow
 (`locked-flow`, `origin: studio`) whose in-flight manifest carries a real
 `flow_id` is locked against edits — the write returns `423 Locked` and
 `flow.yaml` is byte-unchanged. The lock predicate is
-`cli/bridge-studio-writes.ts:774-786` (`r.flowId === id && r.status === 'active'`);
+`apps/forge/bridge-studio-writes.ts:774-786` (`r.flowId === id && r.status === 'active'`);
 the run's `flowId` is manifest-derived since S8/DEC-3 (`orchestrator/run-model.ts`,
 `FALLBACK_FLOW_ID='unknown'` applies to pre-S8 manifests only). The test was
 authored with the S8/DEC-3 fix (commit `d0a186f`, 2026-06-21) — it pre-dates this
@@ -148,8 +148,8 @@ was needed.
   `feedback_bridge_real_agent_surfaces`: three bridge surfaces trigger real
   agents/real git with **no env guard** — (1) in-process `runReleaseFinalize`
   + the real `gh pr merge` beside it in the verdict-approve branch
-  (`cli/bridge-studio-runs.ts`; wiring `cli/ui-bridge.ts`), (2)
-  `spawnBrainFix` (`cli/bridge-studio-kbs.ts`, KB lint-resolution route), (3)
+  (`packages/flows/bridge-studio-runs.ts`; wiring `apps/forge/ui-bridge.ts`), (2)
+  `spawnBrainFix` (`packages/knowledge/bridge-studio-kbs.ts`, KB lint-resolution route), (3)
   `POST /api/scheduler/start` (boots the real daemon). Incident 2026-07-16
   (see header). Fix direction per known-gaps: extend the guard contract to
   ALL real-agent/real-git paths, or a first-class `FORGE_DRY_BRIDGE=1`.
@@ -252,7 +252,7 @@ was needed.
   review A3): run-model has derived `flowId` from `manifest.flow_id` since
   S8/DEC-3 (`orchestrator/run-model.ts` — `FALLBACK_FLOW_ID='unknown'` is a
   pre-S8 fallback only) and the edit-lock predicate documents it
-  (`cli/bridge-studio-writes.ts:760-765`). known-gaps §1 is stale — struck via
+  (`apps/forge/bridge-studio-writes.ts:760-765`). known-gaps §1 is stale — struck via
   R5-07-F1. What's genuinely missing is the proof artifact, and the real
   residual gap in this area (operator-authored flows have no enqueue path at
   all) is owned by **R2-04-F1**, cross-referenced there.
@@ -262,7 +262,7 @@ was needed.
     ACs: test exists and is green; known-gaps §1 struck with the S8/DEC-3
     citation (rides R5-07-F1).
     - **Done 2026-07-18:** the proof already existed and is green —
-      `cli/bridge-studio-flows.test.ts` (commit `d0a186f`, authored with the
+      `apps/forge/bridge-studio-flows.test.ts` (commit `d0a186f`, authored with the
       S8/DEC-3 fix), which pre-dates this roadmap. No new test authored (a
       duplicate would be a review defect); as-built in R5-B10, known-gaps §1
       already struck.
@@ -550,7 +550,7 @@ maintenance contract; nothing currently carries a deferral condition.
   green before merge.
 - 2026-07-18 — **R5-04 implemented** (rider, branch
   `docs/r5-04-edit-lock-verified`): the edit-lock verification proof already
-  existed and is green (`cli/bridge-studio-flows.test.ts`, commit `d0a186f`
+  existed and is green (`apps/forge/bridge-studio-flows.test.ts`, commit `d0a186f`
   with the S8/DEC-3 fix) — it pre-dates this roadmap, so the "proof artifact
   missing" framing was an oversight. No new test was authored (a duplicate
   would be a review defect); status planned → implemented, as-built in R5-B10.

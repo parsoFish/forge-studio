@@ -15,7 +15,7 @@
  * the same repo differently.
  *
  * THE CONTAINMENT RULE (exit row E3). `sourceUrl` is operator-typable through
- * the registry CRUD form (`cli/bridge-studio-writes.ts`), so it is attacker-
+ * the registry CRUD form (`apps/forge/bridge-studio-writes.ts`), so it is attacker-
  * controlled input reaching forge's own server process. Therefore:
  *
  *   1. A row's `sourceUrl` is NEVER fetched. It is PARSED into an upstream

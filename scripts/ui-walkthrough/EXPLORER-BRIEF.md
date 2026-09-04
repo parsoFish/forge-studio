@@ -15,7 +15,7 @@ the UI where that is the only way to validate a path (the operator authorised th
   restart it. NEVER run `npm run ui:journey`, `ui:deadpaths`, `forge studio --force-takeover`, or
   anything that binds ports 4123/4124 or git-resets the tree.
 - Do NOT edit any file under the repo except `<OUT>/**` (the campaign/output dir you are given) (findings, scripts, screenshots). Read source
-  freely (forge-ui/, cli/ui-bridge.ts, cli/, orchestrator/, studio/, skills/) to explain root causes.
+  freely (forge-ui/, apps/forge/ui-bridge.ts, cli/, orchestrator/, studio/, skills/) to explain root causes.
 - Drive the UI with node + playwright-core: `import {...} from './scripts/ui-walkthrough/lib.mjs'` (run scripts
   from repo root `/home/parso/forge`, e.g. `node <OUT>/explore/<cluster>/probe1.mjs`). Read that file
   first (60 lines). Baseline crawl of all routes is in `<OUT>/explore/crawl.json` +
