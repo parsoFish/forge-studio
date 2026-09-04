@@ -72,3 +72,31 @@ never import each other; a shared symbol goes down to `kernel` or `contracts`).
 `POST /api/studio/kbs/:id/cleanup/start` looks like a KB route and is not one: it mints
 an interactive session and rides the generic turn spine. It is handed off for the same
 reason.
+
+## The session-status port, and why it stays generic
+
+`SessionStatusIoPort` (`kb-drain-model.ts`) is how this package reaches
+`guardedReadSessionStatus` / `guardedWriteSessionStatus` without importing
+`@forge/sessions`: knowledge is rank 2, sessions is rank 4, so the package
+declares the shape and `apps/forge` supplies the functions (M4 ruling 99). The
+port-type annotation on the real binding is the drift check between the two
+sides, exactly as it is for `KbDrainRunFixTurnFn`.
+
+**Both members are generic, and that is load-bearing.** The real functions are
+generic and the one read site instantiates `S` with a real status shape. A port
+typed to a concrete object would force a cast at that site — and that site sits
+inside `approveKbCleanup`'s SYNC INVARIANT span, where a cast is precisely the
+quiet weakening the guard exists to prevent. The port is allowed to be less
+convenient than the function; it is not allowed to be less typed.
+
+**Why the pair was not pushed down into kernel instead**, which looks cheaper:
+`guardedWriteSessionStatus` enforces the sticky-cancel refusal
+(`cancelledPhaseWins`, `CANCELLED_PHASE`), so kernel would inherit sessions'
+lifecycle vocabulary — ruling 86's mistake through another door.
+
+**Three functions take it, not ten call sites.** `approveKbCleanup` (via its
+existing opts bag), `mintKbCleanupDraftSession` and
+`mintProjectBrainSeedingSession`. Each refuses BY NAME when the port is absent
+rather than writing a session status through an unguarded path — the discipline
+`runFixTurn`'s absence already follows.
+

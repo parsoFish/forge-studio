@@ -10,25 +10,9 @@ import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, symlin
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
-import {
-  runStructuredTurn,
-  runAgentTurn,
-  parseFencedJson,
-  readSessionStatus,
-  writeSessionStatus,
-  makeHeartbeatWriter,
-  makeThinkingSink,
-  makeReasoningSink,
-  REDACTED_THINKING_MARKER,
-  THINKING_CAPPED_MARKER,
-  REASONING_CAPPED_MARKER,
-  SINK_ROW_CAP,
-  MAX_THINKING_TEXT,
-  makeWriteRootCanUseTool,
-  type TextSinkContext,
-  type QueryFn,
-  type WriteRootCanUseTool,
-} from '../../interactive-session.ts';
+import { runStructuredTurn, runAgentTurn, makeHeartbeatWriter, makeThinkingSink, makeReasoningSink, REDACTED_THINKING_MARKER, THINKING_CAPPED_MARKER, REASONING_CAPPED_MARKER, SINK_ROW_CAP, MAX_THINKING_TEXT, makeWriteRootCanUseTool, type TextSinkContext, type QueryFn, type WriteRootCanUseTool } from '../../interactive-session.ts';
+import { parseFencedJson } from '../../session-status-io.ts';
+import { readSessionStatus, writeSessionStatus } from '../../interactive-session.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 const MODEL = 'claude-sonnet-4-6';

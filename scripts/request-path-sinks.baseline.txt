@@ -574,10 +574,10 @@ packages/sessions/interactive-finalizers.ts openSync 2
 packages/sessions/interactive-finalizers.ts readdirSync 1
 packages/sessions/interactive-finalizers.ts realpathSync 1
 packages/sessions/interactive-session.ts existsSync 2
-packages/sessions/interactive-session.ts mkdirSync 4
-packages/sessions/interactive-session.ts readFileSync 3
+packages/sessions/interactive-session.ts mkdirSync 2
+packages/sessions/interactive-session.ts readFileSync 1
 packages/sessions/interactive-session.ts realpathSync 2
-packages/sessions/interactive-session.ts writeFileSync 4
+packages/sessions/interactive-session.ts writeFileSync 2
 packages/sessions/kinds/architect-critic.ts existsSync 1
 packages/sessions/kinds/architect-critic.ts readFileSync 2
 packages/sessions/kinds/architect-plan.ts mkdirSync 1
@@ -613,6 +613,9 @@ packages/sessions/kinds/kind-turn.ts rmSync 1
 packages/sessions/kinds/project-brain.ts mkdirSync 1
 packages/sessions/session-readability.ts readFileSync 1
 packages/sessions/session-resolution.ts readdirSync 1
+packages/sessions/session-status-io.ts mkdirSync 2
+packages/sessions/session-status-io.ts readFileSync 2
+packages/sessions/session-status-io.ts writeFileSync 2
 packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
 packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
 packages/sessions/studio/session-artifact-derivers.ts realpathSync 6

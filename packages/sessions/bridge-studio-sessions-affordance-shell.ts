@@ -10,7 +10,7 @@ import { sendJson, guardedWriteFile, type StudioContext } from '@forge/kernel';
 import type { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import type { SessionAffordance, SessionAffordanceKind } from './studio/session-kinds-affordances.ts';
-import { guardedWriteSessionStatus } from './interactive-session.ts';
+import { guardedWriteSessionStatus } from './session-status-io.ts';
 import type { SpawnTurnOutcome } from './bridge-studio-session-helpers.ts';
 import { MAX_ANSWER_FIELD_BYTES } from './session-answer-limits.ts';
 

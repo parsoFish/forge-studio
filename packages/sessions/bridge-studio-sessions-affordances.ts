@@ -42,7 +42,7 @@ import {
   type SessionKindDescriptor,
 } from './studio/session-kinds.ts';
 import { deriveSessionAffordances, type SessionAffordance } from './studio/session-kinds-affordances.ts';
-import { guardedReadSessionStatus } from './interactive-session.ts';
+import { guardedReadSessionStatus } from './session-status-io.ts';
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { invalidProjectReason } from './session-resolution.ts';
 import {

@@ -13,6 +13,7 @@
  * noSpawn guard).
  */
 
+import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -413,6 +414,7 @@ test('writeKbDrainStatus is atomic (temp+rename): no leftover .tmp file after a 
  * are the host's policy and live in `cli/*.test.ts`.
  */
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

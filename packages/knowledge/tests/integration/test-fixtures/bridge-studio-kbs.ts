@@ -19,6 +19,7 @@
  * HOST's policy and live in `cli/*.test.ts`.
  */
 
+import { refusingSessionStatusIo } from '../../test-fixtures/session-status-io.ts';
 import {
   mkdirSync,
   mkdtempSync,
@@ -33,6 +34,7 @@ import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../../routes.ts';
 
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

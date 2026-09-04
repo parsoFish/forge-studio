@@ -40,7 +40,7 @@ import {
 } from './bridge-studio-session-helpers.ts';
 import type { DemoBuilderStatus } from './kinds/demo-builder.ts';
 import type { InstructionsStatus } from './kinds/instructions.ts';
-import { guardedReadSessionStatus } from './interactive-session.ts';
+import { guardedReadSessionStatus } from './session-status-io.ts';
 import type { ProjectBrainRow as ProjectBrainStatus } from './bridge-studio-project-brain.ts';
 import { fixedTierForSessionKind } from './session-model-tier.ts';
 import { loadSessionKinds } from './studio/session-kinds.ts';

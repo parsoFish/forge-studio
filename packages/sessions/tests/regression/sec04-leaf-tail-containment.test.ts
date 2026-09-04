@@ -44,7 +44,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
-import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 

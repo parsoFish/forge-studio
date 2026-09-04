@@ -37,7 +37,7 @@ import {
   type SessionKindVariant,
 } from './kind-turn.ts';
 import { guardedFile, guardedWriteFile, sendJson } from '@forge/kernel';
-import { guardedWriteSessionStatus } from '../interactive-session.ts';
+import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import {
   DEMO_KIND_DIR,
   GENERATIONS_DIRNAME,

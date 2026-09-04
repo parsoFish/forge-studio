@@ -85,7 +85,7 @@ import { createLogger, sanitizeError } from '@forge/kernel';
 import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
 import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
-import type { KbDrainFixTurnInput, KbDrainFixTurnResult, KbDrainRunFixTurnFn } from './kb-drain-model.ts';
+import type { KbDrainFixTurnInput, KbDrainFixTurnResult, KbDrainRunFixTurnFn, SessionStatusIoPort } from './kb-drain-model.ts';
 import {
   guardAgentKbEdits,
   snapshotBrainTree,
@@ -251,6 +251,9 @@ export type {
   KbDrainFixTurnInput,
   KbDrainFixTurnResult,
   KbDrainRunFixTurnFn,
+  GuardedReadSessionStatusFn,
+  GuardedWriteSessionStatusFn,
+  SessionStatusIoPort,
 } from './kb-drain-model.ts';
 
 /** Same signature as the internal `writeKbDrainStatus` (below). Injectable
@@ -268,6 +271,11 @@ export type KbDrainOpts = {
   lint?: KbDrainLintFn;
   applyAutoFixes?: KbDrainApplyAutoFixesFn;
   runFixTurn?: KbDrainRunFixTurnFn;
+  /** The guarded session-status IO, as a port (ruling 99) — see
+   *  `SessionStatusIoPort` in kb-drain-model.ts. The drain needs it only to
+   *  mint a kb-cleanup DRAFT session; absent, that mint refuses by name
+   *  rather than writing a status through an unguarded path. */
+  sessionStatusIo?: SessionStatusIoPort;
   persistStatus?: KbDrainPersistFn;
   /** Liveness-heartbeat cadence (W7-B2); 0 disables (unit tests). Defaults
    *  to KB_DRAIN_HEARTBEAT_MS. */
@@ -608,7 +616,10 @@ export async function runKbDrain(
           // The prose edit NEVER lands directly: restore, then park the
           // proposal as an operator-approved kb-cleanup draft.
           revertProseChanges(brainRoot, proseChanges);
-          const minted = mintKbCleanupDraftSession(forgeRoot, kbId, brainDir, brainRoot, f, proseChanges, runId, round);
+          const minted = mintKbCleanupDraftSession(
+            forgeRoot, kbId, brainDir, brainRoot, f, proseChanges, runId, round,
+            opts.sessionStatusIo?.write,
+          );
           if (minted) {
             proseDisposition = 'drafted';
             draftSession = minted;

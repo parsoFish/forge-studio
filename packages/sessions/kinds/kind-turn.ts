@@ -52,16 +52,8 @@ import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
-import {
-  guardedReadSessionStatus,
-  guardedWriteSessionStatus,
-  makeHeartbeatWriter,
-  makeReasoningSink,
-  makeThinkingSink,
-  runAgentTurn,
-  statusWriteRefusalReason,
-  type QueryFn,
-} from '../interactive-session.ts';
+import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus, statusWriteRefusalReason } from '../session-status-io.ts';
 
 /** The operator's revision notes, written beside status.json by a `revise` verdict. */
 const FEEDBACK_FILENAME = 'feedback.md';

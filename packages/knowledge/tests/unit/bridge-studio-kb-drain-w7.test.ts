@@ -8,6 +8,7 @@
  * HTTP routes against a real isolated bridge.
  */
 
+import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -292,6 +293,7 @@ test('runKbDrain — a cancel request lands as a "cancelled" terminal between tu
  * from inside the package would re-test the host through its tenant.
  */
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

@@ -86,12 +86,8 @@
 
 import { join, resolve } from 'node:path';
 
-import {
-  guardedReadSessionStatus,
-  makeHeartbeatWriter,
-  makeReasoningSink,
-  makeThinkingSink,
-} from './interactive-session.ts';
+import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
+import { guardedReadSessionStatus } from './session-status-io.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';

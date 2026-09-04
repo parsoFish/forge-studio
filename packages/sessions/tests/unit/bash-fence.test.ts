@@ -43,7 +43,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { inspectBashCommand } from '../../bash-fence.ts';
-import { makeWriteRootCanUseTool, runAgentTurn, writeSessionStatus, type QueryFn, type WriteRootCanUseTool } from '../../interactive-session.ts';
+import { makeWriteRootCanUseTool, runAgentTurn, type QueryFn, type WriteRootCanUseTool } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { loadSessionKinds, BASH_FENCE_MODES } from '../../studio/session-kinds.ts';
 import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
