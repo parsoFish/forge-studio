@@ -119,7 +119,7 @@ import { startBridge } from '../../apps/forge/ui-bridge.ts';
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
 // happy paths — see the T3 report for the exact captured failure per test).
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from './tests/test-fixtures/flow-fixture.ts';
 import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from './studio/hook-library.ts';
 import { listTemplateLibrary } from './studio/template-library.ts';
 import { SCAFFOLD_READONLY } from './bridge-studio-templates.ts';
@@ -609,7 +609,7 @@ test("WI3-1: finalize (template, category:'planning') body is EXACTLY {project,s
   assert.equal((installed.data as Record<string, unknown>)['category'], undefined, "a real installed template.md must NOT carry the draft-only 'category' routing field");
 
   // Assert the ARTIFACT via listTemplateLibrary itself, not just the write.
-  const entries = listTemplateLibrary(forgeRoot);
+  const entries = listTemplateLibrary(forgeRoot, fixtureFlowSource);
   const entry = entries.find((e) => e.id === 'authored-template');
   assert.ok(entry, 'the finalized template must be listTemplateLibrary-visible immediately');
   assert.equal(entry!.category, 'planning');
@@ -627,7 +627,7 @@ test("WI3-2: finalize (template, category:'demo-output') installs into studio/de
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
 
   assert.ok(existsSync(join(forgeRoot, 'studio', 'demo-elements', 'authored-demo-el.md')), 'studio/demo-elements/authored-demo-el.md must exist on disk');
-  const entry = listTemplateLibrary(forgeRoot).find((e) => e.id === 'authored-demo-el');
+  const entry = listTemplateLibrary(forgeRoot, fixtureFlowSource).find((e) => e.id === 'authored-demo-el');
   assert.ok(entry, 'the finalized demo-output template must be listTemplateLibrary-visible immediately');
   assert.equal(entry!.category, 'demo-output');
 });
@@ -1272,7 +1272,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false, flowSource: fixtureFlowSource }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-authoring URL must return false');
 });
 

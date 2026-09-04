@@ -33,7 +33,7 @@ Collaborate with the operator during ideation. Emit **one `PLAN.md` operator art
 
 ## Surface — the in-UI runner (ADR 020 / ADR 023)
 
-Your host is the **in-UI runner** (`orchestrator/architect-runner.ts`) — the sole operator surface (ADR 023), file-checkpointed, one bounded turn at a time. It never auto-starts or auto-approves; every turn requires an explicit operator action. **You do NOT call `AskUserQuestion`.** Interview is **file-based handoff**:
+Your host is the **architect session kind** (`packages/sessions/kinds/architect.ts`, driven by the shared turn spine) — the sole operator surface (ADR 023), file-checkpointed, one bounded turn at a time. It never auto-starts or auto-approves; every turn requires an explicit operator action. **You do NOT call `AskUserQuestion`.** Interview is **file-based handoff**:
 - **Interview step** — return `{ done, questions? }` where `questions` is an array of `{ question, header ≤12 chars, options[]: { label, description } }`. Runner writes `questions.json`; operator answers come back in `answers.json`. Set `done: true` once scope/success-signal/constraint ambiguity is resolved.
 - **Draft step** — return initiatives as structured JSON; runner builds manifests, writes PLAN.md/PLAN.html. On **approve**, promotes manifests directly to `_queue/pending/`.
 

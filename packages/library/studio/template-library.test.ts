@@ -13,6 +13,7 @@
  * that must stay true (real template/flow/scaffold counts, edges, agents).
  */
 
+import { fixtureFlowSource } from '../tests/test-fixtures/flow-fixture.ts';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -118,7 +119,7 @@ function byId(entries: readonly TemplateLibraryEntry[], id: string): TemplateLib
 
 describe('listTemplateLibrary — real repo union + categories', () => {
   it('AT-1: the real repo surfaces exactly 17 templates: 8 planning + 6 demo-output + 3 project-scaffold', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     assert.equal(entries.length, 17, `got ids: ${entries.map((e) => e.id).join(', ')}`);
     assert.equal(entries.filter((e) => e.category === 'planning').length, 8);
     assert.equal(entries.filter((e) => e.category === 'demo-output').length, 6);
@@ -126,7 +127,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
   });
 
   it('AT-2: entries are sorted by id (deterministic output)', () => {
-    const ids = listTemplateLibrary(REPO_ROOT).map((e) => e.id);
+    const ids = listTemplateLibrary(REPO_ROOT, fixtureFlowSource).map((e) => e.id);
     assert.deepEqual(ids, [...ids].sort((a, b) => a.localeCompare(b)));
   });
 
@@ -134,7 +135,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
     const root = makeForgeRoot();
     writeArtifactTemplate(root, 'fixture-file-kind', { kind: 'file' });
     writeArtifactTemplate(root, 'fixture-git-kind', { kind: 'git-state' });
-    const entries = listTemplateLibrary(root);
+    const entries = listTemplateLibrary(root, fixtureFlowSource);
     // Both artifact-templates land in 'planning' regardless of their differing
     // `kind` value — the directory decides the category, not the field.
     assert.equal(byId(entries, 'fixture-file-kind').category, 'planning');
@@ -142,7 +143,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
   });
 
   it('AT-4: real repo id sets per category are exactly the known on-disk ids', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     const planning = entries.filter((e) => e.category === 'planning').map((e) => e.id).sort();
     const demoOutput = entries.filter((e) => e.category === 'demo-output').map((e) => e.id).sort();
     const scaffold = entries.filter((e) => e.category === 'project-scaffold').map((e) => e.id).sort();
@@ -158,7 +159,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
 
 describe('templateDetail', () => {
   it('AT-5: a planning entry\'s detail carries its single .md file, path relative, body verbatim', () => {
-    const detail = templateDetail(REPO_ROOT, 'plan');
+    const detail = templateDetail(REPO_ROOT, 'plan', fixtureFlowSource);
     assert.ok(detail);
     assert.equal(detail!.files.length, 1);
     assert.equal(detail!.files[0].path, 'plan.md');
@@ -167,7 +168,7 @@ describe('templateDetail', () => {
   });
 
   it('AT-6: a demo-output entry\'s detail carries its single .md file, same shape', () => {
-    const detail = templateDetail(REPO_ROOT, 'cli-capture');
+    const detail = templateDetail(REPO_ROOT, 'cli-capture', fixtureFlowSource);
     assert.ok(detail);
     assert.equal(detail!.files.length, 1);
     assert.equal(detail!.files[0].path, 'cli-capture.md');
@@ -176,7 +177,7 @@ describe('templateDetail', () => {
   });
 
   it('AT-7: a project-scaffold entry\'s detail carries the whole file tree, sorted lexicographically', () => {
-    const detail = templateDetail(REPO_ROOT, 'typescript-cli');
+    const detail = templateDetail(REPO_ROOT, 'typescript-cli', fixtureFlowSource);
     assert.ok(detail);
     assert.ok(detail!.files.length > 3, 'a real scaffold has more than a handful of files');
     const paths = detail!.files.map((f) => f.path);
@@ -187,7 +188,7 @@ describe('templateDetail', () => {
   });
 
   it('AT-8: an unknown id returns null (never throws)', () => {
-    assert.equal(templateDetail(REPO_ROOT, 'no-such-template-anywhere'), null);
+    assert.equal(templateDetail(REPO_ROOT, 'no-such-template-anywhere', fixtureFlowSource), null);
   });
 });
 
@@ -205,7 +206,7 @@ describe('D2 — STARTERS_NON_TEMPLATE_DIRS + starters-gap lint', () => {
   });
 
   it('AT-10: the real repo lints clean on the starters-gap check (guard against shipping a red lint)', () => {
-    const findings = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/starters-gap');
+    const findings = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((f) => f.check === 'template-library/starters-gap');
     assert.deepEqual(findings, [], `expected 0 starters-gap findings, got: ${JSON.stringify(findings)}`);
   });
 
@@ -218,7 +219,7 @@ describe('D2 — STARTERS_NON_TEMPLATE_DIRS + starters-gap lint', () => {
     // exclusion list.
     mkdirSync(join(root, 'studio', 'starters', 'widgets'), { recursive: true });
 
-    const findings = lintTemplateLibrary(root).filter((f) => f.check === 'template-library/starters-gap');
+    const findings = lintTemplateLibrary(root, fixtureFlowSource).filter((f) => f.check === 'template-library/starters-gap');
     assert.ok(findings.length > 0, 'expected a starters-gap finding');
     assert.ok(findings.some((f) => f.level === 'error'));
     assert.ok(findings.some((f) => f.message.includes('widgets')), `message must name "widgets", got: ${JSON.stringify(findings)}`);
@@ -231,34 +232,34 @@ describe('D2 — STARTERS_NON_TEMPLATE_DIRS + starters-gap lint', () => {
 
 describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
   it('AT-12: usedBy for "plan" is exactly ["forge-architect:architect→project-manager"]', () => {
-    const entry = byId(listTemplateLibrary(REPO_ROOT), 'plan');
+    const entry = byId(listTemplateLibrary(REPO_ROOT, fixtureFlowSource), 'plan');
     assert.deepEqual(entry.usedBy, ['forge-architect:architect→project-manager']);
   });
 
   it('AT-13: usedBy for "wi-branches" is exactly ["forge-develop:developer-ralph→demo-agent"]', () => {
-    const entry = byId(listTemplateLibrary(REPO_ROOT), 'wi-branches');
+    const entry = byId(listTemplateLibrary(REPO_ROOT, fixtureFlowSource), 'wi-branches');
     assert.deepEqual(entry.usedBy, ['forge-develop:developer-ralph→demo-agent']);
   });
 
   it('AT-14: usedBy for "pr" is exactly ["forge-develop:demo-agent→adversarial-review"]', () => {
-    const entry = byId(listTemplateLibrary(REPO_ROOT), 'pr');
+    const entry = byId(listTemplateLibrary(REPO_ROOT, fixtureFlowSource), 'pr');
     assert.deepEqual(entry.usedBy, ['forge-develop:demo-agent→adversarial-review']);
   });
 
   it('AT-15: usedBy for "review-findings" resolves its gate endpoint as "gate:review" (no agent on that node)', () => {
-    const entry = byId(listTemplateLibrary(REPO_ROOT), 'review-findings');
+    const entry = byId(listTemplateLibrary(REPO_ROOT, fixtureFlowSource), 'review-findings');
     assert.deepEqual(entry.usedBy, ['forge-develop:adversarial-review→gate:review']);
   });
 
   it('AT-16: verdict / work-items / demo-fix-spec travel by band re-entry — zero flow edges, usedBy: []', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
       assert.deepEqual(byId(entries, id).usedBy, [], `${id} must have empty usedBy (no DAG edge carries it)`);
     }
   });
 
   it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (2)', () => {
-    const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'planning');
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((e) => e.category === 'planning');
     assert.ok(entries.length > 0);
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'studio/flows/*/flow.yaml');
@@ -268,8 +269,8 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     }
   });
 
-  it('AT-18: deriveArtifactTemplateUsage(REPO_ROOT) is the same fact, exposed as a standalone Map', () => {
-    const usage = deriveArtifactTemplateUsage(REPO_ROOT);
+  it('AT-18: deriveArtifactTemplateUsage(REPO_ROOT, fixtureFlowSource) is the same fact, exposed as a standalone Map', () => {
+    const usage = deriveArtifactTemplateUsage(REPO_ROOT, fixtureFlowSource);
     assert.deepEqual(usage.get('plan'), ['forge-architect:architect→project-manager']);
     assert.deepEqual(usage.get('review-findings'), ['forge-develop:adversarial-review→gate:review']);
     assert.deepEqual(usage.get('verdict') ?? [], []);
@@ -296,14 +297,14 @@ describe('D3 — demo-output usedBy derivation (project demoProcess)', () => {
 
   it('AT-19: a demo-element referenced by exactly one project\'s demoProcess.element → usedBy: [that project id]; an unreferenced element → []', () => {
     const root = demoOutputFixture();
-    const entries = listTemplateLibrary(root);
+    const entries = listTemplateLibrary(root, fixtureFlowSource);
     assert.deepEqual(byId(entries, 'cli-capture').usedBy, ['proj-with-element']);
     assert.deepEqual(byId(entries, 'narrative').usedBy, []);
   });
 
   it('AT-20: usedByDerivation names the real project.json source and the real discovered-project count', () => {
     const root = demoOutputFixture();
-    const entries = listTemplateLibrary(root).filter((e) => e.category === 'demo-output');
+    const entries = listTemplateLibrary(root, fixtureFlowSource).filter((e) => e.category === 'demo-output');
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'projects/*/.forge/project.json (demoProcess)');
       assert.equal(e.usedByDerivation.scanned, 2, `expected 2 discovered projects for "${e.id}"`);
@@ -324,7 +325,7 @@ describe('D3 — demo-output usedBy derivation (project demoProcess)', () => {
 
 describe('D3 — project-scaffold usedBy is honestly empty (appType is not persisted)', () => {
   it('AT-22: the real repo\'s scaffold entries carry usedBy: [] and a non-empty usedByDerivation.source naming what was checked', () => {
-    const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'project-scaffold');
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((e) => e.category === 'project-scaffold');
     assert.equal(entries.length, 3);
     for (const e of entries) {
       assert.deepEqual(e.usedBy, []);
@@ -347,7 +348,7 @@ describe('D3 — project-scaffold usedBy is honestly empty (appType is not persi
       'utf8',
     );
 
-    const entry = byId(listTemplateLibrary(root), 'typescript-cli');
+    const entry = byId(listTemplateLibrary(root, fixtureFlowSource), 'typescript-cli');
     assert.deepEqual(entry.usedBy, [], 'a coincidental file-shape match must never populate usedBy');
   });
 });
@@ -359,18 +360,18 @@ describe('D3 — project-scaffold usedBy is honestly empty (appType is not persi
 
 describe('D4 — producer/consumer cross-check', () => {
   it('AT-24: plan / wi-branches / pr / review-findings are all edge-backed and agree → endpointsVerified: true, no lint finding', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     for (const id of ['plan', 'wi-branches', 'pr', 'review-findings']) {
       assert.equal(byId(entries, id).endpointsVerified, true, `${id} must be endpointsVerified: true`);
     }
-    const mismatchFindings = lintTemplateLibrary(REPO_ROOT).filter(
+    const mismatchFindings = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter(
       (f) => f.check === 'template-library/endpoint-mismatch' && ['plan', 'wi-branches', 'pr', 'review-findings'].some((id) => f.object.includes(id)),
     );
     assert.deepEqual(mismatchFindings, []);
   });
 
   it('AT-25: declaredProducer/declaredConsumer are carried VERBATIM from frontmatter — "review-findings" consumer stays the bare string "review", never normalized to "gate:review"', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     const plan = byId(entries, 'plan');
     assert.equal(plan.declaredProducer, 'architect');
     assert.equal(plan.declaredConsumer, 'project-manager');
@@ -384,17 +385,17 @@ describe('D4 — producer/consumer cross-check', () => {
     // (the one DAG edge that carried it) was retired — the template stays
     // registered for authored flows, so unverifiable-endpoints is the
     // honest classification, same as the band-re-entry three.
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.equal(byId(entries, id).endpointsVerified, false, `${id} must be endpointsVerified: false (unverifiable)`);
     }
-    const flags = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/unverifiable-endpoints');
+    const flags = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((f) => f.check === 'template-library/unverifiable-endpoints');
     assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
     assert.ok(flags.every((f) => f.level === 'flag'));
     for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
     }
-    const errors = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/endpoint-mismatch' && f.level === 'error');
+    const errors = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((f) => f.check === 'template-library/endpoint-mismatch' && f.level === 'error');
     assert.deepEqual(errors, [], 'the real repo must not carry any endpoint-mismatch errors');
   });
 
@@ -411,9 +412,9 @@ describe('D4 — producer/consumer cross-check', () => {
       }),
     );
 
-    const entry = byId(listTemplateLibrary(root), 'mismatched');
+    const entry = byId(listTemplateLibrary(root, fixtureFlowSource), 'mismatched');
     assert.equal(entry.endpointsVerified, false, 'a contradicting declaration must not be reported as verified');
-    const findings = lintTemplateLibrary(root).filter((f) => f.check === 'template-library/endpoint-mismatch');
+    const findings = lintTemplateLibrary(root, fixtureFlowSource).filter((f) => f.check === 'template-library/endpoint-mismatch');
     assert.ok(findings.some((f) => f.level === 'error' && f.message.includes('mismatched')));
   });
 
@@ -429,7 +430,7 @@ describe('D4 — producer/consumer cross-check', () => {
         edges: '  - { from: a, to: review-gate, artifact: gate-matched }',
       }),
     );
-    const okEntry = byId(listTemplateLibrary(rootOk), 'gate-matched');
+    const okEntry = byId(listTemplateLibrary(rootOk, fixtureFlowSource), 'gate-matched');
     assert.equal(okEntry.endpointsVerified, true, 'declared consumer equal to the bare gate node id must verify');
 
     const rootBad = makeForgeRoot('template-library-gate-bad-');
@@ -443,9 +444,9 @@ describe('D4 — producer/consumer cross-check', () => {
         edges: '  - { from: a, to: review-gate, artifact: gate-mismatched }',
       }),
     );
-    const badEntry = byId(listTemplateLibrary(rootBad), 'gate-mismatched');
+    const badEntry = byId(listTemplateLibrary(rootBad, fixtureFlowSource), 'gate-mismatched');
     assert.equal(badEntry.endpointsVerified, false);
-    const findings = lintTemplateLibrary(rootBad).filter((f) => f.check === 'template-library/endpoint-mismatch');
+    const findings = lintTemplateLibrary(rootBad, fixtureFlowSource).filter((f) => f.check === 'template-library/endpoint-mismatch');
     assert.ok(findings.some((f) => f.level === 'error' && f.message.includes('gate-mismatched')));
   });
 });
@@ -457,13 +458,13 @@ describe('D4 — producer/consumer cross-check', () => {
 
 describe('D5 — format / provenance / definitionRef', () => {
   it('AT-29: planning format is the source ArtifactTemplate.kind, verbatim', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     assert.equal(byId(entries, 'plan').format, 'file');
     assert.equal(byId(entries, 'wi-branches').format, 'git-state');
   });
 
   it('AT-30: demo-output format is the source DemoElementDefinition.phase, verbatim, for every real element', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     const expected: Record<string, string> = {
       'api-verify': 'verify',
       'cli-capture': 'capture',
@@ -478,20 +479,20 @@ describe('D5 — format / provenance / definitionRef', () => {
   });
 
   it('AT-31: project-scaffold format is the fixed literal "directory tree"', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     assert.equal(byId(entries, 'typescript-cli').format, 'directory tree');
     assert.equal(byId(entries, 'typescript-api').format, 'directory tree');
   });
 
   it('AT-32: provenance is category-level, pinned exactly, identical across every entry in a category', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     for (const e of entries.filter((x) => x.category === 'planning')) assert.equal(e.provenance, 'studio/artifact-templates');
     for (const e of entries.filter((x) => x.category === 'demo-output')) assert.equal(e.provenance, 'studio/demo-elements');
     for (const e of entries.filter((x) => x.category === 'project-scaffold')) assert.equal(e.provenance, 'studio/starters/projects');
   });
 
   it('AT-33: definitionRef is the entry-specific, repo-root-relative path', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     assert.equal(byId(entries, 'plan').definitionRef, 'studio/artifact-templates/plan.md');
     assert.equal(byId(entries, 'test-evidence').definitionRef, 'studio/demo-elements/test-evidence.md');
     assert.equal(byId(entries, 'typescript-api').definitionRef, 'studio/starters/projects/typescript-api');
@@ -504,7 +505,7 @@ describe('D5 — format / provenance / definitionRef', () => {
 
 describe('D6 — previewKind mapping', () => {
   it('AT-34: the previewKind mapping is pinned exactly, across every real entry', () => {
-    const entries = listTemplateLibrary(REPO_ROOT);
+    const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     const expected: Record<string, string> = {
       plan: 'doc', // planning, kind: file
       'wi-branches': 'mock', // planning, kind: git-state
@@ -535,7 +536,7 @@ describe('D6 — previewKind mapping', () => {
     writeDemoElement(root, 'clean-element', { phase: 'verify' });
 
     let entries: TemplateLibraryEntry[] = [];
-    assert.doesNotThrow(() => { entries = listTemplateLibrary(root); }, 'one malformed demo-element must not crash the whole listing');
+    assert.doesNotThrow(() => { entries = listTemplateLibrary(root, fixtureFlowSource); }, 'one malformed demo-element must not crash the whole listing');
 
     const clean = entries.find((e) => e.id === 'clean-element');
     assert.ok(clean, 'the clean sibling must still be reported');
@@ -561,7 +562,7 @@ describe('D7 — malformed definitions surface with error; duplicate ids are a l
     writeArtifactTemplate(root, 'clean-template', {});
 
     let entries: TemplateLibraryEntry[] = [];
-    assert.doesNotThrow(() => { entries = listTemplateLibrary(root); });
+    assert.doesNotThrow(() => { entries = listTemplateLibrary(root, fixtureFlowSource); });
 
     assert.ok(entries.some((e) => e.id === 'clean-template'), 'the clean sibling must still be reported');
     // The broken file has no parseable id — it must still surface (e.g. keyed by
@@ -575,11 +576,11 @@ describe('D7 — malformed definitions surface with error; duplicate ids are a l
     writeArtifactTemplate(root, 'collision', {});
     writeDemoElement(root, 'collision', {});
 
-    const entries = listTemplateLibrary(root).filter((e) => e.id === 'collision');
+    const entries = listTemplateLibrary(root, fixtureFlowSource).filter((e) => e.id === 'collision');
     assert.equal(entries.length, 2, 'both the planning and demo-output entries must surface, neither dropped nor merged');
     assert.deepEqual(entries.map((e) => e.category).sort(), ['demo-output', 'planning']);
 
-    const findings = lintTemplateLibrary(root).filter((f) => f.check === 'template-library/duplicate-id');
+    const findings = lintTemplateLibrary(root, fixtureFlowSource).filter((f) => f.check === 'template-library/duplicate-id');
     assert.ok(findings.some((f) => f.level === 'error' && f.message.includes('collision')));
   });
 });

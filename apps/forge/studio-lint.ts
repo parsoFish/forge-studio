@@ -30,6 +30,7 @@
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
 
+import { libraryFlowSource } from './library-flow-source.ts';
 import { libraryAgentFacts } from './library-agent-facts.ts';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -568,7 +569,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
 
   try {
-    findings.push(...lintTemplateLibrary(root));
+    findings.push(...lintTemplateLibrary(root, libraryFlowSource));
   } catch (err) {
     findings.push({
       level: 'error',

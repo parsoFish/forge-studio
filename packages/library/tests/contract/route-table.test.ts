@@ -58,10 +58,11 @@ import assert from 'node:assert/strict';
 
 import { libraryRoutes } from '../../routes.ts';
 import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';
+import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts';
 
 // The table's SHAPE is what this file pins, and no entry's shape depends on
 // what the deps carry — one built table serves every case here.
-const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-root'), isSdkAvailable: () => false });
+const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-root'), isSdkAvailable: () => false, flowSource: fixtureFlowSource });
 
 /**
  * The 31 routes the seven dispatchers matched at `c323dc04`, in the order
