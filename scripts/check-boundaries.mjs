@@ -62,6 +62,20 @@ const LEGACY = /^(orchestrator|cli|loops)\//;
 const LEGACY_SHIM = /^orchestrator\/_pkg\//;
 /** The studio app. `forge-ui/` was its path until the M2 move. */
 const STUDIO = /^apps\/studio\//;
+/**
+ * The ASSEMBLY — the one tree that is allowed to know about everything, because
+ * knowing about everything is what an assembly is FOR: it binds each package's
+ * factory into a running bridge (`makeRouteTable(deps)`, ruling 59).
+ *
+ * It is named here because the M4-flows host carve moves `cli/`'s five modules
+ * into it, and without this class the move would have been a BLINDING rather
+ * than a closure (ruling 116). `packages/* -> cli/*` is a violation everyone can
+ * see in the table; the same edge re-pointed at `apps/forge/` would have matched
+ * no rule at all and vanished — a package would be importing the assembly, the
+ * wrong direction, and the table would have reported 38 fewer violations as
+ * though they had been fixed.
+ */
+const ASSEMBLY = /^apps\/forge\//;
 const PACKAGE = /^packages\/([^/]+)\//;
 
 /**
@@ -75,6 +89,16 @@ export function classify(from, to) {
 
   // 1. packages never import orchestrator/ cli/ loops/
   if (fromPkg && LEGACY.test(to)) return 'package-to-legacy';
+
+  // 1b. packages never import the ASSEMBLY either (ruling 116). A package
+  //     reaching up into `apps/forge/` is the same defect as reaching into
+  //     `cli/` — it inverts the direction the assembly exists to provide — so
+  //     it stays a named, visible violation instead of matching no rule.
+  if (fromPkg && ASSEMBLY.test(to)) return 'package-to-assembly';
+
+  // 1c. the assembly may import every package (that is its job), but reaching
+  //     DOWN into a legacy tree is debt with an owner, and stays visible.
+  if (ASSEMBLY.test(from) && LEGACY.test(to)) return 'assembly-to-legacy';
 
   // 2. apps/studio imports contracts only
   if (STUDIO.test(from)) {

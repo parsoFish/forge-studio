@@ -87,8 +87,75 @@ test('rule 4 — a package imports strictly lower ranks only', () => {
   assert.equal(classify('packages/flows/a.ts', 'packages/flows/b.ts'), null, 'intra-package is free');
 });
 
+test('rule 1b — a package may never import the ASSEMBLY (ruling 116)', () => {
+  // The M4-flows host carve moves `cli/`'s modules into `apps/forge/`. Without
+  // this rule the 38 `package-to-legacy` rows pointing at `cli/` would have
+  // matched NO rule at their new path and vanished from the table — read as 38
+  // violations fixed when nothing had been fixed. A package reaching up into
+  // the assembly is the same inverted direction as reaching into `cli/`.
+  assert.equal(classify('packages/kernel/index.ts', 'apps/forge/routes.ts'), 'package-to-assembly');
+  assert.equal(classify('packages/flows/bridge-hooks.ts', 'apps/forge/ui-bridge.ts'), 'package-to-assembly');
+});
+
+test('rule 1b — the assembly may import every package, because that is what an assembly IS', () => {
+  // The other half of ruling 116, and the half a one-sided rule would get
+  // wrong: `apps/forge` binding each package's factory into a running bridge
+  // (`makeRouteTable(deps)`, ruling 59) is the DESIGN, not debt. If this ever
+  // returned a rule name, the carve would have traded 153 real closures for 153
+  // new violations and the assembly could not do its job.
+  assert.equal(classify('apps/forge/routes.ts', 'packages/flows/bridge-hooks.ts'), null);
+  assert.equal(classify('apps/forge/ui-bridge.ts', 'packages/sessions/routes.ts'), null);
+  assert.equal(classify('apps/forge/cli.ts', 'packages/contracts/studio/types.ts'), null);
+});
+
+test('rule 1c — the assembly reaching DOWN into a legacy tree stays visible', () => {
+  // Debt with an owner (M5-A), not a free pass. Before this rule the
+  // assembly's own 14 edges into `orchestrator/` and `cli/` matched nothing and
+  // were unmeasured — the table said the assembly was clean because no rule
+  // could see it.
+  assert.equal(classify('apps/forge/routes.ts', 'orchestrator/studio/registry.ts'), 'assembly-to-legacy');
+  assert.equal(classify('apps/forge/cli.ts', 'cli/studio-lint.ts'), 'assembly-to-legacy');
+  assert.equal(classify('apps/forge/x.ts', 'loops/y.ts'), 'assembly-to-legacy');
+});
+
 test('an unknown package name is a failure, not a free pass', () => {
   assert.equal(classify('packages/typo/x.ts', 'packages/kernel/y.ts'), 'unknown-package');
+});
+
+test('the baseline names only rule kinds the checker can actually produce', () => {
+  // Anti-blinding, and deliberately NOT a floor on any kind's COUNT: bead 5.49
+  // removed the `violations >= 1` floor precisely because a floor on debt goes
+  // red at the moment the campaign succeeds. What must never happen instead is
+  // a baseline row keyed to a rule name `classify()` cannot return — a typo, or
+  // a kind renamed on one side only. Such a row matches nothing forever: it is
+  // reported as stale if you are lucky and silently carried if you are not.
+  const KINDS = new Set([
+    'package-to-legacy',
+    'package-to-assembly',
+    'assembly-to-legacy',
+    'studio-beyond-contracts',
+    'legacy-to-package-not-via-shim',
+    'package-layer-order',
+    'unknown-package',
+  ]);
+  // Every kind in the set is REACHABLE — a name nothing can produce is as dead
+  // as a baseline row nothing can match, so the vocabulary is proven, not
+  // asserted. `unknown-package` and the two new kinds included.
+  const produced = new Set([
+    classify('packages/flows/x.ts', 'cli/y.ts'),
+    classify('packages/flows/x.ts', 'apps/forge/y.ts'),
+    classify('apps/forge/x.ts', 'orchestrator/y.ts'),
+    classify('apps/studio/lib/x.ts', 'orchestrator/y.ts'),
+    classify('cli/x.ts', 'packages/kernel/y.ts'),
+    classify('packages/contracts/x.ts', 'packages/flows/y.ts'),
+    classify('packages/nosuchpkg/x.ts', 'packages/kernel/y.ts'),
+  ]);
+  assert.deepEqual([...produced].sort(), [...KINDS].sort(),
+    'every rule kind the baseline may use must be producible by classify(), and vice versa');
+
+  const rows = JSON.parse(readFileSync(BASELINE, 'utf8')) as string[];
+  const unknown = [...new Set(rows.map((r) => r.split('|')[0]!))].filter((k) => !KINDS.has(k));
+  assert.deepEqual(unknown, [], `baseline rows keyed to a rule the checker cannot produce: ${unknown.join(', ')}`);
 });
 
 test('the real tree is at its baseline', () => {
@@ -146,6 +213,27 @@ test('it FAILS on a NEW studio → legacy import (the defect it exists for)', ()
     assert.equal(code, 1, `a new apps/studio -> orchestrator import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__boundary_probe__\.ts/);
+  } finally {
+    rmSync(victim, { force: true });
+  }
+});
+
+test('it FAILS on a NEW package -> assembly import (ruling 116, driven through the real cruise)', () => {
+  // The unit tests above prove `classify()`; this proves the RULE IS WIRED —
+  // that a real edge in a real cruise reaches it. A rule that classifies
+  // correctly but is never consulted is the same blindness by another door.
+  //
+  // The victim is planted and removed here, in the live tree, because
+  // dependency-cruiser must cruise the real graph to produce the edge at all.
+  // That is known-flake #6's shape and it is why this file's probes are named
+  // `__…_probe__` and deleted in a `finally`.
+  const victim = join(ROOT, 'packages/kernel/__assembly_probe__.ts');
+  writeFileSync(victim, "import '../../apps/forge/routes.ts';\nexport const probe = 1;\n");
+  try {
+    const { code, out } = run();
+    assert.equal(code, 1, `a new packages/kernel -> apps/forge import must fail — got exit 0:\n${out}`);
+    assert.match(out, /package-to-assembly/);
+    assert.match(out, /__assembly_probe__\.ts/);
   } finally {
     rmSync(victim, { force: true });
   }
