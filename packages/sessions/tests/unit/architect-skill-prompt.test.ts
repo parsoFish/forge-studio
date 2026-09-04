@@ -49,11 +49,24 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import {
   runArchitectTurn,
-  writeStatus,
   type ArchitectStatus,
   type QueryFn,
 } from '../../kinds/architect.ts';
 import { createLogger } from '@forge/kernel';
+
+// The architect's raw `readStatus`/`writeStatus` pair was deleted with the M4
+// exit door (ruling 129): it had no production caller and was the unguarded
+// `join(sessionDir, 'status.json')` shape that `guardedWriteStatus` (SEC-04)
+// exists to close. This fixture only PLANTS a status file, so it writes one
+// directly — behaviour identical to the deleted helper, `updated_at` stamp
+// included — rather than keeping a production symbol alive for tests.
+function writeStatus(sessionDir: string, status: ArchitectStatus): string {
+  mkdirSync(sessionDir, { recursive: true });
+  const p = join(sessionDir, 'status.json');
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
 
 /** Anchored on FORGE_ROOT, not a `..`/HERE chain (COMMON §15.14) — the fourth
  *  such anchor this wave. Was `architect-runner.ts` beside this file before the

@@ -190,11 +190,40 @@ test('the driver refuses a status advance over a cancelled phase, naming the rea
   }
 });
 
-test('the architect kind declares no status writer of its own — it reaches the seam above', () => {
+/**
+ * LOCK THE PROPERTY, NOT THE IDENTIFIER (COMMON §15.141).
+ *
+ * This test used to assert that the string `function writeArchitectStatus(`
+ * was absent from `kinds/architect.ts`. It had NEVER MATCHED ANYTHING: no
+ * symbol in the repo was ever named that. Meanwhile the private status writer
+ * it was written to forbid sat ten lines below the assertion, spelled
+ * `writeStatus` — an unguarded `join(sessionDir, 'status.json')` +
+ * `writeFileSync`, exactly the SEC-04 shape `guardedWriteStatus` exists to
+ * close, and exactly the "reaches past the seam" behaviour named in the old
+ * message. A regex lock on one spelling is satisfied by any other spelling.
+ *
+ * The property is: `kinds/architect.ts` names no `status.json` leaf of its
+ * own. Every architect status read and write goes through the guarded pair in
+ * `architect-session.ts`, which routes the WHOLE path — leaf included —
+ * through `guardedFile`. Comments are stripped before the probe so the
+ * module's prose may still discuss `status.json` (COMMON §15.112).
+ *
+ * The pair this replaced would have FAILED this assertion on both its lines.
+ */
+test('the architect kind names no status.json leaf of its own — every status read and write reaches the guarded seam', () => {
   const src = readFileSync(new URL('../../kinds/architect.ts', import.meta.url), 'utf8');
-  assert.equal(
-    /function writeArchitectStatus\s*\(/.test(src), false,
-    'kinds/architect.ts must not re-declare a private status writer — that is how it missed the sticky-cancel seam for a whole wave',
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((l) => l.replace(/(^|[^:'"`])\/\/.*$/, '$1'))
+    .join('\n');
+  const offenders = code
+    .split('\n')
+    .map((l, i) => [i + 1, l] as const)
+    .filter(([, l]) => /['"`]status\.json['"`]/.test(l));
+  assert.deepEqual(
+    offenders, [],
+    `kinds/architect.ts must not name the status.json leaf under ANY identifier — a raw join(sessionDir, 'status.json') is the SEC-04 shape guardedReadStatus/guardedWriteStatus exist to close, and a private writer under any name is how the sticky-cancel seam was missed for a whole wave. Route status access through the guarded pair in architect-session.ts. Offending lines: ${JSON.stringify(offenders)}`,
   );
   assert.equal(
     src.split('\n').filter((l) => /^\s*guardedWriteStatus\(/.test(l)).length, 0,
