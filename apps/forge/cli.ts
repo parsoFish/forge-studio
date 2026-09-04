@@ -30,8 +30,8 @@ import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayout, resolveGuardedPath, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
-import { bandAgentDeps } from './band-agent-deps.ts';
-import { architectManifestPorts } from './session-kind-deps.ts';
+import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
+
 import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
 import { cmdProjectReset } from '@forge/projects/reset.ts';
 import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
@@ -104,7 +104,7 @@ process.chdir(FORGE_ROOT);
     case 'demo-builder':
       return await cmdDemoBuilder(args.slice(1));
     case 'agent':
-      return await cmdAgent(args.slice(1), FORGE_ROOT, { band: bandAgentDeps, sessionKind: { manifestPorts: architectManifestPorts } });
+      return await cmdAgent(args.slice(1), FORGE_ROOT, AGENT_DISPATCH_DEPS);
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'demo':
@@ -516,7 +516,7 @@ async function cmdArchitect(rest: string[]): Promise<void> {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdArchitectRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['architect', ...rest], FORGE_ROOT);
+  return cmdAgentRun(['architect', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +544,7 @@ async function cmdProjectBrain(rest: string[]): Promise<void> {
 // above) — behavior (the combined-arg-check quirk, error text, exit codes,
 // printed summary) is unchanged.
 async function cmdProjectBrainRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['project-brain', ...rest], FORGE_ROOT);
+  return cmdAgentRun(['project-brain', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
 }
 
 /**
@@ -698,7 +698,7 @@ function cmdConstraints(rest: string[]): void {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdInstructionsRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['instructions', ...rest], FORGE_ROOT);
+  return cmdAgentRun(['instructions', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +727,7 @@ async function cmdDemoBuilder(rest: string[]): Promise<void> {
 // R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
 // above) — behavior (error text, exit codes, printed summary) is unchanged.
 async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['demo-builder', ...rest], FORGE_ROOT);
+  return cmdAgentRun(['demo-builder', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
 }
 
 // ── demo + preflight. `demo render` is an agent/dev tool, hidden from operator

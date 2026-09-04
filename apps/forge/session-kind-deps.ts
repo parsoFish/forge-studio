@@ -1,3 +1,5 @@
+import { bandAgentDeps } from './band-agent-deps.ts';
+
 /**
  * The manifest ports a ported session kind needs, bound HERE because this is
  * the one place that may import them (M4 rulings 79 and 81).
@@ -29,3 +31,16 @@ export const architectManifestPorts: ArchitectManifestPorts = {
 
 /** The single port the `roadmap-draft` artifact renderer needs. */
 export const parseManifestPort: ParseManifestPort = parseManifest;
+
+/**
+ * The agent-dispatch deps, defined ONCE (G1 P1) and beside the ports they
+ * carry. Every path that can reach `cmdAgentRun` must pass this — the four
+ * legacy `cmd<X>Run` delegates as well as the generic `case 'agent'` arm.
+ * `spawn-deps-parity.test.ts` is the structural control and carries the full
+ * account of the defect it closes.
+ */
+export const AGENT_DISPATCH_DEPS = {
+  band: bandAgentDeps,
+  sessionKind: { manifestPorts: architectManifestPorts },
+} as const;
+
