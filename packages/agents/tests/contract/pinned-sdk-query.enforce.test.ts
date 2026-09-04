@@ -76,7 +76,7 @@ const WRAPPER_RELATIVE_PATH = 'packages/agents/pinned-sdk-query.ts';
 // existsSync so that `anchor-depth.test.ts`'s anti-typo assertion (every name
 // in this list exists at the real root) stays exact; a resurrected `cli/` file
 // is caught immediately by check-boundaries, whose LEGACY regex still names it.
-const SCANNED_DIRS = ['orchestrator', 'loops', 'packages', 'apps/forge'];
+const SCANNED_DIRS = ['orchestrator', 'packages', 'apps/forge'];
 
 /**
  * The SDK module specifier, assembled so this file's own source never

@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { getPaths } from './queue.ts';
 import { parseManifest, validateManifest, writeManifest } from './manifest.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from '../../apps/forge/bridge-studio.ts';
+import { sendJson, pathOnly, allowedOrigin, sanitizeError } from '@forge/kernel';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import {
@@ -43,7 +43,16 @@ import {
  * DIFFERENT root than the bridge is actually running against (see
  * `packages/flows/manifest-path-guard.ts`'s `ProjectsRootOpt`).
  */
-export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string; projectsRoot: string };
+export type RecoveryContext = {
+  forgeRoot: string;
+  queueRoot: string;
+  logsRoot: string;
+  projectsRoot: string;
+  /** The RESULT of the host's body policy, never the policy itself — the closure
+   *  `kernel/route-entry.ts` declares as `RouteContext.readBody`, whose header
+   *  carries T1 ruling 30's reasoning. */
+  readBody: () => Promise<unknown>;
+};
 
 type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
 
@@ -211,7 +220,7 @@ export async function handleRecoveryRoutes(
     const id = decodeURIComponent(requeueMatch[1]);
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
-      const body = (await readJson(req).catch(() => ({}))) as Record<string, unknown>;
+      const body = (await ctx.readBody().catch(() => ({}))) as Record<string, unknown>;
       const result = runRequeue(id, {
         resetRetries: body['resetRetries'] === true,
         resumeFromDemo: body['resumeFromDemo'] === true,
@@ -226,7 +235,7 @@ export async function handleRecoveryRoutes(
   // POST /api/initiatives — enqueue a fresh manifest from a spec body
   if (method === 'POST' && url === '/api/initiatives') {
     try {
-      const body = (await readJson(req).catch(() => null)) as { manifest?: string } | null;
+      const body = (await ctx.readBody().catch(() => null)) as { manifest?: string } | null;
       if (!body || typeof body.manifest !== 'string') {
         sendJson(res, 400, { error: 'body must be { manifest: "<manifest markdown>" }' }, origin);
         return true;

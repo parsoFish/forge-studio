@@ -71,7 +71,7 @@ import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
 
 /** Roots scanned for spawn sites. `cli/` imports `isSafeRunId` from run-agent
  *  but never the pinned query as a value, so it holds no spawn site. */
-const SCAN_ROOTS = ['orchestrator', 'loops', 'packages', 'apps/forge'];
+const SCAN_ROOTS = ['orchestrator', 'packages', 'apps/forge'];
 
 /**
  * Files that import the pinned SDK query as a VALUE yet legitimately do not

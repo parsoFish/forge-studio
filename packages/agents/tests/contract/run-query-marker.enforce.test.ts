@@ -47,7 +47,7 @@ const ROOT = FORGE_ROOT;
 
 /** Directories scanned for the pass-through invariant. */
 // `cli` dropped by the M4-flows host carve — see pinned-sdk-query.enforce.test.ts.
-const SCANNED_DIRS = ['orchestrator', 'loops', 'packages', 'apps/forge'];
+const SCANNED_DIRS = ['orchestrator', 'packages', 'apps/forge'];
 
 const SOURCE_FILE_RE = /\.(ts|tsx|mts|cts)$/;
 const DECLARATION_FILE_RE = /\.d\.(ts|mts|cts)$/;
