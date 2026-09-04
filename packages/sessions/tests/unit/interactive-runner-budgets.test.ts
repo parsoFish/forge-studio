@@ -40,7 +40,8 @@ import { join } from 'node:path';
 
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../../studio/session-kinds.ts';
-import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';

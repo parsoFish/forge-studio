@@ -88,7 +88,7 @@ import { startBridge } from '../../apps/forge/ui-bridge.ts';
 import { handleStudioSessionsRoutes, type SessionsRouteContext } from './bridge-studio-sessions.ts';
 import { isPseudoProjectAnchor } from './session-resolution.ts';
 import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
-import { guardedWriteSessionStatus } from './interactive-session.ts';
+import { guardedWriteSessionStatus } from './session-status-io.ts';
 import type { ProjectBrainStatus } from './kinds/project-brain.ts';
 
 // ---------------------------------------------------------------------------

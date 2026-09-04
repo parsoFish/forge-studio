@@ -421,3 +421,43 @@ export type KbDrainFixTurnResult = {
 export type KbDrainRunFixTurnFn = (
   input: KbDrainFixTurnInput,
 ) => Promise<KbDrainFixTurnResult & { costUsd: number }>;
+
+/**
+ * The guarded session-status IO this package needs but may not import
+ * (M4 ruling 99). Same shape and same reason as `KbDrainRunFixTurnFn`: the port
+ * is declared HERE in this package's vocabulary and the assembly supplies the
+ * implementation. The type parameters are NOT incidental — see `design.md`
+ * ("The session-status port, and why it stays generic").
+ */
+export type GuardedReadSessionStatusFn = <S>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  leaf?: string,
+) => S | null;
+
+export type GuardedWriteSessionStatusFn = <S extends Record<string, unknown>>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  status: S,
+  leaf?: string,
+) => string | null;
+
+/** The pair, threaded as one value so a caller cannot supply half of it. */
+export type SessionStatusIoPort = {
+  readonly read: GuardedReadSessionStatusFn;
+  readonly write: GuardedWriteSessionStatusFn;
+};
+
+/** Refuse BY NAME when the assembly did not supply the port, rather than
+ *  writing a session status through an unguarded path. The three call sites
+ *  that need it share this one refusal so its wording cannot drift. */
+export function requireSessionStatusIo<T>(fn: T | undefined, caller: string): T {
+  if (!fn) {
+    throw new Error(
+      `${caller}: the guarded session-status port is required — it is declared by @forge/knowledge and ` +
+      'supplied by the assembly (apps/forge threads it through knowledgeRoutes). Refusing rather than ' +
+      'writing a session status through an unguarded path.',
+    );
+  }
+  return fn;
+}

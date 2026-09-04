@@ -26,14 +26,9 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 
-import {
-  runStructuredTurn,
-  writeQuestions,
-  readAnswerRounds,
-  type InterviewQuestion,
-  type InterviewAnswer,
-} from '../interactive-session.ts';
-import { guardedWriteSessionStatus } from '../interactive-session.ts';
+import { runStructuredTurn } from '../interactive-session.ts';
+import { writeQuestions, readAnswerRounds, type InterviewQuestion, type InterviewAnswer } from '../session-status-io.ts';
+import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import { parsePendingQuestions } from '../bridge-studio-sessions.ts';
 import {
   affordanceDryBridgeMarker,
@@ -64,7 +59,7 @@ import {
   stripComposedSeedsFooter,
 } from '@forge/library/instruction-seed-match.ts';
 
-export { type InterviewQuestion } from '../interactive-session.ts';
+export { type InterviewQuestion } from '../session-status-io.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/instructions-creator/SKILL.md (single source)

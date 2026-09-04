@@ -27,7 +27,7 @@ import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolve
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-builder.ts';
 import { GENERATIONS_DIRNAME } from './kinds/demo-session-store.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';
 import { listDemoSessions } from './bridge-studio-session-index.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';

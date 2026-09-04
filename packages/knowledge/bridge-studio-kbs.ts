@@ -32,6 +32,7 @@
  * pins all 17 carved routes so that "carved" and "lost" can never be confused.
  */
 
+import { requireSessionStatusIo } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -40,8 +41,7 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
-import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
+import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
 
 import { classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
@@ -174,8 +174,16 @@ export async function approveKbCleanup(
    * dispatches one turn per agent-tier group; absent, that call refuses by
    * name rather than reporting every finding uncleared.
    */
-  opts: { expectedKbId?: string; runFixTurn?: KbDrainRunFixTurnFn } = {},
+  opts: { expectedKbId?: string; runFixTurn?: KbDrainRunFixTurnFn; sessionStatusIo?: SessionStatusIoPort } = {},
 ): Promise<ApproveKbCleanupOutcome> {
+  // Ruling 99: the guarded status IO arrives as a PORT this package declares
+  // (`SessionStatusIoPort`, kb-drain-model.ts) rather than an import of
+  // `@forge/sessions`, which rank forbids. Aliased once here so the call
+  // sites below read exactly as they did when they were direct imports.
+  const io = requireSessionStatusIo(opts.sessionStatusIo, 'approveKbCleanup');
+  const guardedReadSessionStatus = io.read;
+  const guardedWriteSessionStatus = io.write;
+
   // --- SYNC INVARIANT SPAN START — see header. No await until the
   //     phase:'applying' write below has returned. ---
   const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
@@ -700,9 +708,13 @@ export function mintProjectBrainSeedingSession(
   sessionProject: string,
   kbId: string,
   binding: KbBinding,
+  /** Ruling 99: the guarded status writer as a PORT, never an import of
+   *  `@forge/sessions`. Absent, the mint refuses by name. */
+  guardedWriteSessionStatus?: GuardedWriteSessionStatusFn,
 ): string {
+  const write = requireSessionStatusIo(guardedWriteSessionStatus, 'mintProjectBrainSeedingSession');
   const sessionId = newProjectBrainSessionId();
-  const written = guardedWriteSessionStatus<ProjectBrainSeedingSessionStatus>(
+  const written = write<ProjectBrainSeedingSessionStatus>(
     projectsRoot,
     [sessionProject, '_project-brain', sessionId],
     {

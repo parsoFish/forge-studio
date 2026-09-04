@@ -110,7 +110,8 @@ import {
   type DemoBuilderStatus,
 } from '../../kinds/demo-builder.ts';
 import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../kinds/project-brain.ts';
-import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
 

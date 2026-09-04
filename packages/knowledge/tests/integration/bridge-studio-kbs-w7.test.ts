@@ -5,6 +5,7 @@
  * Part B.
  */
 
+import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -24,6 +25,7 @@ import { deriveKbActiveJob, activeJobReason } from '../../kb-job-state.ts';
  * in `cli/*.test.ts`.
  */
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

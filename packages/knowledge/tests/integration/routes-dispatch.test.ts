@@ -27,6 +27,7 @@
  *     throw and not answer, for a URL no entry owns, or the host cannot fall
  *     through to its remaining switch.
  */
+import { refusingSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync } from 'node:fs';
@@ -45,6 +46,7 @@ import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
  * a handler's response; neither should depend on what flows exist on disk.
  */
 const routes = knowledgeRoutes({
+  sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
   listFlowBandIds: () => ['review-band', 'demo-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route

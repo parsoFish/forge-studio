@@ -16,6 +16,7 @@
  *     to the KB's own brain dir) instead of running a consolidate.
  */
 
+import { testSessionStatusIo } from '../test-fixtures/session-status-io.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -224,6 +225,7 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
       '',
     ].join('\n');
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-t1', {
+      sessionStatusIo: testSessionStatusIo,
       lint: () => ({ findings: [finding] }),
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
@@ -287,6 +289,7 @@ test('W8-F1 — a prose rewrite that ALSO deletes a live link is REFUSED, not dr
     // link, whose target exists.
     const condensed = THEME_BEFORE.split('\n').slice(0, 10).join('\n') + '\n';
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-w8f1', {
+      sessionStatusIo: testSessionStatusIo,
       lint: () => ({ findings: [finding] }),
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
@@ -330,6 +333,7 @@ test('runKbDrain — structural edit within the KB dir is applied, drain reaches
     const fixed = THEME_BEFORE.replace('updated_at: 2026-07-17', 'updated_at: 2026-08-20');
     let turnRan = false;
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-t2', {
+      sessionStatusIo: testSessionStatusIo,
       lint: () => ({ findings: turnRan ? [] : [finding] }),
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: turnRan ? [] : [finding] }),
       runFixTurn: async (input) => {
@@ -389,7 +393,7 @@ function makeDraftSessionRoot(opts: { targetRel: string; blockWritesAt?: string 
 test('approveKbCleanup — a draft-carrying session applies the DRAFT files, not a consolidate', async () => {
   const { root, projectsRoot, sid, themeFile } = makeDraftSessionRoot({ targetRel: 'brain/dkb/themes/x.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, true, JSON.stringify(outcome));
     assert.equal(readFileSync(themeFile, 'utf8'), 'proposed content\n');
     const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
@@ -402,7 +406,7 @@ test('approveKbCleanup — a draft-carrying session applies the DRAFT files, not
 test('approveKbCleanup — a draft target OUTSIDE the session\'s own KB dir is refused, nothing written', async () => {
   const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/other/themes/y.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.equal(readFileSync(join(root, 'brain', 'other', 'themes', 'y.md'), 'utf8'), 'other kb content\n', 'the foreign KB file must be untouched');
   } finally {
@@ -413,7 +417,7 @@ test('approveKbCleanup — a draft target OUTSIDE the session\'s own KB dir is r
 test('approveKbCleanup — a traversal-shaped draft target is refused', async () => {
   const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: '../outside.md' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.ok(!existsSync(join(root, '..', 'outside.md')), 'nothing may be written outside the root');
   } finally {
@@ -435,7 +439,7 @@ test('approveKbCleanup — a draft WRITE failure is never swallowed: ok:false, s
     blockWritesAt: 'brain/dkb/blocked',
   });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as {
       phase: string; apply_error?: string;
@@ -451,7 +455,7 @@ test('approveKbCleanup — a draft WRITE failure is never swallowed: ok:false, s
 test('approveKbCleanup — a draft target that IS the kb brain dir itself is refused', async () => {
   const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/dkb' });
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.equal(outcome.ok === false ? outcome.status : 0, 422);
     const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
@@ -486,7 +490,7 @@ test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY
 
     // NOT awaited: everything up to the first `await` runs in this tick, which
     // is exactly the window the gate was blind in.
-    const pending = approveKbCleanup(root, projectsRoot, ['.kb-ckb', '_kb-cleanup', sid]);
+    const pending = approveKbCleanup(root, projectsRoot, ['.kb-ckb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     const job = deriveKbActiveJob(root, 'ckb');
     assert.ok(job, 'the just-dispatched consolidate must be visible to deriveKbActiveJob immediately');
     assert.equal(job.kind, 'consolidate');
@@ -560,7 +564,7 @@ test('W8-F1 r2 (S1): approving a parked draft REFUSES when the theme gained a re
     const withEdge = readFileSync(themeFile, 'utf8').replace('category: pattern', `category: pattern\nrelated_themes: [${partnerSlug}]`);
     writeFileSync(themeFile, withEdge);
 
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
 
     // THE ASSERTION IS THE ARTIFACT: the edge survives.
     const after = readFileSync(themeFile, 'utf8');
@@ -576,7 +580,7 @@ test('W8-F1 r2 (S1): approving a parked draft REFUSES when the theme gained a re
 test('W8-F1 r2 CONTROL: a draft that is still sound at approve time applies exactly as before', async () => {
   const { root, projectsRoot, sid, themeFile } = makeGraphDraftRoot();
   try {
-    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid], { sessionStatusIo: testSessionStatusIo });
     assert.equal(outcome.ok, true, `the re-audit must refuse stale drafts, not all drafts — got ${JSON.stringify(outcome)}`);
     assert.match(readFileSync(themeFile, 'utf8'), /Condensed\./);
   } finally {

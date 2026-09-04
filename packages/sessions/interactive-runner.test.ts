@@ -105,7 +105,8 @@ import { join, resolve, dirname } from 'node:path';
 import { runInteractiveTurn } from './interactive-runner.ts';
 
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
-import { writeSessionStatus, readSessionStatus, type QueryFn } from './interactive-session.ts';
+import { type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus, readSessionStatus } from './interactive-session.ts';
 import { createLogger } from '@forge/kernel';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -1767,7 +1768,6 @@ test('R4-19-F2 (positive control): the real kb-cleanup descriptor\'s drafting ph
   assert.equal(result.phase, 'awaiting-approval', 'the real kb-cleanup turnSpec\'s drafting row must declare next: awaiting-approval');
   assert.equal(readSessionStatus<KbCleanupTestStatus>(fx.sessionDir)?.phase, 'awaiting-approval', 'status.json on disk must reflect the advanced phase');
 });
-
 
 // ===========================================================================
 // bead forge-eip (W6-CR-3) — the writeRoots fence, driven end to end through

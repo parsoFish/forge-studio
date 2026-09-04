@@ -46,7 +46,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
-import { CANCELLED_PHASE } from './interactive-session.ts';
+import { CANCELLED_PHASE } from './session-status-io.ts';
 // `readJson` stays with the host: body policy is the host's (T1 ruling 30).
 // This import dies when the route takes its body from `ctx.readBody` in the
 // routes carve — it is the last thing holding this file's legacy row open.
@@ -54,7 +54,7 @@ import { readJson } from '../../apps/forge/bridge-studio.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from './interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './session-resolution.ts';
 import { killTrackedTurn } from './bridge-studio-lifecycle.ts';
 

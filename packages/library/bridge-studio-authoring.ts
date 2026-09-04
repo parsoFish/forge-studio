@@ -173,7 +173,7 @@ import {
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 // Static import — `interactive-finalizers.ts` imports only `node:fs`,
 // `node:path` and the path guard (no Claude Agent SDK), so pulling its named
