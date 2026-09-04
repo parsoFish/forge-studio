@@ -60,7 +60,7 @@ Every rule here was measured 2+ times.
 Lanes became real `claude` sessions in tmux, launched by T1 (operator ruling 2026-08-28: operator-pasted sessions put parallelism on the human; in-process subagents cannot nest). Two T1 sessions and 17 lanes ran. The record (`_1.0/ledger.md`, the transcripts) measured the mechanism itself:
 
 - **The pane-paste relay was the single largest failure.** `lanes.sh send` and `launch` printed success over a payload the TUI had staged as `[Pasted text #1]` and never submitted — three instances in one afternoon; a ruling already made sat undelivered and a lane stayed parked **99 minutes**; a launched lane sat at $0.00. The fix (declared-boundary paste + watch the input line drain) shipped green on 9 unit tests and was still wrong in both paths, because the real TUI pads an empty line with U+00A0 — found only by a live check. Six sessions were spent probing delivery. Retired 2026-08-30: T1 and lanes now use Claude Code's cross-session `SendMessage` (a named session is an address; delivery is a tool result; an idle lane wakes on receipt — measured ~20 s), and there is no `send` subcommand to trust.
-- **The pane is not state.** LANE_IDLE was inferred from a `· done H:MM` marker; liveness was once the pane log (an idle TUI redraws its status bar, so a 2 h 12 m idle lane on a finished, passing run never flagged). Retired: `claude agents --json` reports each session `busy` / `idle` / `waiting … blocked`, which `lanes.sh events` reads. (`SendMessage`'s `notify_when_idle` notices are delivered at T1's next turn boundary: three subscriptions made while T1 kept working arrived together ~30 min after the lanes went idle, the moment T1 stopped — so the notice wakes a waiting T1 but cannot interrupt a busy one.)
+- **The pane is not state.** LANE_IDLE was inferred from a `· done H:MM` marker; liveness was once the pane log (an idle TUI redraws its status bar, so a 2 h 12 m idle lane on a finished, passing run never flagged). Retired: `claude agents --json` reports each session's `status`, which `lanes.sh events` reads. (Values measured on Claude Code v2.1.260, 2026-09-04: `busy` · `idle` · `waiting`, the last carrying a `waitingFor` of `permission prompt` or `input needed`. This sentence read `waiting … blocked` until then, and the script matched the string `blocked`, which nothing emits — see the M5 section.) (`SendMessage`'s `notify_when_idle` notices are delivered at T1's next turn boundary: three subscriptions made while T1 kept working arrived together ~30 min after the lanes went idle, the moment T1 stopped — so the notice wakes a waiting T1 but cannot interrupt a busy one.)
 - **T1 polled by hand for ~39 hours before arming its events Monitor** and twice learned a lane had finished because the operator said so; it called raw `tmux` 12 times against 15 `peek`s and 4 Monitor arms. The events monitor was then reading the ledger T1 itself writes (self-echo), and a well-behaved lane that de-registered was the silent one ("a perverse contract for a relay"). Retired: events no longer grep the ledger; they read the roster, tmux and STALL flags; OUTCOME arrives as a message from the lane.
 - **Questions asked in lane windows.** 15 `AskUserQuestion` calls across 9 lanes were answered by the operator inside the lanes' own tmux windows (0.2–58 min each); H2 spend approvals routed through T1's relay were the slow, fragile path, while an operator sitting in an attended (H6) lane was fast. Retired for unattended lanes: a launch-time PreToolUse hook blocks `AskUserQuestion` and points the lane at T1's session name; the operator answers only in T1's session. Attended lanes (`--attended`) keep the tool.
 - **5 of 5 lanes failed to de-register from `ACTIVE`; one corrupted the file.** Three T1 rewrites of the watcher chased the same class (a global arm stamp re-armed by an unrelated lane's clean exit → 79 minutes blind; T1 registering itself → three false self-stalls). Retired: `ACTIVE` is written by `lanes.sh launch/kill` only, arm stamps are per lane, and T1 is never in it.
@@ -80,3 +80,42 @@ Lanes became real `claude` sessions in tmux, launched by T1 (operator ruling 202
 | a T1-authored per-campaign watcher (`watch-lanes.sh`) and hand-written lane addenda | `lanes.sh events` + `lane-protocol.md` |
 | questions asked in a lane's window | PreToolUse hook → `PARK` message → `AskUserQuestion` in T1's session only |
 | `claude --bg` background sessions (considered 2026-08-30) | not adopted: identical blocked-on-dialog behaviour, no operator terminal tab, `claude logs` is raw ANSI; tmux keeps the operator's window and pane log |
+
+## Forge 1.0, M5 session 1 (2026-09-04): what a kickoff actually costs
+
+Measured from the campaign's own session transcripts (`~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`, `message.usage` summed per session; the session ids are in `<campaign>/heartbeat/<lane>.session`). Prompt bytes are `<campaign>/prompts/<lane>.md` on disk.
+
+| lane | prompt B | turn-1 input tok | API calls | total input tok | of which cache_read | output tok |
+|---|---|---|---|---|---|---|
+| m2-b | 6,040 | 68,361 | 573 | 213,234,862 | 212,071,450 | 584,217 |
+| m2-a | 7,803 | 67,901 | 863 | 349,586,209 | 346,686,361 | 833,358 |
+| m3-a | 7,815 | 69,069 | 708 | 278,230,675 | 274,505,938 | 817,827 |
+| harness | 8,548 | 67,606 | 212 | 44,388,162 | 43,740,312 | 250,090 |
+| sessions | 11,621 | 67,224 | 2,118 | 987,297,516 | 982,976,027 | 1,573,224 |
+| library | 12,204 | 66,332 | 1,161 | 613,226,948 | 610,930,014 | 918,160 |
+| knowledge | 12,276 | 70,921 | 810 | 359,070,809 | 355,653,571 | 737,964 |
+| projects | 12,240 | 72,169 | 475 | 132,015,166 | 131,303,573 | 304,423 |
+| agents | 13,144 | 67,662 | 424 | 118,188,155 | 117,375,404 | 391,172 |
+| flows | 15,128 | 66,289 | 1,828 | 915,481,184 | 912,820,030 | 1,182,094 |
+
+Three things follow, and only the third is actionable:
+
+1. **Turn-one input is 66–72 k tokens for every lane, whatever its prompt size.** A 6,040 B prompt cost 68,361 and a 15,128 B prompt cost 66,289. The prompt is 1,500–3,800 tokens — **2–5 % of turn one**, below the noise of the system prompt and tool definitions. Prompt bytes are not the cost, and shortening a kickoff to save tokens is theatre.
+2. **Total input tracks TURNS, not prompt size.** flows: 1,828 API calls → 915 M input. harness: 212 → 44 M. 99 % of every lane's input is `cache_read`: everything admitted to context is re-read on every later call, so a byte admitted once is paid for on every turn that follows.
+3. **What the prompt's READ line NAMED is the cost.** Summed on `61491050`, the corpus an M4 lane was told to read: `docs/roadmaps/1.0.md` 45,213 + the blueprint spec 26,157 + `SPEC.md` 13,390 + `QUARRY.md` 63,498 + `M4-COMMON.md` 101,767 + the lane brief ~17,000 + **`<campaign>/ledger.md` 1,686,743** = **1,953,768 B ≈ 488 k tokens — 130× the prompt it arrived in, and 88 % of it the ledger alone.**
+
+**The rule this bought:** a successor's inputs are its predecessor's **OUTCOME file and named ledger SECTIONS**, never the ledger and never the corpus. `lanes.sh render --outcome <file> --ledger <f> --section '<re>'` appends exactly those under labelled headers and refuses to write a prompt over **24,576 B** — the good case's prompt (flows, 15,128 B) plus headroom for an OUTCOME (~6 KiB) and two sections (~2 KiB): ≈ 6.1 k tokens, ≈ 9 % of a 67 k turn-one context, against 488 k for the corpus. A render that exceeds it is asking for a corpus, which is the thing being replaced.
+
+### The three lane states, measured (bead forge-8vfn.2.31)
+
+A probe lane driven onto each dialog in turn, Claude Code v2.1.260:
+
+| state | `claude agents --json` |
+|---|---|
+| working | `{"status":"busy"}` |
+| turn finished | `{"status":"idle"}` |
+| on a tool permission dialog | `{"status":"waiting","waitingFor":"permission prompt"}` |
+| on an `AskUserQuestion` | `{"status":"waiting","waitingFor":"input needed"}` |
+| on the **trust** dialog | **no row at all** — a live `claude` whose `/proc/<pid>/cwd` is the lane's cwd, unregistered |
+
+There is **no `state` key**, and no value anywhere contains the string `blocked` — which is what `lanes.sh` matched on, so a lane parked on a dialog was reported as launched. The session's transcript is **not** a signal either: the last record while blocked is `{"type":"attachment"}` with no permission marker. The bead recorded the roster as emitting seven keys; it had been sampled with nothing waiting in it, and the "cleanup" it implied would have deleted the live field along with the dead one.
