@@ -33,11 +33,9 @@ const REVIEW_FIX_DEFAULT_ITERATIONS = 15;
 // ---------------------------------------------------------------------------
 
 export type StudioPostContext = StudioContext & {
-  /** The RESULT of the host's body policy, never the policy itself (T1 ruling 30;
-   *  the same closure `kernel/route-entry.ts`'s `RouteContext.readBody` carries).
-   *  The POST arms used to call the assembly's body reader directly, which was two
-   *  `package-to-assembly` boundary rows for a request-parsing decision the host is
-   *  the single place to make. */
+  /** The RESULT of the host's body policy, never the policy itself — the closure
+   *  `kernel/route-entry.ts` declares as `RouteContext.readBody`, whose header
+   *  carries T1 ruling 30's reasoning. */
   readBody: () => Promise<unknown>;
   queueRoot: string;
   projectsRoot: string;
