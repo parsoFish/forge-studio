@@ -202,6 +202,76 @@ test('nested expectations must be satisfied by ONE element, not assembled from t
   assert.equal(v.status, 'red');
 });
 
+// ── M5-B s2: keys the page splits across two SIBLING elements (ruling 163,
+// bead forge-8vfn.9, measured by `_1.0/evidence/m5-b-probe9/`).
+//
+// `/projects/<id>` renders `data-preflight-status` on ContractReadiness's own
+// div and `data-checklist-row`/`data-checklist-status` on ProjectContractPanel
+// `<li>`s. They are siblings: no single element carries both. Reading S1 beat
+// 3's exact key set reported `data-preflight-status` "absent from the page"
+// while a probe reading that key ALONE, on the same page moments later, found
+// it — so the absence was the runner's, and the bead blaming the product for
+// declaring `page-ready` too early is refuted.
+//
+// The relaxation is bounded by SOURCE COUNT, not by convenience: a key exactly
+// one element on the page carries names no competing entity, so reading it
+// from its own element cannot pick the wrong one. A key two elements carry is
+// exactly the gitweave/mdtoc ambiguity above and stays under the together-rule.
+
+/** The live DOM of `/projects/gitweave` right after onboarding (probe9, 2026-09-05). */
+const liveProjectPage = {
+  route: '/projects/gitweave',
+  data: { page: 'projects', 'project-id': 'gitweave', 'page-ready': 'true' },
+  nested: [
+    { section: 'contract-readiness', 'preflight-status': 'hard-fail' },
+    { section: 'contract-checklist', 'checklist-row-count': '5' },
+    { 'checklist-row': 'contract', 'checklist-status': 'absent' },
+    { 'checklist-row': 'instructions', 'checklist-status': 'present' },
+    { 'checklist-row': 'secrets', 'checklist-status': 'absent' },
+  ],
+};
+
+/** S1 beat 3's expectation set, verbatim from the pinned story. */
+const siblingBeat = {
+  act: 'Fill in the form and press "Onboard project →"',
+  expect: {
+    route: '/projects/gitweave',
+    data: {
+      page: 'projects',
+      'project-id': 'gitweave',
+      'page-ready': 'true',
+      'preflight-status': 'hard-fail',
+      'checklist-row': 'contract',
+      'checklist-status': 'absent',
+    },
+  },
+  say: 'Forge measures GitWeave against the contract and reports a hard fail.',
+};
+
+test('a key only ONE element on the page carries is read from it, even when another element answers the rest', () => {
+  // Kills "one best record decides every missing key". The best-covering
+  // record is a checklist `<li>`, which cannot carry `preflight-status` at
+  // all; before this, the beat failed naming a key the page plainly rendered.
+  const v = beatVerdict(siblingBeat, liveProjectPage);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('a key several elements carry is still answered by ONE element, not assembled', () => {
+  // Kills the over-wide fix: `checklist-row` and `checklist-status` are each
+  // carried by three `<li>`s, so "the contract row is present" must be true of
+  // ONE row. `contract` is absent and `instructions` is present; assembling
+  // the pair across the two would report a row that does not exist.
+  const v = beatVerdict(
+    { ...siblingBeat, expect: { ...siblingBeat.expect, data: { ...siblingBeat.expect.data, 'checklist-status': 'present' } } },
+    liveProjectPage,
+  );
+  assert.equal(v.status, 'red');
+  assert.ok(
+    v.failures.some((f) => /checklist-status.*expected "present", got "absent"/.test(f)),
+    v.failures.join(' | '),
+  );
+});
+
 test('a nested expectation nothing on the page carries is still red, and says absent', () => {
   const v = beatVerdict(cardBeat, { route: '/projects', data: { page: 'projects-index' }, nested: [] });
   assert.equal(v.status, 'red');
