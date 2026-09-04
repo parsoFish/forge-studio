@@ -107,8 +107,14 @@
  *     under `cli/`, `orchestrator/`, `packages/` and `apps/`, UNAMBIGUOUS only
  *     — a value read off an HTTP request MEMBER (`body.*`/`params.*`/`query.*`/
  *     `req.*`/`request.*`), a raw leaf below a guard producer's output, or one
- *     of the six bare ids in `SWEEP_MODEL.bareTaint` (the names that are never
- *     server-enumerated outside the declared surface). So in tier 2 a request
+ *     of the SEVEN bare ids in `SWEEP_MODEL.bareTaint` (never server-enumerated
+ *     outside the declared surface). `id` joined for bead 5.36 with the fresh
+ *     numbers G10 requires: re-derived on `5ddd7ecc`, after 5.32 took
+ *     `test-fixtures/` out of the sweep, it surfaces exactly FOUR sites in
+ *     three packages — one fixed at the source (`mint-triggered-initiative.ts`,
+ *     via `guardedFile`), three audited as residuals in
+ *     check-raw-fs-guarded.allowlist.mjs. Before 5.32 it was eight, four of
+ *     them in one fixture file. So in tier 2 a request
  *     value laundered through one of the FOUR EXCLUDED bare ids (`cycleId`,
  *     `initiativeId`, `repoPath`, `runId`) or through an unresolved dir-param
  *     leaf-append is NOT reported — those rules are calibrated for request
@@ -501,7 +507,10 @@ export function sweepModules(root = FORGE_ROOT) {
  * cannot notice the model changing under it.
  */
 export const SWEEP_MODEL = {
-  bareTaint: new Set(['sessionId', 'slug', 'projectId', 'project_repo_path', 'url', 'rawUrl']),
+  // Bead 5.36: `id` was absent and is the COMMONEST name for a request-derived
+  // id here — every unguarded site in PR #291's findings used it, so none was
+  // knowingly allowlisted, all were simply out of scope.
+  bareTaint: new Set(['id', 'sessionId', 'slug', 'projectId', 'project_repo_path', 'url', 'rawUrl']),
   dirParams: new Set(),
 };
 

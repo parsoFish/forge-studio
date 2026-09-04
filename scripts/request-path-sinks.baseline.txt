@@ -231,7 +231,7 @@ packages/flows/manifest.ts existsSync 5
 packages/flows/manifest.ts mkdirSync 1
 packages/flows/manifest.ts readFileSync 9
 packages/flows/manifest.ts writeFileSync 6
-packages/flows/mint-triggered-initiative.ts existsSync 2
+packages/flows/mint-triggered-initiative.ts existsSync 1
 packages/flows/mint-triggered-initiative.ts mkdirSync 1
 packages/flows/mint-triggered-initiative.ts writeFileSync 1
 packages/flows/notify.ts execSync 3
