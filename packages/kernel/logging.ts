@@ -131,7 +131,20 @@ export type LoggerOptions = {
 
 export function createLogger(
   cycleId: string,
-  logsDir = '_logs',
+  /**
+   * An ABSOLUTE logs root. Required, and deliberately without a default
+   * (T1 ruling 101, bead forge-8vfn.5.53): it used to default to `'_logs'`,
+   * which `resolve(logsDir, cycleId)` below anchors on `process.cwd()` — so a
+   * caller that omitted it silently wrote its events wherever the process
+   * happened to start. That is not a hypothetical: it is exactly how four
+   * flows tests came to be KNOWN RED outside the repo-root cwd, and in
+   * production it means a run started from another directory logs where
+   * nobody reads. Measured before removal: ZERO callers repo-wide omitted the
+   * argument and, after 5.53, zero passed a relative one — so the default was
+   * dead code whose only remaining effect was to make the next cwd-anchored
+   * caller a silent mis-write instead of a compile error.
+   */
+  logsDir: string,
   opts: LoggerOptions = {},
 ): EventLogger {
   const dir = resolve(logsDir, cycleId);
