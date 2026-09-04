@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/studio/registry.ts
+ * Tests for the studio object loaders, each imported from the package that owns its kind.
  * Uses node:test + node:assert/strict with mkdtempSync fixtures.
  */
 

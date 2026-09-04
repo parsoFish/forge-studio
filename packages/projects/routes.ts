@@ -170,10 +170,10 @@ export type ProjectsRouteDeps = {
   ) => void;
   /** `@forge/knowledge/kb-sites.ts`'s `projectKbBindings`. */
   projectKbBindings: (forgeRoot: string) => Map<string, string>;
-  /** `orchestrator/studio/registry.ts`'s `listStarterAgents` — legacy, no
+  /** `@forge/agents/studio/agent-registry.ts`'s `listStarterAgents` — injected, no
    *  package-native home. */
   listStarterAgents: (forgeRoot: string) => AgentDefinition[];
-  /** `orchestrator/studio/registry.ts`'s `loadStarterFlow`. */
+  /** `@forge/flows/studio/flow-registry.ts`'s `loadStarterFlow`. */
   loadStarterFlow: (forgeRoot: string) => FlowDefinition | null;
   /** `@forge/agents/studio/derive.ts`'s `agentCapabilityDescriptor`. Return
    *  type deliberately `unknown`, mirroring `project-roster.ts`'s own note:

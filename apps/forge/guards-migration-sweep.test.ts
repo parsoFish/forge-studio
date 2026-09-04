@@ -43,7 +43,7 @@
  * `studio/starters/agents/` (2026-08-04 coverage-gap close): the ORIGINAL
  * A2 only scanned `skills/`, but `studio/starters/agents/{plan,dev,review}`
  * also carry `composition:` blocks and ALSO flow through `loadAgentDefinition`
- * (via `listStarterAgents`, `orchestrator/studio/registry.ts` — the New-Agent
+ * (via `listStarterAgents`, `@forge/agents/studio/agent-registry.ts` — the New-Agent
  * picker's StarterPicker source) — a directory the sweep could silently miss
  * while `skills/` alone stayed clean, since nothing else pinned it. These
  * three are the ONLY other on-disk `composition:`-bearing definitions:

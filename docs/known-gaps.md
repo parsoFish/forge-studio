@@ -185,7 +185,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `community-skills` list, and `POST /api/studio/skills` (the `/skills/new`
     builder) never registered the new skill into `catalog.yaml` — so a skill an
     operator just authored could not be dragged into an agent's skill drop-zone.
-    Fixed via the "palette unions" candidate: `orchestrator/studio/registry.ts`
+    Fixed via the "palette unions" candidate: `@forge/library/studio/skill-registry.ts`
     now exposes `listPlainSkills(forgeRoot)` (a live filesystem scan of
     `skills/*/SKILL.md` entries with no `runtime` block — the inverse of
     `isStudioAgent`), and `GET /api/studio/catalog`
@@ -313,7 +313,7 @@ and the legibility goal it served is already met without it.**
 - **Blast radius:** ~35 `.ts`/`.mjs` files hardcode literal skill paths
   (`deriveAgentSpec('skills/<name>/SKILL.md')`, `resolve(FORGE_ROOT,'skills',<name>,'SKILL.md')`)
   — each phase runner resolves its own skill by a hardcoded string, with **no shared
-  resolver** to change in one place. `orchestrator/studio/registry.ts:listAgentDefinitions`
+  resolver** to change in one place. `@forge/agents/studio/agent-registry.ts`'s `listAgentDefinitions`
   additionally requires skills as **flat** direct children (`readdirSync(skillsDir)` +
   `join(skillsDir, entry, 'SKILL.md')`), so the move also needs a real discovery-behaviour
   change on the hot path.

@@ -5,7 +5,7 @@
  *   - Resolution is an IDENTITY match of the payload's repo against declared
  *     `repo` values (orchestrator/project-config-repo.test.ts pins the field
  *     itself); the result is the project's ENUMERATION id
- *     (orchestrator/studio/registry.ts `discoverProjects` / `normalizeProjectId`),
+ *     (`@forge/kernel` `discoverProjects` / `normalizeProjectId`),
  *     never the payload string, never the raw directory name.
  *   - Undeclared `repo` ⇒ FAILS CLOSED. No auto-discover arm. No
  *     name-matching fallback. Ambiguity (two projects declaring the same

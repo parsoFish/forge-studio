@@ -12,7 +12,7 @@ Three things live here, and the difference matters:
   every source row is `fetchedBy: seed` — hand-curated, never a verified live
   signal from the upstream host; `forge community refresh` replaces that with
   `api:github` / `api:npm` / `api:mcp-registry` only for a source it genuinely
-  got a 200 for. See `orchestrator/studio/registry.ts`'s
+  got a 200 for. See `@forge/library/studio/community-registry.ts`'s
   `loadCommunityRegistry`.
 
   The **leading comment block** of `registry.yaml` is preserved verbatim across

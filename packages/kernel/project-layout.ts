@@ -4,7 +4,7 @@
  * (`projects`, `knowledge`, `library`).
  *
  * MOVED VERBATIM (M4 layout PR): `normalizeProjectId`, `discoverProjects` and
- * `DiscoveredProject` from `orchestrator/studio/registry.ts`; `projectBrainDir`
+ * `DiscoveredProject` from `@forge/kernel`; `projectBrainDir`
  * and `projectThemesDir` from `packages/knowledge/brain-paths.ts`. A symbol
  * two rank-2 siblings both need lives in kernel (M4 ruling 17/18) — it does
  * not travel sideways from one rank-2 package to another.
