@@ -47,10 +47,6 @@ import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import { CANCELLED_PHASE } from './session-status-io.ts';
-// `readJson` stays with the host: body policy is the host's (T1 ruling 30).
-// This import dies when the route takes its body from `ctx.readBody` in the
-// routes carve — it is the last thing holding this file's legacy row open.
-import { readJson } from '../../apps/forge/bridge-studio.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
@@ -59,6 +55,13 @@ import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTer
 import { killTrackedTurn } from './bridge-studio-lifecycle.ts';
 
 export type SessionCancelRouteContext = StudioContext & {
+  /** The request body, read through the ROUTE envelope (T1 ruling 30) rather
+   *  than the host's `readJson`. `familyContext` in `routes.ts` has always
+   *  supplied it; this arm was the last one still importing the host helper,
+   *  and that import was the only thing holding this file's legacy boundary
+   *  row open (M4 exit row 1). Body POLICY stays the host's — this is the
+   *  same closure, reached through the envelope instead of an import. */
+  readBody: () => Promise<unknown>;
   /** Optional per-kind "list changed" broadcasts (the legacy kinds' WS
    *  signals) — invoked after a successful cancel so an open bespoke panel
    *  (architect/instructions/demo) refetches without waiting for its poll. */
@@ -96,7 +99,7 @@ export async function handleSessionCancelRoute(
     // JSON object. `project` is the only field read.
     let body: unknown = {};
     try {
-      body = await readJson(req);
+      body = await ctx.readBody();
     } catch {
       sendJson(res, 400, { error: 'invalid or oversized JSON body' }, origin);
       return true;
