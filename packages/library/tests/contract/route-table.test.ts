@@ -57,6 +57,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { libraryRoutes } from '../../routes.ts';
+import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';
+
+// The table's SHAPE is what this file pins, and no entry's shape depends on
+// what the deps carry — one built table serves every case here.
+const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-root') });
 
 /**
  * The 31 routes the seven dispatchers matched at `c323dc04`, in the order
@@ -137,7 +142,7 @@ function concreteUrl(path: string): string {
 const key = (method: string, path: string): string => `${method} ${path}`;
 
 test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains dispatched plus the 3 residue routes', () => {
-  const tabled = libraryRoutes.map((e) => key(e.method, e.path));
+  const tabled = TABLE.map((e) => key(e.method, e.path));
   const pinned = PINNED.map(([m, p]) => key(m, p));
 
   const missing = pinned.filter((k) => !tabled.includes(k));
@@ -145,7 +150,7 @@ test('everyRouteIsTabled: the table is exactly the 31 routes the seven if-chains
 
   assert.deepEqual(missing, [], `routes that left an if-chain without arriving in the table:\n${missing.join('\n')}`);
   assert.deepEqual(extra, [], `table entries with no if-chain arm behind them:\n${extra.join('\n')}`);
-  assert.equal(libraryRoutes.length, PINNED.length, 'the table must carry exactly 35 entries — a duplicate is as wrong as a gap');
+  assert.equal(TABLE.length, PINNED.length, 'the table must carry exactly 35 entries — a duplicate is as wrong as a gap');
 });
 
 test('theProbeIsNotVacuous: every entry matches the concrete URL built from its own path', () => {
@@ -153,7 +158,7 @@ test('theProbeIsNotVacuous: every entry matches the concrete URL built from its 
   // matches anything — the vacuous-green shape. This assertion is what makes
   // the disjointness result mean something.
   const blind: string[] = [];
-  for (const e of libraryRoutes) {
+  for (const e of TABLE) {
     if (!e.matches(concreteUrl(e.path))) blind.push(`${key(e.method, e.path)} does not match its own URL ${concreteUrl(e.path)}`);
   }
   assert.deepEqual(blind, [], `entries whose matcher does not claim their own path:\n${blind.join('\n')}`);
@@ -167,9 +172,9 @@ test('noTwoEntriesClaimOneUrl: no two entries share a method and both claim one 
   // (packages/kernel/route-entry.ts:108), so a shared URL across DIFFERENT
   // methods is not a collision and is not reported here.
   const overlaps: string[] = [];
-  for (const a of libraryRoutes) {
+  for (const a of TABLE) {
     const url = concreteUrl(a.path);
-    for (const b of libraryRoutes) {
+    for (const b of TABLE) {
       if (a === b) continue;
       if (a.method !== b.method) continue;
       if (b.matches(url)) {
@@ -189,7 +194,7 @@ test('everyEntryMatchesWithAQuery: a handler receives the RAW url and normalises
   // An entry that dropped that call declines against `…?x=1`, the request 404s,
   // and nothing goes red. Positive control for the whole table at once.
   const unnormalised: string[] = [];
-  for (const e of libraryRoutes) {
+  for (const e of TABLE) {
     if (!e.matches(`${concreteUrl(e.path)}?x=1`)) unnormalised.push(key(e.method, e.path));
   }
   assert.deepEqual(unnormalised, [], `entries that stop matching once a query string is present:\n${unnormalised.join('\n')}`);
@@ -197,7 +202,7 @@ test('everyEntryMatchesWithAQuery: a handler receives the RAW url and normalises
 
 test('everyEntryCarriesADryClassification and a callable handler', () => {
   const allowed = new Set(['refuse', 'stub-actions', 'exempt-local', 'read-only']);
-  for (const e of libraryRoutes) {
+  for (const e of TABLE) {
     assert.ok(allowed.has(e.dryClassification), `${key(e.method, e.path)} carries an unknown dryClassification ${String(e.dryClassification)}`);
     // Callable WITHOUT booting a server (COMMON §5): the handler is a plain
     // function of the five-argument route signature, not a bridge entry point.

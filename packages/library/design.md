@@ -29,6 +29,25 @@ On top of that, `forge-6gv.8.2` added a review step: an unconfirmed request retu
 
 The hook approval ledger carries `approved`, a `revoked` history, and `declined`. `declined` grants nothing: `hookRunState` never reads it, so a declined hook is `runnable: false` exactly like a never-reviewed one. It exists so the review queue can close honestly — a hook an operator looked at and rejected had no state but "needs-review forever". Approve and decline clear each other through the writers; a hand-edited ledger carrying both resolves to `approved` silently, which is the safe direction but is not a contradiction the surface reports.
 
+### Agent facts arrive by injection
+
+Three modules here — `studio/skill-trust.ts`, `studio/hook-library.ts`, `studio/connection-library.ts` — each kept a private copy of the same resilient agent-roster walk, reaching `isStudioAgent` and `loadAgentDefinition` through `orchestrator/studio/registry.ts`. Library is rank 2 and agents is rank 3, so that read is what ruling 13 forbids. All three copies are gone. `studio/agent-facts.ts` declares what library needs in library's own vocabulary and `apps/forge/library-agent-facts.ts` binds it, beside the Agent-kind loaders.
+
+The port has **two members answering two different questions, and no path in library uses both**:
+
+- `usage(kind, forgeRoot)` — "which agents compose this id". Bound to agents' `agentUsageIndex`, whose derivation is line-for-line what the three copies did (per-agent dedupe, carrier lists sorted by slug, `scanned` counting the agents that loaded). It serves `listHookLibrary` / `deriveHookUsage`, `listConnections` / `connectionById` / `deriveConnectionUsage`, and `listSkillLibrary`'s `usedBy`, which substitute with no behaviour change.
+- `compositions(forgeRoot)` — "what does each agent compose". The two lint paths need it because the index cannot serve them. `lintHookComposition` reads `composition.guards`, and the usage index has no `guard` kind, so the very fact `hook-library/hook-in-guards` exists to find is absent from it. `lintSkillTrust` and `lintSkillRefs` emit one finding per agent per `composition.skills` **occurrence**, in slug order, where the index is the inverse map with duplicates already collapsed. Keeping their existing derivation over `compositions` makes their output identical by construction rather than by argument.
+
+`isAgentSkillMd(mdPath)` is a third read and not a usage question at all: five sites ask whether one SKILL.md is a studio agent — `listSkillLibrary` excluding agents from the skill library (AT-5), and the skills routes that 404 or refuse when an id turns out to be an agent.
+
+If a future path wants both members, that is the signal one of them is answering the wrong question — fix the path rather than widening the port.
+
+Two things follow from the boundary rather than from taste. Library's own tests supply the port from `tests/test-fixtures/agent-fixture.ts`, because a test edge is still an edge; what that leaves unproven — that the real binding answers what those fixtures assume — is proven at `apps/forge/library-agent-facts.test.ts`, which also carries the drift guard between `agentUsageIndex` and the assembly's `compositions` walk. And a handful of cases whose subject was the agent loader all along moved out to the assembly, where importing both packages is what the assembly is for.
+
+### A catalog read that scans no agents
+
+`listConnections` decorates the catalog with `usedBy`, which costs a full agent-roster walk. Measured across its eleven call sites, exactly two read that field: the connections list and detail routes. The community index, the install router, the probe and install routes and agents' run gate all read `kind`/`id`/`name`/`provenance` and the install fields — so they take `listCatalogConnections`, which reads `studio/catalog.yaml` and nothing else. The alternative was handing them a `ConnectionDefinition` with a fabricated empty `usedBy`, which is exactly what `usedByDerivation` exists to make impossible.
+
 ## Deferred, on purpose
 
 **Plugin-host process isolation is not in 1.0.** Spec §0 defers it to a concrete driver. `runHookScript` today is an env-stripped, bounded child process with the credential exclusions its own header documents — not a sandbox, and it says so rather than implying more safety than it has. The honest-limits section in that file is the contract; if isolation is ever built, this is where it goes.

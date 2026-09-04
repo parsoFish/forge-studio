@@ -66,6 +66,7 @@
  *       is a 404, never a fabricated entry.
  */
 
+import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -73,7 +74,7 @@ import { resolve } from 'node:path';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
 import { isDryBridge } from '../../apps/forge/dry-bridge.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
+import { catalogConnectionById, connectionById, listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection, installPreviewFor } from './studio/connection-install.ts';
 
@@ -89,12 +90,21 @@ const INSTALL_TIMEOUT_MS = 120_000;
 // Mirrors bridge-studio-writes.ts's `resolveManagedProject` pattern.
 // ---------------------------------------------------------------------------
 
-function resolveConnectionOrRespond(
-  forgeRoot: string,
+/**
+ * Decode, slug-validate, look up — one 400/404 path for every connection
+ * route. The LOOKUP is a parameter because the routes need two different
+ * reads: probe and install take the catalog half (they never surface
+ * `usedBy`), detail takes the usage-decorated one because it forwards the
+ * whole definition on the wire. Passing the read in keeps that difference at
+ * the four call sites and leaves ONE copy of the error handling — a second
+ * resolver would be a shape a later route could half-update.
+ */
+function resolveConnectionOrRespond<T>(
   rawIdSegment: string,
   res: ServerResponse,
   origin: string,
-): ConnectionDefinition | null {
+  lookup: (id: string) => T | undefined,
+): T | null {
   let id: string;
   try {
     id = decodeURIComponent(rawIdSegment);
@@ -108,7 +118,7 @@ function resolveConnectionOrRespond(
     sendJson(res, 400, { error: sanitizeError(err) }, origin);
     return null;
   }
-  const def = connectionById(forgeRoot, id);
+  const def = lookup(id);
   if (!def) {
     sendJson(res, 404, { error: `unknown connection "${id}"` }, origin);
     return null;
@@ -132,13 +142,13 @@ function toWireConnection(forgeRoot: string, def: ConnectionDefinition): Record<
 // first arm of handleStudioConnectionsRoutes, :129.
 // ---------------------------------------------------------------------------
 
-export async function handleConnectionsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleConnectionsList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   if (url === '/api/studio/connections' && method === 'GET') {
     try {
-      const connections = listConnections(ctx.forgeRoot).map((def) => toWireConnection(ctx.forgeRoot, def));
+      const connections = listConnections(ctx.forgeRoot, facts).map((def) => toWireConnection(ctx.forgeRoot, def));
       sendJson(res, 200, { connections }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -163,7 +173,7 @@ export async function handleConnectionsProbe(req: IncomingMessage, res: ServerRe
   const probeMatch = url.match(PROBE_RE);
   if (method === 'POST' && probeMatch) {
     try {
-      const def = resolveConnectionOrRespond(ctx.forgeRoot, probeMatch[1], res, origin);
+      const def = resolveConnectionOrRespond(probeMatch[1], res, origin, (id) => catalogConnectionById(ctx.forgeRoot, id));
       if (!def) return true;
       sendJson(res, 200, { ok: true, probe: probeConnection(ctx.forgeRoot, def) }, origin);
     } catch (err) {
@@ -189,7 +199,7 @@ export async function handleConnectionsInstall(req: IncomingMessage, res: Server
   const installMatch = url.match(INSTALL_RE);
   if (method === 'POST' && installMatch) {
     try {
-      const def = resolveConnectionOrRespond(ctx.forgeRoot, installMatch[1], res, origin);
+      const def = resolveConnectionOrRespond(installMatch[1], res, origin, (id) => catalogConnectionById(ctx.forgeRoot, id));
       if (!def) return true;
 
       if (!def.installable) {
@@ -274,14 +284,14 @@ export async function handleConnectionsInstall(req: IncomingMessage, res: Server
 
 export const DETAIL_RE = /^\/api\/studio\/connections\/([^/]+)$/;
 
-export async function handleConnectionsDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleConnectionsDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   const detailMatch = url.match(DETAIL_RE);
   if (method === 'GET' && detailMatch) {
     try {
-      const def = resolveConnectionOrRespond(ctx.forgeRoot, detailMatch[1], res, origin);
+      const def = resolveConnectionOrRespond(detailMatch[1], res, origin, (id) => connectionById(ctx.forgeRoot, id, facts));
       if (!def) return true;
       sendJson(res, 200, toWireConnection(ctx.forgeRoot, def), origin);
     } catch (err) {

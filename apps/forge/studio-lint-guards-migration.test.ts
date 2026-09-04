@@ -87,6 +87,7 @@
  * real aggregate findings — pinning BOTH call paths, per instruction.
  */
 
+import { libraryAgentFacts } from './library-agent-facts.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -172,7 +173,7 @@ test('A3 (direct) SUPERSEDED: loadAgentDefinition no longer throws — compositi
     // under composition.hooks resolves as a library-hook reference to a real
     // guard id, which is precisely hook-library/guard-in-hooks — strictly
     // more precise than A3's old "stale key" throw (it NAMES the collision).
-    const findings = lintHookComposition(dir);
+    const findings = lintHookComposition(dir, libraryAgentFacts);
     const hit = findings.find((f) => f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks');
     assert.ok(
       hit,
@@ -241,7 +242,7 @@ test('A3 SUPERSEDED (exhaustive): every one of the ten legacy PLATFORM_GUARD_IDS
       mkdirSync(skillDir, { recursive: true });
       writeFileSync(join(skillDir, 'SKILL.md'), legacyHooksSkillMd(LEGACY_SLUG, hookId));
 
-      const findings = lintHookComposition(dir);
+      const findings = lintHookComposition(dir, libraryAgentFacts);
       const hit = findings.find((f) => f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks');
       assert.ok(hit, `legacy value "${hookId}" must fire hook-library/guard-in-hooks — got: ${JSON.stringify(findings)}`);
     } finally {

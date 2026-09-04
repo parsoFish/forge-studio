@@ -30,6 +30,7 @@
  * `library: true` added; the provenance `contentHash` overwritten). A pin that
  * was never seen red is a pin of nothing.
  */
+import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -154,7 +155,7 @@ test('GET /api/studio/skills cannot leak a file outside the library through a sy
     // the CONTENT, not just the count: a future change that keeps the entry but
     // blanks its fields would still be a leak of the id, and one that returns
     // the outside file's frontmatter is the leak itself.
-    const entries = listSkillLibrary(forgeRoot);
+    const entries = listSkillLibrary(forgeRoot, fixtureAgentFacts(forgeRoot));
     assert.deepEqual(entries.map((e) => e.id), [], 'no entry may be derived from a symlinked SKILL.md leaf');
     assert.doesNotMatch(JSON.stringify(entries), /exfiltrated|from outside the library/, 'no field of the outside file may appear in the response');
   } finally {

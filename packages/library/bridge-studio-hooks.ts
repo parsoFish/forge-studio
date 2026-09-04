@@ -82,6 +82,7 @@
  * the throw is reported as 400 (never a 500, never a raw stack trace).
  */
 
+import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -103,8 +104,7 @@ import {
   hookYamlPath,
   listHookLibrary,
   loadHookDefinition,
-  HOOK_LIFECYCLE_EVENTS,
-  FORBIDDEN_HOOK_BINDING_KEYS,
+  HOOK_LIFECYCLE_EVENTS, FORBIDDEN_HOOK_BINDING_KEYS,
   type HookLifecycleEvent,
   type HookPermissionManifest,
   hookTriggerError,
@@ -288,13 +288,13 @@ export const HOOK_OVERRIDE_RE = /^\/api\/studio\/hooks\/([^/]+)\/override$/;
 export const HOOK_REVOKE_RE = /^\/api\/studio\/hooks\/([^/]+)\/revoke-approval$/;
 export const HOOK_ID_RE = /^\/api\/studio\/hooks\/([^/]+)$/;
 
-export async function handleHooksList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleHooksList(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
   if (method === 'GET' && url === '/api/studio/hooks') {
     try {
-      const hooks = listHookLibrary(ctx.forgeRoot).map((entry) => toClientListEntry(ctx.forgeRoot, entry));
+      const hooks = listHookLibrary(ctx.forgeRoot, facts).map((entry) => toClientListEntry(ctx.forgeRoot, entry));
       sendJson(res, 200, { hooks }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -659,7 +659,7 @@ export async function handleHookUpdate(req: IncomingMessage, res: ServerResponse
  *
  * Refuses (409, naming them) while any agent still carries the hook.
  */
-export async function handleHookDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleHookDelete(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -673,7 +673,7 @@ export async function handleHookDelete(req: IncomingMessage, res: ServerResponse
       const located = locateHook(ctx.forgeRoot, id, { requireScript: false });
       if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
 
-      const entry = listHookLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const entry = listHookLibrary(ctx.forgeRoot, facts).find((e) => e.id === id);
       const carriedBy = entry?.ok === true ? entry.carriedBy : [];
       if (carriedBy.length > 0) {
         sendJson(res, 409, {
@@ -702,7 +702,7 @@ export async function handleHookDelete(req: IncomingMessage, res: ServerResponse
 }
 
 /** GET /api/studio/hooks/:id — detail (D-4: malformed reads as absent). */
-export async function handleHookDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleHookDetail(req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string, facts: AgentFacts): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -713,7 +713,7 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       try { id = decodeIdSegment(detailMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
       try { assertSkillSlug(id, 'hook'); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
 
-      const entry = listHookLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const entry = listHookLibrary(ctx.forgeRoot, facts).find((e) => e.id === id);
       if (!entry || entry.ok !== true) {
         sendJson(res, 404, { error: `unknown hook "${id}"` }, origin);
         return true;

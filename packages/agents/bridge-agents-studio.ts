@@ -55,6 +55,7 @@ import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
 import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
+import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
 import { skillsDir as toSkillsDir } from './skill-path.ts';
@@ -83,6 +84,11 @@ export type AgentStudioRouteDeps = {
   ): readonly { level?: string; message?: string }[];
   listFlowIds(forgeRoot: string): string[];
   loadFlowDefinition(flowYamlPath: string): FlowDefinition;
+  /** Library's `AgentFacts` port, bound at `apps/forge`. This module calls
+   *  into `@forge/library` (rank 3 → 2, legal) and library's readers now take
+   *  the facts by injection, so the binding travels with the deps rather than
+   *  being rebuilt here — there is ONE resilient roster walk in the tree. */
+  agentFacts: AgentFacts;
 };
 
 type Handler = (
@@ -252,7 +258,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       // Defence in depth: even for a real agent, never delete one that
       // something still composes. Same `usedBy` derivation the library
       // listing renders — one source of truth, no second scan.
-      const composedBy = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === slug)?.usedBy ?? [];
+      const composedBy = listSkillLibrary(ctx.forgeRoot, deps.agentFacts).find((e) => e.id === slug)?.usedBy ?? [];
       if (composedBy.length > 0) {
         sendJson(res, 409, {
           error: `agent "${slug}" is still composed by ${composedBy.length} agent(s): ${composedBy.join(', ')} — unbind it from their builders first`,

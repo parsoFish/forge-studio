@@ -30,6 +30,7 @@
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
 
+import { libraryAgentFacts } from './library-agent-facts.ts';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
@@ -539,8 +540,8 @@ export function runStudioLint(root: string): StudioLintResult {
   //    entry. See orchestrator/studio/skill-library.ts (single source).
   // ------------------------------------------------------------------
 
-  findings.push(...lintSkillTrust(root));
-  findings.push(...lintSkillRefs(root));
+  findings.push(...lintSkillTrust(root, libraryAgentFacts));
+  findings.push(...lintSkillRefs(root, libraryAgentFacts));
 
   // ------------------------------------------------------------------
   // 6b. Tool-fence sweep — a roster SKILL.md that declares tool frontmatter
@@ -584,7 +585,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
 
   findings.push(...lintHookDefinitions(root));
-  findings.push(...lintHookComposition(root));
+  findings.push(...lintHookComposition(root, libraryAgentFacts));
 
   // ------------------------------------------------------------------
   // 9. Community index (R3-07) — a vendored community skill package id must

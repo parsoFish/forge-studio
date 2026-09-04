@@ -58,7 +58,7 @@
  *       into a `Finding` for `forge studio lint` — satisfying the roadmap's
  *       literal "a lint ERROR" phrasing for the `on:` check without making
  *       `loadHookDefinition` itself return a bogus value for a bad enum.
- *  D-C. `deriveHookUsage(forgeRoot)` takes a ROOT, not an `AgentDefinition[]`
+ *  D-C. `deriveHookUsage(forgeRoot, fixtureAgentFacts(forgeRoot))` takes a ROOT, not an `AgentDefinition[]`
  *       array (template-library.ts's `deriveArtifactTemplateUsage`
  *       precedent, not skill-library.ts's `deriveSkillUsage` precedent) —
  *       deliberately, so this test file never has to construct a fixture
@@ -85,6 +85,7 @@
  *       field directly.
  */
 
+import { fixtureAgentFacts, writeFixtureAgent } from '../tests/test-fixtures/agent-fixture.ts';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
@@ -92,7 +93,6 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
 import { loadCatalog } from './catalog-registry.ts';
 import { PLATFORM_GUARD_IDS } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
@@ -187,38 +187,9 @@ function writeAgentSkillMd(
   slug: string,
   composition: { skills?: string[]; tools?: string[]; mcps?: string[]; guards?: string[]; hooks?: string[] } = {},
 ): string {
-  const dir = join(root, 'skills', slug);
-  mkdirSync(dir, { recursive: true });
-  const compositionYaml = [
-    `  skills: [${(composition.skills ?? []).join(', ')}]`,
-    `  tools: [${(composition.tools ?? []).join(', ')}]`,
-    `  mcps: [${(composition.mcps ?? []).join(', ')}]`,
-    `  guards: [${(composition.guards ?? []).join(', ')}]`,
-    ...(composition.hooks !== undefined ? [`  hooks: [${composition.hooks.join(', ')}]`] : []),
-  ].join('\n');
-  const content = `---
-name: ${slug}
-description: Test agent ${slug}.
-purpose: Test purpose.
-composition:
-${compositionYaml}
-runtime:
-  sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
-brainAccess: none
-interactivity: Fully autonomous.
-allowed-tools: []
-disallowed-tools: []
-budgets:
-  iterationCap: 5
----
-
-Process body.
-`;
-  const p = join(dir, 'SKILL.md');
-  writeFileSync(p, content, 'utf8');
-  return p;
+  // The shared fixture writes the SKILL.md AND records what it composes, so
+  // `fixtureAgentFacts(root)` can never disagree with the tree built here.
+  return writeFixtureAgent(root, slug, composition);
 }
 
 /** A minimal, valid AgentDefinition fixture (no disk I/O) matching the
@@ -455,7 +426,7 @@ describe('listHookLibrary: a malformed entry carries no fabricated field values'
     const root = makeForgeRoot();
     writeHookPackage(root, 'malformed-hook', { on: 'NotARealEvent' });
 
-    const entries = listHookLibrary(root);
+    const entries = listHookLibrary(root, fixtureAgentFacts(root));
     const entry = entries.find((e) => e.id === 'malformed-hook');
     assert.ok(entry, 'a malformed hook must still be LISTED (never silently dropped, AT-7 precedent) — just not fabricated');
 
@@ -478,7 +449,7 @@ describe('listHookLibrary: a malformed entry carries no fabricated field values'
     const root = makeForgeRoot();
     writeHookPackage(root, 'well-formed-hook', { on: 'SessionEnd', matcher: 'Bash(gh pr create)' });
 
-    const entries = listHookLibrary(root);
+    const entries = listHookLibrary(root, fixtureAgentFacts(root));
     const entry = entries.find((e) => e.id === 'well-formed-hook');
     assert.ok(entry);
     assert.equal((entry as unknown as { ok: boolean }).ok, true);
@@ -499,7 +470,7 @@ describe('carriedBy: derived, self-naming (R3-06 D3 precedent)', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'orphan-hook', {});
     writeAgentSkillMd(root, 'unrelated-agent', { hooks: [] });
-    const entries = listHookLibrary(root);
+    const entries = listHookLibrary(root, fixtureAgentFacts(root));
     const orphan = entries.find((e: HookLibraryEntry) => e.id === 'orphan-hook');
     assert.ok(orphan, 'orphan-hook must be listed');
     assert.deepEqual(orphan!.carriedBy, []);
@@ -513,17 +484,17 @@ describe('carriedBy: derived, self-naming (R3-06 D3 precedent)', () => {
     writeHookPackage(root, 'carried-hook', {});
     writeAgentSkillMd(root, 'carrier-agent', { hooks: ['carried-hook'] });
     writeAgentSkillMd(root, 'bystander-agent', { hooks: [] });
-    const entries = listHookLibrary(root);
+    const entries = listHookLibrary(root, fixtureAgentFacts(root));
     const carried = entries.find((e: HookLibraryEntry) => e.id === 'carried-hook');
     assert.deepEqual(carried!.carriedBy, ['carrier-agent']);
     assert.equal(carried!.carriedByDerivation.scanned, 2);
   });
 
-  it('deriveHookUsage(forgeRoot) exposes the same fact as a standalone Map', () => {
+  it('deriveHookUsage(forgeRoot, fixtureAgentFacts(forgeRoot)) exposes the same fact as a standalone Map', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'map-hook', {});
     writeAgentSkillMd(root, 'map-carrier', { hooks: ['map-hook'] });
-    const usage = deriveHookUsage(root);
+    const usage = deriveHookUsage(root, fixtureAgentFacts(root));
     assert.deepEqual(usage.get('map-hook'), ['map-carrier']);
   });
 
@@ -532,7 +503,7 @@ describe('carriedBy: derived, self-naming (R3-06 D3 precedent)', () => {
     writeHookPackage(root, 'shared-hook', {});
     writeAgentSkillMd(root, 'z-agent', { hooks: ['shared-hook'] });
     writeAgentSkillMd(root, 'a-agent', { hooks: ['shared-hook'] });
-    const entries = listHookLibrary(root);
+    const entries = listHookLibrary(root, fixtureAgentFacts(root));
     const shared = entries.find((e: HookLibraryEntry) => e.id === 'shared-hook');
     assert.deepEqual(shared!.carriedBy, ['a-agent', 'z-agent']);
   });
@@ -550,7 +521,7 @@ describe('carriedBy: derived, self-naming (R3-06 D3 precedent)', () => {
 
 describe('OOTB seed hooks (mockup data.jsx HOOKS_LOCAL, provenance: OOTB)', () => {
   it('pre-pr-security-review ships with the mockup-pinned event + matcher', () => {
-    const entries = listHookLibrary(REPO_ROOT);
+    const entries = listHookLibrary(REPO_ROOT, fixtureAgentFacts(REPO_ROOT));
     const entry = entries.find((e: HookLibraryEntry) => e.id === 'pre-pr-security-review');
     assert.ok(entry, 'pre-pr-security-review must be a shipped OOTB library hook');
     assert.equal(entry!.on, 'PreToolUse');
@@ -562,7 +533,7 @@ describe('OOTB seed hooks (mockup data.jsx HOOKS_LOCAL, provenance: OOTB)', () =
   });
 
   it('post-merge-brain-ingest ships with the mockup-pinned event', () => {
-    const entries = listHookLibrary(REPO_ROOT);
+    const entries = listHookLibrary(REPO_ROOT, fixtureAgentFacts(REPO_ROOT));
     const entry = entries.find((e: HookLibraryEntry) => e.id === 'post-merge-brain-ingest');
     assert.ok(entry, 'post-merge-brain-ingest must be a shipped OOTB library hook');
     assert.equal(entry!.on, 'SessionEnd');
@@ -625,34 +596,6 @@ describe('PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set parity (bidire
 });
 
 // ---------------------------------------------------------------------------
-// F1b — composition.hooks REINTRODUCED at the registry layer
-// ---------------------------------------------------------------------------
-
-describe('composition.hooks reintroduced (registry.ts loadAgentDefinition)', () => {
-  it('a SKILL.md declaring composition.hooks no longer throws the "retired" error', () => {
-    const root = makeForgeRoot();
-    const p = writeAgentSkillMd(root, 'hook-composer', { hooks: ['pre-pr-security-review'] });
-    assert.doesNotThrow(() => loadAgentDefinition(p));
-  });
-
-  it('the parsed composition.hooks array round-trips (cast documented in D-E)', () => {
-    const root = makeForgeRoot();
-    const p = writeAgentSkillMd(root, 'hook-composer-2', { hooks: ['pre-pr-security-review', 'post-merge-brain-ingest'] });
-    const def = loadAgentDefinition(p);
-    const hooks = (def.composition as unknown as { hooks: string[] }).hooks;
-    assert.deepEqual(hooks, ['pre-pr-security-review', 'post-merge-brain-ingest']);
-  });
-
-  it('composition.hooks absent parses as an empty array, not undefined', () => {
-    const root = makeForgeRoot();
-    const p = writeAgentSkillMd(root, 'no-hooks-agent', {});
-    const def = loadAgentDefinition(p);
-    const hooks = (def.composition as unknown as { hooks?: string[] }).hooks;
-    assert.deepEqual(hooks ?? [], []);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // F1b — SYMMETRIC enforcement (lintHookComposition). Both directions.
 // ---------------------------------------------------------------------------
 
@@ -664,7 +607,7 @@ describe('lintHookComposition: guard id under composition.hooks is an ERROR', ()
     it(`"${guardId}" under composition.hooks is flagged`, () => {
       const root = makeForgeRoot();
       writeAgentSkillMd(root, `agent-with-${guardId}-as-hook`, { hooks: [guardId] });
-      const findings = lintHookComposition(root);
+      const findings = lintHookComposition(root, fixtureAgentFacts(root));
       const hit = findings.find((f: Finding) => f.object === `agent:agent-with-${guardId}-as-hook` && f.check === 'hook-library/guard-in-hooks');
       assert.ok(hit, `expected a hook-library/guard-in-hooks finding for guard id "${guardId}"`);
       assert.equal(hit!.level, 'error');
@@ -677,7 +620,7 @@ describe('lintHookComposition: library hook id under composition.guards is an ER
     const root = makeForgeRoot();
     writeHookPackage(root, 'pre-pr-security-review', { on: 'PreToolUse', matcher: 'Bash(gh pr create)' });
     writeAgentSkillMd(root, 'agent-with-hook-as-guard', { guards: ['pre-pr-security-review'] });
-    const findings = lintHookComposition(root);
+    const findings = lintHookComposition(root, fixtureAgentFacts(root));
     const hit = findings.find((f: Finding) => f.object === 'agent:agent-with-hook-as-guard' && f.check === 'hook-library/hook-in-guards');
     assert.ok(hit, 'expected a hook-library/hook-in-guards finding');
     assert.equal(hit!.level, 'error');
@@ -689,14 +632,14 @@ describe('lintHookComposition: the correct placement in each field produces no f
     const root = makeForgeRoot();
     writeHookPackage(root, 'clean-hook', {});
     writeAgentSkillMd(root, 'well-formed-agent', { guards: ['event-log'], hooks: ['clean-hook'] });
-    const findings = lintHookComposition(root).filter((f: Finding) => f.object === 'agent:well-formed-agent');
+    const findings = lintHookComposition(root, fixtureAgentFacts(root)).filter((f: Finding) => f.object === 'agent:well-formed-agent');
     assert.deepEqual(findings, []);
   });
 
   it('an unknown id under composition.hooks (neither a guard nor a real hook) is a distinct error', () => {
     const root = makeForgeRoot();
     writeAgentSkillMd(root, 'agent-with-typo-hook', { hooks: ['totally-made-up-hook-id'] });
-    const findings = lintHookComposition(root);
+    const findings = lintHookComposition(root, fixtureAgentFacts(root));
     const hit = findings.find((f: Finding) => f.object === 'agent:agent-with-typo-hook' && f.check === 'hook-library/unknown-hook-ref');
     assert.ok(hit, 'expected an unknown-hook-ref finding, distinct from guard-in-hooks');
   });

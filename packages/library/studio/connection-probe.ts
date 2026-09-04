@@ -58,7 +58,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { delimiter, join, relative, resolve } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, buildChildEnv } from '@forge/kernel/spawn-env.ts';
-import type { ConnectionConfigVar, ConnectionDefinition, ConnectionProbeSpec } from './connection-library.ts';
+import type { CatalogConnection, ConnectionConfigVar, ConnectionProbeSpec } from './connection-library.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -354,7 +354,7 @@ function probeCommandPresence(
   return deriveProbeState({ kind: 'command-presence', presenceOk, missingConfig });
 }
 
-function probeNpmPackage(forgeRoot: string, connection: ConnectionDefinition, missingConfig: string[]): ProbeResult {
+function probeNpmPackage(forgeRoot: string, connection: CatalogConnection, missingConfig: string[]): ProbeResult {
   if (connection.install.method !== 'npm') {
     // D15's coherence table ties npm-package probes to npm installs; a lint
     // rule (WI-1's validateConnections) is meant to catch this at curation
@@ -394,7 +394,7 @@ function probeNpmPackage(forgeRoot: string, connection: ConnectionDefinition, mi
  */
 export function probeConnection(
   forgeRoot: string,
-  connection: ConnectionDefinition,
+  connection: CatalogConnection,
   opts: ProbeConnectionOptions = {},
 ): ProbeResult {
   const missingConfig = computeMissingConfig(connection.config);

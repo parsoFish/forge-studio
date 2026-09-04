@@ -63,7 +63,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { skillPath } from '../skill-path.ts';
 import { communitySourceKey } from './community-source-url.ts';
-import { listConnections } from './connection-library.ts';
+import { listCatalogConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-install.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
 import { scanHookScript } from './hook-scan.ts';
@@ -349,7 +349,7 @@ describe('listCommunityHubs', () => {
 describe('resolveHub — D4', () => {
   it('the real memory mcp (upstream .../servers/tree/main/src/memory) resolves to the real mcp-servers hub', () => {
     const hubs = listCommunityHubs(REPO_ROOT);
-    const memory = listConnections(REPO_ROOT).find((c) => c.id === 'memory');
+    const memory = listCatalogConnections(REPO_ROOT).find((c) => c.id === 'memory');
     assert.ok(memory, 'expected the real memory mcp catalog entry');
     const resolved = resolveHub(memory!.provenance, hubs);
     assert.ok(resolved, 'expected memory to resolve to a hub');
@@ -358,7 +358,7 @@ describe('resolveHub — D4', () => {
 
   it('the real sqlite mcp (upstream .../servers-archived/tree/main/src/sqlite) resolves to null — "servers-archived" must NOT match the "servers" hub', () => {
     const hubs = listCommunityHubs(REPO_ROOT);
-    const sqlite = listConnections(REPO_ROOT).find((c) => c.id === 'sqlite');
+    const sqlite = listCatalogConnections(REPO_ROOT).find((c) => c.id === 'sqlite');
     assert.ok(sqlite, 'expected the real sqlite mcp catalog entry');
     assert.equal(resolveHub(sqlite!.provenance, hubs), null, 'a hub-name PREFIX collision ("servers" vs "servers-archived") must never resolve');
   });

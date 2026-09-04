@@ -47,11 +47,9 @@
 import { join } from 'node:path';
 
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { listSkillMdDirs } from '../skill-path.ts';
-import { isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import type { AgentFacts } from './agent-facts.ts';
 import { loadCatalog } from './catalog-registry.ts';
 import type {
-  AgentDefinition,
   CatalogCapability,
   CatalogConfigVar,
   CatalogConnectionEntry,
@@ -113,50 +111,52 @@ export interface ConnectionDefinition {
   capabilitiesSource?: 'curated';
 }
 
+/**
+ * A catalog connection WITHOUT the agent-derived usage fields.
+ *
+ * Every caller that only needs to know a connection EXISTS — the community
+ * index, the install router, the probe and install routes, agents' run gate —
+ * takes this. It is not a convenience: `usedBy` is derived by reading the
+ * whole agent roster, so serving those callers a `ConnectionDefinition` meant
+ * one full roster walk per existence check, and the only alternative that
+ * avoided it would have been a fabricated empty `usedBy` — precisely what
+ * `usedByDerivation` exists to make impossible. Measured before the split:
+ * of the eleven call sites of `listConnections`/`connectionById`, exactly TWO
+ * read `usedBy` (the connections list and detail routes, through
+ * `toWireConnection`); the other nine read `kind`/`id`/`name`/`provenance` and
+ * the probe/install fields.
+ */
+export type CatalogConnection = Omit<ConnectionDefinition, 'usedBy' | 'usedByDerivation'>;
+
 export const CONNECTION_USAGE_SOURCE = 'skills/*/SKILL.md (composition.tools + composition.mcps)';
 
 // ---------------------------------------------------------------------------
 // usedBy / usedByDerivation — DERIVED from real agent specs, never declared.
-// Mirrors hook-library.ts's computeHookUsage/listAgentDefinitionsResilient
-// exactly, scanning composition.tools + composition.mcps instead of
-// composition.hooks (a connection IS a tools/mcps entry — D2).
+// Read through the injected `AgentFacts` port (rulings 13/73/127): this
+// module is rank 2 and may not read agent files. `usage('connection', ...)`
+// scans composition.tools + composition.mcps (a connection IS a tools/mcps
+// entry — D2), which is what the private roster walk here used to do.
 // ---------------------------------------------------------------------------
 
-/** Studio agents, tolerating a malformed one — a single bad sibling must not
- *  crash the whole scan (mirrors hook-library.ts's own resilient listing). */
-function listAgentDefinitionsResilient(root: string): AgentDefinition[] {
-  const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(join(root, 'skills'))) {
-    const mdPath = join(dir, 'SKILL.md');
-    if (!isStudioAgent(mdPath)) continue;
-    try {
-      defs.push(loadAgentDefinition(mdPath));
-    } catch {
-      /* malformed studio agent — already reported elsewhere; skip here */
-    }
-  }
-  return defs.sort((a, b) => a.slug.localeCompare(b.slug));
-}
-
-function computeConnectionUsage(forgeRoot: string): {
+function computeConnectionUsage(
+  forgeRoot: string,
+  facts: AgentFacts,
+): {
   byConnection: Map<string, string[]>;
   derivation: ConnectionUsedByDerivation;
 } {
-  const agents = listAgentDefinitionsResilient(forgeRoot);
-  const byConnection = new Map<string, Set<string>>();
-  for (const agent of agents) {
-    for (const connId of new Set([...agent.composition.tools, ...agent.composition.mcps])) {
-      if (!byConnection.has(connId)) byConnection.set(connId, new Set());
-      byConnection.get(connId)!.add(agent.slug);
-    }
-  }
-  const out = new Map<string, string[]>();
-  for (const [connId, slugs] of byConnection) out.set(connId, [...slugs].sort((a, b) => a.localeCompare(b)));
-  return { byConnection: out, derivation: { source: CONNECTION_USAGE_SOURCE, scanned: agents.length } };
+  // The index already dedupes per agent and sorts each carrier list — this is
+  // the same derivation the private roster walk did here, moved behind the
+  // port. The copy is because `ConnectionDefinition.usedBy` is a mutable
+  // `string[]` and the port hands back `readonly`.
+  const { byId, scanned } = facts.usage('connection', forgeRoot);
+  const byConnection = new Map<string, string[]>();
+  for (const [id, slugs] of byId) byConnection.set(id, [...slugs]);
+  return { byConnection, derivation: { source: CONNECTION_USAGE_SOURCE, scanned } };
 }
 
-export function deriveConnectionUsage(forgeRoot: string): Map<string, string[]> {
-  return computeConnectionUsage(forgeRoot).byConnection;
+export function deriveConnectionUsage(forgeRoot: string, facts: AgentFacts): Map<string, string[]> {
+  return computeConnectionUsage(forgeRoot, facts).byConnection;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,18 +174,16 @@ function requireConnectionField<T>(value: T | undefined, entryId: string, field:
   return value;
 }
 
-function composeConnectionDefinition(
+function composeCatalogConnection(
   entry: CatalogConnectionEntry,
   kind: ConnectionKind,
-  usedBy: string[],
-  usedByDerivation: ConnectionUsedByDerivation,
-): ConnectionDefinition {
+): CatalogConnection {
   const install = requireConnectionField(entry.install, entry.id, 'install');
   const probe = requireConnectionField(entry.probe, entry.id, 'probe');
   const provenance = requireConnectionField(entry.provenance, entry.id, 'provenance');
   const config = requireConnectionField(entry.config, entry.id, 'config');
 
-  const def: ConnectionDefinition = {
+  const def: CatalogConnection = {
     id: entry.id,
     name: entry.name,
     ...(entry.desc !== undefined ? { desc: entry.desc } : {}),
@@ -195,8 +193,6 @@ function composeConnectionDefinition(
     provenance,
     config,
     installable: install.method === 'npm',
-    usedBy,
-    usedByDerivation,
   };
 
   // D8 — capabilities are MCP-only, and present only when the catalog entry
@@ -210,16 +206,32 @@ function composeConnectionDefinition(
   return def;
 }
 
-export function listConnections(forgeRoot: string): ConnectionDefinition[] {
+/** Every catalog connection, read from `studio/catalog.yaml` alone — no agent
+ *  roster walk, so no `AgentFacts` and no fabricated usage. */
+export function listCatalogConnections(forgeRoot: string): CatalogConnection[] {
   const catalog = loadCatalog(join(forgeRoot, 'studio', 'catalog.yaml'));
-  const { byConnection, derivation } = computeConnectionUsage(forgeRoot);
-
-  const tools = catalog.tools.map((e) => composeConnectionDefinition(e, 'tool', byConnection.get(e.id) ?? [], derivation));
-  const mcps = catalog.mcps.map((e) => composeConnectionDefinition(e, 'mcp', byConnection.get(e.id) ?? [], derivation));
-  return [...tools, ...mcps];
+  return [
+    ...catalog.tools.map((e) => composeCatalogConnection(e, 'tool')),
+    ...catalog.mcps.map((e) => composeCatalogConnection(e, 'mcp')),
+  ];
 }
 
-export function connectionById(forgeRoot: string, id: string): ConnectionDefinition | undefined {
+/** The catalog read DECORATED with who composes each connection. */
+export function listConnections(forgeRoot: string, facts: AgentFacts): ConnectionDefinition[] {
+  const { byConnection, derivation } = computeConnectionUsage(forgeRoot, facts);
+  return listCatalogConnections(forgeRoot).map((def) => ({
+    ...def,
+    usedBy: byConnection.get(def.id) ?? [],
+    usedByDerivation: derivation,
+  }));
+}
+
+export function catalogConnectionById(forgeRoot: string, id: string): CatalogConnection | undefined {
+  assertSkillSlug(id, 'connection');
+  return listCatalogConnections(forgeRoot).find((e) => e.id === id);
+}
+
+export function connectionById(forgeRoot: string, id: string, facts: AgentFacts): ConnectionDefinition | undefined {
   // Defense-in-depth (house convention, hook-library.ts precedent): no path
   // is constructed from `id` today (there is no per-connection file — D1),
   // but a future bridge route (WI-4, `GET /api/studio/connections/:id`) will
@@ -227,5 +239,5 @@ export function connectionById(forgeRoot: string, id: string): ConnectionDefinit
   // one shared lookup point means a traversal-shaped id is rejected here
   // before any future caller ever learns to build a path from it.
   assertSkillSlug(id, 'connection');
-  return listConnections(forgeRoot).find((e) => e.id === id);
+  return listConnections(forgeRoot, facts).find((e) => e.id === id);
 }

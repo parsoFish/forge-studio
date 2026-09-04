@@ -34,7 +34,7 @@ import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { guardedSkillMdPath } from '../skill-path.ts';
 import { hooksDir } from './hook-library.ts';
 import { guardedFile } from '@forge/kernel';
-import { listConnections } from './connection-library.ts';
+import { listCatalogConnections } from './connection-library.ts';
 import { communitySkillsFromRegistry } from './community-registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
 import type { CommunityKind } from './community-index.ts';
@@ -118,7 +118,7 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
 
   // kind === 'mcp' | 'tool' — the catalog IS the only source (D1); no
   // in-between "known but not vendored" state exists for a connection.
-  const found = listConnections(forgeRoot).some((c) => c.kind === kind && c.id === id);
+  const found = listCatalogConnections(forgeRoot).some((c) => c.kind === kind && c.id === id);
   if (found) return { pipeline: 'connection', connectionId: id };
   return { pipeline: 'none', reason: unknownItemReason(kind, id) };
 }

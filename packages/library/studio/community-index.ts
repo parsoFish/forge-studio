@@ -60,8 +60,8 @@ import { extractProvenance } from './skill-package.ts';
 import type { PackageFile } from './skill-package.ts';
 import { hookYamlPath } from './hook-library.ts';
 import { hookRunState } from './hook-approval-ledger.ts';
-import { listConnections } from './connection-library.ts';
-import type { ConnectionDefinition } from './connection-library.ts';
+import { listCatalogConnections } from './connection-library.ts';
+import type { CatalogConnection } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
 import { communityRegistryPath, communitySkillsFromRegistry } from './community-registry.ts';
@@ -364,7 +364,7 @@ export function communityInstallState(forgeRoot: string, kind: CommunityKind, id
     return hookRunState(forgeRoot, id).runnable ? 'installed' : 'draft-pending-approval';
   }
   // kind === 'mcp' | 'tool' — D3: probed from that connection's OWN execution.
-  const connection = listConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);
+  const connection = listCatalogConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);
   if (!connection) {
     throw new Error(`communityInstallState: no ${kind} connection "${id}" found in studio/catalog.yaml`);
   }
@@ -520,7 +520,7 @@ function buildHookItem(forgeRoot: string, hubs: readonly CommunityHub[], id: str
  *  communityItem's single-connection resolution) controls exactly when the
  *  one real spawn happens and never repeats it (T2 round 5/6). `probeState`
  *  is always populated here — the real raw state behind `installState`. */
-export function buildConnectionItem(hubs: readonly CommunityHub[], conn: ConnectionDefinition, probe: ProbeResult): CommunityItem {
+export function buildConnectionItem(hubs: readonly CommunityHub[], conn: CatalogConnection, probe: ProbeResult): CommunityItem {
   return {
     kind: conn.kind,
     id: conn.id,
@@ -610,7 +610,7 @@ export function listCommunityIndex(forgeRoot: string, kinds?: readonly Community
   // the bridge's own second listCommunityIndex call; both now derive from
   // ONE computation, see hubCountsFrom below and packages/library/bridge-studio-community.ts).
   if ((want('mcp') || want('tool')) && existsSync(join(forgeRoot, 'studio', 'catalog.yaml'))) {
-    for (const conn of listConnections(forgeRoot)) {
+    for (const conn of listCatalogConnections(forgeRoot)) {
       if (!want(conn.kind)) continue;
       items.push(buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn)));
     }
@@ -642,7 +642,7 @@ export function communityItem(forgeRoot: string, kind: CommunityKind, id: string
   }
 
   // kind === 'mcp' | 'tool'
-  const conn = listConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);
+  const conn = listCatalogConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);
   if (!conn) return undefined;
   return buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn));
 }

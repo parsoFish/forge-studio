@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type CommunityItem, type CommunityKind } from './studio/community-index.ts';
-import { listConnections, type ConnectionDefinition } from './studio/connection-library.ts';
+import { listCatalogConnections, type CatalogConnection } from './studio/connection-library.ts';
 import { type ProbeState } from './studio/connection-probe.ts';
 import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 
@@ -68,7 +68,7 @@ export type CommunityItemWire = {
 
 export type WireCtx = {
   communitySkills: readonly CommunitySkill[];
-  connections: readonly ConnectionDefinition[];
+  connections: readonly CatalogConnection[];
   /**
    * The caller's error redactor (`sanitizeError`, the bridge transport's).
    * INJECTED rather than imported: this module is below the route layer, and
@@ -100,7 +100,7 @@ export function buildWireCtx(
 ): WireCtx {
   const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
   const catalogExists = existsSync(catalogPath);
-  const connections = catalogExists ? listConnections(forgeRoot) : [];
+  const connections = catalogExists ? listCatalogConnections(forgeRoot) : [];
   return { communitySkills, connections, sanitize };
 }
 

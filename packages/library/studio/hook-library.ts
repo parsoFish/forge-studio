@@ -26,15 +26,13 @@
  * is rejected before any read, mirroring skill-library.ts's own convention.
  */
 
+import type { AgentFacts } from './agent-facts.ts';
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { assertSkillSlug, FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { listSkillMdDirs } from '../skill-path.ts';
 import { PLATFORM_GUARD_IDS } from '@forge/contracts';
-import { isStudioAgent, loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
 import { reqString, optString, optBool, stringArray, oneOf, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
@@ -358,42 +356,26 @@ export function loadHookDefinition(id: string, root: string = FORGE_ROOT): HookD
 // deriveArtifactTemplateUsage precedent), not an AgentDefinition[] array.
 // ---------------------------------------------------------------------------
 
-/** Studio agents, tolerating a malformed one — a single bad sibling must not
- *  crash the whole scan (mirrors skill-library.ts's own resilient listing). */
-function listAgentDefinitionsResilient(root: string): AgentDefinition[] {
-  const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(join(root, 'skills'))) {
-    const mdPath = join(dir, 'SKILL.md');
-    if (!isStudioAgent(mdPath)) continue;
-    try {
-      defs.push(loadAgentDefinition(mdPath));
-    } catch {
-      /* malformed studio agent — already reported elsewhere; skip here */
-    }
-  }
-  return defs.sort((a, b) => a.slug.localeCompare(b.slug));
+function computeHookUsage(
+  forgeRoot: string,
+  facts: AgentFacts,
+): { byHook: Map<string, string[]>; derivation: HookUsedByDerivation } {
+  // The port's index already dedupes per agent and sorts each carrier list —
+  // the derivation this module used to run over its own roster walk, moved
+  // behind the boundary (rulings 13/73/127). The copy is because
+  // `HookLibraryEntry.carriedBy` is a mutable `string[]`.
+  const { byId, scanned } = facts.usage('hook', forgeRoot);
+  const byHook = new Map<string, string[]>();
+  for (const [id, slugs] of byId) byHook.set(id, [...slugs]);
+  return { byHook, derivation: { source: HOOK_USAGE_SOURCE, scanned } };
 }
 
-function computeHookUsage(forgeRoot: string): { byHook: Map<string, string[]>; derivation: HookUsedByDerivation } {
-  const agents = listAgentDefinitionsResilient(forgeRoot);
-  const byHook = new Map<string, Set<string>>();
-  for (const agent of agents) {
-    for (const hookId of new Set(agent.composition.hooks)) {
-      if (!byHook.has(hookId)) byHook.set(hookId, new Set());
-      byHook.get(hookId)!.add(agent.slug);
-    }
-  }
-  const out = new Map<string, string[]>();
-  for (const [hookId, slugs] of byHook) out.set(hookId, [...slugs].sort((a, b) => a.localeCompare(b)));
-  return { byHook: out, derivation: { source: HOOK_USAGE_SOURCE, scanned: agents.length } };
+export function deriveHookUsage(forgeRoot: string, facts: AgentFacts): Map<string, string[]> {
+  return computeHookUsage(forgeRoot, facts).byHook;
 }
 
-export function deriveHookUsage(forgeRoot: string): Map<string, string[]> {
-  return computeHookUsage(forgeRoot).byHook;
-}
-
-export function listHookLibrary(forgeRoot: string): HookLibraryEntry[] {
-  const { byHook, derivation } = computeHookUsage(forgeRoot);
+export function listHookLibrary(forgeRoot: string, facts: AgentFacts): HookLibraryEntry[] {
+  const { byHook, derivation } = computeHookUsage(forgeRoot, facts);
   const entries: HookLibraryEntry[] = [];
   for (const id of listHookIds(forgeRoot)) {
     const carriedBy = byHook.get(id) ?? [];
@@ -514,10 +496,13 @@ export function checkHookComposition(
 // truth, and a lint fixture root may not seed one at all.
 // ---------------------------------------------------------------------------
 
-export function lintHookComposition(forgeRoot: string): Finding[] {
+export function lintHookComposition(forgeRoot: string, facts: AgentFacts): Finding[] {
   const guardIds = new Set<string>(PLATFORM_GUARD_IDS);
   const hookIds = new Set(listHookIds(forgeRoot));
-  const agents = listAgentDefinitionsResilient(forgeRoot);
+  // `compositions`, not `usage`: this check reads `composition.guards`, and the
+  // usage index has no `guard` kind — the very thing
+  // `hook-library/hook-in-guards` exists to find is absent from it.
+  const agents = facts.compositions(forgeRoot);
 
   const findings: Finding[] = [];
   for (const agent of agents) {
