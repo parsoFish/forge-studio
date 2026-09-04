@@ -67,6 +67,9 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
       LANES_CONFIRM_TIMEOUT_S: '6',
+      // Pinned so the memory floor cannot turn every launch test into a reading of whatever the
+      // host had free at the time — the same reason envWithoutLanesVars() exists.
+      LANES_MEMINFO: meminfo(9 * 1024 * 1024),
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: repo,
       LANES_WORKTREE_ROOT: join(dir, 'wt'),
@@ -453,6 +456,85 @@ describe('lanes.sh launch — preflight, before a single token is spent', () => 
 
     const good = lanes(['launch', camp, 'skill', prompt, '--cwd', laneCwd, '--t1', 't1', '--skill', 'tiered-orchestration'], { LANES_CLAUDE_BIN: bin });
     assert.equal(good.status, 0, good.stderr);
+  });
+
+  /**
+   * `git worktree remove` leaves the branch `worktree add -b` created. A preflight that says
+   * "nothing left running" and leaves a branch behind sends the operator's identical retry into
+   * "a branch named … already exists" — with the real cause hidden behind a discarded stderr.
+   */
+  test('a failure after the worktree is cut removes the worktree AND its branch, so the same command can be retried', () => {
+    const lane = 'retry';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const bin = laneBin('lane-retry', { register: 'busy' });
+    const prompt = join(dir, 'prompt-retry.md');
+    writeFileSync(prompt, kickoff('work retry'));
+    const elsewhere = join(dir, 'borrowed-kernel-2');
+    mkdirSync(elsewhere, { recursive: true });
+
+    const bad = lanes(['launch', camp, lane, prompt, '--branch', `lane/${lane}`, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_BASE_REF: 'main',
+      LANES_INSTALL_CMD: `mkdir -p node_modules/@forge && ln -sfn ${elsewhere} node_modules/@forge/kernel`,
+    });
+
+    assert.notEqual(bad.status, 0);
+    assert.equal(git(repo, 'branch', '--list', `lane/${lane}`).trim(), '', 'the branch it created is gone too');
+
+    // The retry is the proof: the identical command must now be able to succeed.
+    const wt = join(dir, 'wt', `forge-${lane}`);
+    const good = lanes(['launch', camp, lane, prompt, '--branch', `lane/${lane}`, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_BASE_REF: 'main',
+      LANES_INSTALL_CMD: `mkdir -p node_modules/@forge packages/kernel && ln -sfn ${wt}/packages/kernel node_modules/@forge/kernel`,
+    });
+
+    assert.equal(good.status, 0, `the identical retry must work; stderr=${good.stderr}`);
+  });
+
+  test('the install log survives the worktree it was written for, and the failure names it', () => {
+    const lane = 'ilog';
+    sessions.add(`${PREFIX}${lane}`);
+    const bin = laneBin('lane-ilog', { register: 'busy' });
+    const prompt = join(dir, 'prompt-ilog.md');
+    writeFileSync(prompt, kickoff('work ilog'));
+
+    const r = lanes(['launch', camp, lane, prompt, '--branch', `lane/${lane}`, '--t1', 't1'], {
+      LANES_CLAUDE_BIN: bin,
+      LANES_BASE_REF: 'main',
+      LANES_INSTALL_CMD: 'echo "npm ERR! ENOSPC no space left on device" >&2; exit 1',
+    });
+
+    assert.notEqual(r.status, 0);
+    const ilog = join(camp, 'heartbeat', `${lane}.install.log`);
+    assert.match(r.stderr, new RegExp(ilog.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'the failure names the log');
+    assert.match(readFileSync(ilog, 'utf8'), /ENOSPC/, 'and the evidence outlives the worktree it was deleted with');
+  });
+
+  /**
+   * §15.92 through this preflight's own door: `roster()` swallows a failing CLI with `[]`, so a
+   * flake between the confirm loop and the argv proof would have skipped the proof entirely and
+   * still printed `launched`. A proof that can be skipped is not a proof.
+   */
+  test('a launch whose MCP flags cannot be PROVEN on the live process is not a confirmed launch', () => {
+    const lane = 'nopid';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const bin = laneBin('lane-nopid', { register: 'busy' });
+    const prompt = join(dir, 'prompt-nopid.md');
+    writeFileSync(prompt, kickoff('work nopid'));
+    const laneCwd = join(dir, 'cwd-nopid');
+    mkdirSync(laneCwd, { recursive: true });
+    // A roster that registers the session but names no pid — what a partial read looks like.
+    const pidless = writeExec('roster-pidless', `#!/usr/bin/env bash\npython3 -c '\nimport json, sys\nrows = json.load(open(sys.argv[1]))\nfor r in rows: r.pop("pid", None)\nprint(json.dumps(rows))' '${rosterFile}'\n`);
+
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, LANES_ROSTER_CMD: pidless });
+
+    assert.notEqual(r.status, 0, 'an unprovable launch is NOT CONFIRMED');
+    assert.match(r.stderr, /no pid/, 'and the failure names the branch it could not take');
+    assert.doesNotMatch(r.stdout, /^launched/m);
+    assert.notEqual(tmux('has-session', '-t', s).status, 0, 'and it started nothing');
   });
 
   test('--branch cuts the worktree, installs into it, and proves the kernel link is its own', () => {

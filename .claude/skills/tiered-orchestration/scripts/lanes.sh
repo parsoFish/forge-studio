@@ -44,14 +44,15 @@
 #                                    > 10 min: the relay hole).
 # Env: LANES_MODEL (opus) · LANES_PERMISSION_MODE (auto) · LANES_CWD (/home/parso/forge) ·
 #      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60) ·
-#      LANES_BASE_REF (parsoFish/main) · LANES_INSTALL_CMD · LANES_MEMINFO (both test seams).
+#      LANES_BASE_REF (parsoFish/main) · LANES_MEM_FLOOR_GIB (4) · LANES_INSTALL_CMD ·
+#      LANES_MEMINFO (the last two are test seams).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${LANES_SESSION_PREFIX:-forge-}"
 # COMMON §1: 4 GiB available before any suite or story run. §15.17 measured suites dying mid-run
 # under load with no OOM; the floor was a line in a brief until launch enforced it.
-LANES_MEM_FLOOR_GIB_DEFAULT=4
+LANES_MEM_FLOOR_GIB="${LANES_MEM_FLOOR_GIB:-4}"
 REPO="${LANES_CWD:-/home/parso/forge}"
 
 die() { echo "lanes.sh: $*" >&2; exit 2; }
@@ -271,10 +272,24 @@ cmd_render() {
 # running with ACTIVE still NONE — a live session with a full prompt, no orchestrator, no
 # registry entry and no watcher signal). `active_add` has not run at this point, so ACTIVE is
 # untouched by construction; the session and the process it started are not.
+# What a launch CREATED, so every failure path can undo all of it. `git worktree remove` leaves
+# the branch `worktree add -b` made, so the identical retry hits "a branch named … already
+# exists" with the real cause hidden behind a discarded stderr.
+LAUNCH_WT=""
+LAUNCH_BRANCH=""
+undo_created() {
+  [ -n "$LAUNCH_WT" ] || return 0
+  git -C "$REPO" worktree remove --force "$LAUNCH_WT" >/dev/null 2>&1 || rm -rf "$LAUNCH_WT"
+  git -C "$REPO" worktree prune
+  [ -z "$LAUNCH_BRANCH" ] || git -C "$REPO" branch -D "$LAUNCH_BRANCH" >/dev/null 2>&1 || true
+  echo "removed the worktree $LAUNCH_WT and the branch ${LAUNCH_BRANCH:-<none>} this launch created" >&2
+  LAUNCH_WT=""; LAUNCH_BRANCH=""
+}
 die_launch() {
   local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p
   tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s (undoing a launch that was never confirmed)" >&2
   for p in $(pids_claude_in "$cwd" "$t0"); do retire_pid "$p" "half-launched lane $lane" >&2 || true; done
+  undo_created
   die "$msg"
 }
 
@@ -325,12 +340,12 @@ cmd_launch() {
 
   # (a) memory floor. Suites died mid-run under load with no OOM (§15.17); COMMON §1 sets 4 GiB
   # and nothing enforced it. LANES_MEMINFO is the seam — a red is plantable without a small host.
-  local mem_kb floor_kb=$((LANES_MEM_FLOOR_GIB_DEFAULT * 1024 * 1024))
+  local mem_kb floor_kb=$((LANES_MEM_FLOOR_GIB * 1024 * 1024))
   mem_kb="$(awk '/^MemAvailable:/ {print $2}' "${LANES_MEMINFO:-/proc/meminfo}" 2>/dev/null || true)"
   [ -n "$mem_kb" ] || die "cannot read MemAvailable from ${LANES_MEMINFO:-/proc/meminfo} — a floor that cannot be measured is not a floor"
   if [ "$mem_kb" -lt "$floor_kb" ]; then
     die "$(printf 'MemAvailable %.1f GiB is below the %d GiB floor (COMMON §1) — a suite started here dies mid-run; free memory or wait' \
-      "$(awk -v k="$mem_kb" 'BEGIN{print k/1048576}')" "$LANES_MEM_FLOOR_GIB_DEFAULT")"
+      "$(awk -v k="$mem_kb" 'BEGIN{print k/1048576}')" "$LANES_MEM_FLOOR_GIB")"
   fi
 
   # (c) the rendered prompt must carry the campaign's suite lock. A lane that never saw the line
@@ -354,13 +369,16 @@ cmd_launch() {
     cwd="${LANES_WORKTREE_ROOT:-$HOME}/forge-$lane"
     [ -e "$cwd" ] && die "worktree $cwd already exists — retire the old lane first (lanes.sh kill)"
     git -C "$REPO" worktree add -b "$branch" "$cwd" "$base" >/dev/null 2>&1 || die "could not cut worktree $cwd on $branch from $base"
-    undo_worktree() { git -C "$REPO" worktree remove --force "$cwd" >/dev/null 2>&1 || rm -rf "$cwd"; git -C "$REPO" worktree prune; }
-    ( cd "$cwd" && eval "${LANES_INSTALL_CMD:-npm install --no-audit --no-fund}" ) >/dev/null 2>&1 \
-      || { undo_worktree; die "install failed in $cwd — worktree removed, nothing left running"; }
+    LAUNCH_WT="$cwd"; LAUNCH_BRANCH="$branch"
+    # The install's output is KEPT: on failure the worktree is deleted, so a discarded stderr
+    # takes the only evidence with it (ENOSPC and a registry 503 read identically otherwise).
+    local ilog="$camp/heartbeat/$lane.install.log"
+    ( cd "$cwd" && eval "${LANES_INSTALL_CMD:-npm install --no-audit --no-fund}" ) > "$ilog" 2>&1 \
+      || { undo_created; die "install failed in $cwd — see $ilog; worktree and branch removed, nothing left running"; }
     local klink; klink="$(cd "$cwd" && readlink -f node_modules/@forge/kernel 2>/dev/null || true)"
     case "$klink" in
       "$cwd"/*) echo "kernel link: $klink" ;;
-      *) undo_worktree; die "kernel link resolves to '${klink:-<none>}', not inside $cwd — this tree would run another tree's install (§15.148); worktree removed" ;;
+      *) undo_created; die "kernel link resolves to '${klink:-<none>}', not inside $cwd — this tree would run another tree's install (§15.148)" ;;
     esac
   fi
   # (f) the skills a brief tells this lane to use must be openable FROM THE TREE IT LAUNCHES INTO
@@ -370,7 +388,7 @@ cmd_launch() {
   local sk
   for sk in "${skills[@]+"${skills[@]}"}"; do
     if [ ! -f "$cwd/.claude/skills/$sk/SKILL.md" ] && [ ! -f "$HOME/.claude/skills/$sk/SKILL.md" ]; then
-      [ -n "$branch" ] && undo_worktree
+      undo_created
       die "--skill $sk: no SKILL.md at $cwd/.claude/skills/$sk/ or \$HOME/.claude/skills/$sk/ — this lane could not open the skill its brief names"
     fi
   done
@@ -403,12 +421,15 @@ cmd_launch() {
   # this whole preflight exists to close.
   local pid cmdline
   pid="$(roster_pid "$s")"
-  if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ]; then
-    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
-    case "$cmdline" in *--strict-mcp-config*) ;; *) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline carries no --strict-mcp-config" ;; esac
-    case "$cmdline" in *tokensave*) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: tokensave in /proc/$pid/cmdline (ruling 140)" ;; esac
-    echo "preflight: MemAvailable ok · prompt carries '$lockline' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
-  fi
+  # A proof that can be SKIPPED is not a proof: `roster()` swallows a failing CLI with `[]`, so a
+  # flake here would have left the block unexecuted and the launch still reported as confirmed —
+  # precisely the fail-open this preflight exists to close (§15.92). No pid, no launch.
+  [ -n "$pid" ] || die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: the roster named no pid for $s, so --strict-mcp-config could not be proven on the live process"
+  [ -r "/proc/$pid/cmdline" ] || die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline is unreadable, so the MCP flags could not be proven"
+  cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+  case "$cmdline" in *--strict-mcp-config*) ;; *) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline carries no --strict-mcp-config" ;; esac
+  case "$cmdline" in *tokensave*) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: tokensave in /proc/$pid/cmdline (ruling 140)" ;; esac
+  echo "preflight: MemAvailable ok · prompt carries '$lockline' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
   active_add "$camp" "$lane"
   printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"
   echo "launched $s  [$row]  model=$model permission-mode=$pm cwd=$cwd t1=$t1 attended=$attended"
