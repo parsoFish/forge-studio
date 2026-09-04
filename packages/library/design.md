@@ -105,6 +105,15 @@ the directory itself and calls the single-file loaders
 one bad sibling never hides the rest.
 ```
 
+### The authoring turn arrives by injection
+
+`bridge-studio-authoring.ts`'s finalize route drives a real session: it reads and writes `status.json` through the guarded pair, loads the `authoring` session kind, runs one interactive turn on it, and tells an honest named refusal from the staging copy layer apart from a structural failure. All four reads were `@forge/sessions` imports — rank 4 from a rank-2 package, handoffs L1–L4. `studio/authoring-session.ts` declares them as this package's own `AuthoringSessionPort`; `apps/forge/library-authoring-session.ts` binds it, and it reaches `packages/sessions/kinds/authoring.ts` — which calls `runFinalize` directly — through the deps that package already threads.
+
+Two collapses keep the port to four members and sessions' vocabulary out of library:
+
+- **`runAuthoringTurn` folds `loadSessionKinds` + `runInteractiveTurn` into one call.** Taking the descriptor separately would have put sessions' `SessionKindDescriptor` into library's types for no gain. `null` means the authoring kind is absent — the route's own 500. The turn stays a DYNAMIC import on the binding side, because a static one pulls the Claude Agent SDK into bridge start-up.
+- **`isFinalizerError` replaces an `instanceof`, and the classification stays here.** `InteractiveFinalizerError` carries only a message; which message shapes are an honest entry-scoped refusal (400) rather than a structural failure (500) is a fact about THIS route's contract, so the regex stays in library and only the "did it come from the copy layer" half is injected.
+
 ### The Flow kind arrives by injection too
 
 `studio/template-library.ts` derives each planning template's `usedBy` from the flow graph, which meant reading the Flow kind's loaders — `@forge/flows` is rank 5, this package is rank 2, and they were reached through `orchestrator/studio/registry.ts`'s re-export hub. Library now declares its own `FlowSource` port (`listFlowIds` + `loadFlowDefinition`, in terms of the `FlowDefinition` that already lives in `@forge/contracts`, so nothing is lifted) and `apps/forge/library-flow-source.ts` binds it. Four exported functions take it: `listTemplateLibrary`, `templateDetail`, `lintTemplateLibrary` and `deriveArtifactTemplateUsage`.

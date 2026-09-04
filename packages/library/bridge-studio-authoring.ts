@@ -160,6 +160,7 @@
  * ---------------------------------------------------------------------------
  */
 
+import type { AuthoringSessionPort, AuthoringStatus, AuthoringTurnResult } from './studio/authoring-session.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { rmSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -173,19 +174,15 @@ import {
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
 import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 // Static import — `interactive-finalizers.ts` imports only `node:fs`,
 // `node:path` and the path guard (no Claude Agent SDK), so pulling its named
 // error class in here does NOT regress the deliberate dynamic-import-of-the-
 // RUNNER decision a few lines below (that import stays dynamic because
 // `interactive-runner.ts`, not this module, is what drags the SDK in).
-import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizers.ts';
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
 // DYNAMICALLY, inside runFinalize, below (mirrors packages/agents/agent-run.ts's own
 // project-brain kind's dynamic-import precedent).
-import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '@forge/sessions/interactive-runner.ts';
 import { finalizeSkillFromLanded } from './bridge-studio-authoring-skill.ts';
 import { finalizeHookFromLanded } from './bridge-studio-authoring-hook.ts';
 import { finalizeTemplateFromLanded } from './bridge-studio-authoring-template.ts';
@@ -212,7 +209,7 @@ const REQUIRED_PHASE = 'awaiting-review';
 
 const ENTRY_SCOPED_FINALIZER_REFUSAL_RE = /^copyStagingToLibrary: (staged entry|destination for) "/;
 
-function isEntryScopedFinalizerRefusal(err: InteractiveFinalizerError): boolean {
+function isEntryScopedFinalizerRefusal(err: Error): boolean {
   return ENTRY_SCOPED_FINALIZER_REFUSAL_RE.test(err.message);
 }
 
@@ -239,10 +236,11 @@ function isEntryScopedFinalizerRefusal(err: InteractiveFinalizerError): boolean 
 function revertToAwaitingReview(
   projectsRoot: string,
   dirSegments: readonly string[],
-  preCommitStatus: InteractiveTurnStatus,
+  preCommitStatus: AuthoringStatus,
+  sessions: AuthoringSessionPort,
 ): void {
   try {
-    guardedWriteSessionStatus(projectsRoot, dirSegments, { ...preCommitStatus, phase: REQUIRED_PHASE });
+    sessions.writeStatus(projectsRoot, dirSegments, { ...preCommitStatus, phase: REQUIRED_PHASE });
   } catch {
     /* best-effort — see doc comment above */
   }
@@ -265,6 +263,7 @@ export async function runFinalize(
   res: ServerResponse,
   origin: string,
   input: { project: string; sessionId: string; kind: 'skill' | 'hook' | 'template'; id: string },
+  sessions: AuthoringSessionPort,
 ): Promise<void> {
   const { project, sessionId, kind, id } = input;
 
@@ -288,7 +287,7 @@ export async function runFinalize(
 
     // Step 3 — the guarded read (leaf included) — the SAME primitive
     // runInteractiveTurn itself uses for its own status reads.
-    const status = guardedReadSessionStatus<InteractiveTurnStatus>(projectsRoot, dirSegments);
+    const status = sessions.readStatus<AuthoringStatus>(projectsRoot, dirSegments);
     if (!status) {
       sendJson(res, 404, { error: 'session status not found' }, origin);
       return;
@@ -301,7 +300,7 @@ export async function runFinalize(
     }
 
     // Step 4 — guarded-write package_id + phase:'committing'.
-    const written = guardedWriteSessionStatus(projectsRoot, dirSegments, { ...status, package_id: id, phase: 'committing' });
+    const written = sessions.writeStatus(projectsRoot, dirSegments, { ...status, package_id: id, phase: 'committing' });
     if (written === null) {
       sendJson(res, 500, { error: 'failed to advance session status to "committing"' }, origin);
       return;
@@ -319,7 +318,7 @@ export async function runFinalize(
     // there is exactly one place that decides how to recover — never a
     // bespoke per-branch write.
     // -------------------------------------------------------------------
-    const revert = (): void => revertToAwaitingReview(projectsRoot, dirSegments, status);
+    const revert = (): void => revertToAwaitingReview(projectsRoot, dirSegments, status, sessions);
 
     // sessionGuard.realPath === <projectsRoot realpath>/<project>/_authoring/
     // <sessionId> (resolveGuardedPath's own per-segment join order) — the
@@ -353,18 +352,16 @@ export async function runFinalize(
       // SDK into bridge start-up (apps/forge/ui-bridge.ts does not import
       // packages/agents/agent-run.ts today) — mirrors packages/agents/agent-run.ts's own
       // project-brain kind's dynamic-import precedent.
-      const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
-      if (!descriptor) {
-        revert();
-        sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
-        return;
-      }
-      const { runInteractiveTurn } = await import('@forge/sessions/interactive-runner.ts');
-      const turnResult: RunInteractiveTurnResult = await runInteractiveTurn(descriptor, {
+      const turnResult: AuthoringTurnResult | null = await sessions.runAuthoringTurn({
         sessionId,
         projectRoot,
         forgeRoot: ctx.forgeRoot,
       });
+      if (turnResult === null) {
+        revert();
+        sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
+        return;
+      }
       if (turnResult.phase !== 'committed') {
         // Never report success on an unfinished turn.
         revert();
@@ -406,9 +403,9 @@ export async function runFinalize(
       // status.json to phase 'committed') and best-effort: the package HAS
       // landed and installed — a failed pointer write must never turn that
       // into a reported failure.
-      const committedStatus = guardedReadSessionStatus<InteractiveTurnStatus>(projectsRoot, dirSegments);
+      const committedStatus = sessions.readStatus<AuthoringStatus>(projectsRoot, dirSegments);
       if (committedStatus) {
-        guardedWriteSessionStatus(projectsRoot, dirSegments, { ...committedStatus, finalized: { kind, id } });
+        sessions.writeStatus(projectsRoot, dirSegments, { ...committedStatus, finalized: { kind, id } });
       }
       sendJson(res, 200, { ok: true, kind, id }, origin);
     } catch (err) {
@@ -438,8 +435,8 @@ export async function runFinalize(
       // bad file" refusal. Widening the 400 mapping to catch those too would
       // regress that pinned contract for no operator benefit: there is no
       // single offending entry to name.
-      if (err instanceof InteractiveFinalizerError && isEntryScopedFinalizerRefusal(err)) {
-        sendJson(res, 400, { error: `staged package could not be copied: ${err.message}` }, origin);
+      if (sessions.isFinalizerError(err) && isEntryScopedFinalizerRefusal(err as Error)) {
+        sendJson(res, 400, { error: `staged package could not be copied: ${(err as Error).message}` }, origin);
         return;
       }
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -470,7 +467,7 @@ export async function runFinalize(
 // of handleStudioAuthoringRoutes (guarded at :471, matched at :474).
 // ---------------------------------------------------------------------------
 
-export async function handleAuthoringFinalize(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string): Promise<boolean> {
+export async function handleAuthoringFinalize(req: IncomingMessage, res: ServerResponse, ctx: RouteContext, rawUrl: string, method: string, sessions: AuthoringSessionPort): Promise<boolean> {
   if (method !== 'POST') return false;
 
   const url = pathOnly(rawUrl);
@@ -515,6 +512,6 @@ export async function handleAuthoringFinalize(req: IncomingMessage, res: ServerR
     return true;
   }
 
-  await runFinalize(ctx, res, origin, { project, sessionId, kind, id });
+  await runFinalize(ctx, res, origin, { project, sessionId, kind, id }, sessions);
   return true;
 }

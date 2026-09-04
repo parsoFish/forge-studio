@@ -18,6 +18,7 @@
  * `tests/contract/routes-table.test.ts` pins which entry claims each colliding
  * URL rather than merely asserting both exist.
  */
+import type { AuthoringSessionPort } from '@forge/library/studio/authoring-session.ts';
 import type { IncomingMessage } from 'node:http';
 
 import type { RouteContext, RouteTable } from '@forge/kernel';
@@ -73,6 +74,7 @@ export type SessionsRouteDeps = {
    *  rather than imported by name. The kb-cleanup approve arm consolidates
    *  through it, so dropping the thread breaks a live operator path. */
   readonly runFixTurn: NonNullable<Parameters<typeof approveKbCleanup>[3]>['runFixTurn'];
+  readonly authoringSession: AuthoringSessionPort;
 } & SessionHostSurface;
 
 /** Matching strips the query; handlers receive the RAW url and normalise for
@@ -128,6 +130,7 @@ function familyContext(ctx: RouteContext, deps: SessionsRouteDeps) {
     // spread; `runFixTurn` is new above.
     broadcastKindChanged: deps.broadcastKindChanged,
     runFixTurn: deps.runFixTurn,
+    authoringSession: deps.authoringSession,
   };
 }
 

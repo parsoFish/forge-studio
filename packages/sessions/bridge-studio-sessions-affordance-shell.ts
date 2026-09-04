@@ -4,6 +4,7 @@
  * dispatch imports the kinds, so anything a kind imported back out of the
  * dispatch would be a cycle. See `design.md` for the rest.
  */
+import type { AuthoringSessionPort } from '@forge/library/studio/authoring-session.ts';
 import type { ServerResponse } from 'node:http';
 
 import { sendJson, guardedWriteFile, type StudioContext } from '@forge/kernel';
@@ -72,6 +73,7 @@ export type AffordanceRouteContext = StudioContext & {
    *  `spawnAgentTurn` is: host machinery, and its kernel move is only
    *  half-done (see `SessionHostSurface`'s own note). */
   dryBridgeAgentTurnMarker: (logsRoot: string, route: string, sessionId: string) => Record<string, unknown>;
+  authoringSession: AuthoringSessionPort;
   /** Injected from `apps/forge/ui-bridge.ts` — see this file's header for why this
    *  is dependency-injected rather than imported: delegates to the EXACT
    *  SAME `spawnAgentTurn` every bespoke per-kind route already calls, not a

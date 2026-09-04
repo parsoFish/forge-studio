@@ -119,7 +119,7 @@ import { startBridge } from '../../apps/forge/ui-bridge.ts';
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
 // happy paths — see the T3 report for the exact captured failure per test).
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from './tests/test-fixtures/flow-fixture.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from './routes.ts'; import { fixtureAgentFacts } from './tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from './tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from './tests/test-fixtures/authoring-session-fixture.ts';
 import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from './studio/hook-library.ts';
 import { listTemplateLibrary } from './studio/template-library.ts';
 import { SCAFFOLD_READONLY } from './bridge-studio-templates.ts';
@@ -1272,7 +1272,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
   const mockReq = {} as import('node:http').IncomingMessage;
   const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false, flowSource: fixtureFlowSource }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
+  const handled = await dispatchRoute(libraryRoutes({ agentFacts: fixtureAgentFacts(ctx.forgeRoot), isSdkAvailable: () => false, flowSource: fixtureFlowSource, authoringSession: inertAuthoringSession }), mockReq, mockRes, { ...ctx, readBody: async () => ({}) }, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-authoring URL must return false');
 });
 
