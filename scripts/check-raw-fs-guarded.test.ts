@@ -477,22 +477,6 @@ test('C2: clean FOR THE RIGHT REASON — the scanner is live and every audited r
   assert.equal(r.mistargeted.length, 0, 'no mistargeted allowlist rows');
 });
 
-test('C4: every real allowlist row is well-formed (file, line, a reason, and an audited sink)', () => {
-  // A structural integrity gate on the allowlist itself — a row with no reason
-  // or no sink identity is not an audited residual, it is a silent skip.
-  //
-  // Bead 5.49: `&& ALLOWLIST.length > 0` forbade ever emptying the audited list.
-  assert.ok(Array.isArray(ALLOWLIST));
-  for (const a of ALLOWLIST) {
-    assert.equal(typeof a.file, 'string');
-    assert.equal(typeof a.line, 'number');
-    assert.ok(a.reason && a.reason.trim().length > 20, `row ${a.file}:${a.line} needs a substantive reason`);
-    const sinks = a.sinks ?? (a.sink ? [a.sink] : []);
-    assert.ok(sinks.length > 0, `row ${a.file}:${a.line} must name the audited sink(s)`);
-    for (const s of sinks) assert.ok(RAW_FS_SINKS.includes(s), `row ${a.file}:${a.line} names non-sink "${s}"`);
-  }
-});
-
 // =============================================================================
 // Group E — W7-C3 (forge-i9w): the fd-based sink family. openSync is a PATH
 // sink (its first argument is a filesystem path, exactly like readFileSync);

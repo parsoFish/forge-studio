@@ -2007,12 +2007,35 @@ changed path and nothing else.
 |---|---|---|---|
 | `orchestrator/flow-runner.ts` | `packages/flows/flow-runner.ts` | `readFileSync` 1 | the runner is flows' runtime; `SPEC.md` §2 puts the Station engine in the package, and the move is what lets it stop importing `orchestrator/` |
 
-**The proof that this is a re-key and not growth is the guard's own totals: 605
-`(file, sink)` rows and 1,371 sink calls before, and 605 / 1,371 after.**
-Accepted by hand-editing the single affected line, NOT by `--write`: bead
-`forge-8vfn.5.19` records that `--write` harvests unrelated baseline slack, and
-the tightenable line this produced (`orchestrator/flow-runner.ts readFileSync
-1 -> 0`) is the same row's other half rather than an independent shrink.
+**The proof that this is a re-key and not growth is the guard's own totals,
+re-derived from the checker rather than quoted: 604 `(file, sink)` rows and
+1,366 sink calls, unchanged across the move.**
+
+> **Correction (M4-flows s2).** This paragraph first read "605 rows and 1,371
+> sink calls before, and 605 / 1,371 after". Neither figure was measured on the
+> tree the sentence describes.
+>
+> - **605** was `wc -l` of the baseline FILE, not a row count. At `544f6621` one
+>   of its lines, `packages/sessions/kinds/architect-plan.ts existsSync 4`, had
+>   matched nothing live since sessions' #362 and was reported as tightenable, so
+>   the checker found **604** rows against a **605**-line baseline. Sessions' #366
+>   has since harvested that line: at `4b337b69` the baseline is **604** lines and
+>   the row count is unchanged at **604**.
+> - **1,371** was measured during M4-flows PR 4 and carried forward without
+>   re-deriving. The #362 fix (`existsSync 4 → 0`, `mkdirSync 2 → 1`) took the
+>   call total to **1,366**, where it remains.
+>
+> The conservation CLAIM was and is true — the row changed path and nothing else
+> — but the evidence quoted for it came from two different trees. Measured with
+> `node scripts/check-request-path-sinks.mjs`: at `544f6621`, **304 reachable
+> modules / 604 rows / 1,366 calls / baseline 605 lines**; at `4b337b69`,
+> **308 / 604 / 1,366 / baseline 604** — the reachable count and the baseline
+> move with other lanes' carves, the two invariants do not. Quote the invariant
+> and the SHA it was measured at, never a bare absolute.
+>
+> Also recorded here so the next lane does not revert it: **#365 re-sorted
+> `scripts/request-path-sinks.baseline.txt` into `LC_ALL=C` order.** A re-sort
+> under a different locale is a whole-file diff that hides the real change.
 
 Reachable modules go 303 → 304: `packages/flows/flow-fanout.ts`, the fan-out
 predicate extracted from `orchestrator/studio/validate.ts` in the same move, is
