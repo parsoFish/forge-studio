@@ -29,6 +29,7 @@ let repo: string;
 let rosterFile: string;
 let rosterCmd: string;
 const sessions = new Set<string>();
+const planted = new Set<number>();
 
 function tmux(...args: string[]) {
   return spawnSync('tmux', args, { encoding: 'utf8' });
@@ -57,10 +58,11 @@ function envWithoutLanesVars(): NodeJS.ProcessEnv {
 }
 
 /** Run lanes.sh. Never throws — the exit status IS the subject of these tests. */
-function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 30000) {
+function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 30000, cwd?: string) {
   const r = spawnSync('bash', [LANES, ...args], {
     encoding: 'utf8',
     timeout: timeoutMs,
+    cwd,
     env: {
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
@@ -83,11 +85,41 @@ function writeExec(name: string, body: string) {
   return p;
 }
 /**
+ * A binary at `<dir>/<name>/<name>`, so its `comm` (what `pgrep -x` matches) is <name>.
+ * A copy of `sleep`: it idles, and it is not the real program of that name.
+ */
+function fakeBin(name: string) {
+  const d = join(dir, `bin-${name}`);
+  mkdirSync(d, { recursive: true });
+  const p = join(d, name);
+  // Copied once per name: re-copying over a running copy is ETXTBSY, and every planted
+  // process of that name wants the same binary anyway.
+  if (!existsSync(p)) {
+    copyFileSync(execFileSync('bash', ['-c', 'command -v sleep'], { encoding: 'utf8' }).trim(), p);
+    chmodSync(p, 0o755);
+  }
+  return p;
+}
+/**
  * A lane program: records its argv, optionally registers itself in the roster
  * (what a real claude session does by existing), then idles.
+ *
+ * `register` values are the ones `claude agents --json` really emits, measured on
+ * Claude Code v2.1.260 (2026-09-04, bead forge-8vfn.2.31):
+ *   busy     — working
+ *   waiting  — parked on a dialog: `{"status":"waiting","waitingFor":"permission prompt"}`.
+ *              `waitingFor` is only present while waiting; there is NO `state` key, and no
+ *              observed value anywhere contains the string "blocked".
+ *   never    — the trust dialog: the session never reaches the roster at all, while its
+ *              process is alive in the lane's cwd.
+ *
+ * `detach` spawns a grandchild through `setsid` before idling, so it survives the death of
+ * the tmux session that started it — §15.100's RC-attached claude, plantable on demand.
  */
-function laneBin(name: string, opts: { register: 'busy' | 'blocked' | 'never' }) {
+function laneBin(name: string, opts: { register: 'busy' | 'waiting' | 'never'; detach?: string }) {
   const argvFile = join(dir, `${name}.argv`);
+  const status =
+    opts.register === 'waiting' ? '"waiting", "waitingFor": "permission prompt"' : '"busy"';
   const row =
     opts.register === 'never'
       ? ''
@@ -95,19 +127,54 @@ function laneBin(name: string, opts: { register: 'busy' | 'blocked' | 'never' })
 import json, os, sys
 p = os.environ["ROSTER"]
 rows = json.load(open(p)) if os.path.exists(p) else []
-rows.append({"name": os.environ["SESS"], "pid": int(sys.argv[1]), "kind": "interactive", "status": ${opts.register === 'blocked' ? '"waiting", "state": "blocked", "waitingFor": "input needed"' : '"busy"'}})
+rows.append({"name": os.environ["SESS"], "pid": int(sys.argv[1]), "kind": "interactive", "status": ${status}})
 json.dump(rows, open(p, "w"))
 PY`;
+  const detach = opts.detach
+    ? `setsid nohup '${opts.detach}' 300 </dev/null >'${join(dir, `${name}.detached`)}' 2>&1 &
+echo $! > '${join(dir, `${name}.detachedpid`)}'
+`
+    : '';
   return writeExec(
     name,
     `#!/usr/bin/env bash
 printf '%s\\0' "$@" > '${argvFile}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
-${row}
+${detach}${row}
 sleep 120
 `,
   );
+}
+/** The pid of the grandchild `laneBin(..., {detach})` spawned, once it exists. */
+function detachedPid(name: string) {
+  const f = join(dir, `${name}.detachedpid`);
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
+  assert.ok(existsSync(f), `precondition: ${name} never spawned its detached process`);
+  const pid = Number(readFileSync(f, 'utf8').trim());
+  planted.add(pid);
+  return pid;
+}
+/** Plant a detached process with a chosen cwd and comm — the orphan a retirement must find. */
+function plant(name: string, cwd: string) {
+  const r = spawnSync('bash', ['-c', `setsid nohup '${fakeBin(name)}' 300 </dev/null >/dev/null 2>&1 & echo $!`], {
+    cwd,
+    encoding: 'utf8',
+  });
+  const pid = Number(r.stdout.trim());
+  assert.ok(pid > 0 && alive(pid), `precondition: could not plant ${name} in ${cwd}`);
+  planted.add(pid);
+  return pid;
+}
+/** True while /proc/<pid> exists — the only honest 'is it gone?' (§15.100). */
+function alive(pid: number) {
+  return existsSync(`/proc/${pid}`);
+}
+function waitGone(pid: number, ms = 12000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
+  return !alive(pid);
 }
 function argvOf(name: string) {
   return readFileSync(join(dir, `${name}.argv`), 'utf8').replace(/\0$/, '').split('\0');
@@ -133,6 +200,8 @@ before(() => {
 });
 after(() => {
   killAll();
+  // A red test must never leak a planted process into the host (§15.100 through our own door).
+  for (const pid of planted) if (alive(pid)) spawnSync('kill', ['-KILL', String(pid)]);
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -166,6 +235,26 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     assert.ok(existsSync(join(camp, 'prompts', `${lane}.protocol.md`)), 'the rendered protocol is a file a successor can read');
   });
 
+  /**
+   * §15.60 / bead forge-uowf (T1, wave-3 launch): the `-s` existence check runs in the
+   * LAUNCHER's cwd and the `cat` runs inside the pane, in `--cwd`. A relative prompt path
+   * passed both and launched a promptless session — $0.00, 0 context, an empty box.
+   */
+  test('a RELATIVE prompt path still reaches the lane when --cwd is somewhere else', () => {
+    const bin = laneBin('lane-rel', { register: 'busy' });
+    const lane = 'rel';
+    sessions.add(`${PREFIX}${lane}`);
+    const laneCwd = join(dir, 'cwd-rel');
+    mkdirSync(laneCwd, { recursive: true });
+    writeFileSync(join(dir, 'rel-prompt.md'), 'RELATIVE KICKOFF\n');
+
+    const r = lanes(['launch', camp, lane, 'rel-prompt.md', '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }, 30000, dir);
+
+    assert.equal(r.status, 0, r.stderr);
+    const argv = argvOf('lane-rel');
+    assert.equal(argv[argv.length - 1], 'RELATIVE KICKOFF', 'the prompt is resolved to an absolute path before send-keys');
+  });
+
   test('--attended launches without the AskUserQuestion hook', () => {
     const bin = laneBin('lane-att', { register: 'busy' });
     const lane = 'att';
@@ -181,33 +270,59 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     assert.match(argv[argv.indexOf('--append-system-prompt') + 1], /named named-t1/, '--t1 overrides discovery');
   });
 
-  test('a lane that never appears in the roster makes launch FAIL LOUDLY and stay out of ACTIVE', () => {
-    const bin = laneBin('lane-deaf', { register: 'never' });
+  /**
+   * Bead forge-8vfn.2.32, reproduced live on 2026-09-04 before this test existed: the first
+   * probe lane sat on the trust dialog, `launch` printed NOT CONFIRMED and exited — and left
+   * the tmux session AND `claude` pid 421213 running with `ACTIVE` still `NONE`. A live session
+   * with a full prompt, no orchestrator, no registry entry and no watcher signal.
+   *
+   * The lane program here plants a `claude`-named grandchild through `setsid`, so it survives
+   * the death of the tmux session on its own: killing the pane is NOT enough, and a test whose
+   * fake process dies with tmux would pass against the broken script.
+   */
+  test('a launch that cannot be confirmed kills the session AND the process it started, by PID', () => {
     const lane = 'deaf';
-    sessions.add(`${PREFIX}${lane}`);
+    const laneCwd = join(dir, `cwd-${lane}`);
+    mkdirSync(laneCwd, { recursive: true });
+    const bin = laneBin('lane-deaf', { register: 'never', detach: fakeBin('claude') });
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
     const prompt = join(dir, 'prompt-deaf.md');
     writeFileSync(prompt, 'never consumed\n');
     const before = readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8');
 
-    const r = lanes(['launch', camp, lane, prompt, '--cwd', dir, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+    const stray = detachedPid('lane-deaf');
 
     assert.notEqual(r.status, 0, 'launch must exit non-zero when the lane cannot be confirmed');
     assert.doesNotMatch(r.stdout, /^launched/m, 'launch must not print a success line it did not verify');
     assert.match(r.stderr, new RegExp(`NOT CONFIRMED for ${lane}`), 'the failure names the lane');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8'), before, 'an unconfirmed lane is not registered');
+    assert.notEqual(tmux('has-session', '-t', s).status, 0, 'the failure path ends the tmux session the success path created');
+    assert.ok(waitGone(stray), `the claude it started is retired by PID, not left burning tokens (pid ${stray})`);
+    assert.match(r.stderr, new RegExp(`\\b${stray}\\b`), 'and the pid it retired is printed, so a human can check it');
   });
 
-  test('a lane that comes up blocked on a dialog is reported, not called launched', () => {
-    const bin = laneBin('lane-blocked', { register: 'blocked' });
-    const lane = 'blocked';
+  /**
+   * MEASURED, 2026-09-04, Claude Code v2.1.260 (bead forge-8vfn.2.31). A session parked on a
+   * permission dialog is in the roster as {"status":"waiting","waitingFor":"permission prompt"};
+   * an AskUserQuestion reads {"status":"waiting","waitingFor":"input needed"}. There is no
+   * `state` key and no value containing the string "blocked" — which is what the script used
+   * to match on, so this case could never fire and a lane on a dialog was CONFIRMED as launched.
+   */
+  test('a lane parked on a permission dialog is reported, not called launched', () => {
+    const bin = laneBin('lane-waiting', { register: 'waiting' });
+    const lane = 'waiting';
     sessions.add(`${PREFIX}${lane}`);
-    const prompt = join(dir, 'prompt-blocked.md');
+    const prompt = join(dir, 'prompt-waiting.md');
     writeFileSync(prompt, 'trust me?\n');
 
     const r = lanes(['launch', camp, lane, prompt, '--cwd', dir, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
 
     assert.notEqual(r.status, 0);
-    assert.match(r.stderr, /blocked on a dialog/, 'the failure says what a terminal must answer');
+    assert.match(r.stderr, /waiting on a dialog/, 'the failure says what a terminal must answer');
+    assert.match(r.stderr, /permission prompt/, 'and quotes waitingFor, the field that says WHICH dialog');
+    assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8').includes(lane), false, 'a lane on a dialog is not registered');
   });
 });
 
@@ -237,6 +352,58 @@ describe('lanes.sh kill — retirement cleans up, and never destroys work', () =
     assert.match(git(repo, 'branch', '--list', `lane/${lane}`), /lane\/clean/, 'the branch is never touched by kill');
   });
 
+  /**
+   * §15.100 (sessions s4, 2026-09-04): `lanes.sh kill` ended the tmux session and left an
+   * RC-attached `claude` alive with cwd `/home/parso/forge-sessions (deleted)` — the worktree
+   * had already been removed under it. Both planted processes here survive tmux death on their
+   * own, so a script that only kills the pane fails this test.
+   */
+  test('retires every process whose cwd is the worktree — the claude AND an orphan — by PID', () => {
+    const lane = 'procs';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    tmux('new-session', '-d', '-s', s, 'sleep 120');
+    writeFileSync(join(camp, 'heartbeat', 'ACTIVE'), `${lane}\n`);
+    const wt = worktreeFor(lane);
+    const claudePid = plant('claude', wt);
+    const orphanPid = plant('node', wt);
+
+    const r = lanes(['kill', camp, lane]);
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(waitGone(claudePid), `the lane's claude is retired by PID (pid ${claudePid})`);
+    assert.ok(waitGone(orphanPid), `and so is an orphan that is not named claude (pid ${orphanPid})`);
+    assert.match(r.stdout, new RegExp(`\\b${claudePid}\\b`), 'every retired pid is printed');
+    assert.match(r.stdout, new RegExp(`\\b${orphanPid}\\b`), 'the orphan scan names what it found');
+    assert.ok(!existsSync(wt), 'the worktree is removed only after its processes are gone');
+  });
+
+  /**
+   * A lane launched with `--cwd` has no worktree of its own, so the worktree scan finds
+   * nothing — and §15.100's survivor is exactly the session's own process. `kill` reads its
+   * pid out of the roster BEFORE ending the pane, while the row still exists.
+   */
+  test('retires the session pid the roster names, even with no worktree to scan', () => {
+    const lane = 'rosterpid';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    tmux('new-session', '-d', '-s', s, 'sleep 120');
+    writeFileSync(join(camp, 'heartbeat', 'ACTIVE'), `${lane}\n`);
+    const laneCwd = join(dir, `cwd-${lane}`);
+    mkdirSync(laneCwd, { recursive: true });
+    const pid = plant('claude', laneCwd);
+    // `waitingFor` carries a SPACE. A retirement that reads the pid positionally out of the
+    // roster ROW retires field 3 — the word "prompt" — and silently retires nothing: measured
+    // live on 2026-09-04, pid 511842 survived a `kill` that reported success.
+    setRoster([{ name: s, pid, kind: 'interactive', status: 'waiting', waitingFor: 'permission prompt', cwd: laneCwd }]);
+
+    const r = lanes(['kill', camp, lane]);
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(waitGone(pid), `the pid the roster named is retired (pid ${pid})`);
+    assert.match(r.stdout, new RegExp(`\\b${pid}\\b`), 'and it is printed');
+  });
+
   test('KEEPS a worktree with uncommitted changes', () => {
     const lane = 'dirty';
     writeFileSync(join(camp, 'heartbeat', 'ACTIVE'), `${lane}\n`);
@@ -249,6 +416,44 @@ describe('lanes.sh kill — retirement cleans up, and never destroys work', () =
     assert.ok(existsSync(join(wt, 'work.txt')), 'uncommitted work survives retirement');
     assert.match(r.stdout, /KEPT worktree/, 'and the operator is told');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8').trim(), 'NONE');
+  });
+});
+
+/**
+ * Bead forge-uowf / §15.59 (T1, wave-3 launch): `lanes.sh render docs/roadmaps/1.0-kickoffs.md
+ * '11. M4-' out` produced the T1 kickoff block from §1 — twice — because a heading regex that
+ * matches nothing left `found` false and the first ```text block in the file won. A rendered
+ * prompt that is silently the wrong prompt is worse than no prompt.
+ */
+describe('lanes.sh render — a heading miss is an error, never a fallback', () => {
+  let src: string;
+  before(() => {
+    src = join(dir, 'kickoffs.md');
+    writeFileSync(
+      src,
+      ['## 1. T1 — campaign orchestrator', '', '```text', 'ROLE: T1 campaign orchestrator', '```', '',
+       '## 11. M4-<pkg> — package lane', '', '```text', 'ROLE: T2 lane for $PKG', '```', ''].join('\n'),
+    );
+  });
+
+  test('a heading regex that matches nothing exits non-zero, names the regex and writes NO file', () => {
+    const out = join(dir, 'render-miss.md');
+
+    const r = lanes(['render', src, '^## nope', out]);
+
+    assert.notEqual(r.status, 0, 'a miss is an error');
+    assert.match(r.stderr, /\^## nope/, 'the failure names the regex that missed, so it can be fixed');
+    assert.ok(!existsSync(out), 'and nothing is left on disk to be mistaken for a rendered prompt');
+  });
+
+  test('a hit prints the heading it matched, so the render can be checked before a launch', () => {
+    const out = join(dir, 'render-hit.md');
+
+    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents']);
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /## 11\. M4-<pkg> — package lane/, 'the matched heading is printed');
+    assert.equal(readFileSync(out, 'utf8').trim(), 'ROLE: T2 lane for agents', 'the right block, with its parameters filled');
   });
 });
 
@@ -283,7 +488,7 @@ describe('lanes.sh events — one line per lane state, read from the roster and 
     writeFileSync(join(camp, 'heartbeat', 'STALL-ev-gone'), 'STALL ev-gone gap=45min ceiling=30min\n');
     writeFileSync(join(camp, 'heartbeat', 'ev-busy.log'), 'fresh\n');
     setRoster([
-      { name: blocked, pid: 1, status: 'waiting', state: 'blocked', waitingFor: 'input needed' },
+      { name: blocked, pid: 1, status: 'waiting', waitingFor: 'permission prompt' },
       { name: idle, pid: 2, status: 'idle' },
       { name: busy, pid: 3, status: 'busy' },
     ]);
@@ -293,7 +498,7 @@ describe('lanes.sh events — one line per lane state, read from the roster and 
     assert.match(out, /^STALL: STALL ev-gone gap=45min/m);
     assert.match(out, new RegExp(`^LANE_GONE: ${PREFIX}ev-gone tmux session gone`, 'm'));
     assert.match(out, new RegExp(`^LANE_EXITED: ${PREFIX}ev-exited claude has exited \\(pane runs 'bash'\\)`, 'm'));
-    assert.match(out, new RegExp(`^LANE_BLOCKED: ${PREFIX}ev-blocked is waiting on a dialog`, 'm'));
+    assert.match(out, new RegExp(`^LANE_BLOCKED: ${PREFIX}ev-blocked is waiting on a dialog .*permission prompt`, 'm'), 'the event quotes waitingFor — WHICH dialog a terminal must answer');
     assert.match(out, new RegExp(`^LANE_IDLE: ${PREFIX}ev-idle finished its turn, heartbeat 16666 min old`, 'm'), 'idle with no heartbeat is the relay hole');
     assert.doesNotMatch(out, new RegExp(`${PREFIX}ev-busy`), 'a busy lane with a fresh heartbeat is not an event');
     assert.equal(out.split('\n').filter((l) => l.startsWith('LANE_') || l.startsWith('STALL')).length, 5, 'exactly one line per state, no repeats within a pass');
