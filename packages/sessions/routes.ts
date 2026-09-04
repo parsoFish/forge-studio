@@ -441,7 +441,7 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
         handleSessionCancelRoute(
           req,
           res,
-          { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, broadcastKindChanged: deps.broadcastKindChanged },
+          { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, readBody: () => ctx.readBody(), broadcastKindChanged: deps.broadcastKindChanged },
           url,
           method,
         ),
