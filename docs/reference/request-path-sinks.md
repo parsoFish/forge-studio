@@ -1997,6 +1997,32 @@ goes 79 + 384 → 80 + 383. Exactly one module crossed from the tier-2 sweep int
 the tier-1 full model, it is named above, and the **total scanned is conserved
 at 463**.
 
+### M4-flows Task 9 — one baseline row RE-KEYED, no new sink surface
+
+`orchestrator/flow-runner.ts` was carved into `packages/flows/flow-runner.ts`
+(QUARRY owns it to `flows`, disposition `rewritten`). One `(file, sink)` row
+changed path and nothing else.
+
+| was | is now | sink | why it moved |
+|---|---|---|---|
+| `orchestrator/flow-runner.ts` | `packages/flows/flow-runner.ts` | `readFileSync` 1 | the runner is flows' runtime; `SPEC.md` §2 puts the Station engine in the package, and the move is what lets it stop importing `orchestrator/` |
+
+**The proof that this is a re-key and not growth is the guard's own totals: 605
+`(file, sink)` rows and 1,371 sink calls before, and 605 / 1,371 after.**
+Accepted by hand-editing the single affected line, NOT by `--write`: bead
+`forge-8vfn.5.19` records that `--write` harvests unrelated baseline slack, and
+the tightenable line this produced (`orchestrator/flow-runner.ts readFileSync
+1 -> 0`) is the same row's other half rather than an independent shrink.
+
+Reachable modules go 303 → 304: `packages/flows/flow-fanout.ts`, the fan-out
+predicate extracted from `orchestrator/studio/validate.ts` in the same move, is
+now reachable from the runner. It carries no fs sink, so it adds no row.
+
+The classification is unchanged and is restated rather than assumed: the read is
+`flowPathForId`'s `<forgeRoot>/studio/flows/<flowId>/flow.yaml`, where `flowId`
+is a registry-resolved flow id and the root is now kernel's `FORGE_ROOT` rather
+than a hand-counted `'..'` chain — strictly tighter than before the move.
+
 ### Relocated in M4-sessions s6 (exit row 5, PR B1) — four splits, nine sink pairs, no new surface
 
 Four `packages/sessions` production files came under the 800-line cap by

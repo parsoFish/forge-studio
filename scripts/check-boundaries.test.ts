@@ -120,9 +120,27 @@ test('it inspects a real dependency graph, not an empty one', () => {
   assert.deepEqual(json.stale, []);
 });
 
+/**
+ * A legacy module to point a probe at, DERIVED rather than named.
+ *
+ * §15.93: this test used to hardcode `orchestrator/flow-runner.ts` and went red
+ * the moment that file was carved into its package — the probe imported a path
+ * that no longer existed. Failing loudly was the right outcome; the wrong one
+ * is a probe that keeps passing while pointing at nothing. Taking a live
+ * `orchestrator/*.ts` from git means no carve can strand it, and the assertion
+ * still names whatever it picked.
+ */
+function aLegacyModule(): string {
+  const files = execFileSync('git', ['ls-files', 'orchestrator/*.ts'], { cwd: ROOT, encoding: 'utf8' })
+    .split('\n')
+    .filter((f) => f && !f.endsWith('.test.ts'));
+  assert.ok(files.length > 0, 'the legacy tree must still hold a non-test module for the probe to import');
+  return files[0];
+}
+
 test('it FAILS on a NEW studio → legacy import (the defect it exists for)', () => {
   const victim = join(ROOT, 'apps/studio/lib/__boundary_probe__.ts');
-  writeFileSync(victim, "import { flowRunnerVersion } from '../../../orchestrator/flow-runner.ts';\nexport const probe = flowRunnerVersion;\n");
+  writeFileSync(victim, `import '../../../${aLegacyModule()}';\nexport const probe = 1;\n`);
   try {
     const { code, out } = run();
     assert.equal(code, 1, `a new apps/studio -> orchestrator import must fail — got exit 0:\n${out}`);

@@ -34,24 +34,31 @@
  * proceeds.
  */
 
-import { resolve, dirname, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
-import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
+import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { CostTracker, WedgeDetector, RateLimitGate } from '@forge/flows/flow-budgets.ts';
-import { listArtifactTemplates, listAgentDefinitions, normalizeProjectId } from './studio/registry.ts';
+import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
+// §15.43: all three were reached through `orchestrator/studio/registry.ts`,
+// which only re-exports them. Imported from their real owners instead — every
+// one is a strictly lower rank, so the carve-in costs no boundary row.
+import { listArtifactTemplates } from '@forge/library/studio/artifact-registry.ts';
+import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { normalizeProjectId } from '@forge/kernel/project-layout.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { FORGE_ROOT, skillsDir } from '@forge/agents/skill-path.ts';
-import { findFanOutViolations } from './studio/validate.ts';
-import { assertInboundArtifacts, type ArtifactContract } from '@forge/flows/flow-artifacts.ts';
-import { fireFlowTriggers } from '@forge/flows/flow-trigger.ts';
-import { stageFlowRunRequest } from '@forge/flows/flow-run-requests.ts';
+// §15.6: FORGE_ROOT via `@forge/agents/skill-path.ts` is a re-export detour —
+// it type-checks and it is the wrong owner. Kernel is the owner.
+import { FORGE_ROOT } from '@forge/kernel';
+import { skillsDir } from '@forge/agents/skill-path.ts';
+import { findFanOutViolations } from './flow-fanout.ts';
+import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
+import { fireFlowTriggers } from './flow-trigger.ts';
+import { stageFlowRunRequest } from './flow-run-requests.ts';
 
 import type { PhaseExecutor, ProjectGate } from '@forge/kernel';
-import type { NodeExecContext, NodeRunState } from '@forge/flows/flow-node-context.ts';
-import { resolveNodeKind } from '@forge/flows/flow-node-kind.ts';
+import type { NodeExecContext, NodeRunState } from './flow-node-context.ts';
+import { resolveNodeKind } from './flow-node-kind.ts';
 
 /**
  * `resolveNodeKind` moved to its own module in M2-B so the executor table can
@@ -633,6 +640,8 @@ export async function runFlow({
  * non-existent path and runCycle throws (see orchestrator/cycle.ts).
  */
 export function flowPathForId(flowId: string): string {
-  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  return resolve(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml');
+  // Bead 5.53's class, in production: a hand-counted `'..'` chain is correct
+  // only at the depth the file happens to sit at, and this file just moved.
+  // Anchored on kernel's FORGE_ROOT so the next move cannot break it.
+  return resolve(FORGE_ROOT, 'studio', 'flows', flowId, 'flow.yaml');
 }

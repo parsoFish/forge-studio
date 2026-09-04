@@ -32,7 +32,7 @@ import {
   clearPendingRefusalLog,
   type ClaimValidationResult,
 } from './claim-validator.ts';
-import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../orchestrator/flow-runner.ts';
+import { readOnDiskFlowVersion, checkFlowVersionSeam } from './flow-runner.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
