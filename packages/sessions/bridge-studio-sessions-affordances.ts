@@ -37,12 +37,11 @@ import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/ke
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import {
   loadSessionKinds,
-  deriveSessionAffordances,
   verdictValueState,
   VERDICT_VALUES,
   type SessionKindDescriptor,
-  type SessionAffordance,
 } from './studio/session-kinds.ts';
+import { deriveSessionAffordances, type SessionAffordance } from './studio/session-kinds-affordances.ts';
 import { guardedReadSessionStatus } from './interactive-session.ts';
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { invalidProjectReason } from './session-resolution.ts';
