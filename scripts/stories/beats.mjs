@@ -131,6 +131,20 @@ const answers = (got, want) => (PLACEHOLDER.test(want) ? got !== '' : got === wa
  * attention" is false, yet per-key matching reports it true. When no element
  * answers them all, the best-covering candidate is returned so the failures
  * name real values instead of a blanket absence.
+ *
+ * That rule was too narrow for a page that SPLITS one assertion across sibling
+ * elements. `/projects/<id>` renders `preflight-status` on ContractReadiness's
+ * div and `checklist-row`/`checklist-status` on ProjectContractPanel `<li>`s;
+ * no element carries both, so the best-covering candidate decided which key
+ * went missing and S1 beat 3 reported a key the page plainly rendered as
+ * "absent from the page" (bead forge-8vfn.9, refuted by
+ * `_1.0/evidence/m5-b-probe9/` — a probe reading that key ALONE found it).
+ *
+ * The relaxation is bounded by SOURCE COUNT, never by convenience: a key that
+ * exactly ONE element on the page carries names no competing entity, so
+ * reading it from its own element cannot pick the wrong one. Every key two or
+ * more elements carry — `card-id`, `health`, `checklist-row` — is precisely
+ * the ambiguity the together-rule exists for, and stays under it.
  */
 function resolveExpectations(expected, observed) {
   const root = observed.data;
@@ -139,16 +153,28 @@ function resolveExpectations(expected, observed) {
 
   const records = observed.nested ?? [];
   const covers = (r, k) => Object.hasOwn(r, k);
-  const score = (r) => missing.reduce((n, k) => n + (covers(r, k) ? (answers(r[k], expected[k]) ? 2 : 1) : 0), 0);
+
+  // Keys exactly one element carries: read each from its own element.
+  const solo = {};
+  const shared = [];
+  for (const k of missing) {
+    const carriers = records.filter((r) => covers(r, k));
+    if (carriers.length === 1) solo[k] = carriers[0][k];
+    else shared.push(k);
+  }
+  if (shared.length === 0) return { ...solo, ...root };
+
+  // What is left is ambiguous by construction and stays under the together-rule.
+  const score = (r) => shared.reduce((n, k) => n + (covers(r, k) ? (answers(r[k], expected[k]) ? 2 : 1) : 0), 0);
 
   let best = null;
   let bestScore = 0;
   for (const r of records) {
-    if (missing.every((k) => covers(r, k) && answers(r[k], expected[k]))) return { ...r, ...root };
+    if (shared.every((k) => covers(r, k) && answers(r[k], expected[k]))) return { ...r, ...solo, ...root };
     const sc = score(r);
     if (sc > bestScore) [best, bestScore] = [r, sc];
   }
-  return best === null ? root : { ...best, ...root };
+  return best === null ? { ...solo, ...root } : { ...best, ...solo, ...root };
 }
 
 /**
