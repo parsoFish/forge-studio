@@ -179,6 +179,39 @@ const ERROR_SENTINELS = [
 /** How long to wait for a page to declare itself ready before judging it. */
 const READY_TIMEOUT_MS = 15_000;
 
+/** How often `waitForConsequence` re-reads the page while it waits. */
+const CONSEQUENCE_POLL_MS = 100;
+
+/**
+ * Wait for a same-route act's CONSEQUENCE — the first data-* state this beat
+ * declared — to settle before the beat is judged. `driveBeat`'s other waits
+ * are all keyed to a URL change, so a `do` block that acts on the route it
+ * already stands on gets none of them; a press there can still start real
+ * work (an agent dispatch, a save) whose answer arrives a moment later, and
+ * reading immediately reports on work that is provably still in flight. Bead
+ * `forge-8vfn.2.25`.
+ *
+ * Polls with the SAME reader the eventual verdict uses (`readObserved`), so
+ * what satisfies this wait and what `beatVerdict` judges can never disagree
+ * — no second notion of "the page's data" to drift from the first. Bounded
+ * and never throws: on timeout it simply returns, and `beatVerdict` below
+ * reports the honest mismatch (which attribute, expected vs. got) on its own
+ * terms — the same catch-and-let-the-verdict-explain shape every other wait
+ * in this function already uses.
+ */
+async function waitForConsequence(page, beat, timeoutMs) {
+  const [attr, want] = Object.entries(beat.expect.data)[0] ?? [];
+  if (attr === undefined) return;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const { data, nested } = await readObserved(page, beat);
+    const record = [data, ...nested].find((r) => Object.hasOwn(r, attr));
+    if (record !== undefined && answers(record[attr], want)) return;
+    if (Date.now() >= deadline) return;
+    await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+  }
+}
+
 /**
  * Reach the beat's route by REAL NAVIGATION and read what the page shows.
  *
@@ -192,8 +225,13 @@ const READY_TIMEOUT_MS = 15_000;
  * route itself — the nav pillar pointing at it, else any link to it. When
  * neither exists the beat is RED saying so; it never falls back to
  * `page.goto`, which would let an unreachable route pass.
+ *
+ * `timeoutMs` bounds every wait this call makes (`run.mjs` never passes it,
+ * so production always gets `READY_TIMEOUT_MS`); it exists so a test can
+ * prove a wait gives up at its bound without the suite actually sitting
+ * through 15 real seconds to do it.
  */
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
     return Object.freeze({
@@ -219,7 +257,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
   // beat's page — before this beat's state is judged. All nine operator flows
   // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
-  const stepError = await performSteps(page, steps);
+  const stepError = await performSteps(page, steps, timeoutMs);
   if (stepError !== null) {
     return stuckVerdict(beat, await readObserved(page, beat), stepError);
   }
@@ -244,12 +282,25 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
   // and M1-B closed one layer up, where `data-page-ready` could not tell
   // "not yet" from "already done" either. The URL can: it is the one signal
   // the source page cannot answer for the destination.
+  //
+  // But a same-route act has no URL to wait on at all, and the shipped code
+  // treated that as nothing to wait FOR — the `steps.length > 0` guard above
+  // fires only when the pathname already changed. A press that acts on the
+  // route it is already standing on (an agent-dispatch button, a save that
+  // stays put) still has a consequence: the state this beat asserts. Bead
+  // `forge-8vfn.2.25`, measured live on S3 beat 11: pressing "Run onboarding
+  // agent" started a real Claude process, and the same-tick read reported
+  // `data-onboard-run-status="idle"` with no session id — the product had
+  // already answered; the runner had not looked again. A story can spend
+  // real money and still report the product never started.
   if (steps.length > 0 && new URL(page.url()).pathname !== target) {
     await page
       .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
       .catch(() => {
         /* the press did not navigate here — the nav resolution below reports it honestly */
       });
+  } else if (steps.length > 0) {
+    await waitForConsequence(page, beat, timeoutMs);
   }
 
   // Already there: the operator acted on this page and stayed on it, or the
@@ -328,12 +379,52 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
  * Returns the failure text, or null. Every playwright throw is caught for the
  * reason the click below is: an unguarded throw aborts the WHOLE run and drops
  * every later story's doc and gallery row.
+ *
+ * Steps ran back-to-back with no wait between them. A step that navigates —
+ * a shelf CTA, a create button, any press — starts a client-side route
+ * change, and the very next step resolved its handle against the OLD page,
+ * which does not carry it. Bead `forge-8vfn.2.29`, measured on S7's template
+ * beat: do = [press new-template, fill template-category, ...] failed with
+ * "could not fill [data-field="template-category"]: Timeout 5000ms exceeded"
+ * because the press had navigated /library -> /templates/new and the fill
+ * ran before the new page mounted. So from the SECOND step on, this waits —
+ * bounded, and only after the first step, matching the original zero-wait
+ * behaviour for a single-step `do` block exactly — for the arrival page's
+ * ready signal, then for the next handle itself, rather than reading
+ * whatever the previous step left in the DOM in the same tick. That is what
+ * lets a story express "press the create CTA and fill in the form it opens"
+ * as ONE beat instead of splitting one operator act across two.
  */
-async function performSteps(page, steps) {
-  for (const step of steps) {
+async function performSteps(page, steps, timeoutMs) {
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
     const fills = Object.hasOwn(step, 'fill');
     const key = fills ? step.fill : step.press;
     const handle = `[data-${fills ? 'field' : 'action'}="${key}"]`;
+
+    if (i > 0) {
+      if (!Object.hasOwn(steps[i - 1], 'fill')) {
+        // The step before this one may have navigated. Wait for the ARRIVAL
+        // page's ready signal — bounded, and swallowed on timeout, because a
+        // step that never navigated (a toggle, a same-route press) leaves
+        // this already satisfied and the wait below reports the real story.
+        await page
+          .waitForSelector('main[data-page][data-page-ready="true"]', { timeout: timeoutMs })
+          .catch(() => {
+            /* still on the old page, or it never settled — the handle wait below reports it honestly */
+          });
+      }
+      // Locate THIS step's handle with its own bounded wait rather than a
+      // same-tick lookup — the page it lives on may only just have mounted.
+      await page
+        .locator(handle)
+        .first()
+        .waitFor({ timeout: timeoutMs })
+        .catch(() => {
+          /* not there yet — the act below throws its own honest failure */
+        });
+    }
+
     try {
       if (!fills) {
         await page.locator(handle).first().click();

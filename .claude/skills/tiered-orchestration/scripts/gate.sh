@@ -73,6 +73,11 @@ case "$link" in
   *) echo "BORROWED node_modules — this tree is running another tree's install; verdict void (§15.13)"; exit 2 ;;
 esac
 
+# A wall-clock delta is a proxy, and a proxy that can report an impossible number is a broken
+# measurement, not a fast step (§15.48: `real 0m0.000s` for 2 s of work). If the clock stepped
+# under us the duration is reported as `?s`, never as a plausible-looking lie.
+secs() { local d=$(( $(date +%s) - $1 )); if [ "$d" -lt 0 ]; then echo "?s (clock stepped)"; else echo "${d}s"; fi; }
+
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
@@ -81,9 +86,9 @@ while IFS= read -r cmd; do
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
   t0=$(date +%s)
   if ( eval "$cmd" ) > "$LOGS/gate-$name.log" 2>&1; then
-    echo "PASS  $cmd  ($(( $(date +%s) - t0 ))s)"
+    echo "PASS  $cmd  ($(secs "$t0"))"
   else
-    echo "FAIL  $cmd  ($(( $(date +%s) - t0 ))s)  → $LOGS/gate-$name.log"
+    echo "FAIL  $cmd  ($(secs "$t0"))  → $LOGS/gate-$name.log"
     fail=1
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')
