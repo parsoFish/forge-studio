@@ -71,6 +71,21 @@ Pre-authorise the known park points at kickoff (ADR amendments, judgement conten
 - "STALL flag → reclaim the lock" → the 3-signal check first.
 - A coordination rule that lives only in prose → it is decoration; put it in a script, a hook or a file, or delete it.
 
+## T1 tools — `scripts/`, and every path an argument
+
+Each was rebuilt by hand in a gitignored campaign dir for three campaigns running. They live here now so the next T1 inherits them, and none of them resolves an input from its own location: a tool that does answers a different question in each checkout (§15.148).
+
+| tool | answers | tested by |
+|---|---|---|
+| `lanes.sh` | launch · list · peek · open · kill · reap · events · render | `scripts/lanes.test.ts` |
+| `heartbeat.sh <campaign> <lane> "<state>" [job-log …]` | the ONE writer of `<lane>.log` + `<lane>.liveness`, from one `date` | `scripts/heartbeat.test.ts` |
+| `watch-heartbeats.sh <heartbeat-dir>` | out-of-process stall watcher (cron): gap · stamp/mtime mismatch · liveness stamped without a live job | `scripts/watch-heartbeats.test.ts` |
+| `ci-terminal.sh <pr> <sha>` · `--wait` · `classify <want> <got> < rows` | is this head terminal, and which way — the merge predicate. `classify` is a pure function of `name\|status\|conclusion` rows | `scripts/ci-terminal.test.ts` |
+| `gate.sh <worktree> [campaign]` · `--list` | every gate the tree's own `ci.yml` names, run in its order; what it did not run, named | `scripts/gate.test.ts` |
+| `pin-reconcile.sh <repo> <campaign> <glob> <from> <to> "<label>"` | rehash only the pin entries a merge touched, and append the amendment | — |
+| `prod-lines.mjs [root]` | production lines per package, by that root's own `check-owner.mjs` definition | — |
+| `boundary-share.mjs [pkg]` | who owns each `boundaries.json` row | — |
+
 ## See also
 
 - `immutable-gates` — the pinning and verification contract T2 executes.
