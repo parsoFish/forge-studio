@@ -8,7 +8,7 @@
  */
 
 import type { FlowNode, AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { PHASE_EXECUTOR_KINDS } from '../../orchestrator/studio/registry.ts';
+import { PHASE_EXECUTOR_KINDS } from '@forge/agents/studio/agent-registry.ts';
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events

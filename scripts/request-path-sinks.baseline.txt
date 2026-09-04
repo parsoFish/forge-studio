@@ -30,7 +30,6 @@ cli/ui-bridge.ts statSync 4
 orchestrator/phases/executor-deps.ts readFileSync 1
 orchestrator/phases/executor-table.ts existsSync 1
 orchestrator/phases/executor-table.ts readFileSync 3
-orchestrator/studio/registry.ts readdirSync 1
 packages/agents/_adapters/aider/index.ts execFile 1
 packages/agents/_adapters/aider/index.ts execFileSync 4
 packages/agents/_adapters/aider/index.ts readFileSync 1
@@ -287,6 +286,7 @@ packages/flows/scheduler.ts readFileSync 5
 packages/flows/scheduler.ts readdirSync 1
 packages/flows/scheduler.ts symlinkSync 1
 packages/flows/scheduler.ts writeFileSync 2
+packages/flows/studio/flow-registry.ts readdirSync 1
 packages/flows/wi-merge-back.ts execFileSync 5
 packages/flows/wi-merge-back.ts rmSync 1
 packages/flows/wi-worktree.ts cpSync 1

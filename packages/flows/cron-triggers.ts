@@ -40,7 +40,7 @@ import { join, resolve } from 'node:path';
 import { Cron } from 'croner';
 
 import { normalizeProjectId } from '@forge/kernel';
-import { listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 

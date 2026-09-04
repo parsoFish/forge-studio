@@ -50,7 +50,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 
-import { loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
 import {
   stageFlowRunRequest,
   drainFlowRunRequests,

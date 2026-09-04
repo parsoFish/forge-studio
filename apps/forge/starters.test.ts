@@ -11,19 +11,23 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import type { AgentDefinition } from './types.ts';
-// `loadCatalog` (Catalog kind) moved to `@forge/library/studio/catalog-registry.ts`
-// (M4 library-by-kind carve, PR 3 / Part 2) and is re-exported from
-// `registry.ts` for this importer specifically: `contracts` is rank 0, the
-// lowest, and may not import `library` (rank 2) even indirectly — repointing
-// this one line would trade the file's existing `package-to-legacy` debt
-// (already baselined against `registry.ts`) for a NEW `package-layer-order`
-// violation, which the carve must not introduce.
-import { loadAgentDefinition, loadFlowDefinition, loadCatalog, listStarterAgents, loadStarterFlow } from '../../../orchestrator/studio/registry.ts';
-import { validateAgent, validateFlow } from '../../../orchestrator/studio/validate.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+// Handoff P11a, closed by MOVING rather than converting. This test validates
+// the starter FIXTURES against three packages at once — the Agent kind
+// (agents), the Flow kind (flows) and the Catalog kind (library) — so no single
+// package can host it, and it lived in `contracts` (rank 0) only by importing
+// them all through `registry.ts`'s re-export hub. When Task 13 moved the Flow
+// kind into flows, keeping it there would have traded one `package-to-legacy`
+// row for a strictly worse `package-layer-order` one. Ruling 89 puts a test
+// that needs real cross-package objects FLAT at the assembly, where importing
+// every package is what the assembly is FOR — so the row closes outright.
+import { loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
+import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { validateAgent, validateFlow } from '../../orchestrator/studio/validate.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');
 const AGENT_SLUGS = ['plan', 'dev', 'review'] as const;
 

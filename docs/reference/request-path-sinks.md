@@ -1997,6 +1997,30 @@ goes 79 + 384 → 80 + 383. Exactly one module crossed from the tier-2 sweep int
 the tier-1 full model, it is named above, and the **total scanned is conserved
 at 463**.
 
+### M4-flows Task 13 — one baseline row RE-KEYED, no new sink surface
+
+The Flow kind's registry moved out of `orchestrator/studio/registry.ts` into
+`packages/flows/studio/flow-registry.ts` (ADR 028 §1: the package that owns the
+flow engine owns loading its definitions). `listFlowIds`'s `readdirSync` is the
+only raw-fs sink in the moved block and it is byte-identical.
+
+| was | is now | sink | why it moved |
+|---|---|---|---|
+| `orchestrator/studio/registry.ts` | `packages/flows/studio/flow-registry.ts` | `readdirSync` 1 | the Flow kind is flows'; the scan is `studio/flows/*` under a caller-supplied `forgeRoot`, unchanged |
+
+Measured with `node scripts/check-request-path-sinks.mjs`: main at `92c388a7`
+reports **309 reachable modules / 603 (file,sink) rows / 1,364 calls / baseline
+604 lines**; this branch reports **310 / 603 / 1,364 / 604**. Rows and calls are
+IDENTICAL — the row changed path and nothing else. The single reachable-module
+increase is the new file itself; `registry.ts` stays reachable as a re-export
+hub until the host carve deletes it.
+
+Accepted by hand-editing the one affected line, NOT by `--write`: the checker
+also reports two tightenable lines in `packages/sessions/studio/session-kinds.ts`
+(`existsSync 1 → 0`, `readFileSync 2 → 1`) from sessions' #369, and `--write`
+would sweep another lane's slack into this PR (bead `forge-8vfn.5.19`). The
+baseline stays in `LC_ALL=C` order (#365).
+
 ### M4-flows Task 9 — one baseline row RE-KEYED, no new sink surface
 
 `orchestrator/flow-runner.ts` was carved into `packages/flows/flow-runner.ts`
