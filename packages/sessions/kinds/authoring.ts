@@ -138,5 +138,5 @@ export async function handleAuthoringVerdict(
   // runFinalize sends its OWN response (success and every failure path) —
   // this route hands off wholesale rather than reimplementing any part of
   // the copyStagingToLibrary + skill/hook-install sequence.
-  await runFinalize(ctx, res, origin, { project, sessionId, kind, id });
+  await runFinalize(ctx, res, origin, { project, sessionId, kind, id }, ctx.authoringSession);
 }

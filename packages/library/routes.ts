@@ -68,6 +68,7 @@
 import type { AgentFacts } from './studio/agent-facts.ts';
 import { createCatalogHandler, CATALOG_URL, type SdkAvailabilityFn } from './bridge-studio-catalog.ts';
 import type { FlowSource } from './studio/template-library.ts';
+import type { AuthoringSessionPort } from './studio/authoring-session.ts';
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
 
 import {
@@ -165,10 +166,12 @@ export type LibraryRouteDeps = {
   readonly isSdkAvailable: SdkAvailabilityFn;
   /** The Flow kind's loaders — `@forge/flows` is rank 5 (ruling 113). */
   readonly flowSource: FlowSource;
+  /** The authoring turn and its status IO — `@forge/sessions` is rank 4 (L1–L4). */
+  readonly authoringSession: AuthoringSessionPort;
 };
 
 export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteContext> {
-  const { agentFacts, flowSource } = deps;
+  const { agentFacts, flowSource, authoringSession } = deps;
   const handleCatalog = createCatalogHandler(deps);
   return [
   // ---- bridge-studio-catalog.ts (1 route, the last to leave the bridge)
@@ -318,7 +321,7 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     // spawn at all — it runs copyStagingToLibrary; the install writes local
     // bytes through the guarded-path helpers. No spawn, no remote, no daemon.
     dryClassification: 'exempt-local',
-    handler: handleAuthoringFinalize,
+    handler: (req, res, ctx, url, method) => handleAuthoringFinalize(req, res, ctx, url, method, authoringSession),
   },
 
   // ---- bridge-studio-templates.ts (5 routes, was :175 :300 :301 :306 :317)

@@ -61,6 +61,12 @@ function deps(projectsRoot: string): SessionsRouteDeps {
     servedFileHeaders: () => ({}),
     dryBridgeAgentTurnMarker: () => ({}),
     isContainedProjectRepoPath: contained,
+  authoringSession: {
+    readStatus: () => null,
+    writeStatus: () => null,
+    runAuthoringTurn: async () => null,
+    isFinalizerError: () => false,
+  },
     newRunStamp: () => 'stamp',
     safeInputKeyRe: /^[A-Za-z0-9_-]+$/,
   };
