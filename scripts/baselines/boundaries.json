@@ -171,7 +171,7 @@
   "package-to-assembly|packages/projects/bridge-studio-project-preflight-write.ts|apps/forge/dry-bridge.ts",
   "package-to-assembly|packages/sessions/bridge-studio-session-cancel.ts|apps/forge/bridge-studio.ts",
   "package-to-assembly|packages/sessions/bridge-studio-sessions.test.ts|apps/forge/ui-bridge.ts",
-  "package-to-assembly|packages/sessions/studio/session-kinds.test.ts|apps/forge/studio-lint.ts",
+  "package-to-assembly|packages/sessions/tests/contract/session-kinds-turnspec.test.ts|apps/forge/studio-lint.ts",
   "package-to-assembly|packages/sessions/tests/contract/session-tail-kind-parity.test.ts|apps/forge/ui-bridge.ts",
   "package-to-assembly|packages/sessions/tests/integration/bridge-studio-agent-capability.test.ts|apps/forge/ui-bridge.ts",
   "package-to-assembly|packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts|apps/forge/ui-bridge.ts",
