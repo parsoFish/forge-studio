@@ -40,7 +40,9 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, loadFlowDefinition, discoverProjects, serializeAgentDefinition, serializeFlowDefinition, listFlowIds } from '../../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';

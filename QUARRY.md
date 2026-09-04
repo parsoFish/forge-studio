@@ -387,7 +387,6 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/library-validate.ts | library | verbatim | 259 |
 | packages/knowledge/studio/kb-descriptor.ts | knowledge | verbatim | 210 |
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
-| orchestrator/studio/registry.ts | kernel | rewritten | 588 |
 | packages/sessions/studio/session-kinds.ts | sessions | verbatim | 580 |
 | packages/sessions/studio/session-kinds-validate.ts | sessions | rewritten | 706 |
 | packages/sessions/studio/session-kinds-affordances.ts | sessions | rewritten | 148 |

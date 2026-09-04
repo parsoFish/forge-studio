@@ -90,7 +90,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, listAgentDefinitions, loadAgentDefinition, listFlowIds, loadFlowDefinition } from '../../orchestrator/studio/registry.ts';
+import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
 import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
 import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';

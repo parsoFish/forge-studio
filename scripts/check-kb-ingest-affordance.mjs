@@ -91,7 +91,10 @@ export const BRIDGE_SCAN_DIRS = [
 // the descriptor default (+ its re-export) and the reflection builtin.
 export const ALLOWED_INGEST_FILES = new Set([
   'packages/knowledge/studio/kb-descriptor.ts',
-  'orchestrator/studio/registry.ts',
+  // `orchestrator/studio/registry.ts` was here for its re-export of the
+  // descriptor default. M4-library B2 DELETED that file, so the waiver
+  // suppressed nothing and is removed rather than left: a waiver whose
+  // subject is gone hides the next real injection (COMMON 15.70).
   'packages/knowledge/kb-health.ts',
 ]);
 // Top-level dir of runtime-agent SKILL.md files (rule 4 below).

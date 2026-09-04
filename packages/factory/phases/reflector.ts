@@ -31,7 +31,7 @@ import type { EventLogger, EventLogEntry } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { loadAgentDefinition } from '../../../orchestrator/studio/registry.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import {
   buildReflectorSystemPrompt,

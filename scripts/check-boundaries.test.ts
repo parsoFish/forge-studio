@@ -72,10 +72,15 @@ test('rule 2 — apps/studio imports contracts and nothing else', () => {
   assert.equal(classify('apps/studio/lib/x.ts', 'orchestrator/config.ts'), 'studio-beyond-contracts');
 });
 
-test('rule 3 — legacy reaches a package only through orchestrator/_pkg/', () => {
+test('rule 3 — legacy never reaches a package', () => {
   assert.equal(classify('orchestrator/cycle.ts', 'packages/flows/index.ts'), 'legacy-to-package-not-via-shim');
   assert.equal(classify('cli/ui-bridge.ts', 'packages/kernel/index.ts'), 'legacy-to-package-not-via-shim');
-  assert.equal(classify('orchestrator/_pkg/flows.ts', 'packages/flows/index.ts'), null);
+  // The `orchestrator/_pkg/` exemption is retired (M4-library B2): the M3
+  // cutover deleted that directory, so the case below asserted a classification
+  // for a path that cannot exist. It is replaced by the one that CAN — the
+  // shim path now classifies like any other legacy file, which is the whole
+  // point of retiring it.
+  assert.equal(classify('orchestrator/_pkg/flows.ts', 'packages/flows/index.ts'), 'legacy-to-package-not-via-shim');
 });
 
 test('rule 4 — a package imports strictly lower ranks only', () => {
@@ -113,7 +118,7 @@ test('rule 1c — the assembly reaching DOWN into a legacy tree stays visible', 
   // assembly's own 14 edges into `orchestrator/` and `cli/` matched nothing and
   // were unmeasured — the table said the assembly was clean because no rule
   // could see it.
-  assert.equal(classify('apps/forge/routes.ts', 'orchestrator/studio/registry.ts'), 'assembly-to-legacy');
+  assert.equal(classify('apps/forge/routes.ts', 'orchestrator/studio/validate.ts'), 'assembly-to-legacy');
   assert.equal(classify('apps/forge/cli.ts', 'cli/studio-lint.ts'), 'assembly-to-legacy');
   assert.equal(classify('apps/forge/x.ts', 'loops/y.ts'), 'assembly-to-legacy');
 });

@@ -34,7 +34,7 @@ import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
 import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
-import { loadFlowDefinition, listFlowIds } from '../../orchestrator/studio/registry.ts';
+import { loadFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
