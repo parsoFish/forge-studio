@@ -33,11 +33,31 @@ function assertSafeStoryId(storyId) {
 }
 
 /**
+ * The `story-<id>` fixture names a story can mint, in every case the product
+ * might use. A story declares its id as authored (`S2`, `S4`); `create` slugs
+ * the typed name to lower case before it writes a directory, so the sweep has
+ * to ask for both or it can never own the ground it made. Measured on S2 run 1
+ * (2026-09-04, bead `forge-8vfn.2.21`): a story declared `S2` minted
+ * `projects/story-s2` while the sweep removed `projects/story-S2` — different
+ * directories on a case-sensitive filesystem, so the next run reds at the
+ * create beat with "already exists", a FIXTURE failure wearing a product
+ * failure's clothes.
+ *
+ * `story-` stays a reserved prefix in every variant, so the guard that keeps a
+ * story named after its own ground from deleting that ground is untouched.
+ */
+function storyFixtureNames(storyId) {
+  const names = new Set([`story-${storyId}`, `story-${storyId.toLowerCase()}`]);
+  return [...names];
+}
+
+/**
  * Every path this story owns. Pure, date-independent, and every entry carries
- * the story id.
+ * the story id (case-insensitively — see `storyFixtureNames`).
  */
 export function fixturePathsFor(storyId, root) {
   assertSafeStoryId(storyId);
+  const names = storyFixtureNames(storyId);
   return [
     join(root, 'demos', 'stories', storyId),
     join(root, '_queue', 'in-flight', `STORY-${storyId}.md`),
@@ -47,8 +67,13 @@ export function fixturePathsFor(storyId, root) {
     // Brain 3 profile onboarding scaffolds beside it. The `story-` prefix is
     // reserved and no real project carries it, so a story named after its own
     // ground can never delete the repo it exists to prove things about.
-    join(root, 'projects', `story-${storyId}`),
-    join(root, 'brain', 'projects', `story-${storyId}`),
+    ...names.map((name) => join(root, 'projects', name)),
+    ...names.map((name) => join(root, 'brain', 'projects', name)),
+    // A story that SAVES a flow owns that flow file. `/flows/new` saves with
+    // `create: true`, so a leftover `studio/flows/story-<id>/` makes the second
+    // run of the same story 409 on the name and reds every beat after the save
+    // for a fixture reason. Measured on S4 run 1 (bead `forge-8vfn.2.26`).
+    ...names.map((name) => join(root, 'studio', 'flows', name)),
   ];
 }
 
