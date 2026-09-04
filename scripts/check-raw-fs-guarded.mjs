@@ -406,7 +406,11 @@ function allSourceModules(root) {
     const abs = join(root, rel);
     if (!existsSync(abs) || !statSync(abs).isDirectory()) return;
     for (const entry of readdirSync(abs, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      // Bead 5.32: `test-fixtures/` is not production. check-owner's
+      // productionFiles() has excluded it since M2 and this walk did not, so
+      // the two guards disagreed and eight fixture modules were swept as
+      // request-handling surface. Scope contract: check-raw-fs-guarded.scope.test.ts.
+      if (entry.name === 'node_modules' || entry.name === 'test-fixtures' || entry.name.startsWith('.')) continue;
       const next = `${rel}/${entry.name}`;
       if (entry.isDirectory()) walk(next);
       else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.d.ts')) out.push(next);
@@ -876,18 +880,13 @@ export const ALLOWLIST = [
   { file: 'packages/agents/band-agent-run.ts', line: 222, sink: 'existsSync',
     reason: 'BOOL-PROBE + BOUNDARY-VALIDATED: manifest lookup join(<config-derived queue dir>, `${initiativeId}.md`) over the four runnable states; same SAFE_INITIATIVE_RE gate at :196 throws before this loop is reached, so the candidate path is <config root>/<validated stem>.md by construction.' },
 
-  // ---- shared TEST FIXTURE modules (M4) ----
-  // The only non-production rows here. The sweep skips `*.test.ts` by filename,
-  // so these helpers were invisible inside a test file; M4's split under the
-  // 800-line cap moved them to `tests/<bucket>/test-fixtures/*.ts` — the
-  // directory `check-owner.mjs:49` calls NOT_PRODUCTION and this scan has never
-  // been taught. Byte-identical code, unchanged containment posture. Teaching
-  // `allSourceModules` that regex would drop SIX modules, three of them
-  // long-standing `orchestrator/test-fixtures/*`: a wave decision, not a lane's.
-  { file: 'packages/knowledge/tests/integration/test-fixtures/bridge-studio-kbs.ts', line: 230, sink: 'writeFileSync',
-    reason: 'TEST FIXTURE, TRUSTED-AT-CONSTRUCTION: seedProjectBrain(root, id, themeSlugs) — `slug` matches the sweep\'s bare taint-name list, but it is a fixture-authored literal from the test\'s own array (\'a-one\', \'alpha\', \'t-one\', ...), never request-derived, and `root` is the mkdtempSync tmpdir the fixture itself just created (makeIsolatedForge / setupSharedForge). No HTTP value reaches this join. Byte-identical to the code that lived at bridge-studio-kbs.test.ts:446 before the M4 split; it became visible only because a shared fixture module cannot be named *.test.ts. (M4-knowledge s5 line-drift remap from 196: this fixture stopped booting a bridge and now drives the carved handlers directly (COMMON §5), so the route table + req/res mocks sit above this sink (+27). No code change to the sink: same `writeFileSync(join(dir, \'themes\', `${slug}.md`))` into the fixture\'s own `mkdtempSync` root, byte-for-byte. Re-paired by SINK KIND and ORDER from a real `--json` run — one stale row, one new finding, both writeFileSync in this file, 1:1 — never by arithmetic. Conservation asserted rather than assumed: suppressed rows 86 on main and 86 here, the ONLY difference being this row\'s line. The first fix attempt ADDED a row at 223 and left 196 stale, which the checker caught as a stale entry — a remap keeps the original reason\'s history, an added row silently forks it.) (M4 ruling 86 line-drift remap from 223 -- this fixture\'s route-deps literal gained the required `runFixTurn` port stub (+7 lines above this row). Re-paired by sink kind from a real lint run; same enclosing function, source unchanged.)' },
-  { file: 'packages/knowledge/tests/unit/test-fixtures/brain-lint.ts', line: 122, sink: 'writeFileSync',
-    reason: 'TEST FIXTURE, TRUSTED-AT-CONSTRUCTION: writeProjectTheme(root, project, slug, category) — same shape as the row above. `slug` is a fixture literal chosen by the calling test; `root` is buildBrainFixture\'s own mkdtempSync tmpdir. Byte-identical to the code at brain-lint.test.ts:627 before the M4 split.' },
+  // ---- shared TEST FIXTURE modules — RETIRED by bead forge-8vfn.5.32 ----
+  // Two rows lived here to suppress findings in `tests/**/test-fixtures/*.ts`.
+  // They are gone because their SUBJECTS are gone: `allSourceModules` now skips
+  // a `test-fixtures/` directory, matching what `check-owner.mjs`'s
+  // NOT_PRODUCTION has meant since M2. The note they carried said teaching this
+  // scan that rule "would drop SIX modules … a wave decision, not a lane's" —
+  // this is that decision, and the count is EIGHT now, not six.
 
   // ---- cli/agent-run.ts — CLI subcommand handler (non-HTTP) ----
   { file: 'packages/agents/find-session-project.ts', line: 47, sink: 'existsSync',

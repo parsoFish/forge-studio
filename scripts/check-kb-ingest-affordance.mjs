@@ -51,7 +51,7 @@
  *   node scripts/check-kb-ingest-affordance.mjs
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
@@ -71,9 +71,21 @@ const UI_SCAN_DIRS = ['apps/studio/app', 'apps/studio/components', 'apps/studio/
 // these dirs and INVISIBLE with `['cli']` alone (the same control shape the
 // raw-fs `EXPLICIT_MODULES` remedy needed in this PR). The real tree passes
 // either way, which is exactly why the blindness was silent.
+// Bead forge-8vfn.5.32 (with 5.34's shape): the list above was still a HAND
+// LIST of eight packages — it had already gone blind once when M3-A moved the
+// bridge modules out of `cli/`, and it would go blind again the day a ninth
+// package appears or the host moves to `apps/forge/`. Derived now, so neither
+// event needs an edit here. The host trees are named because they are trees,
+// not packages; `packages/` is enumerated.
 export const BRIDGE_SCAN_DIRS = [
-  'cli', 'packages/knowledge', 'packages/flows', 'packages/library',
-  'packages/sessions', 'packages/agents', 'packages/projects', 'packages/factory',
+  'cli',
+  'apps/forge',
+  ...(existsSync(join(FORGE_ROOT, 'packages'))
+    ? readdirSync(join(FORGE_ROOT, 'packages'), { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => `packages/${e.name}`)
+        .sort()
+    : []),
 ];
 // Files where DEFAULT_KB_INGEST / 'reflector-ingest' legitimately appear —
 // the descriptor default (+ its re-export) and the reflection builtin.
