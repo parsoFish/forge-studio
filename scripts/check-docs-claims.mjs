@@ -109,7 +109,11 @@ function main() {
     console.error(`check-docs-claims: FAIL (${violations.length} file${violations.length === 1 ? '' : 's'} not mentioned in docs/README.md)`);
     for (const v of violations) console.error(`  ✗ ${v}`);
     console.error('Add a one-line entry to docs/README.md — either a direct link to the file, or (for a new subdirectory) a link to its own <dir>/README.md to cover the whole directory.');
-    process.exit(1);
+    // `process.exitCode` + `return`, never `process.exit()`: the violation list
+    // above is unbounded and `process.exit()` tears the process down before a
+    // piped stdout has drained (see check-raw-fs-guarded.mjs).
+    process.exitCode = 1;
+    return;
   }
 
   console.log(`check-docs-claims: PASS — ${files.length} tracked docs files, all mentioned in docs/README.md (directly or via a directory-level mention)`);

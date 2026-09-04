@@ -270,5 +270,6 @@ export function runCheck({ root = FORGE_ROOT } = {}) {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  process.exit(runCheck());
+  // `process.exitCode`, never `process.exit()` — see check-raw-fs-guarded.mjs.
+  process.exitCode = runCheck();
 }

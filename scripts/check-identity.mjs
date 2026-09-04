@@ -152,5 +152,8 @@ if (hits.length > 0) {
   console.log(
     '  Do NOT write \"the integrate band\": spec §5 lists it as 1.0-TARGET work, so naming it in a current-state doc invents a claim.',
   );
-  process.exit(1);
+  // `process.exitCode`, never `process.exit()` — the hit list above is unbounded
+  // and `process.exit()` truncates a piped stdout (see check-raw-fs-guarded.mjs).
+  // Nothing follows this block, so no `return` is needed.
+  process.exitCode = 1;
 }

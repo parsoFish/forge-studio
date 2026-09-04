@@ -1001,7 +1001,14 @@ test('G9 (RED at the first W8-F5 cure, found by adversarial review): a reachable
   );
 });
 
-test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured six — the four expensive names stay tier-1-only and are named in the header', () => {
+test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured seven — the four expensive names stay tier-1-only and are named in the header', () => {
+  // `id` joined the six for bead forge-8vfn.5.36. This assertion asked for
+  // exactly one thing in exchange — "change it only with fresh numbers in the
+  // header" — and that price is paid there: four sites in three packages,
+  // re-derived on 5ddd7ecc, one fixed at the source and three audited. Both
+  // halves are mutation-proven: dropping `id` takes the three audited rows
+  // stale, and reverting the source fix takes the guard to FAIL. The assertion
+  // was not an obstacle to the fix, it was the fix's contract.
   // Kills: a future widening that quietly turns the sweep into the full model
   // (measured: +24 cycleId, +17 initiativeId, +4 repoPath, +3 runId findings,
   // all server-built ids in engine modules) or that quietly narrows it back to
@@ -1010,7 +1017,7 @@ test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured six — the f
   assert.ok(model, 'SWEEP_MODEL must be exported');
   assert.deepEqual(
     [...model.bareTaint].sort(),
-    ['projectId', 'project_repo_path', 'rawUrl', 'sessionId', 'slug', 'url'],
+    ['id', 'projectId', 'project_repo_path', 'rawUrl', 'sessionId', 'slug', 'url'],
     'the sweep bare-id set is a measured calibration, not an accident — change it only with fresh numbers in the header',
   );
   for (const excluded of ['cycleId', 'initiativeId', 'repoPath', 'runId']) {
