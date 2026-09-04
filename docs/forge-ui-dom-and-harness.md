@@ -1099,7 +1099,19 @@ is what this contract reads — but it cannot be the only distinguisher.
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
-  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. The save button
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **The builder's two
+  CORE acts are declared too (M5-B, `forge-8vfn.5.12`):** a placeable palette
+  chip carries `[data-action="place-station-<agentRef>"]`, and each station's
+  own two ports carry `[data-action="connect-from-<agentRef>"]` (arm this
+  station as the edge's source) and `[data-action="connect-into-<agentRef>"]`
+  (draw the armed edge into it). Both were pointer-only before — an HTML5
+  dragstart onto the canvas, and a drag between two ReactFlow `[data-handleid]`
+  markup internals — so the single act the builder exists for could not be
+  named by automation driving this contract, and S4 beat 4 could assert the
+  node and edge counts but never reach them. Each action carries its subject in
+  its own name, per the rule above. The declared handles and the pointer acts
+  share one implementation (`lib/flow-builder-acts` + `stationEdgeShape`), so an
+  edge drawn by press and an edge drawn by drag cannot come out different. The save button
   additionally carries **`[data-save-state="saving"|"idle"]`** (W7-B4 review
   finding 11) — the in-flight state used to be visible only as the button's
   `disabled` prop, so the `flows-author` journey guessed with a fixed

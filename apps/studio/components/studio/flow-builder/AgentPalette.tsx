@@ -44,9 +44,11 @@ type DraggableChipProps = {
   // node, so its chip is greyed out and cannot start a drag. Defaults true
   // (project/artifact chips are never gated).
   placeable?: boolean;
+  /** Place this chip's agent on the canvas without a pointer drag (5.12). */
+  onPlace?: (ref: string) => void;
 };
 
-function DraggableChip({ kind, ref_, label, sublabel, placeable = true }: DraggableChipProps): JSX.Element {
+function DraggableChip({ kind, ref_, label, sublabel, placeable = true, onPlace }: DraggableChipProps): JSX.Element {
   const dotColor =
     kind === 'agent'   ? 'var(--c-agent)' :
     kind === 'project' ? 'var(--c-project)' :
@@ -58,6 +60,18 @@ function DraggableChip({ kind, ref_, label, sublabel, placeable = true }: Dragga
       data-palette-chip={kind}
       data-chip-ref={ref_}
       data-chip-placeable={placeable ? 'true' : 'false'}
+      // The declared handle for the act this palette exists for. It carries its
+      // SUBJECT in the action value, not on a second attribute, because a `do`
+      // step resolves `[data-action=…]` and takes `.first()` — the shape that
+      // made `select-stage` and `resolve-clause-agent` unnameable (`5.6`,
+      // `5.9`). Only a placeable chip declares one: an interactive agent has no
+      // act to name here, and a handle that exists but refuses is the
+      // declared-data-fails-open shape this campaign keeps closing.
+      {...(placeable && onPlace ? { 'data-action': `place-station-${ref_}` } : {})}
+      onClick={() => {
+        if (!placeable) return;
+        onPlace?.(ref_);
+      }}
       onDragStart={(e) => {
         if (!placeable) return;
         e.dataTransfer.effectAllowed = 'copy';
@@ -140,7 +154,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function AgentPalette(): JSX.Element {
+type AgentPaletteProps = {
+  /** Place an agent on the canvas by ref, without a pointer drag (5.12). */
+  onPlace?: (ref: string) => void;
+};
+
+export function AgentPalette({ onPlace }: AgentPaletteProps = {}): JSX.Element {
   const [agents, setAgents] = useState<Agent[]>([]);
 
   // B2: projects are NOT part of the build tab — a flow binds to a project at
@@ -200,6 +219,7 @@ export function AgentPalette(): JSX.Element {
               label={ag.name}
               sublabel={ag.purpose}
               placeable={!ag.capability?.interactive}
+              onPlace={onPlace}
             />
           ))
         )}

@@ -23,7 +23,6 @@
   "apps/studio/app/projects/[id]/page.tsx": 1446,
   "apps/studio/components/studio/PhaseDrawer.tsx": 950,
   "apps/studio/components/studio/RoadmapCanvas.tsx": 870,
-  "apps/studio/components/studio/flow-builder/FlowBuilderCanvas.tsx": 851,
   "apps/studio/lib/agent-ledger.test.ts": 1205,
   "apps/studio/lib/bridge-client.ts": 1531,
   "apps/studio/lib/community-client.ts": 947,

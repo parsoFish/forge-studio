@@ -21,7 +21,9 @@
  */
 
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -51,6 +53,18 @@ import { ArtifactPicker } from './ArtifactPicker';
 import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
 import { NodeMiniPanel } from './NodeMiniPanel';
 import { decodeDragPayload } from './AgentPalette';
+import {
+  stationIdForRef,
+  nextStationPosition,
+  canConnect,
+} from '@/lib/flow-builder-acts';
+import {
+  ConnectActsContext,
+  NODE_TYPES,
+  stationEdgeShape,
+  type ConnectActs,
+  type FlowNodeData,
+} from './FlowStationNode';
 
 // ---------------------------------------------------------------------------
 // Layout constants (from the mockup autolayout logic)
@@ -114,160 +128,6 @@ function kahnLayout(
 // ---------------------------------------------------------------------------
 // Custom flowNode type
 // ---------------------------------------------------------------------------
-type FlowNodeData = {
-  agentRef: string;
-  agentName: string;
-  gate?: string;
-  fanOut?: string;
-  resumable?: boolean;
-  selected?: boolean;
-};
-
-const HEX_CLIP = 'polygon(25% 3%, 75% 3%, 98% 50%, 75% 97%, 25% 97%, 2% 50%)';
-const HANDLE_VISIBLE_STYLE: React.CSSProperties = {
-  width: 12,
-  height: 12,
-  border: '2px solid var(--bg, #0b0e14)',
-  borderRadius: '50%',
-};
-
-function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNodeData>): JSX.Element {
-  const truncate = (s: string, max: number) =>
-    s && s.length > max ? `${s.slice(0, max - 1)}…` : s;
-
-  const hexBorderColor = selected ? 'var(--ember, #ff9e4a)' : 'var(--line-2, #39455f)';
-
-  return (
-    <div
-      data-flow-node=""
-      data-node-id={id}
-      data-agent-ref={data.agentRef}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        cursor: 'pointer',
-        userSelect: 'none',
-        position: 'relative',
-        width: 96,
-      }}
-      title={data.agentName}
-    >
-      {/* Target handle — left (in-port) */}
-      <Handle
-        id="in"
-        type="target"
-        position={Position.Left}
-        style={{
-          ...HANDLE_VISIBLE_STYLE,
-          background: 'var(--steel, #5cc8ff)',
-          boxShadow: '0 0 8px rgba(92,200,255,0.4)',
-          left: -6,
-          top: '50%',
-          transform: 'translateY(-50%)',
-        }}
-      />
-
-      {/* Hex frame + body */}
-      <div
-        style={{
-          clipPath: HEX_CLIP,
-          padding: '1.5px',
-          background: selected
-            ? 'linear-gradient(135deg, var(--ember, #ff9e4a), var(--ember-hot, #ff6b35))'
-            : hexBorderColor,
-          display: 'inline-block',
-          boxShadow: selected ? '0 0 20px rgba(255,158,74,0.4)' : undefined,
-          width: 96,
-          height: 88,
-        }}
-      >
-        <div
-          style={{
-            clipPath: HEX_CLIP,
-            background: 'var(--panel-2, #1a2230)',
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 3,
-          }}
-        >
-          {/* Agent dot indicator */}
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-agent, #ff9e4a)', marginBottom: 2 }} />
-
-          {/* Agent name */}
-          <span style={{
-            fontFamily: 'var(--font-display, sans-serif)',
-            fontSize: 11,
-            fontWeight: 600,
-            color: 'var(--text, #e9eef6)',
-            textAlign: 'center',
-            lineHeight: 1.2,
-            maxWidth: 72,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            padding: '0 4px',
-          }}>
-            {truncate(data.agentName || data.agentRef, 12)}
-          </span>
-
-          {/* Read-only badges for gate/fanOut/resumable */}
-          {data.gate && (
-            <span style={{ fontSize: 9, color: 'var(--amber, #fbbf24)', fontFamily: 'var(--font-mono, monospace)', background: 'rgba(251,191,36,0.12)', padding: '1px 4px', borderRadius: 2 }}>
-              gate
-            </span>
-          )}
-          {data.fanOut && (
-            <span style={{ fontSize: 9, color: 'var(--steel, #5cc8ff)', fontFamily: 'var(--font-mono, monospace)', background: 'rgba(92,200,255,0.1)', padding: '1px 4px', borderRadius: 2 }}>
-              fan-out
-            </span>
-          )}
-          {data.resumable && (
-            <span style={{ fontSize: 9, color: 'var(--green, #4ade80)', fontFamily: 'var(--font-mono, monospace)', background: 'rgba(74,222,128,0.1)', padding: '1px 4px', borderRadius: 2 }}>
-              resumable
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Source handle — right (out-port) */}
-      <Handle
-        id="out"
-        type="source"
-        position={Position.Right}
-        style={{
-          ...HANDLE_VISIBLE_STYLE,
-          background: 'var(--ember, #ff9e4a)',
-          boxShadow: '0 0 8px rgba(255,158,74,0.6)',
-          right: -6,
-          top: '50%',
-          transform: 'translateY(-50%)',
-        }}
-      />
-
-      {/* Agent ref label below hex */}
-      <div style={{
-        marginTop: 5,
-        fontSize: 10,
-        color: 'var(--faint)',
-        fontFamily: 'var(--font-mono, monospace)',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        maxWidth: 90,
-        textAlign: 'center',
-      }}>
-        {data.agentRef}
-      </div>
-    </div>
-  );
-}
-
-const NODE_TYPES: NodeTypes = { flowNode: FlowNodeComponent };
 
 // ---------------------------------------------------------------------------
 // Edge label (artifact name on the edge)
@@ -382,6 +242,12 @@ function FitOnChange({ count }: { count: number }): null {
 export type CanvasHandle = {
   getNodes: () => Node<FlowNodeData>[];
   getEdges: () => Edge<BuilderEdgeData>[];
+  /**
+   * Place an agent on the canvas by ref. The palette's declared
+   * `place-station-<ref>` handle crosses into the canvas through here — the
+   * canvas owns the node state, so there is nowhere else the act can live.
+   */
+  placeStation: (agentRef: string) => void;
 };
 
 type Props = {
@@ -432,10 +298,15 @@ export function FlowBuilderCanvas({
   // Expose current state via handle
   const nodesRef = useRef(rfNodes);
   const edgesRef = useRef(rfEdges);
+  // The handle is published once (its effect depends on `onRef` alone), so the
+  // placement act reaches it through a ref that is re-pointed every render
+  // rather than by re-publishing the handle on every dependency change.
+  const placeStationAtRef = useRef<(agentRef: string) => void>(() => {});
   nodesRef.current = rfNodes;
   edgesRef.current = rfEdges;
   useEffect(() => {
     onRef?.({
+      placeStation: (agentRef: string) => placeStationAtRef.current(agentRef),
       getNodes: () => nodesRef.current,
       getEdges: () => edgesRef.current,
     });
@@ -479,13 +350,7 @@ export function FlowBuilderCanvas({
       // ReactFlow's auto-generated id would not match (B1).
       setRfEdges((eds) => addEdge({
         ...connection,
-        id: `${connection.source ?? ''}__${connection.target ?? ''}`,
-        sourceHandle: 'out',
-        targetHandle: 'in',
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: 'var(--line-2, #39455f)', strokeWidth: 2 },
-        data: { artifact: undefined },
+        ...stationEdgeShape(connection.source ?? '', connection.target ?? ''),
       }, eds));
       // Stash the connection; onConnectEnd will open the picker at the real cursor position
       pendingConnectionRef.current = connection;
@@ -583,14 +448,48 @@ export function FlowBuilderCanvas({
     if (dropRejectTimeoutRef.current) clearTimeout(dropRejectTimeoutRef.current);
   }, []);
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const raw = e.dataTransfer.getData('text/plain');
-      const payload = decodeDragPayload(raw);
-      if (!payload || payload.kind !== 'agent') return;
+  /**
+   * The armed edge source, set by `connect-from-<agent>` and consumed by the
+   * next `connect-into-<agent>`. A ref, not state: arming is not a rendered
+   * condition, and making it one would re-render every node on each press.
+   */
+  const armedSourceRef = useRef<string | null>(null);
 
-      const agentRef = payload.ref;
+  const connectActs = useMemo<ConnectActs>(
+    () => ({
+      armFrom: (nodeId: string) => {
+        armedSourceRef.current = nodeId;
+      },
+      completeInto: (targetId: string) => {
+        const sourceId = armedSourceRef.current;
+        if (sourceId === null) {
+          // Named, not silent: a press that draws nothing has to say why, or a
+          // story reads "the product refused" as "the product did nothing".
+          rejectDrop('press a station\'s out-port ("connect-from-…") before wiring into another one.');
+          return;
+        }
+        armedSourceRef.current = null;
+        const verdict = canConnect(nodesRef.current, edgesRef.current, sourceId, targetId);
+        if (!verdict.ok) {
+          rejectDrop(verdict.reason);
+          return;
+        }
+        setRfEdges((eds) => [...eds, stationEdgeShape(sourceId, targetId) as Edge<BuilderEdgeData>]);
+      },
+    }),
+    [rejectDrop],
+  );
+
+
+  /**
+   * Place an agent as a station. ONE implementation, called by the pointer drop
+   * and by the palette's declared `place-station-<ref>` handle — the drop's
+   * only extra is the cursor position it can supply and a press cannot.
+   * Keeping the interactive-agent refusal here is the point: a second placement
+   * path would be one refactor away from not having it (§15.80).
+   */
+  const placeStationAt = useCallback(
+    (agentRef: string, position?: { x: number; y: number }) => {
       const agent = agents.find((a) => a.id === agentRef);
 
       // R2-02-F3: an interactive agent (per the F1 capability descriptor)
@@ -601,31 +500,44 @@ export function FlowBuilderCanvas({
         return;
       }
 
+      const newId = `fn-${Date.now().toString(36)}`;
+      setRfNodes((nds) => [
+        ...nds,
+        {
+          id: newId,
+          type: 'flowNode',
+          position: position ?? nextStationPosition(nds),
+          data: {
+            agentRef,
+            agentName: agent?.name ?? agentRef,
+            selected: false,
+          },
+          width: 96,
+          height: 106,
+        },
+      ]);
+    },
+    [agents, rejectDrop],
+  );
+  placeStationAtRef.current = placeStationAt;
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData('text/plain');
+      const payload = decodeDragPayload(raw);
+      if (!payload || payload.kind !== 'agent') return;
+
       // Convert screen coords to ReactFlow coords
       const wrapper = reactFlowWrapper.current;
       if (!wrapper || !rfInstance) return;
       const rect = wrapper.getBoundingClientRect();
-      const position = rfInstance.project({
+      placeStationAt(payload.ref, rfInstance.project({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
-      });
-
-      const newId = `fn-${Date.now().toString(36)}`;
-      const newNode: Node<FlowNodeData> = {
-        id: newId,
-        type: 'flowNode',
-        position,
-        data: {
-          agentRef,
-          agentName: agent?.name ?? agentRef,
-          selected: false,
-        },
-        width: 96,
-        height: 106,
-      };
-      setRfNodes((nds) => [...nds, newNode]);
+      }));
     },
-    [agents, rfInstance, rejectDrop],
+    [rfInstance, placeStationAt],
   );
 
   // ---------------------------------------------------------------------------
@@ -673,6 +585,7 @@ export function FlowBuilderCanvas({
   // Render
   // ---------------------------------------------------------------------------
   return (
+    <ConnectActsContext.Provider value={connectActs}>
     <div
       ref={reactFlowWrapper}
       data-component="flow-builder-canvas"
@@ -834,6 +747,7 @@ export function FlowBuilderCanvas({
         />
       )}
     </div>
+    </ConnectActsContext.Provider>
   );
 }
 
