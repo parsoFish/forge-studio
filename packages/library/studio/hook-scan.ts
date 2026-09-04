@@ -427,7 +427,7 @@ export function scanHookScript(input: { body: string; permissions: HookPermissio
  * (`selectScannableHookFiles`, hook-package.ts) and compute ONE verdict over
  * their union — the single "scan these files, dedupe env-read, compute the
  * verdict" primitive both `scanHookPackage` (post-install) and
- * `cli/bridge-studio-community.ts`'s pre-install preview use, so a package
+ * `packages/library/bridge-studio-community.ts`'s pre-install preview use, so a package
  * that scans `blocked` after install can never have previewed `clean` (PIN B).
  * Deny-by-default on a missing entry: throws naming `entryPath` if absent
  * from `files`, rather than reporting a verdict over nothing scanned.

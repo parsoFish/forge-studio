@@ -1,7 +1,7 @@
 /**
  * REAL-ENTRY-POINT acceptance test for R3-07's `lintCommunityIndex` — driven
  * through the ACTUAL `forge studio lint` entry point (`runStudioLint`,
- * `cli/studio-lint.ts`), not a hand-rolled/direct call to
+ * `apps/forge/studio-lint.ts`), not a hand-rolled/direct call to
  * `lintCommunityIndex` (that direct-call coverage lives in
  * `orchestrator/studio/community-index.test.ts`).
  *
@@ -18,9 +18,9 @@
  * — is pinned here).
  *
  * Co-located in cli/ (not orchestrator/studio/), mirroring
- * `cli/studio-lint-hooks.test.ts`'s own stated reason: both need the entry
+ * `apps/forge/studio-lint-hooks.test.ts`'s own stated reason: both need the entry
  * point directly. Fixture conventions (`tmpRoot`, `seedValidProject`,
- * `buildBaseRoot`) are copied from `cli/studio-lint-hooks.test.ts` rather
+ * `buildBaseRoot`) are copied from `apps/forge/studio-lint-hooks.test.ts` rather
  * than reinvented.
  *
  * RED today for the same compounding reason as that file's own header:
@@ -55,7 +55,7 @@ function seedValidProject(root: string, id = 'my-project'): void {
 
 /** A base root with everything runStudioLint needs to lint clean EXCEPT the
  *  community fixtures the caller adds afterwards — mirrors
- *  cli/studio-lint-hooks.test.ts's `buildBaseRoot`. W6-CR-1: community
+ *  apps/forge/studio-lint-hooks.test.ts's `buildBaseRoot`. W6-CR-1: community
  *  skills live in studio/community/registry.yaml, not catalog.yaml. */
 function buildBaseRoot(): string {
   const root = tmpRoot();

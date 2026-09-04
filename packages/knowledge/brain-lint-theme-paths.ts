@@ -133,8 +133,8 @@ export function findThemeBySlug(brainRoot: string, slug: string): string | null 
 
 /**
  * Lenient frontmatter parser — delegates to the ONE shared implementation in
- * cli/theme-frontmatter.ts (W7 FIX-B-KB: extracted so the deterministic
- * fixers in cli/brain-fix-auto.ts parse themes with the exact same lenient
+ * packages/knowledge/theme-frontmatter.ts (W7 FIX-B-KB: extracted so the deterministic
+ * fixers in packages/knowledge/brain-fix-auto.ts parse themes with the exact same lenient
  * fallback the lint checks use; the two used to disagree, so the fixer
  * refused the very theme lint had just flagged). Null only on a READ
  * failure — the parse itself always produces a result (gray-matter first,

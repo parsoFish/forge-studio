@@ -377,7 +377,7 @@ const execReflect: NodeExecutor = async (ctx) => {
  * onboard-preflight (the `onboard-preflight` band, R4-18/ADR-039): the
  * `gate: contract` node of an onboard-shaped flow (authorable — the OOTB
  * wrapper was retired in W7-C1). Runs the REAL forge↔project
- * contract preflight (`runPreflight`, `cli/preflight.ts`) DIRECTLY,
+ * contract preflight (`runPreflight`, `packages/projects/preflight.ts`) DIRECTLY,
  * orchestrator-side — mirrors `execDemo`'s shape (start event, do the real
  * work, end event carrying `status`) but spawns NO agent at all.
  *
@@ -392,11 +392,11 @@ const execReflect: NodeExecutor = async (ctx) => {
  * gate unfakeable — is retired there rather than left to rot. What guards it
  * now: exactly one production caller wires the real preflight
  * (`orchestrator/cycle.ts` via `createProjectGate()`), and a conformance test
- * fails if `flow-runner.ts` ever imports `cli/preflight.ts` again. The
+ * fails if `flow-runner.ts` ever imports `packages/projects/preflight.ts` again. The
  * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
  * declaration carrier + display identity the band-guard machinery needs
  * (composition.guards, runtime/budgets for lint); it is never spawned.
- * `formatPreflightReport` (cli/preflight.ts) is available for a future
+ * `formatPreflightReport` (packages/projects/preflight.ts) is available for a future
  * human-readable render — today the report is carried structurally via
  * `failing_clause_ids`, in `runPreflight`'s own clause order.
  *

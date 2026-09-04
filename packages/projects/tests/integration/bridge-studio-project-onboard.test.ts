@@ -14,7 +14,7 @@
  * right arguments, and does it react correctly to a rejection — is what is
  * actually under test.
  *
- * CARRIED ACROSS from `cli/bridge-studio-project-create-containment.test.ts`
+ * CARRIED ACROSS from `apps/forge/bridge-studio-project-create-containment.test.ts`
  * (this task's brief: report which containment ATs moved here): Defect 2
  * (sibling-project clobber — an application-level, route-owned check, not a
  * path-identity one) and the SEC-03 round-3/4 error-routing shape

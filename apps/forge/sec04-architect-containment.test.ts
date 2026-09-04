@@ -15,7 +15,7 @@
  *       is enumerated with no guard and every out-of-root `status.json` under
  *       it — idea, session_id, project_repo_path — is disclosed in the listing.
  *
- *   (2) applyPlanVerdict (cli/bridge-studio-runs.ts:586, `_architectSessionDir`
+ *   (2) applyPlanVerdict (packages/flows/bridge-studio-runs.ts:586, `_architectSessionDir`
  *       at :91 = bare join, `_readStatus` at :95). Reached by POST
  *       /api/plan-verdict (and POST /api/runs/:id/gates/plan). CHARSET-gated
  *       (SLUG_RE on project, SAFE_ID_RE on sessionId) — but charset does NOT

@@ -1,7 +1,7 @@
 /**
  * bridge-agents-run-state.ts — how a standalone agent run's state is READ.
  *
- * Carved out of `cli/ui-bridge.ts` (M4-agents, exit row 2), where this
+ * Carved out of `apps/forge/ui-bridge.ts` (M4-agents, exit row 2), where this
  * derivation sat between the bridge's other route families for no reason but
  * history: every symbol in this file serves the `/api/agents/*` routes and
  * nothing else, which was checked per symbol before the move rather than
@@ -90,7 +90,7 @@ export type AgentFlowRun = {
 // cap (not a proportion of the log size) so a runaway log is never served
 // whole; the TAIL (most-recently-written lines) is preserved when capping,
 // so a long-running run's log view never looks frozen at dispatch.
-// Carved from `cli/ui-bridge.ts:140`, where it was declared among the host's
+// Carved from `apps/forge/ui-bridge.ts:140`, where it was declared among the host's
 // own constants but read by exactly one function — this file's
 // `deriveStandaloneStateFromEvents`. Its host declaration is deleted, not
 // duplicated: two copies of a cap drift, and this is the only reader.
@@ -157,7 +157,7 @@ export type StandaloneRunState = {
  * A malformed individual JSONL line is skipped, not fatal — unchanged from
  * the prior behaviour. */
 // W8-F6 (bead forge-6gv.27): the implementation MOVED, verbatim, to
-// cli/session-readability.ts so the legacy-session read path and these four
+// packages/sessions/session-readability.ts so the legacy-session read path and these four
 // call sites share ONE guarded parse instead of two copies. Imported at the
 // top of this file; the doc comment above travelled with it.
 
@@ -177,7 +177,7 @@ export type StandaloneRunState = {
 export function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown>[]): StandaloneRunState {
   const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
   // `runAgent` emits `end` only on success; a crashed dispatch writes a
-  // terminal 'agent-dispatch.failed' marker (cli/agent-run.ts) instead —
+  // terminal 'agent-dispatch.failed' marker (packages/agents/agent-run.ts) instead —
   // without it the run would read 'running' forever.
   const failedMarker = [...parsed].reverse().find((e) => e['message'] === 'agent-dispatch.failed');
   // W7-B5 (agents-30): an operator cancel writes a durable

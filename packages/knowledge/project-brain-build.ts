@@ -155,7 +155,7 @@ export function commitProjectBrain(args: {
   // scaffolded, or the descriptor splits in two (one empty kb.yaml at the
   // create location, one seeded kb.yaml here) and every operator-authored theme
   // is silently orphaned. Create scaffolds brain/<id> UNCONDITIONALLY for EVERY
-  // binding kind (cli/bridge-studio-kbs.ts create route), so a create hand-off
+  // binding kind (packages/knowledge/bridge-studio-kbs.ts create route), so a create hand-off
   // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
   // (orchestrator/brain-paths.ts) resolves it there. Only the ORDINARY
   // project-brain flow (no hand-off, kbId === status.project, a real project)

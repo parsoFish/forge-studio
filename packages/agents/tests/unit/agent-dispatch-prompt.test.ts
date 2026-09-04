@@ -78,7 +78,7 @@ test('buildStandaloneRunPrompt: no project / no inputs → "none", no inputs blo
 
 // ---------------------------------------------------------------------------
 // R6-04-F2 ROUND 3 amendment 3 — materials must actually REACH the agent.
-// Review found nothing in this module (or run-agent.ts / cli/agent-run.ts /
+// Review found nothing in this module (or run-agent.ts / packages/agents/agent-run.ts /
 // run-model.ts) ever references `materials` — files land on disk, a
 // reference is logged, and the spawned agent never learns they exist. This
 // is the recurring "declared data surfaced to the user, consumed by

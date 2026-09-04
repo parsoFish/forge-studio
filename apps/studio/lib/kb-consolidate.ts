@@ -11,7 +11,7 @@
  * every other bounded agent-run poll in this app uses — a consolidate runId
  * (`${kbId}-consolidate-<stamp>`) is pollable through the byte-identical
  * `GET /api/studio/kbs/:id/fix-agent/:runId` route a per-finding fix-agent
- * runId already uses (`readBrainFixState`, cli/bridge-studio-kbs.ts, doesn't
+ * runId already uses (`readBrainFixState`, packages/knowledge/bridge-studio-kbs.ts, doesn't
  * distinguish by op). Reattach-on-mount goes through
  * `fetchActiveOrLatestConsolidate` (./studio-client.ts), which hits the new
  * `GET /api/studio/kbs/:id/consolidate/active` discovery route. Both live in

@@ -240,7 +240,7 @@ test('routes-table: every entry carries a dryClassification and a callable handl
 // ---------------------------------------------------------------------------
 // R4-17 AT-3, MOVED HERE WITH ITS SUBJECT (M4 projects routes carve).
 //
-// It lived in `cli/bridge-studio-contract-stages.test.ts` and drove
+// It lived in `apps/forge/bridge-studio-contract-stages.test.ts` and drove
 // `handleStudioRoutes` directly. The contract-stages route left that if-chain
 // for this table, so the legacy dispatcher stopped claiming the URL and the
 // case went red — correctly: it was reporting that its subject had moved, not

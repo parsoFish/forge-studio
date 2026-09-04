@@ -88,7 +88,7 @@ test('every studio SKILL.md runtime.sdk is in registeredSdkIds()', () => {
 // ---------------------------------------------------------------------------
 
 test('bridge default for a body with no runtime.sdk resolves to a registered id', () => {
-  // Mirror cli/bridge-studio-writes.ts: a body with no runtime.sdk and no
+  // Mirror apps/forge/bridge-studio-writes.ts: a body with no runtime.sdk and no
   // existing agent falls back to the literal default. That default must resolve.
   const bridgeDefault = 'claude';
   const resolved = resolveSdkId(bridgeDefault);

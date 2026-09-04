@@ -129,7 +129,7 @@ export function defaultConfigPath(forgeRoot: string): string {
  * projects (rank 2 — `check-boundaries.mjs` treats SAME rank as a violation,
  * `b >= a`). It is a layout fact, so it sits beside `resolveProjectsDir` here
  * rather than being duplicated; `project-create.ts` re-exports both names, so
- * its own importers (`cli/bridge-studio.ts`, `apps/forge/cli.ts`, its tests)
+ * its own importers (`apps/forge/bridge-studio.ts`, `apps/forge/cli.ts`, its tests)
  * are unchanged.
  *
  * The previous body composed this as `join(skillsDir(forgeRoot), '..',

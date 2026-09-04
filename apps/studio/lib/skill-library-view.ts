@@ -61,7 +61,7 @@ export function groupSkillLibrary(entries: readonly SkillLibraryEntry[]): Groupe
  */
 export type SkillBadge = 'community' | 'authored' | 'reference' | 'draft' | 'needs-review';
 
-/** The exact provenance.source stamp cli/bridge-studio-authoring.ts's
+/** The exact provenance.source stamp packages/library/bridge-studio-authoring.ts's
  *  copyStagingToLibrary writes for locally-authored packages. */
 export const AUTHORING_PROVENANCE_SOURCE = 'forge-authoring';
 

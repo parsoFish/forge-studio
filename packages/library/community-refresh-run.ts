@@ -1,10 +1,10 @@
 /**
  * W8-B5 WI-3 — the ONE load → refresh → write runner. Exit rows E1 and E7 are
- * really one row: `forge community refresh` (cli/community-refresh-cmd.ts) and
- * `POST /api/studio/community/refresh` (cli/bridge-studio-community.ts) must
+ * really one row: `forge community refresh` (packages/library/community-refresh-cmd.ts) and
+ * `POST /api/studio/community/refresh` (packages/library/bridge-studio-community.ts) must
  * be the SAME code path, not two hand-rolled copies that drift. Both call
  * `runCommunityRefresh`; neither knows how the registry is loaded, serialized,
- * or written, and `cli/bridge-studio-community-refresh.test.ts`'s P1 pins the
+ * or written, and `packages/library/bridge-studio-community-refresh.test.ts`'s P1 pins the
  * two surfaces byte-for-byte against each other so a future divergence is red
  * rather than silent.
  *
@@ -15,7 +15,7 @@
  *   community-refresh-cmd.ts                       argv + console + exit code.
  *   bridge-studio-community.ts                     HTTP status + JSON body.
  *
- * That is `migrateProjectConfig`'s own shape (cli/project-migrate.ts): a pure
+ * That is `migrateProjectConfig`'s own shape (packages/projects/project-migrate.ts): a pure
  * decision function returning a typed `{ok:true,…} | {ok:false, reason, …}`
  * union that never throws for an EXPECTED failure, plus thin surfaces that
  * render it. A caller can therefore render a distinct remedy per `reason`
@@ -32,7 +32,7 @@
  *      test, which is why every failure test here asserts the BYTES.
  *
  *   2. THE WRITE IS TEMP → RE-PARSE THROUGH THE ONE LOADER → RENAME, the same
- *      discipline the registry CRUD routes use (cli/bridge-studio-writes.ts's
+ *      discipline the registry CRUD routes use (apps/forge/bridge-studio-writes.ts's
  *      `mutateCommunityRegistry`). A document that cannot be re-loaded never
  *      lands, and a crash mid-write cannot leave a half-written registry
  *      behind. The destination is a FIXED, server-owned path
@@ -50,7 +50,7 @@
  * The cure is OPTIMISTIC CONCURRENCY, not a lock held across the network — a
  * lock spanning the fetches would block every curation edit for minutes,
  * trading a rare lost update for a common stall. So: fetch outside any lock,
- * THEN take the registry mutex (cli/community-registry-lock.ts), RE-LOAD the
+ * THEN take the registry mutex (packages/library/community-registry-lock.ts), RE-LOAD the
  * document from disk under it, apply the freshly-verified facts onto that
  * re-loaded document, write, release.
  *

@@ -67,7 +67,7 @@ describe('studio starter library', () => {
 
   // R2-02-F1: GET /api/studio/starters threads the same server-computed
   // capability descriptor onto starter agents as GET /api/studio/agents
-  // (cli/bridge-studio.ts). Guard the source it's built from: the descriptor
+  // (apps/forge/bridge-studio.ts). Guard the source it's built from: the descriptor
   // must compute cleanly (no throw, well-formed shape) for every real
   // starter agent the New-Agent picker offers.
   it('agentCapabilityDescriptor computes for every starter agent (threaded onto GET /api/studio/starters)', () => {

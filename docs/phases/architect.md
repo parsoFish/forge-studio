@@ -73,7 +73,7 @@ All phase infrastructure is live:
 - [x] In-UI architect runner (`packages/sessions/kinds/architect.ts`) — ADR 020.
 - [x] Architect interview + PLAN gate rebuilt natively inside Studio (ADR 031): interview panel → PLAN gate via the unified `/artifact` viewer. The `/architect/[sessionId]` standalone route was replaced; `/review` and `/reflect` also redirect to `/artifact`.
 - [x] LLM Council critic chain — runs inside `skills/architect/` via `packages/sessions/kinds/architect.ts` (council transcript in `packages/sessions/kinds/architect-plan.ts`).
-- [x] Rich PLAN.html viewer — `cli/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels), embedded via `PlanRenderer` + `PlanGate` in the artifact viewer.
+- [x] Rich PLAN.html viewer — `packages/sessions/kinds/architect-plan.ts:renderPlanHtml` (D3: sections over paragraphs, initiative cards, comparative decision panels), embedded via `PlanRenderer` + `PlanGate` in the artifact viewer.
 - [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
 - [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.
 - [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.

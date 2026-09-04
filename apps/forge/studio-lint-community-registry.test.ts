@@ -3,7 +3,7 @@
  * section (W6-CR-1: studio/community/registry.yaml, superseding
  * catalog.yaml's former `community-skills:` section) — driven through the
  * ACTUAL `forge studio lint` entry point (`runStudioLint`,
- * `cli/studio-lint.ts`), mirroring `cli/studio-lint-community.test.ts`'s own
+ * `apps/forge/studio-lint.ts`), mirroring `apps/forge/studio-lint-community.test.ts`'s own
  * stated reason for testing at this level rather than calling
  * `validateCommunityRegistry` directly (that direct-call coverage lives in
  * `orchestrator/studio/validate.test.ts`).

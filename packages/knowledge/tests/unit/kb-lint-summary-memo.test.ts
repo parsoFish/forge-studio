@@ -1,6 +1,6 @@
 /**
  * PROOF TESTS — W6-P2 (ADR 044, read-path memoization): memoizing the
- * full-tree brain lint behind `cli/kb-lint-summary.ts`'s
+ * full-tree brain lint behind `packages/knowledge/kb-lint-summary.ts`'s
  * `runBrainLintFullMemoized`/`runBrainLintFullFresh`.
  *
  * ADR 044's four rules, and where each is proven here:
@@ -11,7 +11,7 @@
  *                              brain/) + the invalidation tests covering
  *                              EVERY check that reaches outside brain/, per
  *                              the completeness table in
- *                              cli/kb-lint-summary.ts: `_queue/done`
+ *                              packages/knowledge/kb-lint-summary.ts: `_queue/done`
  *                              (checkReflectorLoss), `docs/`+`orchestrator/`
  *                              (checkStaleness's bounded 4-prefix allowlist),
  *                              and a relative-markdown-link target under
@@ -28,7 +28,7 @@
  *                              memo entry a same-millisecond, size-neutral
  *                              write can collide with.
  *
- * RUN: node --test --experimental-strip-types cli/kb-lint-summary-memo.test.ts
+ * RUN: node --test --experimental-strip-types packages/knowledge/tests/unit/kb-lint-summary-memo.test.ts
  */
 
 import { test, describe } from 'node:test';

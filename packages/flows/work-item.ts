@@ -270,7 +270,7 @@ const SHELL_HEADS = new Set(['sh', 'bash', 'zsh', 'dash', '/bin/sh', '/bin/bash'
  * `python` defeat a denylist. We only inspect EXPLICIT shell-wrapped gates
  * (`bash -c "…"`); a plain argv like `["go","test","-run","A|B","./pkg/"]`
  * carries the `|` as a literal regex arg, not a shell pipe, and is fine.
- * Mirrors the project-gate metacharacter ban in cli/preflight.ts (clause n).
+ * Mirrors the project-gate metacharacter ban in packages/projects/preflight.ts (clause n).
  */
 export function gateIsShellPipeline(cmd: readonly string[]): boolean {
   const head = cmd[0] ?? '';
@@ -363,7 +363,7 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
     // `grep '--- PASS:…'` pattern starts with `-`, is parsed as grep options,
     // so the gate ALWAYS errors regardless of the tests (cost a whole cycle).
     // Structural, not a tool denylist: `rg`/`jq`/`wc`/`python` defeat a
-    // denylist. Mirrors the project-gate ban in cli/preflight.ts (clause n).
+    // denylist. Mirrors the project-gate ban in packages/projects/preflight.ts (clause n).
     errors.push(
       'quality_gate_cmd must be ONE runnable command whose exit code is the verdict — NOT a shell pipeline or chain. Drop the `bash -c "… | grep/awk/… "` / `&&` / `;` wrapper and invoke the runner directly (e.g. `["go","test","-tags","all","-run","<Prefix>","<pkg>"]`); scope with the runner\'s own `-run`/path flags, never a post-filter.',
     );

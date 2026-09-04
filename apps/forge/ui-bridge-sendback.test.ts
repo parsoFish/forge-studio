@@ -11,8 +11,8 @@
  *      the body (the re-run's prompt source), and
  *   2. a structured `reviewer.verdict.send-back` event PLUS one
  *      `pm.work-item-emitted` event per fix WI in the cycle's
- *      `_logs/<cycleId>/events.jsonl` (`cli/cycle-retention.ts` and
- *      `cli/cycle-recap.ts` count the former; `run-model-derive` matches the
+ *      `_logs/<cycleId>/events.jsonl` (`packages/knowledge/cycle-retention.ts` and
+ *      `packages/factory/cycle-recap.ts` count the former; `run-model-derive` matches the
  *      latter for the run page's hex + drawer spec).
  * Cap exhaustion (`FixLoopCapError`) rejects with 409 + `parked:
  * 'needs-operator'` and writes the greppable `.forge/REVIEW-CAP-EXHAUSTED.md`

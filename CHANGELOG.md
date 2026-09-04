@@ -594,7 +594,7 @@ real data-table dispatch and a second, gated implementation behind it).
 - **The pre-Studio `/dashboard`** and its exclusive component cluster were deleted
   (Studio fully replaces it).
 - **The deprecated `forge watch` alias** was retired in M8-E. Use `forge studio`.
-  (The shared launcher implementation in `cli/forge-watch.ts` remains; only the CLI
+  (The shared launcher implementation in `apps/forge/forge-watch.ts` remains; only the CLI
   alias was removed.)
 
 ### Licensing

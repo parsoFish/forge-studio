@@ -300,7 +300,7 @@ test('dryBridgeAgentTurnMarker() under FORGE_DRY_BRIDGE=1 returns the marker and
 // bead forge-8nw / forge-720 — the run's OWN events.jsonl must carry a
 // terminal marker for the ONE standalone-dispatch route
 // (POST /api/agents/:slug/run), the file `deriveStandaloneRunState`
-// (cli/ui-bridge.ts) actually reads to derive a standalone run's state.
+// (apps/forge/ui-bridge.ts) actually reads to derive a standalone run's state.
 // Before this fix, `dryBridgeAgentTurnMarker` wrote ONLY into the shared
 // `DRY_BRIDGE_LOG_BUCKET` — the run's own `<logsRoot>/<runId>/events.jsonl`
 // never received a terminal fact, so the run derived `state: 'running'`
@@ -327,7 +327,7 @@ test('forge-8nw AT-1: dryBridgeAgentTurnMarker() for the standalone dispatch rou
       assert.deepEqual(marker, { dryBridge: { skipped: ['agent-turn'] } });
 
       // Assert on the FILE CONTENT at the exact path deriveStandaloneRunState
-      // reads (logsRoot/<runEntryName>/events.jsonl, cli/ui-bridge.ts) — never
+      // reads (logsRoot/<runEntryName>/events.jsonl, apps/forge/ui-bridge.ts) — never
       // on a helper's return value, which would look identical whether or not
       // the run's own log was ever touched.
       const ownEventsPath = join(logsRoot, runId, 'events.jsonl');

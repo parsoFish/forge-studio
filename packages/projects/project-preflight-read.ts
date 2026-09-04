@@ -3,7 +3,7 @@
  * `GET /api/studio/projects/:id/repo-status` and
  * `GET /api/studio/projects/:id/preflight/fix-agent/:runId`.
  *
- * M4 §4 (projects routes carve). Moved VERBATIM out of `cli/bridge-studio.ts`'s
+ * M4 §4 (projects routes carve). Moved VERBATIM out of `apps/forge/bridge-studio.ts`'s
  * `handleStudioRoutes` if-chain into standalone handlers with the
  * `RouteEntry` handler signature. No injected dependency needed here — every
  * import (`runPreflight`, `classifyClause`, `hasPendingStudioChanges`,
@@ -13,7 +13,7 @@
  *
  * The write-side siblings (`POST .../preflight/fix-auto`,
  * `POST .../preflight/fix-agent`, `POST .../save-repo`) live in
- * `cli/bridge-studio-writes.ts` and are carved separately (a different
+ * `apps/forge/bridge-studio-writes.ts` and are carved separately (a different
  * source file, a different worker in this same PR).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';

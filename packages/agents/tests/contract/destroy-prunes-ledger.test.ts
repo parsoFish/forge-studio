@@ -1,6 +1,6 @@
 /**
  * W8-B4 (library-34 / library-35) — the ENUMERATION pin the task brief
- * demanded, mirroring cli/bridge-community-registry-crud.test.ts's CRUD-12b
+ * demanded, mirroring apps/forge/bridge-community-registry-crud.test.ts's CRUD-12b
  * idiom ("a pin that fails if the [...] list is ever narrowed/widened
  * again") applied to a DIFFERENT invariant: every fs call that destroys a
  * hook or skill package BY ID must be paired with the matching ledger-prune
@@ -19,7 +19,7 @@
  * ============================================================================
  * W8-B4 FIX-2 (2026-08-23) — the classifier itself had a blind spot a LIVE
  * path walked through: this file's own PROVEN EXCEPTION list below claimed
- * "cli/bridge-studio-writes.ts's agent-delete (:1342) ... reference[s]
+ * "apps/forge/bridge-studio-writes.ts's agent-delete (:1342) ... reference[s]
  * NEITHER `hooksDir(...)` nor `skillsDir(...)`/`skillDir(...)` anywhere as
  * real code." That claim was FALSE — bridge-studio-writes.ts imports
  * `skillsDir` under an alias (`import { skillsDir as toSkillsDir, ... }`)
@@ -36,10 +36,10 @@
  *
  * The fix has three parts, all below:
  *
- *   (a) PRODUCTION FIX — cli/bridge-studio-writes.ts's agent-DELETE route
+ *   (a) PRODUCTION FIX — apps/forge/bridge-studio-writes.ts's agent-DELETE route
  *       now calls `removeInstallLedgerEntry` before its `rmSync`, mirroring
- *       cli/bridge-studio-skills.ts's DELETE route. See
- *       cli/bridge-studio-writes-ledger-prune.test.ts for the live-bridge
+ *       packages/library/bridge-studio-skills.ts's DELETE route. See
+ *       apps/forge/bridge-studio-writes-ledger-prune.test.ts for the live-bridge
  *       reproduction pins (pin 2: the reviewer's repro, asserting the
  *       ARTIFACT — the ledger file's content and the recreated skill's
  *       trust — not a status code; pin 3: a no-ledger-row delete control).
@@ -83,12 +83,12 @@
  *      that still correctly excludes every OTHER destroy call in the tree,
  *      WITH ONE PROVEN EXCEPTION this test itself caught (not the
  *      accompanying hand-audit — see HOOK_CENSUS_ALLOWLIST below):
- *      cli/bridge-studio-authoring.ts combines an unrelated staging-cleanup
+ *      packages/library/bridge-studio-authoring.ts combines an unrelated staging-cleanup
  *      rmSync with a hooksDir(...)-rooted guard used by a different,
  *      create-only code path. Verified by hand (2026-08-23 W8-B4, RE-verified
  *      W8-B4 FIX-2 against the alias-aware classifier) for every OTHER
  *      destroy-verb site in the tree — in particular
- *      cli/bridge-studio-writes.ts's FLOW-delete route (:2193 area) resolves
+ *      apps/forge/bridge-studio-writes.ts's FLOW-delete route (:2193 area) resolves
  *      its guard root from `flowsBase = resolve(ctx.forgeRoot, 'studio',
  *      'flows')`, never `hooksDir`/`skillsDir`/`skillDir` under any import
  *      or alias, so it correctly does not match; ITS agent-DELETE route DOES
@@ -100,9 +100,9 @@
  *      or via a traced one-hop variable), so it still does not match.
  *
  *   2. The classified file-SET must equal EXACTLY the known, audited
- *      production call path for each kind — `cli/bridge-studio-hooks.ts`
- *      (the DELETE route, library-34) / `cli/bridge-studio-skills.ts` +
- *      `cli/bridge-studio-writes.ts` (the skills DELETE route and the
+ *      production call path for each kind — `packages/library/bridge-studio-hooks.ts`
+ *      (the DELETE route, library-34) / `packages/library/bridge-studio-skills.ts` +
+ *      `apps/forge/bridge-studio-writes.ts` (the skills DELETE route and the
  *      agents DELETE route respectively, library-35) — plus any AUDITED
  *      false positive named in HOOK_CENSUS_ALLOWLIST below, each with a
  *      mandatory reason (mirrors scripts/check-raw-fs-guarded.mjs's own
@@ -201,7 +201,7 @@ function escapeRegExp(s: string): string {
  * aliased and unaliased local spelling uniformly — the fix for the exact
  * blind spot library-35's fourth path exploited: the old classifier grepped
  * for the literal call-site spelling `skillsDir(`, which
- * cli/bridge-studio-writes.ts's `import { skillsDir as toSkillsDir, ... }`
+ * apps/forge/bridge-studio-writes.ts's `import { skillsDir as toSkillsDir, ... }`
  * never produces (the file calls `toSkillsDir(`, a spelling the old regex
  * had never heard of), so the whole file silently fell out of BOTH the
  * census and the pairing assertion.
@@ -276,7 +276,7 @@ function localNamesFor(aliasMap: Map<string, string>, originals: string[]): stri
  * destroy verb, but doesn't provably route that variable into a guard, must
  * fail the test") was considered and REJECTED after checking it against the
  * live tree: it fires on real, audited-safe code in THIS SAME FILE
- * (cli/bridge-studio-writes.ts assigns `toSkillsDir(ctx.forgeRoot)` to a
+ * (apps/forge/bridge-studio-writes.ts assigns `toSkillsDir(ctx.forgeRoot)` to a
  * read-only local consumed only by `listAgentDefinitions(...)` — never a
  * guard call — at its flow-PUT route, nothing to do with any delete path).
  * A rule that fires on genuinely unrelated code trains the next author to
@@ -410,11 +410,11 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
   const scans = scanTree();
   const skillDestroyFiles = scans.filter((s) => s.hasDestroyVerb && s.hasSkillGuard);
   const files = skillDestroyFiles.map((s) => s.file).sort();
-  // W8-B4 FIX-2: cli/bridge-studio-writes.ts's agent-DELETE route joins the
+  // W8-B4 FIX-2: apps/forge/bridge-studio-writes.ts's agent-DELETE route joins the
   // census — it was ALWAYS a real skill-destroying site (skillsDir imported
   // as toSkillsDir); the old literal-spelling regex just never saw it.
   // M4-agents routes carve: the agent DELETE route MOVED out of
-  // `cli/bridge-studio-writes.ts` into `packages/agents/bridge-agents-studio.ts`,
+  // `apps/forge/bridge-studio-writes.ts` into `packages/agents/bridge-agents-studio.ts`,
   // which is a real skill-destroying site and calls the prune. Registered here
   // deliberately, as this guard's own message instructs.
   const expected = [
@@ -439,7 +439,7 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
       // A FALSIFIABLE exemption, never a blanket one. The census is
       // deliberately FILE-scoped — coarse is the safe direction for a guard
       // about deletion — so a file can pair a destroy verb with an unrelated
-      // skills-dir idiom. That is now true of `cli/bridge-studio-writes.ts`:
+      // skills-dir idiom. That is now true of `apps/forge/bridge-studio-writes.ts`:
       // the M4-agents carve took its agent-DELETE route away, and every
       // destroy verb it still has targets a FLOW directory, while its
       // remaining `skillsDir(...)` uses are starter WRITES and a roster read.

@@ -1,9 +1,9 @@
 /**
  * Acceptance tests for `POST /api/studio/authoring/start` (R4-21 T3,
- * BLOCKER-2 fix — the authoring session's kickoff route, `cli/ui-bridge.ts`).
+ * BLOCKER-2 fix — the authoring session's kickoff route, `apps/forge/ui-bridge.ts`).
  *
  * Byte-for-byte the SAME shape as `POST /api/studio/onboarding/start`
- * (`cli/ui-bridge-onboarding-start.test.ts`, R4-17) — `project` is
+ * (`apps/forge/ui-bridge-onboarding-start.test.ts`, R4-17) — `project` is
  * `SLUG_RE`+length-cap validated BEFORE any fs call, resolved through the
  * SAME `resolveContainedProjectDir`, and the session dir is created via the
  * SAME two-level containment shape (`_authoring` parent created +
@@ -136,7 +136,7 @@ test('AT-7: a valid start writes a real session dir (status.json + prompt.md) un
 // existing whole-status JSON dump threads it through for free (see the
 // OTHER half of this pin, orchestrator/interactive-runner.test.ts's own
 // "P4" test, which proves that half of the contract against the real
-// runner). RED today: `writeAuthoringSession` (cli/ui-bridge.ts) seeds
+// runner). RED today: `writeAuthoringSession` (apps/forge/ui-bridge.ts) seeds
 // status.json with only {phase, project, runId, startedAt} — no prompt key.
 test('AT-11 (P4): a valid start seeds status.json with the operator\'s prompt verbatim, alongside phase:"analyzing" — prompt.md is still written too (an addition, not a replacement)', async () => {
   const promptText = 'A skill that reviews PR titles for conventional-commit compliance.';
@@ -229,7 +229,7 @@ test('AT-9 (containment): a project repo carrying a symlinked "_authoring" point
 // <sid> --project <p>`"). CALL-RECORD assertion, not just the outcome.
 //
 // WHY THIS TECHNIQUE (a documented T3 design call): `spawnAgentTurn` /
-// `SPAWN_AGENT_SPECS` are private, non-exported symbols of cli/ui-bridge.ts,
+// `SPAWN_AGENT_SPECS` are private, non-exported symbols of apps/forge/ui-bridge.ts,
 // and `spawn` is imported there as a named ESM binding
 // (`import { spawn } from 'node:child_process'`) — empirically verified
 // BEFORE choosing this approach that Node's `t.mock.method()` cannot

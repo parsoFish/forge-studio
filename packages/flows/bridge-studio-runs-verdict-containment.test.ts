@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE TESTS (SEC-02 round 2, must be RED until fixed) — two gaps the
  * round-1 fix did NOT close in `applyReviewVerdict`
- * (`cli/bridge-studio-runs.ts`, reached by `POST /api/verdict`). Both were
+ * (`packages/flows/bridge-studio-runs.ts`, reached by `POST /api/verdict`). Both were
  * live-proven by hand before this file was written:
  *
  *   Finding 1 (guard-symmetry hole): the APPROVE branch never containment-
@@ -14,7 +14,7 @@
  *
  *   Finding 2 (headline): `cycle_id` is completely unchecked in BOTH
  *   branches — no import of `isSafeCycleId` exists anywhere in
- *   `cli/bridge-studio-runs.ts`. `writeVerdictJson`
+ *   `packages/flows/bridge-studio-runs.ts`. `writeVerdictJson`
  *   (`orchestrator/flow-artifacts.ts:170`) and `createLogger`
  *   (`orchestrator/logging.ts:124`) both do `resolve(logsRoot, cycleId)` +
  *   `mkdirSync(recursive:true)` + a write. Confirmed live (manual repro
@@ -26,7 +26,7 @@
  * Threat model: `applyReviewVerdict` reads the manifest from disk
  * (`_queue/in-flight/<id>.md` or `ready-for-review/`), NOT from an ingest
  * body — so every fixture here is planted DIRECTLY with `writeFileSync`,
- * the same defence-in-depth argument `cli/forge-requeue-containment.test.ts`
+ * the same defence-in-depth argument `packages/flows/forge-requeue-containment.test.ts`
  * already makes for `runRequeue` (a different destructive call site, same
  * manifest-poisoning threat model).
  */

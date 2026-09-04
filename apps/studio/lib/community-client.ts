@@ -1,7 +1,7 @@
 /**
  * Client-side fetch + parse helpers for the Studio community-browser bridge
  * routes (R3-07-F2/F3). Mirrors connection-client.ts's / hook-client.ts's
- * role exactly — see cli/bridge-studio-community.ts's own header for the
+ * role exactly — see packages/library/bridge-studio-community.ts's own header for the
  * transport shapes this carries through verbatim.
  *
  * Every parser below REFUSES (throws) on a malformed payload rather than
@@ -16,7 +16,7 @@
  * fetch, no window, no jsdom (this repo's forge-ui vitest config is
  * `environment: 'node'`, a standing decision; the transport, `bridgeFetch`,
  * requires `window`). The over-the-wire behaviour is pinned by
- * cli/bridge-studio-community.test.ts instead.
+ * packages/library/bridge-studio-community.test.ts instead.
  *
  * W8-B5b adds `postCommunityRefresh` — the client side of the deterministic,
  * LLM-free `POST /api/studio/community/refresh` (see that section below for
@@ -28,7 +28,7 @@ import { parseProbeResult, parseInstallPreview, type ConnectionProbeResult, type
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (orchestrator/studio/community-index.ts,
-// cli/bridge-studio-community.ts)
+// packages/library/bridge-studio-community.ts)
 // ---------------------------------------------------------------------------
 
 export const COMMUNITY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
@@ -346,7 +346,7 @@ function parseCommunityConnectionCapability(raw: unknown): CommunityConnectionCa
 }
 
 /** Parse a full detail response (base item fields + the kind-appropriate
- *  extra payload cli/bridge-studio-community.ts's detail route attaches). */
+ *  extra payload packages/library/bridge-studio-community.ts's detail route attaches). */
 export function parseCommunityItemDetail(raw: unknown): CommunityItemDetail {
   const item = parseCommunityItem(raw);
   const r = asRecord(raw);
@@ -392,7 +392,7 @@ export function parseCommunityItemDetail(raw: unknown): CommunityItemDetail {
 
 // ---------------------------------------------------------------------------
 // Fetch helpers — over-the-wire behaviour pinned by
-// cli/bridge-studio-community.test.ts, not by this file's own test (see
+// packages/library/bridge-studio-community.test.ts, not by this file's own test (see
 // module header: no window/fetch under this repo's node-environment vitest).
 // ---------------------------------------------------------------------------
 
@@ -609,7 +609,7 @@ export function deleteRegistryItem(id: string): Promise<RegistryCrudResult> {
 
 // ---------------------------------------------------------------------------
 // W8-B5b — POST /api/studio/community/refresh, the DETERMINISTIC (LLM-free)
-// refresh. Types below mirror cli/community-refresh-run.ts's
+// refresh. Types below mirror packages/library/community-refresh-run.ts's
 // `CommunityRefreshRunResult`/`CommunityRefreshCounts` and
 // orchestrator/studio/community-refresh-api.ts's `CommunityRefreshOutcome`/
 // `CommunityRefreshFailure`/`CommunityRefreshErrorKind` — mirrored LOCALLY
@@ -841,7 +841,7 @@ export function parseCommunityRefreshResponse(status: number, raw: unknown): Com
 
   // Neither a dry-bridge refusal nor a typed one: no `reason`, no `remedy` —
   // the route's own `catch` arm. Reached by ELIMINATION, never by status
-  // code: `statusForRefreshReason` (cli/bridge-studio-community.ts:641)
+  // code: `statusForRefreshReason` (packages/library/bridge-studio-community.ts:641)
   // answers 500 for `write-failed` as well, and that is a typed refusal the
   // branch above has already claimed on its `reason` key. Do not "simplify"
   // this to a 500 check — see this section's header.

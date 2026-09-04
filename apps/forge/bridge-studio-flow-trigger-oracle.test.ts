@@ -1,8 +1,8 @@
 /**
  * ACCEPTANCE TEST (must be RED until fixed) — bd `forge-b2k` (P1):
- * `flowProjectOf` in cli/bridge-studio-writes.ts (~L1010) is an unguarded
+ * `flowProjectOf` in apps/forge/bridge-studio-writes.ts (~L1010) is an unguarded
  * file-existence ORACLE, driven through the REAL PUT /api/studio/flows/:id
- * route (mirrors the fixture idiom of cli/bridge-studio-flows.test.ts).
+ * route (mirrors the fixture idiom of apps/forge/bridge-studio-flows.test.ts).
  *
  * Root cause: the PUT route's own `id` (the URL path segment) IS SLUG_RE-
  * gated and containment-guarded (resolveGuardedPath) — that is not the bug.
@@ -60,7 +60,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
-// Fixture helpers (mirrors cli/bridge-studio-flows.test.ts)
+// Fixture helpers (mirrors apps/forge/bridge-studio-flows.test.ts)
 // ---------------------------------------------------------------------------
 
 function makeAgentSkillMd(): string {

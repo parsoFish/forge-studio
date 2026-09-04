@@ -140,11 +140,11 @@ hard — C1b once `testProcess.ci` is declared, C7 once
 never flip the verdict.
 
 **Guided resolution (Stage D).** Each failing clause is classified into a
-resolution tier (`cli/preflight-resolve.ts` `classifyClause`, mirroring the
+resolution tier (`packages/projects/preflight-resolve.ts` `classifyClause`, mirroring the
 brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel`:
 - **auto** — `C2`/`ARTIFACTS` (append to `.gitignore`), `C4` (scaffold `roadmap.md`
   + central brain `profile.md` stubs). One click applies every fixer
-  (`cli/preflight-fix-auto.ts`), then re-runs preflight to confirm each cleared.
+  (`packages/projects/preflight-fix-auto.ts`), then re-runs preflight to confirm each cleared.
 - **agent** — `C8` routes to the Stage-A instructions creator, `DEMO`/`DEMO-SKILL`/
   `DEMO-ALIGN` to the Stage-B demo builder, `BRAIN` to brain-fix. The operator
   authors it in the matching builder (no auto-generation of an agent-instruction
@@ -528,7 +528,7 @@ The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
 
 Project-action skills are **not** `artifactRoot`-scoped, despite an earlier
 version of this line saying so: the resolver (`SkillsBind`/
-`resolveSkillBinding`, `cli/bridge-studio.ts`'s `deriveProjectLocalSkills`)
+`resolveSkillBinding`, `apps/forge/bridge-studio.ts`'s `deriveProjectLocalSkills`)
 scans the fixed, literal path **`.forge/skills/<id>/SKILL.md`** — one level
 deep — and `artifactRoot` never enters that function or its caller. A project
 onboarded before this was fixed (skills physically under

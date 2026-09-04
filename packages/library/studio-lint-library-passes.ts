@@ -1,11 +1,11 @@
 /**
  * `forge studio lint`'s library-kind passes — the inline loader+validate
  * scaffolding for Artifact template / Demo element / Instruction seed /
- * Catalog / Community, split out of `cli/studio-lint.ts` (M4 library-by-kind
+ * Catalog / Community, split out of `apps/forge/studio-lint.ts` (M4 library-by-kind
  * carve, PR 3 / Part 2).
  *
  * MOVED VERBATIM (behaviour, order and messages unchanged) — five sections of
- * `runStudioLint` (cli/studio-lint.ts, pre-carve head): the artifact-template
+ * `runStudioLint` (apps/forge/studio-lint.ts, pre-carve head): the artifact-template
  * preload loop, the demo-element preload loop, the instruction-seed preload
  * loop, Catalog section §3 (including its `validateConnections` call), and
  * Community section §3b + the stray-staging check. `runStudioLint` calls
@@ -13,7 +13,7 @@
  * into its own accumulator — it is unaware anything moved.
  *
  * The catalog model-id/guard-id preload (`runStudioLint`'s own lines 107-135
- * on the pre-carve head) STAYS in `cli/studio-lint.ts` — cross-kind glue
+ * on the pre-carve head) STAYS in `apps/forge/studio-lint.ts` — cross-kind glue
  * feeding `validateAgent`'s checks, not Catalog-kind logic — and is not
  * duplicated here.
  */

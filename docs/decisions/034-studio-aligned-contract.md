@@ -110,7 +110,7 @@ segments, and backslashes. The empty string and `"."` are both normalised to
 `undefined` (callers default to `"."`). Existing projects without the field
 continue to work exactly as before.
 
-**Usage in preflight (C4, BRAIN):** `cli/preflight.ts` reads `artifactRoot` via
+**Usage in preflight (C4, BRAIN):** `packages/projects/preflight.ts` reads `artifactRoot` via
 `readArtifactRoot(dir)` (`orchestrator/brain-paths.ts`) and constructs brain
 paths as `<artifactRoot>/brain/profile.md` and `<artifactRoot>/brain/themes/`.
 
@@ -214,6 +214,6 @@ project's conventions).
 - [ADR-027](./027-studio-object-model.md) — the Studio object model that introduced the five project fields.
 - [ADR-033](./033-studio-first-flow-ux.md) — first-flow UX; the `ContractReadiness` panel.
 - [`orchestrator/project-config.ts`](../../orchestrator/project-config.ts) — `ProjectConfig` type + `validateProjectConfig` + `parseArtifactRoot`.
-- [`cli/preflight.ts`](../../cli/preflight.ts) — operational-clause enforcement; reads `artifactRoot` via `readArtifactRoot`.
+- [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts) — operational-clause enforcement; reads `artifactRoot` via `readArtifactRoot`.
 - [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../../forge-ui/components/studio/project-builder/ContractReadiness.tsx) — the unified readiness panel (`data-flow-ready`).
 - [`orchestrator/brain-paths.ts`](../../orchestrator/brain-paths.ts) — `readArtifactRoot` (the `artifactRoot` resolver used by both preflight and the brain loader).

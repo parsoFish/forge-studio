@@ -166,7 +166,7 @@ function readProjectDescription(profilePath: string): string {
   try {
     const raw = readFileSync(profilePath, 'utf8');
     // `{}` bypasses gray-matter's parse cache (poisoning class documented in
-    // cli/theme-frontmatter.ts module header).
+    // packages/knowledge/theme-frontmatter.ts module header).
     const { data, content } = matter(raw, {});
     // Prefer the first non-heading, non-empty paragraph as the "one-paragraph hook".
     const lines = content

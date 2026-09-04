@@ -11,7 +11,7 @@
  *
  * What is NOT exercised here, deliberately: origin/CSRF and the host's own
  * 404 fallthrough. Those are the HOST's request policy and stay pinned in
- * `cli/bridge-studio-affordances.test.ts`, which still boots a real bridge.
+ * `apps/forge/bridge-studio-affordances.test.ts`, which still boots a real bridge.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';

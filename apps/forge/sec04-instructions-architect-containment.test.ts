@@ -9,7 +9,7 @@
  *     = join(projectsRoot, project, '_instructions', sessionId)
  *
  * Neither goes through the fixed `resolveSafeSessionDir`
- * (cli/bridge-studio-sessions.ts → resolveGuardedPath, per-segment
+ * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath, per-segment
  * identity+charset+symlink). So a `..`-laden `project` OR `sessionId` escapes
  * `projectsRoot` entirely, and the two GET `/file/` routes' only check —
  *   base     = <sessionDir> + sep

@@ -11,7 +11,7 @@
  *   DELETE /api/studio/templates/:id  → remove a single-file template (409 while `usedBy` is non-empty) (handleTemplateDeleteRoute)
  *
  * M4 route-carve: each route above used to be one arm of a single dispatcher,
- * `handleStudioTemplatesRoutes`, that `cli/ui-bridge.ts` called directly.
+ * `handleStudioTemplatesRoutes`, that `apps/forge/ui-bridge.ts` called directly.
  * That dispatcher is now gone — `packages/library/routes.ts` is what
  * dispatches these, as a table. Each handler below keeps the SAME
  * five-parameter contract the dispatcher's arms ran under —
@@ -119,7 +119,7 @@ function toClientEntry<T extends { error?: string }>(entry: T): T {
  *  Studio — `project-scaffold` (the third real `TemplateCategory` member) is
  *  deliberately excluded from this type: it is a whole directory tree, never
  *  a single-file write target (`SCAFFOLD_READONLY` below). Exported so
- *  `cli/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm shares
+ *  `packages/library/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm shares
  *  this exact narrowing rather than re-declaring it. */
 export type WritableTemplateCategory = Extract<TemplateCategory, 'planning' | 'demo-output'>;
 
@@ -137,7 +137,7 @@ export const SCAFFOLD_READONLY =
  * Validate a candidate `category` value against the REAL `TemplateCategory`
  * union (template-library.ts) and narrow it to the two WRITABLE members.
  * Every write path that accepts a category — the POST create route below AND
- * `cli/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm — shares
+ * `packages/library/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm — shares
  * this ONE check, so "which categories are writable" and "why
  * project-scaffold isn't" live in exactly one place, never a second
  * re-implementation that could drift from this one's wording.
@@ -269,7 +269,7 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
 /**
  * Shared mutation body for PUT and DELETE /api/studio/templates/:id
  * (W7-B4). One dispatch line per exported handler (not a combined `||`) so
- * the dry-bridge coverage scanner (cli/dry-bridge-coverage.test.ts) derives
+ * the dry-bridge coverage scanner (apps/forge/dry-bridge-coverage.test.ts) derives
  * BOTH candidates — its explicit-method regex reads only the first
  * `method ===` on an if-line. Module-local: the two exported handlers below
  * are its only callers.

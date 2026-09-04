@@ -249,7 +249,7 @@ test('roadmap: a frontmatter title: field wins over heading scrape entirely', as
 
 // ---------------------------------------------------------------------------
 // W6-RV-2: completedAt threaded from the memoized run derivation (no second
-// events.jsonl parser) — cli/run-list-cache.ts::cachedListRuns.
+// events.jsonl parser) — packages/flows/run-list-cache.ts::cachedListRuns.
 // ---------------------------------------------------------------------------
 
 test('roadmap: a done initiative with a real cycle.end event carries completedAt', async () => {

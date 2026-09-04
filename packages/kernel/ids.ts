@@ -54,9 +54,9 @@ export const MAX_EXACT_ID_LENGTH = 128;
  * M4 §4 (projects routes carve, T1 ruling) — the charset guard for run/gate/
  * session-style ids (`runId`, `gateId`, `sessionId`, …): alphanumeric plus
  * `_`/`-`, no `/`, `.`, `..`, whitespace or null bytes. HOISTED VERBATIM from
- * `cli/bridge-studio.ts` ("Safe-ID guard: blocks path traversal in run/gate
+ * `apps/forge/bridge-studio.ts` ("Safe-ID guard: blocks path traversal in run/gate
  * IDs"), which re-exports this binding rather than defining it, so its many
- * existing importers (`cli/ui-bridge.ts`, `packages/flows/bridge-studio-runs.ts`,
+ * existing importers (`apps/forge/ui-bridge.ts`, `packages/flows/bridge-studio-runs.ts`,
  * `packages/sessions/bridge-studio-sessions.ts`) are unaffected.
  *
  * Same source pattern as `EXACT_ID_RE` above (both are
@@ -90,7 +90,7 @@ export function isReservedId(id: string): boolean {
 export const MAX_SKILL_ID_LENGTH = 100;
 
 /** The slug rule as PLAIN PROSE + the bare pattern source (no leading `/`):
- *  `sanitizeError` (cli/bridge-studio.ts) redacts every `/…` token from
+ *  `sanitizeError` (apps/forge/bridge-studio.ts) redacts every `/…` token from
  *  bridge error strings, and a RegExp literal's own `/^…$/` was being eaten
  *  into `[path]:-[a-z0-9]+)*$/` on the wire (walkthrough library-13). */
 export const SLUG_RULE_TEXT = `a single lowercase-kebab path segment matching ${SLUG_RE.source} (lowercase letters, digits and hyphens); no "/", "\\", ".", or ".."`;

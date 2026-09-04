@@ -1,6 +1,6 @@
 /**
  * ACCEPTANCE TESTS (SEC-03, T3) — two real defects on `POST
- * /api/studio/projects` (cli/bridge-studio-writes.ts ~683-737), pinned RED
+ * /api/studio/projects` (apps/forge/bridge-studio-writes.ts ~683-737), pinned RED
  * against today's code:
  *
  * DEFECT 1 (P0) — lexical containment bypass. The route computes
@@ -44,7 +44,7 @@
  *   …)` identity-verifies `projectRoot` ITSELF and nothing below it. Every
  *   subsequent write in the route builds its path with a plain
  *   `join()`/`resolve()` off that already-verified root, with NO further
- *   containment: `cli/bridge-studio-writes.ts` ~723-724
+ *   containment: `apps/forge/bridge-studio-writes.ts` ~723-724
  *   `mkdirSync(resolve(projectRoot,'.forge'))`, ~769
  *   `writeFileSync(resolve(forgeDir,'project.json'), …)`, and
  *   `scaffoldContractArtifacts` (same file, ~78-134):
@@ -101,7 +101,7 @@
  *     after any fix — each one says so in its own comment.
  *   - Every claim is driven through the REAL route via `startBridge` +
  *     `fetch`, mirroring the fixture idiom in
- *     `cli/bridge-studio-sibling-containment.test.ts`.
+ *     `apps/forge/bridge-studio-sibling-containment.test.ts`.
  */
 
 import { test, before, after } from 'node:test';
@@ -974,10 +974,10 @@ test('positive control (passes before AND after any Finding-B fix): a pre-existi
 // ONBOARD route (this same POST /api/studio/projects handler) is NOT clean —
 // it is a SECOND INSTANCE of the half-created-project class the round-3
 // review found on the greenfield route (scaffoldGreenfieldProject →
-// cli/bridge-studio-writes.ts's /create route), not a distinct or merely
+// apps/forge/bridge-studio-writes.ts's /create route), not a distinct or merely
 // cosmetic issue.
 //
-// Traced from source (cli/bridge-studio-writes.ts, the "POST /api/studio/
+// Traced from source (apps/forge/bridge-studio-writes.ts, the "POST /api/studio/
 // projects" handler above): by the time `seedProjectBrain` is called, this
 // route has ALREADY (a) mkdirSync'd a bare `projectRoot` (the Defect-5 fix,
 // "safe to create — isContainedProjectRepoPath already proved it"), and (b)
@@ -1032,7 +1032,7 @@ test('(RED) [SEC-03 round 3, onboard route — SECOND INSTANCE, not a clean rout
   // merely after Defect-2's clobber check) already makes the assertions
   // above pass — but round 3's HTTP listing check was GET /api/studio/projects
   // only. loadKbDescriptors walks brain/projects/ as its OWN second
-  // containment root (cli/bridge-studio-kbs.ts), independent of
+  // containment root (packages/knowledge/bridge-studio-kbs.ts), independent of
   // discoverProjects — checked here too, measured rather than assumed.
   const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
   const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
@@ -1122,12 +1122,12 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
 // question ("does lint catch an orphaned project brain, however it arose?")
 // is ORTHOGONAL to "can this one route still create one?" and remains a
 // real, filed gap:
-//   - bd `forge-8kq` — cli/studio-lint.ts's KB-descriptor scan
+//   - bd `forge-8kq` — apps/forge/studio-lint.ts's KB-descriptor scan
 //     (~L395-413) does `readdirSync(brainDir)` then
 //     `join(brainDir, entry, 'kb.yaml')` — ONE level under brain/. It never
 //     recurses into brain/projects/<id>/, so it never even SEES a
 //     per-project KB, phantom or legitimate.
-//   - bd `forge-4qf` — cli/brain-lint.ts's checkProjectBrainIndexes
+//   - bd `forge-4qf` — packages/knowledge/brain-lint.ts's checkProjectBrainIndexes
 //     (~L337) is the ONLY brain-lint check that walks
 //     brain/projects/<name>/, and it `continue`s immediately for any
 //     project brain whose themes/ has zero non-README .md files — exactly

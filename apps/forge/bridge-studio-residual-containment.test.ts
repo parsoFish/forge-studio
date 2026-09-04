@@ -3,7 +3,7 @@
  * LEXICAL-ONLY containment defects (`resolve()`+`startsWith()`, or a charset
  * regex, with NO realpath anywhere), driven through the REAL bridge routes
  * (`startBridge`), mirroring the fixture idiom of
- * cli/bridge-studio-kbs-containment.test.ts.
+ * packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts.
  *
  * Governing rule for every "leak" assertion below: the test plants a UNIQUE
  * secret marker string outside the forge root and asserts that marker does
@@ -15,16 +15,16 @@
  *
  * The four items (see the task brief / bead forge-2zz for the full defect
  * writeups):
- *   1. GET /api/runs/:id/phases/:node/log (cli/bridge-studio.ts) — no
+ *   1. GET /api/runs/:id/phases/:node/log (apps/forge/bridge-studio.ts) — no
  *      charset gate at all; a lexical resolve()+startsWith() check that
  *      never resolves symlinks, AND a route regex that approves a raw url
  *      BEFORE decodeURIComponent ever turns a %2F into a real separator.
- *   2. readBrainFixState (cli/bridge-studio-kbs.ts) — `_logs/_brainfix-<id>`
+ *   2. readBrainFixState (packages/knowledge/bridge-studio-kbs.ts) — `_logs/_brainfix-<id>`
  *      resolved with a bare `join()`, no realpath.
- *   3. readPreflightFixState (cli/bridge-studio.ts) — byte-for-byte the same
+ *   3. readPreflightFixState (apps/forge/bridge-studio.ts) — byte-for-byte the same
  *      shape as (2) with `_preflight-fix-<id>`.
  *   4. POST /api/studio/kbs/:id/maintenance op=fix-agent
- *      (cli/bridge-studio-kbs.ts) — a full absolute path validated only by
+ *      (packages/knowledge/bridge-studio-kbs.ts) — a full absolute path validated only by
  *      `abs !== file` (blocks `..`-normalization) + a lexical
  *      `startsWith(brainRoot+sep)` (never realpath), forwarded to a spawned
  *      `brain fix --file` process.
@@ -430,7 +430,7 @@ test('[item4b] non-regression (direct unit check of the fixed route\'s own trans
   // FORGE_DRY_BRIDGE=1, which short-circuits BEFORE this guard is ever
   // reached, so it cannot exercise the guard's ACCEPT path either). This
   // test instead replicates, byte-for-byte, the SAME transformation the
-  // fixed route performs (see cli/bridge-studio-kbs.ts's op=fix-agent
+  // fixed route performs (see packages/knowledge/bridge-studio-kbs.ts's op=fix-agent
   // branch: `relative(brainRoot, abs)` then `resolveGuardedPath(brainRoot,
   // rel.split(sep))`) against a real fixture file, proving the fix does not
   // over-reject a legitimate path.

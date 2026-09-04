@@ -2,11 +2,11 @@
  * W8-B5 WI-3 — `forge community refresh` (exit row E1).
  *
  * A THIN wrapper: it parses argv, calls the ONE shared runner
- * (cli/community-refresh-run.ts), prints, and RETURNS a number that
+ * (packages/library/community-refresh-run.ts), prints, and RETURNS a number that
  * orchestrator/cli.ts hands to `process.exit`. It makes no decision of its
  * own about what a refresh means — that lives in the runner, so the bridge
  * route reaches the identical behaviour. Shape copied from
- * `cmdProjectMigrate` (cli/project-migrate.ts), which is this repo's
+ * `cmdProjectMigrate` (packages/projects/project-migrate.ts), which is this repo's
  * exemplar for a two-level `forge <noun> <verb>` handler.
  *
  * EXIT CODES, and why each one:

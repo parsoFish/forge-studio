@@ -41,7 +41,7 @@
  *       usedBy, usedByDerivation) — it does not re-parse the YAML itself.
  *       This is why every fixture below writes a full `catalog.yaml`
  *       (sdks/models/tools/mcps/guards, mirroring `validCatalogYaml()` in
- *       cli/studio-lint.test.ts) rather than a bespoke connections-only file.
+ *       apps/forge/studio-lint.test.ts) rather than a bespoke connections-only file.
  *  D-C. `kind` (D2 of the spec): `tools:` section entries get kind:'tool',
  *       `mcps:` section entries get kind:'mcp' — structural, from WHICH
  *       array the entry came from, never content-sniffed.

@@ -6,7 +6,7 @@
  *
  *   - `DEFAULT_BRIDGE_PORT` — the fixed-port convention's default, re-exported
  *     from `@forge/contracts`. It used to be a hand-kept literal mirroring
- *     `cli/forge-watch.ts`, "since the two live in different npm workspaces
+ *     `apps/forge/forge-watch.ts`, "since the two live in different npm workspaces
  *     and can't share a single TS import cleanly" — that is no longer true:
  *     contracts is a workspace package both sides import, so there is one
  *     definition and drift is structurally impossible rather than merely
@@ -14,7 +14,7 @@
  *     inlines it into `window.__FORGE_BRIDGE_PORT__` with zero per-request
  *     work, so the layout stays fully static.
  *   - `resolveBridgePortFromEnv` — the AUTHORITATIVE, env-derived value
- *     (reads `FORGE_BRIDGE_URL`, the var `cli/forge-watch.ts` sets on the
+ *     (reads `FORGE_BRIDGE_URL`, the var `apps/forge/forge-watch.ts` sets on the
  *     Next.js process for both `next dev`/`next start`). Used only by the
  *     dynamic `/api/forge-config` route — the correction path
  *     `lib/bridge-client.ts` falls back to when the optimistic default
@@ -28,7 +28,7 @@
 
 /** The fixed-port convention's default bridge port (CLAUDE.md: "fixed ports
  *  — bridge 4123, UI 4124"). One definition, in `@forge/contracts`, imported
- *  by both this app and `cli/forge-watch.ts`. */
+ *  by both this app and `apps/forge/forge-watch.ts`. */
 export { DEFAULT_BRIDGE_PORT } from '@forge/contracts';
 
 export function resolveBridgePortFromEnv(env: NodeJS.ProcessEnv = process.env): number | null {

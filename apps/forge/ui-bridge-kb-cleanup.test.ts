@@ -10,16 +10,16 @@
  * whose approve affordance goes through the GENERIC write route (`POST
  * /api/studio/sessions/kb-cleanup/:sid/:affordance`, cli/bridge-studio-
  * affordances.ts), which already delegates to the SAME `approveKbCleanup`
- * helper (cli/bridge-studio-kbs.ts) this bespoke route only ever wrapped —
+ * helper (packages/knowledge/bridge-studio-kbs.ts) this bespoke route only ever wrapped —
  * once its one caller (`SessionCleanupPanel.tsx`) was deleted, the bespoke
  * route had no production caller left, and forge does not carry dual paths.
  * The AT-6..AT-15 tests that used to pin its behaviour (phase gate, DEFECT
  * A/B regressions) are deleted with it — `approveKbCleanup` itself keeps its
  * own direct coverage in `cli/bridge-studio-kbs.test.ts`, and the generic
- * route's own dispatch is covered by `cli/bridge-studio-affordances.test.ts`.
+ * route's own dispatch is covered by `apps/forge/bridge-studio-affordances.test.ts`.
  *
  * Mirrors `POST /api/studio/authoring/start` (`cli/ui-bridge-authoring-
- * start.test.ts`) and the KB-create hand-off (`cli/bridge-studio-kbs.ts`
+ * start.test.ts`) and the KB-create hand-off (`packages/knowledge/bridge-studio-kbs.ts`
  * ~:1189) for the session-anchor shape: a project-bound KB anchors its
  * cleanup session under the real project (`<projectsRoot>/<ref>/`); every
  * OTHER binding kind anchors under the dot-prefixed KB-seeding anchor
@@ -74,7 +74,7 @@ after(async () => {
 // ---------------------------------------------------------------------------
 
 /** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly
- *  on disk — mirrors `cli/bridge-studio-kb-seeding-pins.test.ts`'s own
+ *  on disk — mirrors `apps/forge/bridge-studio-kb-seeding-pins.test.ts`'s own
  *  `CYCLES_KB_YAML`/`FORGE_DEV_KB_YAML` fixture idiom, never manufactured
  *  through a route. `bindingYaml` is the raw flow-style YAML for the
  *  `binding:` field, e.g. `{ kind: project, ref: demoproj }` or
@@ -88,7 +88,7 @@ function writeKb(id: string, bindingYaml: string): void {
 
 /** Plants a theme file under `brain/<kbId>/themes/` that is missing the
  *  required `description` frontmatter field — a REAL, detectable
- *  `checkFrontmatter`-shaped defect (cli/brain-lint.ts's
+ *  `checkFrontmatter`-shaped defect (packages/knowledge/brain-lint.ts's
  *  REQUIRED_FRONTMATTER_FIELDS), not a fabricated finding. */
 function writeBrokenTheme(kbId: string, filename = 'broken.md'): string {
   const themesDir = join(forgeRoot, 'brain', kbId, 'themes');
@@ -136,14 +136,14 @@ function startWithBody(kbId: string, body: unknown): Promise<Response> {
  * request for `/api/studio/cleanup/start` (three segments collapse to one:
  * `kbs`, then `..`, cancel each other out). That collapsed path has no `kbs`
  * segment at all, so the real
- * `/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/` route (cli/ui-bridge.ts)
+ * `/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/` route (apps/forge/ui-bridge.ts)
  * can never match it — no server-side implementation could ever satisfy an
  * assertion against that shape, because the request the assertion actually
  * probes is a DIFFERENT, unrelated path. This is the exact "client-side
  * normalization masks a server-side hole" class this repo has already fixed
- * once for GET (`cli/ui-bridge-agent-history.test.ts`'s "D5 (ROUND 4, RAW
+ * once for GET (`apps/forge/ui-bridge-agent-history.test.ts`'s "D5 (ROUND 4, RAW
  * WIRE)" `rawGet`) and once for POST
- * (`cli/ui-bridge-demo-generations.test.ts`'s `rawPostBody`) — this is the
+ * (`apps/forge/ui-bridge-demo-generations.test.ts`'s `rawPostBody`) — this is the
  * SAME fix for THIS route, copied locally (neither sibling file exports its
  * helper, and this file is scoped to leave both siblings' own assertions
  * untouched).
@@ -258,7 +258,7 @@ test('AT-1 (RAW WIRE — a fetch()-delivered ".." cannot reach this route at all
  * `cleanup/start` among them. Its five siblings are carved into
  * `packages/knowledge/routes.ts` and are now driven handler-level, with no
  * bridge (COMMON §5) — but this route is the 18th KB route and the one still
- * implemented INLINE in `cli/ui-bridge.ts`, because it mints an interactive
+ * implemented INLINE in `apps/forge/ui-bridge.ts`, because it mints an interactive
  * session and ruling 17 forbids carving that into a rank-2 package. It is
  * handoff K10 to M4-sessions.
  *

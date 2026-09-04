@@ -218,7 +218,7 @@ function extractFrontmatterLineFields(raw: string): Record<string, string> {
 function parseMd(raw: string): { data: Record<string, unknown>; content: string } {
   try {
     // `{}` options bypass gray-matter's module-level parse cache (same
-    // poisoning class as cli/theme-frontmatter.ts, see its module header): a
+    // poisoning class as packages/knowledge/theme-frontmatter.ts, see its module header): a
     // cache-then-throw on first parse would otherwise return the poisoned
     // `data: {}` hit on every later build without ever re-throwing, so the
     // catch fallback below never runs and list fields silently vanish.
@@ -294,7 +294,7 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
 
   // forge-9kr: the brain-wide slug universe, so a related_themes target that
   // is not in THIS KB can be told apart from one that does not exist at all.
-  // Same single walk `checkDanglingEdges` resolves against (cli/brain-lint.ts)
+  // Same single walk `checkDanglingEdges` resolves against (packages/knowledge/brain-lint.ts)
   // — this file must never grow its own second answer to "does this theme
   // exist", which is precisely the disagreement forge-d8l was made of.
   const externalSlugs = new Set(collectThemeSlugTargets(join(forgeRoot, 'brain')).keys());

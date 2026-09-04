@@ -6,11 +6,11 @@
   brain decision themes [`review-phase-target-design`](../../brain/forge-dev/themes/review-phase-target-design.md)
   and the review row of [`human-interaction-via-own-session`](../../brain/forge-dev/themes/human-interaction-via-own-session.md);
   builds on [ADR 020](./020-architect-in-ui.md) (the in-UI architect + dedicated
-  screens) and the existing demo model (`cli/demo-model.ts:DemoModel`).
+  screens) and the existing demo model (`packages/factory/demo-model.ts:DemoModel`).
 - **Update 2026-06-20 (F4 / DEC-4):** the demo OUTPUT is consolidated to a
   **single** PR-facing `DEMO.md` plus the `demo.json` sidecar the UI renders.
   The parallel self-contained `DEMO.html` renderer (`cli/demo-html.ts`) is
-  **retired**; the shared schema types moved to `cli/demo-types.ts`. References
+  **retired**; the shared schema types moved to `packages/factory/demo-types.ts`. References
   to `DEMO.html` below are historical.
 - **Update 2026-06-14 ([ADR 031](./031-studio-consolidation.md)):** the dedicated
   `/review/[cycleId]` + `/reflect/[cycleId]` screens fully fold into the unified

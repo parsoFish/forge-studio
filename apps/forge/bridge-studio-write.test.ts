@@ -232,7 +232,7 @@ test('PUT /api/studio/agents/write-agent preserves allowedTools even when not in
 // ---------------------------------------------------------------------------
 // forge-hoq — the Agent Builder round trip must not strip disallowed-tools
 // (the ONLY real fence against Task/Agent subagent-spawn — see
-// cli/studio-lint-tool-fence.ts). T1's ruling (_wave8/ledger.md): not
+// packages/library/studio-lint-tool-fence.ts). T1's ruling (_wave8/ledger.md): not
 // rendering the field in the builder UI is a UI choice; deleting it on save
 // is data loss. forge-ui's buildAgentPutBody now sends allowedTools/
 // disallowedTools on every save (forge-hoq fix); the bridge must actually
@@ -533,7 +533,7 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
   assert.equal(cfg.kb, body.id, 'expected project.json.kb bound to the seeded KB (R4-02-F3)');
 });
 
-// POST /api/studio/skills test coverage MOVED to cli/bridge-studio-skills.test.ts
+// POST /api/studio/skills test coverage MOVED to packages/library/bridge-studio-skills.test.ts
 // (R3-01-F3/F4, AT-55) — the route itself relocates there in WI-2.
 
 test('PUT /api/studio/agents/write-agent with invalid runtime (fixed, no model) → 400, file UNCHANGED', async () => {
@@ -792,7 +792,7 @@ test('a PUT that legitimately changes a frontmatter field still reloads with the
 // ---------------------------------------------------------------------------
 // PUT /api/studio/agents — symlink escape (2026-08-05 adversarial-review
 // round 2, finding C/6, VERIFIED BLOCKER). `skillMdPath.startsWith(skillsDir
-// + sep)` at cli/bridge-studio-writes.ts is a LEXICAL check on the
+// + sep)` at apps/forge/bridge-studio-writes.ts is a LEXICAL check on the
 // CONSTRUCTED path string — it never resolves symlinks. A slug that passes
 // SLUG_RE always constructs a path lexically inside skills/, so the guard
 // can never fire regardless of what that path actually points at on disk.
@@ -1297,7 +1297,7 @@ test('PUT /api/studio/projects/<malformed> → 400 (W7-A4: the id rule is case-p
 // ---------------------------------------------------------------------------
 // PUT /api/studio/projects/:id — symlink/hardlink containment escapes
 // (2026-08-05 adversarial-review round 4, finding B/5-6). Guard at
-// cli/bridge-studio-writes.ts (~L797-798), root projects/<id>. A PURE
+// apps/forge/bridge-studio-writes.ts (~L797-798), root projects/<id>. A PURE
 // slug-symlink (projects/<id> itself a symlink) is blocked ACCIDENTALLY —
 // discoverProjects()'s `readdirSync(dir, {withFileTypes:true})` +
 // `dirent.isDirectory()` filter reports false for a symlink dirent (it does

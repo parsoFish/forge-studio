@@ -559,7 +559,7 @@ export async function handleInstructionsAnswer(
   // W7-C2 T1 review (A3, finding sessions-kinds-19) — CORRELATE BY ID, not
   // by text. The panel renders one control per pending question and posts
   // each answer back with the `questionId` the shell route derived
-  // (`pendingQuestionId`, cli/bridge-studio-sessions.ts); this re-derives the
+  // (`pendingQuestionId`, packages/sessions/bridge-studio-sessions.ts); this re-derives the
   // SAME ids from the SAME on-disk questions.json and refuses an answer that
   // names an unknown id, or whose text does not match the question that id
   // actually asks. Answers correlated by text alone mis-bind the moment a
@@ -603,7 +603,7 @@ export async function handleInstructionsAnswer(
 
   // SYNC INVARIANT: no await between this function's writes and the caller's
   // own status read above — an await here reopens the double-spawn race; see
-  // kb-cleanup's now-fixed `approveKbCleanup` (cli/bridge-studio-kbs.ts) for
+  // kb-cleanup's now-fixed `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) for
   // the shape a genuinely-awaited claim needs.
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: recordedAnswers }], null, 2)) === null ||
@@ -621,8 +621,8 @@ export async function handleInstructionsAnswer(
 // ---------------------------------------------------------------------------
 // question-form — instructions' PRE-interview briefing checkpoint
 // (`briefing-question-form`, the phase `POST /api/instructions/start` lands
-// EVERY new session in — cli/ui-bridge.ts:3193-3197 — without spawning the
-// agent). Mirrors `POST /api/instructions/brief` (cli/ui-bridge.ts:3275):
+// EVERY new session in — apps/forge/ui-bridge.ts:3193-3197 — without spawning the
+// agent). Mirrors `POST /api/instructions/brief` (apps/forge/ui-bridge.ts:3275):
 // writes `prompt.md` (NOT `answers.json` — a different on-disk target from
 // `handleInstructionsAnswer` above) and sets `status.prompt`/`round: 1`/
 // `phase: 'interviewing'`, then spawns the same turn.

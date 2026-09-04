@@ -43,14 +43,14 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel
  * AT-D7-3).
  *
  * `sessionDir` is a CLI flag from our OWN spawning code
- * (`spawnAgentDispatch`, cli/ui-bridge.ts), not raw HTTP request text, but
+ * (`spawnAgentDispatch`, apps/forge/ui-bridge.ts), not raw HTTP request text, but
  * the write path is still guarded rather than trusted blindly — twice over:
  * `sessionDir` itself must realpath-resolve to somewhere INSIDE `forgeRoot`
  * (round-1 BLOCKER consequence-path fix — this sink previously had no
  * containment reference at all and unconditionally wrote wherever it was
  * pointed, so the guard depended entirely on the route that started the run
  * having validated the dir first; "one sink, many entry points" — see
- * `cli/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
+ * `apps/forge/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
  * `status.json` turns out to be a symlink escaping that resolved directory
  * the write is refused (never followed).
  *
@@ -189,7 +189,7 @@ export function writeSessionTerminalPhase(
 
 /** Parsed shape of `forge agent dispatch <slug> --run-id <id> [...]`'s argv
  *  (the `rest` array `cmdAgentDispatch` receives, slug-first — mirrors what
- *  `buildAgentDispatchArgs`, cli/ui-bridge.ts, emits). `inputs` is always a
+ *  `buildAgentDispatchArgs`, apps/forge/ui-bridge.ts, emits). `inputs` is always a
  *  (possibly empty) object; `project`/`sessionDir`/`costCeilingUsd` are
  *  ABSENT (not present-as-`undefined`) when their flag was not given. */
 export type ParsedAgentDispatchArgs = {

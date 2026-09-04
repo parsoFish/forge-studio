@@ -5,10 +5,10 @@
  * are INERT on the bridge save path — the THIRD appearance of the same
  * defect class in this one initiative (see `cli/bridge-studio-writes-
  * guard-unknown.test.ts`'s header for the first appearance,
- * `composition/guard-unknown`; `cli/studio-lint-guards-migration.test.ts`'s
+ * `composition/guard-unknown`; `apps/forge/studio-lint-guards-migration.test.ts`'s
  * C4 for the second).
  *
- * Root cause (verified by reading `cli/bridge-studio-writes.ts` directly,
+ * Root cause (verified by reading `apps/forge/bridge-studio-writes.ts` directly,
  * not assumed): the PUT handler's step 6 calls
  * `validateAgent(merged, undefined, validGuardIds)` — that function's own
  * `compArrays` loop only regex-checks each `composition.hooks` entry's SLUG
@@ -17,7 +17,7 @@
  * RESOLVES to a real library hook or collides with a platform guard id.
  * `lintHookComposition` (`orchestrator/studio/hook-library.ts`) is the ONLY
  * function that knows that, and it is called exclusively from
- * `cli/studio-lint.ts`'s `runStudioLint` — a READ-ONLY entry point the write
+ * `apps/forge/studio-lint.ts`'s `runStudioLint` — a READ-ONLY entry point the write
  * route never invokes. Reproduced live by the implementer against a running
  * bridge before this file was written: `PUT .../:slug` with
  * `composition.hooks: ['totally-made-up-hook-id-xyz']` returns 200 and the
@@ -74,8 +74,8 @@ const REAL_HOOK_ID = 'real-lib-hook';
  * to bridge-studio-writes-guard-unknown.test.ts's own fixture — not
  * imported from it (that file is a sibling acceptance test, not a shared
  * fixture module; each ACs file stays self-contained by this repo's
- * convention, see cli/studio-lint-guards-migration.test.ts vs
- * cli/studio-lint-hooks.test.ts both hand-declaring the same catalog shape). */
+ * convention, see apps/forge/studio-lint-guards-migration.test.ts vs
+ * apps/forge/studio-lint-hooks.test.ts both hand-declaring the same catalog shape). */
 function validGuardsCatalogYaml(): string {
   return `sdks:
   - { id: claude-code, name: Claude Agent SDK, available: true }

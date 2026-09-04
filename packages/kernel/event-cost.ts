@@ -8,7 +8,7 @@
  * naively summing every row double/triple-counts those phases. Verified in
  * docs/investigations/2026-07-holistic-review/cost-autopsy.md §0.
  *
- * The rule (single source of truth — used by `cli/metrics.ts::aggregate()`,
+ * The rule (single source of truth — used by `packages/flows/metrics.ts::aggregate()`,
  * `orchestrator/run-model.ts::buildRun()` and
  * `orchestrator/run-model-derive.ts::buildNodeMeta()` / `deriveWorkItems()`):
  *   - a phase that emitted ≥1 `iteration` event → count ONLY its `iteration`

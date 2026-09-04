@@ -18,7 +18,7 @@ import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordanc
 // writes its OWN atomic claim (`phase:'committing'`, step 4) synchronously
 // before its one `await runInteractiveTurn(...)`, independent of whatever
 // this dispatcher read earlier. It already had the claim-then-await shape
-// `approveKbCleanup` (cli/bridge-studio-kbs.ts) was built to match — the
+// `approveKbCleanup` (packages/knowledge/bridge-studio-kbs.ts) was built to match — the
 // W6-B4 adversarial-review fix generalised authoring's existing pattern to
 // kb-cleanup, not the other way around.
 // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordanc
  *  for `SLUG_RE`-class values).
  *
  *  W8-B4/WI-3 landed `kind:'template'` on the DEDICATED finalize route
- *  (`cli/bridge-studio-authoring.ts`'s `runFinalize` + its own
+ *  (`packages/library/bridge-studio-authoring.ts`'s `runFinalize` + its own
  *  `TEMPLATE_STAGING_FILENAME`) but this array's OWN two-shape version —
  *  the one `deriveAuthoringPackageKind` below actually used — never learned
  *  about `template.md`. Drafting a template therefore worked end to end,
@@ -42,7 +42,7 @@ import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordanc
  *   (a) `deriveAuthoringPackageKind` below derives from it (one iteration,
  *       not a hand-rolled if-chain that a fourth shape is easy to forget
  *       inside), and
- *   (b) `cli/authoring-package-shape-parity.test.ts` can cross-check it,
+ *   (b) `packages/sessions/tests/contract/authoring-package-shape-parity.test.ts` can cross-check it,
  *       byte-for-byte, against forge-ui's own hand-mirrored copy
  *       (`apps/studio/lib/authoring-package-shape.ts` — forge-ui never
  *       imports cli/ at runtime, so that file is a second, independent

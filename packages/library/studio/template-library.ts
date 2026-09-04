@@ -527,7 +527,7 @@ export function templateDetail(forgeRoot: string, id: string): TemplateDetail | 
 }
 
 // ---------------------------------------------------------------------------
-// Lint — the call site is wired in cli/studio-lint.ts (landed in commit a15f7f23)
+// Lint — the call site is wired in apps/forge/studio-lint.ts (landed in commit a15f7f23)
 // ---------------------------------------------------------------------------
 
 /** D2 — any directory under studio/starters/ that is neither the `projects`

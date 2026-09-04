@@ -18,7 +18,7 @@
  * installed and this file deliberately does not add them. So for that ONE
  * surface, only the bar it renders (below) and the client call it makes
  * (`startFlowRun`/`planInitiative` sending `confirmRepoint`, pinned over the
- * wire in `cli/ui-bridge-flow-run-repoint.test.ts` and `cli/ui-bridge-plan.test.ts`)
+ * wire in `apps/forge/ui-bridge-flow-run-repoint.test.ts` and `apps/forge/ui-bridge-plan.test.ts`)
  * are covered; the wiring between them is not. The roadmap card IS fully
  * covered here, because its confirmation state is reachable from props, and its
  * decision half is pinned in `lib/roadmap-card-state.test.ts`.

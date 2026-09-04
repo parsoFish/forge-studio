@@ -23,7 +23,7 @@
  *      resurrection.
  *   3. `CANCELLED_PHASE` is ONE constant.
  *
- * Case 3 used to import the constant a SECOND time from `cli/bridge-studio.ts`
+ * Case 3 used to import the constant a SECOND time from `apps/forge/bridge-studio.ts`
  * and assert the two were equal. That assertion could not fail: the host line
  * is `export { CANCELLED_PHASE } from '@forge/sessions/interactive-session.ts'`
  * — a pure re-export, so both names were the same binding and the comparison

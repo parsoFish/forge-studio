@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F3 #9, #11) — the RECEIVER PATH for the two
  * new project-event trigger kinds (`pr-merged` / `issue-raised`), driven at
- * the REAL bridge route exactly as cli/bridge-hooks.test.ts already does for
+ * the REAL bridge route exactly as packages/flows/bridge-hooks.test.ts already does for
  * push/release. New file (not appended to the existing 484-line
  * bridge-hooks.test.ts) per the small-focused-files rule; the two files
  * share no helper exports (bridge-hooks.test.ts's setup()/post()/githubSig()
@@ -35,7 +35,7 @@
  * documented, stable webhook event schema for the `pull_request` event —
  * NOT drawn from this repo's local test corpus (no local pull_request/issues
  * fixtures exist yet; only push/release do, in
- * orchestrator/trigger-payload.test.ts / cli/bridge-hooks.test.ts) and NOT
+ * orchestrator/trigger-payload.test.ts / packages/flows/bridge-hooks.test.ts) and NOT
  * invented ad hoc — it mirrors the well-known, stable GitHub API field names.
  * See this WI's report for the explicit per-fixture provenance statement.
  */

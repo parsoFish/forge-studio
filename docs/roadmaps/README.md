@@ -83,7 +83,7 @@ adjacent. **This directory is the design home for anything within forge.**
 
 | Architecture pillar | Owning roadmap |
 |---|---|
-| Contracts & seams — project contract, KB contract, KbBackend, preflight (`cli/preflight.ts`, `orchestrator/kb-backend.ts`) | **R1** |
+| Contracts & seams — project contract, KB contract, KbBackend, preflight (`packages/projects/preflight.ts`, `orchestrator/kb-backend.ts`) | **R1** |
 | Runnable engine — flow runner, agent primitive, triggers, fanout, artifact surfaces, runtime adapters (`orchestrator/`, `loops/`) | **R2** |
 | Capability libraries — skills, hooks, tools/MCPs, instructions (`skills/`, `studio/catalog.yaml`) | **R3** |
 | Shipped OOTB content — the agent suite + flows, roadmap/attention surface work this round (`studio/flows/`, agent SKILL.mds) | **R4** |
@@ -460,7 +460,7 @@ before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
   gates; `KbDrainPanelView` needed 24 `renderToStaticMarkup` pins added at
   review (#166). A recurring reviewer finding, not a one-off.
 - **The `check-raw-fs-guarded` allowlist's line-numbered format taxes every
-  batch that touches `cli/ui-bridge.ts`** — P1, B1 and B3/B5 all had to
+  batch that touches `apps/forge/ui-bridge.ts`** — P1, B1 and B3/B5 all had to
   serialize and remap around the same file. Bead `forge-mlk` tracks the
   structural fix (content-anchored keys, not line numbers).
 - **Measure perf on the operator's REAL tree, not a clean checkout.** P2's
@@ -700,9 +700,9 @@ closeout; version 0.8.0.
 | Criterion | Delivering WI | Producer (route / agent / beat) | Proof today |
 |---|---|---|---|
 | A plan can be approved from Studio and the approved plan + its initiative are shown | W7-A3 | `/artifact?run=_architect-<sid>&type=plan&mode=gate` → `PlanGate` → `/api/plan-verdict`; journey `sessions-index`/architect beat | `grep -n "approve-plan" forge-ui/components/PlanGate.tsx` |
-| A pending initiative can be started from Studio and a run appears | W7-A3 | Home scheduler card + `/flows` → `POST /api/scheduler/start`; `_queue/pending/INIT-2026-08-18-add-version-flag.md` is the test vehicle | `grep -n "scheduler/start" cli/ui-bridge.ts` |
+| A pending initiative can be started from Studio and a run appears | W7-A3 | Home scheduler card + `/flows` → `POST /api/scheduler/start`; `_queue/pending/INIT-2026-08-18-add-version-flag.md` is the test vehicle | `grep -n "scheduler/start" apps/forge/ui-bridge.ts` |
 | Every session kind can be cancelled from its page and from `/sessions` | W7-A2 | new `POST /api/studio/sessions/:kind/:id/cancel`; generic panel `data-action="cancel"` | (new) |
-| A crashed session reads `crashed` with its stderr on Home, `/sessions`, and its page | W7-A2 | session index derivation (`cli/ui-bridge.ts` sessions index) + panel | operator's `community-refresh 2026-08-18T12-54-32` and two `kb-cleanup` sessions are the fixtures |
+| A crashed session reads `crashed` with its stderr on Home, `/sessions`, and its page | W7-A2 | session index derivation (`apps/forge/ui-bridge.ts` sessions index) + panel | operator's `community-refresh 2026-08-18T12-54-32` and two `kb-cleanup` sessions are the fixtures |
 | Home strips are labelled and visually distinct | W7-B1 | `/` `data-section="sessions-needing-you"` / `data-section="kbs-needing-attention"`; journey `home` beat | `grep -n "Active sessions" forge-ui/components/studio/HomeSessionsStrip.tsx` (W8-F4: this cell named `app/page.tsx`, where the heading has never lived — the claim never matched, under either heading text) |
 | Drain-to-green streams per-finding progress; prose changes are draft-gated | W7-B2 | `/knowledge?id=<kb>&tab=health` drain panel + `_kb-drain-*` events; journey `knowledge` beat | `grep -rn "Waiting for activity" forge-ui/` |
 | Community refresh (full and targeted) completes and its verdict is reachable | W7-B3 | `/sessions/community-refresh/new` (brief field) → generic panel verdict → `registry.yaml` commit | `grep -n "community-refresh" forge-ui/lib/session-panel*.ts` |
@@ -729,7 +729,7 @@ closeout; version 0.8.0.
 - Wave-6's: the full journey gate is the real exit criterion; presence of
   green, not absence of red; any `brain/` content edit shifts the PM
   spawn-capture snapshot; `check-raw-fs-guarded` line-drift tax → serialise
-  lanes touching `cli/ui-bridge.ts` (`forge-mlk` still open).
+  lanes touching `apps/forge/ui-bridge.ts` (`forge-mlk` still open).
 - New from the walkthrough: **an explorer that spends real tokens finds the
   defects a crawler cannot** (the drain's lossy rewrite, the refresh agent's
   write-root escape, the plan gate's two Approve buttons all needed a real

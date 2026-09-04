@@ -171,7 +171,7 @@ async function postRun(flowId: string, body: unknown): Promise<{ status: number;
 // so posting it at `forge-develop` is a cross-flow REPOINT — the exact one-click
 // theft flows-37 reproduced. The route's happy path is unchanged, but it now
 // requires the operator's confirmation to reach it. The unconfirmed case is
-// pinned in cli/ui-bridge-flow-run-repoint.test.ts (409, manifest byte-unchanged).
+// pinned in apps/forge/ui-bridge-flow-run-repoint.test.ts (409, manifest byte-unchanged).
 test('POST /api/flows/:id/run: enqueues a real initiative onto THAT flow (200, cycleId + flowId echoed, manifest repointed)', async () => {
   const r = await postRun('forge-develop', { initiativeId: INIT_PENDING, confirmRepointFrom: 'forge-architect' });
   assert.equal(r.status, 200, JSON.stringify(r.json));

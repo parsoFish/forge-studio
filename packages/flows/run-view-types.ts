@@ -88,7 +88,7 @@ export type Run = {
   startedAt?: string;
   /**
    * W6-RV-2: the real cycle-completion instant, for the roadmap canvas's
-   * time axis (`cli/bridge-studio.ts::buildProjectRoadmap`). Derived the same
+   * time axis (`apps/forge/bridge-studio.ts::buildProjectRoadmap`). Derived the same
    * way `startedAt` is (a forward scan of THIS cycle's already-parsed
    * `events`, no second events.jsonl read) — the `started_at` of the
    * `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event, which

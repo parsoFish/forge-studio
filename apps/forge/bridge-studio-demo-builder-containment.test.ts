@@ -2,7 +2,7 @@
  * ACCEPTANCE TESTS (SEC-03, T3, appended round) — Defect 4: `GET
  * /api/demo-builder/demo/<project>/<sid>` and `GET
  * /api/demo-builder/fragment/<project>/<sid>/<element>`
- * (cli/ui-bridge.ts ~2333-2409) bypass `resolveDemoSessionDir` — the shipped
+ * (apps/forge/ui-bridge.ts ~2333-2409) bypass `resolveDemoSessionDir` — the shipped
  * choke point (~1477) that (a) validates `project`/`sessionId` with the
  * length-cap-then-charset contract BEFORE any fs call, and (b) proves real
  * realpath containment inside THIS project's own resolved dir. Both routes
@@ -413,7 +413,7 @@ test('structural characterization (true always — documents the guard SHAPE, no
     outsideDirs[0] ?? tmp('guard-cannot-fail-probe-'),
   ];
   for (const x of candidates) {
-    // EXACT replica of cli/ui-bridge.ts's guard expression (~2347-2349).
+    // EXACT replica of apps/forge/ui-bridge.ts's guard expression (~2347-2349).
     const base = join(x, '.forge', 'demo') + sep;
     const requested = join(x, DEMO_HTML_REL_PATH);
     assert.ok(

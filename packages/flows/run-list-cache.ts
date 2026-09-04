@@ -1,5 +1,5 @@
 /**
- * cli/run-list-cache.ts — ADR-044 P1: a keyed memo of the single run
+ * packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single run
  * derivation (docs/decisions/044-read-path-memoization.md).
  *
  * `orchestrator/run-model.ts::listRuns` walks every `_queue/<state>/*.md`

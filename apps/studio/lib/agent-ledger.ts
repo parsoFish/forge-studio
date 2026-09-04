@@ -6,7 +6,7 @@
  * `renderSegment`/`renderNarrative`/`sortLedgerRowsNewestFirst`/`formatWhen`
  * unchanged (D2).
  *
- * ARCHITECTURE: the SERVER route (`cli/ui-bridge-agent-history.test.ts`,
+ * ARCHITECTURE: the SERVER route (`apps/forge/ui-bridge-agent-history.test.ts`,
  * Task 1, `GET /api/agents/:slug/history`) already reduces status/cost to
  * the TARGET's own per-row fact (D3) before the wire and sends
  * already-shaped `LedgerRow[]` — this module's `resolveAgentHistoryFromResponse`
@@ -72,7 +72,7 @@ export type AgentFlowNodeRunEntry = { run: Run; nodeId: string; href: string };
  *  `costUsd: null` when the cost genuinely does not exist yet.
  *
  *  W8-A2 (ON-7 defect 4) — 'stalled' added: `StandaloneRunState['state']`
- *  (cli/ui-bridge.ts) grew this member (a run whose process died/wedged
+ *  (apps/forge/ui-bridge.ts) grew this member (a run whose process died/wedged
  *  with no terminal marker, silent past the stall ceiling) and this union
  *  is the enforcement point for what a standalone row's status may be
  *  (`STANDALONE_STATUSES` below, `isValidStandaloneEntry`) — leaving it

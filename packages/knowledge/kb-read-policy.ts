@@ -4,7 +4,7 @@
  *
  * The asymmetric brain-read policy (ADR-010 as amended) governs WHO may read a
  * KB. Encoded here as a PURE, exported predicate so both `forge studio lint`
- * (cli/studio-lint.ts — the production wiring) and the guard test
+ * (apps/forge/studio-lint.ts — the production wiring) and the guard test
  * (orchestrator/kb-read-policy-guard.test.ts) apply the SAME single rule
  * against a real, loaded descriptor rather than a hand-rolled re-derivation.
  *

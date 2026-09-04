@@ -5,7 +5,7 @@
  * These are RED-on-current-code containment pins. The accepted SEC-04 fix
  * routes EVERY session-dir construction through the already-fixed
  * `resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)`
- * (cli/bridge-studio-sessions.ts → resolveGuardedPath: per-segment
+ * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath: per-segment
  * identity+charset+symlink, returns null on escape). The surfaces pinned here
  * bypass that guard TODAY:
  *
@@ -40,7 +40,7 @@
  *   4. DEMO first-segment symlink fold: `resolveDemoSessionDir` (the SEC-03
  *      choke point) computes its containment baseline as
  *      `realProjectDir = realpathSync(join(projectsRoot, project))`
- *      (cli/ui-bridge.ts:2256-2259) and then only checks
+ *      (apps/forge/ui-bridge.ts:2256-2259) and then only checks
  *      `realAncestor.startsWith(realProjectDir + sep)`. When `projects/<attacker>`
  *      is itself a SYMLINK to a victim dir, `realProjectDir` IS the victim, so
  *      the comparison is tautological (root-folding, verbatim from the

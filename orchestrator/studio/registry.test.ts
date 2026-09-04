@@ -685,7 +685,7 @@ describe('serializeAgentDefinition(def, originalRaw) — materials vs byte-fidel
 // - runtime.range: LIVE and reachable today, MORE severe than materials.
 //   apps/studio/app/agents/[id]/page.tsx defaults `runtime.range` to `[]`
 //   (DEFAULT_RUNTIME / parseAgent) and always sends it in buildPutBody;
-//   cli/bridge-studio-writes.ts's PUT merge takes the client's array
+//   apps/forge/bridge-studio-writes.ts's PUT merge takes the client's array
 //   unconditionally whenever it IS an array
 //   (`Array.isArray(rtIn['range']) ? rtIn['range'] : existing?.runtime.range`
 //   — never falls back to disk for a client-supplied array). Every roster

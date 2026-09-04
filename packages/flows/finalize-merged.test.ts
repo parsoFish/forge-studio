@@ -498,8 +498,8 @@ test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-revie
 
 // ---------------------------------------------------------------------------
 // SEC-02 round 3 — a THIRD entry point into the manifest-poisoning threat
-// model neither round 1 (`cli/bridge-recovery.ts` ingest + `cli/forge-
-// requeue.ts`) nor round 2 (`cli/bridge-studio-runs.ts`'s `applyReviewVerdict`)
+// model neither round 1 (`packages/flows/bridge-recovery.ts` ingest + `cli/forge-
+// requeue.ts`) nor round 2 (`packages/flows/bridge-studio-runs.ts`'s `applyReviewVerdict`)
 // could reach: this periodic sweep, driven by a TIMER, not an HTTP route.
 // `cycle_id` is already guarded (`isSafeCycleId`, line ~330 above), but its two
 // siblings on the SAME manifest read are not:

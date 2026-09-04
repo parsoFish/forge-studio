@@ -43,7 +43,7 @@
  *     `row.inFlight>0`).
  *   - HOME_LINT_KB (forge-2am) carries a REAL project-brain dir
  *     (`brain/projects/home-fixture-lint-kb/kb.yaml` + `themes/*.md`) that
- *     genuinely trips `cli/brain-lint.ts`'s `checkProjectBrainIndexes` — a
+ *     genuinely trips `packages/knowledge/brain-lint.ts`'s `checkProjectBrainIndexes` — a
  *     project brain with themes but no category index files
  *     (patterns.md/antipatterns.md/decisions.md/reference.md) is unindexed.
  *     Verified directly against the real lint tool before writing this
@@ -111,10 +111,10 @@ const HOME_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', HOME_ACTIVE_CYCLE_ID);
 // (see this file's header comment for the exact, directly-verified finding).
 // `brain/projects/<id>/` (never `_queue`/`_logs`/`projects`) so it is
 // discovered the SAME way the real gitpulse/mdtoc/etc. project brains are
-// (cli/bridge-studio-kbs.ts's loadKbDescriptors walks brain/projects/*/kb.yaml)
+// (packages/knowledge/bridge-studio-kbs.ts's loadKbDescriptors walks brain/projects/*/kb.yaml)
 // — .gitignore carries its own dedicated entry (never committed).
 // W8-B2 (ON-4) — a REAL parked kb-cleanup draft: the on-disk shape
-// `mintKbCleanupDraftSession` (cli/bridge-studio-kb-drain.ts) writes when the
+// `mintKbCleanupDraftSession` (packages/knowledge/bridge-studio-kb-drain.ts) writes when the
 // drain gates an edit, under the SAME `.kb-<id>` dot-anchor project a
 // unique-binding KB's drafts land in. `awaiting-approval` is non-terminal and
 // awaits a verdict (studio/session-kinds.yaml), so the bridge derives
@@ -167,7 +167,7 @@ function writeHomeProjectConfig(dir, name, northStar) {
 }
 
 /** The gated project's manifest — a real `ready-for-review` placement so
- *  `fetchProjectAttention()` (cli/bridge-studio.ts's buildProjectAttention)
+ *  `fetchProjectAttention()` (apps/forge/bridge-studio.ts's buildProjectAttention)
  *  derives `gated>0` for it from an ACTUAL queue scan, not a poked count.
  *  Carries its own `cycle_id` (no log dir needed — `orchestrator/run-
  *  model.ts`'s `aggregateRunWithMapping` only needs a truthy `manifest.
@@ -247,7 +247,7 @@ function writeHomeActiveManifest() {
  * The lint-flagged KB fixture (forge-2am) — a real `brain/projects/<id>/`
  * dir with a valid-frontmatter theme but NO category index files beside it.
  * Content mirrors exactly what was run through the real `runBrainLint`
- * (cli/brain-lint.ts) before this journey was written — see this file's
+ * (packages/knowledge/brain-lint.ts) before this journey was written — see this file's
  * header comment for the observed finding.
  */
 function writeHomeLintKbFixture() {

@@ -94,7 +94,7 @@
  * WHAT IT DOES
  * ============================================================================
  *
- * Step 1 — REACHABILITY. Entry modules = cli/ui-bridge.ts plus every
+ * Step 1 — REACHABILITY. Entry modules = apps/forge/ui-bridge.ts plus every
  * cli/bridge-*.ts that is not a *.test.ts. From those, walk relative imports
  * transitively (`import … from './x.ts'`, `import … from '../y/z.ts'`,
  * `export … from '…'`, and `import('…')` with a string literal), restricted
@@ -222,7 +222,7 @@ function isCommentLine(line) {
  * identity / charset / symlink containment. Every caller must instead route the
  * request-derived project + sessionId through
  * resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)
- * (cli/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
+ * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
  * to the reader/writer — never a bare join.
  */
 export const DESIGNATED_UNGUARDED_FUNCTIONS = {

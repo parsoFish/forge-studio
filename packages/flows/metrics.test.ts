@@ -1,5 +1,5 @@
 /**
- * Tests for cli/metrics.ts aggregate() — guards the per-phase cost
+ * Tests for packages/flows/metrics.ts aggregate() — guards the per-phase cost
  * de-duplication logic so developer-loop and unifier costs are never
  * double/triple-counted via restating 'end' events.
  */

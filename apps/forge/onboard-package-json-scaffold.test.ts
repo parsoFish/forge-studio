@@ -1,7 +1,7 @@
 /**
  * w8-a1 (bd forge-7pa) — the onboarding `package.json` scaffold pin.
  *
- * cli/preflight.ts's checkC1 was tightened on this branch: a quality gate
+ * packages/projects/preflight.ts's checkC1 was tightened on this branch: a quality gate
  * whose first token is npm/yarn/pnpm/npx/bun/bunx now FAILS unless the
  * project dir itself contains a package.json (and, where the command maps to
  * a script name, that script exists) — without one, npm's own ancestor-
@@ -11,7 +11,7 @@
  * half of the defect: `POST /api/studio/projects` (the onboarding form's own
  * route) accepts `qualityGateCmd: 'npm test'` — the form's own default for a
  * JS project — scaffolds the project from nothing, and never wrote a
- * package.json. `cli/onboard-born-green.test.ts` states the headline
+ * package.json. `apps/forge/onboard-born-green.test.ts` states the headline
  * invariant (a from-scratch project is born contract-green); this file pins
  * the scaffold behaviour that closes it, plus the negative control, the
  * never-clobber rule, the script-name derivation, and a containment pin in
@@ -85,7 +85,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
   mkdirSync(join(forgeRoot, 'brain', 'projects'), { recursive: true });
 
-  // Probe symlink availability once (mirrors cli/bridge-studio-project-create-containment.test.ts).
+  // Probe symlink availability once (mirrors apps/forge/bridge-studio-project-create-containment.test.ts).
   const probeDir = tmp('onboard-pkgjson-symlink-probe-');
   try {
     symlinkSync(probeDir, join(forgeRoot, 'projects', '__symlink_probe__'), 'dir');
@@ -144,7 +144,7 @@ test('POST /api/studio/projects: an EXISTING package.json in the project root is
   // Dir basename deliberately differs from the derived id: discoverProjects
   // lists ANY slug-named dir under projects/ (config or not), so an id equal
   // to the dir name would trip the duplicate-id 409 before ever reaching the
-  // scaffold under test (same precedent as cli/onboard-born-green.test.ts's
+  // scaffold under test (same precedent as apps/forge/onboard-born-green.test.ts's
   // "legacy-checkout" test).
   const projectDir = join(forgeRoot, 'projects', 'pkg-json-preexisting-checkout');
   mkdirSync(projectDir, { recursive: true });
@@ -215,7 +215,7 @@ test('POST /api/studio/projects: qualityGateCmd "npm run verify" produces a pack
 });
 
 test('(RED) POST /api/studio/projects: a symlinked package.json pointing outside the project root is REFUSED, not written through', async (t) => {
-  // Mirrors cli/bridge-studio-project-create-containment.test.ts's dangling-
+  // Mirrors apps/forge/bridge-studio-project-create-containment.test.ts's dangling-
   // leaf shape for roadmap.md/brain/profile.md exactly (same escape class,
   // same `resolveGuardedPath` guard): a DANGLING symlink is what actually
   // drives the pure Phase-1 pre-check (`checkContractArtifactContainment`)
@@ -228,7 +228,7 @@ test('(RED) POST /api/studio/projects: a symlinked package.json pointing outside
   if (skipIfNoSymlinks(t)) return;
 
   // Dir basename deliberately differs from the derived id (same precedent as
-  // the never-clobber test above and cli/onboard-born-green.test.ts's
+  // the never-clobber test above and apps/forge/onboard-born-green.test.ts's
   // "legacy-checkout" test): discoverProjects lists ANY slug-named dir under
   // projects/, so an id equal to the dir name would trip the duplicate-id
   // 409 before ever reaching the containment pre-check under test — which

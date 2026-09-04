@@ -1,14 +1,14 @@
 /**
  * Acceptance test for the R3-04-F3 / D9.2 pre-spawn connection-readiness
  * refusal on the REAL bridge run route `POST /api/agents/:slug/run`
- * (`cli/ui-bridge.ts:1113`) — DOES NOT EXIST YET. The route exists and
+ * (`apps/forge/ui-bridge.ts:1113`) — DOES NOT EXIST YET. The route exists and
  * already accepts requests today; this file's "blocked" tests are RED at
  * the ASSERTION level (a 200 with a real runId today, expected to become a
  * 4xx naming the component once WI-3 lands) rather than at import time —
  * exactly the "seam added to an existing entry point" red the T3 brief
  * anticipates.
  *
- * Mirrors `cli/ui-bridge-agent-run.test.ts`'s fixture style exactly
+ * Mirrors `apps/forge/ui-bridge-agent-run.test.ts`'s fixture style exactly
  * (`studioAgent(slug, surface)`, `FORGE_ARCHITECT_NO_SPAWN=1` to keep the
  * happy path hermetic) — extended with a `tools`/`mcps` composition
  * override and a REAL connections-extended `studio/catalog.yaml`, so the

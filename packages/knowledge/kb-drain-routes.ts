@@ -334,7 +334,7 @@ export async function handleKbDrainStart(
 
       // Server-minted, kbId-prefixed — mirrors consolidate's own
       // `${kbId}-consolidate-${Date.now().toString(36)}` runId shape
-      // (cli/bridge-studio-kbs.ts).
+      // (packages/knowledge/bridge-studio-kbs.ts).
       const runId = `${kbId}-drain-${Date.now().toString(36)}`;
 
       // Write the initial 'running' snapshot SYNCHRONOUSLY, before queuing —

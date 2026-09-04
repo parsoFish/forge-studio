@@ -228,7 +228,7 @@ const FAMILIES: Array<{
   // R4-17 pin 5, item 3 (MAJOR): cli/dry-bridge.ts:153 classifies
   // POST /api/studio/onboarding/start as stub-actions/spawn-helper, claiming
   // "...skipped with marker + event, exactly as the generic run host" — but
-  // the route (cli/ui-bridge.ts, POST /api/studio/onboarding/start) never
+  // the route (apps/forge/ui-bridge.ts, POST /api/studio/onboarding/start) never
   // calls dryBridgeAgentTurnMarker at all. RED now: json.dryBridge is
   // undefined and no _dry-bridge/events.jsonl entry is written. Reuses
   // spawnAgentDispatch (D6, same as the generic /api/agents/:slug/run

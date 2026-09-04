@@ -175,7 +175,7 @@ export const JOURNEY_UNDATED_INITS = [
  *
  * W8-F4 (found by adversarial review): a journey fixture can also create a
  * `_logs/_agent-<slug>-<stamp>` directory — the shape `collectRecentAgentRuns`
- * (cli/ui-bridge.ts) enumerates to build the standalone half of the
+ * (apps/forge/ui-bridge.ts) enumerates to build the standalone half of the
  * everything-ledger. That shape is NOT `INIT-…`, so neither this module nor
  * either ratchet in `scripts/journey-residue-sweep.test.ts` could see it, and a
  * SIGKILL mid-run leaked one per crash, forever. The `_agent-` PREFIX is forced

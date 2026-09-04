@@ -16,8 +16,8 @@
  * WHAT STAYED, AND WHY HERE. Four symbols are imported from OUTSIDE the
  * package and must keep the module path their consumers already use —
  * `loadKbDescriptors`, `KB_SEEDING_ANCHOR_PREFIX`, `computeAgentCleanupFindings`
- * (`cli/ui-bridge.ts`, `packages/sessions/bridge-studio-sessions.ts`,
- * `cli/id-rule.test.ts`, three bridge tests) and `approveKbCleanup`
+ * (`apps/forge/ui-bridge.ts`, `packages/sessions/bridge-studio-sessions.ts`,
+ * `apps/forge/id-rule.test.ts`, three bridge tests) and `approveKbCleanup`
  * (`cli/bridge-studio-affordances.ts`, `kb-drain-structural.test.ts`). No
  * barrel re-export was added for them: they did not move, so nothing needed
  * re-pointing, and a barrel here would have made this file import its own
@@ -27,7 +27,7 @@
  * `bridge-studio-kb-consolidate.ts`; neither imports a route file.
  *
  * `handleStudioKbRoutes` is GONE, not deprecated. Its last caller
- * (`cli/ui-bridge.ts`) now reaches these routes through the table, which
+ * (`apps/forge/ui-bridge.ts`) now reaches these routes through the table, which
  * `dispatchRoute` runs before the host's own arms. `tests/contract/routes-table.test.ts`
  * pins all 17 carved routes so that "carved" and "lost" can never be confused.
  */
@@ -107,7 +107,7 @@ export function subDirs(dir: string): string[] {
 // race).
 //
 // BEFORE this fix, both `POST /api/studio/kbs/:id/cleanup/apply`
-// (cli/ui-bridge.ts) and the generic `POST /api/studio/sessions/kb-cleanup/
+// (apps/forge/ui-bridge.ts) and the generic `POST /api/studio/sessions/kb-cleanup/
 // :sid/:affordance` (cli/bridge-studio-affordances.ts) independently ran:
 // read status -> check phase === 'awaiting-approval' -> `await
 // enqueueConsolidate(...)` -> write phase:'applied'. `enqueueConsolidate`
@@ -375,7 +375,7 @@ export async function approveKbCleanup(
 // KB health computation
 // ---------------------------------------------------------------------------
 
-// `CheckHealthStatus`/`CheckHealthEntry` moved to cli/kb-lint-summary.ts
+// `CheckHealthStatus`/`CheckHealthEntry` moved to packages/knowledge/kb-lint-summary.ts
 // (forge-2am); `CheckHealthEntry` is re-imported above for the `KbHealth` type
 // below. The per-KB own-theme lens that used to live here with them is gone —
 // the full-scope scan covers every theme dir (ADR 035), so there is one lens.
@@ -482,7 +482,7 @@ export function buildKbHealth(
   let healthError: string | undefined;
   try {
     // The per-check itemization (CHECK_SCOPE applicability, the F3 aggregate
-    // roll-up) lives in `computeKbLintChecks` (cli/kb-lint-summary.ts)
+    // roll-up) lives in `computeKbLintChecks` (packages/knowledge/kb-lint-summary.ts)
     // now — the ONE derivation both this per-KB detail route and the list
     // route's `attachKbLintSummaries` share, so the two can never drift.
     const { findings } = runBrainLintFullMemoized(forgeRoot);
@@ -513,8 +513,8 @@ export function buildKbHealth(
 /**
  * R4-19-F2 — the kb-cleanup session's live-findings computation. Exported
  * (cli/ is uncapped) so both the session kickoff (`POST /api/studio/kbs/:id/
- * cleanup/start`, cli/ui-bridge.ts) and the session read branch
- * (`GET /api/studio/sessions/kb-cleanup/:id`, cli/bridge-studio-sessions.ts)
+ * cleanup/start`, apps/forge/ui-bridge.ts) and the session read branch
+ * (`GET /api/studio/sessions/kb-cleanup/:id`, packages/sessions/bridge-studio-sessions.ts)
  * share ONE implementation of this union rather than each duplicating it.
  *
  * Routed through `collectKbFindings` — the ONE per-KB lens, shared with the
@@ -562,7 +562,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
  *
  * Sited here (rather than beside the other list-building helpers above) so
  * this declaration is immediately followed by a top-level `export` — the
- * exact structural shape `cli/studio-provenance.test.ts`'s AT-10 walks to
+ * exact structural shape `apps/forge/studio-provenance.test.ts`'s AT-10 walks to
  * prove `provenanceOfOrigin(` is called INSIDE this function and nowhere
  * else (a `function` declaration hoists, so this relocation changes nothing
  * about when or how it runs).
@@ -594,7 +594,7 @@ export function loadKbDescriptors(
       // resolves `kbId` → `brain/**/<kbId>/`, so a descriptor whose id is not
       // its directory name, or fails the id rule, is skipped here rather than
       // listed as a KB no route will ever accept. ONE predicate
-      // (`unroutableKbReason`, cli/kb-sites.ts) shared with the derived
+      // (`unroutableKbReason`, packages/knowledge/kb-sites.ts) shared with the derived
       // project↔KB binding, the roster's `unroutable[]` diagnostic and
       // `forge studio lint`'s kb `dir-name` check (W7-FIX-A4 / W7A4-04) — the
       // drop is never silent.
@@ -627,7 +627,7 @@ export function loadKbDescriptors(
   };
 
   // Both containment roots — brain/<id>/kb.yaml and brain/projects/<id>/kb.yaml
-  // (ADR 035) — come from the ONE enumeration in cli/kb-sites.ts, shared with
+  // (ADR 035) — come from the ONE enumeration in packages/knowledge/kb-sites.ts, shared with
   // the project roster's derived `kb` field (W7-A4), so the KB roster and the
   // project↔KB pairing can never see different descriptors. Each site gets
   // the identical guarded treatment — a fix that hardens only the primary
@@ -640,7 +640,7 @@ export function loadKbDescriptors(
 /**
  * R1-06-F2: session id for the project-brain hand-off a successful KB create
  * starts. Same shape as the architect/instructions/demo-builder family's
- * `newArchitectSessionId` (cli/ui-bridge.ts) — a chronologically-sortable
+ * `newArchitectSessionId` (apps/forge/ui-bridge.ts) — a chronologically-sortable
  * ISO-ish timestamp plus a hex entropy suffix (SAFE_ID_RE-compatible), so a
  * same-second double-create can never collide. Kept local rather than
  * imported: that helper is a private, unexported function of ui-bridge.ts.

@@ -212,7 +212,7 @@ function computeMissingConfig(config: ConnectionConfigVar[]): string[] {
  *  credential out; skipping this step would be the exact leak D11 forbids.
  *
  * Exported (round-6 FIX-FIRST, MAJOR item 2) so the install executor
- * (`cli/bridge-studio-connections.ts`) can reuse this EXACT filter for the
+ * (`packages/library/bridge-studio-connections.ts`) can reuse this EXACT filter for the
  * npm install child's environment, rather than a second hand-rolled copy. An
  * install child is at least as untrusted as a probe child — `--ignore-scripts`
  * blocks npm lifecycle-script execution, it does nothing to keep a credential

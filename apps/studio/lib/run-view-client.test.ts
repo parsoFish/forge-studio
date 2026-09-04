@@ -2,7 +2,7 @@
  * Acceptance tests closing the gap `./run-view-client.ts`'s own header
  * documents and this initiative's follow-up round exists to close: with
  * `GET /api/agents/runs/:runId` now 404ing for a genuinely unknown runId
- * (see `cli/ui-bridge-agent-run.test.ts`'s new "no run directory at all"
+ * (see `apps/forge/ui-bridge-agent-run.test.ts`'s new "no run directory at all"
  * tests), `RunView.tsx`'s `found` prop — pinned thoroughly at the component
  * level in `./run-view-render.test.ts`, including that `found:false`
  * suppresses content even when other data is present — finally has a real

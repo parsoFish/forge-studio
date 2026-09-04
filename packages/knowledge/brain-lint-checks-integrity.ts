@@ -23,7 +23,7 @@ import type { Finding } from './brain-lint-types.ts';
  * in document order.
  *
  * Exported because the KB drain's edit-soundness audit
- * (cli/kb-drain-edit-soundness.ts) must extract link targets EXACTLY the way
+ * (packages/knowledge/kb-drain-edit-soundness.ts) must extract link targets EXACTLY the way
  * `checkSourceLinks` does — a second extractor that disagreed about what
  * counts as a link would let the audit miss the very repoint it exists to
  * refuse.

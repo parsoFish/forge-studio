@@ -16,7 +16,7 @@
  *      prune the initiative branch (closure aligns local↔remote).
  *
  * `mergePullRequest` IS now called by the approve path (superseding G9):
- *   - `POST /api/verdict` 'approve' in `cli/ui-bridge.ts` — the UI approve
+ *   - `POST /api/verdict` 'approve' in `apps/forge/ui-bridge.ts` — the UI approve
  *     merges the remote PR immediately and fires `finalizeMergedReadyForReview`.
  *     M7-5 (ADR-031) removed the old `forge review --approve` CLI merge; the
  *     bridge verdict route is the sole approve surface (its merge is a strict

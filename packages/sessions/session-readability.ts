@@ -24,10 +24,10 @@
  * in `packages/sessions/bridge-studio-sessions.ts`, next to the project/session-id validation
  * rules it must reuse (`invalidProjectReason`, `findSessionProject`).
  *
- * WHY THIS MODULE IS AN IMPORT LEAF. `cli/bridge-studio.ts` imports no
+ * WHY THIS MODULE IS AN IMPORT LEAF. `apps/forge/bridge-studio.ts` imports no
  * `bridge-studio-*` sibling today, and `packages/sessions/bridge-studio-lifecycle.ts` /
  * `packages/sessions/bridge-studio-sessions.ts` both import FROM it. `invalidProjectReason`
- * transitively needs `SAFE_ID_RE` (cli/bridge-studio.ts) and
+ * transitively needs `SAFE_ID_RE` (apps/forge/bridge-studio.ts) and
  * `KB_SEEDING_ANCHOR_PREFIX` (packages/knowledge/bridge-studio-kbs.ts), so pulling it in here
  * would create the first cycle in that graph. Everything in this file therefore
  * imports only `node:*`, `./studio-path-guard.ts`, and `../orchestrator/**`.
@@ -50,7 +50,7 @@ import { readFileSync } from 'node:fs';
 import { resolveGuardedPath } from '@forge/kernel';
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template `spawnAgentTurn`
- *  (cli/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
+ *  (apps/forge/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
  *  (packages/sessions/interactive-runner.ts) writes events.jsonl/.heartbeat into
  *  (`SPAWN_AGENT_SPECS[..].logPrefix === descriptor.id`, pinned by
  *  packages/sessions/session-tail-kind-parity.test.ts). ONE directory-entry name: the hyphen
@@ -59,7 +59,7 @@ import { resolveGuardedPath } from '@forge/kernel';
  *
  *  Re-exported by packages/sessions/bridge-studio-lifecycle.ts, which is where it used to
  *  live — moved here so this leaf module can use it without importing the
- *  lifecycle module (which imports cli/bridge-studio.ts). */
+ *  lifecycle module (which imports apps/forge/bridge-studio.ts). */
 export function sessionLogDirName(kind: string, sessionId: string): string {
   return `_${kind}-${sessionId}`;
 }
@@ -67,7 +67,7 @@ export function sessionLogDirName(kind: string, sessionId: string): string {
 /**
  * Guarded parse of `<root>/<entryName>/events.jsonl`.
  *
- * MOVED VERBATIM from `cli/ui-bridge.ts`'s private `parseGuardedEventsJsonl`
+ * MOVED VERBATIM from `apps/forge/ui-bridge.ts`'s private `parseGuardedEventsJsonl`
  * (R6-06 round 6, adversarial-containment-review) so this module and that one
  * share ONE implementation rather than growing a second copy — ui-bridge.ts now
  * imports it from here. `entryName` is a SINGLE directory-entry name (never a

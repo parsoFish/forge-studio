@@ -154,7 +154,7 @@ test('checkDanglingEdges: a bare-scalar (non-array) related_themes value is a DE
     //       signal anywhere. It is a filed, tracked gap (this test IS that
     //       tracking record, alongside the `danglingEdgeFindings`
     //       "tolerate missing/absent/non-array" comment a few lines above in
-    //       cli/brain-lint.ts and the sibling cross-KB gap documented in
+    //       packages/knowledge/brain-lint.ts and the sibling cross-KB gap documented in
     //       `checkDanglingEdges`'s own doc comment). Zero occurrences exist
     //       in the live 364-theme corpus as of 2026-08-14, which is why it
     //       is parked rather than fixed now.

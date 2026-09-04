@@ -6,7 +6,7 @@
  * projects-16, sessions-kinds-08/12).
  *
  * The bridge exposes `GET /api/scheduler/status` + start/pause/resume/stop
- * (cli/ui-bridge.ts) but broadcasts no WS message when the daemon starts or
+ * (apps/forge/ui-bridge.ts) but broadcasts no WS message when the daemon starts or
  * stops (an operator may `forge serve` from a shell), so this hook reads on
  * mount, after every action it dispatched itself, and on a slow poll ONLY
  * while the tab is visible. `status === null` means "could not read" — the

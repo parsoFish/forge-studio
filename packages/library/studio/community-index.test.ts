@@ -589,7 +589,7 @@ describe('listCommunityIndex — MAJOR 2: missing vs malformed studio/catalog.ya
   // or what it says. console.warn (not createLogger's structured JSONL
   // event log) is the right choke point here and matches this repo's own
   // house precedent for a warn with no cycle/run context to log through
-  // (see cli/bridge-hooks.ts's own "no cycle context exists" console.warn
+  // (see packages/flows/bridge-hooks.ts's own "no cycle context exists" console.warn
   // family) — this is a synchronous read helper, not a phase or agent run.
   it('a MISSING studio/community/registry.yaml warns loud via console.warn, naming the file (registrySource, community-index.ts)', (t) => {
     const root = makeForgeRoot();

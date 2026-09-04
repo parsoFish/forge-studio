@@ -20,7 +20,7 @@
  * derived `found: false` from `fetchRun(id) === null`, a transient bridge
  * outage would render `data-component="run-not-found"` — an ERROR state
  * rendered as an authoritative NEGATIVE FACT ("this run never existed").
- * `cli/bridge-studio-flow-run-detail.test.ts` (round 1) proves the SERVER
+ * `apps/forge/bridge-studio-flow-run-detail.test.ts` (round 1) proves the SERVER
  * tells the truth (404 only for a genuinely unknown id); this file closes the
  * gap where the CLIENT was about to throw that truth away at the last hop.
  *

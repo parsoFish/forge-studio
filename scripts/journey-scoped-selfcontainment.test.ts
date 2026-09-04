@@ -29,7 +29,7 @@
  *    OWNS: a seeded lint-flagged scratch KB (writeSuLintKbFixture — the
  *    HOME.2 fixture shape), never the repo's transient standing lint debt,
  *    which the operator can drain to green at any time (KB lint is derived
- *    live per request — cli/kb-lint-summary.ts, derive-don't-store).
+ *    live per request — packages/knowledge/kb-lint-summary.ts, derive-don't-store).
  *    home.mjs HOME.2 keeps the deep two-strip coverage (it seeds a gated
  *    project AND a lint-flagged KB); a keeper pin below guards that.
  */

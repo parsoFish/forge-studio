@@ -2,7 +2,7 @@
  * bridge-agents-history-rows.ts — the four collectors behind
  * `GET /api/agents/:slug/history` and `GET /api/agents/runs/recent`.
  *
- * Carved out of `cli/ui-bridge.ts` (M4-agents, exit row 2). Like its sibling
+ * Carved out of `apps/forge/ui-bridge.ts` (M4-agents, exit row 2). Like its sibling
  * `bridge-agents-run-state.ts`, every symbol here served the `/api/agents/*`
  * routes and nothing else — checked per symbol before the move.
  *
@@ -69,7 +69,7 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
   const nodeId = deps.buildAgentSlugToNodeId(forgeRoot).get(slug);
   if (!nodeId) return [];
   const rows: AgentHistoryRow[] = [];
-  // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+  // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
   for (const run of deps.cachedListRuns(forgeRoot, Date.now())) {
     const status = run.phases[nodeId];
     if (status === undefined) continue; // this run's flow never reached the node — no row, never fabricated

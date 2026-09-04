@@ -458,7 +458,7 @@ export function lintHookDefinitions(forgeRoot: string): Finding[] {
 // of the same defect class: a rule implemented, unit-tested, and inert
 // because production never invokes it — see cli/bridge-studio-writes-hook-
 // unknown.test.ts's header). `lintHookComposition` below scans ON-DISK
-// agents; the bridge PUT route (cli/bridge-studio-writes.ts) needs the SAME
+// agents; the bridge PUT route (apps/forge/bridge-studio-writes.ts) needs the SAME
 // rule applied to the IN-MEMORY candidate composition it is about to write,
 // which is NOT yet on disk — re-scanning disk there would silently miss the
 // very save it's supposed to gate. One shared rule, two callers, rather than

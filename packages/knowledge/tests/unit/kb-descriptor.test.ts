@@ -173,7 +173,7 @@ describe('deriveKbUsageDefaults — band vocabulary mapping (R1-06 WI-1, T1 ruli
 });
 
 // ---------------------------------------------------------------------------
-// (4) origin round-trip — moved from `cli/studio-provenance.test.ts` (AT-6)
+// (4) origin round-trip — moved from `apps/forge/studio-provenance.test.ts` (AT-6)
 //
 // It was the only case in that 654-line bridge integration test that touched
 // these two functions, and the only reason a `cli/` file imported

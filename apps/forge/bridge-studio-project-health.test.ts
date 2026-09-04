@@ -2,7 +2,7 @@
  * W8-C3 WI-1 — the SERVER half of the projects index's health signal.
  *
  * RED at branch base (`d17b4251`): `loadProjectsWithMeta`
- * (cli/bridge-studio.ts:375) returns a project with NO health field at all,
+ * (apps/forge/bridge-studio.ts:375) returns a project with NO health field at all,
  * and worse, it derives nothing about the config's validity — it short-circuits
  * on `if (!ref.hasConfig) return result;` (:421) and swallows a malformed
  * config in `catch { /* ignore unreadable project.json *\/ }` (:457). A
@@ -20,7 +20,7 @@
  * writer could forget to update. If the validator's opinion changes, the
  * health signal changes with it in the same call.
  *
- * RUN: node --test --experimental-strip-types cli/bridge-studio-project-health.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/bridge-studio-project-health.test.ts
  */
 
 import { test, before, after } from 'node:test';

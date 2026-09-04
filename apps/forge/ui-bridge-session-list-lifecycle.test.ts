@@ -2,7 +2,7 @@
  * W8-A2 (ON-7 defect 1, WI-1a) — the four BESPOKE per-kind session-list
  * routes (`GET /api/architect/sessions`, `/api/instructions/sessions`,
  * `/api/demo-builder/sessions`, `/api/project-brain/sessions`) never called
- * `deriveSessionLifecycleFor` before this fix — `cli/ui-bridge.ts` imported
+ * `deriveSessionLifecycleFor` before this fix — `apps/forge/ui-bridge.ts` imported
  * it once and called it once, from the GENERIC aggregate index's row
  * collector (`collectStudioSessionIndexRows`) alone. An operator who opens
  * one of the four DEDICATED screens (the ones a human actually visits) saw
@@ -15,10 +15,10 @@
  * Every case here drives the REAL route through a REAL `startBridge()` —
  * never the derivation called directly — so a route that forgets to wire
  * the helper in shows up here, exactly the discipline
- * `cli/ui-bridge-served-file-headers.test.ts` and
- * `cli/bridge-studio-lifecycle.test.ts` already established for this file.
+ * `apps/forge/ui-bridge-served-file-headers.test.ts` and
+ * `packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts` already established for this file.
  *
- * RUN: node --experimental-strip-types --test cli/ui-bridge-session-list-lifecycle.test.ts
+ * RUN: node --experimental-strip-types --test apps/forge/ui-bridge-session-list-lifecycle.test.ts
  */
 
 import { test, before, after } from 'node:test';
@@ -44,7 +44,7 @@ const NOW = Date.now();
 const MIN = 60_000;
 
 // The operator's real crashed-session shape (mirrors
-// cli/bridge-studio-lifecycle.test.ts's KB_CLEANUP_STDERR — an
+// packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts's KB_CLEANUP_STDERR — an
 // InteractiveRunnerError, last non-stack line is the message
 // `extractErrorMessage` must surface).
 const ARCHITECT_STDERR = [

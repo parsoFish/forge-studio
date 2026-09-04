@@ -225,7 +225,7 @@ test('renderSegment: each of the SEVEN known segment kinds renders its exact, pi
 // ---------------------------------------------------------------------------
 // R6-06 (D6/D7) — the segment vocabulary EXTENDS additively: an EIGHTH
 // member, {kind:'standalone'}. A standalone worker dispatch (R6-06's own
-// execution path — cli/ui-bridge-agent-history.test.ts) carries no run-level
+// execution path — apps/forge/ui-bridge-agent-history.test.ts) carries no run-level
 // facts to narrate (no work-items/gate-fails/review-findings/merged/etc — it
 // isn't a flow run at all), so this is a bare, context-free POSITIVE marker
 // the mockup puts in the row's free-text `sub` column, per D7 — never a

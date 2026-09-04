@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for the onboard-preflight PLATFORM SEAM (R4-18): a
  * `gate: contract` flow node executes the REAL preflight (`runPreflight`
- * from `cli/preflight.ts`), orchestrator-side, via the `onboard-preflight`
+ * from `packages/projects/preflight.ts`), orchestrator-side, via the `onboard-preflight`
  * band guard.
  *
  * W7-C1 (flows-20): the `onboard-project` OOTB flow wrapper was RETIRED —

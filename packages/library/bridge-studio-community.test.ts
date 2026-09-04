@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for cli/bridge-studio-community.ts (R3-07-F1/F2/F3,
+ * Acceptance tests for packages/library/bridge-studio-community.ts (R3-07-F1/F2/F3,
  * `_wave5/specs/R3-07.md`) — DOES NOT EXIST YET. This file is RED at branch
  * base: `Cannot find module './bridge-studio-community.ts'` on import. Do
  * not stub the module into existence; red is the deliverable of this round.
@@ -12,7 +12,7 @@
  *
  * D2 (structural negative AC, restated from the spec): NO approve, override,
  * or trust-mutating affordance exists anywhere under `/community`. This file
- * proves the ROUTE surface refuses one; `cli/community-no-trust-decisions.test.ts`
+ * proves the ROUTE surface refuses one; `packages/library/community-no-trust-decisions.test.ts`
  * proves the IMPORT surface never references the four trust-mutating functions
  * (a page/helper could otherwise exist unwired to any route).
  *
@@ -24,7 +24,7 @@
  * campaign's own recurring defect class, "an optional param the production
  * caller forgets").
  *
- * Style mirrors cli/bridge-studio-connections.test.ts exactly: a single
+ * Style mirrors packages/library/bridge-studio-connections.test.ts exactly: a single
  * bridge instance for the whole file (`before`/`after`), each test writing
  * its own catalog/vendored fixtures so nothing leaks across tests.
  *
@@ -42,7 +42,7 @@
  *    Fixture copied from `orchestrator/studio/hook-scan.test.ts`'s own
  *    canonical exfil fixture (`EXFIL_SCRIPT`/`DENY_ALL`), not reinvented.
  *  - M3 (mandatory): `handleStudioCommunityRoutes` must be proven MOUNTED in
- *    `cli/ui-bridge.ts`'s real dispatcher — every test in this file already
+ *    `apps/forge/ui-bridge.ts`'s real dispatcher — every test in this file already
  *    drives requests through `startBridge` (the real dispatcher), which is
  *    the STRONGEST available check (a live HTTP round trip, not a
  *    source-text grep) and would itself 404 if the route were never
@@ -62,7 +62,7 @@
  * real invocation) — the same technique the reviewer used to reproduce it.
  * AT GROUP 1 (the connection-install `ok` field lying about a real failure)
  * is covered in the SEPARATE file
- * `cli/bridge-studio-community-connection-install.test.ts` — see that
+ * `packages/library/bridge-studio-community-connection-install.test.ts` — see that
  * file's own header for why it needs its own environment.
  *
  * ---------------------------------------------------------------------------
@@ -684,7 +684,7 @@ test('M1: a genuinely BLOCKED community hook still materialises (D2: install nev
 // ---------------------------------------------------------------------------
 // Structural negative AC — no approve/override/create/edit route exists,
 // proven against the REAL bridge dispatcher (mirrors
-// cli/connections-no-authoring.test.ts's bridge-refusal half).
+// packages/library/connections-no-authoring.test.ts's bridge-refusal half).
 // ---------------------------------------------------------------------------
 
 test('the real bridge REFUSES POST/PUT/DELETE at /api/studio/community (collection) — no create route exists', async () => {
@@ -822,7 +822,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
 
 // ---------------------------------------------------------------------------
 // M3 (mandatory, T2 round 2): handleStudioCommunityRoutes must be proven
-// MOUNTED in cli/ui-bridge.ts's real request dispatcher — an unmounted
+// MOUNTED in apps/forge/ui-bridge.ts's real request dispatcher — an unmounted
 // handler 404s in production while every unit/direct-invocation test above
 // stays green ("a gate that defers to a caller which does not exist is not
 // a gate"). The STRONGEST available check is a live HTTP round trip through

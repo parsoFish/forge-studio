@@ -12,12 +12,12 @@
  * response (200, `{ok:true,sessionId,mode}`), so there is no wire-observable
  * oracle for "did the read escape". A call-record spy is not available
  * either: this repo has empirically verified (see
- * cli/instructions-start-read-guard.test.ts's own header, and the spawn note
- * in cli/ui-bridge-authoring-start.test.ts) that node:test's `mock.method`
+ * apps/forge/instructions-start-read-guard.test.ts's own header, and the spawn note
+ * in apps/forge/ui-bridge-authoring-start.test.ts) that node:test's `mock.method`
  * cannot redefine ui-bridge's named ESM imports.
  *
  * This handler is a SUBTLER case than the instructions/start precedent it
- * mirrors (forge-osz, cli/instructions-start-read-guard.test.ts). There, NO
+ * mirrors (forge-osz, apps/forge/instructions-start-read-guard.test.ts). There, NO
  * guard preceded the read at all. Here, a containment guard —
  * `resolveDemoSessionDir`, which itself calls `resolveGuardedPath(projectsRoot,
  * [project, '_demo', sessionId])` — DOES run earlier in this very block and
@@ -31,7 +31,7 @@
  * changed. The only honest, RED-at-base assertion is therefore structural:
  * the value the read is built from must literally BE the guard's own output,
  * and the raw fold must be gone — the same shape
- * cli/instructions-start-read-guard.test.ts and
+ * apps/forge/instructions-start-read-guard.test.ts and
  * roadmap-serpentine-retired.test.ts use to pin the ABSENCE of a code shape.
  *
  * RED-AT-BASE: inside the `/api/demo-builder/start` block, `repoPath` is
@@ -62,7 +62,7 @@ import { startBridge } from '../../apps/forge/ui-bridge.ts';
 // ===========================================================================
 
 // M4 session-routes carve: POST /api/demo-builder/start moved verbatim out of
-// cli/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING gate, so it
+// apps/forge/ui-bridge.ts into @forge/sessions. This is a SOURCE / ORDERING gate, so it
 // has to read the file the handler now lives in — left pointing at the host it
 // would pass vacuously against a file the code is no longer in.
 const SRC = readFileSync(
@@ -145,7 +145,7 @@ test('demo-builder/start: body.project must be contained via resolveGuardedPath 
 
 // ===========================================================================
 // Part 2 — behaviour positive controls (must pass BEFORE and AFTER the fix).
-// Wire-level, mirroring cli/bridge-studio-demo-builder-containment.test.ts's
+// Wire-level, mirroring apps/forge/bridge-studio-demo-builder-containment.test.ts's
 // harness (ephemeral port, temp projectsRoot, no SDK spawn).
 // ===========================================================================
 

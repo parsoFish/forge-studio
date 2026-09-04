@@ -331,7 +331,7 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       }
       // SEC-02: this sweep reads `cycle_id` straight off a ready-for-review
       // manifest that never necessarily passed through ingest validation (the
-      // same manifest-poisoning threat model `cli/forge-requeue-containment.test.ts`
+      // same manifest-poisoning threat model `packages/flows/forge-requeue-containment.test.ts`
       // covers for `runRequeue`) — an entry point independent of
       // `applyReviewVerdict`. `createLogger` and `writeVerdictJson` further
       // down both do `resolve(logsRoot, cycleId)`, so validate before either

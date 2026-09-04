@@ -11,7 +11,7 @@
  *
  * ARCHITECTURE (my own design decision, since nothing existed to constrain
  * it — documented so the implementer and I agree on the seam): the SERVER
- * route (`cli/ui-bridge-agent-history.test.ts`, Task 1) already reduces
+ * route (`apps/forge/ui-bridge-agent-history.test.ts`, Task 1) already reduces
  * status/cost to the TARGET's own per-row fact (D3) before the wire — that
  * is where the "aggregate vs per-target" ambiguity is resolved, because only
  * the server has direct filesystem access to a node's `phaseMeta` / a
@@ -879,7 +879,7 @@ test('DEFECT 2 REGRESSION LOCK: fully valid entries across all three linkKinds (
 
 test('W8-A2 (ON-7 defect 4): a standalone entry with status "stalled" is accepted `found` — NOT rejected as the whole response `unresolved`', () => {
   // KILLS: `AgentStandaloneRunEntry['status']`/`STANDALONE_STATUSES` left
-  // at their pre-W8-A2 five-member vocabulary. `cli/ui-bridge.ts`'s
+  // at their pre-W8-A2 five-member vocabulary. `apps/forge/ui-bridge.ts`'s
   // `StandaloneRunState['state']` grew a 'stalled' member (ON-7 defect 4);
   // this resolver's per-row validation is the ENFORCEMENT point for what a
   // standalone row's status may be, and — per this module's own doc
@@ -962,7 +962,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // ROUND 8 — SHIPPED-BLIND DEFECT: `GET /api/agents/:slug/history` returns a
 // PERFECT 200 (`{ok:true, rows:[{id,linkKind,href,status,costUsd}]}`) —
 // every one of the 43 tests above is green, and so is every test in
-// `cli/ui-bridge-agent-history.test.ts` — yet the real page never leaves
+// `apps/forge/ui-bridge-agent-history.test.ts` — yet the real page never leaves
 // `[data-component="history-ledger-unresolved"]`. Why every test above is
 // blind to it: they all construct `LedgerRow`-shaped bodies DIRECTLY
 // (`validFlowNodeRow()` etc. already carry `narrative`/`narrativeKinds`/
@@ -982,7 +982,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // WIRE ENVELOPE ASSUMED BELOW (no spec pins this — flagged, not invented
 // from nothing): `{rows: WireEntry[]}`, each item tagged with the SAME
 // `linkKind` discriminator the server already emits TODAY
-// (`AgentHistoryRow.linkKind`, cli/ui-bridge.ts:773), carrying that path's
+// (`AgentHistoryRow.linkKind`, apps/forge/ui-bridge.ts:773), carrying that path's
 // OWN entry fields verbatim alongside it. Chosen because it changes the
 // LEAST about the current, already-shipped wire contract (same top-level
 // `rows` array, same `linkKind` tag) while fixing exactly the defect (raw
@@ -995,7 +995,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // never accept pre-derived narrative) does not change with the envelope.
 //
 // The `CAPTURED_TODAY_*` constants below are MIRRORED, not hand-invented —
-// transcribed verbatim from `cli/ui-bridge-agent-history.test.ts`'s "ROUND
+// transcribed verbatim from `apps/forge/ui-bridge-agent-history.test.ts`'s "ROUND
 // 8 CAPTURE + DRIFT GUARD" tests, which hit the REAL route via a REAL
 // in-process bridge (that file cannot import this one — see its own
 // comment on the extensionless-import ESM failure, verified by attempting
@@ -1018,7 +1018,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 //
 // FLOW-NODE — when: `run.startedAt`; what: `run.initiative`. MEASURED,
 // already correct in round 8. `GET /api/runs` ships the full `Run` —
-// confirmed live by `cli/ui-bridge-agent-history.test.ts`'s own "ROUND 8
+// confirmed live by `apps/forge/ui-bridge-agent-history.test.ts`'s own "ROUND 8
 // CAPTURE + DRIFT GUARD (flow-node)" test, which asserts `run.startedAt`/
 // `run.initiative`/`run.flowId` directly off a REAL response body from a
 // REAL in-process bridge. `forge-ui/lib/flow-ledger.ts:126` already derives
@@ -1032,12 +1032,12 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // the correct, honestly-available FIRST component of that same idea.
 //
 // STANDALONE — when: the run's own first-event `started_at`. MEASURED,
-// already correct in round 8: `collectStandaloneRows` (cli/ui-bridge.ts:938)
+// already correct in round 8: `collectStandaloneRows` (apps/forge/ui-bridge.ts:938)
 // parses the run's `events.jsonl` into `parsed` before deriving state/cost
 // — that array's own first event's `started_at` is honestly in hand. The
 // PIN test's `'2026-01-01T00:00:00.000Z'` is exactly
 // `seedStandaloneRun`'s own hardcoded start-event timestamp
-// (cli/ui-bridge-agent-history.test.ts:255).
+// (apps/forge/ui-bridge-agent-history.test.ts:255).
 // what: NEGATIVE RESULT — measured this round, genuinely absent server-side.
 // A standalone run's own events (`orchestrator/run-agent.ts:320-382`) carry
 // only `phase: 'orchestrator'`, `skill: <agentSlug>`, `metadata:
@@ -1063,23 +1063,23 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // `_<kind>-<sessionId>/events.jsonl` log dir. MEASURED, already correct in
 // round 8 — the PIN test's `'2026-01-01T00:10:00.000Z'` is exactly
 // `seedArchitectSession`'s own hardcoded start-event timestamp
-// (cli/ui-bridge-agent-history.test.ts:337).
+// (apps/forge/ui-bridge-agent-history.test.ts:337).
 // what: `session-kinds.yaml`'s matching descriptor's OWN `title` field.
 // MEASURED, CONFIRMED this round by reading the REAL, live
 // `studio/session-kinds.yaml` (not merely the test's own verbatim-copied
 // fixture): the `architect` descriptor's `title` is, byte-for-byte,
 // `Planning session` (`studio/session-kinds.yaml:17`) — exactly round 8's
 // choice. `loadSessionKinds` (already called by `collectSessionRows`,
-// cli/ui-bridge.ts:1044) has this value in hand for free — no new read
+// apps/forge/ui-bridge.ts:1044) has this value in hand for free — no new read
 // required to emit it. JUDGEMENT CALL, NOT PINNED (flagged for the ruler,
 // not silently decided): the mockup's own session `what` values (data.jsx:
 // 305-306, e.g. `'betterado roadmap refresh'`) are RICHER per-INSTANCE
 // narratives than a per-KIND static title, and a session's own
 // `status.json` genuinely carries a `project` field alongside `phase`
-// (seeded by `seedArchitectSession`, cli/ui-bridge-agent-history.test.ts:
+// (seeded by `seedArchitectSession`, apps/forge/ui-bridge-agent-history.test.ts:
 // 330) that COULD be combined with the title for a closer mockup match
 // (e.g. `"Planning session · gitpulse"`) — but `readGuardedSessionStatus`
-// (cli/ui-bridge.ts:1015) currently narrows its own return type to `{phase?:
+// (apps/forge/ui-bridge.ts:1015) currently narrows its own return type to `{phase?:
 // unknown}` and `collectSessionRows` never reads `project` out of it today,
 // so surfacing it would be a genuine (small) production change, not a
 // value already flowing. That combination is a NEW design decision this
@@ -1112,7 +1112,7 @@ test('ROUND 8, NEGATIVE (item 2 — defect cannot silently return): a response c
 
 test('ROUND 8 ⚑ THE PIN (item 1, round-trip; item 3, per-path — all three linkKinds in ONE body): a wire body carrying the ENTRY shapes agent-ledger.ts declares, tagged with linkKind, resolves found via the REAL resolveAgentHistoryFromResponse, with rows IDENTICAL to calling deriveAgentLedgerRows directly on the same entries — proves the resolver is wired to DERIVE, not to accept pre-derived rows. RED today: the current resolver treats each item as an already-derived LedgerRow — isValidLedgerRow rejects the flow-node item outright (no id/when/what/narrative — only run/nodeId/href/linkKind) and the standalone/session items too (no narrative/narrativeKinds) — so every item fails validation and the whole response resolves unresolved, never found', () => {
   // Entry facts below are the SAME real facts captured live in
-  // cli/ui-bridge-agent-history.test.ts's ROUND 8 tests (run.id/flowId/
+  // apps/forge/ui-bridge-agent-history.test.ts's ROUND 8 tests (run.id/flowId/
   // initiative/startedAt/phases/phaseMeta for the flow-node path; the fixed
   // event timestamps `seedStandaloneRun`/`seedArchitectSession` always write
   // for standalone/session `when`) — NOT invented.

@@ -1,9 +1,9 @@
 /**
- * Acceptance tests for cli/bridge-studio-templates.ts (R3-06).
+ * Acceptance tests for packages/library/bridge-studio-templates.ts (R3-06).
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-templates.ts` import is the
- * expected red). Mirrors cli/bridge-studio-skills.test.ts's idiom: a real
+ * expected red). Mirrors packages/library/bridge-studio-skills.test.ts's idiom: a real
  * bridge (startBridge) + fetch, plus one direct handler-invocation test for
  * the "returns false when unhandled" passthrough contract.
  *

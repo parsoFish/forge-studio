@@ -425,7 +425,7 @@ export type RoadmapInitiative = {
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), sourced from
    * `Run.completedAt` (orchestrator/run-model.ts) via `buildProjectRoadmap`
-   * (cli/bridge-studio.ts). Drives the roadmap canvas's completion-time X
+   * (apps/forge/bridge-studio.ts). Drives the roadmap canvas's completion-time X
    * axis — absent (never fabricated) for a still-open initiative, or one
    * whose cycle log carries no derivable completion; such a card lands in
    * the canvas's projected zone with an honest "no date" marker instead.
@@ -796,7 +796,7 @@ export type DemoModelCheckpoint = {
   metrics?: DemoHarnessMetricRow[];
   beforeImage?: string | null;
   afterImage?: string | null;
-  // Mirror of cli/demo-model.ts — a kind:'video' checkpoint carries a relative
+  // Mirror of packages/factory/demo-model.ts — a kind:'video' checkpoint carries a relative
   // sibling path (served via the bridge artifact route, NOT a data: URI).
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
@@ -845,12 +845,12 @@ export type DemoModel = {
    * with a verdict (met/partial/missed) and concrete evidence.
    */
   acEvaluations?: DemoAcEvaluation[];
-  // Rich structured sections (mirrors cli/demo-model.ts DemoModel)
+  // Rich structured sections (mirrors packages/factory/demo-model.ts DemoModel)
   summary?: DemoSummarySection;
   apiDiff?: DemoApiDiffEntry[];
   testEvidence?: DemoTestResultRow[];
   filesChanged?: Array<{ path: string; note?: string }>;
-  // New-capability fields (sibling agent adds to cli/demo-model.ts)
+  // New-capability fields (sibling agent adds to packages/factory/demo-model.ts)
   usage_example?: string;
   impact?: string[];
 };
@@ -878,7 +878,7 @@ export type ArchitectQuestion = {
    *  handle, posted back with this question's answer so the durable record
    *  binds by ID, not by question TEXT. The GENERIC session interview always
    *  carries one (the bridge derives it from the question's position in
-   *  questions.json — `pendingQuestionId`, cli/bridge-studio-sessions.ts,
+   *  questions.json — `pendingQuestionId`, packages/sessions/bridge-studio-sessions.ts,
    *  and `parsePendingQuestionsMeta` REQUIRES it). Architect's own bespoke
    *  interview wire (`/api/architect/...`) declares no ids at all, so this
    *  is optional at the TYPE level and simply absent there — not a
@@ -923,7 +923,7 @@ export type ArchitectSessionSummary = {
   staleMs?: number;
   /**
    * W8-A2 (ON-7 defect 1) — the derived session lifecycle (state/needsYou/
-   * error/idleMs/cancellable — `cli/bridge-studio-lifecycle.ts`), the SAME
+   * error/idleMs/cancellable — `packages/sessions/bridge-studio-lifecycle.ts`), the SAME
    * derivation the aggregate `/api/studio/sessions` index already carried;
    * `GET /api/architect/sessions` never called it before. `error` is the
    * runner's own crash message (only for `state: 'crashed'`) —
@@ -1081,7 +1081,7 @@ export async function startInstructions(input: {
 // deleted; every instructions affordance now POSTs through the generic
 // `postSessionAffordance` (`@/lib/session-client`) instead. The three bridge
 // routes themselves are unchanged server-side (still real, independently
-// tested bridge surface — cli/ui-bridge-instructions.test.ts) — only their
+// tested bridge surface — apps/forge/ui-bridge-instructions.test.ts) — only their
 // forge-ui client wrappers had no remaining caller.
 
 // ---- Demo-builder (Stage B) ----------------------------------------------
@@ -1132,7 +1132,7 @@ export function demoFragmentUrl(project: string, sessionId: string, element: str
 
 /** R4-16: bridge-relative URL serving one file out of a specific demo
  *  generation snapshot (`GET /api/demo-builder/generation/<project>/<sid>/
- *  <n>/<filename>`, cli/ui-bridge.ts). `generation` is the snapshot's own
+ *  <n>/<filename>`, apps/forge/ui-bridge.ts). `generation` is the snapshot's own
  *  recorded number (GenerationGalleryEntry.number), never an array index. */
 export function demoGenerationFileUrl(project: string, sessionId: string, generation: number, filename: string): string {
   return `/api/demo-builder/generation/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}/${generation}/${encodeURIComponent(filename)}`;
@@ -1285,7 +1285,7 @@ export async function startAuthoring(input: {
 }
 
 // W8-B4 FIX-1 — `finalizeAuthoring()` (a typed wrapper over the DEDICATED
-// `POST /api/studio/authoring/finalize` route, cli/bridge-studio-authoring.ts)
+// `POST /api/studio/authoring/finalize` route, packages/library/bridge-studio-authoring.ts)
 // was removed here: `git grep -n finalizeAuthoring forge-ui/ cli/ orchestrator/
 // scripts/` found ZERO callers anywhere in the codebase — the real Approve
 // path has gone through the GENERIC verdict route (`postSessionAffordance`
@@ -1296,7 +1296,7 @@ export async function startAuthoring(input: {
 // W8-B4/WI-3) BECAUSE it had no caller exercising it; keeping a zero-caller
 // wrapper around is exactly how that kind of drift recurs invisibly. The
 // dedicated server route + its own acceptance suite
-// (cli/bridge-studio-authoring-finalize.test.ts) are UNCHANGED and remain a
+// (packages/library/bridge-studio-authoring-finalize.test.ts) are UNCHANGED and remain a
 // legitimate, independently-tested API surface — only this orphaned client
 // wrapper is gone, per the task brief's "do not leave a third half-wired
 // path": a function with no caller is not a caller that should exist.

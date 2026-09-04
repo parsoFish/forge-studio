@@ -14,7 +14,7 @@
  * from `types.ts`, so there is no risk of a validate.ts↔connection-
  * validate.ts import cycle (`ConnectionFinding`'s shape is structurally
  * identical to `Finding`, so `findings.push(...validateConnections(catalog))`
- * in `cli/studio-lint.ts` still type-checks with no cast).
+ * in `apps/forge/studio-lint.ts` still type-checks with no cast).
  *
  * Scans BOTH catalog.tools and catalog.mcps (a connection IS a tools/mcps
  * entry — D2's "no third kind" ruling). Findings use `object:

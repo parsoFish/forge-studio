@@ -10,7 +10,7 @@
 
 import type { KbDrainPerFinding, KbDrainProposedChange, KbDrainState } from './studio-client';
 
-/** Mirrors `cli/bridge-studio-kb-drain.ts`'s `KB_DRAIN_MAX_ROUNDS` — a
+/** Mirrors `packages/knowledge/bridge-studio-kb-drain.ts`'s `KB_DRAIN_MAX_ROUNDS` — a
  *  display-only constant (not imported: that module touches `node:fs` and
  *  forge-ui never cross-imports from `cli/`, this repo's own boundary
  *  convention — see every other client-side type mirror in

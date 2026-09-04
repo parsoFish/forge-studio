@@ -5,7 +5,7 @@
  *
  * The defect this module exists to close: `kind:'template'` (W8-B4/WI-3)
  * was taught to the server's DEDICATED finalize route
- * (`cli/bridge-studio-authoring.ts`'s `runFinalize`) but never to the
+ * (`packages/library/bridge-studio-authoring.ts`'s `runFinalize`) but never to the
  * GENERIC verdict route's own copy of this rule
  * (`cli/bridge-studio-affordances.ts`'s `deriveAuthoringPackageKind`) — the
  * route the operator's real Approve button actually calls
@@ -19,12 +19,12 @@
  * boundary import (forge-ui never imports cli/ at runtime; see
  * forge-ui/lib/session-lifecycle-client.ts's own header, and
  * forge-ui/lib/session-client.ts's "no-cross-boundary-import convention").
- * Kept honest by `cli/authoring-package-shape-parity.test.ts`, which is a
+ * Kept honest by `packages/sessions/tests/contract/authoring-package-shape-parity.test.ts`, which is a
  * NODE-SIDE TEST (not part of either production bundle) that imports BOTH
  * arrays directly — a plain, framework-free TS module under forge-ui/lib/
  * (no JSX, no 'use client', no Next-only API) IS importable by a
  * `node --experimental-strip-types --test` file, exactly as
- * `cli/id-rule.test.ts` already does with `forge-ui/lib/
+ * `apps/forge/id-rule.test.ts` already does with `forge-ui/lib/
  * project-save-payload.ts` — and fails the moment the two arrays disagree,
  * so a shape added on one side and forgotten on the other is a RED test,
  * not a silent gap.
@@ -37,7 +37,7 @@
  */
 
 /** The set of package kinds an authoring session can drive to `committed`
- *  (`runFinalize`'s own `kind` parameter, cli/bridge-studio-authoring.ts). */
+ *  (`runFinalize`'s own `kind` parameter, packages/library/bridge-studio-authoring.ts). */
 export type AuthoringPackageKind = 'skill' | 'hook' | 'template';
 
 export type AuthoringPackageShape = {

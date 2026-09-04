@@ -4,7 +4,7 @@
  * file's header for the full route contract this strategy is one arm of.
  *
  * `sanitizeError` rides in as a parameter (never a direct `cli/` import)
- * because that would make this a NEW importer of `cli/bridge-studio.ts` —
+ * because that would make this a NEW importer of `apps/forge/bridge-studio.ts` —
  * the retained route file already imports it and passes it down.
  */
 
@@ -41,8 +41,8 @@ export async function finalizeSkillFromLanded(
     // Finding 2 fix: installSkillPackage is idempotent BY DESIGN — an
     // existing skills/<id>/SKILL.md means it wrote NOTHING and the
     // operator's authored draft was just silently discarded. The two
-    // sibling callers of this same function (cli/bridge-studio-skills.ts,
-    // cli/bridge-studio-community.ts) both surface `alreadyInstalled`; this
+    // sibling callers of this same function (packages/library/bridge-studio-skills.ts,
+    // packages/library/bridge-studio-community.ts) both surface `alreadyInstalled`; this
     // route must too, rather than reporting the discard as a 200 success.
     if (result.alreadyInstalled) {
       return { ok: false, status: 409, error: `skill "${id}" already exists — choose a different id` };

@@ -165,7 +165,7 @@ test('the runner source imports no phase and no preflight — the exit row, asse
   const src = readFileSync(new URL('../../packages/flows/flow-runner.ts', import.meta.url), 'utf8');
   assert.equal((src.match(/from '\.\/phases\//g) ?? []).length, 0, "flow-runner.ts must import nothing from './phases/'");
   // The IMPORT form, not the word: the runner's own doc comment names
-  // `cli/preflight.ts` to explain why it does not import it, and a test that
+  // `packages/projects/preflight.ts` to explain why it does not import it, and a test that
   // failed on prose would push that explanation out of the file.
   assert.equal((src.match(/from '\.\.\/cli\/preflight/g) ?? []).length, 0, 'flow-runner.ts must not import the preflight');
 });

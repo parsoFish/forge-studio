@@ -1,19 +1,19 @@
 /**
  * Bead forge-c6h / R4-17 round-4 — `--projects-root <abs>` argv seam.
  *
- * `spawnAgentDispatch` (cli/ui-bridge.ts) never actually spawns in this test
- * process (see `cli/ui-bridge-agent-run-ceiling.test.ts`'s own "(E) The
+ * `spawnAgentDispatch` (apps/forge/ui-bridge.ts) never actually spawns in this test
+ * process (see `apps/forge/ui-bridge-agent-run-ceiling.test.ts`'s own "(E) The
  * CLI-argv dispatch seam" section, which this file mirrors) — so the seam is
  * pinned as PURE FUNCTION COMPOSITION through the exported
  * `buildAgentDispatchArgs`:
  *   1. `buildAgentDispatchArgs` includes `--projects-root <value>` when given
  *      one — pure, no execution needed.
  *   2. ROUND-TRIP: `parseAgentDispatchArgs(buildAgentDispatchArgs(...))`
- *      (`cli/agent-run.ts`) — the one test that would have caught "the
+ *      (`packages/agents/agent-run.ts`) — the one test that would have caught "the
  *      bridge builds the flag but the CLI-side parser never reads it".
  *
  * The generic `POST /api/agents/:slug/run` route's call site
- * (cli/ui-bridge.ts:~2782) now threads `ctx.projectsRoot` through as this
+ * (apps/forge/ui-bridge.ts:~2782) now threads `ctx.projectsRoot` through as this
  * new trailing argument — that call site is exercised indirectly by every
  * existing route-level test that already covers `/api/agents/:slug/run`; this
  * file only pins the pure argv-building/parsing seam itself, per the T3

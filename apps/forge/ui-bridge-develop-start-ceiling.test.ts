@@ -10,15 +10,15 @@
  * and is UNCHANGED by this WI — this file does not touch env precedence, it
  * only pins that the route's new body field reaches the manifest at all.
  *
- * Mirrors the `cli/ui-bridge-agent-run-ceiling.test.ts` harness conventions
+ * Mirrors the `apps/forge/ui-bridge-agent-run-ceiling.test.ts` harness conventions
  * (temp forgeRoot + real `startBridge`, CSRF header, assert-manifest-content
  * before trusting a response-shape proxy) and the sibling
- * `cli/ui-bridge-develop-start.test.ts` fixture shape (`pendingManifest`,
+ * `apps/forge/ui-bridge-develop-start.test.ts` fixture shape (`pendingManifest`,
  * `flow_id: forge-architect` + `specs` so `hasDecompositionEvidence` passes
  * and the enqueue doesn't short-circuit on `not-planned`).
  *
  * RUN COMMAND:
- *   node --experimental-strip-types --test cli/ui-bridge-develop-start-ceiling.test.ts
+ *   node --experimental-strip-types --test apps/forge/ui-bridge-develop-start-ceiling.test.ts
  *
  * Route contract pinned:
  *   (1) A single-id batch with a valid `costCeilingUsd` stamps

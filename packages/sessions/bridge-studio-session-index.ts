@@ -61,12 +61,12 @@ export type SessionIndexRow = {
   sessionId: string;
   project: string;
   phase: string;
-  /** Derived via `isTerminalPhase` (cli/bridge-studio-sessions.ts) — the
+  /** Derived via `isTerminalPhase` (packages/sessions/bridge-studio-sessions.ts) — the
    *  SAME derivation the single-session route's tail-gating already uses,
    *  never a second, hand-kept terminal-phase notion. */
   terminal: boolean;
   /** W7-A2 — TRUTHFUL in both directions: `deriveSessionLifecycle(...)
-   *  .needsYou` (cli/bridge-studio-lifecycle.ts) — true iff an operator
+   *  .needsYou` (packages/sessions/bridge-studio-lifecycle.ts) — true iff an operator
    *  gate is open (`awaits: questions|verdict` on the phase row, or the
    *  LEGACY_SESSION_AWAITS_PHASES table for architect/project-brain) OR the
    *  runner crashed/stalled. An agent that is merely working (a `step:
@@ -76,7 +76,7 @@ export type SessionIndexRow = {
    *  (home-sessions-08, sessions-kinds-15). */
   needsYou: boolean;
   /** W7-A2 — the derived lifecycle state (`working` | `awaiting-operator` |
-   *  `crashed` | `stalled` | `terminal`); see cli/bridge-studio-lifecycle.ts. */
+   *  `crashed` | `stalled` | `terminal`); see packages/sessions/bridge-studio-lifecycle.ts. */
   state: SessionLifecycleState;
   /** W7-A2 — the runner's crash message read live off
    *  `_logs/_<kind>-<sid>/stderr.log` for a `crashed` row; `null` otherwise. */
@@ -249,7 +249,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // derives `terminal` before `lifecycle` so that is true structurally.
     const { terminal, lifecycle } = deriveRowLifecycle(ctx, descriptor, phase, project, sessionId);
     // W8-B3 (sessions-kinds-R06/31) — the SAME read-time fixed-tier fallback
-    // the session shell applies (cli/session-model-tier.ts), so the index
+    // the session shell applies (packages/sessions/session-model-tier.ts), so the index
     // MODEL column and the session's own chip can never disagree about what a
     // fixed-tier kind ran on. The index used to show "—" for every architect
     // and project-brain row for exactly this reason.
@@ -267,7 +267,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       modelTier: resolvedTier,
       updatedAt,
       // W8-F6 (bead forge-6gv.27) — the ONE server-side builder of a session
-      // address (cli/bridge-studio-sessions.ts), so the index and the route it
+      // address (packages/sessions/bridge-studio-sessions.ts), so the index and the route it
       // links to can never disagree about where a session lives. Every row
       // here is status.json-backed by construction (`readGuardedSessionIndexSummary`
       // above, and the four bespoke per-kind listers), i.e. already

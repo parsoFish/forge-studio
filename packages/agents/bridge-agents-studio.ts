@@ -1,8 +1,8 @@
 /**
  * bridge-agents-studio.ts — the three `/api/studio/agents*` routes.
  *
- * Carved out of `cli/bridge-studio.ts` (the roster GET) and
- * `cli/bridge-studio-writes.ts` (the upsert/delete block) in M4-agents,
+ * Carved out of `apps/forge/bridge-studio.ts` (the roster GET) and
+ * `apps/forge/bridge-studio-writes.ts` (the upsert/delete block) in M4-agents,
  * exit row 2.
  *
  * `PUT` AND `DELETE` SHARE ONE HANDLER, DELIBERATELY. In the host they were a
@@ -241,7 +241,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       // skill fell straight through to the rmSync — deleting a package the
       // skills route deliberately refuses, and breaking every agent that
       // composes it at next spawn. Mirror of the skills route's own
-      // isStudioAgent refusal (cli/bridge-studio-skills.ts), pointing the
+      // isStudioAgent refusal (packages/library/bridge-studio-skills.ts), pointing the
       // operator at the surface that owns the object.
       if (!isStudioAgent(skillMdPath)) {
         sendJson(res, 404, {
@@ -302,7 +302,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       // route's own DELETE — e.g. a skill installed then hand-converted to
       // an agent (provenance stripped, runtime added) still has a
       // provenance-installed history. Prune BEFORE the rmSync, mirroring
-      // cli/bridge-studio-skills.ts's DELETE route ordering: a crash
+      // packages/library/bridge-studio-skills.ts's DELETE route ordering: a crash
       // between the two steps then fails CLOSED (an orphaned package that
       // still needs re-review) rather than fails OPEN (a gone package
       // whose stale ledger row would taint a future skill reusing the id).
@@ -463,7 +463,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     // forge-hoq — allowedTools/disallowedTools: SAME inherit-when-omitted /
     // explicit-replaces convention as `materials` above. `disallowed-tools`
     // is the only real fence against a skill reaching the subagent-spawn
-    // tool (cli/studio-lint-tool-fence.ts) — this is a security control, not
+    // tool (packages/library/studio-lint-tool-fence.ts) — this is a security control, not
     // cosmetic state, so a malformed explicit value is REJECTED (400, file
     // byte-unchanged) rather than silently downgraded to "omitted" (the
     // same declared-data-fails-open shape `materials` already guards
@@ -548,7 +548,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
 
     // 5b. Pre-load catalog guard ids for the composition/guard-unknown check
     // below (ADR-027 §6: "the same validation runs at save (bridge PUT) and
-    // at spawn") — mirrors cli/studio-lint.ts's identical block; a missing
+    // at spawn") — mirrors apps/forge/studio-lint.ts's identical block; a missing
     // or malformed catalog leaves the set undefined so the rule simply does
     // not fire (a catalog load failure must not turn every save into a 400).
     let validGuardIds: ReadonlySet<string> | undefined;

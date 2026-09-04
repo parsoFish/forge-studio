@@ -382,7 +382,7 @@ test('duplicateAgentState clears the slug and marks the name as a copy', () => {
 // agent authored from a fenced starter (applyStarter → parseAgentToState →
 // buildAgentPutBody, forge-ui/app/agents/[id]/page.tsx:245-250/460) or a
 // duplicate of a fenced agent (duplicateAgentState) landed on disk UNFENCED
-// — cli/studio-lint-tool-fence.ts's disallowed-tools rule has nothing to
+// — packages/library/studio-lint-tool-fence.ts's disallowed-tools rule has nothing to
 // find, because the field never reached the bridge at all.
 const FENCED_AGENT_FIXTURE: Agent = {
   ...AGENT_FIXTURE,

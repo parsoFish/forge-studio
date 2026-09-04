@@ -89,7 +89,7 @@ export type StudioLintResult = {
  * W7-FIX-A4 (W7A4-04): a kb.yaml whose `id` is not its directory name (or
  * fails the id rule) is dropped by the roster AND loses its derived
  * project↔KB binding with no diagnostic — this is the lint backstop for the
- * SAME predicate (`unroutableKbReason`, cli/kb-sites.ts), mirroring the flow
+ * SAME predicate (`unroutableKbReason`, packages/knowledge/kb-sites.ts), mirroring the flow
  * `dir-name` check above.
  */
 function kbDirNameFindings(kbId: string, kbPath: string): Finding[] {
@@ -169,7 +169,7 @@ export function runStudioLint(root: string): StudioLintResult {
       try {
         const raw = readFileSync(skillMdPath, 'utf8');
         // `{}` bypasses gray-matter's parse cache (poisoning class documented
-        // in cli/theme-frontmatter.ts module header).
+        // in packages/knowledge/theme-frontmatter.ts module header).
         const { data } = matter(raw, {});
         findings.push(...validateLibraryFlag(entryName, data));
       } catch (readErr) {
@@ -500,7 +500,7 @@ export function runStudioLint(root: string): StudioLintResult {
   //     `dev-loop` OR `reviewer` reader grant on any NON-project KB binding,
   //     except the ONE ratified exception: a flow binding scoped to
   //     band:'review-band' may grant the reviewer an advisory read. This applies
-  //     the pure `kbReadPolicyViolation` predicate (cli/kb-read-policy.ts) to
+  //     the pure `kbReadPolicyViolation` predicate (packages/knowledge/kb-read-policy.ts) to
   //     every real, loaded descriptor — the production wiring of a guard that
   //     previously ran only over tmpdir fixtures inside a test. Walks both brain
   //     shapes (top-level + brain/projects/*), per the ADR-010 amendment.

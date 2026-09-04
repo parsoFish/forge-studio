@@ -1,6 +1,6 @@
 /**
  * ACCEPTANCE TESTS (R6-06 round 6, adversarial-containment-review) —
- * `GET /api/agents/:slug/history` (cli/ui-bridge.ts): six LIVE, REPRODUCED
+ * `GET /api/agents/:slug/history` (apps/forge/ui-bridge.ts): six LIVE, REPRODUCED
  * filesystem escapes across its three collectors. D5 in the sibling suite
  * (`ui-bridge-agent-history.test.ts`) already pins that the caller-supplied
  * `slug` is never joined into a path — that claim is TRUE and is NOT what
@@ -29,7 +29,7 @@
  * ADVERSARIAL FINDING (see task report — flagged loudly, not silently
  * designed around): the task brief frames the fix as "the guards already
  * exist, they were simply never called" and names `resolveSafeSessionDir` +
- * `safeReadFileInSession` (cli/bridge-studio-sessions.ts) as the session-side
+ * `safeReadFileInSession` (packages/sessions/bridge-studio-sessions.ts) as the session-side
  * guard pair. Two things measured directly against THIS repo's checked-out
  * source, live, before writing anything below:
  *   (a) `resolveSafeSessionDir`'s current containment check computes

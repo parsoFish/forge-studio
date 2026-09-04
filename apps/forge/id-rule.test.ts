@@ -22,7 +22,7 @@
  *   - project↔KB binding compared across two normalisations (projects-34);
  *   - a create route accepting the id `new` (projects-30 / crosscut-20).
  *
- * RUN: node --test --experimental-strip-types cli/id-rule.test.ts
+ * RUN: node --test --experimental-strip-types apps/forge/id-rule.test.ts
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';

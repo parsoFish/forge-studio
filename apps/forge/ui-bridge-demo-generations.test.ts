@@ -10,13 +10,13 @@
  * reads `body.generation` at all (it unconditionally flips phase→'locking'
  * and 200s); the GET route doesn't exist, so every request to it falls
  * through to the generic unmatched-route handler (`res.writeHead(404);
- * res.end();` — cli/ui-bridge.ts:1298 — an EMPTY body, no JSON). That empty
+ * res.end();` — apps/forge/ui-bridge.ts:1298 — an EMPTY body, no JSON). That empty
  * body is exploited deliberately below: every rejection-probe test calls
  * `res.json()` on the response, which THROWS on today's empty 404 body —
  * this is what makes "malformed input → 400/404" tests genuinely RED right
  * now instead of coincidentally green because the route doesn't exist yet.
  *
- * Harness mirrors cli/ui-bridge-instructions.test.ts's pattern exactly (a
+ * Harness mirrors apps/forge/ui-bridge-instructions.test.ts's pattern exactly (a
  * real bridge via `startBridge`, no SDK spawn — `FORGE_ARCHITECT_NO_SPAWN=1`).
  */
 
@@ -93,7 +93,7 @@ function writeGenerationFixture(sid: string, n: number | string, files: Record<s
  *  WHATWG URL spec treats `%2e`/`%2E` as equivalent to a literal `.` for
  *  dot-segment detection specifically to close this exact bypass, so a real
  *  `fetch()` call collapses it away before the request is ever sent (the same
- *  class of problem documented in cli/bridge-studio-sessions.test.ts's header,
+ *  class of problem documented in packages/sessions/bridge-studio-sessions.test.ts's header,
  *  which resorts to direct handler invocation instead — unavailable here
  *  because `handleDemoBuilder` is not exported from ui-bridge.ts). */
 function rawGet(rawPath: string): Promise<{ status: number; text: string }> {
@@ -538,7 +538,7 @@ test('R4-16 AT-47 (positive control, green today): all 5 demo-builder routes sti
 // resolves to) AND the realpath check in safeReadFileInSession (which
 // computes containment RELATIVE TO whatever sessionDir it is handed — if the
 // session dir itself is the symlink, containment passes trivially against
-// the attacker's own target). `cli/bridge-studio-sessions.ts`'s
+// the attacker's own target). `packages/sessions/bridge-studio-sessions.ts`'s
 // `resolveSafeSessionDir` already solves exactly this, scoped to the
 // `<project>/_<kind>/` parent (its own AT-47) — the fix mirrors that shape,
 // not a projectsRoot-wide check (which would miss a symlink into ANOTHER
@@ -607,7 +607,7 @@ test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir i
 // that earlier work decorative for exactly this route.
 //
 // Fix shape (binding, per the brief): reuse `isContainedProjectRepoPath`
-// (cli/manifest-path-guard.ts, SEC-02) — already hardened over four review
+// (packages/flows/manifest-path-guard.ts, SEC-02) — already hardened over four review
 // rounds — rather than a new check. That function is a pure boolean; the
 // route itself must still construct the 400 + message naming the offending
 // value, which is what these ATs pin at the ROUTE level (the function's own
@@ -749,7 +749,7 @@ for (const bad of [0, {}]) {
 //
 // HOME: pinned here (not duplicated across all four /start route test
 // files) because the defect lives entirely inside the ONE shared function,
-// `invalidProjectRepoPath` (cli/ui-bridge.ts), that every /start route calls
+// `invalidProjectRepoPath` (apps/forge/ui-bridge.ts), that every /start route calls
 // — this file already carries AT-55, the existing non-string-400 coverage
 // for that exact function via the demo-builder route, so extending it here
 // keeps the guard's full contract (TypeError leak closed AND RangeError leak

@@ -2070,7 +2070,7 @@ describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
 // (packages/sessions/bridge-studio-sessions.ts) as a per-kind proxy for "does this kind
 // record turns". It was a stored copy of a fact this module already knows, and
 // it was WRONG for `authoring` — that kind declares a `turnSpec`, yet its start
-// route (`writeAuthoringSession`, cli/ui-bridge.ts) writes `prompt.md` before
+// route (`writeAuthoringSession`, apps/forge/ui-bridge.ts) writes `prompt.md` before
 // the generic spine ever runs, so the proxy claimed "no turns" for a kind that
 // has one from second zero. `sourcesFound` replaces it with the derived fact.
 // ===========================================================================

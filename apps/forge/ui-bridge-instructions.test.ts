@@ -235,7 +235,7 @@ test('start does not 400 on a missing project (only project is required)', async
 // (`readAgentInstructionsFile(repoPath)`, to default `mode`) before ever
 // persisting — an unvalidated read, not just an unvalidated write target.
 // Fix shape (binding): reuse `isContainedProjectRepoPath`
-// (cli/manifest-path-guard.ts, SEC-02) at this route too. No natural home
+// (packages/flows/manifest-path-guard.ts, SEC-02) at this route too. No natural home
 // exists for a dedicated architect-route test FILE separate from
 // ui-bridge-architect.test.ts (which already carries a real "POST
 // /api/architect/start" test and gets its own ATs there) — but this file

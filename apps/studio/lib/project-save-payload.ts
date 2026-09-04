@@ -2,7 +2,7 @@
  * W7-FIX-A4 (W7A4-03) — the ONE place the project editor's Save payload is
  * assembled (forge-ui/app/projects/[id]/page.tsx `handleSave`).
  *
- * Why this exists: a project's KB binding is DERIVED (cli/kb-sites.ts
+ * Why this exists: a project's KB binding is DERIVED (packages/knowledge/kb-sites.ts
  * `projectKbBindings` — from the kb.yaml whose `binding.ref` names the
  * project; "never stored"). The roster serves that derived value as
  * `project.kb`, the editor hydrates its `kb` state from it, and the bridge's

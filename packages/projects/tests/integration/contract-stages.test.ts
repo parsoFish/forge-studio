@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for `cli/contract-stages.ts` (R4-17 — Onboarding session
+ * Acceptance tests for `packages/projects/contract-stages.ts` (R4-17 — Onboarding session
  * staging). The module DOES NOT EXIST YET — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./contract-stages.ts` import is the expected
  * red).
@@ -60,7 +60,7 @@ const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] a
 /**
  * D11 allow-list (AT-23 replacement, pin 2 — round-1 adversarial review). Every
  * detail string `deriveContractStages` emits today, traced to its exact
- * producing line in `cli/contract-stages.ts`. A NEW pattern must be added
+ * producing line in `packages/projects/contract-stages.ts`. A NEW pattern must be added
  * here deliberately, with review, the moment a genuinely new detail shape is
  * introduced — that deliberate-addition friction IS the D11 gate; the old
  * five-banned-word substring check (`pass|fail|clause|green|red|compliant`)
@@ -631,7 +631,7 @@ describe('deriveContractStages — containment (AT-25..29)', () => {
 
 // ===========================================================================
 // AT-30..32: item 3 — the roadmap row's C4 divergence, made VISIBLE
-// (T2 ruling, binding, pin 2). `cli/preflight.ts`'s checkC4 (HARD) fails
+// (T2 ruling, binding, pin 2). `packages/projects/preflight.ts`'s checkC4 (HARD) fails
 // closed unless BOTH roadmap.md AND brain/projects/<id>/profile.md (Brain 3,
 // ADR 035, central in the forge repo) exist — but `deriveRoadmapRow` today
 // only ever looks at roadmap.md, so a project can read `roadmap: present`

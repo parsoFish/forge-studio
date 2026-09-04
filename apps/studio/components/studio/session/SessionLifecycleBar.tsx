@@ -14,7 +14,7 @@ import { CancelOutcomeNotice } from './CancelOutcomeNotice';
 // none at all, still gets crash/stall/cancel).
 //
 // Renders EXCLUSIVELY from the shell payload's server-derived `lifecycle`
-// (cli/bridge-studio-lifecycle.ts): never re-derives crashed/stalled from
+// (packages/sessions/bridge-studio-lifecycle.ts): never re-derives crashed/stalled from
 // phase names, timestamps, or the event log client-side.
 //   - crashed          → the runner's own error text, verbatim
 //                        (`[data-lifecycle-error]`) + Cancel

@@ -5,7 +5,7 @@
  *   - `packages/agents/run-agent.ts`'s D9.1 pre-spawn block (the seam all six
  *     `runAgent` callers pass through — flow-runner, agent-dispatch, and the
  *     four phase bindings).
- *   - `cli/ui-bridge.ts`'s D9.2 refusal on `POST /api/agents/:slug/run`.
+ *   - `apps/forge/ui-bridge.ts`'s D9.2 refusal on `POST /api/agents/:slug/run`.
  *
  * Both compose the already-shipped PURE `connectionsReadinessFor`
  * (`connection-readiness.ts`) with a REAL probe of exactly the connections

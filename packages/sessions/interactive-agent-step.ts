@@ -82,7 +82,7 @@ export const RUNNER_SKILL = 'interactive-runner';
  *  a future turnSpec-driven status) satisfies this structurally. An optional
  *  `modelTier` (ADR-043 §3 amendment, wave-6) rides here structurally too —
  *  the bridge's kickoff route already validated it before it ever reached
- *  disk (see `resolveKickoffModelTier`, cli/ui-bridge.ts), so this module
+ *  disk (see `resolveKickoffModelTier`, apps/forge/ui-bridge.ts), so this module
  *  only needs to READ it back, never re-validate its shape. */
 export type InteractiveTurnStatus = { phase: string } & Record<string, unknown>;
 

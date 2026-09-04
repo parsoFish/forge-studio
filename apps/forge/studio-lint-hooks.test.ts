@@ -1,7 +1,7 @@
 /**
  * REAL-ENTRY-POINT acceptance tests for R3-03-F1b's symmetric enforcement
  * (composition.hooks vs composition.guards) — driven through the ACTUAL
- * `forge studio lint` entry point (`runStudioLint`, `cli/studio-lint.ts`),
+ * `forge studio lint` entry point (`runStudioLint`, `apps/forge/studio-lint.ts`),
  * not a hand-rolled/direct call to `lintHookComposition`/`lintHookDefinitions`.
  *
  * WHY THIS FILE EXISTS (peer-review redirect, 2026-08-04): the direct-call
@@ -10,7 +10,7 @@
  * calls it. An unwired lint function is exactly the "declared-data-fails-open"
  * defect class this campaign keeps finding (`composition/guard-unknown` was
  * implemented, unit-tested, and inert in production until its own real-entry-
- * point test was added — see `cli/studio-lint-guards-migration.test.ts`'s C4).
+ * point test was added — see `apps/forge/studio-lint-guards-migration.test.ts`'s C4).
  * A lint that lints nothing passes its own unit tests perfectly. So this file
  * drives `runStudioLint(root)` itself and asserts the findings appear in the
  * REAL aggregate output — pinning that the implementer must wire
@@ -20,10 +20,10 @@
  * pinned here, per instruction).
  *
  * Co-located in cli/ (not orchestrator/studio/), mirroring
- * `cli/studio-lint-guards-migration.test.ts`'s own stated reason: both need
+ * `apps/forge/studio-lint-guards-migration.test.ts`'s own stated reason: both need
  * the entry point directly. Fixture conventions (`tmpRoot`, `validSkillMd`-
  * shaped content, `validCatalogYaml`, `seedValidProject`) are copied from
- * `cli/studio-lint.test.ts` / `cli/studio-lint-guards-migration.test.ts`
+ * `apps/forge/studio-lint.test.ts` / `apps/forge/studio-lint-guards-migration.test.ts`
  * rather than reinvented.
  *
  * RED today for compounding reasons, same pattern as the guards-migration
@@ -54,7 +54,7 @@ function tmpRoot(): string {
 }
 
 /** Minimal valid SKILL.md content, with composition.guards/.hooks overridable
- *  — mirrors cli/studio-lint.test.ts's `validSkillMd`. */
+ *  — mirrors apps/forge/studio-lint.test.ts's `validSkillMd`. */
 function agentSkillMd(slug: string, opts: { guards?: string[]; hooks?: string[] } = {}): string {
   const guardsLine = `  guards: [${(opts.guards ?? []).join(', ')}]`;
   const hooksLine = opts.hooks !== undefined ? `\n  hooks: [${opts.hooks.join(', ')}]` : '';
@@ -85,7 +85,7 @@ This agent exercises the hooks/guards symmetric-enforcement lint.
 }
 
 /** The 9 real orchestrator guard ids, in catalog.yaml's `guards:` shape —
- *  mirrors cli/studio-lint-guards-migration.test.ts's `validGuardsCatalogYaml`. */
+ *  mirrors apps/forge/studio-lint-guards-migration.test.ts's `validGuardsCatalogYaml`. */
 function validGuardsCatalogYaml(): string {
   return `sdks:
   - { id: claude-agent-sdk, name: Claude Agent SDK, available: true }
@@ -114,7 +114,7 @@ function seedValidProject(root: string, id = 'my-project'): void {
 
 /** A base root with everything runStudioLint needs to lint clean EXCEPT the
  *  fixture agent(s)/hooks the caller adds afterwards — mirrors
- *  cli/studio-lint.test.ts's `buildValidRoot`, but seeds the real 9-id
+ *  apps/forge/studio-lint.test.ts's `buildValidRoot`, but seeds the real 9-id
  *  `guards:` catalog section (not an empty one) so guard-id resolution has
  *  real ground truth to check against. */
 function buildBaseRoot(): string {

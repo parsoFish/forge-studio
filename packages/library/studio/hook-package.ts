@@ -24,7 +24,7 @@
  *
  * This module is the shared, single read/hash/classify primitive both
  * `hook-scan.ts` (the ledger + the scan) and
- * `cli/bridge-studio-community.ts` (the pre-install preview) now build on,
+ * `packages/library/bridge-studio-community.ts` (the pre-install preview) now build on,
  * so neither surface can independently regress back to a single-file view —
  * one predicate, one meaning, per the standing lesson that a defense-in-depth
  * check must mirror the thing it backstops.
@@ -157,7 +157,7 @@ export function readHookPackage(forgeRoot: string, id: string): HookPackageFile[
         // simply never see it — a hole, not an omission. This fails closed
         // instead. One bad package can never take the whole library down
         // because of this: every production caller that lists many hooks at
-        // once (cli/bridge-studio-hooks.ts's `toClientListEntry`) already
+        // once (packages/library/bridge-studio-hooks.ts's `toClientListEntry`) already
         // wraps its per-hook read in a try/catch, so this throw surfaces as a
         // per-item error field, never a 500 for the other N-1 hooks.
         throw new Error(

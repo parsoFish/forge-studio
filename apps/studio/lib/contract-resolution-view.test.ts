@@ -17,7 +17,7 @@
  *      text message and discarded the response. It takes a REAL, bound KB
  *      id — NEVER derived from the project id: a project's KB binding is
  *      operator-rebindable (`KbBind`'s select) and can be null
- *      (`cli/bridge-studio-writes.ts` deliberately leaves it unbound when
+ *      (`apps/forge/bridge-studio-writes.ts` deliberately leaves it unbound when
  *      no KB seed landed), so id-equals-projectId is only ever the DEFAULT
  *      a fresh scaffold happens to create, never a guarantee. Guessing
  *      wrong here is not a broken link: `/knowledge`'s own `?id=`

@@ -231,7 +231,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
   // ---- exempt-local: kb drain-to-green (W6-B12) --------------------------
   // Same reasoning as /api/studio/kbs/:id/cleanup/apply above: this route
-  // dispatches runKbDrain (cli/bridge-studio-kb-drain.ts), which carries its
+  // dispatches runKbDrain (packages/knowledge/bridge-studio-kb-drain.ts), which carries its
   // OWN noSpawn guard (`FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
   // mirroring runBrainConsolidateNow's identical guard) — under dry-bridge
   // the drain loop still runs its local auto-tier fixes and lint scans to a
@@ -350,16 +350,16 @@ export function emitDryBridgeSkip(
 
 /**
  * bead forge-8nw — the ONE `dryBridgeAgentTurnMarker` caller (POST
- * `/api/agents/:slug/run`, `cli/ui-bridge.ts`) whose 3rd argument is not a
+ * `/api/agents/:slug/run`, `apps/forge/ui-bridge.ts`) whose 3rd argument is not a
  * session id at all but the STANDALONE dispatch's own `runId` (minted
  * `` `_agent-${slug}-${stamp}` ``, then handed to this function verbatim as
  * `sessionId`). `runId` doubles as the run's OWN `_logs/` directory NAME —
  * the exact string `deriveStandaloneRunState`/`GET /api/agents/runs/:runId`
- * (`cli/ui-bridge.ts`) reads back. Every OTHER call site (architect/
+ * (`apps/forge/ui-bridge.ts`) reads back. Every OTHER call site (architect/
  * instructions/demo-builder/project-brain/onboarding/authoring/kb-cleanup —
  * see this file's `BRIDGE_ROUTE_CLASSIFICATION` table) passes a session id
  * whose own terminal state lives in `status.json`
- * (`writeSessionTerminalPhase`, `cli/agent-run.ts`), not in an
+ * (`writeSessionTerminalPhase`, `packages/agents/agent-run.ts`), not in an
  * events.jsonl any standalone-run deriver ever reads — so only THIS route
  * gets the extra write below.
  */
@@ -377,7 +377,7 @@ const STANDALONE_DISPATCH_ROUTE = '/api/agents/:slug/run';
  * bead forge-8nw / forge-720 — beyond the shared-bucket skip event above,
  * a standalone dispatch (`STANDALONE_DISPATCH_ROUTE`) ALSO gets a terminal
  * marker written into ITS OWN `<logsRoot>/<runId>/events.jsonl` — the file
- * `deriveStandaloneRunState` (`cli/ui-bridge.ts`) actually reads to derive
+ * `deriveStandaloneRunState` (`apps/forge/ui-bridge.ts`) actually reads to derive
  * `GET /api/agents/runs/:runId`'s state. Without this, a dispatch under
  * dry-bridge wrote only into the shared `DRY_BRIDGE_LOG_BUCKET`, so its own
  * run directory never recorded a terminal fact and the run derived
@@ -388,11 +388,11 @@ const STANDALONE_DISPATCH_ROUTE = '/api/agents/:slug/run';
  * already writes into this same run's log (`orchestrator/run-agent.ts`,
  * its own `FORGE_DRY_BRIDGE_ENV`/`FORGE_ARCHITECT_NO_SPAWN_ENV` early
  * return) — no new marker vocabulary, exactly what
- * `deriveStandaloneStateFromEvents` (`cli/ui-bridge.ts`) already checks via
+ * `deriveStandaloneStateFromEvents` (`apps/forge/ui-bridge.ts`) already checks via
  * `parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed')` to
  * derive `state: 'suppressed'`. `createLogger` appends (never truncates),
  * so this lands safely after the route's own t0 `agent-run.dispatched`
- * marker (`cli/ui-bridge.ts`, written the instant `runId` is minted, before
+ * marker (`apps/forge/ui-bridge.ts`, written the instant `runId` is minted, before
  * this function is ever called).
  */
 export function dryBridgeAgentTurnMarker(

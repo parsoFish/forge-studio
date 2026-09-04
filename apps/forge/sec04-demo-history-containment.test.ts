@@ -2,7 +2,7 @@
  * ACCEPTANCE PINS (SEC-04, bd forge-ebj) — the DEMO-BUILDER HISTORY routes: the
  * reproduced 4th-module escape. Both fold a request-supplied `project` (and `id`)
  * into a `<projectsRoot>/<project>/.forge/demo/history/...` path with NO
- * per-segment containment guard (cli/ui-bridge.ts, handleDemoBuilder):
+ * per-segment containment guard (apps/forge/ui-bridge.ts, handleDemoBuilder):
  *
  *   GET /api/demo-builder/history/<project>       (LIST)
  *     histRoot = join(projectsRoot, project, '.forge','demo','history')

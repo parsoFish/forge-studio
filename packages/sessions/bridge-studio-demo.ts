@@ -1,6 +1,6 @@
 /**
  * bridge-studio-demo.ts — the demo-builder session kind's `/api/demo-builder/*`
- * routes, carved out of `cli/ui-bridge.ts`.
+ * routes, carved out of `apps/forge/ui-bridge.ts`.
  *
  * Eleven routes: six reads (sessions list, the demo and fragment servers, a
  * generation file server, and two history routes) and five writes (start,
@@ -172,7 +172,7 @@ export async function handleDemoRoutes(
     // CONSTRUCTION for every possible value — a guard that cannot fail is
     // not a guard, so it is deleted here rather than kept as decoration.
     // Validate the value itself instead, with the SHIPPED
-    // `isContainedProjectRepoPath` (cli/manifest-path-guard.ts) — the same
+    // `isContainedProjectRepoPath` (packages/flows/manifest-path-guard.ts) — the same
     // guard `invalidProjectRepoPath` (~1610) applies to `project_repo_path`
     // on every `/start` route. (`invalidProjectRepoPath` itself is not
     // reused directly: its `candidate === ''` early-return means "absent,
@@ -753,7 +753,7 @@ function invalidGenerationSessionIdReason(id: string): string | null {
  * Two escapes closed in one pass:
  *   - Finding A: `project`/`sessionId` are validated (length cap THEN
  *     charset, BEFORE any fs call) with the exact PROJECT_ID_RE/SAFE_ID_RE
- *     contract `cli/bridge-studio-sessions.ts` applies to its own session
+ *     contract `packages/sessions/bridge-studio-sessions.ts` applies to its own session
  *     routes — reused via `invalidGenerationProjectReason`/
  *     `invalidGenerationSessionIdReason` above (round 1 already imported the
  *     regexes for the GET route; not re-declared here). A `".."`-shaped
@@ -762,7 +762,7 @@ function invalidGenerationSessionIdReason(id: string): string | null {
  *     symlink on disk pointing outside this project — validating the STRING
  *     says nothing about what the PATH resolves to. This function proves
  *     containment the same way `resolveSafeSessionDir`
- *     (cli/bridge-studio-sessions.ts) does: `realpathSync` the resolved
+ *     (packages/sessions/bridge-studio-sessions.ts) does: `realpathSync` the resolved
  *     directory and require it to land inside THIS project's own resolved
  *     dir (`realpathSync(<projectsRoot>/<project>)`) — scoped to the
  *     specific project, never a `projectsRoot`-wide check, which would still

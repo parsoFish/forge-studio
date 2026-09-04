@@ -5,17 +5,17 @@
  * `skill-tool-fence/task-agent-not-disallowed` check stops firing — `Task`
  * (the SDK's own permission-machinery name) and `Agent` (this harness's
  * external name for the same subagent-spawn tool). See that check's own
- * module header (`cli/studio-lint-tool-fence.ts`) for the full "why both
+ * module header (`packages/library/studio-lint-tool-fence.ts`) for the full "why both
  * names, why disallowed-tools and not allowed-tools" rationale.
  *
  * Hand-mirrored, never a cross-boundary import — forge-ui never imports
  * cli/ at runtime (see `forge-ui/lib/session-lifecycle-client.ts`'s and
  * `forge-ui/lib/session-client.ts`'s own headers for the same stated
- * convention). Kept honest by `cli/tool-fence-required-names-parity.test.ts`,
+ * convention). Kept honest by `packages/library/tool-fence-required-names-parity.test.ts`,
  * a NODE-SIDE TEST (not part of either production bundle) that imports BOTH
  * arrays directly and fails the moment they disagree — the exact precedent
  * `forge-ui/lib/authoring-package-shape.ts` /
- * `cli/authoring-package-shape-parity.test.ts` (W8-B4 FIX-1) already set for
+ * `packages/sessions/tests/contract/authoring-package-shape-parity.test.ts` (W8-B4 FIX-1) already set for
  * this repo's cli/<->forge-ui boundary.
  *
  * WHY THIS FILE EXISTS AT ALL (forge-6gv.19): before this fix,

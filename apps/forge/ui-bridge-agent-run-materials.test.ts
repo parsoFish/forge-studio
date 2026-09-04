@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE TESTS — R6-04-F2, WI-1 "materials contract enforcement + guarded
  * staging": the agent-kickoff upload seam. `POST /api/agents/:slug/run`
- * (cli/ui-bridge.ts ~line 1148-1222) gains an optional body field
+ * (apps/forge/ui-bridge.ts ~line 1148-1222) gains an optional body field
  * `materials?: Array<{filename, contentBase64}>`. This is the FIRST caller of
  * `agentAcceptsMaterial` (orchestrator/studio/materials.ts) — that gate has
  * existed since R2-09 with zero callers; this is its named enforcement point.
@@ -9,7 +9,7 @@
  * NONE of this exists at HEAD: the route does not read `body.materials` at
  * all today, `materialKindForFilename`/the three cap constants do not exist
  * in materials.ts (see orchestrator/studio/materials.test.ts's RED proof for
- * those), and no route-level materials handling exists in cli/ui-bridge.ts.
+ * those), and no route-level materials handling exists in apps/forge/ui-bridge.ts.
  * A materials-bearing request today is simply ignored — the field is dropped
  * on the floor and the request proceeds exactly as if `materials` were
  * absent. That is why several "must be 400" tests below are RED for the
@@ -763,7 +763,7 @@ test('SUCCESS: multiple materials in one request are each written byte-exact and
  * directory BEFORE the request that creates it.
  *
  * This route's `runId` (`_agent-<slug>-<ISO-timestamp>-<4-char-random>`,
- * cli/ui-bridge.ts `newRunStamp`) is always minted SERVER-SIDE, fresh, per
+ * apps/forge/ui-bridge.ts `newRunStamp`) is always minted SERVER-SIDE, fresh, per
  * request — never accepted from the caller, and never reused across
  * requests (there is no "add materials to an existing run" call). A
  * black-box HTTP caller therefore cannot know the run directory's name

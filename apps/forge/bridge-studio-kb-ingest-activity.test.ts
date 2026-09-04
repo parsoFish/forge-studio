@@ -8,12 +8,12 @@
  * 'reflect.kb-ingest', emitted by orchestrator/kb-health.ts:206/213/216;
  * metadata `{kb, fresh_themes, impl:'builtin'|'cmd'}`) discovered via a
  * listCycles-style walk of `_logs/<cycleId>/events.jsonl` (mirroring
- * cli/metrics.ts:46-76's `listCycles` + `guardedReadFile`), filtered to
+ * packages/flows/metrics.ts:46-76's `listCycles` + `guardedReadFile`), filtered to
  * `metadata.kb === kbId` AFTER the guarded read — kbId is never folded into
  * the filesystem path itself. NO ingest affordance: GET-only, no dispatch,
  * nothing this route does can trigger an ingest.
  *
- * RUN: node --experimental-strip-types --test cli/bridge-studio-kb-ingest-activity.test.ts
+ * RUN: node --experimental-strip-types --test apps/forge/bridge-studio-kb-ingest-activity.test.ts
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -72,7 +72,7 @@ after(async () => {
 
 /**
  * Tolerant GET: a totally unmatched route falls through to the bridge's bare
- * `res.writeHead(404); res.end();` fallback (cli/ui-bridge.ts:1985-1986) —
+ * `res.writeHead(404); res.end();` fallback (apps/forge/ui-bridge.ts:1985-1986) —
  * an EMPTY body, not JSON. Parsing that with a bare `.json()` would throw
  * before any assertion runs, turning a clean "expected 200, got 404" failure
  * into an opaque JSON-parse crash. Read as text first and tolerate an

@@ -60,7 +60,7 @@ export type Provenance = 'ootb' | 'operator' | 'unknown';
 
 /**
  * forge-2am: one KB's lint summary, folded into `GET /api/studio/kbs` by the
- * server (`cli/bridge-studio-kbs.ts`, landing alongside this seam). `error`
+ * server (`packages/knowledge/bridge-studio-kbs.ts`, landing alongside this seam). `error`
  * is present only when the underlying lint run itself threw (mirrors
  * `KbHealth.healthError`'s "whole run threw" convention above) — its
  * presence, not its absence, is the "unknown" signal for a KB row.
@@ -388,7 +388,7 @@ export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
 
 /**
  * `pull_request`/`issues` (R2-08-F3) back `on: pr-merged` / `on: issue-raised`
- * and are GitHub-only in practice (cli/bridge-hooks.ts never resolves either
+ * and are GitHub-only in practice (packages/flows/bridge-hooks.ts never resolves either
  * header for gitea/gitlab); `push`/`release` back `on: webhook`. Mirrors
  * orchestrator/studio/types.ts's `WebhookTriggerConfig.events` element union
  * verbatim — forge-ui cannot import orchestrator TS directly (see this
@@ -456,7 +456,7 @@ export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
  * zyc review finding 1: the `on:` kinds that carry the `webhook:` config
  * block. `pr-merged` / `issue-raised` (R2-08-F3, ADR-027's amendment) reuse
  * the SAME `webhook:` shape `on: webhook` uses — own `on:` value, never a
- * sub-event under `on: webhook` — so `cli/bridge-hooks.ts`'s
+ * sub-event under `on: webhook` — so `packages/flows/bridge-hooks.ts`'s
  * `findWebhookTrigger` (which scans every flow for a trigger whose
  * `webhook.id === hookId`, regardless of which of the three kinds declared
  * it) can resolve a delivery for them. Mirrors
@@ -468,7 +468,7 @@ export const WEBHOOK_FAMILY_TRIGGER_KINDS: readonly ShippedTriggerKind[] = ['web
 
 /**
  * zyc review finding 1: `pr-merged` / `issue-raised` are GitHub-only by
- * ruled design (`cli/bridge-hooks.ts`'s `resolveEventName` only maps
+ * ruled design (`packages/flows/bridge-hooks.ts`'s `resolveEventName` only maps
  * `pull_request`/`issues` under `provider === 'github'` — gitea/gitlab stay
  * schema-reserved with zero stub handlers for those two kinds). `webhook`
  * keeps all 3 shipped providers (push/release ARE shipped for gitea/gitlab).
@@ -559,7 +559,7 @@ export function buildTriggerDeclaration(
   // above) — before this fix only `kind === 'webhook'` reached this branch,
   // so a pr-merged/issue-raised trigger fell through to the generic
   // `{on, target}` fallback below with NO webhook block: authorable in the
-  // UI, but cli/bridge-hooks.ts's `findWebhookTrigger` can only resolve a
+  // UI, but packages/flows/bridge-hooks.ts's `findWebhookTrigger` can only resolve a
   // delivery by scanning for `trigger.webhook.id === hookId` — a row with no
   // webhook block can never be addressed by any hook URL, permanently dead.
   if (WEBHOOK_FAMILY_TRIGGER_KINDS.includes(kind)) {
@@ -642,11 +642,11 @@ export type Flow = {
    */
   origin?: string;
   /**
-   * The flow's REAL derived band vocabulary (cli/flow-band-vocab.ts's
+   * The flow's REAL derived band vocabulary (packages/flows/flow-band-vocab.ts's
    * listFlowBandIds, R1-06 WI-1) — the distinct band ids its own
    * agent-bearing nodes declare via `composition.guards`. `[]` for a
    * bandless (or underivable) flow, never absent — GET /api/studio/flows
-   * (cli/bridge-studio.ts) always attaches this per row (R1-06 WI-2).
+   * (apps/forge/bridge-studio.ts) always attaches this per row (R1-06 WI-2).
    * Optional on the client TYPE (not the wire payload) so existing Flow
    * fixtures elsewhere in forge-ui that predate this field keep compiling;
    * `deriveKbBandOptions` below treats an absent value as `[]`.
@@ -721,7 +721,7 @@ export type Project = {
 
 /**
  * The client-side mirror of the bridge's `ProjectConfigHealth`
- * (`cli/bridge-studio.ts`), plus the one state only a client can be in:
+ * (`apps/forge/bridge-studio.ts`), plus the one state only a client can be in:
  * `'unknown'`, meaning the wire carried nothing this boundary could parse.
  */
 export type ProjectConfigHealth = {
@@ -825,7 +825,7 @@ export type KbExternalEdge = { from: string; toSlug: string };
 
 export type KbGraph = { nodes: KbNode[]; edges: KbEdge[]; externalEdges?: KbExternalEdge[] };
 
-/** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
+/** R6-08 WI-1 — one per-check itemization row (see packages/knowledge/bridge-studio-kbs.ts's
  *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint
  *  run threw (RULING 3), reflected via the sibling `KbHealth.healthError`.
  *  R6-08 4on — `status: 'n/a'` means this check never actually inspected
@@ -1208,7 +1208,7 @@ export async function fetchStudioAgents(): Promise<Agent[]> {
 
 /**
  * R6-04 WI-3 — `GET /api/studio/agents`'s full payload, including
- * `defaultCostCeilingUsd` (a RUN-LEVEL policy value, `cli/bridge-studio.ts`
+ * `defaultCostCeilingUsd` (a RUN-LEVEL policy value, `apps/forge/bridge-studio.ts`
  * — resolved from `forge.config.json`'s `runs.defaultCostCeilingUsd`,
  * falling back to the server's own default constant). Never a literal in
  * any component: RunPanel's cost-ceiling field is pre-filled from THIS
@@ -1413,7 +1413,7 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
 
 /**
  * W6-B11 — one row of the aggregate `GET /api/studio/sessions` index. Mirrors
- * `cli/ui-bridge.ts`'s `SessionIndexRow` wire shape verbatim (server-sourced,
+ * `apps/forge/ui-bridge.ts`'s `SessionIndexRow` wire shape verbatim (server-sourced,
  * never re-derived client-side): `terminal`/`needsYou` are the bridge's own
  * `isTerminalPhase`/`deriveSessionAffordances` derivations, threaded through
  * as-is so the client never re-implements either vocabulary.
@@ -1427,7 +1427,7 @@ export type SessionIndexRow = {
   /** W7-A2 — the bridge's TRUTHFUL lifecycle verdict (operator gate open,
    *  or crashed/stalled) — never re-derived client-side. */
   needsYou: boolean;
-  /** W7-A2 — `cli/bridge-studio-lifecycle.ts`'s derived state (mirrored in
+  /** W7-A2 — `packages/sessions/bridge-studio-lifecycle.ts`'s derived state (mirrored in
    *  `lib/session-lifecycle-client.ts`'s SESSION_LIFECYCLE_STATES). */
   state: 'working' | 'awaiting-operator' | 'crashed' | 'stalled' | 'terminal';
   /** W7-A2 — the runner's crash message for a `crashed` row, else null. */
@@ -1667,13 +1667,13 @@ export async function getAgentFixStatus(id: string, runId: string): Promise<Agen
 
 // --- KB drain-to-green (W6-B13) ---------------------------------------------
 //
-// Client for the W6-B12 bridge job (`cli/bridge-studio-kb-drain.ts`): ONE
+// Client for the W6-B12 bridge job (`packages/knowledge/bridge-studio-kb-drain.ts`): ONE
 // button drives every auto+agent lint finding on a KB to a fixed point,
 // server-side, surviving nav-away by construction (the run's own progress
 // lives in `_logs/_kb-drain-<runId>/status.json`, not client state — this
 // module is a pure OBSERVER: dispatch, then read back what the server
 // already decided). Mirrors `KbDrainStatus`/`KbDrainState`/`KbDrainPerFinding`
-// from `cli/bridge-studio-kb-drain.ts` verbatim (re-declared client-side per
+// from `packages/knowledge/bridge-studio-kb-drain.ts` verbatim (re-declared client-side per
 // this file's own header convention — no Node import across the forge-ui
 // boundary).
 
@@ -1687,7 +1687,7 @@ export type KbDrainState =
   | 'cancelled'
   | 'failed';
 
-/** W8-B2 (ON-3) — mirrors `cli/bridge-studio-kb-drain.ts`'s type of the same
+/** W8-B2 (ON-3) — mirrors `packages/knowledge/bridge-studio-kb-drain.ts`'s type of the same
  *  name: what the fix turn proposed for one file, and what became of it. */
 export type KbDrainProposedChange = {
   /** Path relative to forgeRoot. */
@@ -1902,7 +1902,7 @@ export type AgentRunStatus = {
    *  `'budget-exceeded'` (the SDK ceiling stop — served by the bridge since
    *  R6-04 but previously collapsed to 'unknown' by this parser's cast).
    *  W8-A2 (ON-7 defect 4) adds `'stalled'` — mirrors `StandaloneRunState
-   *  ['state']` (cli/ui-bridge.ts). This field is parsed via an unchecked
+   *  ['state']` (apps/forge/ui-bridge.ts). This field is parsed via an unchecked
    *  `as` cast (`getAgentRunStatus` below), not a runtime allowlist, so a
    *  'stalled' wire value was never REJECTED before this — only mistyped.
    *  `isStillWatching`/`pollDisplayState` (agent-dispatch.ts) already treat
@@ -2010,7 +2010,7 @@ export async function fetchRecentAgentRunsAggregate(
 /** One row of `GET /api/agents/:slug/history`'s standalone-dispatch shape —
  *  narrowed to the fields {@link fetchLatestStandaloneRun} actually needs;
  *  the route's full `AgentHistoryRow` union (flow-node/standalone/session,
- *  `cli/ui-bridge.ts`) is server-internal and never re-declared client-side. */
+ *  `apps/forge/ui-bridge.ts`) is server-internal and never re-declared client-side. */
 export type StandaloneHistoryRow = { id: string; status: string; when: string };
 
 /** The most recent standalone-dispatch row for `slug` — ANY status
@@ -2041,7 +2041,7 @@ export async function fetchLatestStandaloneRun(slug: string): Promise<Standalone
  *  (W6-B14): `GET /api/studio/projects/:id/onboarding/active`. The
  *  onboarding session's OWN `status.json` (written by `POST /api/studio/
  *  onboarding/start`, then updated to a terminal phase by
- *  `writeSessionTerminalPhase`, cli/agent-run.ts) already carries the
+ *  `writeSessionTerminalPhase`, packages/agents/agent-run.ts) already carries the
  *  `runId` pollable via {@link getAgentRunStatus} — this finds the most
  *  recent `_onboarding/<sessionId>` for the project and reads it back.
  *  `sessionId: null` means this project has never run onboarding. */
@@ -2221,7 +2221,7 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
 /**
  * R4-12-F1 — fetch a project's five-stage contract-buildout presence report
  * (`GET /api/studio/projects/:id/contract-stages`, a pure read served by
- * cli/bridge-studio.ts from cli/contract-stages.ts's `deriveContractStages`).
+ * apps/forge/bridge-studio.ts from packages/projects/contract-stages.ts's `deriveContractStages`).
  * The 200 body is `{ok, project, stages, sourcesScanned}`; the rows are
  * validated at THIS boundary via session-client's `parseContractStageRow` —
  * the SAME parser + row type the session-shell's contract-buildout artifact
@@ -2357,7 +2357,7 @@ export async function createKb(body: {
 }
 
 /** R4-19-F2: start a kb-cleanup session for KB `id` (`POST .../kbs/:id/
- *  cleanup/start`, cli/ui-bridge.ts). Returns BOTH `sessionId` AND `project`
+ *  cleanup/start`, apps/forge/ui-bridge.ts). Returns BOTH `sessionId` AND `project`
  *  on success — a non-project-bound KB anchors its session under a
  *  server-minted `.kb-<id>` scratch project (the route's
  *  KB_SEEDING_ANCHOR_PREFIX carve-out), never the KB's own `id`. A caller

@@ -33,7 +33,7 @@
  * MEASURED GROUNDS (task report has the full trace):
  *   - the raw endpoint's line shape carries `event_type`/`message`/`skill`/
  *     `cost_usd`/`metadata` — the same fields `deriveLogLine` reads
- *     (`cli/bridge-studio-phase-log-raw.test.ts`, tests 1-2).
+ *     (`apps/forge/bridge-studio-phase-log-raw.test.ts`, tests 1-2).
  *   - `deriveLogLine`'s own 11-member `EventType` -> 3-kind mapping is NOT
  *     re-derived here — reused verbatim (`run-log-line.ts:58-65`).
  *
@@ -48,7 +48,7 @@ test('a real 200 body maps raw lines through the SHARED deriveLogLine, not a sec
   // `start`/`end` (formats `skill`(+cost) only) — the 'start · architect'
   // text below comes from `skill`, not from the seeded `message`. This
   // fixture is deliberately built from the SAME shape
-  // `cli/bridge-studio-phase-log-raw.test.ts` proves the raw endpoint
+  // `apps/forge/bridge-studio-phase-log-raw.test.ts` proves the raw endpoint
   // serves, so a passing test here is grounded in the real wire contract.
   const lines = resolveNodeLogFromResponse(200, {
     lines: [

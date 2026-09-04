@@ -10,13 +10,13 @@
  * That render test structurally CANNOT catch a server that starts fabricating
  * runs for unknown ids — it never talks to the bridge, so a regression at the
  * wire would sail straight through it. That is "the test is on the wrong
- * surface": the contract this file pins lives in `cli/bridge-studio.ts`
+ * surface": the contract this file pins lives in `apps/forge/bridge-studio.ts`
  * (`findRun`, line 254, and the `/api/runs/<id>` route, line 527), and until
  * now nothing exercised it at the HTTP layer. `grep -rn "run not found"
  * --include="*.ts" .` finds exactly ONE hit — the source line itself — so the
  * contract was pinned by NO test anywhere before this file.
  *
- * Measured (by reading `cli/bridge-studio.ts` directly):
+ * Measured (by reading `apps/forge/bridge-studio.ts` directly):
  *   findRun(forgeRoot, id) === listRuns(forgeRoot, Date.now()).find(r =>
  *     r.id === id) ?? null                                     (line 254-256)
  *   `!run` → 404 `{ error: 'run not found' }`, no `run` key at all (line 536-538)
@@ -27,7 +27,7 @@
  * mutation applied to `findRun`, the resulting RED output, and the
  * byte-for-byte restore proof (the mutation is never committed).
  *
- * Harness pattern copied from `cli/bridge-studio-triggers.test.ts`:
+ * Harness pattern copied from `apps/forge/bridge-studio-triggers.test.ts`:
  * `startBridge({ forgeRoot, port: 0 })` — port 0 is an OS-assigned ephemeral
  * port, never 4123/4124 (this test never touches the operator's fixed-port
  * Studio session). Seeds a tmp forge root with a `_queue/done/` manifest plus
@@ -152,7 +152,7 @@ test('POSITIVE CONTROL on the SAME bridge: GET /api/runs/<the-real-seeded-id> ->
 test('R6-04 REGRESSION GUARD: GET /api/agents/runs/<never-existed-id> -> 404 (unchanged by this feature)', async () => {
   // KILLS: a change made in service of the flow run-detail surface that
   // accidentally weakens or removes the SIBLING contract R6-04 already
-  // established for agent runs (cli/ui-bridge.ts:1146, keyed off run
+  // established for agent runs (apps/forge/ui-bridge.ts:1146, keyed off run
   // DIRECTORY existence under _logs/). F4 must ADD a contract for flow runs,
   // not touch this one — this test names the mechanism so a shared-helper
   // refactor that widens the 404-avoidance logic gets caught here too.

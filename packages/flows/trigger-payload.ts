@@ -228,7 +228,7 @@ export function extractReleasePayload(
  * R2-08-F3 — extract the typed `pr-merged` payload from a verified GitHub
  * `pull_request` webhook body. GitHub only (the caller gates on
  * `webhook.provider === 'github'` before calling this — see
- * `cli/bridge-hooks.ts`). Corpus-grounded on GitHub's documented, stable
+ * `packages/flows/bridge-hooks.ts`). Corpus-grounded on GitHub's documented, stable
  * `pull_request` event schema: `pull_request.{number,title,body,head:{ref,sha},
  * base:{ref},user:{login}}`, `repository.full_name`. The caller alone decides
  * whether `action`/`merged` mean this event actually fires `pr-merged` — this

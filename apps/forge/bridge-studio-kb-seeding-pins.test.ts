@@ -43,7 +43,7 @@ import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { runProjectBrainTurn, type ProjectBrainStatus } from '../../packages/sessions/kinds/project-brain.ts';
 
 // ---------------------------------------------------------------------------
-// Fixture (mirrors cli/bridge-studio-kb-create.test.ts's minimal forge root)
+// Fixture (mirrors apps/forge/bridge-studio-kb-create.test.ts's minimal forge root)
 // ---------------------------------------------------------------------------
 
 const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;

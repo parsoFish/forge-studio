@@ -66,7 +66,7 @@ routes `/agents/new` + `/agents/[id]`, drop zones
 `/skills/new` is the brand-new-skill builder
 ([`forge-ui/app/skills/[id]/page.tsx`](../../forge-ui/app/skills/%5Bid%5D/page.tsx),
 `[data-page="skill-builder"]`), backed by `POST /api/studio/skills` in
-[`cli/bridge-studio-writes.ts`](../../cli/bridge-studio-writes.ts) (~line 790).
+[`apps/forge/bridge-studio-writes.ts`](../../apps/forge/bridge-studio-writes.ts) (~line 790).
 It writes a real `skills/<name>/SKILL.md` but **never registers the skill into
 `catalog.yaml`**, so `CatalogPalette` — which sources skill chips exclusively
 from the static `community-skills` list — cannot see it
@@ -80,7 +80,7 @@ surface** at all (known-gaps §4b.8) and no library/list view (§4b.1).
 [`skills/instructions-creator/SKILL.md`](../../skills/instructions-creator/SKILL.md)
 (`library: false`) + the `/instructions/[sid]` interview UI
 (`[data-page="instructions-interview"]`, bridge surface
-`cli/ui-bridge.ts` / `cli/ui-bridge-instructions.test.ts`) — merged Stage A of
+`apps/forge/ui-bridge.ts` / `apps/forge/ui-bridge-instructions.test.ts`) — merged Stage A of
 the agentic-additions roadmap (2026-06-24). It authors a project's `AGENTS.md`
 through an interview but currently generates from scratch; there is **no seed
 library** of language/domain best-practice instructions for it to draw on.
@@ -109,7 +109,7 @@ file packages, `orchestrator/studio/hook-library.ts` (registry + derived
 `carriedBy` + symmetric `composition.hooks`/`composition.guards` lint),
 `hook-scan.ts` (static scan + verdict + approval ledger hashing script AND
 manifest), `hook-runtime.ts` (deny-by-default env via `HOOK_ENV_BASE_ALLOWLIST`),
-`cli/bridge-studio-hooks.ts` (5 routes), `/hooks` + `/hooks/[id]` + `/hooks/new`,
+`packages/library/bridge-studio-hooks.ts` (5 routes), `/hooks` + `/hooks/[id]` + `/hooks/new`,
 and the `hooks` journey. The security model was designed WITH the library, not
 retrofitted — which is exactly what this entry said it would have to be. Its
 honest remaining limits (writes ungoverned; `read`/`network` declared and
@@ -136,11 +136,11 @@ fidelity); content-reads use the absolute form. This satisfies the [known-gaps �
 precondition — the physical `skills/` role-subfolder move is now a one-place change
 (still a separate, untaken decision). **F2:** `listPlainSkills` (runtime-less,
 non-`library:false` `SKILL.md`) unions with `studio/catalog.yaml` community-skills in
-the `/api/studio/catalog` GET (`cli/bridge-studio.ts`), so a `/skills/new`-authored
+the `/api/studio/catalog` GET (`apps/forge/bridge-studio.ts`), so a `/skills/new`-authored
 skill (`POST /api/studio/skills`, stamped `library: true`) is palette-visible with no
 bridge restart — closing [known-gaps §4.11](../known-gaps.md). The `library`
 frontmatter is explicit on all 24 skills (6 `false` / 18 `true`), lint-enforced by
-`validateLibraryFlag` (`orchestrator/studio/validate.ts` + `cli/studio-lint.ts`,
+`validateLibraryFlag` (`orchestrator/studio/validate.ts` + `apps/forge/studio-lint.ts`,
 errors on unset, reaching every skill dir); `isStudioAgent`'s agent-roster semantics
 are unchanged. The `skills`/`agents` journeys demo the real create→compose throughline
 (no `handoff` substitution). **F3** (`/skills` library view) + **F4** (marketplace
@@ -170,8 +170,8 @@ git-tracked source of truth in `orchestrator/studio/skill-install-ledger.ts`
 (`studio/installed-skills.yaml` — written on first real install; the ledger
 file itself is absent from a fresh checkout until then). Every
 `/api/studio/skills*` route lives in one new module,
-`cli/bridge-studio-skills.ts` (GET the library, GET/detail, POST create
-— moved verbatim from `cli/bridge-studio-writes.ts` — POST install, POST
+`packages/library/bridge-studio-skills.ts` (GET the library, GET/detail, POST create
+— moved verbatim from `apps/forge/bridge-studio-writes.ts` — POST install, POST
 approve). Install (D2) consumes an already-materialised local package
 directory only — no hub fetch, no fabricated vendored content; a real hub
 browse/fetch is R3-07's job, which routes installs through this pipeline
@@ -187,7 +187,7 @@ gained six finding ids: `skill-trust/draft-unapproved`,
 `skill-trust/hash-drift`, `skill-trust/provenance-tampered`,
 `skill-trust/unregistered-install`, and `skill-trust/installed-agent-shape`
 (the ledger cross-check + D4 roster-escalation guard), plus `agent/skill-ref`
-— wired into `orchestrator/studio/validate.ts` / `cli/studio-lint.ts`.
+— wired into `orchestrator/studio/validate.ts` / `apps/forge/studio-lint.ts`.
 Demoed end to end by three new `skills` journey beats
 (`scripts/journeys/skills.mjs`, wired into `RUN_ORDER` in
 `scripts/journeys/index.mjs`): `skills-library` (counts + derived used-by
@@ -239,7 +239,7 @@ SAME `FilePackage` component `/skills/[id]` uses. The detail page renders that
 tree **raw** — it does not enumerate which contract clauses a scaffold
 pre-wires, so F3's "detail page lists what the contract pre-wires" AC is met
 only inferentially (see the change-log entry). `GET /api/studio/templates`
-+ `GET /api/studio/templates/:id` (`cli/bridge-studio-templates.ts`) are the
++ `GET /api/studio/templates/:id` (`packages/library/bridge-studio-templates.ts`) are the
 only routes (read-only; the template library has no write path). Demoed by
 four new `templates` journey beats (`scripts/journeys/templates.mjs`, wired
 into `RUN_ORDER`): `templates-library` (counts + category cross-check),
@@ -308,7 +308,7 @@ influence it. **F3:** `orchestrator/studio/connection-readiness.ts`'s
 `orchestrator/run-agent.ts` blocks pre-spawn (after the dry-bridge/no-spawn
 suppression early-return, so a suppressed rehearsal is never blocked by an
 environment fact about a spawn that never happens), the bridge run route
-(`cli/ui-bridge.ts`) refuses with the component named, and the Agent Builder
+(`apps/forge/ui-bridge.ts`) refuses with the component named, and the Agent Builder
 UI (`forge-ui/app/agents/[id]/page.tsx`) gains a 7th, conditional readiness
 check (`[data-check="connections"]`, appended only for an agent that binds
 at least one tool/MCP — an agent binding none has nothing to be ready about)
@@ -352,10 +352,10 @@ invented hub. `orchestrator/studio/community-install.ts`'s
 `routeCommunityInstall` decides which of the three ALREADY-MERGED pipelines
 (R3-01-F4 skills, R3-03-F2 hooks, R3-04-F2 connections) owns an install and
 dispatches to it — this module never writes a trust decision itself
-(`cli/community-no-trust-decisions.test.ts` scans its source text for exactly
+(`packages/library/community-no-trust-decisions.test.ts` scans its source text for exactly
 that); `installCommunityHookPackage` is the one genuinely new install-side
 behaviour, materialising a vendored hook package and STOPPING — it never
-writes an approval-ledger entry. `cli/bridge-studio-community.ts` owns every
+writes an approval-ledger entry. `packages/library/bridge-studio-community.ts` owns every
 `/api/studio/community*` route (list/detail/install). **UI:** `/community`
 (`forge-ui/app/community/page.tsx`, `[data-page="community-browser"]`) and
 `/community/[kind]/[id]` (`forge-ui/app/community/[kind]/[id]/page.tsx`,
@@ -1191,7 +1191,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   `STUDIO_BRANCH = 'forge-studio'`, `ensureStudioBranch`, `commitStudioChange`,
   `withStudioWrite`, `saveProjectRepo` (merge + push) and `hasPendingStudioChanges`,
   surfaced end-to-end through `GET /api/studio/projects/:id/repo-status`
-  (`cli/bridge-studio.ts`) and `fetchRepoStatus` (`forge-ui/lib/studio-client.ts`).
+  (`apps/forge/bridge-studio.ts`) and `fetchRepoStatus` (`forge-ui/lib/studio-client.ts`).
   Forge's own repo gets none of it. This initiative closes the asymmetry — with
   three deliberate differences from the project-repo transaction, because forge
   core is not a forge-controlled, CI-free config file.
@@ -1326,7 +1326,7 @@ rather than deferred within it:
   `usedBy`, `composedBy` deleted per D3) + `/skills/[id]` package-detail page
   (read-only) + the draft→scan→approve→re-review trust pipeline
   (`orchestrator/studio/skill-library.ts` + `skill-install-ledger.ts` +
-  `cli/bridge-studio-skills.ts`), D8's one creation entry point, and three new
+  `packages/library/bridge-studio-skills.ts`), D8's one creation entry point, and three new
   `skills` journey beats (`skills-library`, `skills-detail-package`,
   `skills-install-approve`) demoing the arc end to end against a package
   materialised outside the repo. Known gap carried forward (NOT closed by
@@ -1346,7 +1346,7 @@ rather than deferred within it:
   `demoProcess` config for demo-output, honestly empty for project-scaffold)
   and producer/consumer endpoint verification against the flow graph. Real
   `/templates` + `/templates/[id]` routes (mirroring `/skills`'s shape) plus
-  `GET /api/studio/templates(/:id)` (`cli/bridge-studio-templates.ts`). **Also
+  `GET /api/studio/templates(/:id)` (`packages/library/bridge-studio-templates.ts`). **Also
   folds in R2-05-F1's canonical-artifact-set audit** (shared substance,
   decided at session start per R3-06's own dependency note):
   `validateArtifactRef` promoted advisory → error; the flow builder's
@@ -1480,7 +1480,7 @@ rather than deferred within it:
   the Agent Builder's readiness panel (`[data-check="connections"]`) + Run
   control (`[data-run-blocked]`) — every enforcement point NAMES the unready
   component and its state. **F4:** exact version pins, real upstream
-  provenance. Bridge (`cli/bridge-studio-connections.ts`) + client
+  provenance. Bridge (`packages/library/bridge-studio-connections.ts`) + client
   (`forge-ui/lib/connection-client.ts`) + UI (`/connections`,
   `/connections/[id]`) round out the surface; **D1's negative AC holds
   structurally** — no create/update/delete route exists anywhere, asserted
@@ -1504,7 +1504,7 @@ rather than deferred within it:
   tool) — `orchestrator/studio/community-index.ts` (D1: three sources, no
   fourth declared list), `community-install.ts` (routes to the owning
   ALREADY-MERGED pipeline, never a trust decision itself, D2),
-  `cli/bridge-studio-community.ts`, `/community` + `/community/[kind]/[id]`.
+  `packages/library/bridge-studio-community.ts`, `/community` + `/community/[kind]/[id]`.
   The community `CommunityInstallState` union carries a fourth member,
   `needs-review`, deliberately — a post-approval object that drifted must
   never be laundered into `installed` by a surface that owns no

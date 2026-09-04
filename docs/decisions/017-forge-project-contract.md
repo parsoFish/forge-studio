@@ -64,7 +64,7 @@ which separates autonomous cycles from hand-directed project surgery so
 A project must satisfy the **forge↔project contract** before forge attempts
 to progress it unattended. The contract is enforced by a written, checkable
 preflight: `forge preflight <project>`
-([`cli/preflight.ts`](../../cli/preflight.ts), wired in
+([`packages/projects/preflight.ts`](../../packages/projects/preflight.ts), wired in
 [`orchestrator/cli.ts`](../../orchestrator/cli.ts)). The preflight is
 pure (`runPreflight()` returns a structured report; the CLI renders it,
 writes a `preflight.verdict` JSONL event, and sets the exit code) so an
@@ -155,7 +155,7 @@ review redesign).
 - [`brain/cycles/themes/human-directed-work-as-initiatives.md`](../../brain/cycles/themes/human-directed-work-as-initiatives.md) — the blurred-lines antipattern; the origin tag (G6) is the cohort-separation sibling that makes the autonomous mode this contract gates measurable.
 - `_logs/2026-05-16_trafficgame-arc-reflection/retro.md` §3 (C1–C6 derivation), §6 closure goals G2 (contract sufficiency) and G6 (origin tagging).
 - [`docs/forge-user-stories.md`](../forge-user-stories.md) US-4.1 — the operator-facing requirement.
-- [`cli/preflight.ts`](../../cli/preflight.ts) — the implementation; [`cli/preflight.test.ts`](../../cli/preflight.test.ts) — clause-by-clause tests.
+- [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts) — the implementation; [`scripts/stories/preflight.test.ts`](../../scripts/stories/preflight.test.ts) — clause-by-clause tests.
 - [`orchestrator/project-config.ts`](../../orchestrator/project-config.ts) — canonical `validateProjectConfig` + `DEMO_SHAPES` (single source of truth imported by preflight).
 - [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json) — operator-facing schema (includes `logging` block; no phantom C26/C27/C28 references).
 - [ADR 011](./011-unattended-scheduler.md) — the unattended scheduler path the contract gates entry to.

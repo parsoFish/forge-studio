@@ -5,11 +5,11 @@
  * somewhere downstream (SEC-02, bd `forge-d1f`).
  *
  * THE DEFECT (reproduced live by T2): `POST /api/initiatives`
- * (`cli/bridge-recovery.ts`) accepted a manifest whose frontmatter carried
+ * (`packages/flows/bridge-recovery.ts`) accepted a manifest whose frontmatter carried
  * these four fields with ZERO validation (`validateManifest`,
  * `orchestrator/manifest.ts`, never checked them). `POST
  * /api/recovery/:id/requeue` then calls `runRequeue`
- * (`cli/forge-requeue.ts`), whose default `resume:false` ⇒
+ * (`packages/flows/forge-requeue.ts`), whose default `resume:false` ⇒
  * `preserveWorktree=false` ⇒ an unconditional
  * `rmSync(worktreePath, { recursive: true, force: true })` on whatever
  * string the attacker put in the manifest. Live probe:
@@ -20,7 +20,7 @@
  *
  * WHY GUARD AT THE WRITE POINT, NOT EVERY READ SITE: these four fields are
  * written ONCE, at ingest (`orchestrator/promote-manifests.ts`,
- * `cli/bridge-recovery.ts`'s `POST /api/initiatives`), and then read
+ * `packages/flows/bridge-recovery.ts`'s `POST /api/initiatives`), and then read
  * UNCHECKED by roughly a dozen call sites downstream — `runRequeue`'s
  * `rmSync` + `git branch -D` / `push --delete`, the bridge's
  * approve/send-back verdict handlers, `orchestrator/requeue-resume.ts`'s
@@ -32,7 +32,7 @@
  * (`writeManifest`) closes the defect for every one of those readers in one
  * place; guarding twelve read sites individually leaves the thirteenth
  * (today, or the next one added) unguarded by construction.
- * `cli/forge-requeue.ts`'s `runRequeue` gets an INDEPENDENT assertion too
+ * `packages/flows/forge-requeue.ts`'s `runRequeue` gets an INDEPENDENT assertion too
  * (defence in depth) because it re-serialises the manifest via
  * `serializeManifest` without re-validating anything — so a manifest that
  * reaches disk through some OTHER path (a future ingest route that forgets
@@ -99,8 +99,8 @@ const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 /**
  * R4-17 round-3 BLOCKER (pin 5, item 2): the ONE resolution of "where do
  * managed projects live" this module uses — `resolveProjectsDir`, the SAME
- * config-aware helper `ctx.projectsRoot` (`cli/ui-bridge.ts`) and
- * `writeSessionTerminalPhase` (`cli/agent-run.ts`) already resolve through,
+ * config-aware helper `ctx.projectsRoot` (`apps/forge/ui-bridge.ts`) and
+ * `writeSessionTerminalPhase` (`packages/agents/agent-run.ts`) already resolve through,
  * fed a FORGE-ROOT-ANCHORED config path (`defaultConfigPath`) rather than
  * `loadConfig`'s cwd-relative default. Before this fix, `isContainedProjectRepoPath`
  * (and `isContainedWorktreePath`'s projects-root fallback branch) hardcoded
@@ -122,7 +122,7 @@ function resolveConfiguredProjectsRoot(forgeRoot: string): string {
  *
  * R4-17 round-4 BLOCKER (pin 7): `resolveConfiguredProjectsRoot` re-reads
  * `forge.config.json` FROM DISK on every call, while `startBridge`
- * (`cli/ui-bridge.ts`) resolves `ctx.projectsRoot` ONCE at server start and
+ * (`apps/forge/ui-bridge.ts`) resolves `ctx.projectsRoot` ONCE at server start and
  * every route handler uses that snapshot for the process's lifetime. A live
  * `forge.config.json` edit (or a `FORGE_PROJECTS_DIR` mutation) while the
  * bridge is up therefore makes the GUARD and the PRODUCER disagree again —

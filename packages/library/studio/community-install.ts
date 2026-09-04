@@ -6,7 +6,7 @@
  * argument that pipeline needs — it never writes anything itself, and never
  * calls (or, in its own comments, spells the name of) a function that could
  * turn a quarantined draft into a trusted or runnable object; this file's
- * source text is scanned for exactly that (cli/community-no-trust-decisions.test.ts).
+ * source text is scanned for exactly that (packages/library/community-no-trust-decisions.test.ts).
  * `installCommunityHookPackage` is the one genuinely new install-side
  * behaviour this initiative authors: hook install has no existing "install a
  * package from a directory" route the way skills do, so this materialises

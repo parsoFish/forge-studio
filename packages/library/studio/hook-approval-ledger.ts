@@ -363,7 +363,7 @@ export function declineHook(input: { forgeRoot: string; id: string; reason?: str
  * live approval" is true whether or not one ever existed, so the delete path
  * needs a call that is silent on the (common) no-op case. This is the ONE
  * function every hook-destroying call site should call before removing the
- * package directory — see cli/bridge-studio-hooks.ts's DELETE route, its
+ * package directory — see packages/library/bridge-studio-hooks.ts's DELETE route, its
  * only production caller today.
  */
 export function revokeHookApprovalIfPresent(input: { forgeRoot: string; id: string }): void {

@@ -1,10 +1,10 @@
 /**
  * W8-B4 FIX-2 (library-35's fourth path) — live-bridge reproduction pins for
  * the agent-DELETE route's install-ledger prune, mirroring
- * cli/bridge-studio-skills.test.ts's own "library-35" tests (the skills
+ * packages/library/bridge-studio-skills.test.ts's own "library-35" tests (the skills
  * DELETE route) at the sibling agents DELETE route.
  *
- * Root cause: cli/bridge-studio-writes.ts's agent-DELETE route
+ * Root cause: apps/forge/bridge-studio-writes.ts's agent-DELETE route
  * (`DELETE /api/studio/agents/:slug`) can destroy a `skills/<id>` package —
  * `isStudioAgent()` only requires a `runtime:` block and no `provenance`/
  * `quarantined` key, which any skill that was installed then hand-converted

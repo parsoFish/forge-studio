@@ -6,7 +6,7 @@
  * review screen renders `demo.json` natively, and forge derives a single
  * PR-facing `DEMO.md` from it (F4 retired the parallel `DEMO.html` — the demo
  * OUTPUT is one markdown + the demo.json sidecar). Shared section types live in
- * [cli/demo-types.ts](./demo-types.ts).
+ * [packages/factory/demo-types.ts](./demo-types.ts).
  *
  * Required core: `title`, `essence`, `project`, `diffStat`, and ≥1 checkpoint
  * (each with `label` + `caption`). Rich structured sections (`summary`,

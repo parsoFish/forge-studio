@@ -9,7 +9,7 @@
  *
  * Mutual gate: every action is disabled while ANY KB job runs, with the
  * server's own reason shown — the same `deriveKbActiveJob` fact the bridge
- * routes 409 with (cli/kb-job-state.ts), fetched from
+ * routes 409 with (packages/knowledge/kb-job-state.ts), fetched from
  * `GET /api/studio/kbs/:id/active-job` and re-checked while anything is in
  * flight. The UI gate is convenience; the SERVER 409s are the enforcement
  * (declared-data-fails-open discipline).

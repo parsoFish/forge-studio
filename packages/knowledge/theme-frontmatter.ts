@@ -1,8 +1,8 @@
 /**
  * The ONE lenient theme-frontmatter parser (W7 FIX-B-KB).
  *
- * Extracted VERBATIM from cli/brain-lint.ts's private `parseTheme` so the
- * lint checks and the deterministic fixers (cli/brain-fix-auto.ts) share a
+ * Extracted VERBATIM from packages/knowledge/brain-lint.ts's private `parseTheme` so the
+ * lint checks and the deterministic fixers (packages/knowledge/brain-fix-auto.ts) share a
  * single parse derivation. They used to disagree: brain-lint fell back to a
  * regex extractor on YAML failure (an unquoted `:` in a description is a
  * real, common theme shape), while brain-fix-auto's own strict copy returned

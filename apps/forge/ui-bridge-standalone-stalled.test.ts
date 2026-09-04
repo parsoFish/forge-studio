@@ -10,7 +10,7 @@
  * PINNED BEFORE THE FIX (RED at branch base — see the W8-A2 report for the
  * quoted failing output and the revert-and-rerun proof).
  *
- * RUN: node --experimental-strip-types --test cli/ui-bridge-standalone-stalled.test.ts
+ * RUN: node --experimental-strip-types --test apps/forge/ui-bridge-standalone-stalled.test.ts
  */
 
 import { test, before, after } from 'node:test';

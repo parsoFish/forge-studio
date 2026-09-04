@@ -69,7 +69,7 @@ test('the gate is the ONLY thing that can reach onConfirm, so display and payloa
   // them), so what is asserted here is the OBSERVABLE half: the bar's rendered
   // flow of origin is the one the caller passed, on both attributes and in the
   // visible copy. The wiring to the click is covered per-route over the wire —
-  // `cli/ui-bridge-flow-run-repoint.test.ts` pins that the WRONG flow string is
+  // `apps/forge/ui-bridge-flow-run-repoint.test.ts` pins that the WRONG flow string is
   // refused, which is what a divergence would produce.
   const html = markup({ pending: { currentFlowId: 'retro-flow', targetFlowId: 'forge-develop' } });
   expect(html).toContain('data-current-flow="retro-flow"');

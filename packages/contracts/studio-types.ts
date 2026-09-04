@@ -518,7 +518,7 @@ export type CommunitySkill = {
 // ever covered kind:skill). Loaded by orchestrator/studio/registry.ts
 // (`loadCommunityRegistry`); validated by orchestrator/studio/validate.ts
 // (`validateCommunityRegistry`), wired into `forge studio lint` via
-// cli/studio-lint.ts.
+// apps/forge/studio-lint.ts.
 // ---------------------------------------------------------------------------
 
 export const COMMUNITY_REGISTRY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
