@@ -303,9 +303,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // `data-onboard-run-status="idle"` with no session id — the product had
   // already answered; the runner had not looked again. A story can spend
   // real money and still report the product never started.
-  if (steps.length > 0) {
+  // A beat WATCHES as well as acts. `waitForConsequence` used to run only for a
+  // beat with a `do` block, so a beat that merely observes an agent it did not
+  // start — S1 beat 6, onboarding, which is fire-and-forget and has nothing to
+  // press — declared a bound that bounded NOTHING. `6.11.19`'s guard said so in
+  // its own words, on the first beat that exercised the case: the guard was
+  // right and this wiring was the gap. A declared agent wait is a statement
+  // about the BEAT (bead `forge-8vfn.6.11.25`, ruling 285).
+  if (steps.length > 0 || bound.label !== null) {
     const waitedFrom = Date.now();
-    if (new URL(page.url()).pathname !== target) {
+    if (steps.length > 0 && new URL(page.url()).pathname !== target) {
       await page
         .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
         .catch(() => {
