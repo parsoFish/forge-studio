@@ -580,7 +580,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const manifestPath = join(root, 'manifest.md');
     writeFileSync(manifestPath, [
       '---', 'initiative_id: INIT-2026-08-02-mg', 'project: demo', `project_repo_path: ${wt}`,
-      "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
+      "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1', 'class: code',
       'phase: in-flight', 'origin: architect', `worktree_path: ${wt}`, '---', '# INIT-2026-08-02-mg', '',
     ].join('\n'));
 

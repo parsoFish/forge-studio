@@ -49,7 +49,7 @@ function writeManifest(stateDir: string, worktreePath: string): void {
   mkdirSync(stateDir, { recursive: true });
   writeFileSync(join(stateDir, `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, 'project: fix', `project_repo_path: ${worktreePath}`,
-    "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
+    "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1', 'class: code',
     'phase: ready-for-review', 'origin: architect', `worktree_path: ${worktreePath}`, `cycle_id: ${INIT}`,
     '---', `# ${INIT}`, '',
   ].join('\n'));

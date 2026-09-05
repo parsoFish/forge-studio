@@ -42,6 +42,8 @@ function withForgeRoot(fn: (root: string) => void): void {
 function seed(root: string, cycleId: string, payload: TriggerPayload | null): CycleInput {
   const manifest: InitiativeManifest = {
     initiative_id: 'INIT-2026-07-25-triggered-x',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'someproj',
     project_repo_path: join(root, 'projects', 'someproj'),
     created_at: '2026-07-25T00:00:00Z',
@@ -185,6 +187,8 @@ test('a non-triggered (architect) manifest yields no trigger line', () => {
     // Rewrite the manifest as an ordinary architect-origin run.
     const manifest: InitiativeManifest = {
       initiative_id: 'INIT-2026-07-25-triggered-x',
+      class: 'code',
+      acceptance_criteria: [],
       project: 'someproj',
       project_repo_path: join(root, 'projects', 'someproj'),
       created_at: '2026-07-25T00:00:00Z',

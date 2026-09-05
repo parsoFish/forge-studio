@@ -57,6 +57,7 @@ project_repo_path: ${join(root, 'projects', 'testproj')}
 created_at: 2026-07-18T00:00:00Z
 iteration_budget: 5
 cost_budget_usd: 3
+class: code
 phase: pending
 origin: architect
 flow_id: forge-architect

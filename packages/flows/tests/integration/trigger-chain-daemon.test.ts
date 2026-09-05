@@ -24,6 +24,8 @@ import { getPaths, listPending } from '../../queue.ts';
 function sourceManifest(): InitiativeManifest {
   return {
     initiative_id: 'INIT-2026-07-25-chain-src',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'someproj',
     project_repo_path: '/tmp/someproj',
     created_at: '2026-07-25T00:00:00Z',

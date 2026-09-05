@@ -34,6 +34,15 @@ export type { ManifestPhase, InitiativeOrigin, InitiativeManifest } from '@forge
 import type { InitiativeOrigin, InitiativeManifest, ManifestPhase } from '@forge/contracts/manifest-types.ts';
 
 const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed', 'triggered'];
+/**
+ * ADR 051's four change classes as a runtime list — the same relationship
+ * `INITIATIVE_ORIGINS` above has to `InitiativeOrigin`: the TYPE is the SSOT in
+ * `@forge/contracts`, this is the value a validator can iterate. Exported
+ * because `@forge/factory`'s class -> gate-profile table is keyed by it and a
+ * second hand-written copy of the four names is how the table drifts from the
+ * field it claims to describe.
+ */
+export const CHANGE_CLASSES: readonly InitiativeManifest['class'][] = ['code', 'docs', 'config', 'infra'];
 const DEFAULT_ORIGIN: InitiativeOrigin = 'architect';
 
 
@@ -101,6 +110,12 @@ export function parseManifest(content: string): InitiativeManifest {
   // the boundary rather than silently coercing).
   const rawOrigin = stringField(data, 'origin', false);
   const origin = (rawOrigin ? rawOrigin : DEFAULT_ORIGIN) as InitiativeOrigin;
+  // ADR 051. `class` follows `origin`'s convention exactly: preserved verbatim
+  // here and rejected by validateManifest, so the boundary fails fast on a
+  // typo rather than coercing it. There is no default — a manifest that omits
+  // it is missing a required field, not an implicit `code` initiative.
+  const changeClass = stringField(data, 'class', true) as InitiativeManifest['class'];
+  const acceptance_criteria = parseAcceptanceCriteria(data);
 
   const manifest: InitiativeManifest = {
     initiative_id,
@@ -111,6 +126,8 @@ export function parseManifest(content: string): InitiativeManifest {
     cost_budget_usd,
     phase,
     origin,
+    class: changeClass,
+    acceptance_criteria,
     body: parsed.content.replace(/^\n+/, ''),
   };
   // W6-RV-1: explicit author-supplied title, trimmed; absent/blank stays absent
@@ -189,6 +206,11 @@ export function serializeManifest(m: InitiativeManifest): string {
     // legacy manifest gains the explicit tag — the cohort split must be
     // unambiguous on disk, not inferred at read time forever.
     origin: m.origin ?? DEFAULT_ORIGIN,
+    // ADR 051: both round-trip unconditionally. A field the writer drops is a
+    // field the next reader cannot enforce, and every write path spreads the
+    // parsed manifest back through here.
+    class: m.class,
+    acceptance_criteria: m.acceptance_criteria.map((c) => ({ given: c.given, when: c.when, then: c.then })),
   };
   // W6-RV-1: round-trip the explicit title unchanged — every write path
   // (claim, cycle_id/cost_ceiling/specs stamps, resume-from) spreads the
@@ -256,6 +278,11 @@ export function validateManifest(m: InitiativeManifest): string[] {
   }
   if (!INITIATIVE_ORIGINS.includes(m.origin)) {
     errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
+  }
+  // ADR 051: the class selects the gate profile the work is judged by, so an
+  // unknown one is an error at the boundary, never a fall-through to `code`.
+  if (!CHANGE_CLASSES.includes(m.class)) {
+    errors.push(`class must be one of ${CHANGE_CLASSES.join(' | ')}: got ${String(m.class)}`);
   }
   if (m.quality_gate_cmd !== undefined) {
     if (!Array.isArray(m.quality_gate_cmd) || m.quality_gate_cmd.length === 0) {
@@ -540,6 +567,42 @@ export function persistManifestSendBack(manifestPath: string): { round: number }
 }
 
 // ---------- helpers ----------
+
+/**
+ * ADR 051 — the typed `acceptance_criteria` reader. A malformed entry is an
+ * ERROR NAMING ITS INDEX, never a silent absence: the shape this replaces
+ * (prose recovered by regex) dropped whatever it failed to match, and a
+ * criterion nobody parsed is a criterion the review agent cannot return a
+ * verdict on. An absent key is an empty list — a manifest may legitimately
+ * carry no criteria at mint time — but a present key must be well formed.
+ */
+function parseAcceptanceCriteria(data: Record<string, unknown>): InitiativeManifest['acceptance_criteria'] {
+  const raw = data['acceptance_criteria'];
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error('manifest acceptance_criteria must be a list of {given, when, then}');
+  }
+  return raw.map((entry, i) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`manifest acceptance_criteria[${i}] must be an object with given/when/then`);
+    }
+    const e = entry as Record<string, unknown>;
+    // `when` may be EMPTY and `given`/`then` may not. A criterion is allowed to
+    // be a state assertion with no trigger — real architect output carries them
+    // (a Given+Then pair, rendered with an em-dash for the absent clause) — but
+    // a criterion with no precondition or no expectation asserts nothing.
+    if (typeof e['when'] !== 'string') {
+      throw new Error(`manifest acceptance_criteria[${i}].when must be a string (it may be empty)`);
+    }
+    for (const key of ['given', 'then'] as const) {
+      const v = e[key];
+      if (typeof v !== 'string' || v.trim().length === 0) {
+        throw new Error(`manifest acceptance_criteria[${i}].${key} must be a non-empty string`);
+      }
+    }
+    return { given: String(e['given']), when: String(e['when']), then: String(e['then']) };
+  });
+}
 
 function stringField(data: Record<string, unknown>, key: string, required: boolean): string {
   const v = data[key];

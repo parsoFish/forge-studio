@@ -96,6 +96,8 @@ test('the ports round-trip a manifest through the contract type', () => {
     cost_budget_usd: 5,
     phase: 'pending' as const,
     origin: 'architect' as const,
+    class: 'code' as const,
+    acceptance_criteria: [],
     body: '# Conformance\n',
   };
   const round = architectManifestPorts.parseManifest(architectManifestPorts.serializeManifest(manifest));

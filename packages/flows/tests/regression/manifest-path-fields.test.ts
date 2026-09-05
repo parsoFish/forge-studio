@@ -339,7 +339,7 @@ test('writeManifest: refuses a manifest with an out-of-root worktree_path AND cr
   const outside = newOutsideDir('mpf-writemanifest-outside-');
   const id = 'INIT-2026-08-06-x12-writemanifest-refuse';
   const m: InitiativeManifest = {
-    initiative_id: id,
+    initiative_id: id, class: 'code', acceptance_criteria: [],
     project: 'test-project',
     project_repo_path: '',
     created_at: '2026-08-06T00:00:00.000Z',

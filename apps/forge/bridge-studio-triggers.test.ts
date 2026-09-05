@@ -60,6 +60,7 @@ function makePlainManifest(): string {
     'created_at: 2026-05-30T22:45:00.000Z',
     'iteration_budget: 5',
     'cost_budget_usd: 2.0',
+    'class: code',
     `cycle_id: ${PLAIN_CYCLE_ID}`,
     'flow_id: forge-develop',
     '---',

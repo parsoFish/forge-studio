@@ -176,6 +176,20 @@ export type DraftInitiative = {
    * `depends_on_initiatives` (F-25 scheduler gate). Empty = runs in parallel.
    */
   depends_on?: string[];
+  /**
+   * ADR 051 — the change class this initiative is. Required of the architect:
+   * it selects the gate profile the work is judged by, and there is no default
+   * to fall back to. `buildManifest` refuses a draft that omits it.
+   */
+  class: 'code' | 'docs' | 'config' | 'infra';
+  /**
+   * ADR 051 — typed acceptance criteria. Required of the architect and carried
+   * verbatim onto the manifest, where the PM compiles them into work items,
+   * review returns a verdict per entry and PLAN.html renders them. This is the
+   * field that retires `extractGwtBlocks`: criteria are DECLARED, not recovered
+   * from prose by regex.
+   */
+  acceptance_criteria: ReadonlyArray<{ given: string; when: string; then: string }>;
   body: string;
 };
 

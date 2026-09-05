@@ -27,6 +27,7 @@ function manifestText(initiativeId: string, extra: Record<string, string> = {}):
     created_at: "'2026-06-21T00:00:00Z'",
     iteration_budget: '4',
     cost_budget_usd: '6',
+    class: 'code',
     phase: 'ready-for-review',
     origin: 'architect',
     flow_id: 'forge-develop',

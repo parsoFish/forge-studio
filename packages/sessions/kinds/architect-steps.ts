@@ -379,9 +379,23 @@ const DRAFT_SCHEMA = {
           iteration_budget: { type: 'number' },
           cost_budget_usd: { type: 'number' },
           depends_on: { type: 'array', items: { type: 'string' } },
+          // ADR 051: both are REQUIRED of the model. `class` selects the gate
+          // profile; `acceptance_criteria` is the typed field that replaces
+          // prose recovered by regex, so the shape is stated here rather than
+          // hoped for in the skill's prose.
+          class: { type: 'string', enum: ['code', 'docs', 'config', 'infra'] },
+          acceptance_criteria: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              properties: { given: { type: 'string' }, when: { type: 'string' }, then: { type: 'string' } },
+              required: ['given', 'when', 'then'],
+            },
+          },
           body: { type: 'string' },
         },
-        required: ['slug', 'title', 'iteration_budget', 'cost_budget_usd', 'body'],
+        required: ['slug', 'title', 'iteration_budget', 'cost_budget_usd', 'class', 'acceptance_criteria', 'body'],
       },
     },
   },
@@ -545,6 +559,11 @@ export async function runDraftStep(
     title: draftInitiatives[idx]?.title ?? m.initiative_id,
     iteration_budget: m.iteration_budget,
     cost_budget_usd: m.cost_budget_usd,
+    // ADR 051: read off the MANIFEST, not the draft — `buildManifest` is where
+    // the class and the criteria were validated, so the plan the operator
+    // confirms shows the same values the queue will run.
+    class: m.class,
+    acceptance_criteria: m.acceptance_criteria,
     // Carry cross-initiative build order through to the PLAN render. The
     // renderer's "Depends on" column reads this; without it the plan showed
     // every initiative as "—" even when the manifests DID carry deps
