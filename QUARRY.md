@@ -158,6 +158,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/derive-pr-body.ts | factory | rewritten | 72 |
 | packages/factory/phases/capture-nonce.ts | factory | rewritten | 58 |
 | packages/factory/phases/pm-decomposition-doc.ts | factory | rewritten | 68 |
+| packages/factory/phases/review-chunks.ts | factory | rewritten | 120 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-capture.ts | factory | verbatim | 48 |
 | packages/factory/demo-model.ts | factory | verbatim | 744 |
