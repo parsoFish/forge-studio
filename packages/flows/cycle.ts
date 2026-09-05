@@ -16,6 +16,7 @@ import { join, resolve } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
+import type { CeilingSource } from './flow-budgets.ts';
 import { createLogger } from '@forge/kernel';
 import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -79,19 +80,27 @@ import { loadFlowDefinition } from './studio/flow-registry.ts';
 /**
  * Resolve the effective per-run cost ceiling override for a cycle. Precedence:
  *   FORGE_COST_CEILING_USD env  ??  manifest `cost_ceiling_usd`
- *   ??  manifest `cost_budget_usd` + DERIVED_CEILING_MARGIN_USD  ??  undefined
- * When undefined, runFlow falls back to the flow's own `costCeilingUsd`. A
+ *   ??  manifest `cost_budget_usd` x (1 + DERIVED_CEILING_MARGIN_SHARE)  ??  none
+ * When there is none, runFlow falls back to the flow's own `costCeilingUsd`. A
  * non-numeric / non-positive env value is ignored (fail-soft to the manifest).
  * Exported for unit testing of the precedence rule.
+ *
+ * Returns the SOURCE with the number (bead forge-8vfn.6.10.23): three knobs set
+ * this ceiling and a stopped run named none of them, so "what bound this run"
+ * meant re-deriving the precedence by hand against a live process — which is how
+ * G2 spent a session discovering the operator's authorised $20 bound nothing.
  */
-export function resolveCostCeilingOverride(manifestPath: string): number | undefined {
+export function resolveCostCeilingOverride(
+  manifestPath: string,
+): { ceilingUsd: number | undefined; source: CeilingSource } {
   const rawEnv = process.env.FORGE_COST_CEILING_USD;
   if (rawEnv !== undefined && rawEnv.trim() !== '') {
     const n = Number.parseFloat(rawEnv);
-    if (Number.isFinite(n) && n > 0) return n;
+    if (Number.isFinite(n) && n > 0) return { ceilingUsd: n, source: 'env' };
   }
   const fromManifest = readManifestCostCeiling(manifestPath);
-  return fromManifest ?? undefined;
+  if (fromManifest !== null) return fromManifest;
+  return { ceilingUsd: undefined, source: 'none' };
 }
 
 /**
@@ -250,8 +259,8 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
         );
       }
       const flow = loadFlowDefinition(flowPath);
-      const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, priorSpendEvents: architectEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
+      const { ceilingUsd: costCeilingUsd, source: costCeilingSource } = resolveCostCeilingOverride(input.manifestPath);
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, costCeilingSource, priorSpendEvents: architectEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

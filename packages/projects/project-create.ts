@@ -41,7 +41,7 @@ import { dirname, join, resolve } from 'node:path';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import { isReservedId } from '@forge/agents/skill-path.ts';
-import { projectStartersDir, listProjectStarters } from '@forge/kernel';
+import { projectStartersDir, listProjectStarters, resolveGuardedPath } from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -71,6 +71,9 @@ export type ScaffoldResult = {
   hardGreen: boolean;
   failingClauses: ClauseResult[];
   filesWritten: string[];
+  /** The remote this creation minted, when asked for. Absent otherwise — never
+   *  an empty string, which would read as "asked for and failed". */
+  remoteUrl?: string;
 };
 
 /**
@@ -245,11 +248,69 @@ function sweepStagingLeftovers(root: string, id: string): void {
  * the two writes — three prior SEC-03 reorders each reopened the orphan one
  * layer down; transactionalization is the different axis that actually closes it.
  */
+/** Operator-owned facts (ruling 168), constants because they decide WHERE an
+ *  outward-facing repository appears and how visible it is. */
+const REMOTE_ACCOUNT = 'parsoFish';
+const REMOTE_VISIBILITY = '--private';
+
+/**
+ * Mint the project's GitHub remote and push the scaffold commit — bead
+ * `forge-8vfn.6.11.2`, operator ruling 168 (T1 ruling 255).
+ *
+ * S2 beat 5's `resolution-user-count: '0'` cannot read while C6 is unresolved,
+ * and `checkC6` passes iff `git remote get-url origin` names a github.com
+ * remote; a greenfield project is its own repo from birth (W7-B6) with none.
+ * `gh` because it is ALREADY forge's PR tool — no new dependency.
+ *
+ * AUTH IS CHECKED FIRST AND FAILS LOUD (the bead's own park): a project that
+ * silently came out remote-less reads as "C6 unresolved again" and costs a run
+ * to diagnose. `runGh` is injected so tests never touch a real GitHub.
+ */
+function mintRemote(
+  projectsRoot: string,
+  id: string,
+  remote: { account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string },
+): string {
+  const runGh =
+    remote.runGh ??
+    ((args: string[], cwd?: string) => execFileSync('gh', args, { cwd, encoding: 'utf8' }).toString());
+  const account = remote.account ?? REMOTE_ACCOUNT;
+  const visibility = remote.visibility ?? REMOTE_VISIBILITY;
+  // `id` is request-derived (the operator types the NAME the slug comes from),
+  // and this hands a directory to an OUTWARD-FACING subprocess. So the path
+  // reaches `gh` only through the guard, with `id` as its own segment and a
+  // fixed root — never a lexical join. `check-request-path-sinks` asked this
+  // question when the sink appeared; routing it is the answer, not baselining.
+  const guarded = resolveGuardedPath(projectsRoot, [id]);
+  if (!guarded.ok || !guarded.exists) {
+    throw new Error(`project "${id}": refusing to create a remote for a path that does not resolve inside ${projectsRoot}`);
+  }
+  const projectDir = guarded.realPath;
+  try {
+    runGh(['auth', 'status']);
+  } catch (err) {
+    throw new Error(
+      `project "${id}" was scaffolded locally, but its GitHub remote was NOT created: \`gh auth status\` failed ` +
+        `(${err instanceof Error ? err.message : String(err)}). Authenticate gh and add the remote deliberately — ` +
+        'forge does not fall back to a local-only project, because a silently remote-less project reads as an ' +
+        'unresolved contract clause and costs a run to diagnose.',
+    );
+  }
+  const out = runGh(
+    ['repo', 'create', `${account}/${id}`, visibility, '--source', projectDir, '--remote', 'origin', '--push'],
+    projectDir,
+  );
+  return String(out).trim().split('\n').filter(Boolean).pop() ?? `https://github.com/${account}/${id}`;
+}
+
 export function scaffoldGreenfieldProject(input: {
   manifest: CreationManifest;
   forgeRoot: string;
   /** Projects root; defaults to `<forgeRoot>/projects`. */
   projectsRoot?: string;
+  /** Mint a GitHub remote and push the scaffold commit. ABSENT = no `gh` call
+   *  at all: an outward-facing side effect happens only when asked for. */
+  remote?: { create: boolean; account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string };
 }): ScaffoldResult {
   const manifest = validateCreationManifest(input.manifest);
   const id = slugifyProjectName(manifest.name);
@@ -403,6 +464,12 @@ export function scaffoldGreenfieldProject(input: {
   // catastrophic here — this narrow between-renames window is the residual
   // this design accepts in exchange for closing the data-loss class.
 
+  // LAST, and that is a CONTAINMENT property, not a preference: the unwind
+  // above deletes a staged directory and CANNOT delete a GitHub repository
+  // (that needs an operator token this lane does not hold), so a remote minted
+  // before a local failure would be an orphan nobody here can remove.
+  const remoteUrl = input.remote?.create === true ? mintRemote(projectsRoot, id, input.remote) : undefined;
+
   return {
     id,
     projectDir,
@@ -410,5 +477,6 @@ export function scaffoldGreenfieldProject(input: {
     hardGreen: report.ok,
     failingClauses: report.clauses.filter((c) => c.hard && !c.pass),
     filesWritten,
+    ...(remoteUrl !== undefined ? { remoteUrl } : {}),
   };
 }
