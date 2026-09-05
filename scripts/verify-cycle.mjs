@@ -9,23 +9,22 @@
  * operator does, through the bridge, threading ONE cycle_id across all three
  * stages (DEC-2):
  *
- *   1. forge-architect — POST /api/architect/start with the initiative idea, then
- *      auto-answer each interview round (/api/architect/answer) until the plan is
- *      drafted, then approve the PLAN GATE (/api/plan-verdict). The architect
- *      promotes a manifest (flow_id: forge-architect, cycle_id minted) to
- *      _queue/pending. `forge serve --once` then runs the architect flow (pm
- *      decomposes the initiative into work items).
- *   2. forge-develop — POST /api/develop/start hands the initiative off to the
- *      develop flow (same cycle_id; reuses the architect worktree + its work
- *      items). `forge serve --once` runs dev → demo → adversarial-review →
- *      verdict, parking at ready-for-review (the VERDICT GATE). Approve via
- *      /api/verdict; the bridge merges the PR and fires finalize.
- *   3. reflect — finalize (in the bridge process) dispatches the standalone
- *      reflector AGENT run (W7-C1: no flow wrapper — forge-develop's
- *      `{on: merged, target: {kind: agent, ref: reflector}}` declaration,
- *      resolved through the reflection-close band guard), which writes the
- *      central project brain. The harness WAITS for `reflector.end` before
- *      teardown (the prior harness killed the bridge mid-reflect).
+ *   1. forge-architect — POST /api/architect/start with the idea, auto-answer each
+ *      interview round, approve the PLAN GATE (/api/plan-verdict). The architect
+ *      promotes a manifest to _queue/pending; `forge serve --once` then runs the
+ *      architect flow (pm decomposes the initiative into work items).
+ *      THE HAND-OFF TO STAGE 2 IS GATED on this stage's verdict — see
+ *      verify-cycle-stage-outcome.mjs and bead forge-8vfn.6.10.6.
+ *   2. forge-develop — POST /api/develop/start hands off to the develop flow (same
+ *      cycle_id; reuses the architect worktree + its work items). `forge serve
+ *      --once` runs dev → demo → adversarial-review → verdict, parking at
+ *      ready-for-review (the VERDICT GATE). Approve via /api/verdict; the bridge
+ *      merges the PR and fires finalize.
+ *   3. reflect — finalize dispatches the standalone reflector AGENT run (W7-C1: no
+ *      flow wrapper — forge-develop's `{on: merged, target: {kind: agent, ref:
+ *      reflector}}`, resolved through the reflection-close band guard), which
+ *      writes the central project brain. The harness WAITS for `reflector.end`
+ *      before teardown (the prior harness killed the bridge mid-reflect).
  *
  * The gate assertions (ADR 022 §1 + S9):
  *   1. the cycle reached merge (finalStatus `done` / manifest in _queue/done/);
@@ -76,6 +75,7 @@ import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
+import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
 import {
   DEFAULT_PROJECT,
   buildOutcomeChecks,
@@ -308,7 +308,7 @@ function runProjectTests(repoPath) {
 }
 
 /** Read a project's `artifactRoot` from `.forge/project.json` (mirrors
- *  orchestrator/brain-paths.ts readArtifactRoot); `"."` on any failure. */
+ *  packages/knowledge/brain-paths.ts readArtifactRoot); `"."` on any failure. */
 function readArtifactRoot(repoPath) {
   try {
     const p = join(repoPath, '.forge', 'project.json');
@@ -323,8 +323,8 @@ function readArtifactRoot(repoPath) {
 
 /** The successor develop flow's tracked demo bundle location (R4-10-F5): the
  *  demo agent (R4-07) authors demo.json at the artifactRoot-resolved demo dir on
- *  the branch (orchestrator/demo-paths.ts projectDemoRelDir), which merges to the
- *  project repo. Mirrors that rule so the harness reads the SAME path. */
+ *  the branch (packages/flows/demo-paths.ts projectDemoRelDir), which merges to
+ *  the project repo. Mirrors that rule so the harness reads the SAME path. */
 function mergedDemoJsonPath(repoPath, initiativeId) {
   const root = readArtifactRoot(repoPath);
   const relDir = root === '.' ? `demo/${initiativeId}` : `${root}/history/${initiativeId}/demo`;
@@ -576,21 +576,13 @@ async function cycleStatusFromBridge(bridgeUrl, cycleId) {
 }
 
 /**
- * autoApprove — the harness's deliberate, explicit approve. POSTs an
- * 'approve' verdict to the bridge's /api/verdict (the SAME surface the
- * operator clicks in the Studio UI). M7-5 (ADR-031): replaces the old
- * `forge review --approve` CLI shell-out — the bridge is the operator API
- * now, and its approve path (mergePullRequest + finalizeMergedReadyForReview)
- * is a strict superset of the deleted cmdReviewApprove (ADR-021/023).
- *
- * NO-AUTO-APPROVE INVARIANT (ADR-023) intact: approval is still NOT automatic
- * — it requires either an operator UI click or this explicit harness call.
- * Only the transport changed (CLI → bridge POST); the outcome is identical.
- *
- * POST shape: bridge base url + 'content-type' + the required 'x-forge-csrf'
- * anti-CSRF header (the bridge rejects any non-GET lacking it with a 403 —
- * see ui-bridge.ts). This call carried the header from the start; M7-5 also
- * corrected postSendBack, which had been omitting it (and thus 403-ing).
+ * autoApprove — the harness's deliberate, explicit approve: POSTs an 'approve'
+ * verdict to the bridge's /api/verdict, the SAME surface the operator clicks
+ * (M7-5 / ADR-031; its path is a strict superset of the deleted
+ * `forge review --approve`). The NO-AUTO-APPROVE invariant (ADR-023) is intact —
+ * approval still requires an operator click or this explicit call; only the
+ * transport changed. The `x-forge-csrf` header is required: the bridge 403s any
+ * non-GET without it.
  */
 async function autoApprove(bridgeUrl, initiativeId) {
   log(`auto-approving cycle (POST ${bridgeUrl}/api/verdict approve)…`);
@@ -882,8 +874,10 @@ async function handoffToDevelop(bridgeUrl, initiativeIds) {
 async function runServeStage(page, label) {
   log(`spawning forge serve --once (${label})…`);
   const serve = startServe();
-  serve.stdout.on('data', (d) => process.stdout.write(d));
-  serve.stderr.on('data', (d) => process.stderr.write(d));
+  const captured = []; // 6.10.6 — captured as well as echoed, then classified below
+  const cap = (d) => { for (const l of String(d).split('\n')) if (l.trim()) captured.push(l); };
+  serve.stdout.on('data', (d) => { cap(d); process.stdout.write(d); });
+  serve.stderr.on('data', (d) => { cap(d); process.stderr.write(d); });
   const EXITED = Symbol('serve-exited');
   const end = new Promise((res) => serve.on('exit', () => res(EXITED)));
   const seen = new Map();
@@ -905,22 +899,21 @@ async function runServeStage(page, label) {
   await end;
   await poll;
   log(`serve --once (${label}) exited`);
+  const outcome = classifyServeStageOutcome(captured);
+  for (const e of outcome.errors) log(`serve stage (${label}) FAILED: ${e}`);
+  return outcome;
 }
 
-/** Wait for the reflector to FINISH or DIE (reflector.end / cycle.reflection-lost
- *  in the cycle log). The bridge fires finalize→reflect detached after the
- *  verdict approve; the old harness tore the bridge down ~3s later, killing
- *  reflect mid-start. Bounded; returns true only when reflection genuinely
- *  completed (`ended`).
+/** Wait for the reflector to FINISH or DIE (`reflector.end` / `cycle.reflection-lost`).
+ *  The bridge fires finalize→reflect detached after the approve; the old harness
+ *  tore the bridge down ~3 s later, killing reflect mid-start. Bounded; true only
+ *  when reflection genuinely `ended`.
  *
- *  M0-A round-2 defect B: the old version scanned only for `reflector.end`,
- *  so a reflector that died loudly (`cycle.reflection-lost` is terminal —
- *  never followed by an end event) burned the FULL deadline and then logged
- *  the neutral "not seen before deadline", which reads as slow rather than
- *  dead (cost 12 of run 1's 47 minutes). `classifyReflectorProgress` lets
- *  this return the moment the outcome is known — `ended` or `lost` — and a
- *  `lost` is always reported by name and cause, never folded into the
- *  deadline-timeout message. */
+ *  M0-A round-2 defect B: scanning only for `reflector.end` meant a reflector that
+ *  died loudly burned the FULL deadline and then logged the neutral "not seen
+ *  before deadline" — slow-looking rather than dead (12 of run 1's 47 minutes).
+ *  `classifyReflectorProgress` returns the moment the outcome is known, and a
+ *  `lost` is always named with its cause. */
 async function waitForReflectorEnd(cycleId, deadlineMs) {
   const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
   let loggedStart = false;
@@ -1049,7 +1042,7 @@ async function main() {
   // initiatives; ONE serve pass decomposes them all (the dependency gate is
   // flow_id-aware — decompose flows never wait on prerequisite merges).
   const { initiatives } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
-  await runServeStage(page, 'architect');
+  const architectStage = await runServeStage(page, 'architect');
   // Focus the first threaded cycle in the dashboard for the frame gallery.
   try {
     await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
@@ -1063,12 +1056,19 @@ async function main() {
   // holds dependents until their prerequisite reaches done/. Each serve pass
   // builds whatever is eligible; each ready-for-review cycle gets the verdict
   // approve; the loop repeats until every initiative merged (or passes run out).
+  if (!architectStage.ok) { // 6.10.6 — gate the hand-off; nothing downstream can tell later
+    log('REFUSING the develop hand-off — the architect stage did not succeed (reasons above).');
+    await watch.stop?.();
+    process.exit(1);
+  }
   await handoffToDevelop(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
   const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
   const approveFailures = new Map();
   let sendBackDone = !SEND_BACK;
   const maxPasses = initiatives.length + 2;
   for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
+    // SCOPE (6.10.6): only the architect hand-off is GATED — the develop passes have
+    // their own convergence logic. Their outcome is still classified and logged.
     await runServeStage(page, `develop-pass-${pass}`);
     await sleep(2000);
     watch = await ensureWatch(watch);

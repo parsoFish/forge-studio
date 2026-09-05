@@ -126,6 +126,11 @@ packages/factory/phases/reflector.ts writeFileSync 8
 packages/factory/phases/release-finalize.ts execFileSync 1
 packages/factory/phases/release-finalize.ts existsSync 1
 packages/factory/phases/release-finalize.ts readFileSync 1
+packages/factory/phases/pm-rejected-set.ts existsSync 2
+packages/factory/phases/pm-rejected-set.ts mkdirSync 1
+packages/factory/phases/pm-rejected-set.ts readdirSync 1
+packages/factory/phases/pm-rejected-set.ts renameSync 1
+packages/factory/phases/pm-rejected-set.ts writeFileSync 1
 packages/factory/reflect-reconcile.ts existsSync 4
 packages/factory/reflect-reconcile.ts readdirSync 1
 packages/factory/reflect-reconcile.ts readFileSync 2

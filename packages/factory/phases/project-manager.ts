@@ -38,6 +38,7 @@ import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
+import { rejectWorkItemSet } from './pm-rejected-set.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -336,11 +337,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       },
     )
   ) {
-    return {
-      kind: 'failure',
-      summary:
-        'brain-first mandate not honoured (0 brain-query calls). The system prompt requires reading from `brain/...` (forge themes + project themes) before producing work items.',
-    };
+    // Second door: returns AFTER the agent's turn, so a set may already be claimable.
+    return rejectWorkItemSet(resolve(input.worktreePath, '.forge', 'work-items'),
+      'brain-first mandate not honoured (0 brain-query calls). The system prompt requires reading from `brain/...` (forge themes + project themes) before producing work items.');
   }
 
   const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
@@ -647,7 +646,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     .filter((s): s is string => s !== null)
     .join('; ');
 
-  return { kind: 'failure', summary };
+  // 8vfn.6.1 / §15.167 — claimants read the DIRECTORY. Story: pm-rejected-set.ts.
+  return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId });
 }
 
 /** Heading for the project-contract standing-AC section injected per WI. */
