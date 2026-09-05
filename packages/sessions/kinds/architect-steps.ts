@@ -104,7 +104,9 @@ export async function runExploreThenDraft(args: ArchitectStepArgs): Promise<RunA
     skill: 'architect-runner',
     event_type: 'log',
     input_refs: [],
-    output_refs: findings ? [edgeCasesPath(paths.sessionDir)] : [],
+    // A non-fs event-log string only — no bytes flow through it. Every ACTUAL
+    // read/write/rm of `edge-cases.json` routes its leaf through `guardedFile`.
+    output_refs: findings ? [join(paths.sessionDir, 'edge-cases.json')] : [],
     message: findings
       ? `exploration stage — ${findings.edgeCases.length} edge case(s), ${findings.brainConstraints.length} brain constraint(s)`
       : exploreCrash
@@ -255,13 +257,6 @@ const EXPLORE_SCHEMA = {
   },
   required: ['edgeCases', 'brainConstraints', 'exploreSummary'],
 };
-
-/** Pure path builder — the ONLY remaining use is the non-fs event-log
- *  `output_refs` string (no bytes flow through it). Every ACTUAL read/write/rm
- *  of `edge-cases.json` routes the leaf through `guardedFile` instead. */
-export function edgeCasesPath(sessionDir: string): string {
-  return join(sessionDir, 'edge-cases.json');
-}
 
 /** SEC-04: the `edge-cases.json` leaf rides through the guard (read mode); a
  *  symlinked leaf collapses to `null`, indistinguishable from absent. */
@@ -638,7 +633,7 @@ async function runStructured<T>(args: {
   onText?: (text: string) => void;
   onThinking?: (text: string) => void;
 }): Promise<StructuredResult<T>> {
-  const { output, reads } = await runStructuredTurn<T>({
+  const { output, reads, costUsd } = await runStructuredTurn<T>({
     queryFn: args.queryFn,
     prompt: args.prompt,
     schema: args.schema,
@@ -659,6 +654,16 @@ async function runStructured<T>(args: {
     onThinking: args.onThinking,
     label: 'architect-structured',
   });
+  // bead forge-8vfn.18 — emit the turn's spend so the ceiling can bound stage 1.
+  // Authoritative because this phase emits no `iteration` events (trap pinned in
+  // architect-turn-cost-event.test.ts). Best-effort: never fail a completed turn.
+  try {
+    args.logger.emit({
+      initiative_id: args.initiativeId, phase: 'architect', skill: 'architect',
+      event_type: 'end', input_refs: [], output_refs: [],
+      cost_usd: costUsd, message: 'architect.turn-cost',
+    });
+  } catch { /* a logging failure must not fail the turn */ }
   return { output, brainReads: reads.filter((p) => p.includes('brain/')) };
 }
 
