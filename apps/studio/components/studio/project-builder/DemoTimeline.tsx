@@ -155,7 +155,16 @@ export function DemoTimeline({
   }
 
   return (
-    <section data-step-count={internal.length}>
+    <section
+      data-step-count={internal.length}
+      // M1-G / forge-8vfn.5.5's rule, which this surface stated at :40 and did
+      // not keep: a surface that starts a session publishes the id on its OWN
+      // root, under a key no page root shadows. `SessionMinted`'s generic
+      // `data-session-id` is shadowed by the onboarding session page's root,
+      // so it could never bind `/sessions/demo/<id>` (S1 beat 8). "No id, no
+      // key" (6.11.5) — never published present-and-empty.
+      {...(demoSessionId === null ? {} : { 'data-demo-session-id': demoSessionId })}
+    >
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Demo Process <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
       </div>
