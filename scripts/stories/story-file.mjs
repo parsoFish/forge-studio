@@ -72,6 +72,45 @@ function validateDoSteps(raw, at) {
  * Validate a raw story object and return a deep-frozen structural copy.
  * Never returns, and never mutates, the input.
  */
+/** Wait kinds a beat may declare. `agent` is the only one so far, and adding
+ *  a second is a deliberate edit here — the friction is the point. */
+const WAIT_KINDS = ['agent'];
+
+/** The widest bound a beat may declare, in ms. A declared wait is a licence to
+ *  sit still; an unbounded or absurd one turns a red run into a hung host,
+ *  which is worse than the defect it was added to fix. */
+const MAX_DECLARED_WAIT_MS = 30 * 60 * 1000;
+
+/**
+ * Validate a beat's optional `wait` (bead `forge-8vfn.6.11.10`, T1 ruling
+ * 220) and RETURN it, so `validateStory`'s field list carries it through.
+ *
+ * That last clause is the whole reason this function exists as more than a
+ * type check: this validator rebuilds every beat from a fixed field list, so a
+ * key it does not name is dropped SILENTLY. `fork` is dropped exactly that way
+ * today (S2 beat 3's own comment says so). A `wait` implemented only in
+ * `beats.mjs` would be declared by the story, never seen by the runner, and
+ * the beat would red at the DOM bound with nothing to say why.
+ *
+ * Fail-closed on an unknown kind rather than falling back to the default: a
+ * silently-ignored `for: 'agnet'` gives the beat the very bound it was
+ * declared to escape, and the run record then blames the product.
+ */
+function validateWait(raw, at) {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) fail(`${at}.wait`, 'expected an object');
+  if (!WAIT_KINDS.includes(raw.for)) {
+    fail(`${at}.wait.for`, `expected one of ${WAIT_KINDS.join(' | ')}, got ${JSON.stringify(raw.for)}`);
+  }
+  if (!Number.isInteger(raw.upTo) || raw.upTo <= 0 || raw.upTo > MAX_DECLARED_WAIT_MS) {
+    fail(
+      `${at}.wait.upTo`,
+      `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
+    );
+  }
+  return Object.freeze({ for: raw.for, upTo: raw.upTo });
+}
+
 export function validateStory(raw) {
   if (raw === null || typeof raw !== 'object') fail('story', 'expected an object');
 
@@ -122,10 +161,12 @@ export function validateStory(raw) {
       fail(`${at}.expect.data`, 'expected at least one data-* expectation');
     }
 
+    const wait = validateWait(b.wait, at);
     return Object.freeze({
       act: b.act,
       say: b.say,
       do: validateDoSteps(b.do, at),
+      ...(wait === undefined ? {} : { wait }),
       expect: Object.freeze({ route: e.route, data: Object.freeze({ ...e.data }) }),
     });
   });
