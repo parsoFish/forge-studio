@@ -1,7 +1,9 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — C1-C4 of the
  * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename,
- * targeting `orchestrator/studio/validate.ts`'s `validateAgent`/`validateCatalog`.
+ * targeting `validateAgent`/`validateCatalog` — then in
+ * `orchestrator/studio/validate.ts`, since ruling 159 in
+ * `packages/agents/studio/validate-agent.ts` (this file moved with its subject).
  *
  * TWO fixture shapes are used, deliberately, and neither is a claim about the
  * real future schema on its own:
@@ -40,7 +42,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { validateAgent, type Finding } from './validate.ts';
+import { validateAgent } from './validate-agent.ts';
+import type { Finding } from '@forge/kernel/findings.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 function mk(slug: string, over: Record<string, unknown> = {}): AgentDefinition {
@@ -51,7 +54,7 @@ function mk(slug: string, over: Record<string, unknown> = {}): AgentDefinition {
     library: true,
     purpose: 'p',
     // Placeholder-empty hooks — see header. Every override below re-specifies
-    // the FULL composition object (mirroring validate.test.ts's own `mk`
+    // the FULL composition object (mirroring `validate-agent.test.ts`'s own `mk`
     // convention, which shallow-merges `over` on top of `base`).
     composition: { skills: [], tools: [], mcps: [], hooks: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },

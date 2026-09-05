@@ -5,7 +5,7 @@
  * M4-library PR 2 split that module three ways, because it was three things
  * wearing one name:
  *   - the id vocabulary and the ONE slug guard  → `@forge/kernel/ids.ts`
- *     (`orchestrator/studio/validate.ts` re-exports them to validate PROJECTS
+ *     (`orchestrator/studio/validate.ts` re-exported them to validate PROJECTS
  *     and KNOWLEDGE BASES, so they were never any one kind's);
  *   - the `skills/` tree layout                 → `@forge/library/skill-path.ts`
  *     (spec §3.1 gives library the Skill kind, and that is its on-disk shape);

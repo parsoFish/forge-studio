@@ -139,7 +139,7 @@ export function FlowHeader({
   const [webhookSources, setWebhookSources] = useState('');
   const [agentSlug, setAgentSlug] = useState('');
 
-  // Client-side only (UX) — orchestrator/studio/validate.ts's trigger-cron
+  // Client-side only (UX) — packages/flows/studio/validate-flow.ts's trigger-cron
   // check (same croner engine) is authoritative on save.
   const cronScheduleInvalid =
     triggerKind === 'cron' && cronSchedule.trim().length > 0 && !isValidCronSchedule(cronSchedule);

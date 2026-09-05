@@ -23,7 +23,7 @@ import { resolve } from 'node:path';
  * The slug shape shared across every studio object id (agents, flows,
  * artifacts, KBs, skills, ...). Defined HERE — this module is a true leaf
  * (only `node:fs`/`node:path`) — and re-exported from
- * `orchestrator/studio/validate.ts` for its 20+ existing call sites.
+ * `@forge/agents/skill-path.ts` for the call sites that reach it that way.
  *
  * This definition used to live in `validate.ts` and be imported back into
  * this file, closing a `skill-path → validate → registry → skill-path`
@@ -39,8 +39,8 @@ export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /**
  * W7-A4 — the ONE id rule for projects and knowledge bases: the id IS the
  * on-disk directory name, case-preserving, matched exactly (see
- * `orchestrator/studio/validate.ts` for the full contract + the reserved-id
- * and reason helpers). Defined in this leaf for the same cycle reason as
+ * `@forge/projects/studio/validate-project.ts` and `@forge/knowledge/studio/validate-kb.ts`
+ * for the rules that apply it, and `RESERVED_OBJECT_IDS` below for the reserved-id helper). Defined in this leaf for the same cycle reason as
  * SLUG_RE; `PROJECT_ID_RE`/`KB_ID_RE` are named aliases of one predicate so
  * a project and the KB bound to it can never disagree about legality.
  */

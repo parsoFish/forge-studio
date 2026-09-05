@@ -500,7 +500,7 @@ export const WEBHOOK_EVENTS_BY_KIND: Readonly<
 };
 
 /** Client-side cron syntax check (UX only) — same croner engine as the
- *  server's `trigger-cron` lint (orchestrator/studio/validate.ts), which
+ *  server's `trigger-cron` lint (packages/flows/studio/validate-flow.ts), which
  *  remains authoritative on save. Empty/blank counts as invalid (nothing to
  *  add yet), not a thrown error. */
 export function isValidCronSchedule(schedule: string): boolean {

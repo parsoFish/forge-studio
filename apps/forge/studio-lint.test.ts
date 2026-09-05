@@ -18,7 +18,7 @@ import { join } from 'node:path';
 
 import { runStudioLint } from './studio-lint.ts';
 import { loadKbDescriptor, resolveKbProcesses } from '@forge/knowledge/studio/kb-descriptor.ts';
-import { validateKb } from '../../orchestrator/studio/validate.ts';
+import { validateKb } from '@forge/knowledge/studio/validate-kb.ts';
 import type { KbBinding } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------

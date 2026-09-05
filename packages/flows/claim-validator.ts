@@ -29,7 +29,7 @@ import { resolve } from 'node:path';
 import { runPreflight } from '@forge/projects/preflight.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { validateFlow } from '../../orchestrator/studio/validate.ts';
+import { validateFlow } from './studio/validate-flow.ts';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 

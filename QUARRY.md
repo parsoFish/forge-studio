@@ -79,7 +79,7 @@ operator-ratified new cap — never a silent raise.
 | `packages/flows/flow-runner.ts` | `flows` | 615 | M2-B replaced its ten phase imports with the `PhaseExecutor` port; the table it shed is `phases/executor-{table,deps}.ts` |
 | `packages/sessions/kinds/project-brain.ts` | `sessions` | 186 | **PORTED 2026-09-03 (M4-sessions s3, ruling 60).** Was `orchestrator/project-brain-builder-runner.ts`. The brain half — `buildAnalyzePlan`, `commitProjectBrain`, `listStagedThemes`, `PROJECT_BRAIN_KIND_DIR` — left first as `packages/knowledge/project-brain-build.ts` (M4-knowledge s5, ruling 56). The 296-line residue was the SHED PLUMBING, and this port sheds it: containment preamble, guarded status read/write, logger/sink/heartbeat/thinking construction and the start/end events are now `kinds/kind-turn.ts`'s, shared by every ported kind. What is left here is the kind's IDENTITY — its phase set, its agent spec, and the two steps that do work. Its `AGENT_RUNNERS` row moved to `kinds/registry.ts` beside it; the old file is deleted. Owner cell now `sessions`, as the knowledge row predicted it would become. |
 | `orchestrator/studio/registry.ts` | `kernel` | 1,180 | one loader for Agent, Flow, KB, Catalog, Community, Template and Project — five packages in one file. **DELETED 2026-09-04 (M4-library s3, ruling 113 as amended by 126/130).** Each kind left for the package that owns it across M3 and M4 — Agent to `@forge/agents/studio/agent-registry.ts`, Flow to `@forge/flows/studio/flow-registry.ts`, KB to `@forge/knowledge/studio/kb-descriptor.ts`, Skill/Template/Catalog/Community to `@forge/library/studio/*-registry.ts`, project discovery to `@forge/kernel` — leaving a 123-line re-export hub with 36 importers and nothing defined in it. Annotated rather than removed, matching the `band-agent-run.ts` and `project-brain.ts` rows above: this table records what the quarry FOUND and what became of it. |
-| `orchestrator/studio/validate.ts` | `kernel` | 1,066 | the same five-way split on the validation side |
+| `orchestrator/studio/validate.ts` | `kernel` | 1,066 | the same split on the validation side — **four-way, not five: kernel owns only `ids.ts` and `findings.ts` (T1 ruling 159)**. **DELETED 2026-09-05 (M5-A s2).** `validateAgent` → `packages/agents/studio/validate-agent.ts`, `validateFlow` + `validateArtifactRef` → `packages/flows/studio/validate-flow.ts`, `validateKb` → `packages/knowledge/studio/validate-kb.ts`, `validateProject` + `validateDiscoveredProjects` → `packages/projects/studio/validate-project.ts`; the library validators had already gone in the M4 carve and the id/`Finding` re-exports die with the file. The KB binding cross-reference composition stays in `apps/forge/studio-lint.ts`, its only composer. `TriggerCheckOpts` was NOT promoted to `@forge/contracts`: measured, its only cross-package consumer was this file, and `validate-flow.ts` now sits beside `validate-triggers.ts` in the same package (disclosed to T1). Annotated rather than removed, matching the `registry.ts` row above. |
 
 ### `pruned` and `deleted`
 
@@ -382,6 +382,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/connection-run-gate.ts | agents | verbatim | 71 |
 | packages/library/studio/connection-validate.ts | library | verbatim | 217 |
 | packages/agents/studio/agent-registry.ts | agents | verbatim | 283 |
+| packages/agents/studio/validate-agent.ts | agents | rewritten | 320 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 121 |
 | packages/agents/studio/derive.ts | agents | verbatim | 290 |
 | packages/agents/studio/hook-dispatch.ts | agents | verbatim | 439 |
@@ -393,6 +394,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/instructions-draft.ts | library | verbatim | 185 |
 | packages/library/studio/library-validate.ts | library | verbatim | 259 |
 | packages/knowledge/studio/kb-descriptor.ts | knowledge | verbatim | 210 |
+| packages/knowledge/studio/validate-kb.ts | knowledge | rewritten | 42 |
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
 | packages/sessions/studio/session-kinds.ts | sessions | verbatim | 580 |
 | packages/sessions/studio/session-kinds-validate.ts | sessions | rewritten | 706 |
@@ -409,9 +411,9 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/template-library.ts | library | verbatim | 610 |
 | packages/contracts/studio/types.ts | contracts | verbatim | 738 |
 | packages/flows/studio/flow-registry.ts | flows | verbatim | 280 |
+| packages/flows/studio/validate-flow.ts | flows | rewritten | 283 |
 | packages/flows/studio/flow-kickoff.ts | flows | rewritten | 137 |
 | packages/flows/studio/validate-triggers.ts | flows | verbatim | 431 |
-| orchestrator/studio/validate.ts | kernel | rewritten | 868 |
 | packages/library/studio/yaml-comments.ts | library | verbatim | 132 |
 | packages/kernel/studio/yaml-fields.ts | kernel | verbatim | 105 |
 | packages/agents/tool-event-emit.ts | agents | verbatim | 244 |
@@ -483,4 +485,5 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 596 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 225 |
 | packages/projects/routes.ts | projects | verbatim | 385 |
+| packages/projects/studio/validate-project.ts | projects | rewritten | 122 |
 | packages/sessions/index.ts | sessions | verbatim | 11 |

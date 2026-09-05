@@ -1478,7 +1478,7 @@ describe('flow-runner per-run cost ceiling override', () => {
 // declaration has no matching inbound edge — an entry node (zero inbound
 // edges) can never satisfy this, so fanOut on an entry node is always
 // illegal. The runtime must honor the SAME predicate the lint rule uses
-// (orchestrator/studio/validate.ts::findFanOutViolations) and reject at flow
+// (packages/flows/flow-fanout.ts::findFanOutViolations) and reject at flow
 // start, before any node executes — never mid-run.
 // ---------------------------------------------------------------------------
 

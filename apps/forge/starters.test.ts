@@ -24,7 +24,8 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { validateAgent, validateFlow } from '../../orchestrator/studio/validate.ts';
+import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
+import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

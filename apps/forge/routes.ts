@@ -70,7 +70,6 @@ import { agentsRoutes } from '@forge/agents/routes.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
 import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
-import { validateAgent } from '../../orchestrator/studio/validate.ts';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
@@ -174,9 +173,6 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       cachedListRuns,
       buildAgentSlugToNodeId,
       loadFlowDefinition,
-      // The Agent kind's VALIDATOR — the half of the registry split still in
-      // `orchestrator/studio/validate.ts`; it comes home when that lands.
-      validateAgent,
       listFlowIds: listFlowIdsForAgents,
       // Bridge-instance state, from the host's own closures.
       projectsRoot: deps.projectsRoot,

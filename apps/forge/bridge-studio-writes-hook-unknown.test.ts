@@ -12,7 +12,7 @@
  * not assumed): the PUT handler's step 6 calls
  * `validateAgent(merged, undefined, validGuardIds)` — that function's own
  * `compArrays` loop only regex-checks each `composition.hooks` entry's SLUG
- * SHAPE (`orchestrator/studio/validate.ts`'s `['composition/hooks',
+ * SHAPE (`@forge/agents/studio/validate-agent.ts`'s `['composition/hooks',
  * def.composition.hooks ?? []]` row), never whether the id actually
  * RESOLVES to a real library hook or collides with a platform guard id.
  * `lintHookComposition` (`orchestrator/studio/hook-library.ts`) is the ONLY

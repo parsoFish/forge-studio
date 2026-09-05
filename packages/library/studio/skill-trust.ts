@@ -97,7 +97,7 @@ export interface SkillLibraryEntry {
   reference?: boolean;
 }
 
-/** Lint finding shape shared with `orchestrator/studio/validate.ts` — reused,
+/** Lint finding shape shared with `@forge/kernel/findings.ts` — reused,
  *  not re-invented, so `forge studio lint` renders every finding uniformly. */
 export type LintFinding = Finding;
 

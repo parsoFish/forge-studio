@@ -119,3 +119,34 @@ describe('kernel/ids — FORGE_ROOT, re-depthed for packages/kernel/ (T1 park #1
     assert.ok(!FORGE_ROOT.endsWith('/packages'), `FORGE_ROOT re-depthed wrong: ${FORGE_ROOT}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// SLUG_RE — the regex's own behaviour, moved here with the retirement of
+// `orchestrator/studio/validate.ts` (T1 ruling 159), which is where these
+// cases lived while that file re-exported the id vocabulary.
+// ---------------------------------------------------------------------------
+
+describe('SLUG_RE', () => {
+  test('matches lowercase-starting slug with hyphens and digits', () => {
+    assert.ok(SLUG_RE.test('my-agent'));
+    assert.ok(SLUG_RE.test('developer-ralph'));
+    assert.ok(SLUG_RE.test('agent1'));
+  });
+
+  test('rejects slugs starting with uppercase, underscore, digit', () => {
+    assert.ok(!SLUG_RE.test('My_Agent'));
+    assert.ok(!SLUG_RE.test('1agent'));
+    assert.ok(!SLUG_RE.test('_agent'));
+  });
+
+  test('rejects consecutive hyphens and trailing hyphens', () => {
+    assert.ok(!SLUG_RE.test('my--agent'));
+    assert.ok(!SLUG_RE.test('agent-'));
+  });
+
+  test('accepts single-char slug and multi-segment slugs', () => {
+    assert.ok(SLUG_RE.test('a'));
+    assert.ok(SLUG_RE.test('forge-cycle'));
+    assert.ok(SLUG_RE.test('claude-harness'));
+  });
+});
