@@ -142,6 +142,9 @@
             "with": "Run npm run acceptance — the built binary against the checked-in slow-pipeline fixture — and show the per-stage table it produces."
           },
           {
+            "press": "add-demo-step"
+          },
+          {
             "press": "save-project"
           }
         ],
@@ -349,15 +352,13 @@
     {
       "act": "Read the secrets element — the one a starter cannot guess from a template",
       "say": "Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.",
-      "status": "red",
-      "failures": [
-        "data-checklist-row: expected \"secrets\", got \"contract\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "story-s2",
-        "checklist-row": "contract",
+        "checklist-row": "secrets",
         "checklist-status": "present"
       },
       "frame": "frames/07-read-the-secrets-element-the-one-a-start.png"
@@ -365,15 +366,13 @@
     {
       "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
       "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
-      "status": "red",
-      "failures": [
-        "data-step-count: expected \"3\", got \"2\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "story-s2",
-        "step-count": "2"
+        "step-count": "3"
       },
       "frame": "frames/08-adjust-the-demo-the-starter-wrote-this-c.png"
     },
@@ -395,15 +394,15 @@
     {
       "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
       "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.",
-      "status": "red",
-      "failures": [
-        "data-architect-session-id: expected a value to bind as <architectSessionId>, got \"\""
-      ],
-      "bindings": {},
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "architectSessionId": "2026-09-05T05-49-56-a6e56570"
+      },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": ""
+        "architect-session-id": "2026-09-05T05-49-56-a6e56570"
       },
       "frame": "frames/10-describe-the-first-piece-of-work-cap-wha.png"
     },
@@ -426,10 +425,15 @@
       "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
       "status": "red",
       "failures": [
-        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+        "could not fill [data-field=\"session-answer\"] with \"The gate command is `npm test`. The timings come from the build tool's own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-answer\"]').first()\u001b[22m\n. no element carries that handle."
       ],
       "bindings": {},
-      "data": {},
+      "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "interviewing"
+      },
       "frame": "frames/12-open-the-session-again-and-answer-the-ar.png"
     },
     {
@@ -437,32 +441,24 @@
       "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
       "status": "red",
       "failures": [
-        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
       ],
       "bindings": {},
-      "data": {
-        "fetch-status": "ok"
-      },
+      "data": {},
       "frame": "frames/13-open-the-plan-and-stand-at-the-gate.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 301004,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
+        "pid": 2062685,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-49-56-a6e56570",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 300809,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 300802,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
+        "pid": 2062608,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-49-56-a6e56570",
         "signal": "SIGTERM",
         "via": "cwd"
       }
@@ -471,8 +467,8 @@
   },
   "sweep": {
     "removed": [
-      "/home/parso/forge-m5-b-author/projects/story-s2",
-      "/home/parso/forge-m5-b-author/brain/projects/story-s2"
+      "/home/parso/forge-m5-b/projects/story-s2",
+      "/home/parso/forge-m5-b/brain/projects/story-s2"
     ],
     "failed": []
   },
