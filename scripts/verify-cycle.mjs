@@ -60,7 +60,7 @@
  *   --force-reset           allow resetting a repo with uncommitted changes.
  *   --send-back             after develop first reaches ready-for-review, POST a
  *                           real send-back verdict, re-serve to drain the re-queued
- *                           UWIs, then fall through to auto-approve.
+ *                           work items, then fall through to the plan-gate approve.
  *
  * Output: demos/verify/<run-handle>/ (video, frames, index.html,
  * summary.json with the verdict). Exits non-zero if the gate fails.
@@ -76,6 +76,7 @@ import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
 import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
+import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
 import {
   DEFAULT_PROJECT,
@@ -824,9 +825,9 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
     const findings = status?.completenessCritic?.findings ?? [];
     if (status?.phase === 'awaiting-verdict' && findings.length > 0 && !criticAcknowledged) {
       criticAcknowledged = true;
-      log(`completeness critic blocked finalize with ${findings.length} finding(s):`);
-      for (const f of findings) log(`  - [${f.severity}] ${f.gap}`);
-      log('re-approving to acknowledge (one-shot critic semantics)…');
+      const critic = classifyCriticFindings(findings);   // bead 6.10.8: the printed severity DECIDES
+      for (const line of critic.log) log(line);
+      if (!critic.acknowledge) throw new Error(critic.reason);
       const ack = await bridgePost(watch.bridgeUrl, '/api/plan-verdict', {
         project,
         sessionId,
