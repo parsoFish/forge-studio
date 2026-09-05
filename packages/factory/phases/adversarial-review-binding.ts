@@ -20,7 +20,6 @@
 import { readFileSync } from 'node:fs';
 
 import { skillPath } from '@forge/agents/skill-path.ts';
-import type { AcEvaluation } from '../demo-model.ts';
 
 const AGENT_SKILL_PATH = skillPath('adversarial-review');
 
@@ -52,8 +51,13 @@ export type AdversarialReviewUserPromptInput = {
   workItems: Array<{ id: string; title: string; status: string }>;
   /** From the orchestrator's changed-files derivation (the diff's file list). */
   changedFiles: string[];
-  /** The demo's agent-authored AC-proof — critiqued, never trusted. */
-  acEvaluations: AcEvaluation[];
+  /**
+   * The lenses this class is reviewed under (the class profile's `reviewLenses`).
+   * The prompt names them and the validator holds the agent to them, from the
+   * SAME array — a prompt that offered one vocabulary while the check enforced
+   * another would reject correct work for a reason the agent was never told.
+   */
+  lenses: ReadonlyArray<string>;
   /** ADVISORY project-brain context for the convention-drift lens only. */
   brainContext: ReadonlyArray<{ path: string; content: string }>;
 };
@@ -71,12 +75,7 @@ export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPr
     input.changedFiles.length > 0
       ? input.changedFiles.map((f) => `- \`${f}\``).join('\n')
       : '- _(empty diff — say so in the summary)_';
-  const evals =
-    input.acEvaluations.length > 0
-      ? input.acEvaluations
-          .map((e) => `- [${e.verdict}] ${e.criterion} — ${e.evidence}`)
-          .join('\n')
-      : '_(no demo acEvaluations available for this cycle)_';
+  const lensList = input.lenses.map((l) => `- \`${l}\``).join('\n');
 
   const brainBlock =
     input.brainContext.length > 0
@@ -112,7 +111,7 @@ export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPr
     '',
     changed,
     '',
-    '## Acceptance criteria (contract-fit lens judges against these)',
+    '## Acceptance criteria — you judge EVERY one of these, verbatim',
     '',
     acList,
     '',
@@ -120,20 +119,31 @@ export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPr
     '',
     wiList,
     '',
-    "## The demo's AC-proof (agent-authored claims — critique what it does NOT cover, never trust it)",
+    '## Review lenses for this initiative\'s change class',
     '',
-    evals,
+    lensList,
+    '',
+    'These are the ONLY categories a finding may carry. They are the class\'s, not a',
+    'fixed set: a docs change is not critiqued for regression risk, and an infra change',
+    'is not critiqued the way code is.',
     ...brainBlock,
     '',
     '## What you author (exactly one file, then stop)',
     '',
     `\`.forge/${REVIEW_FINDINGS_FILENAME}\` — a JSON object:`,
-    '`{ initiative_id, cycleId, baseRef, headSha, reviewedAt, summary, findings: [...] }`.',
-    'Each finding: `{ id: "RF-<n>", severity: blocker | major | minor | info, category:',
-    'correctness | regression-risk | contract-fit | convention-drift, title, detail,',
-    'evidence: [{file, line?, excerpt?}] (≥1 — pointer-less findings are discarded), acRef? }`.',
+    '`{ initiative_id, cycleId, baseRef, headSha, reviewedAt, summary, lenses, findings: [...],`',
+    '` acEvaluations: [...], whyWhatHow: { why, what, how } }`.',
+    `- \`lenses\`: exactly the list above — ${input.lenses.join(', ')}.`,
+    '- Each finding: `{ id: "RF-<n>", severity: blocker | major | minor | info, category:',
+    '  one of the lenses above, title, detail, evidence: [{file, line?, excerpt?}] (≥1 —',
+    '  pointer-less findings are discarded), acRef? }`.',
+    '- `acEvaluations`: ONE entry per acceptance criterion above, `{ criterion, verdict:',
+    '  met | partial | missed, evidence }`. The `criterion` string is copied VERBATIM from',
+    '  the list above — it is matched exactly, not approximately. Judging a criterion that is',
+    '  not on the list, or leaving one off, is rejected.',
+    '- `whyWhatHow`: your narrative of the change — why it was made, what it does, how it works.',
     'Severity reflects CONSEQUENCE, not confidence. An all-clean review still writes the file',
     'with `findings: []` and an honest summary — a missing file is a pipeline failure, never a',
-    'clean pass.',
+    'clean pass. You still judge every criterion on a clean review.',
   ].join('\n');
 }

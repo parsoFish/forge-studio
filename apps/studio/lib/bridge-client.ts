@@ -823,12 +823,6 @@ export type DemoTestResultRow = {
 };
 
 /** Per-acceptance-criterion evaluated output (MVUS req b). */
-export type DemoAcEvaluation = {
-  criterion: string;
-  verdict: 'met' | 'partial' | 'missed';
-  evidence: string;
-};
-
 export type DemoModel = {
   title: string;
   essence: string;
@@ -844,7 +838,6 @@ export type DemoModel = {
    * dedicated "Intent & Outcome" section (MVUS req b). One entry per AC
    * with a verdict (met/partial/missed) and concrete evidence.
    */
-  acEvaluations?: DemoAcEvaluation[];
   // Rich structured sections (mirrors packages/factory/demo-model.ts DemoModel)
   summary?: DemoSummarySection;
   apiDiff?: DemoApiDiffEntry[];

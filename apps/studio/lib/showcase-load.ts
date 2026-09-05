@@ -11,12 +11,12 @@
  * bridge or show the wrong cycle's demo.
  */
 
-import { listShowcaseCycleIds } from './project-showcase';
+import { listShowcaseCycleIds, type ReviewVerdictSource } from './project-showcase';
 import type { Cycle, DemoModel } from './bridge-client';
 
 export type ShowcaseLoadResult =
   | { kind: 'empty' }
-  | { kind: 'loaded'; cycleId: string; model: DemoModel | null };
+  | { kind: 'loaded'; cycleId: string; model: DemoModel | null; review: ReviewVerdictSource | null };
 
 /**
  * Resolve the project's showcase cycle and fetch its `DemoModel`. When no
@@ -27,13 +27,20 @@ export async function loadShowcase(args: {
   cycles: Cycle[];
   projectId: string;
   fetchDemo: (cycleId: string) => Promise<DemoModel | null>;
+  /**
+   * The same cycle's review record. Fetched here rather than derived from the
+   * demo because the per-criterion verdict is the REVIEWER's (spec §5 item 5) —
+   * `null` when no review has run, which the stats render as 0/0/0 rather than
+   * as every criterion having missed.
+   */
+  fetchReview: (cycleId: string) => Promise<ReviewVerdictSource | null>;
   /** W7-B6 (projects-21): an operator-picked cycle from the cycle switcher.
    *  Honoured ONLY when it is genuinely eligible for this project (in
    *  `listShowcaseCycleIds`) — an unknown/foreign id falls back to the
    *  derived newest pick, never a fetch against an arbitrary id. */
   requestedCycleId?: string;
 }): Promise<ShowcaseLoadResult> {
-  const { cycles, projectId, fetchDemo, requestedCycleId } = args;
+  const { cycles, projectId, fetchDemo, fetchReview, requestedCycleId } = args;
   const eligible = listShowcaseCycleIds(cycles, projectId);
   const cycleId = requestedCycleId !== undefined && eligible.includes(requestedCycleId)
     ? requestedCycleId
@@ -41,6 +48,6 @@ export async function loadShowcase(args: {
   if (cycleId === null) {
     return { kind: 'empty' };
   }
-  const model = await fetchDemo(cycleId);
-  return { kind: 'loaded', cycleId, model };
+  const [model, review] = await Promise.all([fetchDemo(cycleId), fetchReview(cycleId)]);
+  return { kind: 'loaded', cycleId, model, review };
 }

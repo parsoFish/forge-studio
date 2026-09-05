@@ -109,12 +109,25 @@ function identityFromPrompt(prompt: string): { initiative_id: string; cycleId: s
   return { initiative_id: grab('initiative_id'), cycleId: grab('cycleId'), baseRef: grab('baseRef'), headSha: grab('headSha') };
 }
 
+/** The `code` class's lenses and the fixture's one criterion, verbatim — the
+ *  review record is now checked against BOTH by exact membership. */
+const CODE_LENSES = ['correctness', 'containment', 'test-strength', 'boundary'];
+const CRITERION = '(WI-1) GIVEN a request WHEN handled THEN it returns 200';
+
+/** What every record in this file is validated against (the run's own facts). */
+const EXPECTED = { lenses: CODE_LENSES, criteria: [CRITERION] };
+
 function validFindingsJson(prompt: string, overrides: Record<string, unknown> = {}): string {
   const id = identityFromPrompt(prompt);
   return JSON.stringify({
     ...id,
     reviewedAt: '2026-07-24T00:00:00.000Z',
     summary: 'one major correctness finding',
+    lenses: CODE_LENSES,
+    acEvaluations: [
+      { criterion: CRITERION, verdict: 'partial', evidence: 'the handler returns 200 only on the happy path' },
+    ],
+    whyWhatHow: { why: 'the caller needs a 200', what: 'a handler', how: 'a slice bound' },
     findings: [
       {
         id: 'RF-1',
@@ -156,13 +169,13 @@ async function run(
   logger: ReturnType<typeof createLogger>,
 ): Promise<AdversarialReviewResult> {
   return runAdversarialReview(
-    { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix' },
+    { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
     logger,
     { queryFn },
   );
 }
 
-test('happy path: findings harvested + persisted, worktree scrubbed, briefing carries diff/ACs/demo-proof', async () => {
+test('happy path: findings harvested + persisted, worktree scrubbed, briefing carries the diff, the ACs and the class lenses', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const fx = makeFixture();
   try {
@@ -176,7 +189,7 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     const p = reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID);
     assert.ok(existsSync(p));
     const rec = JSON.parse(readFileSync(p, 'utf8'));
-    assert.deepEqual(validateReviewFindings(rec), []);
+    assert.deepEqual(validateReviewFindings(rec, EXPECTED), []);
     assert.equal(rec.findings[0].id, 'RF-1');
     // Worktree scrubbed — nothing untracked left to block a later merge.
     assert.ok(!existsSync(join(fx.worktree, '.forge', 'review-findings.json')), 'findings worktree copy deleted');
@@ -184,7 +197,11 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     // Briefing content.
     assert.ok(prompts[0]!.includes('.forge/review-input/diff.patch'));
     assert.ok(prompts[0]!.includes('(WI-1) GIVEN a request WHEN handled THEN it returns 200'));
-    assert.ok(prompts[0]!.includes('the checkpoint shows 200'), 'demo acEvaluations inlined');
+    // The class's lenses, not a fixed four — and the demo's own AC claims are
+    // NOT in the briefing any more: the reviewer produces the verdict now, so
+    // inlining someone else's would be handing it the answer it was asked for.
+    for (const lens of CODE_LENSES) assert.ok(prompts[0]!.includes(lens), `lens ${lens} in the briefing`);
+    assert.ok(!prompts[0]!.includes('acEvaluations available'), 'no demo AC-proof block remains');
     // The assembled diff really contains the change.
     assert.ok(events.some((e) => e.message === 'review.input.assembled'));
     const authored = events.find((e) => e.message === 'review.findings.authored');
@@ -318,19 +335,51 @@ test('spawn suppression: failed/spawn-suppressed, never a fake review', async ()
   }
 });
 
-test('assertAdversarialReviewDeclaration: budget guards + no-Edit/no-Bash guards throw with vectors named', () => {
-  const base = { budgets: { maxTurns: 10, maxBudgetUsd: 1 }, allowedTools: ['Read', 'Grep', 'Glob', 'Write'] };
+test('assertAdversarialReviewDeclaration: the tool fence is an ALLOWLIST — every way to execute is refused, including by delegation', () => {
+  const base = {
+    budgets: { maxTurns: 10, maxBudgetUsd: 1 },
+    allowedTools: ['Read', 'Grep', 'Glob'],
+    disallowedTools: ['Bash', 'Edit', 'MultiEdit', 'NotebookEdit', 'Task', 'Agent', 'WebFetch', 'WebSearch'],
+  };
   assert.doesNotThrow(() => assertAdversarialReviewDeclaration(base));
+
+  // `Write` on EITHER list breaks the fence in opposite directions: allowed, the
+  // SDK pre-approves it and never routes the call through `canUseTool`;
+  // disallowed, the reviewer cannot author its findings at all (T1 ruling 249).
+  assert.throws(
+    () => assertAdversarialReviewDeclaration({ ...base, allowedTools: [...base.allowedTools, 'Write'] }),
+    /leave Write off BOTH lists/,
+  );
+  assert.throws(
+    () => assertAdversarialReviewDeclaration({ ...base, disallowedTools: [...base.disallowedTools, 'Write'] }),
+    /leave Write off BOTH lists/,
+  );
   assert.throws(() => assertAdversarialReviewDeclaration({ ...base, budgets: { maxBudgetUsd: 1 } }), /maxTurns/);
   assert.throws(() => assertAdversarialReviewDeclaration({ ...base, budgets: { maxTurns: 10 } }), /silent-spend/);
-  assert.throws(
-    () => assertAdversarialReviewDeclaration({ ...base, allowedTools: ['Read', 'Edit', 'Write'] }),
-    /never edits/,
-  );
-  assert.throws(
-    () => assertAdversarialReviewDeclaration({ ...base, allowedTools: ['Read', 'Bash', 'Write'] }),
-    /scope guard/,
-  );
+
+  // The three the old DENYLIST named…
+  for (const tool of ['Edit', 'MultiEdit', 'Bash']) {
+    assert.throws(() => assertAdversarialReviewDeclaration({ ...base, allowedTools: [...base.allowedTools, tool] }), /judges and never runs or edits/);
+  }
+  // …and the ones it did not, each of which reaches execution: Task and Agent by
+  // DELEGATION to a subagent that has Bash, NotebookEdit by running a cell,
+  // WebFetch/WebSearch by leaving the machine. A denylist of three names over an
+  // open tool vocabulary was decorative; this is the case that proves it.
+  for (const tool of ['Task', 'Agent', 'NotebookEdit', 'WebFetch', 'WebSearch', 'SomeToolTheSdkAddsNextYear']) {
+    assert.throws(
+      () => assertAdversarialReviewDeclaration({ ...base, allowedTools: [...base.allowedTools, tool] }),
+      new RegExp(tool),
+      `${tool} must be refused by the allowlist`,
+    );
+  }
+  // An empty allow-list is not a fence: each execution tool must ALSO be named
+  // in disallowedTools, because that is the list that reaches the SDK.
+  for (const tool of ['Bash', 'Task', 'NotebookEdit']) {
+    assert.throws(
+      () => assertAdversarialReviewDeclaration({ ...base, disallowedTools: base.disallowedTools.filter((t) => t !== tool) }),
+      new RegExp(`must DISALLOW ${tool}`),
+    );
+  }
 });
 
 test('gitignored .forge/: an agent write under an ignored .forge tree is still a scope-violation', async () => {

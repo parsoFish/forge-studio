@@ -97,6 +97,7 @@ export type BandInitiativeFields = {
   worktree_path?: string | undefined;
   project_repo_path?: string | undefined;
   cost_budget_usd?: number | undefined;
+  class?: string | undefined; // ADR 051 — selects the review lenses downstream
 };
 
 /** What the injected pipeline runner is handed — the union of the two pipelines' inputs. */
@@ -109,6 +110,7 @@ export type BandPipelineInput = {
   costBudgetUsd?: number | undefined;
   /** Review only: the managed-project name for the Brain-3 advisory context. */
   projectName?: string | undefined;
+  changeClass: string; // a VALUE, not a manifest path
   forgeRoot: string;
 };
 
@@ -192,7 +194,7 @@ function resolveInitiativeContext(
   queueRoot: string,
   forgeRoot: string,
   deps: BandAgentDeps,
-): { worktreePath: string; projectRepoPath: string; costBudgetUsd?: number } {
+): { worktreePath: string; projectRepoPath: string; changeClass: string; costBudgetUsd?: number } {
   if (!SAFE_INITIATIVE_RE.test(initiativeId)) {
     throw new Error(`runBandAgentStandalone: invalid initiative id ${JSON.stringify(initiativeId)} (a manifest-file stem: [A-Za-z0-9._-])`);
   }
@@ -239,6 +241,7 @@ function resolveInitiativeContext(
   return {
     worktreePath,
     projectRepoPath: m.project_repo_path ?? '',
+    changeClass: m.class ?? '', // carried, never defaulted — the ASSEMBLY narrows it and fails closed
     ...(m.cost_budget_usd === undefined ? {} : { costBudgetUsd: m.cost_budget_usd }),
   };
 }
@@ -303,7 +306,8 @@ export async function runBandAgentStandalone(
       cycleId: opts.runId,
       logsRoot,
       ...(ctx.costBudgetUsd === undefined ? {} : { costBudgetUsd: ctx.costBudgetUsd }),
-      ...(kind === 'review' && ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
+      ...(ctx.projectRepoPath ? { projectName: basename(ctx.projectRepoPath) } : {}),
+      changeClass: ctx.changeClass,
       forgeRoot,
     },
     logger,

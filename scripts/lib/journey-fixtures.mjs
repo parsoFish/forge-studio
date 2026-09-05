@@ -16,7 +16,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, renameSync, existsSync, utimesSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { basename, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { sleep } from './journey-assertions.mjs';
@@ -677,22 +677,6 @@ export function writeDemoJson(revision) {
       'GIVEN a doc with <!-- toc --> / <!-- /toc --> markers WHEN `mdtoc --write file.md` runs THEN the generated TOC replaces the marker region, nothing outside it changes, and `npm run acceptance` reads back the built CLI output',
       `GIVEN the embedded TOC is already current WHEN \`mdtoc --write file.md\` runs again THEN the file is byte-identical${revision > 1 ? ' on every run — verified across two consecutive --write passes now (added this round on review feedback)' : ''}`,
     ],
-    // Round 1: AC-2 PARTIAL (a trailing newline drifts on the 2nd write) — what the
-    // operator sends back on. Round 2: both ACs MET — the payoff (PARTIAL→MET).
-    acEvaluations: [
-      {
-        criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI',
-        verdict: 'met',
-        evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test, node:test, suite green) + npm run acceptance reads back the exact TOC from dist/cli.js against test/fixtures/release-notes.md, exit 0',
-      },
-      {
-        criterion: 'idempotency: re-running --write on a current doc produces no diff',
-        verdict: revision > 1 ? 'met' : 'partial',
-        evidence: revision > 1
-          ? 'two consecutive --write passes are byte-identical; injectToc_IsIdempotent asserts diff === "" on the 2nd AND 3rd run (fixed the trailing-newline drift this round)'
-          : 'first --write is correct, but a trailing newline drifts on the 2nd write → a one-line diff — operator asked for byte-identical on every run',
-      },
-    ],
     summary: {
       bullets: [
         'Added a pure src/inject.ts (doc string + toc string → new doc string) that slices the <!-- toc --> / <!-- /toc --> region.',
@@ -834,6 +818,19 @@ function showcaseManifest({ initId, project, phase }) {
  * demo.json (DemoModel — packages/factory/demo-model.ts) mirroring writeDemoJson's own
  * `--write` TOC-injection story, under distinct clip-only ids.
  */
+const SHOWCASE_ACS_1 = [{ criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI', verdict: 'met', evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test) + npm run acceptance reads back the exact TOC from dist/cli.js, exit 0' },
+  { criterion: 'idempotency: re-running --write on a current doc produces no diff', verdict: 'met', evidence: 'injectToc_IsIdempotent → PASS, diff === "" on the 2nd and 3rd consecutive --write run' }];
+const SHOWCASE_ACS_2 = [{ criterion: '--check exits non-zero when the embedded TOC has drifted from the generated one', verdict: 'met', evidence: 'checkToc_ExitsNonZeroOnDrift → PASS (npm test)' }];
+
+/** Per-criterion verdicts are the reviewer's (§5 item 5). ONE writer for both showcase cycles. */
+function writeShowcaseReview(artifacts, initId, cycleId, acEvaluations) {
+  writeFileSync(join(artifacts, 'review-findings.json'), JSON.stringify({
+    initiative_id: initId, cycleId, baseRef: 'main', headSha: 'seeded', reviewedAt: '2026-07-16T03:24:00.000Z',
+    summary: 'Both acceptance criteria are demonstrated by the seeded evidence.', acEvaluations, findings: [],
+    lenses: ['correctness', 'containment', 'test-strength', 'boundary'], whyWhatHow: { why: 'the TOC rots when a heading moves', what: 'a pure injector behind --write', how: 'a doc string in, a doc string out' },
+  }, null, 2) + '\n');
+}
+
 export function writeShowcaseCycleOne() {
   mkdirSync(QDIR('done'), { recursive: true });
   writeFileSync(join(QDIR('done'), `${SHOWCASE_INIT_1}.md`), showcaseManifest({ initId: SHOWCASE_INIT_1, project: PROJECT, phase: 'done' }));
@@ -844,12 +841,6 @@ export function writeShowcaseCycleOne() {
     essence: 'Adds a `--write` mode that inserts or refreshes the generated table of contents between <!-- toc --> / <!-- /toc --> markers via a new pure src/inject.ts, wired into the CLI. Idempotent — re-running --write on a current doc produces no diff.',
     project: PROJECT, initiativeId: SHOWCASE_INIT_1, baseRef: 'main', changedRef: `forge/${SHOWCASE_INIT_1}`,
     diffStat: ' src/inject.ts       |  38 ++++++++\n src/cli.ts          |  21 +++-\n test/inject.test.ts |  95 ++++++++++++\n 3 files changed, 154 insertions(+)',
-    acEvaluations: [
-      { criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI', verdict: 'met',
-        evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test) + npm run acceptance reads back the exact TOC from dist/cli.js, exit 0' },
-      { criterion: 'idempotency: re-running --write on a current doc produces no diff', verdict: 'met',
-        evidence: 'injectToc_IsIdempotent → PASS, diff === "" on the 2nd and 3rd consecutive --write run' },
-    ],
     summary: { bullets: ['Adds a pure src/inject.ts marker-region injector, wired into the CLI as --write.'], branch: `forge/${SHOWCASE_INIT_1}`, commitSha: 'b7c4e9a' },
     testEvidence: [
       { name: 'injectToc_ReplacesMarkerRegion', result: 'pass' },
@@ -861,6 +852,7 @@ export function writeShowcaseCycleOne() {
         caption: 'marker-region slice replaces only the TOC; a second --write is byte-identical' },
     ],
   }, null, 2));
+  writeShowcaseReview(artifacts, SHOWCASE_INIT_1, basename(SHOWCASE_CYCLE_LOG_1), SHOWCASE_ACS_1);
 }
 
 export function cleanShowcaseCycleOne() {
@@ -885,10 +877,6 @@ export function writeShowcaseCycleTwo() {
     essence: 'Given a doc whose embedded TOC has drifted, `mdtoc --check` exits non-zero so CI can fail the build on a stale table of contents.',
     project: PROJECT, initiativeId: SHOWCASE_INIT_2, baseRef: 'main', changedRef: `forge/${SHOWCASE_INIT_2}`,
     diffStat: ' src/check.ts        |  24 ++++++\n src/cli.ts          |   9 ++-\n 2 files changed, 31 insertions(+), 2 deletions(-)',
-    acEvaluations: [
-      { criterion: '--check exits non-zero when the embedded TOC has drifted from the generated one', verdict: 'met',
-        evidence: 'checkToc_ExitsNonZeroOnDrift → PASS (npm test)' },
-    ],
     summary: { bullets: ['Adds a pure src/check.ts comparator + --check CLI wiring for CI.'], branch: `forge/${SHOWCASE_INIT_2}`, commitSha: 'a1c93f0' },
     testEvidence: [
       { name: 'checkToc_ExitsNonZeroOnDrift', result: 'pass' },
@@ -899,6 +887,7 @@ export function writeShowcaseCycleTwo() {
         caption: '--check exits non-zero on drift, zero when the embedded TOC is current' },
     ],
   }, null, 2));
+  writeShowcaseReview(artifacts, SHOWCASE_INIT_2, basename(SHOWCASE_CYCLE_LOG_2), SHOWCASE_ACS_2);
 }
 
 export function cleanShowcaseCycleTwo() {
@@ -960,6 +949,17 @@ export function writeReviewFindings(revision) {
     summary: revision > 1
       ? 'Clean pass — the trailing-newline drift is fixed and asserted across consecutive writes; no correctness or regression findings against the round-2 diff.'
       : 'One major contract-fit finding: the idempotency AC is only partially demonstrable — the second --write pass drifts a trailing newline, so the demo cannot show byte-identical re-runs.',
+    // §5 item 5: the VERDICT is the reviewer's — the SAME mdtoc PARTIAL→MET rows the demo carried, moved not invented.
+    lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
+    acEvaluations: [
+      { criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI', verdict: 'met',
+        evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test, node:test, suite green) + npm run acceptance reads back the exact TOC from dist/cli.js against test/fixtures/release-notes.md, exit 0' },
+      { criterion: 'idempotency: re-running --write on a current doc produces no diff', verdict: revision > 1 ? 'met' : 'partial',
+        evidence: revision > 1
+          ? 'two consecutive --write passes are byte-identical; injectToc_IsIdempotent asserts diff === "" on the 2nd AND 3rd run (fixed the trailing-newline drift this round)'
+          : 'first --write is correct, but a trailing newline drifts on the 2nd write → a one-line diff — operator asked for byte-identical on every run' },
+    ],
+    whyWhatHow: { why: 'A README\'s table of contents rots the moment a heading moves, and regenerating it by hand is the step everyone skips.', what: 'A pure `src/inject.ts` that slices the marker region, wired into the CLI behind `--write`, with a unit suite and a creds-free acceptance read-back.', how: 'The injector takes a doc string and a toc string and returns a new doc string, so idempotency is a property of a pure function rather than of the filesystem.' },
     findings: revision > 1 ? [] : [
       {
         id: 'RF-1',

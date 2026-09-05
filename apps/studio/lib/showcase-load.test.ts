@@ -5,7 +5,7 @@
  * directly pinned — see `roadmap-develop-start-ceiling.test.ts` / the sibling
  * `project-showcase.test.ts` header for the established precedent):
  *
- *   (a) `deriveShowcaseStats(model: DemoModel)` in `./project-showcase.ts` —
+ *   (a) `deriveShowcaseStats(model: DemoModel, null)` in `./project-showcase.ts` —
  *       the stats-strip deriver. T1 ruling: NO new run-model fetch — it
  *       reduces the ALREADY-FETCHED `DemoModel` (the same one
  *       `DemoComparison` renders) to a small stats-strip summary.
@@ -41,7 +41,7 @@
  *     commitSha: string | null;
  *     acVerdictCounts: ShowcaseAcVerdictCounts;
  *   };
- *   export function deriveShowcaseStats(model: DemoModel): ShowcaseStats;
+ *   export function deriveShowcaseStats(model: DemoModel, null): ShowcaseStats;
  *
  *   // ./showcase-load.ts (NEW file)
  *   export type ShowcaseLoadResult =
@@ -111,16 +111,22 @@ const NON_EMPTY_MODEL: DemoModel = {
     branch: 'feat/showcase-stats',
     commitSha: 'abc1234def5678',
   },
+};
+
+/** The REVIEW record for the same cycle — where the per-criterion verdict lives
+ *  since spec §5 item 5. The demo carries the evidence; the read-only reviewer
+ *  carries the judgment, and these tiles count the judgment. */
+const REVIEW_WITH_VERDICTS = {
   acEvaluations: [
-    { criterion: 'stats reflect real testEvidence count', verdict: 'met', evidence: 'testEvidence.length === 2' },
-    { criterion: 'prUrl surfaces on the stats strip', verdict: 'met', evidence: 'summary.prUrl present' },
-    { criterion: 'partial coverage example', verdict: 'partial', evidence: 'partially covered' },
-    { criterion: 'missed coverage example', verdict: 'missed', evidence: 'not covered' },
+    { criterion: 'stats reflect real testEvidence count', verdict: 'met' as const, evidence: 'testEvidence.length === 2' },
+    { criterion: 'prUrl surfaces on the stats strip', verdict: 'met' as const, evidence: 'summary.prUrl present' },
+    { criterion: 'partial coverage example', verdict: 'partial' as const, evidence: 'partially covered' },
+    { criterion: 'missed coverage example', verdict: 'missed' as const, evidence: 'not covered' },
   ],
 };
 
-test('AT-1 (rule 38, NON-EMPTY-ROW): deriveShowcaseStats(model) on a real, non-empty DemoModel returns real, non-empty stats — testEvidence count, summary.prUrl/branch/commitSha presence, and REAL acEvaluations verdict counts, never fabricated', () => {
-  const stats = deriveShowcaseStats(NON_EMPTY_MODEL);
+test('AT-1 (rule 38, NON-EMPTY-ROW): deriveShowcaseStats on a real, non-empty DemoModel + its REVIEW record returns real, non-empty stats — testEvidence count, summary.prUrl/branch/commitSha presence, and REAL verdict counts, never fabricated', () => {
+  const stats = deriveShowcaseStats(NON_EMPTY_MODEL, REVIEW_WITH_VERDICTS);
 
   // testEvidence row count — the REAL array length, not a hardcoded/derived
   // "has evidence" boolean that would hide a wrong count.
@@ -133,9 +139,16 @@ test('AT-1 (rule 38, NON-EMPTY-ROW): deriveShowcaseStats(model) on a real, non-e
   expect(stats.branch).toBe('feat/showcase-stats');
   expect(stats.commitSha).toBe('abc1234def5678');
 
-  // acEvaluations verdict counts — REAL counts off the 4-entry fixture
-  // (2 met / 1 partial / 1 missed), not a fabricated "all met" summary.
+  // Verdict counts — REAL counts off the 4-entry REVIEW fixture (2 met / 1
+  // partial / 1 missed), not a fabricated "all met" summary.
   expect(stats.acVerdictCounts).toEqual({ met: 2, partial: 1, missed: 1 });
+});
+
+test('AT-1b: no review yet → 0/0/0, which is the count of verdicts that EXIST, not a claim that every criterion missed', () => {
+  const stats = deriveShowcaseStats(NON_EMPTY_MODEL, null);
+  expect(stats.acVerdictCounts).toEqual({ met: 0, partial: 0, missed: 0 });
+  // The rest of the strip is unaffected — the demo still carries its own facts.
+  expect(stats.testEvidenceCount).toBe(2);
 });
 
 // ---------------------------------------------------------------------------
@@ -161,7 +174,7 @@ const REAL_KINDS_ONLY_MODEL: DemoModel = {
 };
 
 test('AT-2 (HONESTY): deriveShowcaseStats on a DemoModel with ONLY real checkpoint kinds (screenshot/video/harness) never emits an invented "html-summary" kind/field anywhere in its output (F4 retired DEMO.html for this surface)', () => {
-  const stats = deriveShowcaseStats(REAL_KINDS_ONLY_MODEL);
+  const stats = deriveShowcaseStats(REAL_KINDS_ONLY_MODEL, null);
 
   // Serialise the WHOLE result so this pin holds regardless of exactly
   // which field the implementer chooses to carry a kind breakdown on — a
@@ -220,21 +233,30 @@ test('AT-3 (CALLER-COUNT, found path): loadShowcase calls the REAL deriveShowcas
   expect(expectedCycleId, 'fixture precondition: deriveShowcaseCycleId must resolve a real cycleId for the sole terminal cycle').not.toBeNull();
 
   const fetchDemo = vi.fn(async (_cycleId: string) => FETCHED_MODEL);
+  const fetchReview = vi.fn(async (_cycleId: string) => null);
 
   const result = await loadShowcase({
     cycles: [SOLE_TERMINAL_CYCLE],
     projectId: SHOWCASE_PROJECT,
     fetchDemo,
+    fetchReview,
   });
 
   // EXACTLY ONE call — kills an N+1 fetch (e.g. re-deriving/re-fetching per
   // render section) and a zero-caller no-op alike.
   expect(fetchDemo).toHaveBeenCalledTimes(1);
+  // The review fetch is under the SAME contract, for the same reason: it is a
+  // second artifact read per cycle, so a per-section refetch would double it.
+  expect(fetchReview).toHaveBeenCalledTimes(1);
+  expect(fetchReview).toHaveBeenCalledWith(expectedCycleId);
   // EXACTLY the derived cycleId — kills a hand-rolled/hardcoded id, and
   // kills passing the wrong positional arg (e.g. projectId instead).
   expect(fetchDemo).toHaveBeenCalledWith(expectedCycleId);
 
-  expect(result).toEqual({ kind: 'loaded', cycleId: expectedCycleId, model: FETCHED_MODEL });
+  // `review: null` — the same cycle's review record, fetched alongside the demo
+  // because the per-criterion verdict is the reviewer's (spec §5 item 5). This
+  // fixture has no review, and null is the honest answer, not an empty verdict set.
+  expect(result).toEqual({ kind: 'loaded', cycleId: expectedCycleId, model: FETCHED_MODEL, review: null });
 });
 
 // ---------------------------------------------------------------------------
@@ -257,6 +279,7 @@ test('AT-4 (CALLER-COUNT, null path): when deriveShowcaseCycleId returns null (n
     cycles: [],
     projectId: SHOWCASE_PROJECT,
     fetchDemo,
+    fetchReview: async () => null,
   });
 
   // NEVER called — kills an impl that fetches with a fallback/undefined id
