@@ -92,30 +92,6 @@ export { EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH };
  */
 export { RESERVED_OBJECT_IDS, isReservedId };
 
-/** `null` when `id` is a routable project id, else the operator-facing reason. */
-export function invalidProjectIdReason(id: string): string | null {
-  if (id.length === 0) return 'invalid project "" — an id is required';
-  if (id.length > MAX_EXACT_ID_LENGTH) {
-    return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_EXACT_ID_LENGTH}-character length limit`;
-  }
-  if (!PROJECT_ID_RE.test(id)) {
-    return `invalid project "${id}" — must match ${PROJECT_ID_RE} (the project's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
-  }
-  return null;
-}
-
-/** `null` when `id` is a routable KB id, else the operator-facing reason. */
-export function invalidKbIdReason(id: string): string | null {
-  if (id.length === 0) return 'invalid kb id "" — an id is required';
-  if (id.length > MAX_EXACT_ID_LENGTH) {
-    return `invalid kb id "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_EXACT_ID_LENGTH}-character length limit`;
-  }
-  if (!KB_ID_RE.test(id)) {
-    return `invalid kb id "${id}" — must match ${KB_ID_RE} (the KB's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
