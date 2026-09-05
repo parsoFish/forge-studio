@@ -60,7 +60,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-import { runAdversarialReview } from './adversarial-review.ts';
+import { runAdversarialReview, REVIEW_ALLOWED_TOOLS, REVIEW_EXECUTION_TOOLS } from './adversarial-review.ts';
 import { createLogger } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
@@ -145,6 +145,15 @@ function validFindingsJson(prompt: string): string {
     ...id,
     reviewedAt: '2026-07-24T00:00:00.000Z',
     summary: 'one major correctness finding',
+    lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
+    acEvaluations: [
+      { criterion: '(WI-1) GIVEN a request WHEN handled THEN it returns 200', verdict: 'partial', evidence: 'the handler returns 200 only on the happy path' },
+    ],
+    whyWhatHow: {
+      why: 'the caller needs a 200 on a handled request',
+      what: 'a handler and its router registration',
+      how: 'a slice bound the caller reads as inclusive',
+    },
     findings: [
       {
         id: 'RF-1',
@@ -174,7 +183,7 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
     }) as unknown as StreamQueryFn;
 
     const res = await runAdversarialReview(
-      { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix' },
+      { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
       logger,
       { queryFn },
     );
@@ -182,11 +191,71 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
     assert.equal(res.status, 'complete', 'sanity: the fixture must drive the pipeline to a clean single-pass completion');
     assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: fx.worktree, encoding: 'utf8' }).trim();
-    const normalized = normalizeForSnapshot(captured, [
+    // `canUseTool` is a FUNCTION, and `JSON.stringify` drops a function silently
+    // — a golden written straight from this bag would record the fence's ABSENCE
+    // and match forever afterwards, which is the blind-ratchet shape. Rendered
+    // as a marker here (in the test, never in the shared normalizer) so the
+    // golden states that a handler was installed; the handler's BEHAVIOUR is
+    // executed below rather than snapshotted.
+    const capturedOptions = (captured as { options: Record<string, unknown> }).options;
+    const forSnapshot = {
+      ...(captured as Record<string, unknown>),
+      options: { ...capturedOptions, ...('canUseTool' in capturedOptions ? { canUseTool: '<canUseTool>' } : {}) },
+    };
+    const normalized = normalizeForSnapshot(forSnapshot, [
       { value: fx.root, placeholder: '<TMP>' },
       { value: headSha, placeholder: '<HEAD_SHA>' },
     ]);
     assertMatchesJsonSnapshot(FIXTURE_PATH, normalized);
+
+    // ── The tool fence, proven BY EXECUTION (ADR 036, spec §5 item 5) ────────
+    //
+    // Not by reading `skills/adversarial-review/SKILL.md`, and not by calling
+    // the declaration guard: both answer "what does the file say". This asserts
+    // what the SPAWN ACTUALLY RECEIVED — `captured.options` is the object
+    // `runAgent` handed the SDK on this real pipeline run, after every layer of
+    // spec resolution between the frontmatter and the query.
+    //
+    // Containment review, 2026-09-05: the interesting escapes are not `Bash`.
+    // They are `Task`/`Agent` (execution by DELEGATION to a subagent that has
+    // Bash), `NotebookEdit` (execution in a cell) and `WebFetch`/`WebSearch`
+    // (egress). A fence asserted as "no Bash" passes all four, which is why the
+    // assertion below is an ALLOWLIST — anything not named is refused, including
+    // a tool that does not exist yet.
+    const opts = (captured as { options?: Record<string, unknown> }).options as { allowedTools?: unknown; disallowedTools?: unknown; permissionMode?: unknown };
+    assert.deepEqual(opts.allowedTools, REVIEW_ALLOWED_TOOLS, 'the SDK received exactly the read-only tool set');
+    for (const tool of REVIEW_EXECUTION_TOOLS) {
+      assert.ok(
+        (opts.disallowedTools as string[]).includes(tool),
+        `${tool} must reach the SDK on the DISALLOWED list — an absent name is a granted tool when the runtime default set is not empty`,
+      );
+    }
+    // ── The write fence, also proven BY EXECUTION (T1 ruling 249) ───────────
+    //
+    // A fence is three settings, not one. All three are asserted on the bag the
+    // SDK actually received, and then the handler itself is RUN:
+    //   1. `permissionMode: 'default'` — `acceptEdits` auto-accepts a Write
+    //      before any handler sees it;
+    //   2. `Write` is NOT on `allowedTools` — a pre-approved tool is never
+    //      routed through `canUseTool`;
+    //   3. `Write` is NOT on `disallowedTools` either — it stays callable, gated.
+    assert.equal(opts.permissionMode, 'default');
+    assert.ok(!(opts.allowedTools as string[]).includes('Write'), 'a pre-approved Write skips the fence');
+    assert.ok(!(opts.disallowedTools as string[]).includes('Write'), 'a forbidden Write cannot author the findings');
+    const canUseTool = (captured as { options?: Record<string, unknown> }).options!['canUseTool'] as
+      | ((tool: string, input: Record<string, unknown>, o: Record<string, unknown>) => Promise<{ behavior: string; message?: string }>)
+      | undefined;
+    assert.equal(typeof canUseTool, 'function', 'the SDK received a permission handler, not a promise of one');
+
+    // Executed, not read: the same handler the SDK holds, asked about two real
+    // paths. The findings file is the reviewer's one legal write; the source it
+    // is reviewing is the write this fence exists to refuse.
+    const allow = await canUseTool!('Write', { file_path: join(fx.worktree, '.forge', 'review-findings.json') }, {});
+    assert.equal(allow.behavior, 'allow', 'the reviewer can still author its findings file');
+    const denySource = await canUseTool!('Write', { file_path: join(fx.worktree, 'src.ts') }, {});
+    assert.equal(denySource.behavior, 'deny', 'the ONE agent that judges this initiative cannot write the source it judges');
+    const denyEscape = await canUseTool!('Write', { file_path: join(fx.root, 'escape.txt') }, {});
+    assert.equal(denyEscape.behavior, 'deny', 'nor anything outside the worktree');
   } finally {
     fx.cleanup();
   }

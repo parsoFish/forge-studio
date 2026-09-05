@@ -21,6 +21,7 @@ import { runProjectManager as realRunProjectManager } from '@forge/factory/phase
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
 import { runDemoAgentPipeline, type DemoAgentPipelineResult } from '@forge/factory/phases/demo-agent.ts';
 import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
+import type { ChangeClass } from '@forge/factory/class-profiles.ts';
 import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
 import { runReflector } from '@forge/factory/phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
@@ -178,6 +179,16 @@ function readCostBudgetUsd(input: CycleInput): number | undefined {
 }
 
 /**
+ * The initiative's change class, read from its manifest. NOT best-effort like the
+ * budget above: the class selects the review lenses (ADR 051, spec §5 item 5), so
+ * an unreadable manifest here has no honest default — reviewing under a guessed
+ * policy is worse than refusing to review.
+ */
+function readChangeClass(input: CycleInput): ChangeClass {
+  return parseManifest(readFileSync(input.manifestPath, 'utf8')).class;
+}
+
+/**
  * A1 (handoff, agents s4): this was `resolve('_logs')` at the two call sites
  * below — relative to the PROCESS's cwd, so a cycle started from anywhere but
  * the repo root wrote its demo and review evidence into a `_logs` tree beside
@@ -221,6 +232,7 @@ export const DEFAULT_DEPS: FlowRunnerDeps = {
         logsRoot: DEFAULT_LOGS_ROOT,
         costBudgetUsd: readCostBudgetUsd(input),
         projectName: basename(input.projectRepoPath),
+        changeClass: readChangeClass(input),
         forgeRoot: FORGE_ROOT,
       },
       logger,

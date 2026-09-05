@@ -86,9 +86,10 @@ packages/factory/demo-model.ts readdirSync 2
 packages/factory/demo-model.ts writeFileSync 2
 packages/factory/phases/adversarial-review-binding.ts readFileSync 1
 packages/factory/phases/adversarial-review.ts execFileSync 1
-packages/factory/phases/adversarial-review.ts existsSync 6
-packages/factory/phases/adversarial-review.ts mkdirSync 1
-packages/factory/phases/adversarial-review.ts readFileSync 3
+packages/factory/phases/adversarial-review.ts existsSync 5
+packages/factory/phases/adversarial-review.ts mkdirSync 2
+packages/factory/phases/adversarial-review.ts readFileSync 2
+packages/factory/phases/adversarial-review.ts realpathSync 1
 packages/factory/phases/adversarial-review.ts rmSync 1
 packages/factory/phases/adversarial-review.ts unlinkSync 2
 packages/factory/phases/adversarial-review.ts writeFileSync 3
@@ -107,7 +108,7 @@ packages/factory/phases/developer-loop.ts mkdirSync 2
 packages/factory/phases/developer-loop.ts readFileSync 1
 packages/factory/phases/developer-loop.ts unlinkSync 2
 packages/factory/phases/developer-loop.ts writeFileSync 2
-packages/factory/phases/executor-deps.ts readFileSync 1
+packages/factory/phases/executor-deps.ts readFileSync 2
 packages/factory/phases/executor-table.ts existsSync 1
 packages/factory/phases/executor-table.ts readFileSync 3
 packages/factory/phases/pm-binding.ts readFileSync 1

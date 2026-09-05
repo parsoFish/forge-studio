@@ -168,6 +168,8 @@ export type RunContext = {
   systemPrompt?: string;
   cwd?: string;
   permissionMode?: string;
+  /** Installed verbatim at `options.canUseTool`; the reason lives in `packages/sessions/session-write-fence.ts`. */
+  canUseTool?: unknown;
   streamGuard?: StreamGuard;
   /**
    * Observer for every raw streamed SDK message on the one-shot path,
@@ -517,6 +519,7 @@ async function runOneShotSpawn(
     permissionMode: ctx.permissionMode ?? 'acceptEdits',
     allowedTools: [...spec.allowedTools],
     disallowedTools: [...spec.disallowedTools],
+    ...(ctx.canUseTool === undefined ? {} : { canUseTool: ctx.canUseTool }),
   };
   if (def.budgets.maxTurns !== undefined) options['maxTurns'] = def.budgets.maxTurns;
   // W8-B6 — the agent's bound library hooks. Derived from `spec.skill` (the

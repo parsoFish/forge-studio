@@ -49,6 +49,7 @@ import { readFileSync } from 'node:fs';
 
 import type { RuntimeAdapter, AdapterAgentOptions, QueryFn } from '../types.ts';
 import type { AgentInvocation, AgentIterationInfo } from '../../ralph/runner.ts';
+import { extractPath, truncate } from '../../tool-event-emit.ts';
 
 // ---------------------------------------------------------------------------
 // Config — model + creds (no hardcoded secrets; env-driven per project rules)
@@ -495,12 +496,6 @@ function parseUsage(usage: unknown): {
   };
 }
 
-function extractPath(input: unknown): string | null {
-  if (typeof input !== 'object' || input === null) return null;
-  const obj = input as Record<string, unknown>;
-  const candidate = obj.file_path ?? obj.notebook_path ?? obj.path;
-  return typeof candidate === 'string' ? candidate : null;
-}
 
 function extractBashCommand(name: string, input: unknown): string | null {
   if (name !== 'Bash') return null;
@@ -518,10 +513,6 @@ function summarizeInput(input: unknown): string {
   }
 }
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
-}
 
 // ---------------------------------------------------------------------------
 // Adapter export
