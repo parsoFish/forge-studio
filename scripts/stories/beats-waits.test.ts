@@ -362,3 +362,78 @@ test('a press whose handle is ABSENT reds saying so — not "disabled"', async (
   assert.match(text, /no element carries that handle/);
   assert.doesNotMatch(text, /still DISABLED/);
 });
+
+/* ------------------------------------------------------------------------ *
+ * Bead `forge-8vfn.6.11.10` — a beat that waits on a REAL AGENT needs an
+ * agent-scale bound (operator ruling 212's family; T1 ruling 220).
+ *
+ * Measured live on 2026-09-05, three beats across three stories, one cause:
+ *   S1 beat 6   could not fill [data-field="session-answer"] … no element
+ *               carries that handle
+ *   S2 beat 12  the same message, same handle, different session kind
+ *   S4 beat 11  data-session-phase: expected "awaiting-verdict", got
+ *               "interviewing"
+ * `SessionInteractivePanel.tsx` renders `session-answer` only inside a
+ * `question-form` affordance — only once the agent has ASKED — and S4's own
+ * archived `status.json` reads `"phase": "interviewing"` at reap. The runner
+ * had ONE bound, `READY_TIMEOUT_MS = 15_000`, for a local DOM update and for
+ * an architect's phase transition alike. Same family as `6.11.6`: the wait
+ * existed; the BOUND was wrong for what it was waiting on.
+ *
+ * The fix is a DECLARED wait, not a bigger global: raising the 15 s would make
+ * every genuine product red take fifteen times longer to fail.
+ * ------------------------------------------------------------------------ */
+
+/** S4 beat 11's shape: a phase the agent flips well after the DOM bound. */
+const phasePage = (afterMs: number | null) => ({
+  '/sessions/architect/arch-1': {
+    elements: [
+      READY_MAIN('session-detail'),
+      el('button', { 'data-action': 'open-session' }, null,
+        afterMs === null ? null : { afterMs, patch: { 'session-phase': 'awaiting-verdict' } }),
+    ],
+    data: { page: 'session-detail', 'session-phase': 'interviewing' },
+  },
+});
+
+const phaseBeat = (wait?: unknown) => ({
+  act: 'Open the session from Monitor and wait for the Architect to finish drafting',
+  do: [{ press: 'open-session' }],
+  ...(wait === undefined ? {} : { wait }),
+  expect: { route: '/sessions/architect/arch-1', data: { page: 'session-detail', 'session-phase': 'awaiting-verdict' } },
+  say: 'The architect finishes drafting and stops at the gate.',
+});
+
+test('6.11.10: a beat with NO declared wait still gives up at the DOM bound — the global stays 15 s', async () => {
+  // The control that keeps the fix from becoming "make everything slower":
+  // an undeclared beat must be bounded exactly as before, so a genuine
+  // product red still fails fast.
+  const page = fakeStudio({ start: '/sessions/architect/arch-1', commitMs: 0, pages: phasePage(600) });
+  const started = Date.now();
+  const v = await driveBeat(page, phaseBeat(), 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  assert.ok(Date.now() - started < 500, 'an undeclared beat must not silently inherit the agent bound');
+  assert.match(v.failures.join(' | '), /data-session-phase: expected "awaiting-verdict", got "interviewing"/);
+});
+
+test('6.11.10: a beat that DECLARES an agent-scale wait waits past the DOM bound and goes green', async () => {
+  // THE DEFECT, exactly: the consequence lands at 600 ms, three times the DOM
+  // bound this call is given. Without the declaration the beat is red however
+  // correct the product is.
+  const page = fakeStudio({ start: '/sessions/architect/arch-1', commitMs: 0, pages: phasePage(600) });
+  const v = await driveBeat(page, phaseBeat({ for: 'agent', upTo: 3000 }), 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('6.11.10: a declared agent wait still FAILS CLOSED at its own bound, and the failure names which bound fired', async () => {
+  // A longer bound must not become an unbounded one, and the verdict has to
+  // say which bound gave up — otherwise "red at 15 s" and "red at 10 min" are
+  // indistinguishable in a run record.
+  const page = fakeStudio({ start: '/sessions/architect/arch-1', commitMs: 0, pages: phasePage(null) });
+  const started = Date.now();
+  const v = await driveBeat(page, phaseBeat({ for: 'agent', upTo: 300 }), 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  assert.ok(Date.now() - started < 2000, 'a declared wait must respect its own bound, not hang');
+  assert.match(v.failures.join(' | '), /agent wait/i);
+  assert.match(v.failures.join(' | '), /300/);
+});
