@@ -92,12 +92,7 @@ packages/factory/phases/adversarial-review.ts readFileSync 3
 packages/factory/phases/adversarial-review.ts rmSync 1
 packages/factory/phases/adversarial-review.ts unlinkSync 2
 packages/factory/phases/adversarial-review.ts writeFileSync 3
-packages/factory/phases/demo-agent-binding.ts readFileSync 2
-packages/factory/phases/demo-agent.ts execFileSync 1
-packages/factory/phases/demo-agent.ts existsSync 7
-packages/factory/phases/demo-agent.ts readFileSync 5
-packages/factory/phases/demo-agent.ts unlinkSync 4
-packages/factory/phases/demo-agent.ts writeFileSync 1
+packages/factory/phases/capture-nonce.ts readFileSync 1
 packages/factory/phases/dev-binding.ts existsSync 3
 packages/factory/phases/dev-binding.ts readFileSync 2
 packages/factory/phases/dev-binding.ts writeFileSync 3
@@ -110,6 +105,12 @@ packages/factory/phases/developer-loop.ts writeFileSync 2
 packages/factory/phases/executor-deps.ts readFileSync 1
 packages/factory/phases/executor-table.ts existsSync 1
 packages/factory/phases/executor-table.ts readFileSync 3
+packages/factory/phases/integrate.ts execFileSync 1
+packages/factory/phases/integrate.ts existsSync 2
+packages/factory/phases/integrate.ts mkdirSync 2
+packages/factory/phases/integrate.ts readFileSync 1
+packages/factory/phases/integrate.ts unlinkSync 1
+packages/factory/phases/integrate.ts writeFileSync 2
 packages/factory/phases/pm-binding.ts readFileSync 1
 packages/factory/phases/pm-decomposition-doc.ts writeFileSync 1
 packages/factory/phases/pm-prompt-context.ts existsSync 2
@@ -187,8 +188,6 @@ packages/flows/daemon.ts rmSync 4
 packages/flows/daemon.ts spawn 1
 packages/flows/daemon.ts statSync 1
 packages/flows/daemon.ts writeFileSync 3
-packages/flows/demo-fix-loop.ts existsSync 1
-packages/flows/demo-fix-loop.ts readFileSync 3
 packages/flows/drain-fix-loop.ts existsSync 3
 packages/flows/drain-fix-loop.ts readFileSync 1
 packages/flows/drain-fix-loop.ts readdirSync 1
@@ -211,9 +210,9 @@ packages/flows/finalize-merged.ts readdirSync 2
 packages/flows/finalize-merged.ts renameSync 1
 packages/flows/finalize-merged.ts statSync 1
 packages/flows/flow-artifacts.ts existsSync 3
-packages/flows/flow-artifacts.ts mkdirSync 4
+packages/flows/flow-artifacts.ts mkdirSync 3
 packages/flows/flow-artifacts.ts readdirSync 1
-packages/flows/flow-artifacts.ts writeFileSync 4
+packages/flows/flow-artifacts.ts writeFileSync 3
 packages/flows/flow-run-requests.ts existsSync 2
 packages/flows/flow-run-requests.ts mkdirSync 1
 packages/flows/flow-run-requests.ts readFileSync 2

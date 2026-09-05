@@ -501,8 +501,24 @@ function clearMergeGateFeedback(worktreePath: string): void {
   }
 }
 
+/**
+ * One gate this function actually ran, and what it produced.
+ *
+ * The gate used to report only a boolean, which meant the demo bundle
+ * downstream had no way to state WHICH suite proved the branch — so an agent
+ * wrote a sentence about it instead. The evidence rows are what a derived
+ * DEMO.md and PR body are built from (spec §5 item 4), and they are emitted by
+ * the code that ran the command rather than described by anything downstream.
+ */
+export type MergeGateEvidence = {
+  gate: 'local' | 'ci';
+  cmd: readonly string[];
+  ok: boolean;
+  outputTail?: string;
+};
+
 export type MergeGateResult =
-  | { ok: true }
+  | { ok: true; evidence: MergeGateEvidence[] }
   | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string }
   | { ok: false; failedGate: 'config'; reason: string };
 
@@ -572,7 +588,9 @@ function failMergeGateConfig(input: CycleInput, logger: EventLogger, reason: str
 }
 
 export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): MergeGateResult {
-  if (input.dryRun) return { ok: true };
+  // A dry run executes no gate, so it has no evidence to report — an empty
+  // list, never a fabricated green row.
+  if (input.dryRun) return { ok: true, evidence: [] };
 
   let cfg: ReturnType<typeof loadProjectConfig>;
   try {
@@ -616,6 +634,7 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
   const ciGateUnsetEnv =
     loadedCfg.ci_gate_unset_env && loadedCfg.ci_gate_unset_env.length > 0 ? loadedCfg.ci_gate_unset_env : [];
   const ciDeclaredTimeoutMs = loadedCfg.testProcess.ci?.timeoutMs;
+  const evidence: MergeGateEvidence[] = [];
 
   // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.
   //     LOCAL-gate timeout semantics (the same command + knob the per-WI gate
@@ -635,6 +654,7 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
       message: 'cycle.merge-gate',
       metadata: { gate: 'local', ok: local.ok, cmd: localCmd, output_tail: local.output.slice(-1200) },
     });
+    evidence.push({ gate: 'local', cmd: localCmd, ok: local.ok, outputTail: local.output.slice(-1200) });
     if (!local.ok) {
       writeMergeGateFeedback(input.worktreePath, 'local', localCmd, local.output);
       return { ok: false, failedGate: 'local', cmd: localCmd, output: local.output };
@@ -681,6 +701,7 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
           output_tail: decision.gateOutput.slice(-1200),
         },
       });
+      evidence.push({ gate: 'ci', cmd: ciGate, ok: decision.gateOk, outputTail: decision.gateOutput.slice(-1200) });
       if (!decision.gateOk) {
         writeMergeGateFeedback(input.worktreePath, 'ci', ciGate, decision.gateOutput);
         return { ok: false, failedGate: 'ci', cmd: ciGate, output: decision.gateOutput };
@@ -690,5 +711,5 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
 
   // Both green — the full-suite baseline is clean; clear the feedback seam.
   clearMergeGateFeedback(input.worktreePath);
-  return { ok: true };
+  return { ok: true, evidence };
 }

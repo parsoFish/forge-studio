@@ -77,8 +77,8 @@ function makeMockDeps(tracker: { calls: string[] }): TestDeps {
     runDeveloperLoop: async (_input, _logger) => {
       tracker.calls.push('runDeveloperLoop');
     },
-    runDemoAgent: async (_input, _logger) => {
-      tracker.calls.push('runDemoAgent');
+    runIntegrate: (_input, _logger, _gateEvidence) => {
+      tracker.calls.push('runIntegrate');
       return { status: 'complete', demoJsonPath: 'demo/test-initiative/demo.json' };
     },
     runAdversarialReview: async (_input, _logger) => {
@@ -91,7 +91,7 @@ function makeMockDeps(tracker: { calls: string[] }): TestDeps {
     },
     runMergeBoundaryGate: (_input, _logger) => {
       tracker.calls.push('runMergeBoundaryGate');
-      return { ok: true };
+      return { ok: true, evidence: [{ gate: 'local', cmd: ['npm', 'test'], ok: true }] };
     },
     openPrInline: async (_input, _logger) => {
       tracker.calls.push('openPrInline');
@@ -487,7 +487,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     // → verdict(openPr → closure). No unifier/pm/architect/reflect.
     assert.deepEqual(
       tracker.calls,
-      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runDemoAgent', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
       'forge-develop: dev → demo → adversarial-review → verdict only',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 'the unifier executor must NOT run on the live develop flow');
@@ -517,7 +517,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     // separate unifier re-arm — the demo node owns the re-demo now.
     assert.deepEqual(
       tracker.calls,
-      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runDemoAgent', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
       'resume_from:develop re-runs the full dev→demo→adversarial-review→verdict spine through the one develop executor',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the demo node re-authors');
@@ -539,25 +539,25 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     await runFlowT({ flow, input, logger, deps });
 
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a demo resume)');
-    assert.ok(tracker.calls.includes('runDemoAgent'), 'the demo node re-authors the bundle (the resume target now)');
+    assert.ok(tracker.calls.includes('runIntegrate'), 'the demo node re-authors the bundle (the resume target now)');
     assert.ok(tracker.calls.includes('openPrInline'), 'the verdict gate re-opens/updates the PR on resume');
     assert.ok(!tracker.calls.includes('runUnifier'), 'no unifier executor on the live flow');
   });
 
-  it('demo delivery gate: a FAILED demo pipeline blocks the PR (never opens a review-less PR)', async () => {
+  it('demo delivery gate: a FAILED integrate band blocks the PR (never opens a review-less PR)', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    deps.runDemoAgent = async () => {
-      tracker.calls.push('runDemoAgent');
-      return { status: 'failed', reason: 'author-invalid', detail: 'demo.json never validated' };
+    deps.runIntegrate = () => {
+      tracker.calls.push('runIntegrate');
+      return { status: 'failed', reason: 'render-failed', detail: 'the derived bundle never rendered' };
     };
     const input = makeInput();
     const logger = makeLogger();
 
-    await assert.rejects(runFlowT({ flow, input, logger, deps }), /delivery gate: demo pipeline failed/);
+    await assert.rejects(runFlowT({ flow, input, logger, deps }), /delivery gate: integrate band failed/);
     assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed demo');
     assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed demo');
   });
@@ -599,7 +599,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       await runFlowT({ flow, input, logger, deps });
 
       // No demo, no adversarial review, NO PR — a red baseline never merges.
-      assert.ok(!tracker.calls.includes('runDemoAgent'), 'demo does not run on a red merge-gate');
+      assert.ok(!tracker.calls.includes('runIntegrate'), 'demo does not run on a red merge-gate');
       assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review does not run on a red merge-gate');
       assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a red full-suite baseline (the preserved invariant)');
       assert.ok(tracker.calls.includes('runClosure'), 'closure runs — routes the manifest to ready-for-review for the drain');

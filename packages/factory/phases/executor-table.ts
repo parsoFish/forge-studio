@@ -14,7 +14,6 @@ import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forg
 import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import { REPO_RE, type TriggerPayload } from '@forge/flows/trigger-payload.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { enqueueDemoFixWorkItems } from '@forge/flows/demo-fix-loop.ts';
 import { enqueueGateFixWorkItems } from '@forge/flows/gate-fix-loop.ts';
 import { writeMergeGateConfigErrorMarker } from '@forge/flows/fix-work-items.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG } from '@forge/agents/agent-bands.ts';
@@ -105,12 +104,18 @@ const execDev: NodeExecutor = async (ctx) => {
 };
 
 /**
- * demo (the `demo-band`, ADR-039): the R4-07 demo pipeline + the relocated
- * dev-loop close contract (items 4,5,7,8) — the develop flow's successor to the
- * unifier node (R4-10-F1). The demo agent authors demo.json AND the relocated
- * `.forge/pr-description.md`; the pipeline renders + orchestrated-captures. The
- * boundary start/end events (agent_slug metadata) let the run model resolve the
- * demo node's hex to complete, exactly as a generic execAgent spawn would.
+ * demo (the `demo-band`, ADR-039) — the INTEGRATE band of spec §5 item 4.
+ *
+ * Boundary commit, sync invariant, empty-branch guard, the merge-boundary gate
+ * that fails loud on a config error, and then `runIntegrate`, which DERIVES the
+ * demo bundle and the PR body from the acceptance criteria, this gate's own
+ * evidence and the diff. Nothing here spawns a model: the LLM demo node and its
+ * authoring retries were deleted with the fix loop they fed.
+ *
+ * The band keeps its `demo` identity — node id, band guard, slug and
+ * `resume_from: 'demo'` are unchanged (T1 ruling 245), so the run model resolves
+ * this node's hex exactly as before and no golden, story or API field moves. The
+ * NAME lags the spec's word `integrate`; the rename is priced separately.
  */
 const execDemo: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
@@ -220,49 +225,19 @@ const execDemo: NodeExecutor = async (ctx) => {
     return;
   }
 
-  // Gate green → the demo pipeline (the build is proven, so capture succeeds).
-  const result = await runWithWedge(ctx, (sig) => deps.runDemoAgent(input, nodeLogger, sig));
+  // Gate green → derive the bundle. The gate's own evidence rows are an INPUT
+  // here: the demo says which suites proved the branch because the orchestrator
+  // that ran them said so, not because anything downstream described them.
+  const result = deps.runIntegrate(input, nodeLogger, gate.evidence);
 
-  // Item 6 (delivery gate) — the demo pipeline must have produced a bundle. A
-  // miss is a JUDGMENT (`complete-with-misses`), never a failure; only a hard
-  // pipeline `failed` blocks the PR, in the same spot the unifier gate did.
+  // Delivery gate — the band must have produced a bundle. There is no partial
+  // outcome any more: a derivation either produced the artifacts or named the
+  // reason it could not, and either way there is nothing to re-author.
   if (result.status === 'failed') {
     throw new Error(
-      `delivery gate: demo pipeline failed (${result.reason}: ${result.detail}) — ` +
-        `the branch is not review-ready, so no PR is opened. Triage the demo failure before re-running.`,
+      `delivery gate: integrate band failed (${result.reason}: ${result.detail}) — ` +
+        `the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`,
     );
-  }
-
-  // Demo-fix loop (ADR-040 / R4-10-F1): a `complete-with-misses` demo compiles
-  // the agent's scoped fix proposals into `demo-fix` WIs on the initiative's own
-  // queue + stamps the manifest send-back, so the fix-loop drain re-enters
-  // (resume_from:'develop' → dev builds the fixes → this demo node re-authors).
-  // Done AFTER the gates so a red gate never enqueues an undrainable fix loop.
-  if (result.status === 'complete-with-misses') {
-    const enqueue = enqueueDemoFixWorkItems({
-      worktreePath: input.worktreePath,
-      manifestPath: input.manifestPath,
-      initiativeId: input.initiativeId,
-      fixSpecPath: result.fixSpecPath,
-      projectGateCmd: input.qualityGateCmd ?? [],
-    });
-    nodeLogger.emit({
-      initiative_id: input.initiativeId,
-      phase: 'orchestrator',
-      skill: 'demo-agent',
-      event_type: enqueue.status === 'compiled' ? 'log' : 'error',
-      input_refs: [],
-      output_refs:
-        enqueue.status === 'compiled' ? enqueue.appended.map((id) => `.forge/work-items/${id}.md`) : [],
-      message: `demo.fix-loop.${enqueue.status}`,
-      metadata: {
-        misses: result.misses.length,
-        origin: 'demo-fix',
-        ...(enqueue.status === 'compiled'
-          ? { appended_work_items: enqueue.appended, round: enqueue.round }
-          : { detail: 'detail' in enqueue ? enqueue.detail : undefined }),
-      },
-    });
   }
 
   nodeLogger.emit({

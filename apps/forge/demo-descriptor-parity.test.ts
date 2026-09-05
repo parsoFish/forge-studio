@@ -4,7 +4,12 @@
  *
  *   (a) the preflight DEMO clause (accepts it as contract-green),
  *   (b) the demo-builder's composition (`demoTaskLines`, Face B — HTML deliverable),
- *   (c) the demo-agent briefing (`renderDemoAgentUserPrompt`, Face A — executed demo).
+ *   (c) the integrate band's derivation (`deriveDemoModel`, Face A — executed demo).
+ *
+ * Consumer (c) was the demo-agent's briefing until the LLM demo node was deleted
+ * (spec §5 item 4). The claim it carries is unchanged — the descriptor and its
+ * step ORDER may not drift between the faces — but the third face now DERIVES
+ * the checkpoints instead of describing them to a model.
  *
  * One fixture, three consumers — descriptor drift breaks this test. The
  * deliverables intentionally differ (contract doc §DEMO, "two faces"); the
@@ -19,7 +24,7 @@ import { test } from 'node:test';
 
 import { checkDemo } from '@forge/projects/preflight.ts';
 import { demoTaskLines, type DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
-import { renderDemoAgentUserPrompt } from '@forge/factory/phases/demo-agent-binding.ts';
+import { deriveDemoModel } from '@forge/factory/phases/derive-demo-model.ts';
 // `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
 // library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
 // for this importer specifically: `projects` (rank 2) may not import
@@ -35,7 +40,7 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 /** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately
  * NOT in the library's alphabetical order so order-preservation is actually asserted. */
 const FIXTURE_STEPS: Array<DemoStep & { element: string }> = [
-  { kind: 'capture', text: 'record the CLI before/after', element: 'cli-capture' },
+  { kind: 'capture', text: 'record the CLI before/after with `npm run demo`', element: 'cli-capture' },
   { kind: 'verify', text: 'encode the gate result', element: 'test-evidence' },
   { kind: 'present', text: 'one-line essence', element: 'narrative' },
 ];
@@ -69,7 +74,7 @@ test('consumer (a): the preflight DEMO clause accepts the shared fixture', () =>
   }
 });
 
-test('consumers (b)+(c): builder composition and demo-agent briefing list the same elements in the same order', () => {
+test('consumers (b)+(c): builder composition and the derived demo bundle read the same descriptor in the same order', () => {
   const library = listDemoElements(FORGE_ROOT);
   assert.ok(library.length >= 6, 'the studio demo-element library must be present');
   const byId = new Map(library.map((e) => [e.id, e]));
@@ -83,27 +88,37 @@ test('consumers (b)+(c): builder composition and demo-agent briefing list the sa
     byId,
   }).join('\n');
 
-  // (c) demo-agent briefing (Face A).
-  const agentPrompt = renderDemoAgentUserPrompt({
+  // (c) the integrate band's derivation (Face A).
+  const derived = deriveDemoModel({
     initiativeId: 'INIT-parity',
-    acceptanceCriteria: ['AC-1'],
-    workItems: [],
-    qualityGateCmd: ['echo', 'ok'],
+    title: 'Descriptor parity',
+    project: 'parity',
     diffStat: '1 file changed',
     headSha: 'abc',
-    demoDir: 'demo/INIT-parity',
+    changedFiles: ['src.ts'],
+    workItems: [],
+    acceptanceCriteria: ['AC-1'],
+    gateEvidence: [],
     demoProcess: FIXTURE_STEPS,
-    elements: FIXTURE_STEPS.map((s) => byId.get(s.element)!),
+    capture: 'checkpoints',
   });
+  assert.equal(derived.ok, true, derived.ok ? '' : derived.errors.join('; '));
+  const captions = derived.ok ? derived.model.checkpoints.map((c) => c.caption) : [];
 
   const ids = FIXTURE_STEPS.map((s) => s.element);
   assertAscending(positionsOf(builderText, ids), 'demo-builder');
-  assertAscending(positionsOf(agentPrompt, ids), 'demo-agent');
 
-  // Both consumers surface each element's generator body/kind, not just the id.
+  // The derivation reads the SAME descriptor: one checkpoint per `capture` step,
+  // in the descriptor's own order, captioned with the operator's own text.
+  assert.deepEqual(
+    captions,
+    FIXTURE_STEPS.filter((s) => s.kind === 'capture').map((s) => s.text),
+    'the derived checkpoints must follow the demoProcess step order',
+  );
+
+  // The builder surfaces each element's generator body/kind, not just the id.
   for (const s of FIXTURE_STEPS) {
     const el = byId.get(s.element)!;
     assert.ok(builderText.includes(el.name), `builder inlines ${s.element} generator header`);
-    assert.ok(agentPrompt.includes(el.name), `agent briefing inlines ${s.element} generator header`);
   }
 });

@@ -54,9 +54,9 @@ test('cmdAgentDispatch: a standalone band slug with NO deps.band is REFUSED, nam
   try {
     let dispatched = 0;
     const r = await run(
-      ['demo-agent', '--run-id', 'RUN-band-deps-missing', '--input', 'initiative=INIT-x'],
+      ['adversarial-review', '--run-id', 'RUN-band-deps-missing', '--input', 'initiative=INIT-x'],
       root,
-      { dispatch: (async () => { dispatched += 1; return { slug: 'demo-agent', runId: 'x', result: { suppressed: true, costUsd: 0 } }; }) as never },
+      { dispatch: (async () => { dispatched += 1; return { slug: 'adversarial-review', runId: 'x', result: { suppressed: true, costUsd: 0 } }; }) as never },
     );
     assert.equal(r.exitCode, 1, 'the refusal takes the dispatch failure path (exit 1), so the run gets a terminus');
     assert.match(r.err, /without the band pipelines injected \(deps\.band\)/);

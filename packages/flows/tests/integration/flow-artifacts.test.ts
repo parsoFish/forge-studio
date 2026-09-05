@@ -13,10 +13,6 @@ import {
   validateReviewFindings,
   writeReviewFindingsJson,
   type ReviewFindingsRecord,
-  demoFixSpecJsonPath,
-  validateDemoFixSpec,
-  writeDemoFixSpecJson,
-  type DemoFixSpecRecord,
   type ArtifactContract,
   type ArtifactGuardInput,
 } from '../../flow-artifacts.ts';
@@ -310,79 +306,3 @@ test('writeReviewFindingsJson: round-trips beside verdict.json without touching 
 // ---------------------------------------------------------------------------
 // demo-fix-spec — the R4-07-F2 judgment artifact (demo-agent → future fix executor)
 // ---------------------------------------------------------------------------
-
-function validFixSpec(): DemoFixSpecRecord {
-  return {
-    initiative_id: 'INIT-x',
-    cycleId: 'CY-1',
-    demoJsonPath: 'demo/INIT-x/demo.json',
-    authoredAt: '2026-07-24T00:00:00.000Z',
-    proposals: [
-      {
-        id: 'FIX-1',
-        criterion: 'GIVEN a fresh install WHEN the CLI runs THEN it prints usage',
-        verdict: 'missed',
-        evidence: 'the cli-capture checkpoint shows an empty stdout for the after run',
-        title: 'Make the CLI print usage on bare invocation',
-        acceptance_criteria: [{ given: 'a fresh install', when: 'the CLI runs bare', then: 'usage text on stdout' }],
-        files_in_scope: ['src/cli.ts'],
-        rationale: 'the demo cannot show the AC because the behaviour is absent, not because evidence capture failed',
-      },
-    ],
-  };
-}
-
-test('validateDemoFixSpec: a valid record returns no errors', () => {
-  assert.deepEqual(validateDemoFixSpec(validFixSpec()), []);
-});
-
-test('validateDemoFixSpec: non-object and missing core fields are named errors', () => {
-  assert.ok(validateDemoFixSpec(null).length > 0);
-  const errs = validateDemoFixSpec({ cycleId: 'CY-1' });
-  assert.ok(errs.some((e) => e.includes('initiative_id')));
-  assert.ok(errs.some((e) => e.includes('proposals')));
-});
-
-test('validateDemoFixSpec: proposals must be non-empty', () => {
-  const rec = { ...validFixSpec(), proposals: [] };
-  assert.ok(validateDemoFixSpec(rec).some((e) => e.includes('proposals')));
-});
-
-test('validateDemoFixSpec: verdict "met" is rejected with the allowed vocabulary named', () => {
-  const rec = validFixSpec();
-  (rec.proposals[0] as { verdict: string }).verdict = 'met';
-  const errs = validateDemoFixSpec(rec);
-  assert.ok(errs.some((e) => e.includes('met') && e.includes('partial') && e.includes('missed')));
-});
-
-test('validateDemoFixSpec: empty GWT, empty files_in_scope, empty evidence are each rejected', () => {
-  const noGwt = validFixSpec();
-  noGwt.proposals[0].acceptance_criteria = [];
-  assert.ok(validateDemoFixSpec(noGwt).some((e) => e.includes('acceptance_criteria')));
-
-  const blankGwt = validFixSpec();
-  blankGwt.proposals[0].acceptance_criteria = [{ given: '', when: 'w', then: 't' }];
-  assert.ok(validateDemoFixSpec(blankGwt).some((e) => e.includes('given')));
-
-  const noFiles = validFixSpec();
-  noFiles.proposals[0].files_in_scope = [];
-  assert.ok(validateDemoFixSpec(noFiles).some((e) => e.includes('files_in_scope')));
-
-  const noEvidence = validFixSpec();
-  noEvidence.proposals[0].evidence = '';
-  assert.ok(validateDemoFixSpec(noEvidence).some((e) => e.includes('evidence')));
-});
-
-test('writeDemoFixSpecJson: round-trips and the latest authoring wins (overwrite)', () => {
-  const root = tmp();
-  const logsRoot = join(root, '_logs');
-  const p1 = writeDemoFixSpecJson(logsRoot, validFixSpec());
-  assert.equal(p1, demoFixSpecJsonPath(logsRoot, 'CY-1'));
-  assert.ok(existsSync(p1!));
-  const again = validFixSpec();
-  again.proposals[0].title = 'Second authoring';
-  const p2 = writeDemoFixSpecJson(logsRoot, again);
-  assert.equal(p2, p1);
-  assert.equal(JSON.parse(readFileSync(p1!, 'utf8')).proposals[0].title, 'Second authoring');
-  rmSync(root, { recursive: true, force: true });
-});

@@ -228,8 +228,8 @@ function makeMockDeps(tracker: { calls: string[] }): TestDeps {
     runDeveloperLoop: async (_input, _logger) => {
       tracker.calls.push('runDeveloperLoop');
     },
-    runDemoAgent: async (_input, _logger) => {
-      tracker.calls.push('runDemoAgent');
+    runIntegrate: (_input, _logger, _gateEvidence) => {
+      tracker.calls.push('runIntegrate');
       return { status: 'complete', demoJsonPath: 'demo/test-initiative/demo.json' };
     },
     runAdversarialReview: async (_input, _logger) => {
@@ -242,7 +242,7 @@ function makeMockDeps(tracker: { calls: string[] }): TestDeps {
     },
     runMergeBoundaryGate: (_input, _logger) => {
       tracker.calls.push('runMergeBoundaryGate');
-      return { ok: true };
+      return { ok: true, evidence: [] };
     },
     openPrInline: async (_input, _logger) => {
       tracker.calls.push('openPrInline');

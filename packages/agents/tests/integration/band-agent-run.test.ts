@@ -103,8 +103,12 @@ function writeManifest(stateDir: string, worktreePath: string): void {
   ].join('\n'));
 }
 
-test('isStandaloneBandAgent: only the two band-hook node agents', () => {
-  assert.equal(isStandaloneBandAgent('demo-agent'), true);
+test('isStandaloneBandAgent: only a band-hook node agent that still spawns', () => {
+  // `demo-agent` is a declaration carrier since spec §5 item 4 deleted the LLM
+  // demo node — the band it names runs orchestrator-side and there is no turn to
+  // re-run, so it is refused here exactly as `contract-check` always has been.
+  assert.equal(isStandaloneBandAgent('demo-agent'), false);
+  assert.equal(isStandaloneBandAgent('contract-check'), false);
   assert.equal(isStandaloneBandAgent('adversarial-review'), true);
   assert.equal(isStandaloneBandAgent('developer-ralph'), false);
   assert.equal(isStandaloneBandAgent('project-manager'), false);
@@ -119,14 +123,14 @@ test('runBandAgentStandalone: a non-band agent is refused', async () => {
 
 test('runBandAgentStandalone: a missing runId is refused', async () => {
   await assert.rejects(
-    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: '', forgeRoot: '/tmp/none' }, depsWithRecorder().deps),
+    runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: '', forgeRoot: '/tmp/none' }, depsWithRecorder().deps),
     /runId is required/,
   );
 });
 
 test('runBandAgentStandalone: an unsafe initiative id is refused before any path is joined', async () => {
   await assert.rejects(
-    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: '../../etc/passwd', runId: RUN, forgeRoot: '/tmp/none' }, depsWithRecorder().deps),
+    runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: '../../etc/passwd', runId: RUN, forgeRoot: '/tmp/none' }, depsWithRecorder().deps),
     /invalid initiative id/,
   );
 });
@@ -136,7 +140,7 @@ test('runBandAgentStandalone: no manifest for the initiative → clear boundary 
   try {
     mkdirSync(join(root, '_queue', 'ready-for-review'), { recursive: true });
     await assert.rejects(
-      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
+      runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
       /no runnable manifest for initiative/,
     );
   } finally {
@@ -152,7 +156,7 @@ test('runBandAgentStandalone: an in-flight initiative is refused (a live cycle o
     mkdirSync(wt, { recursive: true });
     writeManifest(join(root, '_queue', 'in-flight'), wt);
     await assert.rejects(
-      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
+      runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
       /is in-flight — a live scheduler cycle owns its worktree/,
     );
   } finally {
@@ -167,7 +171,7 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
     try {
       writeManifest(join(root, '_queue', 'ready-for-review'), outside);
       await assert.rejects(
-        runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
+        runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
         /is outside the forge roots/,
       );
     } finally {
@@ -181,11 +185,11 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
 // ---------------------------------------------------------------------------
 // The port control (Task 5.2): the whole standalone path is satisfiable by a
 // runner that imports no phase. This is what the carve buys — before it, the
-// module reached `@forge/factory/phases/{demo-agent,adversarial-review}.ts`
+// module reached `@forge/factory/phases/adversarial-review.ts`
 // from rank 3's dependency graph, and no test could run it without them.
 // ---------------------------------------------------------------------------
 
-test('runBandAgentStandalone: the demo arm runs to completion against an injected runner that imports no phase — events land under the runId, the initiative cycle_id log is untouched, and a terminal `end` marks the run done', async () => {
+test('runBandAgentStandalone: the review arm runs to completion against an injected runner that imports no phase — events land under the runId, the initiative cycle_id log is untouched, and a terminal `end` marks the run done', async () => {
   const root = mkdtempSync(join(tmpdir(), 'band-run-port-'));
   try {
     const wt = join(root, '_worktrees', 'wt');
@@ -194,19 +198,19 @@ test('runBandAgentStandalone: the demo arm runs to completion against an injecte
 
     const { deps, calls } = depsWithRecorder({ status: 'complete' }, 0.25);
     const out = await runBandAgentStandalone(
-      { slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root },
+      { slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root },
       deps,
     );
 
-    assert.equal(out.kind, 'demo');
-    assert.equal(out.slug, 'demo-agent');
+    assert.equal(out.kind, 'review');
+    assert.equal(out.slug, 'adversarial-review');
     assert.equal(out.runId, RUN);
     assert.equal(out.initiativeId, INIT);
     assert.equal(out.result.status, 'complete');
 
     // The port carried the resolved initiative context, not the raw request.
     assert.equal(calls.length, 1);
-    assert.equal(calls[0]!.kind, 'demo');
+    assert.equal(calls[0]!.kind, 'review');
     assert.equal(calls[0]!.input.worktreePath, wt);
     assert.equal(calls[0]!.input.cycleId, RUN, 'the pipeline runs under the RUN id, never the initiative cycle_id');
     assert.equal(calls[0]!.input.logsRoot, join(root, '_logs'));

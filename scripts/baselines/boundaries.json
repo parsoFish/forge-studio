@@ -65,7 +65,6 @@
   "package-to-assembly|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|apps/forge/ui-bridge.ts",
   "package-to-legacy|packages/agents/tests/integration/run-agent-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/factory/phases/adversarial-review-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
-  "package-to-legacy|packages/factory/phases/demo-agent-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/factory/phases/reflector-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/factory/pm-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/flows/tests/contract/flow-run-request-fixture-parity.test.ts|orchestrator/test-fixtures/flow-run-request.ts",

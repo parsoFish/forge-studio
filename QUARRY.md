@@ -153,6 +153,10 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/gates/docs-gate.ts | factory | rewritten | 114 |
 | packages/factory/phases/pm-prompt-context.ts | factory | rewritten | 139 |
 | packages/factory/phases/pm-class-set-rules.ts | factory | rewritten | 45 |
+| packages/factory/phases/integrate.ts | factory | rewritten | 286 |
+| packages/factory/phases/derive-demo-model.ts | factory | rewritten | 194 |
+| packages/factory/phases/derive-pr-body.ts | factory | rewritten | 72 |
+| packages/factory/phases/capture-nonce.ts | factory | rewritten | 58 |
 | packages/factory/phases/pm-decomposition-doc.ts | factory | rewritten | 68 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-capture.ts | factory | verbatim | 48 |
@@ -269,7 +273,6 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 142 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 86 |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 72 |
-| packages/flows/demo-fix-loop.ts | flows | verbatim | 218 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 77 |
@@ -315,8 +318,6 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phase-wiring.ts | flows | verbatim | 48 |
 | apps/forge/factory-wiring.ts | apps/forge | verbatim | 27 |
 | packages/factory/phases/decompose-completeness.ts | factory | verbatim | 197 |
-| packages/factory/phases/demo-agent-binding.ts | factory | verbatim | 214 |
-| packages/factory/phases/demo-agent.ts | factory | verbatim | 740 |
 | packages/factory/phases/dev-binding.ts | factory | verbatim | 339 |
 | packages/factory/phases/developer-loop.ts | factory | pruned | 1941 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 301 |

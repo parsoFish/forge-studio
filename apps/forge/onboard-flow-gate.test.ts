@@ -96,8 +96,8 @@ function makeInertDeps(tracker: { calls: string[] }): TestDeps {
     runDeveloperLoop: async () => {
       tracker.calls.push('runDeveloperLoop');
     },
-    runDemoAgent: async () => {
-      tracker.calls.push('runDemoAgent');
+    runIntegrate: (_input, _logger, _gateEvidence) => {
+      tracker.calls.push('runIntegrate');
       return { status: 'complete', demoJsonPath: 'demo/test-onboard-init/demo.json' };
     },
     runAdversarialReview: async () => {
@@ -110,7 +110,7 @@ function makeInertDeps(tracker: { calls: string[] }): TestDeps {
     },
     runMergeBoundaryGate: () => {
       tracker.calls.push('runMergeBoundaryGate');
-      return { ok: true };
+      return { ok: true, evidence: [] };
     },
     openPrInline: async () => {
       tracker.calls.push('openPrInline');

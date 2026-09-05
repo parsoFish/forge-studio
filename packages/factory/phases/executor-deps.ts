@@ -19,12 +19,12 @@ import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forg
 import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';
 import { runProjectManager as realRunProjectManager } from '@forge/factory/phases/project-manager.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
-import { runDemoAgentPipeline, type DemoAgentPipelineResult } from '@forge/factory/phases/demo-agent.ts';
+import { runIntegrateBand, type IntegrateResult } from '@forge/factory/phases/integrate.ts';
 import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
 import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
 import { runReflector } from '@forge/factory/phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
-import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
+import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 
 
 /**
@@ -42,17 +42,18 @@ export type FlowRunnerDeps = {
   ) => Promise<void>;
 
   /**
-   * R4-10-F1 demo node: the R4-07 demo pipeline (author demo.json + the
-   * relocated `.forge/pr-description.md`, render, orchestrated capture, AC
-   * judgment). Wrapped by execDemo, which relocates the close-contract gates
-   * around it. Returns the pipeline result so execDemo can gate on `failed`
-   * and drive the demo-fix loop on `complete-with-misses`.
+   * The integrate band (spec §5 item 4): derive the demo bundle and the PR body
+   * from the acceptance criteria, the gate evidence and the diff, render, and
+   * capture where the class says so. Wrapped by execDemo, which runs the
+   * close-contract gates before it and hands it their evidence. Synchronous and
+   * signal-free by construction — it waits on no model, so there is nothing for
+   * a wedge timer to abort.
    */
-  runDemoAgent: (
+  runIntegrate: (
     input: CycleInput,
     logger: EventLogger,
-    signal?: AbortSignal,
-  ) => Promise<DemoAgentPipelineResult>;
+    gateEvidence: readonly MergeGateEvidence[],
+  ) => IntegrateResult;
 
   /**
    * R4-10-F1 review node: the R4-08 adversarial-review pipeline (assemble the
@@ -199,18 +200,16 @@ export const DEFAULT_DEPS: FlowRunnerDeps = {
     realRunProjectManager(input, logger, { signal }),
   runDeveloperLoop: (input, logger, signal?) =>
     realRunDeveloperLoop(input, logger, signal),
-  runDemoAgent: (input, logger, signal?) =>
-    runDemoAgentPipeline(
+  runIntegrate: (input, logger, gateEvidence) =>
+    runIntegrateBand(
       {
         initiativeId: input.initiativeId,
         worktreePath: input.worktreePath,
-        cycleId: input.cycleId ?? input.initiativeId,
-        logsRoot: DEFAULT_LOGS_ROOT,
-        costBudgetUsd: readCostBudgetUsd(input),
-        forgeRoot: FORGE_ROOT,
+        manifestPath: input.manifestPath,
+        projectRepoPath: input.projectRepoPath,
       },
       logger,
-      { signal },
+      gateEvidence,
     ),
   runAdversarialReview: (input, logger, signal?) =>
     runAdversarialReview(

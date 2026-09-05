@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { judgeCaptureNonce } from './demo-agent.ts';
+import { judgeCaptureNonce } from './capture-nonce.ts';
 
 test('a matching stamp is the pass', () => {
   assert.deepEqual(judgeCaptureNonce('n-1', 'n-1'), { ok: true });

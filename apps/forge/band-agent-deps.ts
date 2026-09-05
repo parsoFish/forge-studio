@@ -15,7 +15,6 @@
  * stays in the package that owns the seam.
  */
 
-import { runDemoAgentPipeline } from '@forge/factory/phases/demo-agent.ts';
 import { runAdversarialReview } from '@forge/factory/phases/adversarial-review.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { getPaths } from '@forge/flows/queue.ts';
@@ -32,8 +31,5 @@ import type { BandAgentDeps } from '@forge/agents/band-agent-run.ts';
 export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
-  runPipeline: async ({ kind, input, logger, queryFn }) =>
-    kind === 'demo'
-      ? await runDemoAgentPipeline(input, logger, { queryFn })
-      : await runAdversarialReview(input, logger, { queryFn }),
+  runPipeline: async ({ input, logger, queryFn }) => await runAdversarialReview(input, logger, { queryFn }),
 };

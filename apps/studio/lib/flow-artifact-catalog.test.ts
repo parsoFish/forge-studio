@@ -66,9 +66,15 @@ test('AT-52: the picker catalog id set is EXACTLY the on-disk studio/artifact-te
 // the count grows from 7 to 8, same as `studio/artifact-templates/`'s
 // on-disk set (see AT-52 above, which stays the source of truth for the id
 // SET; this test only pins the orphan-free count).
-test('AT-53: the two known orphans ("reflection", "demo") are gone — the catalog has exactly 8 entries', () => {
+// M5-A mechanical amendment (2026-09-05, spec §5 item 4): back to 7. The
+// demo-fix loop was deleted, so `demo-fix-spec.json` has neither a producer nor
+// a consumer — the template went with the loop rather than being reclassified.
+test('AT-53: the known orphans ("reflection", "demo", "demo-fix-spec") are gone — the catalog has exactly 7 entries', () => {
   const ids = ARTIFACTS.map((a: ArtifactDef) => a.id);
   expect(ids).not.toContain('reflection');
   expect(ids).not.toContain('demo');
-  expect(ARTIFACTS.length).toBe(8);
+  // `demo-fix-spec` joined them when spec §5 item 4 deleted the demo-fix loop:
+  // the template described an artifact nothing writes any more.
+  expect(ids).not.toContain('demo-fix-spec');
+  expect(ARTIFACTS.length).toBe(7);
 });
