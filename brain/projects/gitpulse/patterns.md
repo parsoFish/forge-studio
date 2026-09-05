@@ -26,3 +26,11 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`2026-09-05-markdown-output-flag-delivery`](./themes/2026-09-05-markdown-output-flag-delivery.md) — The --markdown flag follows the symmetric renderer-pair pattern: 6 new exports in format.ts (markdownEscape, gfmTable private, 4 renderers), all 4 CLI code paths wired, mutual exclusion with --json/--csv. 3 WIs, all iter=1. RF-1 major: renderSummaryMarkdown silently discards tagRange.
+
+- [`2026-09-04-include-path-filter-delivery`](./themes/2026-09-04-include-path-filter-delivery.md) — `applyInclusions(commits, patterns)` inlined in src/cli.ts (mirrors applyExclusions). Applied in all 4 CLI code paths including the compare branch — explicitly pre-empting the RF-1 gap from the prior --author cycle. 3-WI TDD chain, all 1 iteration. +1225/-34, 6 files, PR #15, v0.14.0.
+
+- [`2026-09-04-compare-path-gap-pre-empted-by-explicit-ac`](./themes/2026-09-04-compare-path-gap-pre-empted-by-explicit-ac.md) — Prior cycle's RF-1 major (--author silently discarded on --compare path) was converted to an explicit acceptance criterion (AC-2.2) and acceptance assertion (AC-5) in this cycle's manifest. No review send-back. Lesson-to-spec propagation via brain → PM → WI ACs is the effective prevention path.
