@@ -291,7 +291,9 @@ and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
   [sessionProject, '_project-brain', sessionId], …)`,
   `packages/knowledge/bridge-studio-kbs.ts:1028-1041`) — routes through
   `guardedFile(projectsRoot, [...segments, 'status.json'], 'write')`
-  (`packages/sessions/interactive-session.ts:303-314`), a GUARD_PRODUCERS-listed
+  (`packages/sessions/interactive-session.ts:303-314`; the write-root fence those lines
+  discuss now lives in `packages/sessions/session-write-fence.ts` — M5-A split, ruling 192),
+  a GUARD_PRODUCERS-listed
   guard-terminal call; the checker sees no raw sink at this call site at all.
   `sessionId = newProjectBrainSessionId()` is server-generated;
   `sessionProject` is either a real `discoverProjects`-verified project id or a
