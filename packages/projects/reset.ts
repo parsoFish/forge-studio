@@ -490,9 +490,12 @@ export function computeContractDrift(
   const rows: DriftRow[] = [
     driftRow('testProcess.local', config?.testProcess.local, starter?.testProcess.local, mode('unconditional'), across((s) => s.testProcess.local)),
     driftRow('testProcess.ci', config?.testProcess.ci, starter?.testProcess.ci, mode('fillOnly'), across((s) => s.testProcess.ci)),
-    // Secret NAMES carve-out (Q3): never sourced from a starter — no starter
-    // declares `acceptance` at all, and even if one did, a template cannot
-    // know which env vars THIS project's live-acceptance tier needs.
+    // Secret NAMES carve-out (Q3): the starter value is hardcoded `undefined`,
+    // never read, because a template cannot know which env vars THIS project's
+    // acceptance tier needs. Since bead `forge-8vfn.6.5` all three starters DO
+    // declare `acceptance` (they used not to), so `'protected'` + `undefined`
+    // is now load-bearing rather than vacuous: it is what stops a reset pushing
+    // a starter's empty `requiresEnv` over a ground that names real ones.
     driftRow('testProcess.acceptance', config?.testProcess.acceptance, undefined, 'protected'),
     driftRow('standing_work_item_acs', config?.standing_work_item_acs, starter?.standing_work_item_acs, mode('fillOnly'), across((s) => s.standing_work_item_acs)),
     driftRow('demoProcess', config?.demoProcess, starter?.demoProcess, mode('unconditional'), across((s) => s.demoProcess)),

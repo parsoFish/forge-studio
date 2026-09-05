@@ -53,6 +53,7 @@ import { dirname, join, sep } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
 import { SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
+import { isPackageManagerShaped, resolveScriptName } from './preflight-gate.ts';
 
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3)
@@ -180,54 +181,14 @@ export function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
 // left every from-scratch JS project born hard-failing (bd forge-7pa,
 // `apps/forge/onboard-born-green.test.ts`).
 //
-// `isPackageManagerShaped`/`resolveScriptName` below are DELIBERATE,
-// byte-for-byte mirrors of the same-named functions in `packages/projects/preflight.ts`
-// (its own `checkC1`, `PACKAGE_MANAGER_TOKENS`, `PM_NATIVE_SUBCOMMANDS`).
-// preflight.ts does not export either — it is outside this worker's fence
-// and must not be edited — so this is a deliberate, narrow duplication
-// rather than a shared import; a drift between the two would silently
-// re-break the invariant (the scaffold writing a package.json C1 doesn't
-// recognise, or a C1-recognised shape the scaffold fails to script-name).
-const PACKAGE_MANAGER_TOKENS = new Set(['npm', 'yarn', 'pnpm', 'npx', 'bun', 'bunx']);
-
-/** True iff `cmd`'s first token invokes a package manager (case-insensitive).
- *  Mirrors `packages/projects/preflight.ts`'s `isPackageManagerShaped` exactly. */
-function isPackageManagerShaped(cmd: string): boolean {
-  const first = cmd.trim().split(/\s+/)[0] ?? '';
-  return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
-}
-
-// pm-native verbs a bare `yarn <token>` / `pnpm <token>` must NOT be mistaken
-// for a project script name. Mirrors `packages/projects/preflight.ts`'s
-// `PM_NATIVE_SUBCOMMANDS` exactly.
-export const PM_NATIVE_SUBCOMMANDS = new Set([
-  'run', 'install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'update', 'upgrade', 'up',
-  'exec', 'dlx', 'init', 'publish', 'link', 'unlink', 'list', 'ls', 'outdated', 'audit', 'why',
-  'info', 'view', 'config', 'cache', 'prune', 'pack', 'create', 'dedupe', 'patch', 'patch-commit',
-  'patch-remove', 'deploy', 'rebuild', 'store', 'server', 'root', 'licenses', 'doctor', 'setup',
-  'tag', 'team', 'owner', 'policies', 'import', 'global', 'node', 'env', 'workspace', 'workspaces',
-  'login', 'logout', 'whoami', 'version', 'versions', 'help', '-v', '--version', '-h', '--help',
-]);
-
-/**
- * Resolves the package.json `scripts` key a declared gate would invoke, or
- * `null` when the shape can't be mapped to one. Mirrors `packages/projects/preflight.ts`'s
- * `resolveScriptName` exactly — SAME mapped shapes: bare `npm test`/
- * `yarn test`/`pnpm test` → "test"; `npm run <name>`/`yarn run <name>`/
- * `pnpm run <name>` → "<name>"; `yarn <name>`/`pnpm <name>` (name not a known
- * pm subcommand) → "<name>". `npx`/`bunx`/`bun` and anything else → null.
- */
-export function resolveScriptName(cmd: string): string | null {
-  const toks = cmd.trim().split(/\s+/).filter(Boolean);
-  const runner = (toks[0] ?? '').toLowerCase();
-  if (runner !== 'npm' && runner !== 'yarn' && runner !== 'pnpm') return null;
-  const first = (toks[1] ?? '').toLowerCase();
-  if (!first) return null;
-  if (first === 'test') return 'test';
-  if (first === 'run') return toks[2] ?? null;
-  if (runner !== 'npm' && !PM_NATIVE_SUBCOMMANDS.has(first)) return toks[1]!;
-  return null;
-}
+// `isPackageManagerShaped`/`resolveScriptName` used to be byte-for-byte COPIES
+// here. The stated reason — "preflight.ts does not export either — it is
+// outside this worker's fence and must not be edited" — stopped being true when
+// `preflight-gate.ts` exported both for `preflight-deps.ts`, so the copies were
+// deleted and the originals imported (bead `forge-8vfn.6.10.13`, the cull
+// QUARRY.md:42's census already measured). Drift between two copies of this
+// rule would silently re-break the invariant they exist for; one copy cannot
+// drift from itself.
 
 /**
  * True iff `scaffoldContractArtifacts` would write a package.json at

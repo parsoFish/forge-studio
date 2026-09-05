@@ -779,8 +779,8 @@ function NewProjectSurface(): JSX.Element {
 
 // ---------------------------------------------------------------------------
 // CreateFromTemplate (R4-03) — the greenfield creation interview: name, north
-// star, and a curated app-type template → scaffolds a contract-green project
-// ready for the first architect run (POST /api/studio/projects/create).
+// star, and a curated app-type template → scaffolds a project whose contract the
+// starter filled as far as it honestly can (ruling 169 — the project page COUNTS what creation left open; POST /api/studio/projects/create).
 // ---------------------------------------------------------------------------
 
 function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
@@ -817,7 +817,7 @@ function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
       <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '20px 22px' }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 16 }}>Or create a new project</h2>
         <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>
-          Scaffold a greenfield repo from a framework template — contract-green and ready for the first architect run.
+          Scaffold a greenfield repo from a framework template — the starter fills every contract element it can, and an agent generates the demo of this particular project afterwards.
         </p>
         <label style={labelStyle} htmlFor="create-name">Project name</label>
         <input id="create-name" data-field="create-name" style={inputStyle} value={name} placeholder="My new tool" onChange={(e) => setName(e.target.value)} />
