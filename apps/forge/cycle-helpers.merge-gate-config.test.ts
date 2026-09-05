@@ -57,6 +57,7 @@ test('a flat-key project.json makes the merge gate RED with failedGate "config" 
   const result = runMergeBoundaryGate(
     { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
     logger,
+    { gates: ['local', 'ci'], hasVerb: false },
   );
   assert.equal(result.ok, false, 'a config the gate cannot read must never report a green gate');
   assert.equal((result as any).failedGate, 'config');
@@ -101,6 +102,7 @@ test('Case 1 — no .forge/project.json at all makes the merge gate RED with fai
   const result = runMergeBoundaryGate(
     { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
     logger,
+    { gates: ['local', 'ci'], hasVerb: false },
   );
   assert.equal(result.ok, false, 'an absent project config must never report a green gate — nothing ran');
   assert.equal((result as any).failedGate, 'config');
@@ -136,6 +138,7 @@ test('Case 2 — a project.json that loads cleanly but declares no local gate co
   const result = runMergeBoundaryGate(
     { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
     logger,
+    { gates: ['local', 'ci'], hasVerb: false },
   );
   assert.equal(result.ok, false, 'a config declaring no local gate command must never report a green gate — nothing ran');
   assert.equal((result as any).failedGate, 'config');
@@ -170,6 +173,7 @@ test('Case 3 (positive control) — a green local gate that actually ran still r
   const result = runMergeBoundaryGate(
     { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
     logger,
+    { gates: ['local', 'ci'], hasVerb: false },
   );
   assert.equal(result.ok, true, 'a config whose declared local gate genuinely passes must report green');
   // Without this control, an implementation that returns config-red

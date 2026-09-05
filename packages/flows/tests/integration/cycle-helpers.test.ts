@@ -173,7 +173,7 @@ test('runMergeBoundaryGate: green full-suite → ok, clears the last-gate-failur
   const fx = setupGateProject({ local: { cmd: ['true'] } });
   try {
     writeFileSync(fx.lastFailurePath, '# stale prior failure'); // must be cleared on a green pass
-    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    const res = runMergeBoundaryGate(fx.input, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     // The evidence rows name the gate that actually ran — a green result with an
     // EMPTY evidence list would mean nothing executed, which is the shape this
     // function exists to make impossible.
@@ -188,7 +188,7 @@ test('runMergeBoundaryGate: red full-suite local baseline → not ok, writes the
   const { runMergeBoundaryGate } = await import('../../cycle-helpers.ts');
   const fx = setupGateProject({ local: { cmd: ['false'] } });
   try {
-    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    const res = runMergeBoundaryGate(fx.input, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     assert.equal(res.ok, false);
     if (res.ok) return;
     assert.equal(res.failedGate, 'local');
@@ -203,7 +203,7 @@ test('runMergeBoundaryGate: local green but CI red → not ok (failedGate ci)', 
   const { runMergeBoundaryGate } = await import('../../cycle-helpers.ts');
   const fx = setupGateProject({ local: { cmd: ['true'] }, ci: { cmd: ['false'] } });
   try {
-    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    const res = runMergeBoundaryGate(fx.input, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     assert.equal(res.ok, false);
     if (res.ok) return;
     assert.equal(res.failedGate, 'ci');
@@ -216,7 +216,7 @@ test('runMergeBoundaryGate: dryRun passes without running anything', async () =>
   const { runMergeBoundaryGate } = await import('../../cycle-helpers.ts');
   const fx = setupGateProject({ local: { cmd: ['false'] } }); // would be red if it ran
   try {
-    const res = runMergeBoundaryGate({ ...fx.input, dryRun: true }, fx.logger);
+    const res = runMergeBoundaryGate({ ...fx.input, dryRun: true }, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     // No gate ran, so there is no evidence — stated, never a fabricated green row.
     assert.deepEqual(res, { ok: true, evidence: [] });
     assert.ok(!existsSync(fx.lastFailurePath), 'dry run never writes the seam');
@@ -235,7 +235,7 @@ test('runMergeBoundaryGate: the LOCAL gate honours FORGE_GATE_TIMEOUT_MS, NOT FO
   process.env.FORGE_GATE_TIMEOUT_MS = '5000';
   const fx = setupGateProject({ local: { cmd: ['sleep', '0.3'] } }); // ~300ms
   try {
-    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    const res = runMergeBoundaryGate(fx.input, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     assert.equal(res.ok, true, 'the slow-but-under-FORGE_GATE local suite passes (CI timeout must not apply to the local gate)');
     assert.deepEqual(res.ok ? res.evidence.map((e) => [e.gate, e.ok]) : [], [['local', true]]);
   } finally {
@@ -251,7 +251,7 @@ test('runMergeBoundaryGate: FORGE_GATE_TIMEOUT_MS caps a too-slow local suite (r
   process.env.FORGE_GATE_TIMEOUT_MS = '50'; // 50ms — sleep 0.3 exceeds it
   const fx = setupGateProject({ local: { cmd: ['sleep', '0.3'] } });
   try {
-    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    const res = runMergeBoundaryGate(fx.input, fx.logger, { gates: ['local', 'ci'], hasVerb: false });
     assert.equal(res.ok, false, 'a local suite over FORGE_GATE_TIMEOUT_MS goes red');
     if (!res.ok) assert.equal(res.failedGate, 'local');
   } finally {

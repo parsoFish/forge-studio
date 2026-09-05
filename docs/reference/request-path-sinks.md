@@ -2198,3 +2198,25 @@ concern, *never baselined*. The two seams are one-way and read in one direction:
 and the brain read, before the turn), `pm-decomposition-doc.ts` is the artifact
 the pass WRITES after its set is validated. **The file-size exemption is deleted,
 not re-keyed** — the file is 687 lines and the baseline drops from 66 rows to 65.
+
+### Guarded in M5-A (spec §5 item 1) — the class's merge-boundary VERB becomes bridge-reachable
+
+Three new `(file, sink)` pairs, and the growth is a real new capability rather
+than a widened rule: the merge boundary now runs the initiative's CHANGE CLASS's
+verb, so `docs` initiatives are checked by `forge gate docs` over the markdown
+their own branch changed. `packages/factory/gates/docs-gate.ts` existed and was
+reachable only from the CLI; wiring it into `executor-deps.ts` puts it on a
+bridge-reachable path for the first time.
+
+| site | sink | request-derived input | class | guard |
+|---|---|---|---|---|
+| `packages/factory/phases/merge-boundary.ts` | `execFileSync` | `input.worktreePath` as `cwd` | guarded `[exec]` | fixed argv (`git diff --name-only main...HEAD`), no request-derived argument; `cwd` is the cycle's own worktree, the same shape `phases/integrate.ts`'s `gitCapture` already carries |
+| `packages/factory/gates/docs-gate.ts` | `existsSync` (2) | the markdown paths in the branch diff | guarded `[read]` | every path is resolved by `changedMarkdownFiles` through `guardedFile(worktreePath, rel.split('/'), 'read')` — the worktree is a FIXED root, each path segment is its own element, and a path that will not resolve inside it is DROPPED rather than read. The gate is only ever handed an already-contained absolute path |
+| `packages/factory/gates/docs-gate.ts` | `readFileSync` (1) | as above | guarded `[read]` | as above; the same resolution, one call site upstream, so the gate has no unguarded entry point of its own |
+
+**Why the guard is upstream rather than inside the gate.** `docs-gate.ts` is also
+the CLI verb's implementation (`forge gate docs <path...>`), where the paths are
+the operator's own argv and a worktree root does not exist. Pushing containment
+into the gate would mean inventing a root for the CLI case; resolving at the one
+bridge-reachable caller keeps the gate a pure checker and puts the guard where
+the untrusted root actually is.

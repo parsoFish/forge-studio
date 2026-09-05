@@ -85,6 +85,8 @@ packages/factory/demo-model.ts existsSync 1
 packages/factory/demo-model.ts readdirSync 2
 packages/factory/demo-model.ts readFileSync 4
 packages/factory/demo-model.ts writeFileSync 2
+packages/factory/gates/docs-gate.ts existsSync 2
+packages/factory/gates/docs-gate.ts readFileSync 1
 packages/factory/phases/adversarial-review-binding.ts readFileSync 1
 packages/factory/phases/adversarial-review.ts execFileSync 1
 packages/factory/phases/adversarial-review.ts existsSync 5
@@ -113,6 +115,7 @@ packages/factory/phases/integrate.ts mkdirSync 2
 packages/factory/phases/integrate.ts readFileSync 1
 packages/factory/phases/integrate.ts unlinkSync 1
 packages/factory/phases/integrate.ts writeFileSync 2
+packages/factory/phases/merge-boundary.ts execFileSync 1
 packages/factory/phases/pm-binding.ts readFileSync 1
 packages/factory/phases/pm-decomposition-doc.ts writeFileSync 1
 packages/factory/phases/pm-prompt-context.ts existsSync 2
