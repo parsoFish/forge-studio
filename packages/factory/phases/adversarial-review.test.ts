@@ -655,3 +655,128 @@ test('kills "a sub-chunk is reviewed under a weaker fence": every per-file spawn
     restore();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.6.10.27 — a completed chunk's review is bought ONCE.
+//
+// G2's resume paid for `WI-1`, `WI-2` exhausted, and the pipeline returned a
+// failure — so `WI-1`'s finished record died with it. The cycle already solves
+// exactly this one level up (`resume_from: demo` reuses the six finished work
+// items); the review solved it for nothing one level down.
+// ---------------------------------------------------------------------------
+
+/** A stub that always authors a valid record, counting its spawns. */
+function countingStub(fx: Fixture, calls: { n: number }): StreamQueryFn {
+  return ((params: { prompt: string }) => {
+    calls.n += 1;
+    async function* gen(): AsyncGenerator<unknown> {
+      writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(params.prompt));
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0.2, usage: { input_tokens: 5, output_tokens: 7 } };
+    }
+    return gen();
+  }) as unknown as StreamQueryFn;
+}
+
+test('kills "a failed pass throws away the chunks that passed": the completed chunk is persisted and the next pass reuses it', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    // Pass 1: the work-item chunk succeeds, the `unattributed` chunk (the
+    // seeded demo.json) exhausts on its single file — G2's shape exactly.
+    const { logger: l1, events: e1 } = collectLogger(fx.logsRoot);
+    let seen = 0;
+    const failing = ((params: { prompt: string }) => {
+      seen += 1;
+      const first = seen === 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        if (!first) {
+          yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.0, usage: { input_tokens: 1, output_tokens: 1 } };
+          return;
+        }
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(params.prompt));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.2, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+
+    assert.equal((await run(fx, failing, l1)).status, 'failed', 'the second chunk must still fail the pass');
+    assert.equal(seen, 2);
+    const persisted = e1.find((e) => e.message === 'review.chunk.persisted');
+    assert.ok(persisted, 'the chunk that COMPLETED is persisted before the next one is attempted');
+    assert.equal((persisted!.metadata as Record<string, unknown>).index, 0);
+    assert.ok(existsSync(join(fx.logsRoot, CYCLE_ID, 'artifacts', 'review-chunks', 'chunk-0.json')));
+
+    // Pass 2: nothing fails now. The first chunk must NOT be spawned again.
+    const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
+    const calls = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, calls), l2)).status, 'complete');
+    assert.equal(calls.n, 1, 'only the chunk without a persisted result is bought — the resume problem, solved one level down');
+    const reused = e2.find((e) => e.message === 'review.chunk.reused');
+    assert.ok(reused, 'and the reuse is an EVENT, so a review assembled from parts is auditable');
+    assert.equal((reused!.metadata as Record<string, unknown>).index, 0);
+
+    // The merged artifact assembles from the parts and is validated ONCE.
+    const record = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
+    assert.deepEqual(validateReviewFindings(record, EXPECTED), []);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "a stale record is reused": a chunk record authored against a DIFFERENT head is a miss, not an answer', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger: l1 } = collectLogger(fx.logsRoot);
+    const first = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, first), l1)).status, 'complete');
+    assert.equal(first.n, 2, 'both chunks bought on a cold store');
+
+    // The branch moves. Same files, same chunk indexes, different head — so a
+    // reuse here would be a review of code nobody is merging.
+    writeFileSync(join(fx.worktree, 'src.ts'), 'export const v = 3;\n');
+    fx.git(['add', '-A']);
+    fx.git(['commit', '-q', '-m', 'a later commit']);
+
+    const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
+    const second = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, second), l2)).status, 'complete');
+    assert.equal(second.n, 2, 'every chunk is re-reviewed against the new head');
+    assert.equal(e2.filter((e) => e.message === 'review.chunk.reused').length, 0);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "the index alone decides": a record whose stored LABEL is not this chunk is a miss', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    const calls = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, calls), logger)).status, 'complete');
+    assert.equal(calls.n, 2);
+
+    // Rewrite chunk-0 with a label that is not WI-1 — the shape a reordered
+    // partition would leave behind.
+    const p = join(fx.logsRoot, CYCLE_ID, 'artifacts', 'review-chunks', 'chunk-0.json');
+    const stored = JSON.parse(readFileSync(p, 'utf8'));
+    writeFileSync(p, JSON.stringify({ ...stored, label: 'WI-99' }, null, 2) + '\n');
+
+    const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
+    const again = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, again), l2)).status, 'complete');
+    // ONE spawn, not two: the mislabelled index is a miss and is re-bought, and
+    // the chunk beside it — untouched, correctly labelled — is still reused. The
+    // miss is scoped to the record that lied about itself.
+    assert.equal(again.n, 1, 'the mislabelled record is ignored — an index that means something else is a miss, never a wrong answer');
+    const stillReused = e2.filter((e) => e.message === 'review.chunk.reused');
+    assert.equal(stillReused.length, 1);
+    assert.equal((stillReused[0]!.metadata as Record<string, unknown>).index, 1);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});

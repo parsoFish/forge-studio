@@ -37,6 +37,7 @@ import {
   type ReviewFindingsRecord,
 } from '@forge/flows/flow-artifacts.ts';
 import type { EventLogger } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
@@ -499,8 +500,19 @@ export async function runAdversarialReview(
     };
 
     const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
-    for (const chunk of chunks) {
+    for (const [index, chunk] of chunks.entries()) {
       const label = chunkLabel(chunk);
+
+      // Bead 6.10.27: a chunk whose review already completed against THIS head
+      // is not bought again. Every not-an-exact-match reads as a miss, so the
+      // worst case is the cost the review already had.
+      const reused = readChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha });
+      if (reused !== null) {
+        emit('review.chunk.reused', { chunk: label, index });
+        chunkRecords.push({ label, record: reused });
+        continue;
+      }
+
       let outcome = await reviewChunk(chunk);
 
       // Bead 6.10.26: the work item is the FIRST cut, not the only one. A budget
@@ -525,6 +537,11 @@ export async function runAdversarialReview(
       }
 
       if (!outcome.ok) return outcome.failure;
+      // Persisted the moment it is finished, never at the end: the chunk AFTER
+      // this one is exactly what might fail, and that is the case this exists
+      // for.
+      const at = writeChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha, record: outcome.record });
+      emit('review.chunk.persisted', { chunk: label, index, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
       chunkRecords.push({ label, record: outcome.record });
     }
 
@@ -548,6 +565,58 @@ export async function runAdversarialReview(
   } finally {
     scrub();
   }
+}
+
+// ---------------------------------------------------------------------------
+// One chunk's finished review, kept — bead forge-8vfn.6.10.27.
+//
+// G2's resume paid for `WI-1`, `WI-2` exhausted, and the pipeline returned a
+// failure — so `WI-1`'s completed record died with it and every retry re-buys
+// every chunk that already succeeded: the resume problem the cycle solves one
+// level up, unsolved one level down.
+//
+// Keyed by chunk INDEX, not by label: a label is a work-item id today and a FILE
+// PATH inside a split, and a path is not a filename. The index is generated
+// here, and the read/write go through `guardedReadFile`/`guardedWriteFile`, so
+// this adds neither a path-safety predicate nor a raw sink on a bridge-reachable
+// module. Label and head SHA live INSIDE the file and are checked on read, so an
+// index that has come to mean something else is a MISS, not a wrong answer.
+// ---------------------------------------------------------------------------
+
+type StoredChunk = { label: string; headSha: string; record: ReviewFindingsRecord };
+
+const chunkSegments = (cycleId: string, index: number): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${index}.json`];
+
+/**
+ * The persisted record for this chunk, or `null` — and `null` for EVERY reason
+ * that is not an exact match: rejected path, no file, unreadable, a different
+ * label at this index, or a record authored against a different head. A stale
+ * reuse would be a review of code nobody is merging; a miss costs only what the
+ * review already costs, so the miss is always the safe answer.
+ */
+export function readChunkRecord(
+  logsRoot: string,
+  cycleId: string,
+  index: number,
+  expect: { label: string; headSha: string },
+): ReviewFindingsRecord | null {
+  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, index));
+  if (raw === null) return null;
+  try {
+    const stored = JSON.parse(raw) as Partial<StoredChunk>;
+    if (stored.label !== expect.label || stored.headSha !== expect.headSha) return null;
+    if (stored.record === undefined || stored.record.headSha !== expect.headSha) return null;
+    return stored.record;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist one finished chunk; the written path, or `null` if the guard refused
+ *  or the write failed — a durable record must never break the review that
+ *  produced it. */
+export function writeChunkRecord(logsRoot: string, cycleId: string, index: number, entry: StoredChunk): string | null {
+  return guardedWriteFile(logsRoot, chunkSegments(cycleId, index), JSON.stringify(entry, null, 2) + '\n');
 }
 
 function harvestFindings(
