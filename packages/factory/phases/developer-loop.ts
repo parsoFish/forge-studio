@@ -1146,7 +1146,7 @@ export async function runDeveloperLoop(
     // (leave the status file untouched — i.e. still `pending` — so the WI
     // stays resumable; never mark it `failed`). Absent ⇒ today's behaviour
     // exactly (no dev-loop caller wires this in yet outside flow-runner).
-    const costStopReason = input.shouldStopBeforeWorkItem?.() ?? null;
+    const costStopReason = input.shouldStopBeforeWorkItem?.(wi.work_item_id) ?? null;
     if (costStopReason) {
       logger.emit({
         initiative_id: input.initiativeId,

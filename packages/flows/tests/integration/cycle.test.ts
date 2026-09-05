@@ -491,6 +491,48 @@ test('P4: runCycle emits architect end event with real cost_usd + duration_ms fr
   }
 });
 
+test('spec §5 item 7: the architect\'s cost is IN the cycle total, not just in the log (kills: an architect_cost_usd that shows on the report and in Studio while every ceiling the run is stopped by counts it as $0)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-arch-cost-'));
+  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');
+  const cycleId = `TEST-arch-cost-${process.pid}-${Date.now()}`;
+  try {
+    const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
+    // $8 of a declared $10 ceiling = 80%, past the tracker's 70% warn line. A
+    // tracker seeded at $0 emits nothing here; one that counted the architect
+    // must warn before a single node has run.
+    writeFileSync(manifestPath, serializeManifest(cycleManifestFixture({
+      architect_cost_usd: 8,
+      cost_ceiling_usd: 10,
+      flow_id: 'forge-develop',
+    })));
+
+    // NOT a dry run: `runCycle` reaches `runFlow` only on the real path, and
+    // the hand-over of the architect's events is exactly what is under test.
+    // The tracker is seeded before any node runs, so the warn is in the log
+    // whatever the (unreached) wiring then does with the first station.
+    await runCycle({
+      initiativeId: 'INIT-2026-06-08-p4test',
+      manifestPath,
+      projectRepoPath: root,
+      worktreePath: root,
+      cycleId,
+      dryRun: false,
+    }, UNREACHED_PHASE_WIRING).catch(() => { /* the first station is unreached by design */ });
+
+    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
+      .split('\n').filter(Boolean)
+      .map((l) => JSON.parse(l) as EventLogEntry);
+
+    const warn = events.find((e) => e.message === 'flow.cost-warn');
+    assert.ok(warn, 'the architect\'s $8 against the $10 ceiling is 80% — the runner\'s tracker must have counted it');
+    assert.equal((warn!.metadata as Record<string, unknown>)?.spentUsd, 8);
+  } finally {
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('P4: runCycle emits architect end event without cost/duration for legacy manifest (no telemetry fields)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-p4-legacy-'));
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');

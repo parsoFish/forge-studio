@@ -134,10 +134,13 @@ export type CycleInput = {
    * (`stopReasonBeforeNextWorkItem`). Consulted by the dev-loop's dispatch
    * wrapper BEFORE a work item's worktree is created, so a breached cost
    * ceiling can skip remaining work items one at a time instead of only being
-   * reachable at the next clean NODE boundary. Returns null while under the
-   * ceiling. Absent ⇒ today's behaviour exactly (no per-WI stop check).
+   * reachable at the next clean NODE boundary. Takes the work item about to be
+   * dispatched: the tracker checks the CYCLE total against the cycle ceiling AND
+   * that WI's own spend against its share of it (spec §5 item 7, ruling 257).
+   * Returns null while under both. Absent ⇒ today's behaviour exactly (no per-WI
+   * stop check).
    */
-  shouldStopBeforeWorkItem?: () => string | null;
+  shouldStopBeforeWorkItem?: (workItemId: string) => string | null;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

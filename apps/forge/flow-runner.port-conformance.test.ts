@@ -173,3 +173,52 @@ test('the runner source imports no phase and no preflight — the exit row, asse
 test('every ratified band id is registered exactly once (kills: a band silently dropped in the move to the table, which would fall through to the generic agent path instead of failing)', () => {
   assert.deepEqual([...registeredBandIds()].sort(), [...BAND_GUARD_IDS].sort());
 });
+
+test('spend that happened BEFORE the runner existed is counted by the ceiling it is supposed to be bounded by — the architect through `priorSpendEvents` (kills: a tracker seeded at $0 that lets an architect spend the run\'s whole budget without any ceiling noticing)', async () => {
+  const logger = makeLogger();
+  const stub: PhaseExecutor<NodeExecContext> = { async run() { return 'pr-open'; } };
+
+  // The flow ceiling is $25 (makeFlow). The architect's synthetic `architect.end`
+  // carries $20 — 80% of it — so a tracker that counted it must warn, and one
+  // seeded at zero cannot.
+  const architectEnd = {
+    event_id: 'a-end',
+    initiative_id: 'port-conformance',
+    phase: 'architect',
+    skill: 'architect',
+    event_type: 'end',
+    message: 'architect.end',
+    cost_usd: 20,
+    metadata: {},
+  } as never;
+
+  await runFlow({
+    flow: makeFlow([{ id: 'review', gate: 'verdict' }]),
+    input: makeInput(),
+    logger,
+    executor: stub,
+    projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
+    runClosure: async () => { throw new Error('unreachable'); },
+    priorSpendEvents: [architectEnd],
+  });
+
+  const warn = (logger.events as Array<Record<string, unknown>>).find((e) => e['message'] === 'flow.cost-warn');
+  assert.ok(warn, 'the architect\'s $20 against a $25 ceiling is 80% — the tracker must have counted it');
+  assert.equal((warn!['metadata'] as Record<string, unknown>)['spentUsd'], 20);
+});
+
+test('the port is optional and additive: a run given no prior spend behaves exactly as before (kills: a runner that requires the new argument, which would break every existing caller)', async () => {
+  const logger = makeLogger();
+  const stub: PhaseExecutor<NodeExecContext> = { async run() { return 'pr-open'; } };
+
+  await runFlow({
+    flow: makeFlow([{ id: 'review', gate: 'verdict' }]),
+    input: makeInput(),
+    logger,
+    executor: stub,
+    projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
+    runClosure: async () => { throw new Error('unreachable'); },
+  });
+
+  assert.ok(!(logger.events as Array<Record<string, unknown>>).some((e) => e['message'] === 'flow.cost-warn'));
+});
