@@ -29,16 +29,27 @@ import * as React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+import type { ProjectRoster } from '@/lib/use-project-roster';
+
 const MINTED = '2026-09-05T02-03-02-641bb6b6';
 
 vi.mock('@/lib/bridge-client', () => ({
   startArchitect: vi.fn(async () => ({ ok: true, sessionId: MINTED })),
 }));
 
-const ROSTER = {
+// The architect's real shape: strategy is fixed (it declares no `surface:`,
+// so `interactive` is false) and a session ceiling IS enforceable — the field
+// the form's cost-ceiling input rides on.
+const ROSTER: ProjectRoster = {
   projects: [{ id: 'story-s2', name: 'story-s2' }],
-  capability: { allowedTiers: ['sonnet', 'opus'], strategy: 'range' as const },
-  state: 'ok' as const,
+  capability: {
+    interactive: false,
+    runtimeSdks: ['claude'],
+    fanoutCapable: false,
+    materials: [],
+    costCeilingEnforceable: true,
+  },
+  state: 'ok',
 };
 
 let container: HTMLDivElement;
