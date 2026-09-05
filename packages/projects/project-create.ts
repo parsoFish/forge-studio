@@ -5,7 +5,9 @@
  * manifest (F1), scaffold a new repo from a curated framework template (F2,
  * `studio/starters/projects/<app-type>/`), then hand off to the R4-02 onboarding
  * loop — here, seed the central brain + run preflight — so a freshly created
- * project is contract-green and ready for its first architect run (F3).
+ * project starts from a contract the template filled as far as it honestly can
+ * (F3; ruling 169 — creation does not run the demo agent, so DEMO-SKILL and
+ * DEMO-ALIGN are still open and `hardGreen` below is the only readiness claim).
  *
  * The templates carry the code skeleton + `.forge/project.json` (the C1 gate) +
  * AGENTS.md (C8) + a gitignore (C2/ARTIFACTS) + roadmap.md (C4 project side).

@@ -30,11 +30,13 @@
  *     fail-closed parser rather than a second, looser hand-rolled one (D11:
  *     "never re-implements a clause verdict" — the real validator already
  *     exists and is the one source of "is this shape legal").
- *   - `secrets` stage status is driven by `requiresEnv.length > 0` — an
- *     explicitly empty `requiresEnv: []` (mdtoc's real, creds-free shape) is
- *     `absent`, regardless of whether the surrounding `testProcess.acceptance`
- *     block exists at all: the stage is about which secret NAMES this
- *     project needs, and there are none.
+ *   - `secrets` stage status is driven by whether `requiresEnv` is DECLARED
+ *     (ruling 203/209, 2026-09-05): an explicitly empty `requiresEnv: []` is
+ *     an ANSWER — `present`, with one fixed detail sentence saying none is
+ *     required — while omitting the field (or the whole
+ *     `testProcess.acceptance` block) is still `absent`, because nobody has
+ *     said. The stage remains about NAMES: D3 holds, `secrets.env` is never
+ *     opened, and no VALUE ever reaches the row (AT-12, AT-10b).
  *   - `demo` stage status is `present` iff EITHER `demoProcess[]` is declared
  *     OR `.forge/demo/demo.lock.json` exists (declared-only, before the demo
  *     is ever built, is legitimately `present` — it names an intent).
@@ -92,6 +94,12 @@ const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
   /^a compliance report file exists at \.forge\/contract-compliance-report\.json$/, // deriveContractRow (contract-stages.ts:126)
   /^source file: (AGENTS\.md|CLAUDE\.md)$/, // deriveInstructionsRow (contract-stages.ts:144)
   /^[A-Za-z_][A-Za-z0-9_]*$/, // deriveSecretsRow — a bare declared requiresEnv NAME, verbatim (contract-stages.ts:158; D3 names-only, no template)
+  // deriveSecretsRow's ONE fixed sentence for a declared-but-empty acceptance
+  // tier (operator ruling 203 / T1 ruling 209, bead `forge-8vfn.6.5`). Added
+  // deliberately, with review — that friction IS the D11 gate, this array's
+  // own header. Anchored end to end with NO wildcard of any kind, so nothing
+  // can ride along inside it; AT-10 additionally asserts it by byte-equality.
+  /^no environment variables are required — the acceptance tier declares none$/,
   /^step: (capture|verify|present)$/, // deriveDemoRow — a declared demoProcess step kind (contract-stages.ts:168)
   // deriveRoadmapRow — the C4 brain-profile divergence fact (pin 2, item 3;
   // landed round-1 fix, contract-stages.ts's deriveRoadmapRow). The id
@@ -283,14 +291,49 @@ describe('deriveContractStages — secrets stage is NAMES ONLY (D3, AT-9..12)', 
     assert.ok(secrets.detail.includes('ADO_PAT'), `detail must name the real declared secret NAME "ADO_PAT", got: ${JSON.stringify(secrets.detail)}`);
   });
 
-  it('AT-10: an explicitly EMPTY requiresEnv:[] (mdtoc\'s real creds-free shape) → absent, even though testProcess.acceptance itself is declared', () => {
+  // AMENDED 2026-09-05 (operator ruling 203, T1 ruling 209, bead
+  // `forge-8vfn.6.5`). This AT used to assert the OPPOSITE — that an explicitly
+  // empty `requiresEnv: []` reads `absent` "regardless of the surrounding
+  // acceptance block existing". That rule made a project's honest "this
+  // acceptance tier needs no credentials" indistinguishable from "nobody has
+  // said", which is the overpromise bead 6.5 was raised for: the create form
+  // told the operator the contract was filled while the secrets row read
+  // absent. Presence here now reports the presence of a DECLARATION. AT-11
+  // below is the other half and is UNCHANGED: omit the field and you still owe
+  // it. D3 is untouched — `secrets.env` is still never opened, and AT-12 still
+  // proves no VALUE reaches the row.
+  it('AT-10: an explicitly EMPTY requiresEnv:[] is an ANSWER, not a gap → present, and the detail line says so in one fixed sentence', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'credsfreeproj');
     writeProjectJson(dir, {
       testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: [] } },
     });
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'credsfreeproj' }));
-    assert.equal(byStage(rows, 'secrets').status, 'absent', 'zero declared secret names must read as absent regardless of the surrounding acceptance block existing');
+    const secrets = byStage(rows, 'secrets');
+    assert.equal(secrets.status, 'present', 'a declared empty requiresEnv is an answered contract element, not a missing one');
+    // Byte-equality against the literal, exactly as AT-23's pin 4 requires of
+    // every detail shape that is not a bare declared NAME: a charset is still
+    // a wildcard, and forge's own verdict language must not be able to ride
+    // along inside a fixed prefix.
+    assert.deepEqual(
+      secrets.detail,
+      ['no environment variables are required — the acceptance tier declares none'],
+      'the resolved-empty state is carried by the detail line, never by a third status value (D11)',
+    );
+    assert.equal(secrets.bytes, null);
+  });
+
+  it('AT-10b (D3, the value channel stays shut): a declared-empty requiresEnv never reads secrets.env, even when one exists beside it', () => {
+    const projectsRoot = makeProjectsRoot();
+    const dir = makeProjectDir(projectsRoot, 'credsfreeplusenv');
+    writeProjectJson(dir, {
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false, requiresEnv: [] } },
+    });
+    const SENTINEL = 'sentinel-value-that-must-never-appear-9f3a';
+    writeFileSync(join(dir, 'secrets.env'), `LEAKED_NAME=${SENTINEL}\n`, 'utf8');
+    const result = deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'credsfreeplusenv' });
+    assert.ok(!JSON.stringify(result).includes(SENTINEL), 'no secrets.env VALUE may appear anywhere in the result');
+    assert.ok(!JSON.stringify(result).includes('LEAKED_NAME'), 'an undeclared NAME from secrets.env may not be inferred into the row either');
   });
 
   it('AT-11: no testProcess.acceptance block at all → absent', () => {
@@ -562,8 +605,15 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     assert.equal(instructions.status, 'present');
     assert.equal(instructions.source, 'CLAUDE.md');
     // mdtoc's real testProcess.acceptance.requiresEnv is [] (creds-free) —
-    // grounds AT-10 against the real repo.
-    assert.equal(byStage(rows, 'secrets').status, 'absent');
+    // grounds AT-10 against the real repo. Under ruling 203/209 that empty
+    // array is an ANSWER, so this row is `present` on a real, unmodified
+    // ground; the value changed here because the RULE changed, and it is
+    // recorded against the on-disk file rather than a fixture
+    // (`projects/mdtoc/.forge/project.json`, `acceptance: {match:
+    // 'acceptance', required: true, requiresEnv: []}`).
+    const secrets = byStage(rows, 'secrets');
+    assert.equal(secrets.status, 'present');
+    assert.deepEqual(secrets.detail, ['no environment variables are required — the acceptance tier declares none']);
     // mdtoc declares demoProcess but has no .forge/demo/demo.lock.json yet.
     const demo = byStage(rows, 'demo');
     assert.equal(demo.status, 'present');

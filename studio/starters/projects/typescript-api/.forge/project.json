@@ -6,7 +6,11 @@
     { "kind": "capture", "text": "Start the server and note the before state of the endpoint." },
     { "kind": "verify", "text": "GET the endpoint (e.g. /health) and assert the JSON response." }
   ],
-  "testProcess": { "local": { "cmd": ["npm", "test"] }, "ci": { "cmd": ["npm", "run", "ci"] } },
+  "testProcess": {
+    "local": { "cmd": ["npm", "test"] },
+    "ci": { "cmd": ["npm", "run", "ci"] },
+    "acceptance": { "match": "npm run acceptance", "required": false, "requiresEnv": [] }
+  },
   "skills": ["api-conventions"],
   "kb": "{{NAME}}"
 }
