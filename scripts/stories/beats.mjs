@@ -512,12 +512,12 @@ async function performSteps(page, steps, timeoutMs) {
         await page.locator(handle).first().click({ timeout: timeoutMs });
         continue;
       }
-      const refusal = await setControl(page, handle, step.with);
+      const refusal = await setControl(page, handle, step.with, timeoutMs);
       if (refusal !== null) return refusal;
     } catch (e) {
       return (
         `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
-        `${e?.message ?? e}. ${await describeControl(page, handle)}`
+        `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`
       );
     }
   }
@@ -538,7 +538,7 @@ async function performSteps(page, steps, timeoutMs) {
  * failure to report, and a description that threw would replace a real
  * finding with an error about describing it.
  */
-async function describeControl(page, handle) {
+async function describeControl(page, handle, timeoutMs) {
   try {
     const one = page.locator(handle).first();
     if ((await page.locator(handle).count()) === 0) return 'no element carries that handle.';
@@ -547,7 +547,7 @@ async function describeControl(page, handle) {
       if (!off) return 'The control is present and enabled — it was obscured, detached or never became stable.';
       const title = (n.title ?? '').trim();
       return `The control is present but still DISABLED${title === '' ? '' : ` (title: "${title}")`}.`;
-    });
+    }, undefined, { timeout: timeoutMs });
   } catch {
     return 'The control could not be inspected after the failure.';
   }
@@ -566,7 +566,7 @@ const CHECKBOX_STATES = Object.freeze({ '': false, false: false, unchecked: fals
  * path costs the same round trip it always did, and so the radio/checkbox
  * decision is made from the DOM rather than from the story's wording.
  */
-const readShape = (el) =>
+const readShape = (el, timeoutMs) =>
   el.evaluate((n) => {
     const self = n.tagName === 'INPUT' ? n : null;
     const inner = self ?? n.querySelector('input[type="radio"],input[type="checkbox"]');
@@ -577,7 +577,7 @@ const readShape = (el) =>
       value: inner === null ? '' : inner.value,
       text: (n.textContent ?? '').trim(),
     };
-  });
+  }, undefined, { timeout: timeoutMs });
 
 /**
  * The input to act on: the match itself when `data-field` sits ON the input
@@ -614,16 +614,28 @@ const inputOf = (el, tag, type) => (tag === 'INPUT' ? el : el.locator(`input[typ
  *
  * Returns a refusal string, or null.
  */
-async function setControl(page, handle, want) {
+/**
+ * `timeoutMs` bounds every playwright ACTION here, not only the waits around
+ * them — bead `forge-8vfn.6.11.10`'s second half (T1 ruling 225).
+ *
+ * S1 run 4 found it: beat 6 declared `wait: { for: 'agent', upTo: 600_000 }`
+ * and still died at `locator.evaluate: Timeout 5000ms exceeded`, because
+ * `readShape`'s evaluate and the `fill` below took no timeout and fell back to
+ * `context.setDefaultTimeout(5000)` (`run.mjs`). `6.11.6`'s class a second
+ * time — the wait existed, the BOUND was wrong for what it was waiting on —
+ * and a field that exists only once an agent has ASKED cannot appear in five
+ * seconds.
+ */
+async function setControl(page, handle, want, timeoutMs) {
   const all = page.locator(handle);
-  const shape = await readShape(all.first());
+  const shape = await readShape(all.first(), timeoutMs);
 
   if (shape.kind === 'radio') {
     const n = await all.count();
     const options = [];
     for (let i = 0; i < n; i += 1) {
       const candidate = all.nth(i);
-      const s = await readShape(candidate);
+      const s = await readShape(candidate, timeoutMs);
       options.push(s.value === '' ? s.text : s.value);
       if (s.value === want || (s.value === '' && s.text === want)) {
         await inputOf(candidate, s.tag, 'radio').check();
@@ -651,8 +663,8 @@ async function setControl(page, handle, want) {
   }
 
   const el = all.first();
-  if (shape.tag === 'SELECT') await el.selectOption(want);
-  else await el.fill(want);
+  if (shape.tag === 'SELECT') await el.selectOption(want, { timeout: timeoutMs });
+  else await el.fill(want, { timeout: timeoutMs });
   return null;
 }
 
