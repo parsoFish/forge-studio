@@ -45,13 +45,8 @@ import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './b
 import { driveBeat } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
-import {
-  collectAgentRuns,
-  reapAgentRuns,
-  describeReap,
-  recordReapedCancellations,
-  reapReasonFor,
-} from './reap.mjs';
+import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STORY_DIR = join(ROOT, 'tests', 'stories');
