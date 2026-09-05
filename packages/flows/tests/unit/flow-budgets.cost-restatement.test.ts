@@ -52,9 +52,9 @@ test('per-WI attribution counts only authoritative events and never the phase ro
 test('the ceiling is reportable at a work-item boundary, not only at a node boundary', () => {
   const logger = stubLogger();
   const t = new CostTracker({ ceilingUsd: 5, initiativeId: 'i', logger: logger as any });
-  assert.equal(t.stopReasonBeforeNextWorkItem(), null);
+  assert.equal(t.stopReasonBeforeNextWorkItem('WI-1'), null);
   for (const e of events) t.noteEvent(e);
-  const reason = t.stopReasonBeforeNextWorkItem();
+  const reason = t.stopReasonBeforeNextWorkItem('WI-1');
   assert.ok(reason && /cost-ceiling/.test(reason), `expected a cost-ceiling stop reason, got ${reason}`);
   assert.ok(logger.emitted.some((e) => e.message === 'flow.cost-ceiling-stop'), 'the breach must be evented where it is detected');
 });

@@ -34,6 +34,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '@forge/flows/work-item.ts';
+import { profileFor, readChangeClass } from '../class-profiles.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
@@ -266,6 +267,8 @@ export async function runDeveloperLoop(
   signal?: AbortSignal,
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
+  // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (ADR 051).
+  const requiredPathsSource = profileFor(readChangeClass(input.manifestPath)).requiredPathsSource;
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'developer-loop',
@@ -704,19 +707,16 @@ export async function runDeveloperLoop(
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
               (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(wiWorktree.path, gateInfo); },
-              // Wave B (2026-06-04): enforce that declared output paths land.
-              // The WI's declared paths MUST appear in the branch diff before
-              // the gate can pass — independently of whether a sibling WI
-              // already produced tests. The `already-complete` 3-way runner
-              // check handles the "sibling beat us" case upstream; this layer
-              // catches "agent exited without writing declared files".
-              // 2026-07-11: creates → verification_artifact → files_in_scope
-              // fallback (gateRequiredPaths) — a PM that omits `creates` no
-              // longer disables the check, which let a vacuous scoped go-test
-              // (exit 0, "[no tests to run]") false-pass at iter-0 and kill
-              // the WI as gate-too-loose.
+              // Wave B (2026-06-04): the WI's declared paths MUST appear in
+              // the branch diff before the gate can pass, catching "agent
+              // exited without writing declared files" independently of
+              // whether a sibling produced them (the `already-complete` 3-way
+              // runner check handles that case upstream). WHICH paths is the
+              // class's answer, not this file's — `gateRequiredPaths` and its
+              // `RequiredPathsSource` union carry the 2026-07-11 incident that
+              // set the rule.
               {
-                requiredPaths: gateRequiredPaths(wi),
+                requiredPaths: gateRequiredPaths(wi, requiredPathsSource),
                 ...(requiredEnv ? { requiredEnv } : {}),
                 ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
                 // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
@@ -1146,7 +1146,7 @@ export async function runDeveloperLoop(
     // (leave the status file untouched — i.e. still `pending` — so the WI
     // stays resumable; never mark it `failed`). Absent ⇒ today's behaviour
     // exactly (no dev-loop caller wires this in yet outside flow-runner).
-    const costStopReason = input.shouldStopBeforeWorkItem?.() ?? null;
+    const costStopReason = input.shouldStopBeforeWorkItem?.(wi.work_item_id) ?? null;
     if (costStopReason) {
       logger.emit({
         initiative_id: input.initiativeId,

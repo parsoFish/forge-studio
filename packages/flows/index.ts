@@ -51,7 +51,7 @@ export { listPlannedInitiatives } from './planned-initiatives.ts';
 export { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 
 // ---- Work items and their worktrees ----------------------------------------
-export { type CouplingPair, DEV_WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, type WorkItem, gateRequiredPaths, parseWorkItem, readWorkItemsFromDir, serializeWorkItem, topologicalOrder, validateWorkItemSet, writeWorkItem, writeWorkItemStatus } from './work-item.ts';
+export { type CouplingPair, DEV_WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, type WorkItem, type RequiredPathsSource, gateRequiredPaths, parseWorkItem, readWorkItemsFromDir, serializeWorkItem, topologicalOrder, validateWorkItemSet, writeWorkItem, writeWorkItemStatus } from './work-item.ts';
 export { createWiWorktree, removeWiWorktree, wiWorktreePath } from './wi-worktree.ts';
 export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPublish, mergeWiIntoCycle } from './wi-merge-back.ts';
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';

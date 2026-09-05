@@ -86,23 +86,50 @@ export type CostTrackerOptions = {
  *   2. Call checkCeiling() at each clean NODE boundary (after a node, before
  *      spawning the next). Returns true if the ceiling was hit; pass
  *      `{ throw: true }` to throw CostCeilingError instead.
- *   3. Call stopReasonBeforeNextWorkItem() at each WI boundary (before that
- *      WI's worktree is created) — non-throwing, for a caller that must skip
- *      rather than abort the whole node.
+ *   3. Call stopReasonBeforeNextWorkItem(workItemId) at each WI boundary —
+ *      non-throwing, for a caller that must skip rather than abort the node.
+ *      Checks the cycle total AND that WI's own spend (spec §5 item 7, 257).
+ *   4. Hand it any cost-bearing event the cycle incurred before the runner
+ *      existed — the architect's, via `runFlow`'s `priorSpendEvents` — or the
+ *      ceiling does not bound what the cycle actually spent.
  *
  * Emits:
  *   - flow.cost-warn (once, at ≥70%) with { spentUsd, ceilingUsd, pct }
  *   - flow.cost-ceiling-stop (at ≥100%, on checkCeiling() — every call while
  *     over ceiling) with { spentUsd, ceilingUsd, stoppedBeforeNode }
- *   - flow.cost-ceiling-stop (at ≥100%, on the FIRST
- *     stopReasonBeforeNextWorkItem() call — never again, so a dispatch loop
- *     that consults this once per remaining WI doesn't double-emit) with
- *     { spentUsd, ceilingUsd, pct, stoppedBeforeWorkItem: true }
+ *   - flow.cost-ceiling-stop from stopReasonBeforeNextWorkItem(), at most once
+ *     PER LIMIT, carrying { limit: 'cycle' | 'work-item', spentUsd, ceilingUsd,
+ *     pct, stoppedBeforeWorkItem: true, work_item_id? } — the figures are the
+ *     BREACHED limit's, not always the cycle's.
  */
+/**
+ * The share of a cycle's ceiling ONE work item may consume before the
+ * orchestrator stops dispatching it (spec §5 item 7, ruling 257). A share, not
+ * a flat figure (`AgentBudgets.maxBudgetUsdShare`'s shape): it scales with
+ * whatever ceiling the run was given and enforces exactly when the cycle
+ * ceiling does, so it cannot fail open by nobody setting a second knob. Half is
+ * deliberately generous — a two-item cycle spends evenly without either item
+ * being stopped, so this fires on a runaway, not on variance.
+ */
+export const PER_WORK_ITEM_CEILING_SHARE = 0.5;
+
+/**
+ * The bucket for authoritative spend that belongs to the cycle but to no work
+ * item — today the architect, which runs out-of-cycle and whose dollars reach
+ * the log as `emitSyntheticArchitectEvents`' `architect.end` (`cycle.ts`).
+ * Ruling 257: a RESERVED PRE-WI key, so the spend stays attributable without
+ * pretending to be a work item — it counts toward the cycle ceiling and never
+ * against the per-WI one, there being no dispatch to stop. Deliberately not
+ * parseable as a work-item id, so a reader that mistakes the map for a WI list
+ * fails loudly instead of inventing a phantom work item.
+ */
+export const ARCHITECT_SPEND_KEY = '__architect__';
+
 export class CostTracker {
   private spentUsd = 0;
   private warnEmitted = false;
   private wiStopEmitted = false;
+  private readonly perWiStopEmitted = new Set<string>();
   private readonly iterationPhases = new Set<string>();
   private readonly spentByWorkItemMap = new Map<string, number>();
   private readonly ceilingUsd: number;
@@ -174,11 +201,21 @@ export class CostTracker {
     const costUsd = costUsdIsValid ? rawCostUsd : 0;
     this.spentUsd += costUsd;
 
-    const workItemId = entry.metadata?.work_item_id;
-    if (typeof workItemId === 'string' && workItemId.length > 0) {
+    // Bucket key: the event's own work item, else the reserved pre-WI key for a
+    // phase that legitimately has none and whose spend must still be
+    // attributable (the architect — 257). Every other work-item-less event
+    // (the phase rollup `end`) buckets nowhere, exactly as before.
+    const rawWorkItemId = entry.metadata?.work_item_id;
+    const bucketKey =
+      typeof rawWorkItemId === 'string' && rawWorkItemId.length > 0
+        ? rawWorkItemId
+        : entry.phase === 'architect'
+          ? ARCHITECT_SPEND_KEY
+          : null;
+    if (bucketKey !== null) {
       this.spentByWorkItemMap.set(
-        workItemId,
-        (this.spentByWorkItemMap.get(workItemId) ?? 0) + costUsd,
+        bucketKey,
+        (this.spentByWorkItemMap.get(bucketKey) ?? 0) + costUsd,
       );
     }
 
@@ -219,40 +256,90 @@ export class CostTracker {
   }
 
   /**
-   * Non-throwing ceiling check for a WORK-ITEM boundary — call before a WI's
-   * worktree is created so a dev-loop node can skip its remaining WIs one at
-   * a time instead of only being able to stop at the next NODE boundary
-   * (checkCeiling, below). Returns null while under the ceiling; at or over
-   * it, returns the `CostCeilingError` message text (the caller never
-   * throws — it skips the WI and keeps walking so later WIs also see the
-   * stop reason) and emits `flow.cost-ceiling-stop` exactly ONCE across
-   * however many times this is called after the breach.
+   * The per-work-item ceiling: `PER_WORK_ITEM_CEILING_SHARE` of the cycle's.
+   * Zero when not enforcing, so the two limits switch on and off together and
+   * neither can be left declared-but-unenforced.
    */
-  stopReasonBeforeNextWorkItem(): string | null {
-    if (!this.enforcing) return null;
-    if (this.spentUsd < this.ceilingUsd) return null;
+  get perWorkItemCeilingUsd(): number {
+    return this.enforcing ? PER_WORK_ITEM_CEILING_SHARE * this.ceilingUsd : 0;
+  }
 
-    if (!this.wiStopEmitted) {
-      this.wiStopEmitted = true;
-      const pct = (this.spentUsd / this.ceilingUsd) * 100;
-      this.logger.emit({
-        initiative_id: this.initiativeId,
-        phase: 'orchestrator',
-        skill: 'flow-budgets',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'flow.cost-ceiling-stop',
-        metadata: {
-          spentUsd: this.spentUsd,
-          ceilingUsd: this.ceilingUsd,
-          pct: Math.round(pct * 10) / 10,
-          stoppedBeforeWorkItem: true,
-        },
-      });
+  /**
+   * Non-throwing ceiling check for a WORK-ITEM boundary — call before a WI's
+   * worktree is created, so a dev-loop node can skip WIs one at a time instead
+   * of only stopping at the next NODE boundary (checkCeiling, below).
+   *
+   * TWO limits, checked independently (spec §5 item 7, ruling 257): the CYCLE
+   * total against the cycle ceiling, which once breached stops every WI
+   * including one that has spent nothing; and THIS work item's own spend
+   * (`spentByWorkItem`) against `perWorkItemCeilingUsd`, which stops a REQUEUED
+   * runaway while its siblings and the cycle are still under budget. The second
+   * gave `spentByWorkItem` its first production reader — the map said what each
+   * WI had spent and nothing ever asked, and a ceiling that trips only on the
+   * cycle total trips after the runaway has taken its siblings' budget.
+   *
+   * Returns null while under both; at or over either, returns the message text
+   * (the caller never throws — it skips the WI and keeps walking, so later WIs
+   * also see the reason) and emits `flow.cost-ceiling-stop` once per limit.
+   * `ARCHITECT_SPEND_KEY` is not dispatchable: accepted here, answers null.
+   */
+  stopReasonBeforeNextWorkItem(workItemId: string): string | null {
+    if (!this.enforcing) return null;
+
+    if (this.spentUsd >= this.ceilingUsd) {
+      this.emitStop({ limit: 'cycle', spentUsd: this.spentUsd, ceilingUsd: this.ceilingUsd });
+      return new CostCeilingError(this.spentUsd, this.ceilingUsd).message;
     }
 
-    return new CostCeilingError(this.spentUsd, this.ceilingUsd).message;
+    if (workItemId === ARCHITECT_SPEND_KEY) return null;
+
+    const spentOnThisWi = this.spentByWorkItemMap.get(workItemId) ?? 0;
+    const wiCeiling = this.perWorkItemCeilingUsd;
+    if (spentOnThisWi >= wiCeiling) {
+      this.emitStop({ limit: 'work-item', spentUsd: spentOnThisWi, ceilingUsd: wiCeiling, workItemId });
+      return (
+        `cost-ceiling: work item ${workItemId} spent $${spentOnThisWi.toFixed(4)} which meets or exceeds its ` +
+        `$${wiCeiling.toFixed(2)} share of the $${this.ceilingUsd.toFixed(2)} cycle ceiling — ` +
+        `not dispatching it again (the cycle continues; siblings keep their budget).`
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * `flow.cost-ceiling-stop`, at most once per limit. The per-WI latch is a SET,
+   * not a boolean: "once" for a work-item breach means once for THAT work item,
+   * and one shared latch would let the first runaway silence every later one —
+   * the flood this guards against, inverted into a blind spot.
+   */
+  private emitStop(opts: { limit: 'cycle' | 'work-item'; spentUsd: number; ceilingUsd: number; workItemId?: string }): void {
+    if (opts.limit === 'cycle') {
+      if (this.wiStopEmitted) return;
+      this.wiStopEmitted = true;
+    } else {
+      const id = opts.workItemId ?? '';
+      if (this.perWiStopEmitted.has(id)) return;
+      this.perWiStopEmitted.add(id);
+    }
+    const pct = opts.ceilingUsd > 0 ? (opts.spentUsd / opts.ceilingUsd) * 100 : 0;
+    this.logger.emit({
+      initiative_id: this.initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-budgets',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'flow.cost-ceiling-stop',
+      metadata: {
+        limit: opts.limit,
+        spentUsd: opts.spentUsd,
+        ceilingUsd: opts.ceilingUsd,
+        pct: Math.round(pct * 10) / 10,
+        stoppedBeforeWorkItem: true,
+        ...(opts.workItemId !== undefined ? { work_item_id: opts.workItemId } : {}),
+      },
+    });
   }
 
   /**

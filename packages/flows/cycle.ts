@@ -15,7 +15,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:f
 import { join, resolve } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
-import type { EventLogger } from '@forge/kernel';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { createLogger } from '@forge/kernel';
 import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -110,7 +110,7 @@ export function emitSyntheticArchitectEvents(
   input: CycleInput,
   logger: EventLogger,
   origin?: string,
-): void {
+): EventLogEntry[] {
   const resolvedOrigin = origin ?? readManifestOrigin(input.manifestPath);
   let architectCostUsd: number | undefined;
   let architectDurationMs: number | undefined;
@@ -123,7 +123,8 @@ export function emitSyntheticArchitectEvents(
   } catch {
     /* best-effort — a missing/unreadable manifest must not block the cycle */
   }
-  logger.emit({
+  const emitted: EventLogEntry[] = [];
+  emitted.push(logger.emit({
     initiative_id: input.initiativeId,
     phase: 'architect',
     skill: 'architect',
@@ -136,8 +137,8 @@ export function emitSyntheticArchitectEvents(
       ...(architectSessionId ? { session_id: architectSessionId } : {}),
       note: 'architect ran out-of-cycle; event emitted by orchestrator so the UI can reflect the phase as complete',
     },
-  });
-  logger.emit({
+  }));
+  emitted.push(logger.emit({
     initiative_id: input.initiativeId,
     phase: 'architect',
     skill: 'architect',
@@ -151,7 +152,8 @@ export function emitSyntheticArchitectEvents(
       origin: resolvedOrigin,
       ...(architectSessionId ? { session_id: architectSessionId } : {}),
     },
-  });
+  }));
+  return emitted;
 }
 
 export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<CycleResult> {
@@ -196,7 +198,11 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   //
   // Emitted here (not inside runFlow) so dry-run cycles also produce the
   // architect events — the P4 tests verify this unconditional emission.
-  emitSyntheticArchitectEvents(input, logger, origin);
+  // Returned, not just emitted: these carry the architect's real spend, and
+  // `runFlow` builds its CostTracker after this point — so they are handed to
+  // it as `priorSpendEvents` or the architect's dollars are counted by nothing
+  // (spec §5 item 7, ruling 257).
+  const architectEvents = emitSyntheticArchitectEvents(input, logger, origin);
 
   // F-04 / F-06: derive the effective quality-gate command once per cycle so
   // the dev-loop and reviewer use exactly the same gate. Precedence:
@@ -245,7 +251,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
       }
       const flow = loadFlowDefinition(flowPath);
       const costCeilingUsd = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, priorSpendEvents: architectEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;
