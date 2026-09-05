@@ -33,6 +33,26 @@
  * 2026-08-29 ruling ("author the true flow") applied to the verbs as it was
  * applied to the assertions. `_1.0/stories/S1.md` names every one of those
  * gaps and its owner.
+ *
+ * AMENDED 2026-09-05 (H6, ruling 170, operator present at the terminal) —
+ * FOUR beats, and the story grows from ten to ELEVEN. Every gap the 2026-08-30
+ * amendment left open has been closed by the product since, so the beats that
+ * stood unexpressed can now perform what they always described: beat 4 opens
+ * the brief panel before filling it (the missing press that cost this story
+ * three runs at $0.00 — no Agent was ever dispatched); beat 7 hands the demo
+ * stage over on the surface it stands on and binds the id the handoff mints;
+ * beat 10 starts the Architect inline on the project page and binds that id
+ * too; beat 11 walks into the session it named. Beat 3 is RE-RECORDED, not
+ * repaired: it pinned `checklist-status: 'absent'` for a contract the product
+ * scaffolds at registration.
+ *
+ * The one structural change is beat 7. It carried two acts — hand the demo
+ * stage over, AND come back when the builder has finished — and the runner
+ * resolves `expect.route` before the `do` steps, so no single beat can both
+ * mint an id and stand on the route that id names. Splitting it keeps an
+ * assertion on both acts; folding them would have dropped one in silence.
+ * Beats 8–11 are the old 7–10 renumbered. Recorded in
+ * `_1.0/gate-manifests/M1-C-S1.amend-1.md`.
  */
 
 /** The gate command GitWeave's own repo answers to — `tests/` is pytest. */
@@ -41,6 +61,13 @@ const GATE = 'python -m pytest tests/';
 /** GitWeave's own README, first line — the north star is the project's, not the story's. */
 const NORTH_STAR =
   'A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling.';
+
+/** The first piece of work the operator asks the Architect to plan. */
+const IDEA =
+  'Add an overlay lint that fails the plan when a repo overlay names a team that no module in the org actually grants, so a broken grant is caught before it reaches GitHub.';
+
+/** This run's ceiling, in dollars — the same figure the ground declares. */
+const CEILING = '25';
 
 export default {
   id: 'S1',
@@ -77,6 +104,19 @@ export default {
       // Fully expressible. Every handle below was verified live by M1-F on
       // this exact form; `proof.story.mjs` beat 5 performs the identical six
       // steps and is green for a project forge has never seen.
+      //
+      // AMENDED 2026-09-05 (H6, operator present) — `checklist-status`
+      // re-recorded `absent` → `present`, and the narration rewritten to match.
+      // The beat pinned a world where registering a project leaves its contract
+      // absent; the product scaffolds the C4 artifacts at registration and says
+      // so in its own copy ("the project was registered and the C4 artifacts
+      // were scaffolded"). Measured twice — 2026-09-02 (`_1.0/stories/S1.md`,
+      // Finding A) and again 2026-09-04 by probe `m5-b-probe9`. Re-recorded,
+      // never edited to pass: `preflight-status: 'hard-fail'` STAYS, because
+      // the two together are the finding — a present stub that still hard-fails
+      // is exactly what onboarding has to work on. (Its sibling amendment, the
+      // one that would have split this six-key set across two beats, is struck:
+      // the sibling-key absence was the runner's and PR #411 fixed it.)
       act: 'Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press "Onboard project →"',
       do: [
         { fill: 'project-name', with: 'gitweave' },
@@ -94,24 +134,30 @@ export default {
           'page-ready': 'true',
           'preflight-status': 'hard-fail',
           'checklist-row': 'contract',
-          'checklist-status': 'absent',
+          'checklist-status': 'present',
         },
       },
-      say: 'Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. The Contract Buildout checklist says why — the contract itself is absent, and so are the secrets, demo and roadmap stages. Only the instructions are present, read from the repo\'s own CLAUDE.md. No Flow can be pointed at a project in this state.',
+      say: 'Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo\'s own CLAUDE.md. No Flow can be pointed at a project in this state.',
     },
     {
-      // Partly expressible. `run-onboarding-agent` is a real `data-action`.
-      // The two brief fields are NOT: `OnboardWithAgent.tsx` declares them as
-      // `data-onboard-input="northStar"|"gateCommand"`, and `do`'s fill verb
-      // resolves `[data-field=...]` only — so the story names the product's
-      // own declared VALUES and goes red on the attribute, rather than
-      // dropping the brief and quietly dispatching an unbriefed agent while
-      // the act text and the generated tutorial both say it was briefed.
-      // The `<summary>` that opens `[data-section="onboard-brief"]` carries no
-      // `data-action` either, unlike `toggle-onboard-advanced` on the very
-      // next panel — so there is no way to open the brief before filling it.
+      // FULLY expressible since the `<summary>` gained a handle, and AMENDED
+      // 2026-09-05 (H6, operator present) to use it. Both halves of this
+      // beat's authoring-time gap are closed: the two brief inputs declare
+      // `data-field` now (they were `data-onboard-input` when this was
+      // written), and `[data-action="toggle-onboard-brief"]` opens the
+      // `<details>` they sit in.
+      //
+      // The single missing press is what cost this story three runs at $0.00.
+      // The 2026-09-02 run failed `could not fill [data-field="northStar"] …
+      // element is not visible` — the input existed and was the right one; the
+      // panel around it was shut. So `forge-8vfn.2.25`, which that run was
+      // forecast to exercise, was never reached, and no Agent was ever
+      // dispatched. S3's beat 11, authored a day later against the same
+      // surface, has always opened the panel first; only a story-authoring
+      // session may bring S1 into line with it, and this is that session.
       act: 'Open "Brief the agent", give it the north star and the gate command, and press "Run onboarding agent"',
       do: [
+        { press: 'toggle-onboard-brief' },
         { fill: 'northStar', with: NORTH_STAR },
         { fill: 'gateCommand', with: GATE },
         { press: 'run-onboarding-agent' },
@@ -176,19 +222,46 @@ export default {
       say: 'This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator\'s. The secrets stage names the environment variables and never their values.',
     },
     {
-      // NOT expressible, and deliberately left so — two independent gaps.
-      // (a) `<demoSessionId>` cannot be bound. The demo builder is started by
-      //     a POST whose handler `router.push`es `/sessions/demo/<sid>` in the
-      //     same click (`ContractResolutionPanel.tsx`, `projects/[id]/page.tsx`),
-      //     so the id is never rendered as a `data-*` value a prior beat could
-      //     observe. Binding it off `HomeSessionsStrip`'s `data-session-id`
-      //     would take whichever session sorts first — the fail-open shape.
-      // (b) There is no handle to press. `ContractBuildout.tsx`'s stage detail
-      //     declares `data-stage-detail-state|stage|status` and no
-      //     `data-action` at all, so "hand it to the demo builder" has no
-      //     declared control on the onboarding session surface;
-      //     `[data-action="launch-demo-builder"]` lives on the project page.
-      act: 'Select the demo stage and hand it to the demo builder — the heavy one — then come back when it has finished',
+      // AMENDED 2026-09-05 (H6, operator present) — SPLIT IN TWO, and both
+      // halves are now expressible. Both gaps this beat was left open for are
+      // closed by bead `forge-8vfn.5.6`: `ContractBuildout.tsx:118` mounts
+      // `DemoStageHandoff` on the demo stage's own detail — so the act HAS a
+      // declared control on this surface at last — and that component's
+      // `SessionMinted` publishes `[data-session-id]` beside
+      // `[data-action="view-demo-session"]`, so the id is rendered before the
+      // navigation that consumes it. `StageSelector.tsx:46` declares one
+      // `select-stage-<id>` per stage, so a beat can finally say WHICH stage
+      // it opens instead of taking `.first()` and pretending.
+      //
+      // The split is forced by the runner, not by taste: `driveBeat` resolves
+      // `expect.route` BEFORE the `do` steps, so a beat cannot both mint an id
+      // and stand on the route that id names. This beat mints and binds on the
+      // page it is standing on — the S4 beat-9 shape — and the next one walks
+      // in. The original beat's two acts each keep an assertion; folding them
+      // would have dropped one of them silently.
+      act: 'Select the demo stage and hand it to the demo builder — the heavy one',
+      do: [{ press: 'select-stage-demo' }, { press: 'launch-demo-builder' }],
+      expect: {
+        route: '/sessions/onboarding/<sessionId>',
+        data: {
+          page: 'session',
+          'page-ready': 'true',
+          'session-kind': 'onboarding',
+          'stage-detail-stage': 'demo',
+          'session-id': '<demoSessionId>',
+        },
+      },
+      say: 'Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.',
+    },
+    {
+      // Fully expressible; the second half of the beat this session split.
+      // `<demoSessionId>` was bound by the beat above, so the route resolves,
+      // and `view-demo-session` (`SessionMinted.tsx:26`) is the way in. All
+      // four keys are the demo session shell's own root — the same shared
+      // session surface the onboarding session uses, which is the point: one
+      // surface, four kinds, no bespoke runner per kind.
+      act: 'Come back to the demo builder when it has finished',
+      do: [{ press: 'view-demo-session' }],
       expect: {
         route: '/sessions/demo/<demoSessionId>',
         data: {
@@ -198,7 +271,7 @@ export default {
           'session-phase': 'complete',
         },
       },
-      say: 'Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. The operator can leave it and come back — the session is the record, not the terminal it was started from.',
+      say: 'The operator can leave a heavy session and come back — the session is the record, not the terminal it was started from. This is the beat that proves it: the demo builder was started from one surface, left alone, and read from another, and the work is there and finished.',
     },
     {
       // Fully expressible, but only because the exit is itself a
@@ -226,25 +299,37 @@ export default {
       say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
     },
     {
-      // NOT expressible — the same gap as beat 7, one surface along.
-      // `<architectSessionId>` cannot be bound: `ProjectArchitectEntry.tsx`
-      // opens `NewIdeaBox`, whose `start-architect` POST returns the id
-      // straight into `router.push('/sessions/architect/<sid>')`. The one
-      // element that DOES render it — `[data-action="resume-architect-session"]
-      // [data-session-id]` — appears only once an in-flight session already
-      // exists, which is after this beat, not before it. The route resolves
-      // before any `do` step runs, so no press on this beat can supply it.
-      act: 'Press "Architect →" and describe the first piece of work',
+      // AMENDED 2026-09-05 (H6, operator present) — expressible, and it always
+      // was the same shape as the demo handoff two beats up. `NewIdeaBox`'s
+      // `start-architect` does NOT push the minted id into a route: it sets
+      // `startedSessionId` and publishes it on its own section
+      // (`NewIdeaBox.tsx:111`), then renders `SessionMinted` beside it
+      // (`:187`). `ProjectArchitectEntry.tsx:84` opens that box INLINE on the
+      // project page, so every step of this act happens on `/projects/gitweave`
+      // and the id is bound where it is minted. The beat that stood here
+      // asserted the architect session's own phase and could never reach it —
+      // no earlier beat could supply the segment, so nothing was ever pressed
+      // and no Architect was ever started. Its `session-phase` assertion is
+      // not re-homed: the beat below walks through that session to the plan
+      // gate and asserts `architect-phase` there, which is the same fact read
+      // where the operator actually decides on it.
+      act: 'Press "Plan with Architect" and describe the first piece of work',
+      do: [
+        { press: 'plan-with-architect' },
+        { fill: 'idea', with: IDEA },
+        { fill: 'cost-ceiling-usd', with: CEILING },
+        { press: 'start-architect' },
+      ],
       expect: {
-        route: '/sessions/architect/<architectSessionId>',
+        route: '/projects/gitweave',
         data: {
-          page: 'session',
-          'page-ready': 'true',
-          'session-kind': 'architect',
-          'session-phase': 'awaiting-verdict',
+          page: 'projects',
+          'project-id': 'gitweave',
+          section: 'new-idea',
+          'architect-session-id': '<architectSessionId>',
         },
       },
-      say: 'With a contract in place the Architect can plan. It interviews the operator, reads the project, and produces a roadmap for review — the first Gate a human stands at.',
+      say: 'With a contract in place the Architect can plan. It interviews the operator, reads the project, and produces a roadmap for review — the first Gate a human stands at. A real Agent costs money, so the operator caps this run before starting it, and forge names the session it just minted on the page they are standing on rather than sweeping them into it.',
     },
     {
       // Fully expressible. `/artifact` is reached by a query-string href, so
@@ -252,8 +337,17 @@ export default {
       // navigation is a `do` step (`[data-action="open-plan"]`,
       // `SessionArchitectPanel.tsx`) and the approval follows it on the page
       // it lands on (`[data-action="approve-plan"]`, `PlanGate.tsx`).
-      act: 'Read the plan and press Approve',
-      do: [{ press: 'open-plan' }, { press: 'approve-plan' }],
+      //
+      // AMENDED 2026-09-05 (H6, operator present) — one press added at the
+      // front. The beat above now binds `<architectSessionId>` on the project
+      // page rather than being swept into the session, so this beat starts on
+      // `/projects/gitweave` and `open-plan` is not there — it is on the
+      // architect session's panel. `SessionMinted.tsx:26` renders
+      // `[data-action="view-architect-session"]` beside the id the beat above
+      // bound, so the walk in is a declared step like the other two. Three
+      // presses, three surfaces, all named by the product.
+      act: 'Open the session, read the plan and press Approve',
+      do: [{ press: 'view-architect-session' }, { press: 'open-plan' }, { press: 'approve-plan' }],
       expect: {
         route: '/artifact',
         data: {
