@@ -202,6 +202,19 @@ const ERROR_SENTINELS = [
   ['load-error', 'true'],
 ];
 
+/**
+ * The product's OWN verdict on a session, published by `SessionLifecycleBar`
+ * on the 5-token contract `working | awaiting-operator | crashed | stalled |
+ * terminal` and derived server-side by `deriveSessionLifecycle` — never
+ * re-derived from phase names or timestamps, here or in the page.
+ *
+ * `stalled` is that function's "hung-SDK shape": a live pid whose channel went
+ * quiet past its kind's ceiling (120 s for an architect). A beat waiting on an
+ * agent has no business sitting out a ten-minute bound after the product has
+ * said, at two minutes, that nothing is coming.
+ */
+const LIFECYCLE_STALLED = 'stalled';
+
 /** How long to wait for a page to declare itself ready before judging it. */
 const READY_TIMEOUT_MS = 15_000;
 
@@ -262,15 +275,24 @@ const CONSEQUENCE_POLL_MS = 100;
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-async function waitForConsequence(page, beat, timeoutMs) {
+async function waitForConsequence(page, beat, timeoutMs, watchLifecycle) {
   const wanted = Object.entries(beat.expect.data);
-  if (wanted.length === 0) return;
-  const deadline = Date.now() + timeoutMs;
+  if (wanted.length === 0) return null;
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
   for (;;) {
     const observed = await readObserved(page, beat);
     const seen = resolveExpectations(beat.expect.data, observed);
-    if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return;
-    if (Date.now() >= deadline) return;
+    if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
+    // Ruling 241 step 2. Only for a beat that DECLARED an agent wait: those are
+    // the beats that stand on a session, and scoping it there means no other
+    // beat gains a new way to fail. The product is believed rather than
+    // second-guessed — `stalled` is server-derived, and re-deriving it here
+    // from phases or timestamps is the mistake the bar's own header forbids.
+    if (watchLifecycle && observed.lifecycle === LIFECYCLE_STALLED) {
+      return Object.freeze({ afterMs: Date.now() - startedAt });
+    }
+    if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
   }
 }
@@ -317,10 +339,20 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // gave up, or "red at 15 s" and "red at ten minutes" read identically in a
   // run record.
   const bound = beatBound(rawBeat, timeoutMs);
-  const named = (verdict) =>
-    bound.label === null || verdict.status !== 'red'
-      ? verdict
-      : Object.freeze({ ...verdict, failures: Object.freeze([...verdict.failures, `gave up at the ${bound.label}`]) });
+  // What ENDED the wait, so the verdict can say it. `null` = the bound did.
+  let stalled = null;
+  const named = (verdict) => {
+    if (verdict.status !== 'red') return verdict;
+    const why =
+      stalled !== null
+        ? `the session's own lifecycle read "${LIFECYCLE_STALLED}" ${Math.round(stalled.afterMs / 1000)}s into the ` +
+          `${bound.label} — the product had already declared this session hung, so the beat stopped there instead ` +
+          'of sitting out its declared bound'
+        : bound.label === null
+          ? null
+          : `gave up at the ${bound.label}`;
+    return why === null ? verdict : Object.freeze({ ...verdict, failures: Object.freeze([...verdict.failures, why]) });
+  };
 
   if (index === 0) {
     await page.goto(baseUrl + target, { waitUntil: 'domcontentloaded' });
@@ -366,14 +398,30 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // `data-onboard-run-status="idle"` with no session id — the product had
   // already answered; the runner had not looked again. A story can spend
   // real money and still report the product never started.
-  if (steps.length > 0 && new URL(page.url()).pathname !== target) {
-    await page
-      .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
-      .catch(() => {
-        /* the press did not navigate here — the nav resolution below reports it honestly */
-      });
-  } else if (steps.length > 0) {
-    await waitForConsequence(page, beat, bound.ms);
+  if (steps.length > 0) {
+    const waitedFrom = Date.now();
+    if (new URL(page.url()).pathname !== target) {
+      await page
+        .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
+        .catch(() => {
+          /* the press did not navigate here — the nav resolution below reports it honestly */
+        });
+    }
+    // Bead `forge-8vfn.6.11.17`. The consequence wait used to run on the
+    // same-route branch ALONE, so a beat whose press NAVIGATES got a wait on
+    // the URL and nothing else — and a URL commits in about a second. S4 beat
+    // 11 is that shape (`press: open-session` → `/sessions/architect/<id>`):
+    // it declared `wait: { for: 'agent', upTo: 600_000 }`, bounded a route
+    // change with it, read the session's phase immediately, and the verdict
+    // then said `gave up at the agent wait (declared 600000 ms)` — naming a
+    // bound that never fired. Declared, surfaced, enforced nowhere, in the very
+    // field `6.11.10` added to stop a wrong bound. The route change is now just
+    // the first part of the wait; the rest of the bound goes where it was
+    // declared to go, on the state the beat is actually waiting for.
+    if (new URL(page.url()).pathname === target) {
+      const left = bound.ms - (Date.now() - waitedFrom);
+      if (left > 0) stalled = await waitForConsequence(page, beat, left, bound.label !== null);
+    }
   }
 
   // Already there: the operator acted on this page and stayed on it, or the
@@ -684,7 +732,7 @@ async function readObserved(page, beat) {
   // Always read the error sentinels alongside the beat's own keys — the
   // verdict cannot judge what was never collected.
   const keys = [...new Set([...Object.keys(beat.expect.data), ...ERROR_SENTINELS.map(([a]) => a)])];
-  const { data, nested } = await page.evaluate(
+  const { data, nested, lifecycle } = await page.evaluate(
     ({ wanted, safe }) => {
       const root = document.querySelector('main[data-page]') ?? document.body;
       const pick = (el) => {
@@ -697,9 +745,15 @@ async function readObserved(page, beat) {
       };
       const sel = safe.map((k) => `[data-${k}]`).join(',');
       const kids = sel === '' ? [] : [...root.querySelectorAll(sel)].map(pick);
-      return { data: pick(root), nested: kids };
+      // The lifecycle bar is read by its OWN selector rather than folded into
+      // `wanted`: collecting it as an ordinary key would put it in `nested`,
+      // where `resolveExpectations` could return it inside a matched record and
+      // the generated how-to would start listing an attribute no beat asked
+      // about. It is diagnosis, not an expectation, so it travels beside them.
+      const bar = document.querySelector('div[data-section="session-lifecycle"][data-lifecycle-state]');
+      return { data: pick(root), nested: kids, lifecycle: bar === null ? null : bar.getAttribute('data-lifecycle-state') };
     },
     { wanted: keys, safe: keys.filter((k) => SAFE_KEY.test(k)) },
   );
-  return { route: new URL(page.url()).pathname, data, nested };
+  return { route: new URL(page.url()).pathname, data, nested, lifecycle: lifecycle ?? null };
 }
