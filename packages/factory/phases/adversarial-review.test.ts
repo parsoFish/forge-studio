@@ -38,14 +38,14 @@ function withoutSpawnSuppressionEnv(): () => void {
   };
 }
 
-function wiFixture(): WorkItem {
+function wiFixture(extraFiles: readonly string[] = []): WorkItem {
   return {
     work_item_id: 'WI-1',
     initiative_id: INIT_ID,
     status: 'complete',
     depends_on: [],
     acceptance_criteria: [{ given: 'a request', when: 'handled', then: 'it returns 200' }],
-    files_in_scope: ['src.ts'],
+    files_in_scope: ['src.ts', ...extraFiles],
     estimated_iterations: 1,
     quality_gate_cmd: ['echo', 'gate-ok'],
     body: 'Build the handler.',
@@ -60,7 +60,13 @@ type Fixture = {
   cleanup: () => void;
 };
 
-function makeFixture(): Fixture {
+/**
+ * `extraFiles` puts MORE THAN ONE file in WI-1's chunk — the only shape in which
+ * the per-file re-review can be observed at all, since a one-file chunk has
+ * nothing to split. Every existing caller passes nothing and gets exactly the
+ * one-file fixture it had.
+ */
+function makeFixture(extraFiles: readonly string[] = []): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'adv-review-'));
   const bare = join(root, 'origin.git');
   execFileSync('git', ['init', '--bare', '-b', 'main', bare], { stdio: 'pipe' });
@@ -76,13 +82,14 @@ function makeFixture(): Fixture {
     join(worktree, '.forge', 'project.json'),
     JSON.stringify({ testProcess: { local: { cmd: ['echo', 'gate-ok'] } } }),
   );
-  writeFileSync(join(worktree, '.forge', 'work-items', 'WI-1.md'), serializeWorkItem(wiFixture()));
+  writeFileSync(join(worktree, '.forge', 'work-items', 'WI-1.md'), serializeWorkItem(wiFixture(extraFiles)));
   writeFileSync(join(worktree, 'src.ts'), 'export const v = 1;\n');
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'main baseline']);
   git(['push', '-q', 'origin', 'main']);
   git(['checkout', '-q', '-b', `feat/${INIT_ID}`]);
   writeFileSync(join(worktree, 'src.ts'), 'export const v = 2;\n');
+  for (const f of extraFiles) writeFileSync(join(worktree, f), `export const ${f.replace(/\W/g, '_')} = 2;\n`);
   // Seed the demo's AC-proof so the briefing inlines acEvaluations.
   mkdirSync(join(worktree, 'demo', INIT_ID), { recursive: true });
   writeFileSync(
@@ -481,6 +488,168 @@ test('error_during_execution: spawn-failed, never budget-exhausted misdiagnosis'
     assert.equal(res.status, 'failed');
     assert.equal((res as { reason: string }).reason, 'spawn-failed');
     assert.ok(!/raise the declared budgets/.test((res as { detail: string }).detail));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.6.10.26 — a work item too large for ONE review pass is
+// re-reviewed per FILE.
+//
+// G2's resume (2026-09-06) measured the premise `review-chunks.ts` was written
+// on: "the chunk is the work item, which introduces NO NEW NUMBER — the PM
+// already bounded it". `review.agent-pass chunk=WI-1` succeeded and
+// `review.budget-exhausted chunk=WI-2` followed on eight files, so a work item
+// the developer built at `iters=1` still exceeded the reviewer's 50 turns. The
+// PM's bound is developer-shaped (can one agent BUILD it); the reviewer's load
+// is diff-shaped (how much must be READ and judged per criterion).
+//
+// The file is the smallest unit the diff already has — no threshold is invented
+// here either, and the work item stays the chunk that owns the criteria.
+// ---------------------------------------------------------------------------
+
+/** Count how many of `files` the rendered prompt lists as changed. */
+function changedFileCount(prompt: string, files: readonly string[]): number {
+  return files.filter((f) => prompt.includes(`- \`${f}\``)).length;
+}
+
+const THREE = ['a.ts', 'b.ts'] as const; // + src.ts from the base fixture = three
+
+test('kills "a work item too large for one pass just fails": the chunk is re-reviewed PER FILE and the review completes', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture(THREE);
+  const all = ['src.ts', ...THREE];
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    // The stub reproduces G2's shape rather than a convenient one: the whole
+    // work item exhausts, one file at a time does not.
+    const qf = ((params: { prompt: string }) => {
+      prompts.push(params.prompt);
+      const n = changedFileCount(params.prompt, all);
+      async function* gen(): AsyncGenerator<unknown> {
+        if (n > 1) {
+          yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.5, usage: { input_tokens: 1, output_tokens: 1 } };
+          return;
+        }
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(params.prompt));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.2, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete', `the split must rescue the review, got ${JSON.stringify(res)}`);
+    // 1 whole-work-item pass that exhausted + 3 per-file passes + the
+    // `unattributed` chunk (the branch's seeded `demo/<init>/demo.json`, which
+    // no work item claims). The split changes ONE chunk's shape and leaves the
+    // partition around it alone — which is the other half of the claim.
+    assert.equal(prompts.length, 5, 'one whole-work-item pass that exhausted, then one pass per file, then the unattributed chunk');
+
+    const split = events.find((e) => e.message === 'review.chunk.split');
+    assert.ok(split, 'the split is an EVENT — a review that silently changes shape is unauditable');
+    assert.equal((split!.metadata as Record<string, unknown>).chunk, 'WI-1');
+    assert.equal((split!.metadata as Record<string, unknown>).files, 3);
+
+    const record = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
+    assert.deepEqual(validateReviewFindings(record, EXPECTED), [], 'the merged record still satisfies the artifact contract');
+    // Provenance survives the split: work item AND file, without a new field.
+    const splitIds = record.findings.map((f: { id: string }) => f.id).filter((id: string) => id.startsWith('WI-1/'));
+    for (const id of splitIds) {
+      assert.match(id, /^WI-1\/(src|a|b)\.ts\/RF-1$/, `finding id must name its work item AND its file, got ${id}`);
+    }
+    assert.equal(splitIds.length, 3, 'one finding per per-file pass, none dropped in the merge');
+    assert.ok(
+      record.findings.some((f: { id: string }) => f.id === 'unattributed/RF-1'),
+      'the chunk that did NOT split keeps its own single-level id — the split is local to the work item that needed it',
+    );
+    // The criterion is judged ONCE. Three per-file passes each judged it; a
+    // merged record repeating it three times, possibly disagreeing, would be a
+    // verdict a reader cannot act on.
+    assert.deepEqual(record.acEvaluations.map((e: { criterion: string }) => e.criterion), [CRITERION]);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "the split hides an unreviewable file": a SINGLE file that exhausts fails loudly and NAMES the file', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture(THREE);
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    let calls = 0;
+    const qf = ((_p: { prompt: string }) => {
+      calls += 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.0, usage: { input_tokens: 1, output_tokens: 1 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
+    const detail = (res as { detail: string }).detail;
+    assert.match(detail, /SINGLE file/, 'the message says the split has bottomed out');
+    assert.match(detail, /src\.ts|a\.ts|b\.ts/, 'and it names the file, which is the only actionable fact left');
+    assert.doesNotMatch(detail, /raise the declared budgets/, 'widening the budget is still what must not be suggested');
+    assert.equal(calls, 2, 'the work item pass, then the FIRST file — a bottomed-out split stops, it does not grind through the rest');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "a sub-chunk is reviewed under a weaker fence": every per-file spawn gets the SAME bag, and the fence is proven by execution', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture(THREE);
+  const all = ['src.ts', ...THREE];
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    const bags: Array<Record<string, unknown>> = [];
+    const qf = ((params: { prompt: string; options?: Record<string, unknown> }) => {
+      bags.push(params.options ?? {});
+      const n = changedFileCount(params.prompt, all);
+      async function* gen(): AsyncGenerator<unknown> {
+        if (n > 1) {
+          yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.5, usage: { input_tokens: 1, output_tokens: 1 } };
+          return;
+        }
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(params.prompt));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.2, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+
+    assert.equal((await run(fx, qf, logger)).status, 'complete');
+    assert.equal(bags.length, 5, 'the exhausted pass, three per-file passes, and the unattributed chunk');
+
+    // The three settings that ARE the fence, on every bag the SDK received —
+    // compared across bags, not against a literal, so a change that weakens all
+    // four at once still cannot pass this by agreeing with itself.
+    const fenceOf = (o: Record<string, unknown>): string =>
+      JSON.stringify({
+        permissionMode: o.permissionMode,
+        allowedTools: o.allowedTools,
+        disallowedTools: o.disallowedTools,
+        hasHandler: typeof o.canUseTool === 'function',
+      });
+    for (const bag of bags) assert.equal(fenceOf(bag), fenceOf(bags[0]!), 'a sub-chunk was spawned under a different fence');
+    assert.equal((bags[0]! as { permissionMode?: string }).permissionMode, 'default');
+    assert.ok(!((bags[0]!.allowedTools as string[]) ?? []).includes('Write'), 'a pre-approved Write skips the fence');
+    assert.ok(!((bags[0]!.disallowedTools as string[]) ?? []).includes('Write'), 'a forbidden Write cannot author the findings');
+
+    // Executed, not read (§15.194) — the LAST sub-chunk's own handler.
+    const canUseTool = bags[bags.length - 1]!.canUseTool as
+      | ((tool: string, input: Record<string, unknown>, o: Record<string, unknown>) => Promise<{ behavior: string }>)
+      | undefined;
+    assert.equal(typeof canUseTool, 'function');
+    assert.equal((await canUseTool!('Write', { file_path: join(fx.worktree, '.forge', 'review-findings.json') }, {})).behavior, 'allow');
+    assert.equal((await canUseTool!('Write', { file_path: join(fx.worktree, 'src.ts') }, {})).behavior, 'deny');
+    assert.equal((await canUseTool!('Write', { file_path: join(fx.root, 'escape.txt') }, {})).behavior, 'deny');
   } finally {
     fx.cleanup();
     restore();
