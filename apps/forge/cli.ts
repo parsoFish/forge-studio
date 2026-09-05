@@ -12,6 +12,7 @@
  *   forge serve [--once]                    the scheduler daemon (spawned by the bridge + harnesses)
  *   forge architect run <sid>               advance one architect turn (spawned by the bridge per operator action)
  *   forge brain index|lint                  brain-integrity gate (mirrors studio lint)
+ *   forge gate docs <path...>               the docs class's merge-boundary gate (ADR 036: a verb, not a script)
  *   forge community refresh [--dry-run]     deterministic community-registry refresh (needs GH_TOKEN)
  */
 
@@ -20,7 +21,8 @@ import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows/scheduler.ts';
 import { factoryPhaseWiring } from './factory-wiring.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
-import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
+import { cmdBrainLint } from './cli-brain-lint.ts';
+import { cmdGate } from './cli-gate.ts';
 import { runStudioLint } from './studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
@@ -107,6 +109,8 @@ process.chdir(FORGE_ROOT);
       return await cmdAgent(args.slice(1), FORGE_ROOT, AGENT_DISPATCH_DEPS);
     case 'brain':
       return await cmdBrain(args.slice(1));
+    case 'gate':
+      return cmdGate(args.slice(1));
     case 'demo':
       return await cmdDemo(args.slice(1));
     case 'project-brain':
@@ -315,67 +319,6 @@ function cmdBrainIndex(rest: string[]): void {
   const scopeIdx = rest.indexOf('--scope');
   const scope = scopeIdx >= 0 ? rest[scopeIdx + 1] ?? null : null;
   process.stdout.write(loadBrainIndex({ scope }) + '\n');
-}
-
-function cmdBrainLint(rest: string[]): void {
-  // Parse flags. Mirror the standalone brain-lint.ts CLI but wire through the
-  // forge CLI so the operator types `forge brain lint ...`.
-  let scope: BrainLintScope = 'full';
-  let project: string | undefined;
-  let file: string | undefined;
-  let cycle: string | undefined;
-  let fix = false;
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (a === '--scope') {
-      const v = rest[++i];
-      const allowed: BrainLintScope[] = [
-        'full',
-        'forge-only',
-        'project-only',
-        'single-file',
-        'cycle-touched-themes',
-        'cleanup-dry-run',
-      ];
-      if (!allowed.includes(v as BrainLintScope)) {
-        console.error(`forge brain lint: unknown --scope: ${v}`);
-        process.exit(2);
-      }
-      scope = v as BrainLintScope;
-    } else if (a === '--project') {
-      project = rest[++i];
-    } else if (a === '--file') {
-      file = rest[++i];
-    } else if (a === '--cycle') {
-      cycle = rest[++i];
-    } else if (a === '--fix') {
-      fix = true;
-    }
-  }
-  const result = runBrainLint({ cwd: FORGE_ROOT, scope, project, file, cycle, fix });
-
-  const errors = result.findings.filter((f) => f.category === 'error');
-  const flags = result.findings.filter((f) => f.category === 'flag');
-  const fixes = result.findings.filter((f) => f.category === 'auto-fix');
-  for (const [label, group] of [
-    ['ERRORS', errors],
-    ['FLAGS', flags],
-    ['AUTO-FIXES', fixes],
-  ] as const) {
-    if (group.length === 0) continue;
-    console.log(`## ${label} (${group.length})`);
-    for (const f of group) {
-      const relPath = f.file.startsWith(FORGE_ROOT)
-        ? f.file.slice(FORGE_ROOT.length + 1)
-        : f.file;
-      console.log(`- [${f.check ?? 'check'}] ${relPath}: ${f.message}`);
-    }
-    console.log('');
-  }
-  console.log(
-    `Summary: ${errors.length} error(s), ${flags.length} flag(s), ${fixes.length} auto-fix(es).`,
-  );
-  process.exit(result.exitCode);
 }
 
 // ---------------------------------------------------------------------------
