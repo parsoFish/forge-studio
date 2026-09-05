@@ -421,3 +421,199 @@ test('AT-6.11.19-4 (RED) a URL wait alone does NOT count as consuming an agent b
   // the guard is not simply always-on for navigating beats.
   assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
 });
+
+/**
+ * ONE declared bound is ONE spend (bead `forge-8vfn.6.11.22`, T1 ruling 267).
+ *
+ * S2 run 3 measured it on the lane's LAST S2 run: beat 12 declared
+ * `upTo: 600_000` and took about twenty minutes — 600 s in `performSteps`'
+ * handle wait, which SWALLOWS its timeout, and then 600 s again in
+ * `setControl`'s `evaluate`, which was handed the same `timeoutMs` afresh.
+ *
+ * #458's early red correctly did not fire: the session was never `stalled`, it
+ * was FINISHED. The architect had asked its three questions at 118.5 s and the
+ * page read `data-session-phase="awaiting-answers"` throughout. So the
+ * double-spend is not a stall problem — it is what a healthy session plus an
+ * absent handle costs, and that is the ordinary shape of a story finding a real
+ * product gap. Ten minutes of a funded run went into waiting twice for an answer
+ * the first wait had already given.
+ *
+ * A declared bound is a statement about the BEAT, not about each wait inside it.
+ */
+
+test('AT-6.11.22-1 (RED) a beat whose handle never appears spends its declared bound ONCE, not twice', async () => {
+  // Healthy session, handle absent forever — S2 beat 12's exact shape.
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: null });
+  const began = Date.now();
+  const verdict = await driveBeat(page as never, answerBeat(1_200), 1, 'http://localhost:4124');
+  const took = Date.now() - began;
+
+  assert.equal(verdict.status, 'red', 'the field never appears, so the beat is red either way');
+  assert.ok(
+    took < 2_000,
+    `one declared bound of 1200 ms is ONE spend: the handle wait and the act that follows share it. ` +
+      `Took ${took} ms — a second full bound means the beat pays twice for one declaration.`,
+  );
+  const said = verdict.failures.join(' | ');
+  assert.match(
+    said,
+    /whole declared bound \(1200 ms\)/,
+    `and the beat says the bound ran out, in its own terms. Got: ${JSON.stringify(verdict.failures)}`,
+  );
+  assert.doesNotMatch(
+    said,
+    /Timeout 0ms exceeded/,
+    'never "Timeout 0ms exceeded" — that names a bound nobody declared and reads like a runner bug',
+  );
+});
+
+test('AT-6.11.22-2 (positive control) a handle that arrives inside the shared bound is still filled', async () => {
+  // The deadline is shared, not shortened: work that finishes in time still wins.
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: 300, stalledAfterMs: null });
+  const verdict = await driveBeat(page as never, answerBeat(5_000), 1, 'http://localhost:4124');
+  assert.equal(
+    verdict.status,
+    'green',
+    `sharing the bound must not shorten it. Failures: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.22-3 (positive control) the stall early red still wins when the product DOES say stalled', async () => {
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: 150 });
+  const began = Date.now();
+  const verdict = await driveBeat(page as never, answerBeat(30_000), 1, 'http://localhost:4124');
+  assert.ok(Date.now() - began < 10_000, 'the stall still cuts the wait short');
+  assert.match(verdict.failures.join(' | '), /stalled/, JSON.stringify(verdict.failures));
+});
+
+/**
+ * The next occurrence of `6.11.17` describes itself (bead `forge-8vfn.6.11.22`,
+ * ruling 267's second half). The bead is P1, open, owner unknown and
+ * INTERMITTENT — S4 run 2 hung, while an out-of-story dispatch and S2 run 3's
+ * architect both completed. What settles it is what the process was doing WHILE
+ * a beat waited, and until now that was reconstructed afterwards, by hand, once.
+ *
+ * The probe is injected so these pins never touch a real `/proc`.
+ */
+
+/** A probe that reports a trend, exactly as the real one does. */
+const fakeProbe = (summary: string | null) => {
+  const p: any = () => { p.calls += 1; };
+  p.calls = 0;
+  p.summary = () => summary;
+  return p;
+};
+
+test('AT-6.11.22-4 (RED) an unsatisfied agent wait carries the agent\'s own /proc trend into its failure', async () => {
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: null });
+  const probe = fakeProbe('agent /proc over 4 sample(s): parent state=S utime 49→49, SDK child state=S utime 154→197 — it was WORKING');
+  const verdict = await driveBeat(
+    page as never, answerBeat(1_000), 1, 'http://localhost:4124', {}, undefined, probe,
+  );
+  assert.equal(verdict.status, 'red');
+  assert.ok(probe.calls > 0, 'the probe must be SAMPLED while the beat waits, not called once at the end');
+  assert.match(
+    verdict.failures.join(' | '),
+    /SDK child state=S utime 154→197/,
+    `the trend must reach the verdict. Got: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.22-5 (positive control) with NO probe the failure text is unchanged', async () => {
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: null });
+  const verdict = await driveBeat(page as never, answerBeat(1_000), 1, 'http://localhost:4124');
+  assert.equal(verdict.status, 'red');
+  assert.doesNotMatch(verdict.failures.join(' | '), /\/proc/, 'no probe, no /proc noise');
+});
+
+test('AT-6.11.22-6 (positive control) a beat that SUCCEEDS carries no probe noise', async () => {
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: 300, stalledAfterMs: null });
+  const probe = fakeProbe('anything at all');
+  const verdict = await driveBeat(
+    page as never, answerBeat(5_000), 1, 'http://localhost:4124', {}, undefined, probe,
+  );
+  assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
+  assert.doesNotMatch(verdict.failures.join(' | '), /anything at all/, 'diagnosis rides on FAILURE only');
+});
+
+/**
+ * `fillAll` in the runner (bead `forge-8vfn.6.11.21`, T1 ruling 271).
+ *
+ * `ArchitectQuestionForm` renders one free-text box per question and enables
+ * Submit only once EVERY question is answered. The count is model-determined —
+ * two questions in one measured architect turn, three in another — so a story
+ * cannot name a fixed number of `fill` steps, and a single `fill` against a
+ * `data-field` shared by N boxes trips playwright strict mode on the first one.
+ */
+
+/** A page with `n` boxes all sharing one `data-field`, plus a submit action. */
+function fakeStudioWithN(n: number) {
+  const filled: string[] = [];
+  const locator = (sel: string): any => ({
+    first: () => locator(sel),
+    count: async () => (sel.includes('question-freetext') ? n : sel.includes('submit-answers') ? 1 : 0),
+    nth: (i: number) => ({
+      async fill(v: string) { filled[i] = v; },
+      async evaluate(fn: (x: any) => unknown) {
+        return fn({ tagName: 'TEXTAREA', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+      },
+    }),
+    async fill(v: string) { filled[0] = v; },
+    async click() { /* submit */ },
+    waitFor: async () => {},
+    async evaluate(fn: (x: any) => unknown) {
+      return fn({ tagName: 'TEXTAREA', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+    },
+  });
+  return {
+    filled,
+    url: () => 'http://localhost:4124' + SESSION,
+    goto: async () => {},
+    locator,
+    waitForURL: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => ({
+      data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' },
+      nested: [], lifecycle: 'working',
+    }),
+  };
+}
+
+const answerAllBeat = {
+  act: "Answer every one of the Architect's questions",
+  do: [{ fillAll: 'question-freetext', with: 'The gate command is `npm test`.' }, { press: 'submit-answers' }],
+  expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' } },
+  say: 'The operator answers the whole round.',
+};
+
+test('AT-6.11.21-8 (RED) fillAll fills EVERY match — a round of three is fully answered', async () => {
+  const page = fakeStudioWithN(3);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+  assert.deepEqual(
+    page.filled,
+    Array(3).fill('The gate command is `npm test`.'),
+    'every box, not just the first — Submit stays disabled until all are answered',
+  );
+});
+
+test('AT-6.11.21-9 (RED) fillAll with ZERO matches is red, naming the field', async () => {
+  const page = fakeStudioWithN(0);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124', {}, 400);
+  assert.equal(verdict.status, 'red', 'a round with nothing to answer must not pass silently');
+  assert.match(
+    verdict.failures.join(' | '),
+    /question-freetext/,
+    `the field must be NAMED. Got: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.21-10 (positive control) a single match is filled exactly as `fill` would', async () => {
+  const page = fakeStudioWithN(1);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
+  assert.deepEqual(page.filled, ['The gate command is `npm test`.']);
+});

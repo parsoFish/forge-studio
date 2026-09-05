@@ -48,22 +48,32 @@ function validateDoSteps(raw, at) {
       const where = `${at}.do[${i}]`;
       if (step === null || typeof step !== 'object') fail(where, 'expected an object');
       const isFill = Object.hasOwn(step, 'fill');
+      // `fillAll` — bead `forge-8vfn.6.11.21` (T1 ruling 271). One step answers a
+      // WHOLE round. `ArchitectQuestionForm` requires EVERY question answered
+      // before Submit enables, and the question COUNT is model-determined (two
+      // in one measured architect turn, three in another), so a fixed number of
+      // `fill` steps cannot answer a variable number of questions — and one
+      // `data-field` value on N elements trips playwright strict mode on the
+      // first `fill`. Additive: `fill` is untouched and still means "exactly
+      // this one control".
+      const isFillAll = Object.hasOwn(step, 'fillAll');
       const isPress = Object.hasOwn(step, 'press');
-      if (isFill === isPress) {
-        fail(where, `expected exactly one of {fill, with} or {press}, got ${JSON.stringify(step)}`);
+      if ([isFill, isFillAll, isPress].filter(Boolean).length !== 1) {
+        fail(where, `expected exactly one of {fill, with}, {fillAll, with} or {press}, got ${JSON.stringify(step)}`);
       }
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);
         return Object.freeze({ press: step.press });
       }
-      requireNonEmptyString(step.fill, `${where}.fill`);
+      const key = isFillAll ? 'fillAll' : 'fill';
+      requireNonEmptyString(step[key], `${where}.${key}`);
       // `with` is checked as a string, not for truthiness: clearing a field to
       // "" is a real operator action, and coercing a missing value to "" would
       // silently type nothing into a required field.
       if (typeof step.with !== 'string') {
         fail(`${where}.with`, `expected a string value to fill, got ${JSON.stringify(step.with)}`);
       }
-      return Object.freeze({ fill: step.fill, with: step.with });
+      return Object.freeze(isFillAll ? { fillAll: step.fillAll, with: step.with } : { fill: step.fill, with: step.with });
     }),
   );
 }

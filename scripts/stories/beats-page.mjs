@@ -183,7 +183,7 @@ async function stalledNow(page) {
  * Returns a stall record, or null (found, or the bound expired — the act below
  * then throws its own honest failure, exactly as before).
  */
-export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecycle) {
+export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecycle, probe = null) {
   if (!watchLifecycle) {
     await page.locator(handle).first().waitFor({ timeout: timeoutMs }).catch(() => {});
     return null;
@@ -192,6 +192,10 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecyc
   const deadline = startedAt + timeoutMs;
   for (;;) {
     if ((await page.locator(handle).count()) > 0) return null;
+    // Bead `forge-8vfn.6.11.22`: sample the agent's own process WHILE waiting.
+    // Diagnosis must never fail a beat that would otherwise pass, so it throws
+    // nothing and the beat's outcome does not depend on it.
+    if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
     if (await stalledNow(page)) return Object.freeze({ afterMs: Date.now() - startedAt });
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
@@ -229,7 +233,7 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecyc
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle) {
+export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle, probe = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -243,6 +247,7 @@ export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle) 
     // beat gains a new way to fail. The product is believed rather than
     // second-guessed — `stalled` is server-derived, and re-deriving it here
     // from phases or timestamps is the mistake the bar's own header forbids.
+    if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
     if (watchLifecycle && observed.lifecycle === LIFECYCLE_STALLED) {
       return Object.freeze({ afterMs: Date.now() - startedAt });
     }

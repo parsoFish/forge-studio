@@ -3687,7 +3687,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   partial reply, and it matches the architect interview's own long-standing
   rule — `ArchitectQuestionForm` is literally the same component. Journeys
   MUST fill every `[data-question-freetext]` (or select an option per
-  question) before clicking `[data-action="submit-answers"]`.** Without questions on the wire it
+  question) before clicking `[data-action="submit-answers"]`.**
+  **M5-B s7 (bead `forge-8vfn.6.11.21`, T1 rulings 266/271) — each free-text
+  box ALSO carries `[data-field="question-freetext"]`, additively; the indexed
+  `[data-question-freetext={i}]` is unchanged and four journeys still select on
+  it.** The VALUE names the field kind, as `session-answer` does on the generic
+  panel. Bought by a measurement: S2 run 3, the lane's LAST funded S2 run, spent
+  $25 finding that its beat named `[data-field="session-answer"]` — a handle
+  only `SessionInteractivePanel` publishes, and the architect kind is excluded
+  from that affordance BY DESIGN. This component published NO `data-field` at
+  all, and the story runner builds every fill step's selector as
+  `[data-field="<value>"]` (§3.1 gives an author `data-field`/`data-action`
+  VALUES and forbids a CSS selector), so the architect's interview was
+  unreachable by any story — not a beat naming the wrong handle, but no handle
+  to name. **A story answers a whole round with the `fillAll` step**, because
+  every question must be answered before Submit enables and the question COUNT
+  is model-determined (2 in one measured turn, 3 in another): a fixed number of
+  `fill` steps cannot answer a variable number of questions. Without questions on the wire it
   stays a free-text answer field (`[data-field="session-answer"]`)
   and `[data-action="submit-answers"]` — with its own briefing copy
   ("Brief the agent (optional)" / "Start →") when `affordance.phase` is

@@ -317,11 +317,36 @@ export default {
       // `a[data-action="open-session"]`, and `<architectSessionId>` was bound
       // by beat 9. `session-kind` and `session-phase` are the session root's
       // own — S2's worked vocabulary, which costs a spawn to observe live.
-      act: 'Open the session from Monitor and wait for the Architect to finish drafting',
-      do: [{ press: 'open-session' }],
+      act: 'Open the session from Monitor, answer the Architect\'s questions about the work, and wait for it to finish drafting',
+      do: [
+        { press: 'open-session' },
+        {
+          fillAll: 'question-freetext',
+          with: 'Scope it to the commit range the flag already accepts — no new range syntax. The gate command is `npm test`, and the human-readable output must keep working exactly as it does now.',
+        },
+        { press: 'submit-answers' },
+      ],
       // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).
       // A `wait` field changes no expectation and no act — it names the bound
       // the beat is judged under.
+      //
+      // RE-AUTHORED 2026-09-05 (M5-B s7, bead `forge-8vfn.6.11.24`, T1 ruling
+      // 276). The beat used to press `open-session` and wait for
+      // `awaiting-verdict` alone. S4 run 3 — this lane's LAST S4 run — showed
+      // why that can never arrive: the architect turn ran 117.3 s to a CLEAN
+      // end and stopped at `awaiting-answers` having asked the operator
+      // questions, and the beat waited its full 600 000 ms for a draft that
+      // was never coming. The `/proc` trend recorded it in the same verdict
+      // ("it was WORKING … and the process was gone by the end"), so the run
+      // could say "the product asked a question" rather than "the agent hung".
+      //
+      // A fresh architect session's FIRST round is an interview, and no beat
+      // answered it. So the beat now does what the operator does: answers the
+      // whole round (`fillAll`, because Submit stays disabled until EVERY
+      // question is answered and the count is model-determined — two in one
+      // measured turn, three in another), submits, and THEN waits for the
+      // draft. The expectation is unchanged: `awaiting-verdict` is still what
+      // a drafted plan looks like.
       //
       // This beat stands on a REAL AGENT. S4 run 1's own archived
       // `_architect/<id>/status.json` reads `"phase": "interviewing"` at reap,
