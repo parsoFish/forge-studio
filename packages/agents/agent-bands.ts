@@ -40,7 +40,6 @@ import type { BandGuardId } from '@forge/contracts';
  * Re-exported here so this module's fifteen existing importers are unchanged.
  */
 export { TOGGLE_GUARD_IDS, PLATFORM_GUARD_IDS } from '@forge/contracts';
-export type { ToggleGuardId } from '@forge/contracts';
 
 /**
  * Band guard id → the ONE canonical agent slug the band's pipeline loads its
