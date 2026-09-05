@@ -57,6 +57,7 @@ import {
   stationIdForRef,
   nextStationPosition,
   canConnect,
+  pickerAnchorFor,
 } from '@/lib/flow-builder-acts';
 import {
   ConnectActsContext,
@@ -69,6 +70,18 @@ import {
 // ---------------------------------------------------------------------------
 // Layout constants (from the mockup autolayout logic)
 // ---------------------------------------------------------------------------
+/**
+ * `CSS.escape` where it exists, and a conservative fallback where it does not.
+ * Station ids are `stationIdForRef`'s output — an agent ref, or an `fn-<hex>`
+ * for a placed station — so the fallback's character class covers every id the
+ * builder can mint, and anything outside it is escaped rather than passed
+ * through into a selector.
+ */
+const cssEscape = (v: string): string =>
+  typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape(v)
+    : v.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+
 const COL_W = 200;
 const ROW_H = 120;
 const PAD_X = 120;
@@ -475,6 +488,36 @@ export function FlowBuilderCanvas({
           return;
         }
         setRfEdges((eds) => [...eds, stationEdgeShape(sourceId, targetId) as Edge<BuilderEdgeData>]);
+
+        // forge-8vfn.5.12.1: ASK WHICH ARTIFACT, exactly as the pointer path
+        // does. This branch used to stop at the line above, so an edge drawn
+        // through the declared handles carried no artifact — the save route
+        // accepted it (200; `validateArtifactRef` is a `forge studio lint`-only
+        // pass), `serializeFlowDefinition` wrote `edges: [{from, to}]`,
+        // `loadFlowDefinition` then THREW on the missing field, `loadAllFlows`
+        // skipped the unreadable flow, and `/flows/<id>` rendered `not-found`.
+        // The flow the operator had just built was invisible on the page they
+        // were redirected to.
+        //
+        // A press has no cursor, so the anchor comes from the station just
+        // wired into — MEASURED, not computed from `node.position`, which is
+        // flow space (see `pickerAnchorFor`).
+        const targetEl = document.querySelector(`.react-flow__node[data-id="${cssEscape(targetId)}"]`);
+        const anchor = pickerAnchorFor(
+          targetEl === null ? null : targetEl.getBoundingClientRect(),
+          { width: window.innerWidth, height: window.innerHeight },
+        );
+        if (anchor === null) {
+          // Named, never silent — the edge exists and is unlabelled, and the
+          // operator has to know that rather than discover it at load time.
+          rejectDrop(`the edge into "${targetId}" was drawn but its artifact picker could not be anchored — label it by dragging between the ports.`);
+          return;
+        }
+        setPickerState({
+          x: anchor.x,
+          y: anchor.y,
+          connection: { source: sourceId, target: targetId, sourceHandle: null, targetHandle: null },
+        });
       },
     }),
     [rejectDrop],

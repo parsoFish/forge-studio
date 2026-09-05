@@ -91,3 +91,43 @@ export function canConnect(
   }
   return { ok: true };
 }
+
+/** A measured on-screen box — the shape `getBoundingClientRect()` returns. */
+export type ScreenRect = { left: number; top: number; right: number; bottom: number };
+
+/** How far the artifact picker sits from the station it belongs to. */
+const PICKER_OFFSET = 0;
+
+/**
+ * Where to open the artifact picker for an edge drawn by a DECLARED handle
+ * (bead `forge-8vfn.5.12.1`).
+ *
+ * The pointer path anchors the picker at `event.clientX/clientY`. A press has
+ * no cursor — the same gap `nextStationPosition` closes for placement — so the
+ * anchor is derived from the station the edge was wired INTO.
+ *
+ * It takes the station's MEASURED rect, never its `position`: a node's
+ * `position` is flow space, the canvas applies a pan/zoom transform (it
+ * `fitView`s on mount), and a rule reading `position` would claim to follow
+ * the station while pointing somewhere else. Measuring is the caller's job;
+ * deciding is this rule's.
+ *
+ * Returns null when there is nothing to anchor to — an absent node, or a rect
+ * of zero area, which is what `getBoundingClientRect()` reports for a detached
+ * or unrendered element and is indistinguishable from the top-left corner
+ * unless it is named (§15.92). A null opens no picker and lets the caller say
+ * why, rather than putting one in the corner for an edge nobody can associate
+ * with it.
+ */
+export function pickerAnchorFor(
+  rect: ScreenRect | null,
+  viewport: { width: number; height: number },
+): { x: number; y: number } | null {
+  if (rect === null) return null;
+  if (rect.right - rect.left <= 0 || rect.bottom - rect.top <= 0) return null;
+  const clamp = (v: number, hi: number) => Math.max(0, Math.min(v, hi));
+  return {
+    x: clamp(rect.right + PICKER_OFFSET, viewport.width),
+    y: clamp(rect.bottom + PICKER_OFFSET, viewport.height),
+  };
+}
