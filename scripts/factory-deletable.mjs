@@ -7,10 +7,19 @@
  *   1. STATIC. No production file may import `@forge/factory` except the one
  *      resolution seam, `apps/forge/factory-wiring.ts` (clauses 1 and 2). This
  *      half is non-destructive and runs anywhere.
- *   2. LIVE. `packages/factory` and its workspace link are REMOVED, then the
- *      bridge is booted in-process on an OS-assigned port and asked to serve:
- *      `/api/health` must answer as `forge-bridge`, and a route that belongs to
- *      the example must answer 501 — not 500, and not a wrong answer.
+ *   2. LIVE. A THROWAWAY `git worktree` of HEAD is created without the example
+ *      package, and the bridge is booted from THAT tree, in-process on an
+ *      OS-assigned port, and asked to serve: `/api/health` must answer as
+ *      `forge-bridge`, and a route that belongs to the example must answer
+ *      501 — not 500, and not a wrong answer.
+ *
+ *      IT DOES NOT TOUCH THE TREE IT IS RUN FROM, and says so with a porcelain
+ *      check either side (bead forge-8vfn.6.10.21). The first shape of this
+ *      script deleted in place: CI's checkout is ephemeral so CI was fine, but
+ *      `gate.sh` replicates every `ci.yml` step in a PERSISTENT worktree — one
+ *      green gate left it with no example package and the next failed the
+ *      build, 32 tests and four guards on empty populations. A proof that
+ *      destroys the thing it is run against is not a proof.
  *
  * WHY THE BRIDGE AND NOT `forge studio`. `forge studio` is the bridge plus a
  * static Next build that talks to it over HTTP and imports no package at all
@@ -20,13 +29,15 @@
  * on port 0 also keeps the check off the host-global 4123/4124 pair, so it is
  * runnable next to a live studio session.
  *
- * DESTRUCTIVE: run it last in a job, or in a disposable tree. It refuses to run
- * against a tree with uncommitted changes to `packages/factory`, so an operator
- * cannot lose work to it by accident.
+ * SAFE TO RUN ANYWHERE with a committed `packages/factory`: the deletion happens
+ * only in the throwaway worktree. It still refuses to start when `packages/factory`
+ * has uncommitted changes, because a scratch worktree of HEAD would silently
+ * prove the WRONG tree deletable.
  */
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+
+import { createFactorylessWorktree, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 /**
@@ -104,30 +115,39 @@ if (process.argv.includes('--static-only')) {
   process.exit(0);
 }
 
-const dirty = execFileSync('git', ['-C', ROOT, 'status', '--porcelain', '--', 'packages/factory'], { encoding: 'utf8' }).trim();
-if (dirty !== '') fail(`packages/factory has uncommitted changes; refusing to delete it:\n${dirty}`);
+const dirty = porcelain(ROOT, 'packages/factory');
+if (dirty !== '') fail(`packages/factory has uncommitted changes; a scratch worktree of HEAD would prove the wrong tree:\n${dirty}`);
 
-rmSync(join(ROOT, 'packages', 'factory'), { recursive: true, force: true });
-rmSync(join(ROOT, 'node_modules', '@forge', 'factory'), { recursive: true, force: true });
-if (existsSync(join(ROOT, 'packages', 'factory'))) fail('packages/factory still exists after removal');
-console.log('factory-deletable: removed packages/factory and its workspace link.');
-
-const { startBridge } = await import('../apps/forge/ui-bridge.ts');
-const bridge = await startBridge({ forgeRoot: ROOT, port: 0 });
+const { dir: scratch, cleanup } = createFactorylessWorktree(ROOT);
 try {
-  const health = await fetch(`${bridge.url}/api/health`);
-  if (!health.ok) fail(`/api/health answered ${health.status} with no example installed`);
-  const body = await health.json();
-  if (body.service !== 'forge-bridge') fail(`/api/health served ${JSON.stringify(body.service)}, not forge-bridge`);
-  console.log(`factory-deletable: live — the bridge booted at ${bridge.url} and serves /api/health as forge-bridge.`);
+  if (!isFactoryless(scratch)) fail('the scratch worktree still carries the example package — the proof would prove nothing');
+  console.log(`factory-deletable: scratch worktree ${scratch} has no packages/factory and no workspace link to one.`);
 
-  const example = await fetch(`${bridge.url}/api/review-comments/TEST-no-example`);
-  if (example.status !== 501) {
-    fail(`an example-owned route answered ${example.status}; absence must be a SUPPORTED state (501), never a crash or a wrong answer`);
+  const { startBridge } = await import(join(scratch, 'apps', 'forge', 'ui-bridge.ts'));
+  const bridge = await startBridge({ forgeRoot: scratch, port: 0 });
+  try {
+    const health = await fetch(`${bridge.url}/api/health`);
+    if (!health.ok) fail(`/api/health answered ${health.status} with no example installed`);
+    const body = await health.json();
+    if (body.service !== 'forge-bridge') fail(`/api/health served ${JSON.stringify(body.service)}, not forge-bridge`);
+    console.log(`factory-deletable: live — the bridge booted at ${bridge.url} and serves /api/health as forge-bridge.`);
+
+    const example = await fetch(`${bridge.url}/api/review-comments/TEST-no-example`);
+    if (example.status !== 501) {
+      fail(`an example-owned route answered ${example.status}; absence must be a SUPPORTED state (501), never a crash or a wrong answer`);
+    }
+    console.log('factory-deletable: live — an example-owned route answers 501, not 500 and not an answer.');
+  } finally {
+    await bridge.close();
   }
-  console.log('factory-deletable: live — an example-owned route answers 501, not 500 and not an answer.');
 } finally {
-  await bridge.close();
+  cleanup();
 }
+
+// The property the first shape of this script did not have. Asserted, not assumed.
+const after = porcelain(ROOT, 'packages/factory');
+if (after !== '') fail(`the proof MODIFIED the tree it was run from — that is the defect this check exists to never repeat:\n${after}`);
+if (!existsSync(join(ROOT, 'packages', 'factory'))) fail('the proof deleted the caller\'s packages/factory');
+console.log('factory-deletable: the tree this ran from is untouched (packages/factory present, git clean).');
 
 console.log('factory-deletable: PASS — the platform boots and serves with the example package deleted (ADR 048).');
