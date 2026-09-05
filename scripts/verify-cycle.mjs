@@ -52,9 +52,8 @@
  *   --idea-file <path>      the initiative idea fed to the architect (forge-root
  *                           relative). Falls back to the corpus manifest body.
  *   --base-sha <sha>        base commit to reset the harness repo to (routine).
- *   --cost-ceiling <usd>    fail the gate above this total cost (default scales
- *                           with project + send-back; the 3-stage spine costs more
- *                           than a single collapsed run, so the default is higher).
+ *   --cost-ceiling <usd>    BINDS the run (threaded as FORGE_COST_CEILING_USD) and
+ *                           fails the gate above it; the default only asserts.
  *   --require-live-evidence force the live-demo-evidence gate on (default: on for
  *                           known live-resource projects). --no-live-evidence opts out.
  *   --force-reset           allow resetting a repo with uncommitted changes.
@@ -75,6 +74,7 @@ import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
+import { harnessCeilingEnv } from './verify-cycle-ceiling.mjs';
 import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
 import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
@@ -113,7 +113,7 @@ const IS_LIVE_PROJECT = LIVE_PROJECTS.has(PROJECT);
 // the defaults. --send-back adds an extra develop→demo→review pass; live projects
 // add infra cost.
 const _ceilingDefault = IS_LIVE_PROJECT ? (SEND_BACK ? 90 : 70) : (SEND_BACK ? 50 : 35);
-const COST_CEILING = parseFloat(flag('cost-ceiling', String(_ceilingDefault))) || _ceilingDefault;
+const { ceilingUsd: COST_CEILING, bound: COST_CEILING_BINDS, env: COST_CEILING_ENV } = harnessCeilingEnv(argv, _ceilingDefault);
 // The live-demo-evidence gate: on by default for live-resource projects; force
 // with --require-live-evidence, opt out with --no-live-evidence.
 const REQUIRE_LIVE_EVIDENCE =
@@ -137,7 +137,7 @@ function log(msg) { console.log(`[verify ${new Date().toISOString().slice(11, 19
  * headroom header or the :8787 base url so unrelated proxies are left untouched.
  */
 function forgeSpawnEnv(extra = {}) {
-  const env = { ...process.env, ...extra };
+  const env = { ...process.env, ...COST_CEILING_ENV, ...extra };
   const base = env.ANTHROPIC_BASE_URL ?? '';
   const headers = env.ANTHROPIC_CUSTOM_HEADERS ?? '';
   const isHeadroom = /headroom/i.test(headers) || /\/\/(127\.0\.0\.1|localhost):8787\b/.test(base);
@@ -994,7 +994,7 @@ async function main() {
   mkdirSync(FRAMES_DIR, { recursive: true });
 
   // Pre-run: resolve the idea, clean prior state, reset the repo (routine).
-  log(`spine drive · project=${PROJECT} handle=${RUN_HANDLE} ceiling=$${COST_CEILING}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
+  log(`spine drive · project=${PROJECT} handle=${RUN_HANDLE} ceiling=$${COST_CEILING}${COST_CEILING_BINDS ? ' (BINDS the run via FORGE_COST_CEILING_USD)' : ' (post-run assertion only — the run is bound by its manifest)'}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
   const repoPath = projectRepoPath();
   const idea = resolveIdea();
   if (!idea) process.exit(1);
@@ -1174,7 +1174,7 @@ async function main() {
   checks.push({
     name: 'aggregate cost under ceiling',
     pass: totalCost <= COST_CEILING,
-    detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}`,
+    detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}${COST_CEILING_BINDS ? ' (bound: FORGE_COST_CEILING_USD)' : ' (assertion only)'}`,
   });
 
   // Post-run boundary check (R5-01-F3) — always printed, success or failure

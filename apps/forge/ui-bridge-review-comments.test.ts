@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -68,4 +68,48 @@ test('review-comments edit + delete round-trip: append → edit body/blocking �
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
+});
+
+/**
+ * bead forge-8vfn.6.10.20 — ONE `isSafeCycleId`, and it is the flows one.
+ *
+ * The predicate was defined TWICE for one question: `packages/flows/manifest-path-guard.ts`
+ * (type-checked, capped at 200 characters, regex) and `packages/factory/review-comments.ts`
+ * (regex alone). The factory copy was the one guarding these routes, and it is
+ * strictly weaker on two counts that are demonstrable rather than theoretical:
+ * `SAFE_CYCLE_ID_RE.test(7)` is `true` (RegExp coerces its argument, and "7"
+ * matches), and a 300-character id passes a pattern with no length bound.
+ *
+ * The LENGTH gap is asserted at the ROUTE, because that is where the weaker
+ * guard actually stood — a unit test on the predicate would have passed against
+ * the copy too; it was the callers that got the weak one.
+ *
+ * The TYPE gap is NOT asserted here, deliberately. A URL path segment is always
+ * a string, so `isSafeCycleId(7)` is unreachable from the wire; a route test for
+ * it would be green before and after this change and would prove nothing. It is
+ * real in the copy and worth deleting, and that is what the structural
+ * assertion below covers: the copy is gone, so the gap cannot come back.
+ */
+test('a cycle id past the 200-character cap is refused by the review-comment routes (kills: the factory copy of isSafeCycleId, whose regex has no length bound)', async () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'rc-cycleid-len-'));
+  try {
+    mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+    for (const s of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+      mkdirSync(join(forgeRoot, '_queue', s), { recursive: true });
+    }
+    const { url, close } = await startBridge({ forgeRoot, port: 0 });
+    try {
+      const tooLong = `A${'b'.repeat(220)}`;
+      assert.equal(tooLong.length > 200, true, 'precondition: past the cap the flows predicate enforces');
+      const res = await post(url, `/api/review-comments/${tooLong}`, { region: 'ac-1', body: 'x' });
+      assert.equal(res.status, 400, 'an unbounded cycle id must be refused, not turned into a path segment');
+    } finally { await close(); }
+  } finally { rmSync(forgeRoot, { recursive: true, force: true }); }
+});
+
+test('the factory declares no cycle-id predicate of its own (kills: two definitions that agree today and drift tomorrow)', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'factory', 'review-comments.ts'), 'utf8');
+  assert.equal(/export function isSafeCycleId/.test(source), false, 'the copy is deleted, not merely unused');
+  assert.equal(/SAFE_CYCLE_ID_RE/.test(source), false, 'and so is its private regex');
+  assert.match(source, /manifest-path-guard\.ts/, 'it imports the one predicate instead');
 });

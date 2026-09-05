@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import {
   applyFence,
+  starterAgentSlugs,
   describeFence,
   fenceBreaches,
   fixturePathsFor,
@@ -379,4 +380,90 @@ test('AT-6.12-4 (positive control) a clean fence still says clean, and carries a
   const fence = applyFence({ restore: [], remove: [] }, tmpdir());
   assert.deepEqual(fence.removedContents, []);
   assert.deepEqual(describeFence(fence), ['[stories] fence: clean — the run wrote nothing outside its own artifacts']);
+});
+
+/**
+ * The fence names an EXPECTED starter materialisation as such (bead
+ * `forge-8vfn.6.12`, T1 ruling 275).
+ *
+ * S4 runs 2 and 3 both had the fence remove `skills/{dev,plan,review}` and
+ * report them as escapes. #459's listing then pinned the writer: `PUT
+ * /api/studio/flows/:id` materialises STARTER agents into the roster so a
+ * seeded canvas validates on a fresh install (`bridge-studio-writes.ts`
+ * :191/:225-266/:449) — designed behaviour, a CLOSED slug set, and an existing
+ * `skills/<slug>` always wins.
+ *
+ * So the removal is right and the WORDING was not: calling a designed,
+ * documented write an escape trains the reader to skim the fence's own output,
+ * which is the one place a real escape would appear. The fence still removes
+ * them — run 2 must not inherit run 1's roster — and still reds anything else.
+ *
+ * The expected set is DERIVED from `studio/starters/agents/`, the same source
+ * `listStarterAgents` enumerates. Hardcoding `dev|plan|review` would drift the
+ * moment a starter is added, and would quietly stop naming the new one.
+ */
+test('AT-6.12-5 (RED) a removed starter agent is named an EXPECTED materialisation, not an escape', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-starter-'));
+  try {
+    mkdirSync(join(root, 'studio', 'starters', 'agents', 'plan'), { recursive: true });
+    mkdirSync(join(root, 'skills', 'plan'), { recursive: true });
+    writeFileSync(join(root, 'skills', 'plan', 'SKILL.md'), '---\nname: plan\n---\n', 'utf8');
+
+    const fence = applyFence({ restore: [], remove: ['skills/plan'] }, root);
+    assert.deepEqual(fence.removed, ['skills/plan'], 'still removed — run 2 must not inherit run 1 roster');
+    assert.ok(!existsSync(join(root, 'skills', 'plan')), 'and actually gone');
+
+    const said = describeFence(fence, starterAgentSlugs(root)).join('\n');
+    assert.match(said, /EXPECTED/, `a designed materialisation must be named as one. Got: ${said}`);
+    assert.match(said, /skills\/plan/, said);
+    assert.doesNotMatch(said, /created by the run, not its artifact/, `not the escape wording. Got: ${said}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-6 (positive control) a FOREIGN path is still reported as an escape, unchanged', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-starter-'));
+  try {
+    mkdirSync(join(root, 'studio', 'starters', 'agents', 'plan'), { recursive: true });
+    mkdirSync(join(root, 'skills', 'not-a-starter'), { recursive: true });
+    writeFileSync(join(root, 'skills', 'not-a-starter', 'SKILL.md'), 'x', 'utf8');
+
+    const fence = applyFence({ restore: [], remove: ['skills/not-a-starter'] }, root);
+    const said = describeFence(fence, starterAgentSlugs(root)).join('\n');
+    assert.match(said, /created by the run, not its artifact/, `an unknown slug is still an escape. Got: ${said}`);
+    assert.doesNotMatch(said, /EXPECTED/, said);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-7 the expected set is DERIVED from studio/starters/agents, never hardcoded', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-starter-'));
+  try {
+    // A starter this repo does not ship today. A hardcoded dev|plan|review list
+    // would call it an escape; deriving the set names it correctly.
+    mkdirSync(join(root, 'studio', 'starters', 'agents', 'brand-new-starter'), { recursive: true });
+    mkdirSync(join(root, 'skills', 'brand-new-starter'), { recursive: true });
+    writeFileSync(join(root, 'skills', 'brand-new-starter', 'SKILL.md'), 'x', 'utf8');
+
+    assert.deepEqual(starterAgentSlugs(root), ['brand-new-starter']);
+    const fence = applyFence({ restore: [], remove: ['skills/brand-new-starter'] }, root);
+    assert.match(describeFence(fence, starterAgentSlugs(root)).join('\n'), /EXPECTED/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-8 (positive control) with NO starters declared, every removal reads exactly as before', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-starter-'));
+  try {
+    mkdirSync(join(root, 'skills', 'plan'), { recursive: true });
+    writeFileSync(join(root, 'skills', 'plan', 'SKILL.md'), 'x', 'utf8');
+    assert.deepEqual(starterAgentSlugs(root), [], 'a tree with no starters dir yields no expected slugs');
+    const fence = applyFence({ restore: [], remove: ['skills/plan'] }, root);
+    assert.match(describeFence(fence, starterAgentSlugs(root)).join('\n'), /created by the run, not its artifact/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

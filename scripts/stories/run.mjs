@@ -26,18 +26,19 @@
  * teleporting this runner exists to stop.
  */
 import { makeAgentProcProbe } from './beats-agent-proc.mjs';
-import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync, existsSync } from 'node:fs';
+import { readdirSync, mkdirSync, writeFileSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
-import { spendGateVerdict } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
 import { memoryVerdict, readAvailableMb, acquireHostLock } from './preflight.mjs';
 import {
   applyFence,
   describeFence,
   fenceBreaches,
+  starterAgentSlugs,
   readGitPorcelain,
   sweepProductFixtures,
   sweepStoryResidue,
@@ -50,6 +51,19 @@ import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
+ *  never a silent zero (bead `forge-8vfn.6.11.8`). */
+function readRunEvents(dir) {
+  try {
+    return readFileSync(join(dir, 'events.jsonl'), 'utf8')
+      .split('\n')
+      .filter((l) => l.trim() !== '')
+      .map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+  } catch {
+    return [];
+  }
+}
 const STORY_DIR = join(ROOT, 'tests', 'stories');
 const BRIDGE_HEALTH = 'http://localhost:4123/api/health';
 const VIEWPORT = { width: 1600, height: 1000 };
@@ -253,7 +267,11 @@ async function runStory(story, uiUrl, startedMs) {
   // INTO the verdict record — an orphan that outlives its run is unobserved
   // by the gate that started it, and a kill nobody can read afterwards is a
   // side effect rather than evidence (`forge-8vfn.5.37`, reap.mjs header).
-  const reap = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
+  // Collected ONCE and reused: the reap signals and removes, so a second
+  // `collectAgentRuns` after it would find a smaller window and price less than
+  // the run actually spent.
+  const dispatchedRuns = collectAgentRuns(ROOT, startedMs);
+  const reap = await reapAgentRuns(dispatchedRuns, { ownRoot: ROOT });
   // 6.11.12 (T1 ruling 232): the kill cannot write its own ending, so the
   // reserved terminal phase is stamped here — the same act, through the same
   // guarded seam, as the generic cancel route. The reason quotes the run's
@@ -266,6 +284,18 @@ async function runStory(story, uiUrl, startedMs) {
   });
   for (const line of describeReap(reap)) console.log(line);
 
+  // Bead `forge-8vfn.6.11.8` — the spend COLUMN. Read from the dispatched
+  // runs' OWN event logs, collected before the reap removed them from the
+  // window, so a turn that priced itself is reported and a turn that was reaped
+  // before writing a terminal event is reported as UNMEASURED with the reason.
+  // Never `$0.00`: a zero meaning "nothing was spent" and a zero meaning
+  // "nobody looked" printing the same is what four H6 runs cost to learn.
+  const spend = summariseRunSpend({
+    realSpawn: story.ground?.realSpawn === true,
+    events: dispatchedRuns.map((r) => readRunEvents(r.dir)),
+  });
+  console.log(`[stories] spend: ${spend.label}`);
+
   // §3.1's trailing duty: the fixtures this story CREATED in the product. Not
   // its own output — `demos/stories/<id>` IS the artifact. The comment that
   // used to stand here ("the smoke story creates none") was true of `smoke` and
@@ -277,7 +307,10 @@ async function runStory(story, uiUrl, startedMs) {
 
   // And the fence, over everything the product wrote that carries no story id.
   const fence = applyFence(fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id), ROOT);
-  for (const line of describeFence(fence)) console.log(line);
+  // Bead `forge-8vfn.6.12` (ruling 275) — a flow save legitimately materialises
+  // starter agents into the roster, so the fence names those as EXPECTED while
+  // still removing them; anything else is still an escape.
+  for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
 
   const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);

@@ -39,7 +39,7 @@ import { readFileSync } from 'node:fs';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
+import { CostTracker, WedgeDetector, RateLimitGate, type CeilingSource } from './flow-budgets.ts';
 // §15.43: all three were reached through `orchestrator/studio/registry.ts`,
 // which only re-exports them. Imported from their real owners instead — every
 // one is a strictly lower rank, so the carve-in costs no boundary row.
@@ -228,6 +228,8 @@ export type FlowRunArgs = {
    * ceiling than the shared seed flow without mutating the flow file.
    */
   costCeilingUsd?: number;
+  /** Which knob `costCeilingUsd` came from (bead forge-8vfn.6.10.23). */
+  costCeilingSource?: CeilingSource;
 };
 
 // ---------------------------------------------------------------------------
@@ -398,6 +400,7 @@ export async function runFlow({
   nodeBudgets,
   rateLimitGate: injectedGate,
   costCeilingUsd,
+  costCeilingSource,
   priorSpendEvents,
 }: FlowRunArgs): Promise<{
   cycleOutcome: CycleOutcome;
@@ -425,6 +428,8 @@ export async function runFlow({
   // cost_ceiling_usd) wins over the flow's own ceiling when provided.
   const costTracker = new CostTracker({
     ceilingUsd: costCeilingUsd ?? flow.costCeilingUsd ?? 0,
+    // Falling through to the flow's own ceiling means the FLOW bounds this run.
+    ceilingSource: costCeilingUsd !== undefined ? (costCeilingSource ?? 'none') : (flow.costCeilingUsd !== undefined ? 'flow' : 'none'),
     initiativeId: rawInput.initiativeId,
     logger,
   });
