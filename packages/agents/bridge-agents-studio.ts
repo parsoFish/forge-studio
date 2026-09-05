@@ -22,7 +22,7 @@
  * `resolveDefaultKickoffCeilingUsd` are `@forge/kernel`'s; and
  * `@forge/library`'s catalog, hook and skill-trust readers are a legal rank-3 →
  * rank-2 import. Only THREE things genuinely live above this package:
- * `validateAgent` (still `orchestrator/studio/validate.ts` — the Agent kind's
+ * `validateAgent` (this package's `studio/validate-agent.ts` since ruling 159 — the Agent kind's
  * validator is the half of the registry split that has not moved yet) and the
  * Flow-kind pair `listFlowIds` / `loadFlowDefinition`, which wave 4 carries.
  * The roster GET needs no injection at all.
@@ -65,23 +65,20 @@ import { serializeAgentDefinition } from './studio/skill-md-fidelity.ts';
 import {
   isStudioAgent, loadAgentDefinition, listAgentDefinitions,
 } from './studio/agent-registry.ts';
+import { validateAgent } from './studio/validate-agent.ts';
 
 /**
- * The three symbols that genuinely live above rank 3, declared structurally.
- * `apps/forge/routes.ts` supplies them; `validateAgent` returns to this package
- * when the registry split's validator half lands, and the Flow pair when wave 4
+ * The symbols that genuinely live above rank 3, declared structurally.
+ * `apps/forge/routes.ts` supplies them; the Flow pair comes home when wave 4
  * carves the Flow kind.
+ *
+ * `validateAgent` USED to be a fourth field here, injected only because the
+ * Agent kind's validator was still `orchestrator/studio/validate.ts`. Ruling
+ * 159 brought it into this package (`studio/validate-agent.ts`), so the port
+ * is retired and the call below imports it — exactly what the old comment
+ * said would happen "when it does".
  */
 export type AgentStudioRouteDeps = {
-  /** `validateAgent(def, validModelIds?, validGuardIds?)` — still
-   *  `orchestrator/studio/validate.ts`: the Agent kind's VALIDATOR is the half
-   *  of the registry split that has not moved yet, so it is injected rather
-   *  than imported, and this declaration comes home when it does. */
-  validateAgent(
-    def: AgentDefinition,
-    validModelIds?: ReadonlySet<string>,
-    validGuardIds?: ReadonlySet<string>,
-  ): readonly { level?: string; message?: string }[];
   listFlowIds(forgeRoot: string): string[];
   loadFlowDefinition(flowYamlPath: string): FlowDefinition;
   /** Library's `AgentFacts` port, bound at `apps/forge`. This module calls
@@ -589,7 +586,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     );
 
     // 6. Validate — reject on any error-level finding
-    const findings = [...deps.validateAgent(merged, undefined, validGuardIds), ...hookCompositionFindings];
+    const findings = [...validateAgent(merged, undefined, validGuardIds), ...hookCompositionFindings];
     const hasErrors = findings.some((f) => f.level === 'error');
     if (hasErrors) {
       sendJson(res, 400, { error: 'validation failed', findings }, origin);

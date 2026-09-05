@@ -516,7 +516,7 @@ export type CommunitySkill = {
 // declared-list source of truth for community items (skill/hook/mcp/tool),
 // superseding catalog.yaml's former `community-skills:` section (which only
 // ever covered kind:skill). Loaded by orchestrator/studio/registry.ts
-// (`loadCommunityRegistry`); validated by orchestrator/studio/validate.ts
+// (`loadCommunityRegistry`); validated by @forge/library/studio/library-validate.ts
 // (`validateCommunityRegistry`), wired into `forge studio lint` via
 // apps/forge/studio-lint.ts.
 // ---------------------------------------------------------------------------

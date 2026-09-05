@@ -6,7 +6,7 @@
  * Root cause: `apps/forge/bridge-studio-writes.ts` (~L422) calls
  * `validateAgent(merged)` with NO second (`validModelIds`) or third
  * (`validGuardIds`) argument, so the `if (validGuardIds) {...}` branch
- * inside `composition/guard-unknown` (`orchestrator/studio/validate.ts`)
+ * inside `composition/guard-unknown` (`@forge/agents/studio/validate-agent.ts`)
  * never executes on `PUT /api/studio/agents/:slug`. A typo'd or unknown
  * guard id — via the builder UI or a raw API call — is accepted with 200
  * and persisted to disk, silently inert until someone happens to run
@@ -26,7 +26,7 @@
  * `apps/forge/bridge-studio-write.test.ts`'s "empty purpose → 400 + findings,
  * SKILL.md unchanged" test already pins exactly this contract for
  * `readiness/purpose`. `composition/guard-unknown` is an ERROR-level finding
- * (`err(...)`, not `flag(...)` — `orchestrator/studio/validate.ts`), so
+ * (`err(...)`, not `flag(...)` — `@forge/agents/studio/validate-agent.ts`), so
  * wiring `validGuardIds` into the SAME `validateAgent()` call makes this
  * exact 400 path fire automatically — no new response shape is needed, and
  * the route does NOT currently ignore validation errors wholesale (it

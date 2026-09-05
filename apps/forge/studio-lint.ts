@@ -52,15 +52,12 @@ import { lintTemplateLibrary } from '@forge/library/studio/template-library.ts';
 import { lintHookComposition, lintHookDefinitions } from '@forge/library/studio/hook-library.ts';
 import { lintCommunityIndex } from '@forge/library/studio/community-index.ts';
 import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-validate.ts';
-import {
-  validateAgent,
-  validateArtifactRef,
-  validateFlow,
-  validateKb,
-  validateDiscoveredProjects,
-  validateLibraryFlag,
-  type Finding,
-} from '../../orchestrator/studio/validate.ts';
+import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
+import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
+import { validateKb } from '@forge/knowledge/studio/validate-kb.ts';
+import { validateDiscoveredProjects } from '@forge/projects/studio/validate-project.ts';
+import { validateLibraryFlag } from '@forge/library/studio/library-validate.ts';
+import type { Finding } from '@forge/kernel/findings.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';

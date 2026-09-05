@@ -118,7 +118,7 @@ test('rule 1c — the assembly reaching DOWN into a legacy tree stays visible', 
   // assembly's own 14 edges into `orchestrator/` and `cli/` matched nothing and
   // were unmeasured — the table said the assembly was clean because no rule
   // could see it.
-  assert.equal(classify('apps/forge/routes.ts', 'orchestrator/studio/validate.ts'), 'assembly-to-legacy');
+  assert.equal(classify('apps/forge/dispatch-decision-capture.test.ts', 'orchestrator/test-fixtures/spawn-capture/normalize.ts'), 'assembly-to-legacy');
   assert.equal(classify('apps/forge/cli.ts', 'cli/studio-lint.ts'), 'assembly-to-legacy');
   assert.equal(classify('apps/forge/x.ts', 'loops/y.ts'), 'assembly-to-legacy');
 });

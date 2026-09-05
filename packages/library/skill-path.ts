@@ -10,7 +10,7 @@
  * agents is `splitSkillTurnSections`/`loadSkillTurnPrompt` — per-turn prompt
  * composition, which is the per-spawn runtime the spec carves out to agents.
  * What went to `@forge/kernel` is the id vocabulary and the slug guard, which
- * `orchestrator/studio/validate.ts` re-exports to validate projects and KBs.
+ * `orchestrator/studio/validate.ts` re-exported to validate projects and KBs (that file is gone; the four validators are package-owned since ruling 159).
  *
  * `skillPath` returns an ABSOLUTE path — use it for direct file reads.
  * `deriveAgentSpec('skills/<name>/SKILL.md')` sites must instead use

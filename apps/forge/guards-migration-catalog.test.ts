@@ -2,7 +2,7 @@
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — B1-B3 of the
  * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename,
  * targeting `studio/catalog.yaml` + `orchestrator/studio/registry.ts`'s
- * `loadCatalog` + `orchestrator/studio/validate.ts`'s `validateCatalog`.
+ * `loadCatalog` + `@forge/library/studio/library-validate.ts`'s `validateCatalog`.
  *
  * At that migration's landing the 9 ids were unchanged (5 toggles, 4 bands —
  * `BAND_GUARD_IDS`); what moved is the section name (`hooks:` → `guards:`)
