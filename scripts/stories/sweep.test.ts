@@ -266,6 +266,8 @@ test('a tracked file the RUN dirtied is restored, and an untracked file the run 
   assert.deepEqual(fenceBreaches(before, after, 'S8'), {
     restore: ['studio/community/registry.yaml'],
     remove: ['studio/hooks/block-protected-branch-push/', 'skills/plan/SKILL.md'],
+    // Ruling 308 — a story that declares no ground defers nothing.
+    defer: [],
   });
 });
 
@@ -275,7 +277,7 @@ test('a file that was ALREADY dirty before the run is the operator\'s, and is ne
   // a gate they only meant to observe.
   const dirty = porcelainZ(' M packages/projects/reset.ts', '?? notes.md');
   const breaches = fenceBreaches(parseGitPorcelain(dirty), parseGitPorcelain(dirty), 'S8');
-  assert.deepEqual(breaches, { restore: [], remove: [] });
+  assert.deepEqual(breaches, { restore: [], remove: [], defer: [] });
 });
 
 test('the run\'s OWN artifacts are never a breach, wherever the fence is called', () => {
@@ -285,7 +287,7 @@ test('the run\'s OWN artifacts are never a breach, wherever the fence is called'
   const after = parseGitPorcelain(
     porcelainZ('?? demos/stories/S8/', ' M demos/stories/index.html', ' M docs/how-to/S8.md', '?? docs/tutorials/S8.md'),
   );
-  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [] });
+  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [], defer: [] });
 });
 
 test('another story\'s artifact IS a breach — the allowance is this run\'s id, not the gallery', () => {
@@ -293,6 +295,7 @@ test('another story\'s artifact IS a breach — the allowance is this run\'s id,
   assert.deepEqual(fenceBreaches([], after, 'S8'), {
     restore: ['demos/stories/S2/story.json', 'docs/how-to/S2.md'],
     remove: [],
+    defer: [],
   });
 });
 

@@ -20,7 +20,7 @@
  */
 import { rmSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 /** A story id must be a single safe path segment — it is interpolated into
@@ -111,6 +111,16 @@ export function sweepProductFixtures(storyId, root) {
   return removeAll(productFixturePathsFor(storyId, root));
 }
 
+/**
+ * Remove a set of absolute paths, reporting only what was actually there.
+ * Exported for ruling 308's late removal: the ground's Brain 3 is HELD through
+ * the fence so preflight C4 can pass while the verdict is read, then removed
+ * once `story.json` is written.
+ */
+export function removePaths(paths) {
+  return removeAll(paths);
+}
+
 function removeAll(paths) {
   const removed = [];
   const failed = [];
@@ -198,20 +208,100 @@ function runArtifactPaths(storyId) {
  * @returns {{restore: string[], remove: string[]}} tracked paths to put back,
  *   and paths that did not exist before this run and are not its artifact.
  */
-export function fenceBreaches(before, after, storyId) {
+export function fenceBreaches(before, after, storyId, groundProject = null) {
   assertSafeStoryId(storyId);
   const wasDirty = new Set(before.map((entry) => entry.path));
   const artifacts = runArtifactPaths(storyId);
   const isArtifact = (path) =>
     artifacts.some((a) => (a.endsWith('/') ? path.startsWith(a) : path === a));
 
+  // Ruling 308 — the ground project's Brain 3 sub-wiki is a DESIGNED write, not
+  // an escape: S1's onboarding creates it, and preflight clause C4 requires it,
+  // so removing it at fence time made S1's own exit row unreachable. Only the
+  // ground THIS story declares is exempt; another project's brain is still an
+  // escape. It is held, not kept — the trailing removal runs once the verdict
+  // is recorded, so a post-run `forge preflight` still sees it.
+  const groundBrain =
+    groundProject !== null && /^[a-zA-Z0-9._-]+$/.test(groundProject)
+      ? `brain/projects/${groundProject}/`
+      : null;
+
   const restore = [];
   const remove = [];
+  const defer = [];
   for (const entry of after) {
     if (wasDirty.has(entry.path) || isArtifact(entry.path)) continue;
+    if (groundBrain !== null && entry.path.startsWith(groundBrain)) { defer.push(entry.path); continue; }
     (entry.xy === '??' ? remove : restore).push(entry.path);
   }
-  return { restore, remove };
+  return { restore, remove, defer };
+}
+
+/**
+ * Escapes into git worktrees this run does NOT own — T1 ruling 309(b).
+ *
+ * S1 run 5 printed `fence: clean` in the same run that wrote into the main
+ * checkout. The fence read only its own tree's porcelain, so a sibling-tree
+ * write was invisible by construction — and that is the escape that matters
+ * most, because it touches a tree the run does not own.
+ *
+ * Siblings come from `git worktree list`, never a hardcoded path: the guard
+ * must cover whatever trees the host has, and the tree that got hit was the
+ * main checkout only by accident. Call once before the run for a baseline,
+ * once after with that baseline to get what GREW.
+ *
+ * Nothing here is ever removed. Deleting from a tree the run does not own is
+ * not the fence's business; naming it is.
+ *
+ * @param {string} root the run's OWN worktree, excluded from the result
+ * @returns {Map<string,Set<string>>} sibling worktree dir -> its dirty paths
+ */
+export function snapshotSiblingWorktrees(root) {
+  const trees = new Map();
+  let listing = '';
+  try {
+    listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
+  } catch {
+    return trees; // not a worktree-bearing checkout (or no git): no siblings to judge
+  }
+  for (const line of listing.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const dir = line.slice('worktree '.length).trim();
+    if (dir === '' || resolve(dir) === resolve(root)) continue;
+    let rows = [];
+    try {
+      // `-uall` and not the default: git COLLAPSES an untracked directory to its
+      // top level, so the escape that started this would have been named
+      // `brain/` — true, and useless to whoever has to investigate it. An
+      // escape report is only actionable at full path precision.
+      rows = parseGitPorcelain(
+        execFileSync('git', ['status', '--porcelain', '-z', '-uall'], { cwd: dir, encoding: 'utf8' }),
+      );
+    } catch {
+      continue; // a pruned or unreadable tree is not this run's finding
+    }
+    trees.set(dir, new Set(rows.map((r) => r.path)));
+  }
+  return trees;
+}
+
+/**
+ * What GREW in a sibling worktree since `baseline` — the escapes this run is
+ * answerable for. Pre-existing dirt in someone else's tree is never charged to
+ * this run.
+ *
+ * @param {string} root the run's own worktree
+ * @param {Map<string,Set<string>>} baseline from `snapshotSiblingWorktrees` before the run
+ * @returns {Array<{root: string, paths: string[]}>}
+ */
+export function siblingWorktreeEscapes(root, baseline) {
+  const grown = [];
+  for (const [dir, paths] of snapshotSiblingWorktrees(root)) {
+    const was = baseline.get(dir) ?? new Set();
+    const added = [...paths].filter((p) => !was.has(p)).sort();
+    if (added.length > 0) grown.push({ root: dir, paths: added });
+  }
+  return grown;
 }
 
 /**
@@ -444,10 +534,30 @@ export function starterAgentSlugs(root) {
 
 /** The fence's report, always printed — a clean run says so (§15.92). */
 export function describeFence(fence, expectedStarters = []) {
-  if (fence.restored.length === 0 && fence.removed.length === 0 && fence.failed.length === 0) {
+  const defer = fence.defer ?? [];
+  const escapes = fence.escapes ?? [];
+  if (
+    fence.restored.length === 0 && fence.removed.length === 0 && fence.failed.length === 0 &&
+    defer.length === 0 && escapes.length === 0
+  ) {
     return ['[stories] fence: clean — the run wrote nothing outside its own artifacts'];
   }
   return [
+    // Ruling 308 — a sanctioned write is still a write, and is still stated. It
+    // is NOT folded into "clean": a reader who learns that the fence's one line
+    // sometimes hides a write stops reading the line an escape appears on.
+    ...defer.map((p) =>
+      `[stories] fence: HELD ${p} — EXPECTED: the story's own onboarding creates the ground's ` +
+      'Brain 3 sub-wiki (ADR 035) and preflight clause C4 requires it; kept until the verdict ' +
+      'is recorded, then removed by the trailing sweep',
+    ),
+    // Ruling 309(b) — a tree this run does not own. Never removed from here.
+    ...escapes.flatMap(({ root, paths }) =>
+      paths.map((p) =>
+        `[stories] fence: ESCAPED ${p} — written into ${root}, a worktree this run does not own; ` +
+        'NOT removed (that tree is not the fence\'s to edit) — investigate before trusting this run',
+      ),
+    ),
     ...fence.restored.map((p) => `[stories] fence: RESTORED ${p} — the run wrote a repo-tracked file outside its artifacts`),
     ...fence.removed.map((p) => {
       const slug = /^skills\/([^/]+)$/.exec(p)?.[1];

@@ -27,7 +27,7 @@
  */
 import { makeAgentProcProbe } from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 
@@ -40,6 +40,9 @@ import {
   fenceBreaches,
   starterAgentSlugs,
   readGitPorcelain,
+  snapshotSiblingWorktrees,
+  siblingWorktreeEscapes,
+  removePaths,
   sweepProductFixtures,
   sweepStoryResidue,
 } from './sweep.mjs';
@@ -212,6 +215,11 @@ async function runStory(story, uiUrl, startedMs) {
   // the leading sweep, so a previous run's residue is never charged to this one
   // and an operator's work-in-progress is never charged to it either.
   const treeBefore = readGitPorcelain(ROOT);
+  // Ruling 309(b) — the fence used to read ONLY this tree, so S1 run 5 printed
+  // `fence: clean` in the same run that wrote into the main checkout. Every
+  // OTHER worktree of this repo is snapshotted too; what grows in one is an
+  // escape into a tree this run does not own.
+  const siblingsBefore = snapshotSiblingWorktrees(ROOT);
   const outDir = join(ROOT, 'demos', 'stories', story.id);
   const framesDir = join(outDir, 'frames');
   const clipTmp = join(outDir, '_clip');
@@ -306,7 +314,11 @@ async function runStory(story, uiUrl, startedMs) {
   for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
 
   // And the fence, over everything the product wrote that carries no story id.
-  const fence = applyFence(fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id), ROOT);
+  const fence = applyFence(
+    fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null),
+    ROOT,
+  );
+  fence.escapes = siblingWorktreeEscapes(ROOT, siblingsBefore);
   // Bead `forge-8vfn.6.12` (ruling 275) — a flow save legitimately materialises
   // starter agents into the roster, so the fence names those as EXPECTED while
   // still removing them; anything else is still an escape.
@@ -314,6 +326,16 @@ async function runStory(story, uiUrl, startedMs) {
 
   const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);
+
+  // Ruling 308's second half — the ground's Brain 3 was HELD through the fence
+  // so preflight clause C4 can pass while the verdict is being read (removing
+  // it made S1's own exit row unreachable). The verdict is recorded now, so the
+  // trailing removal happens here rather than never.
+  if ((fence.defer ?? []).length > 0) {
+    const held = removePaths(fence.defer.map((p) => join(ROOT, p)));
+    for (const p of held.removed) console.log(`[stories] trailing sweep removed ${relative(ROOT, p)} (held for the verdict)`);
+    for (const f of held.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
+  }
 
   const docPath = docPathFor(story, ROOT);
   mkdirSync(dirname(docPath), { recursive: true });
@@ -325,6 +347,20 @@ async function runStory(story, uiUrl, startedMs) {
   console.log(`[stories] ${story.id}: ${row.status} — ${row.greenBeats}/${row.beats} beats green`);
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
+
+  // Ruling 309(b) — an escape into a tree this run does not own reds the run
+  // even when every beat is green. S1 run 5 was the reverse of this: a run that
+  // wrote into the main checkout and reported `fence: clean`, because nothing
+  // looked. A containment failure is not a footnote on a green verdict.
+  const escaped = (fence.escapes ?? []).reduce((n, e) => n + e.paths.length, 0);
+  if (escaped > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${escaped} path(s) written into ` +
+      `${fence.escapes.length} worktree(s) this run does not own (named above). The run is RED ` +
+      'regardless of its beats.',
+    );
+    return 1;
+  }
 
   return row.status === 'green' ? 0 : 1;
 }
