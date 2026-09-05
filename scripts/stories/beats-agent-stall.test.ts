@@ -186,3 +186,151 @@ test('AT-6.11.17-7 (positive control) a beat that really does exhaust its declar
     `a bound that genuinely fired must still be named. Got: ${JSON.stringify(verdict.failures)}`,
   );
 });
+
+/**
+ * The SECOND place an agent-scale bound is spent, found by reading what the
+ * held S2/S1 runs actually do rather than by another run.
+ *
+ * S2 beat 12's `do` is three steps — `press open-session` (navigates),
+ * `fill session-answer`, `press submit-answers` — and
+ * `SessionInteractivePanel.tsx:455` renders that field ONLY inside a
+ * `question-form` affordance, i.e. only once the architect has ASKED. So the
+ * bound goes into `performSteps`' handle wait, not into `waitForConsequence`:
+ * a single `locator.waitFor({ timeout })`, which cannot consult the lifecycle
+ * mid-wait. S1 beat 6 has the same shape.
+ *
+ * And the bound is spent TWICE: the handle wait swallows its timeout, then
+ * `setControl` runs with the SAME bound and `readShape`'s evaluate waits again
+ * — a ten-minute declared bound on a field that never appears is a
+ * twenty-minute beat. Nothing had a bound long enough to expose that until
+ * #438 gave these three beats one.
+ */
+
+/** A session page whose `question-form` field appears only after `fieldAfterMs`. */
+function fakeStudioWithField(spec: {
+  commitMs: number;
+  fieldAfterMs: number | null;
+  stalledAfterMs: number | null;
+}) {
+  let route = MONITOR;
+  const startedAt = Date.now();
+  const since = () => Date.now() - startedAt;
+  const hasField = () => spec.fieldAfterMs !== null && since() >= spec.fieldAfterMs;
+  const lifecycle = () =>
+    spec.stalledAfterMs !== null && since() >= spec.stalledAfterMs ? 'stalled' : 'working';
+
+  const until = (pred: () => boolean, timeout: number, what: string) =>
+    new Promise<void>((resolve, reject) => {
+      const began = Date.now();
+      const tick = () => {
+        if (pred()) return resolve();
+        if (Date.now() - began >= timeout) return reject(new Error(`Timeout ${timeout}ms exceeded waiting for ${what}`));
+        setTimeout(tick, 5);
+      };
+      tick();
+    });
+
+  const present = (sel: string) => {
+    if (sel.includes('open-session')) return route === MONITOR;
+    if (sel.includes('session-answer') || sel.includes('submit-answers')) return route === SESSION && hasField();
+    return false;
+  };
+
+  const locator = (sel: string): any => ({
+    first: () => locator(sel),
+    count: async () => (present(sel) ? 1 : 0),
+    waitFor: ({ timeout }: { timeout: number }) => until(() => present(sel), timeout, sel),
+    async click({ timeout = 5000 }: { timeout?: number } = {}) {
+      await until(() => present(sel), timeout, sel).catch(() => {
+        throw new Error(`locator.click: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
+      if (sel.includes('open-session')) setTimeout(() => { route = SESSION; }, spec.commitMs);
+    },
+    async fill(_v: string, { timeout = 5000 }: { timeout?: number } = {}) {
+      await until(() => present(sel), timeout, sel).catch(() => {
+        throw new Error(`locator.fill: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
+    },
+    async evaluate(fn: (n: any) => unknown, _a?: unknown, { timeout = 5000 }: { timeout?: number } = {}) {
+      await until(() => present(sel), timeout, sel).catch(() => {
+        throw new Error(`locator.evaluate: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
+      return fn({
+        tagName: 'TEXTAREA', textContent: '', type: '', value: '',
+        querySelector: () => null, disabled: false, title: '', getAttribute: () => null,
+      });
+    },
+  });
+
+  return {
+    url: () => `http://localhost:4124${route}`,
+    goto: async (u: string) => { route = new URL(u).pathname; },
+    locator,
+    waitForURL: (pred: (u: string) => boolean, o: { timeout: number }) =>
+      until(() => pred(`http://localhost:4124${route}`), o.timeout, 'the URL'),
+    waitForSelector: (_s: string, _o: { timeout: number }) => Promise.resolve(),
+    evaluate: async () => ({
+      data: route === SESSION
+        ? { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' }
+        : { page: 'monitor', 'page-ready': 'true' },
+      nested: [],
+      lifecycle: route === SESSION ? lifecycle() : null,
+    }),
+  };
+}
+
+/** S2 beat 12's shape. */
+const answerBeat = (upTo: number | null) => ({
+  act: "Open the session again and answer the Architect's questions about the project",
+  do: [
+    { press: 'open-session' },
+    { fill: 'session-answer', with: 'The gate command is `npm test`.' },
+    { press: 'submit-answers' },
+  ],
+  ...(upTo === null ? {} : { wait: { for: 'agent', upTo } }),
+  expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' } },
+  say: 'The operator answers the Architect and it goes away to draft.',
+});
+
+test('AT-6.11.17-8 (RED) a stalled session reds a beat waiting for a handle inside its do block', async () => {
+  // The field NEVER appears and the product says `stalled` at 200 ms. Without
+  // the early red this burns the declared bound TWICE — once in the handle
+  // wait, once in setControl — so the assertion below is deliberately far
+  // tighter than one bound, let alone two.
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: 200 });
+  const began = Date.now();
+  const verdict = await driveBeat(page as never, answerBeat(30_000), 1, 'http://localhost:4124');
+  const took = Date.now() - began;
+
+  assert.equal(verdict.status, 'red', 'the field never appears, so the beat cannot pass');
+  assert.ok(took < 10_000, `it must stop at the stall, not sit out its bound (twice) — took ${took} ms`);
+  assert.match(
+    verdict.failures.join(' | '),
+    /stalled/,
+    `the refusal must NAME the stall. Got: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.17-9 (positive control) a handle that arrives late is still waited for', async () => {
+  // The architect asks at 400 ms — well inside the declared bound. The beat
+  // must wait for it and go green, never red early on a session that is
+  // merely working.
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: 400, stalledAfterMs: null });
+  const verdict = await driveBeat(page as never, answerBeat(6_000), 1, 'http://localhost:4124');
+  assert.equal(
+    verdict.status,
+    'green',
+    `a working session whose field arrives at 400 ms must be waited for. Failures: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.17-10 (positive control) a beat with no declared agent wait keeps its old failure text', async () => {
+  const page = fakeStudioWithField({ commitMs: 20, fieldAfterMs: null, stalledAfterMs: 50 });
+  const verdict = await driveBeat(page as never, answerBeat(null), 1, 'http://localhost:4124', {}, 400);
+  assert.equal(verdict.status, 'red', 'the field never appears');
+  assert.doesNotMatch(
+    verdict.failures.join(' | '),
+    /stalled/,
+    'the early red stays scoped to beats that declared an agent wait',
+  );
+});
