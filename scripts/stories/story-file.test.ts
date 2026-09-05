@@ -214,3 +214,42 @@ test('do steps come back frozen, like the rest of the story', () => {
     s.beats[0].do.push({ press: 'anything' });
   }, TypeError);
 });
+
+/* ------------------------------------------------------------------------ *
+ * Bead `forge-8vfn.6.11.10` — a beat's declared agent-scale wait.
+ *
+ * The trap this file already knows: `validateStory` builds each beat from a
+ * fixed field list, so an undeclared key is dropped SILENTLY. That is what
+ * happens to `fork` today (S2 beat 3 says so in its own comment), and it is
+ * what would happen to `wait` if it were only implemented in `beats.mjs` — the
+ * story would declare an agent wait, the runner would never see it, and the
+ * beat would red at fifteen seconds with no sign of why.
+ * ------------------------------------------------------------------------ */
+
+const withWait = (wait) => ({ ...ok, beats: [{ ...ok.beats[0], wait }] });
+
+test('a beat\'s declared agent wait SURVIVES validation — it is not dropped like fork', () => {
+  const s = validateStory(withWait({ for: 'agent', upTo: 600_000 }));
+  assert.deepEqual(s.beats[0].wait, { for: 'agent', upTo: 600_000 });
+});
+
+test('a beat with no wait declares none — every story authored before this keeps working', () => {
+  const s = validateStory(ok);
+  assert.equal(s.beats[0].wait, undefined);
+});
+
+test('an unknown wait kind is REFUSED by name, never treated as the DOM default', () => {
+  // Fail-closed: silently ignoring `for: 'agnet'` would give the beat the 15 s
+  // bound it was declared to escape, and the run record would blame the
+  // product. Same rule `parseContractStageStatus` states one package over.
+  assert.throws(() => validateStory(withWait({ for: 'agnet', upTo: 600_000 })), /wait\.for/);
+});
+
+test('a wait with no upTo, a non-integer, or an out-of-range bound is REFUSED', () => {
+  // A declared wait is a licence to sit still; an unbounded or absurd one
+  // turns a red run into a hung host, which is worse than the defect.
+  assert.throws(() => validateStory(withWait({ for: 'agent' })), /wait\.upTo/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: '600000' })), /wait\.upTo/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 0 })), /wait\.upTo/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 60 * 60 * 1000 })), /wait\.upTo/);
+});
