@@ -40,6 +40,7 @@ import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
+import { underDecomposedFlag } from './pm-class-set-rules.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -443,6 +444,17 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     expectedInitiativeId: manifest.initiative_id,
   });
   const setErrors = [...validationSetErrors, ...compileErrors];
+  // ADR 051 / ruling 229 half A — a FLAG, never a failure. The gate for this
+  // column runs at the plan gate, on the declared criteria, before any spend.
+  const underDecomposed = underDecomposedFlag(manifest, items);
+  if (underDecomposed !== null) {
+    logger.emit({
+      initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
+      phase: 'project-manager', skill: 'project-manager', event_type: 'log',
+      input_refs: [], output_refs: [], message: 'pm.under-decomposed',
+      metadata: { change_class: manifest.class, work_item_count: items.length, detail: underDecomposed },
+    });
+  }
   const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
   // A2a (2026-06-06): live-acceptance-WI requirement (contract C7). When the

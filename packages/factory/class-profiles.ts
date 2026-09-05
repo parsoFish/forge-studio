@@ -51,7 +51,19 @@ export type GateProfile = {
   reviewLenses: ReadonlyArray<string>;
   /** Does the reflector run? */
   reflect: 'always' | 'optional';
-  /** May the plan gate accept a one-work-item initiative of this class? */
+  /**
+   * May an initiative of this class be a SINGLE deliverable outcome?
+   *
+   * Enforced in two places, which ruling 229 settled after the column's first
+   * consumer showed the sentence could be read two ways:
+   *   - GATE, at the plan gate, on the manifest's declared `acceptance_criteria`
+   *     — exactly one criterion for a `false` class is REFUSED before any spend.
+   *   - FLAG, at the project manager, on the decomposed work-item count — a
+   *     one-item set for a `false` class is recorded for the report and NEVER
+   *     fails the pass, because a one-item decomposition of a genuinely
+   *     one-item initiative is the PM being correct, and the PM is the wrong
+   *     actor to punish for the architect's scoping.
+   */
   singleWiAllowed: boolean;
 };
 
