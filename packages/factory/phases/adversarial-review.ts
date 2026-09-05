@@ -43,7 +43,10 @@ import { skillPath } from '@forge/agents/skill-path.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
 import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
-import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk } from './review-chunks.ts';
+import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
+  splitChunkPerFile,
+  mergeSplitRecords,
+} from './review-chunks.ts';
 import {
   buildAdversarialReviewSystemPrompt,
   renderAdversarialReviewUserPrompt,
@@ -336,8 +339,13 @@ export async function runAdversarialReview(
      */
     const reviewChunk = async (
       chunk: ReviewChunk,
+      // A per-file sub-chunk is named by its FILE in every event, prompt and
+      // failure message: once the split has bottomed out, the file is the only
+      // actionable fact left, and inheriting the work item's label would report
+      // the same anonymous failure ruling 290 exists to forbid.
+      labelOverride?: string,
     ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
-      const label = chunkLabel(chunk);
+      const label = labelOverride ?? chunkLabel(chunk);
       const wi = chunk.workItemId === null ? undefined : byId.get(chunk.workItemId);
       const criteria = wi ? criteriaOf(wi) : [];
 
@@ -429,7 +437,13 @@ export async function runAdversarialReview(
               reason: 'budget-exhausted',
               detail:
                 `${label} is too large for review: its spawn was terminated by the SDK (${spawn.resultSubtype}). ` +
-                `${chunk.files.length} file(s) in this chunk. Split the work item, not the budget.`,
+                (chunk.files.length === 1
+                  // Bottomed out: one file's own diff exceeded the pass. There is
+                  // no smaller unit to cut to, so the fact worth reporting is the
+                  // FILE — and the action is still upstream, never the budget.
+                  ? `The chunk is a SINGLE file and cannot be split further: ${chunk.files[0]}. ` +
+                    `Split the work item, not the budget.`
+                  : `${chunk.files.length} file(s) in this chunk. Split the work item, not the budget.`),
             },
           };
         }
@@ -486,9 +500,32 @@ export async function runAdversarialReview(
 
     const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
     for (const chunk of chunks) {
-      const outcome = await reviewChunk(chunk);
+      const label = chunkLabel(chunk);
+      let outcome = await reviewChunk(chunk);
+
+      // Bead 6.10.26: the work item is the FIRST cut, not the only one. A budget
+      // kill on a multi-file chunk re-reviews that work item one FILE at a time
+      // — same criteria, same fence, narrower evidence — and merges the parts.
+      // Measured on G2: `WI-2` exhausted 50 turns on eight files while `WI-1`
+      // passed, so the work item's own size, not the reviewer, was the bound.
+      if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
+        const subChunks = splitChunkPerFile(chunk);
+        emit('review.chunk.split', { chunk: label, files: subChunks.length });
+        const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+        for (const sub of subChunks) {
+          const subLabel = sub.files[0]!;
+          const subOutcome = await reviewChunk(sub, subLabel);
+          // A file that exhausts on its own has bottomed out — reported by
+          // `reviewChunk` with the file named, and NOT ground through the
+          // remaining files, which would buy nothing and cost a spawn each.
+          if (!subOutcome.ok) return subOutcome.failure;
+          subs.push({ label: subLabel, record: subOutcome.record });
+        }
+        outcome = { ok: true, record: mergeSplitRecords(subs) };
+      }
+
       if (!outcome.ok) return outcome.failure;
-      chunkRecords.push({ label: chunkLabel(chunk), record: outcome.record });
+      chunkRecords.push({ label, record: outcome.record });
     }
 
     // Band 5 — merge into the ONE artifact the verdict gate reads, validate the

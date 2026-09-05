@@ -10,9 +10,16 @@
  * flat `DERIVED_CEILING_MARGIN_USD` made one bead ago. The PM already bounded
  * the work item, one agent authored it, its gate already ran over it.
  *
+ * **That last sentence was measured false** (bead `forge-8vfn.6.10.26`). G2's
+ * resume logged `chunk=WI-1` passing and `chunk=WI-2` exhausting on eight files:
+ * a work item the developer built at `iters=1` still exceeded the reviewer's 50
+ * turns, because the PM's bound is DEVELOPER-shaped and the reviewer's load is
+ * DIFF-shaped. So the work item is the FIRST cut; the second is the file, which
+ * is still not a number anybody invented.
+ *
  * Files no work item claims become one final `unattributed` chunk, so nothing
- * escapes review. A chunk that still exhausts the declared budget fails LOUDLY
- * naming its work item (ruling 290) — never skipped, never given more budget.
+ * escapes review. A SINGLE FILE that still exhausts fails LOUDLY naming the file
+ * (ruling 290 as amended by 311) — never skipped, never given more budget.
  */
 
 import type { ReviewFindingsRecord } from '@forge/flows/flow-artifacts.ts';
@@ -116,5 +123,60 @@ export function mergeChunkRecords(
       what: chunks.map((c) => label(c.label, c.record.whyWhatHow.what)).join('\n'),
       how: chunks.map((c) => label(c.label, c.record.whyWhatHow.how)).join('\n'),
     },
+  };
+}
+
+/**
+ * One chunk per FILE, all of them still owned by the same work item.
+ *
+ * Reached only when a work-item chunk's spawn was killed for turns/budget. The
+ * file is the smallest unit the diff already carries, so this invents no
+ * threshold — the same reason the chunk is the work item in the first place.
+ * The work item keeps ownership because it owns the CRITERIA: a per-file spawn
+ * is shown the work item's acceptance criteria and a narrower slice of evidence,
+ * never a criterion nobody declared.
+ */
+export function splitChunkPerFile(chunk: ReviewChunk): ReviewChunk[] {
+  return chunk.files.map((file) => ({ workItemId: chunk.workItemId, files: [file] }));
+}
+
+/** `met` beats `partial` beats `missed` — the order the resolution below uses. */
+const AC_VERDICT_RANK: Record<string, number> = { met: 2, partial: 1, missed: 0 };
+
+/**
+ * Merge the per-file records of ONE split work item back into a single chunk
+ * record, resolving the acceptance criteria the split necessarily duplicated.
+ *
+ * Every per-file spawn is shown the work item's WHOLE criteria set (the contract
+ * demands exact set membership), so N files produce N verdicts per criterion
+ * from N narrower views. The resolution is the STRONGEST, the only rule that
+ * does not manufacture a failure out of the narrowing: a criterion whose
+ * evidence lives in file 3 is genuinely `missed` from file 1, and reporting that
+ * would fail the initiative for the shape of the split. The winning file is
+ * named and the resolution is declared the orchestrator's — an unattributed
+ * merge of disagreeing verdicts is the produced-value-nobody-owns class.
+ */
+export function mergeSplitRecords(
+  subs: ReadonlyArray<{ label: string; record: ReviewFindingsRecord }>,
+): ReviewFindingsRecord {
+  const merged = mergeChunkRecords(subs, []);
+  const best = new Map<string, { label: string; verdict: string; evidence: string }>();
+  for (const { label, record } of subs) {
+    for (const e of record.acEvaluations) {
+      const prior = best.get(e.criterion);
+      if (prior === undefined || (AC_VERDICT_RANK[e.verdict] ?? -1) > (AC_VERDICT_RANK[prior.verdict] ?? -1)) {
+        best.set(e.criterion, { label, verdict: e.verdict, evidence: e.evidence });
+      }
+    }
+  }
+  return {
+    ...merged,
+    acEvaluations: [...best.entries()].map(([criterion, b]) => ({
+      criterion,
+      verdict: b.verdict as ReviewFindingsRecord['acEvaluations'][number]['verdict'],
+      evidence:
+        `[${b.label}] ${b.evidence} ` +
+        `(strongest of ${subs.length} per-file verdicts; resolution authored by the orchestrator, not by a review agent)`,
+    })),
   };
 }

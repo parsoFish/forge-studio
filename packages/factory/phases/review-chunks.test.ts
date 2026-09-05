@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { partitionChangedFiles, chunkLabel, UNATTRIBUTED_CHUNK_ID } from './review-chunks.ts';
+import { partitionChangedFiles, chunkLabel, UNATTRIBUTED_CHUNK_ID, splitChunkPerFile, mergeSplitRecords } from './review-chunks.ts';
 
 const wi = (id: string, filesInScope: string[], creates?: string[]) => ({
   work_item_id: id,
@@ -168,4 +168,67 @@ test('whyWhatHow is merged with its chunk labelled — one narrative per chunk, 
   for (const s of ['why-1', 'why-2', 'WI-1', 'unattributed']) assert.ok(merged.whyWhatHow.why.includes(s), `why must carry ${s}`);
   assert.ok(merged.whyWhatHow.what.includes('what-1') && merged.whyWhatHow.what.includes('what-2'));
   assert.ok(merged.whyWhatHow.how.includes('how-1') && merged.whyWhatHow.how.includes('how-2'));
+});
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.6.10.26 — the SECOND cut, when the work item is still too big.
+// ---------------------------------------------------------------------------
+
+test('kills "the split loses the work item": each per-file chunk keeps the same owner, one file, in diff order', () => {
+  const subs = splitChunkPerFile({ workItemId: 'WI-2', files: ['m/a.md', 'm/b.md', 'm/c.md'] });
+  assert.deepEqual(subs, [
+    { workItemId: 'WI-2', files: ['m/a.md'] },
+    { workItemId: 'WI-2', files: ['m/b.md'] },
+    { workItemId: 'WI-2', files: ['m/c.md'] },
+  ]);
+  // The owner is what carries the CRITERIA into each narrower spawn; a split
+  // that dropped it would show each file an empty criteria set and the artifact
+  // contract would then reject every one of them for judging nothing.
+  for (const sub of subs) assert.equal(chunkLabel(sub), 'WI-2');
+});
+
+const subRecord = (verdict: 'met' | 'partial' | 'missed', evidence: string): ReviewFindingsRecord => ({
+  initiative_id: 'INIT-x', cycleId: 'CY-1', baseRef: 'origin/main', headSha: 'abc', reviewedAt: '2026-09-06T00:00:00.000Z',
+  summary: `judged from one file: ${verdict}`,
+  lenses: ['accuracy-against-source'],
+  findings: [{ id: 'RF-1', severity: 'minor', category: 'accuracy-against-source', title: 't', detail: 'd', evidence: [{ file: 'm/a.md' }] }],
+  acEvaluations: [{ criterion: 'C1', verdict, evidence }],
+  whyWhatHow: { why: 'w', what: 'w', how: 'h' },
+});
+
+test('kills "a narrowed view fails the initiative": the criterion is judged ONCE, at its STRONGEST, naming the file that earned it', () => {
+  // Three files, one criterion whose evidence lives in exactly one of them.
+  // Concatenating the three verdicts would report a criterion as both met and
+  // missed; taking the first or the last would make the answer depend on file
+  // order. Neither is a verdict a reader can act on.
+  const merged = mergeSplitRecords([
+    { label: 'm/a.md', record: subRecord('missed', 'nothing in this file speaks to it') },
+    { label: 'm/b.md', record: subRecord('met', 'the registry row is here') },
+    { label: 'm/c.md', record: subRecord('partial', 'a related row, incomplete') },
+  ]);
+  assert.equal(merged.acEvaluations.length, 1);
+  assert.equal(merged.acEvaluations[0]!.criterion, 'C1');
+  assert.equal(merged.acEvaluations[0]!.verdict, 'met');
+  assert.match(merged.acEvaluations[0]!.evidence, /^\[m\/b\.md\] the registry row is here/, 'the winning file is named');
+  assert.match(merged.acEvaluations[0]!.evidence, /resolution authored by the orchestrator/, 'and the resolution is owned, not anonymous');
+});
+
+test('kills "the strongest verdict depends on file order": the same three views merge the same way reversed', () => {
+  const views = [
+    { label: 'm/a.md', record: subRecord('missed', 'nothing here') },
+    { label: 'm/b.md', record: subRecord('met', 'the row is here') },
+    { label: 'm/c.md', record: subRecord('partial', 'incomplete') },
+  ];
+  const forward = mergeSplitRecords(views);
+  const backward = mergeSplitRecords([...views].reverse());
+  assert.equal(forward.acEvaluations[0]!.verdict, backward.acEvaluations[0]!.verdict);
+  assert.equal(forward.acEvaluations[0]!.evidence, backward.acEvaluations[0]!.evidence);
+});
+
+test('kills "the split loses findings or their provenance": every file\'s findings survive, id-namespaced by the file', () => {
+  const merged = mergeSplitRecords([
+    { label: 'm/a.md', record: subRecord('missed', 'x') },
+    { label: 'm/b.md', record: subRecord('met', 'y') },
+  ]);
+  assert.deepEqual(merged.findings.map((f) => f.id), ['m/a.md/RF-1', 'm/b.md/RF-1']);
 });
