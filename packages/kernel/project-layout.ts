@@ -16,9 +16,10 @@
  */
 
 import { readdirSync, existsSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
+import { join, resolve, relative, sep, isAbsolute } from 'node:path';
 
 import { PROJECT_ID_RE } from './ids.ts';
+import { resolveProjectsDir } from './config.ts';
 import type { ProjectRef } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -122,4 +123,40 @@ export function projectBrainDir(forgeRoot: string, projectName: string): string 
 /** Brain 3 (project) — a managed project's theme dir, central (ADR 035). */
 export function projectThemesDir(forgeRoot: string, projectName: string): string {
   return resolve(projectBrainDir(forgeRoot, projectName), 'themes');
+}
+
+/**
+ * Does `forgeRoot` actually manage `projectDir`? — bead `forge-8vfn.6.11.26`.
+ *
+ * Brain 3 is CENTRAL: it lives under the forge root, while a project's own
+ * files live under `projectDir`. A writer handed both is only coherent when the
+ * root is the one that manages that project. S1 run 5 (M5-B session 8) was
+ * handed a mismatched pair and split its single fix across two trees —
+ * `roadmap.md` into the lane's ground, `brain/projects/<name>/profile.md` into
+ * a different checkout entirely.
+ *
+ * `resolveProjectsDir` is the one place that decides where a root's projects
+ * live, so this honours `FORGE_PROJECTS_DIR` and `forge.config.json` exactly as
+ * every other caller does. Resolved, not `realpath`ed: forge is WSL2/Linux-only,
+ * where neither a git worktree nor `/tmp` is a symlink, and reading a link here
+ * would add a raw-fs sink to a bridge-reachable module to buy nothing.
+ */
+export function rootManagesProject(forgeRoot: string, projectDir: string): boolean {
+  const rel = relative(resolve(resolveProjectsDir(forgeRoot)), resolve(projectDir));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+/**
+ * Why a `(forgeRoot, projectDir)` pair was refused — the sentence a caller
+ * surfaces instead of writing into a tree that does not own the project. It
+ * lives here because it explains a KERNEL invariant (Brain 3 is central to the
+ * forge root, ADR 035) using paths only this module computes, and because the
+ * next incident is attributable from one log line only if both roots are named.
+ */
+export function rootMismatchReason(forgeRoot: string, projectDir: string): string {
+  return (
+    `forgeRoot ${forgeRoot} does not manage ${projectDir} (its projects live at ` +
+    `${resolveProjectsDir(forgeRoot)}). Brain 3 is central to the forge root (ADR 035), so ` +
+    'writing here would put this project\'s profile in an unrelated tree.'
+  );
 }
