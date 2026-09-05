@@ -316,6 +316,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/dev-binding.ts | factory | verbatim | 339 |
 | packages/factory/phases/developer-loop.ts | factory | pruned | 1941 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 301 |
+| packages/flows/phases/gitignored-creates.ts | flows | rewritten | 58 |
 | packages/factory/phases/pm-binding.ts | factory | verbatim | 386 |
 | packages/factory/phases/project-manager.ts | factory | verbatim | 859 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |

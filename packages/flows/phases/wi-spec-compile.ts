@@ -40,6 +40,7 @@ import {
   type ConstraintBlock,
   type ConstraintMatchContext,
 } from '@forge/projects/constraint-blocks.ts';
+import { isIgnoredPathFor } from './gitignored-creates.ts';
 import { ralphSpecLintWorkItems } from './ralph-spec-lint.ts';
 
 /** ADR 037: sizing bound on a WI's `creates:` list — the evidence base is the
@@ -202,8 +203,16 @@ export function injectConstraintClauses(
  * files). Reported set-errors-style (mirrors `validateWorkItemSet`'s
  * `setErrors` message shape) so the PM pipeline can fold these straight into
  * its existing failure path/telemetry without a new outcome shape.
+ *
+ * ADR 051 decision 5 adds the third `creates:` rule to this same place: a path
+ * git will never see. `isIgnoredPath` is injected so the rule stays testable
+ * without a repository, and is omitted by callers that have none — a validator
+ * that cannot see the repository must not accuse a work item of hiding from it.
  */
-export function validateCompiledWorkItemSet(items: ReadonlyArray<WorkItem>): string[] {
+export function validateCompiledWorkItemSet(
+  items: ReadonlyArray<WorkItem>,
+  isIgnoredPath?: (relPath: string) => boolean,
+): string[] {
   const errors: string[] = [];
   for (const item of items) {
     const hasCreates = Array.isArray(item.creates) && item.creates.length > 0;
@@ -213,6 +222,17 @@ export function validateCompiledWorkItemSet(items: ReadonlyArray<WorkItem>): str
       errors.push(
         `${item.work_item_id}: creates is required (ADR 037) unless verification_artifact is set — ` +
           `pure-modification WIs must declare verification_artifact as the creates: escape`,
+      );
+    }
+    for (const path of hasCreates && isIgnoredPath ? item.creates! : []) {
+      if (isIgnoredPath?.(path) !== true) continue;
+      // ADR 051 decision 5. The required-paths check reads the DIFF for these
+      // paths, so one git never sees cannot appear there and the check passes
+      // on its ABSENCE — the work is graded done because the evidence it looks
+      // for is invisible. The most expensive form of declared-data-fails-open.
+      errors.push(
+        `${item.work_item_id}: creates entry ${path} is under a gitignored path — a file git never ` +
+          `sees cannot appear in the diff the required-paths check reads, so that check would pass on its absence`,
       );
     }
     if (hasCreates && item.creates!.length > MAX_WI_CREATE_PATHS) {
@@ -498,7 +518,10 @@ export function compileWorkItemSpecs(opts: WiSpecCompileOptions): WiSpecCompileR
     });
   }
 
-  const invariantErrors = validateCompiledWorkItemSet(coupling.items);
+  const invariantErrors = validateCompiledWorkItemSet(
+    coupling.items,
+    isIgnoredPathFor(projectRoot, coupling.items.flatMap((i) => i.creates ?? []), { forgeRoot, initiativeId }),
+  );
 
   return {
     items: coupling.items,
