@@ -25,6 +25,7 @@
  * fresh context per beat re-navigating with `page.goto`, which is exactly the
  * teleporting this runner exists to stop.
  */
+import { makeAgentProcProbe } from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -42,7 +43,7 @@ import {
   sweepStoryResidue,
 } from './sweep.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
-import { driveBeat } from './beats.mjs';
+import { driveBeat, resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
@@ -221,7 +222,12 @@ async function runStory(story, uiUrl, startedMs) {
   let bindings = {};
   try {
     for (const [i, beat] of story.beats.entries()) {
-      const verdict = await driveBeat(page, beat, i, uiUrl, bindings);
+      // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
+      // process as it polls, so an unsatisfied one says what that process was
+      // doing instead of leaving it to be reconstructed afterwards by hand.
+      // Built per beat from the route it is about; null for every other beat.
+      const probe = makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
+      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });

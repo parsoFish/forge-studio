@@ -172,6 +172,30 @@ function beatBound(beat, domTimeoutMs) {
 
 
 /**
+ * Append what the agent's own process was doing, to a RED verdict ONLY.
+ *
+ * Bead `forge-8vfn.6.11.22`. `6.11.17` is P1, open, owner unknown and
+ * INTERMITTENT — S4 run 2 hung while an out-of-story dispatch and S2 run 3's
+ * architect both completed — so the next occurrence has to describe itself
+ * rather than be reconstructed from an archive by hand afterwards.
+ *
+ * A GREEN beat carries no diagnosis: nobody needs it, and the generated how-to
+ * renders a beat's failures, so a trend on a passing beat would become
+ * documentation of nothing.
+ */
+function withAgentProc(verdict, probe) {
+  if (verdict.status !== 'red' || probe === null || typeof probe?.summary !== 'function') return verdict;
+  let trend = null;
+  try {
+    trend = probe.summary();
+  } catch {
+    return verdict; // diagnosis is never load-bearing
+  }
+  if (trend === null || trend === undefined || trend === '') return verdict;
+  return Object.freeze({ ...verdict, failures: Object.freeze([...verdict.failures, trend]) });
+}
+
+/**
  * Reach the beat's route by REAL NAVIGATION and read what the page shows.
  *
  * `page.goto` is used for the FIRST beat only — the operator opening Studio.
@@ -190,7 +214,7 @@ function beatBound(beat, domTimeoutMs) {
  * prove a wait gives up at its bound without the suite actually sitting
  * through 15 real seconds to do it.
  */
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
     return Object.freeze({
@@ -241,11 +265,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // beat's page — before this beat's state is judged. All nine operator flows
   // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
-  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null);
+  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
-    return stuckVerdict(beat, await readObserved(page, beat), stepError);
+    return withAgentProc(stuckVerdict(beat, await readObserved(page, beat), stepError), agentProcProbe);
   }
 
   // A press that saves asynchronously mints its route a moment later, so a beat
@@ -302,7 +326,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (new URL(page.url()).pathname === target) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
-        stalled = await waitForConsequence(page, beat, left, bound.label !== null);
+        stalled = await waitForConsequence(page, beat, left, bound.label !== null, agentProcProbe);
         agentWaitConsumed = true;
       }
     }
@@ -371,7 +395,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       /* not ready — the verdict below reports that honestly rather than throwing */
     });
 
-  const verdict = named(beatVerdict(beat, await readObserved(page, beat)));
+  let verdict = named(beatVerdict(beat, await readObserved(page, beat)));
+  verdict = withAgentProc(verdict, agentProcProbe);
   // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
   // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
   // that passes without its declared wait ever running passed by luck, and a
@@ -418,7 +443,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
  * lets a story express "press the create CTA and fill in the form it opens"
  * as ONE beat instead of splitting one operator act across two.
  */
-async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
+async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null) {
+  // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
+  // handle wait SWALLOWS its timeout and the act that follows was then handed
+  // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
+  // twice — measured on S2 run 3, the lane's LAST S2 run: a declared 600 000 ms
+  // became a twenty-minute beat, on a session that was never stalled but simply
+  // did not publish the handle. A bound is a statement about the BEAT, not about
+  // each wait inside it, so every wait below reads what is LEFT of one deadline.
+  const deadlineAt = Date.now() + timeoutMs;
+  const left = () => Math.max(0, deadlineAt - Date.now());
   // `waitedForHandle` feeds `6.11.19`'s guard: it says whether this block gave
   // the beat's declared bound to a waiter that watches the PAGE for a handle
   // the agent has to produce, rather than to a URL change.
@@ -436,14 +470,14 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
         // step that never navigated (a toggle, a same-route press) leaves
         // this already satisfied and the wait below reports the real story.
         await page
-          .waitForSelector('main[data-page][data-page-ready="true"]', { timeout: timeoutMs })
+          .waitForSelector('main[data-page][data-page-ready="true"]', { timeout: left() })
           .catch(() => {
             /* still on the old page, or it never settled — the handle wait below reports it honestly */
           });
       }
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
-      const stall = await waitForHandleOrStall(page, handle, timeoutMs, watchLifecycle);
+      const stall = await waitForHandleOrStall(page, handle, left(), watchLifecycle, probe);
       waitedForHandle = true;
       if (stall !== null) {
         return {
@@ -457,6 +491,21 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
       }
     }
 
+    // The bound is spent. Say so in the beat's own terms rather than letting the
+    // act report `Timeout 0ms exceeded`, which names a bound nobody declared and
+    // reads like a bug in the runner instead of a wait that ran out.
+    if (left() === 0) {
+      return {
+        waitedForHandle,
+        // The SAME prefix the act's own catch uses, so what a beat says when its
+        // bound runs out and what it says when the act throws stay one shape.
+        error:
+          `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
+          `waited this beat's whole declared bound (${timeoutMs} ms) for it and it never appeared, ` +
+          'so the act was not attempted — one declared bound is one spend.',
+      };
+    }
+
     try {
       if (!fills) {
         // Bounded by the RUNNER's timeout, not by `context.setDefaultTimeout`.
@@ -468,10 +517,10 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
         // control that frees itself: `element is not enabled`, twice, in two
         // live runs. Bead `forge-8vfn.6.11.6`. The bound was the defect; the
         // wait was always there.
-        await page.locator(handle).first().click({ timeout: timeoutMs });
+        await page.locator(handle).first().click({ timeout: left() });
         continue;
       }
-      const refusal = await setControl(page, handle, step.with, timeoutMs);
+      const refusal = await setControl(page, handle, step.with, left());
       if (refusal !== null) return { waitedForHandle, error: refusal };
     } catch (e) {
       return {
