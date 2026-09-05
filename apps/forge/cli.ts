@@ -19,7 +19,7 @@
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows/scheduler.ts';
-import { factoryPhaseWiring } from './factory-wiring.ts';
+import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { cmdBrainLint } from './cli-brain-lint.ts';
 import { cmdGate } from './cli-gate.ts';
@@ -110,7 +110,7 @@ process.chdir(FORGE_ROOT);
     case 'brain':
       return await cmdBrain(args.slice(1));
     case 'gate':
-      return cmdGate(args.slice(1));
+      return await cmdGate(args.slice(1));
     case 'demo':
       return await cmdDemo(args.slice(1));
     case 'project-brain':
@@ -199,7 +199,7 @@ function cmdInit(): void {
 async function cmdServe(rest: string[]): Promise<void> {
   const once = rest.includes('--once');
   console.log(once ? 'forge serve --once: claiming one initiative…' : 'forge serve: starting…');
-  await serve({ mode: once ? 'once' : 'forever', phaseWiring: factoryPhaseWiring() });
+  await serve({ mode: once ? 'once' : 'forever', phaseWiring: (await requireInstalledFactory('forge serve')).phaseWiring });
   if (once) {
     // Once-mode is the showcase / debug entry point — surface the most
     // recent cycle's report path as a breadcrumb. The forever-mode
@@ -709,7 +709,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const dirFlag = flagValue(rest, '--dir');
     const demoDir = dirFlag ?? worktreeDemoDir(INVOCATION_CWD, initiativeId);
     const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
-    const { renderDemoBundle } = await import('@forge/factory/demo-model.ts');
+    const { renderDemoBundle } = (await requireFactoryDemo('forge demo render')).model;
     // worktree root lets the bundle back-fill any live evidence the acceptance
     // test persisted under <worktree>/.forge/live-evidence/.
     const res = renderDemoBundle(demoDir, worktreeRoot);
@@ -761,8 +761,8 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const baseRef = flagValue(rest, '--base') ?? 'main';
     const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
     try {
-      const { captureCheckpoints } = await import('@forge/factory/demo.ts');
-      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = await import('@forge/factory/demo-model.ts');
+      const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
+      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = demoModel;
       const { CAPTURE_NONCE_ENV } = await import('@forge/flows/phases/orchestrated-capture.ts');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));

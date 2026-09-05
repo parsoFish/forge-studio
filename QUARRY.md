@@ -317,6 +317,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/executor-table.ts | factory | rewritten | 676 |
 | packages/flows/phase-wiring.ts | flows | verbatim | 48 |
 | apps/forge/factory-wiring.ts | apps/forge | verbatim | 27 |
+| apps/forge/factory-cli-wiring.ts | apps/forge | verbatim | 65 |
 | packages/factory/phases/decompose-completeness.ts | factory | verbatim | 197 |
 | packages/factory/phases/dev-binding.ts | factory | verbatim | 339 |
 | packages/factory/phases/developer-loop.ts | factory | pruned | 1941 |

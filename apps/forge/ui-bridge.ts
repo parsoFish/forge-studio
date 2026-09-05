@@ -42,18 +42,7 @@ import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest
 import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
 import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
-import {
-  readReviewComments,
-  writeReviewComments,
-  appendReviewComment,
-  resolveComment,
-  editComment,
-  deleteComment,
-  deriveVerdictFromComments,
-  reviewCommentsPath,
-  isSafeCycleId,
-  REVIEW_COMMENTS_MAX,
-} from '@forge/factory/review-comments.ts';
+
 import lockfile from 'proper-lockfile';
 import {
   handleStudioRoutes,
@@ -90,7 +79,6 @@ import {
   type StudioPostContext,
   type ReleaseFinalizeHookInput,
 } from '@forge/flows/bridge-studio-runs.ts';
-import { runReleaseFinalize } from '@forge/factory/phases/release-finalize.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
@@ -98,7 +86,7 @@ import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { reconcileReflectFeedback, type RerunReflectorFn } from '@forge/factory/reflect-reconcile.ts';
+type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
 // one the carved `POST /api/agents/:slug/run` route applies, so the package
@@ -107,7 +95,11 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
-import { factoryPhaseWiring, factorySingleWiAllowed } from './factory-wiring.ts';
+import {
+  NO_EXAMPLE_INSTALLED, installedExample as example, peekInstalledFactory,
+  resolveInstalledFactory, reviewCommentsBinding as rc, type InstalledFactory,
+} from './factory-wiring.ts';
+
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -196,6 +188,9 @@ type TailState = {
 
 export async function startBridge(opts: BridgeOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { forgeRoot } = opts;
+  // ADR 048 clause 2, FIRST: every factory-backed default below reads this, and
+  // the bridge must come up whether or not an example package is installed.
+  await resolveInstalledFactory();
   // F1: a stable identity for this bridge process, captured once at startup
   // and served from GET /api/health, so a second `forge studio` can recognise
   // a healthy forge bridge and ATTACH read-only instead of killing it.
@@ -230,7 +225,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const mergePrFn = opts.mergePr ?? mergePullRequest;
   // ADR 048: flows declares the reflector port; the assembly binds it, here and in `factory-wiring.ts`.
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? ((deps: { queueRoot: string; logsRoot: string }) =>
-    finalizeMergedReadyForReview({ ...deps, runReflector: factoryPhaseWiring().runReflector }));
+    finalizeMergedReadyForReview({ ...deps, runReflector: example().phaseWiring.runReflector }));
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
@@ -238,13 +233,13 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     opts.runReleaseFinalize ??
     (async (input: ReleaseFinalizeHookInput): Promise<{ release_status: string }> => {
       const logger = createLogger(input.cycleId, logsRoot);
-      return runReleaseFinalize(input, logger);
+      return example().runReleaseFinalize(input, logger);
     });
   // D — auto-rerun the reflector on operator feedback. Default delegates to the
   // real helper; the POST handler + startup reconcile both call this.
   const rerunReflectorFn: RerunReflectorFn =
     opts.rerunReflector ??
-    ((input) => import('@forge/factory/reflector-rerun.ts').then((m) => m.rerunReflector(input)));
+    ((input) => example().rerunReflector(input));
   // Recover feedback that landed while the bridge was down (or whose live rerun
   // was lost to a restart): re-run the reflector for any cycle whose RECENT
   // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
@@ -255,8 +250,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // there is no HTTP response at boot, so the JSONL event IS the typed refusal.
   if (isDryBridge()) {
     emitDryBridgeRefusal({ route: 'startup:reflect-reconcile', method: 'BOOT', action: 'spawn-agent', logsRoot });
-  } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1') {
-    void reconcileReflectFeedback({
+  } else if (process.env.FORGE_ARCHITECT_NO_SPAWN !== '1' && peekInstalledFactory() !== null) {
+    // ADR 048: reconciling feedback is the EXAMPLE's work; with none installed
+    // there is no reflector to re-run, so it is skipped, not swallowed.
+    void example().reconcileReflectFeedback({
       logsRoot,
       queueRoot: queuePaths.root,
       rerunReflector: rerunReflectorFn,
@@ -902,17 +899,17 @@ function isAcShape(v: unknown): boolean {
 async function withReviewCommentLock(
   logsRoot: string,
   cycleId: string,
-  mutate: (sidecar: ReturnType<typeof readReviewComments>) => ReturnType<typeof readReviewComments>,
-): Promise<ReturnType<typeof readReviewComments>> {
-  // Ensure the sidecar exists so proper-lockfile has a target (writeReviewComments
+  mutate: (sidecar: ReturnType<typeof rc.read>) => ReturnType<typeof rc.read>,
+): Promise<ReturnType<typeof rc.read>> {
+  // Ensure the sidecar exists so proper-lockfile has a target (rc.write
   // throws on a traversal cycleId — that propagates as a 500, never a write).
-  if (!existsSync(reviewCommentsPath(logsRoot, cycleId))) {
-    writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
+  if (!existsSync(rc.path(logsRoot, cycleId))) {
+    rc.write(logsRoot, cycleId, { cycleId, comments: [] });
   }
-  const release = await lockfile.lock(reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  const release = await lockfile.lock(rc.path(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
   try {
-    const next = mutate(readReviewComments(logsRoot, cycleId));
-    writeReviewComments(logsRoot, cycleId, next);
+    const next = mutate(rc.read(logsRoot, cycleId));
+    rc.write(logsRoot, cycleId, next);
     return next;
   } finally {
     try { await release(); } catch { /* ignore */ }
@@ -1615,11 +1612,14 @@ async function handleHttp(
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
   // read-modify-write is atomic per cycle). Verdict derivation is over the set:
   // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
+  // ADR 048 clause 2: the sidecar is the EXAMPLE's surface — 501 once, ahead of
+  // the whole group, rather than each handler discovering it separately.
+  if (url.startsWith('/api/review-comments/') && peekInstalledFactory() === null) { sendJson(res, 501, { error: NO_EXAMPLE_INSTALLED }, origin); return; }
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
-    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
-    const sidecar = readReviewComments(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    if (!cycleId || !rc.isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
+    const sidecar = rc.read(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.verdict(sidecar.comments) }, origin);
     return;
   }
   // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
@@ -1631,15 +1631,15 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
       const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
       const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
       if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
       if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+        rc.edit(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
       );
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1650,9 +1650,9 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.remove(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1663,9 +1663,9 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolve(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1677,19 +1677,19 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
       const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
-      if (readReviewComments(ctx.logsRoot, cycleId).comments.length >= REVIEW_COMMENTS_MAX) {
-        sendJson(res, 409, { error: `review-comment cap reached (${REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
+      if (!cycleId || !rc.isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
+      if (rc.read(ctx.logsRoot, cycleId).comments.length >= rc.max) {
+        sendJson(res, 409, { error: `review-comment cap reached (${rc.max}) for this cycle` }, origin);
         return;
       }
       const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+        rc.append(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
       );
       sendJson(res, 200, {
         ...result,
         comment: result.comments[result.comments.length - 1],
-        derivedVerdict: deriveVerdictFromComments(result.comments),
+        derivedVerdict: rc.verdict(result.comments),
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -2048,7 +2048,7 @@ async function handleArchitect(
         projectsRoot: ctx.projectsRoot,
         mergePr: ctx.mergePr,
         finalizeAfterMerge: ctx.finalizeAfterMerge,
-        broadcastArchitectChanged: ctx.broadcastArchitectChanged, singleWiAllowedFor: factorySingleWiAllowed,
+        broadcastArchitectChanged: ctx.broadcastArchitectChanged, singleWiAllowedFor: (c: string) => peekInstalledFactory()?.singleWiAllowed(c) ?? null,
         spawnArchitectTurnFn: (forgeRoot, project, sessionId) => spawnAgentTurn(forgeRoot, 'architect', project, sessionId),
       };
       await applyPlanVerdict(req, res, planCtx, {

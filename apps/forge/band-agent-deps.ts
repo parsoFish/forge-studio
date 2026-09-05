@@ -15,8 +15,7 @@
  * stays in the package that owns the seam.
  */
 
-import { isChangeClass, type ChangeClass } from '@forge/factory/class-profiles.ts';
-import { runAdversarialReview } from '@forge/factory/phases/adversarial-review.ts';
+import { NO_EXAMPLE_INSTALLED, resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { getPaths } from '@forge/flows/queue.ts';
 import type { BandAgentDeps } from '@forge/agents/band-agent-run.ts';
@@ -35,8 +34,8 @@ import type { BandAgentDeps } from '@forge/agents/band-agent-run.ts';
  * the assembly's job, and it FAILS CLOSED: an unknown class is not reviewed
  * under a guessed policy.
  */
-function asChangeClass(value: string): ChangeClass {
-  if (!isChangeClass(value)) {
+function asChangeClass(factory: InstalledFactory, value: string): string {
+  if (!factory.isChangeClass(value)) {
     throw new Error(
       value === ''
         ? 'band dispatch: the initiative declares no `class` — the change class selects the review lenses (ADR 051) and has no default'
@@ -49,6 +48,16 @@ function asChangeClass(value: string): ChangeClass {
 export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
-  runPipeline: async ({ input, logger, queryFn }) =>
-    await runAdversarialReview({ ...input, changeClass: asChangeClass(input.changeClass) }, logger, { queryFn }),
+  runPipeline: async ({ input, logger, queryFn }) => {
+    // ADR 048: the band pipeline IS the example. Resolved here rather than
+    // imported, and its absence refuses loudly — a band dispatch with no
+    // pipeline to dispatch to must never look like a completed review.
+    const factory = await resolveInstalledFactory();
+    if (factory === null) throw new Error(`band dispatch: ${NO_EXAMPLE_INSTALLED}`);
+    return await factory.runAdversarialReview(
+      { ...input, changeClass: asChangeClass(factory, input.changeClass) as never },
+      logger,
+      { queryFn },
+    );
+  },
 };
