@@ -37,7 +37,7 @@ the child's own attribute; a route must not learn its readiness from a copy.
 **A minted id is rendered BEFORE the navigation that consumes it (M1-G,
 `forge-8vfn.5.5`).** A surface that starts a session publishes the id on its own
 root (`data-onboard-session-id`, `data-architect-session-id`,
-`data-session-id`) and offers the way in as a separate act
+`data-demo-session-id`, `data-session-id`) and offers the way in as a separate act
 (`[data-action="view-onboarding-session"|"view-architect-session"|
 "view-demo-session"]` — the shared `components/studio/session/SessionMinted.tsx`).
 **No id, no key** (`forge-8vfn.6.11.5`): the root publishes the attribute only
@@ -47,6 +47,15 @@ story runner's post-`do` wait among them — is answered by a value that names
 nothing.
 `router.push`ing from inside the click that mints the id leaves it observable to
 nothing, so no automation can bind `/sessions/<kind>/<id>`.
+**The key must be DISTINCTLY NAMED, not the generic `data-session-id`**
+(`forge-8vfn.6.11.26`, ruling 307): a minting surface usually renders INSIDE
+another session's page, whose own root also carries `data-session-id`, and the
+story runner's `resolveExpectations` binds the best-covering candidate — so the
+root wins and the key answers with the WRONG session's id. `DemoTimeline`
+published only `SessionMinted`'s generic key for exactly this reason and S1
+beat 8 could never bind `/sessions/demo/<demoSessionId>`; it now publishes
+`data-demo-session-id` on its own `<section>`. Shadowing is silent: the beat
+reds on an unbound segment, never on a wrong value.
 
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
