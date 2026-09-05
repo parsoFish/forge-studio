@@ -21,7 +21,9 @@ import { runProjectManager as realRunProjectManager } from '@forge/factory/phase
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
 import { runIntegrateBand, type IntegrateResult } from '@forge/factory/phases/integrate.ts';
 import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
-import { readChangeClass } from '@forge/factory/class-profiles.ts';
+import { profileFor, readChangeClass } from '@forge/factory/class-profiles.ts';
+import { changedMarkdownFiles, runClassMergeBoundary } from '@forge/factory/phases/merge-boundary.ts';
+import { runDocsGate } from '@forge/factory/gates/docs-gate.ts';
 import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
 import { runReflector } from '@forge/factory/phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
@@ -231,7 +233,16 @@ export const DEFAULT_DEPS: FlowRunnerDeps = {
     const s = emitDeliverySummary(input, logger);
     return { commitsAhead: s.commits, filesChanged: s.filesChanged, insertions: s.insertions };
   },
-  runMergeBoundaryGate,
+  // Spec §5 item 1's merge-boundary columns: the CLASS decides which of the
+  // project's declared gates run and whether a verb runs with them. The value
+  // goes down into `@forge/flows`' gate; the verb's implementation lives here,
+  // because `@forge/flows` may not import this package.
+  runMergeBoundaryGate: (input, logger) =>
+    runClassMergeBoundary(profileFor(readChangeClass(input.manifestPath)), input, logger, {
+      runTestGate: runMergeBoundaryGate,
+      changedMarkdown: (worktreePath) => changedMarkdownFiles(worktreePath),
+      docsGate: (paths) => runDocsGate(paths, { links: true }),
+    }),
   openPrInline,
   runClosure,
   runReflector,

@@ -511,7 +511,8 @@ function clearMergeGateFeedback(worktreePath: string): void {
  * the code that ran the command rather than described by anything downstream.
  */
 export type MergeGateEvidence = {
-  gate: 'local' | 'ci';
+  /** `docs` is the class VERB's row (`forge gate docs`), not a `testProcess.*`. */
+  gate: 'local' | 'ci' | 'docs';
   cmd: readonly string[];
   ok: boolean;
   outputTail?: string;
@@ -519,7 +520,7 @@ export type MergeGateEvidence = {
 
 export type MergeGateResult =
   | { ok: true; evidence: MergeGateEvidence[] }
-  | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string }
+  | { ok: false; failedGate: 'local' | 'ci' | 'docs'; cmd: string[]; output: string }
   | { ok: false; failedGate: 'config'; reason: string };
 
 /**
@@ -587,10 +588,39 @@ function failMergeGateConfig(input: CycleInput, logger: EventLogger, reason: str
   return { ok: false, failedGate: 'config', reason };
 }
 
-export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): MergeGateResult {
+/**
+ * Which declared gates the ORCHESTRATOR runs at the merge boundary, chosen by
+ * the initiative's change class (spec §5 item 1). The VALUE comes down from
+ * `@forge/factory`, never the table — this package may not import that one.
+ * `hasVerb` is not decoration: `gates: []` is legitimate only when the class
+ * carries a verb instead, or an empty selection returns a green gate on the
+ * strength of having checked nothing.
+ */
+export type MergeBoundarySelection = {
+  gates: ReadonlyArray<'ci' | 'local'>;
+  hasVerb: boolean;
+};
+
+export function runMergeBoundaryGate(
+  input: CycleInput,
+  logger: EventLogger,
+  selection: MergeBoundarySelection,
+): MergeGateResult {
   // A dry run executes no gate, so it has no evidence to report — an empty
   // list, never a fabricated green row.
   if (input.dryRun) return { ok: true, evidence: [] };
+
+  if (selection.gates.length === 0 && !selection.hasVerb) {
+    return failMergeGateConfig(
+      input,
+      logger,
+      'the change class selects no merge-boundary test and no merge-boundary verb — a boundary that checks nothing cannot report a green gate',
+    );
+  }
+  // The class's boundary is its VERB, run by the caller, which events its own
+  // `cycle.merge-gate` row. Nothing here to run and nothing here claiming to
+  // have run: an empty evidence list, never a fabricated green row.
+  if (selection.gates.length === 0) return { ok: true, evidence: [] };
 
   let cfg: ReturnType<typeof loadProjectConfig>;
   try {
@@ -615,19 +645,27 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
   // `{ ok: true }` below. Neither case has a gate to run, so neither can be
   // green; the two reasons are worded distinctly so an operator can tell "I
   // cannot read your config" from "your config declares no local gate" apart.
+  const wantsLocal = selection.gates.includes('local');
   const localCmd = cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0 ? cfg.quality_gate_cmd : null;
-  if (!localCmd) {
+  // Fail-closed only when the CLASS asked for a local gate: a `['ci']` class
+  // must not be red for a local suite it was never going to run.
+  if (wantsLocal && !localCmd) {
     const reason =
       cfg === null
         ? `project.json could not be read at ${join(input.projectRepoPath, '.forge', 'project.json')} (absent, unreadable, or rejected by the containment guard) — the merge gate has nothing to run and cannot report a green gate.`
         : `project.json loaded but testProcess.local.cmd is empty — it declares no local gate command, so the merge gate has nothing to run and cannot report a green gate.`;
     return failMergeGateConfig(input, logger, reason);
   }
-  // `localCmd` is derived from `cfg?.quality_gate_cmd`, so it can only be
-  // non-null when `cfg` itself is non-null — TS can't see that implication
-  // through the optional-chain ternary above, hence the cast (not a fresh
-  // runtime assumption, just naming the one this guard already proved).
-  const loadedCfg = cfg as NonNullable<typeof cfg>;
+  // Reachable only when the class asked for no local gate. An unreadable config
+  // is still no basis for a green gate, whichever gate the class selected.
+  if (cfg === null) {
+    return failMergeGateConfig(
+      input,
+      logger,
+      `project.json could not be read at ${join(input.projectRepoPath, '.forge', 'project.json')} (absent, unreadable, or rejected by the containment guard) — the merge gate has nothing to run and cannot report a green gate.`,
+    );
+  }
+  const loadedCfg = cfg;
   const localTimeoutMs = loadedCfg.testProcess.local?.timeoutMs;
   const ciGate = loadedCfg.ci_gate && loadedCfg.ci_gate.length > 0 ? loadedCfg.ci_gate : null;
   const ciFixCmd = loadedCfg.ci_fix_cmd && loadedCfg.ci_fix_cmd.length > 0 ? loadedCfg.ci_fix_cmd : null;
@@ -638,11 +676,11 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
 
   // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.
   //     LOCAL-gate timeout semantics (the same command + knob the per-WI gate
-  //     used). This ALWAYS runs now (localCmd is guaranteed non-null above) —
-  //     that is the structural guard finding 1 asks for: `{ ok: true }` below
-  //     is reachable only past a local gate that actually executed, not by the
-  //     mere absence of a failure this function happens to check for today.
-  {
+  //     used). Runs whenever the CLASS selects it, `localCmd` then guaranteed
+  //     non-null above — the structural property finding 1 asks for: `{ ok:
+  //     true }` is reachable only past the gates the class chose actually
+  //     executing, never by the absence of a failure this happens to check.
+  if (wantsLocal && localCmd) {
     const local = runLocalSuiteGate(localCmd, input.worktreePath, localTimeoutMs);
     logger.emit({
       initiative_id: input.initiativeId,
@@ -662,8 +700,10 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
   }
 
   // (2) CI delivery net — env-stripped, after formatters. Reuses the same
-  //     decision core the final CI delivery gate uses today.
-  if (ciGate) {
+  //     decision core the final CI delivery gate uses today. Runs only when the
+  //     CLASS selects it — a `config` initiative is checked by the local suite,
+  //     and a project's whole CI over it is spend the class did not ask for.
+  if (selection.gates.includes('ci') && ciGate) {
     const decision = decideFinalCiGate({
       ciGate,
       ciFixCmd,

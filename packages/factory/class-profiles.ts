@@ -40,8 +40,18 @@ export type ChangeClass = InitiativeManifest['class'];
 export { CHANGE_CLASSES };
 
 export type GateProfile = {
-  /** Must the per-WI quality gate FAIL on the untouched base before iteration 1? */
-  iter0FailFirst: 'required' | 'advisory' | 'off';
+  /**
+   * Must the per-WI quality gate FAIL on the untouched base before iteration 1?
+   *
+   * Two values, not three. `'advisory'` — run the iteration-0 check, record it,
+   * do not fail the work item — has no mapping onto the ralph runner's
+   * `failOnHollowIter0Gate` boolean, and giving it one meant editing
+   * `packages/agents` at exactly its cap. The `infra` row it was written for now
+   * reads `'required'`, the safe direction: a gate that passes before any work
+   * exists still stops the work item. Narrowed under T1 ruling 292; operator
+   * ratification pending.
+   */
+  iter0FailFirst: 'required' | 'off';
   /**
    * Where the ralph runner's diff-inclusion list comes from. The union is
    * `@forge/flows`' own (`work-item.ts`, beside `gateRequiredPaths`), not a
@@ -49,16 +59,22 @@ export type GateProfile = {
    * vocabulary of its own.
    */
   requiredPathsSource: RequiredPathsSource;
-  /** Which `testProcess.*` the ORCHESTRATOR runs at the merge boundary, in order; [] = none. */
-  mergeBoundaryTest: ReadonlyArray<'ci' | 'local' | 'acceptance'>;
+  /**
+   * Which `testProcess.*` the ORCHESTRATOR runs at the merge boundary, in
+   * order; `[]` = none, and then `mergeBoundaryVerb` must not be null — a class
+   * with neither has no merge boundary at all, which the contract test refuses.
+   *
+   * `'acceptance'` was dropped from the union with `'advisory'` and for the same
+   * reason: no gate implements it and no row selected it. Narrowed under T1
+   * ruling 292; operator ratification pending.
+   */
+  mergeBoundaryTest: ReadonlyArray<'ci' | 'local'>;
   /** An orchestrator verb run at the merge boundary in addition to the above; null = none. */
   mergeBoundaryVerb: 'gate docs' | null;
   /** What evidence the integrate band captures. */
   capture: 'checkpoints' | 'plan-output' | 'none';
   /** The review agent's lenses for this class (spec §5 item 5). */
   reviewLenses: ReadonlyArray<string>;
-  /** Does the reflector run? */
-  reflect: 'always' | 'optional';
   /**
    * May an initiative of this class be a SINGLE deliverable outcome?
    *
@@ -83,7 +99,6 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     mergeBoundaryVerb: null,
     capture: 'checkpoints',
     reviewLenses: ['correctness', 'containment', 'test-strength', 'boundary'],
-    reflect: 'always',
     singleWiAllowed: false,
   },
   docs: {
@@ -93,7 +108,6 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     mergeBoundaryVerb: 'gate docs',
     capture: 'none',
     reviewLenses: ['accuracy-against-source', 'link-integrity', 'forbidden-tokens', 'structure'],
-    reflect: 'optional',
     singleWiAllowed: true,
   },
   config: {
@@ -103,17 +117,15 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     mergeBoundaryVerb: null,
     capture: 'none',
     reviewLenses: ['schema-validity', 'secret-exposure', 'drift-from-declared', 'rollback'],
-    reflect: 'optional',
     singleWiAllowed: true,
   },
   infra: {
-    iter0FailFirst: 'advisory',
+    iter0FailFirst: 'required',
     requiredPathsSource: 'wi.creates',
     mergeBoundaryTest: ['ci', 'local'],
     mergeBoundaryVerb: null,
     capture: 'plan-output',
     reviewLenses: ['blast-radius', 'idempotence', 'secret-exposure', 'rollback'],
-    reflect: 'always',
     singleWiAllowed: false,
   },
 };
@@ -143,4 +155,19 @@ export function profileFor(cls: ChangeClass): GateProfile {
  */
 export function readChangeClass(manifestPath: string): ChangeClass {
   return parseManifest(readFileSync(manifestPath, 'utf8')).class;
+}
+
+/**
+ * Does a work item's iteration-0 hollow-gate guard run? Two independent reasons
+ * to disable it, and both are honoured: THE CLASS (`iter0FailFirst` — a `docs`
+ * work item has no failing test to write first, so its gate legitimately passes
+ * on the untouched base) and THE WORK ITEM (`behavior_preserving` — a
+ * rename/move leaves the suite green either side; the diff and the
+ * empty-delivery backstop still guard against a no-op).
+ */
+export function hollowGateGuardFor(
+  iter0FailFirst: GateProfile['iter0FailFirst'],
+  behaviorPreserving: boolean | undefined,
+): boolean {
+  return iter0FailFirst === 'required' && !behaviorPreserving;
 }

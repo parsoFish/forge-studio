@@ -42,25 +42,19 @@ const COLUMNS: ReadonlyArray<keyof GateProfile> = [
   'mergeBoundaryVerb',
   'capture',
   'reviewLenses',
-  'reflect',
   'singleWiAllowed',
 ];
 
 /**
- * Columns whose consumer has not landed yet, with the spec §5 item that lands
- * it. This list may only SHRINK, and the test below fails BOTH ways: a column
- * here that has gained a consumer must be removed, and a column not here must
- * have one. That two-way assertion is what stops it becoming the stale
- * allowlist that reads as progress while it blinds the check (§15.41's shape).
+ * Columns whose consumer has not landed yet. **EMPTY, and it closed by the
+ * countdown's own rule: a column is wired or it is deleted, never carried.**
+ * The test below still fails BOTH ways, so the list cannot come back as a
+ * blindfold — a column named here that has a consumer fails, and a column not
+ * named here that has none fails too (§15.41's shape).
  *
- * Empty by the end of M5-A. Nothing is added to this list without a ruling.
+ * Nothing is added to this list without a ruling.
  */
-const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
-  'iter0FailFirst',      // spec §5 item 4 — the integrate band's per-WI gate
-  'mergeBoundaryTest',   // spec §5 item 4 — the class-selected merge gate
-  'mergeBoundaryVerb',   // spec §5 item 6 — `forge gate docs`
-  'reflect',             // spec §5 item 4 — the reflector's class rule
-];
+const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [];
 
 // `reviewLenses` came off with spec §5 item 5: `phases/adversarial-review.ts`
 // reads it ONCE and threads the same array to the launch prompt and to
@@ -80,15 +74,33 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
 //
 // `singleWiAllowed` came off this list first, and where it landed corrected the
 // draft: it is enforced by the project manager's SET rules, not the plan gate,
-// because at the plan gate there are no work items to count. FOUR columns left,
-// and each names the spec item that lands it.
-
-// Every column is on the list as this lands, and that is the honest state of a
-// table whose consumers are spec §5 items 3 to 6: the DATA is ratified now
-// (ruling 155) so the items that read it are written against a fixed shape
-// rather than inventing one each. The list is the countdown, asserted in BOTH
-// directions so it cannot quietly become a permanent exemption, and it is empty
-// at this lane's close or the row is NOT MET with the columns named.
+// because at the plan gate there are no work items to count.
+//
+// THE LAST FOUR, and how the countdown actually closed:
+//
+// `iter0FailFirst` — `phases/developer-loop.ts` reads it beside
+// `requiredPathsSource` and hands it to the ralph runner's hollow-gate guard.
+// Landing it NARROWED the union to `'required' | 'off'`: `'advisory'` ("run the
+// iteration-0 check, record it, do not fail the work item") has no mapping onto
+// the runner's boolean, and inventing one would have meant editing
+// `packages/agents` at exactly its cap. The `infra` row now reads `'required'`,
+// the safe direction. Narrowed under T1 ruling 292; operator ratification pending.
+//
+// `mergeBoundaryTest` + `mergeBoundaryVerb` — read together by
+// `phases/executor-deps.ts`, which passes the class's SELECTION down into
+// `runMergeBoundaryGate` (the value goes down, never the table: `@forge/flows`
+// may not import this package) and then runs the class's verb. The union
+// narrowed to `'ci' | 'local'` for the same reason as above: no gate implements
+// `'acceptance'`, and no operator row selected it.
+//
+// `reflect` — DELETED. It asked "does the reflector run?", and `'optional'`
+// named no chooser: nothing in the product decides per run whether an optional
+// reflection happens, so every honest wiring either made it behave exactly like
+// `'always'` (the decorative shape this file exists to catch) or changed the
+// column's meaning to something its own doc comment contradicted. The reflector
+// keeps firing from the develop flow's `on: merged` trigger for every class.
+// Deleted under T1 ruling 292; if per-class reflection control is wanted, M6
+// defines the chooser and the column returns with a meaning.
 
 describe('class profiles — the table is total', () => {
   it('kills "a class exists with no profile": every ChangeClass has a profile, and the table has no extra keys', () => {
@@ -154,6 +166,22 @@ describe('class profiles — no phase re-derives what the table decides', () => 
       }
     }
     assert.deepEqual(offenders, [], 'a profile re-derived from a class name can drift from the table it claims to obey');
+  });
+});
+
+describe('class profiles — every class has a merge boundary', () => {
+  it('kills "a class with no merge boundary at all": every class selects a test gate, a verb, or both', () => {
+    // `docs` selects NO `testProcess.*` — a markdown initiative has no suite to
+    // run — and that is only safe because it carries `mergeBoundaryVerb: 'gate
+    // docs'`. A class with neither would reach the merge with nothing having
+    // checked it, and the emptiness would look exactly like a green gate.
+    for (const cls of CHANGE_CLASSES) {
+      const p = CLASS_PROFILES[cls];
+      assert.ok(
+        p.mergeBoundaryTest.length > 0 || p.mergeBoundaryVerb !== null,
+        `${cls} declares neither a merge-boundary test nor a verb — its merge boundary checks nothing`,
+      );
+    }
   });
 });
 

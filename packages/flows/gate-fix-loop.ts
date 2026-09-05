@@ -45,7 +45,7 @@ export type EnqueueGateFixInput = {
   manifestPath: string;
   initiativeId: string;
   /** Which sub-gate went red — surfaced in the WI rationale. */
-  failedGate: 'local' | 'ci';
+  failedGate: 'local' | 'ci' | 'docs';
   /** The cycle's effective project full-suite command (CycleInput.qualityGateCmd). */
   projectGateCmd: string[];
 };
@@ -72,7 +72,7 @@ function notifyCapPark(initiativeId: string, detail: string): void {
  * union of every dev-WI's `files_in_scope`. No sharp `qualityGateCmd` — the
  * project gate (the full suite) IS the gate the fix must turn green.
  */
-function gateFixConcern(failedGate: 'local' | 'ci', failureDetail: string): FixConcernSource {
+function gateFixConcern(failedGate: 'local' | 'ci' | 'docs', failureDetail: string): FixConcernSource {
   return {
     origin: 'gate-fix',
     concernKind: 'code-fix',

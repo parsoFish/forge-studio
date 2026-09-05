@@ -34,7 +34,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '@forge/flows/work-item.ts';
-import { profileFor, readChangeClass } from '../class-profiles.ts';
+import { hollowGateGuardFor, profileFor, readChangeClass } from '../class-profiles.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
@@ -268,7 +268,8 @@ export async function runDeveloperLoop(
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (ADR 051).
-  const requiredPathsSource = profileFor(readChangeClass(input.manifestPath)).requiredPathsSource;
+  const classProfile = profileFor(readChangeClass(input.manifestPath));
+  const requiredPathsSource = classProfile.requiredPathsSource;
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'developer-loop',
@@ -728,12 +729,7 @@ export async function runDeveloperLoop(
           // when ALL of THIS WI's declared outputs are on the branch (a sibling
           // genuinely delivered them) — not on a bare "branch has a commit".
           requiredPaths: wi.creates ?? [],
-          // A behaviour-preserving refactor WI (rename/move/reformat) has no
-          // fail-first gate — the existing suite is green on the base — so the
-          // iter-0 hollow-gate guard would wrongly reject it. The PM marks such
-          // WIs; honour the marker by disabling that guard for them (the diff +
-          // empty-delivery backstop still guard against a no-op).
-          failOnHollowIter0Gate: !wi.behavior_preserving,
+          failOnHollowIter0Gate: hollowGateGuardFor(classProfile.iter0FailFirst, wi.behavior_preserving),
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,
