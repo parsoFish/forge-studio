@@ -32,7 +32,18 @@ import { join } from 'node:path';
 
 import { scaffoldGreenfieldProject } from '../../project-create.ts';
 
-const FORGE = '/home/parso/forge-m5-b';
+/**
+ * The repo root, derived from THIS FILE's own location — never a hardcoded
+ * absolute path. The first version of this test hardcoded the author's
+ * worktree (`/home/parso/forge-m5-b`) and passed locally while failing every CI
+ * run with `ENOENT: … lstat '/home/parso/forge-m5-b/studio/starters'`, because
+ * CI checks out to `/home/runner/work/...`. A local gate structurally cannot
+ * catch that: the path exists on the machine that wrote it. §15.148's rule — a
+ * tool that resolves its inputs from its own location answers a different
+ * question in each checkout — with the sign flipped: here the location IS the
+ * only honest source, and the absolute path was the lie.
+ */
+const FORGE = join(import.meta.dirname, '..', '..', '..', '..');
 
 /** A forge root with the real starters, so the scaffold is the real one. */
 function plantRoot() {
