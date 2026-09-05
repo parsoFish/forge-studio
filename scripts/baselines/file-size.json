@@ -35,7 +35,6 @@
   "apps/studio/lib/studio-client.test.ts": 1373,
   "apps/studio/lib/studio-client.ts": 2540,
   "packages/factory/phases/developer-loop.ts": 1941,
-  "packages/factory/phases/project-manager.ts": 859,
   "packages/factory/phases/reflector.test.ts": 866,
   "packages/factory/phases/reflector.ts": 981,
   "packages/flows/run-model-derive.ts": 988,
