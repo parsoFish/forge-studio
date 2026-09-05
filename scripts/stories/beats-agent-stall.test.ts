@@ -358,22 +358,55 @@ test('AT-6.11.17-10 (positive control) a beat with no declared agent wait keeps 
  * accepts luck is the fail-open shape this campaign keeps paying for.
  */
 
-/** A beat declaring an agent wait whose route needs no navigation and whose
- *  `do` block is empty — no waiter can consume the bound. */
+/**
+ * A beat declaring an agent wait, with no `do` block, that reaches its route by
+ * following a NAV LINK — so the consequence wait, which runs only once the beat
+ * stands on its target, never gets the bound.
+ *
+ * NOTE, because this fixture CHANGED: it used to be a beat with an empty `do`
+ * standing ON its target route. `6.11.25` (ruling 285) made that case
+ * legitimate — a beat may WATCH an agent it did not start, and the consequence
+ * wait now runs for it — so the guard correctly stopped firing there and this
+ * pin would have gone green for a good reason. Re-fixtured rather than deleted:
+ * the guard still has a reachable failing case, and a guard whose only red pin
+ * has quietly become unreachable is decoration.
+ */
 const strandedWaitBeat = {
-  act: 'Stand on the session and declare a wait nothing can consume',
+  act: 'Declare a wait for a route this beat neither stands on nor acts to reach',
   wait: { for: 'agent', upTo: 5_000 },
   expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true' } },
   say: 'A declared bound that bounds nothing.',
 };
 
 test('AT-6.11.19-1 (RED) a declared agent wait that NO waiter consumed reds the beat, naming it', async () => {
-  // The page already satisfies every expectation, so without the guard this
-  // beat is GREEN — green by luck, with a ten-second bound that bounded
-  // nothing. That is the shape the guard exists to refuse.
-  const page = fakeStudio({ commitMs: 0, phaseAfterMs: 0, stalledAfterMs: null });
-  await page.goto('http://localhost:4124' + SESSION);
-  const verdict = await driveBeat(page as never, strandedWaitBeat, 0, 'http://localhost:4124');
+  // The one path that still strands a declared bound: the beat reaches its
+  // route by following a NAV LINK rather than by a `do` press, so the
+  // consequence wait — which runs only once the beat is standing on its target
+  // — never gets the bound. Everything the beat asserts is then satisfied, so
+  // WITHOUT the guard this is GREEN: green by luck, with a 5-second bound that
+  // bounded nothing.
+  let route = '/monitor';
+  const page: any = {
+    url: () => 'http://localhost:4124' + route,
+    goto: async () => {},
+    locator: (sel: string) => ({
+      first: () => page.locator(sel),
+      count: async () => (sel.includes(`href="${SESSION}"`) ? 1 : 0),
+      click: async () => { route = SESSION; },
+      waitFor: async () => {},
+    }),
+    waitForURL: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => ({
+      data:
+        route === SESSION
+          ? { page: 'session', 'page-ready': 'true' }
+          : { page: 'monitor', 'page-ready': 'true' },
+      nested: [],
+      lifecycle: 'working',
+    }),
+  };
+  const verdict = await driveBeat(page, strandedWaitBeat, 1, 'http://localhost:4124');
 
   assert.equal(
     verdict.status,
@@ -398,7 +431,11 @@ test('AT-6.11.19-2 (positive control) the SAME beat with a consumer runs, and th
 test('AT-6.11.19-3 (positive control) a beat that declares NO wait is never judged by this guard', async () => {
   const page = fakeStudio({ commitMs: 0, phaseAfterMs: 0, stalledAfterMs: null });
   await page.goto('http://localhost:4124' + SESSION);
-  const noWait = { ...strandedWaitBeat, wait: undefined };
+  const noWait = {
+    act: 'Stand on the session and declare no wait at all',
+    expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true' } },
+    say: 'A plain read.',
+  };
   const verdict = await driveBeat(page as never, noWait as never, 0, 'http://localhost:4124');
   assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
   assert.doesNotMatch(verdict.failures.join(' | '), /no waiter/i, said2(verdict));
@@ -616,4 +653,86 @@ test('AT-6.11.21-10 (positive control) a single match is filled exactly as `fill
   const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124');
   assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
   assert.deepEqual(page.filled, ['The gate command is `npm test`.']);
+});
+
+/**
+ * A beat that WATCHES an agent without acting still waits for it — found by
+ * `6.11.19`'s own guard, on the first beat that exercised the case
+ * (bead `forge-8vfn.6.11.25`, T1 ruling 285).
+ *
+ * S1 beat 6 was re-authored to assert what onboarding actually does: a
+ * dispatched agent session running to a terminal phase. Onboarding is
+ * fire-and-forget — three phases, no `awaits: questions` — so the beat has
+ * nothing to press or fill, and its `do` is empty. It still stands on a REAL
+ * AGENT and still declares `wait: { for: 'agent', upTo: 600_000 }`.
+ *
+ * `waitForConsequence` ran only when `steps.length > 0`, so that beat's bound
+ * bounded NOTHING — and `6.11.19`'s guard said so, in the words it was written
+ * in: "a URL wait and a page-ready wait both take the bound and neither watches
+ * an agent". The guard was right and the wiring was the gap: a declared agent
+ * wait is a statement about the BEAT, and a beat may legitimately observe an
+ * agent it did not itself start.
+ */
+test('AT-6.11.25-1 (RED) a beat with NO do block still waits for its declared agent bound', async () => {
+  // The consequence arrives at 400 ms; nothing on this beat acts.
+  const page = fakeStudio({ commitMs: 0, phaseAfterMs: 400, stalledAfterMs: null });
+  await page.goto('http://localhost:4124' + SESSION);
+  const verdict = await driveBeat(
+    page as never,
+    {
+      act: 'Watch the agent finish',
+      do: [],
+      wait: { for: 'agent', upTo: 5_000 },
+      expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-verdict' } },
+      say: 'The operator watches.',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+  assert.doesNotMatch(
+    verdict.failures.join(' | '),
+    /NO WAITER CONSUMED IT/,
+    'the declared bound must be consumed by a waiter that watches the agent',
+  );
+});
+
+test('AT-6.11.25-2 (positive control) a beat with no do AND no declared wait is unchanged', async () => {
+  // Nothing declared, nothing to wait for: the beat is judged immediately and
+  // the guard does not apply.
+  const page = fakeStudio({ commitMs: 0, phaseAfterMs: 0, stalledAfterMs: null });
+  await page.goto('http://localhost:4124' + SESSION);
+  const began = Date.now();
+  const verdict = await driveBeat(
+    page as never,
+    {
+      act: 'Just look',
+      do: [],
+      expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-verdict' } },
+      say: 'A plain read.',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
+  assert.ok(Date.now() - began < 2_000, 'an undeclared beat gains no new waiting');
+});
+
+test('AT-6.11.25-3 a watching beat whose agent never arrives still reds at its bound, naming it', async () => {
+  const page = fakeStudio({ commitMs: 0, phaseAfterMs: null, stalledAfterMs: null });
+  await page.goto('http://localhost:4124' + SESSION);
+  const verdict = await driveBeat(
+    page as never,
+    {
+      act: 'Watch the agent finish',
+      do: [],
+      wait: { for: 'agent', upTo: 600 },
+      expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-verdict' } },
+      say: 'The operator watches.',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(verdict.status, 'red');
+  assert.match(verdict.failures.join(' | '), /gave up at the agent wait \(declared 600 ms\)/, JSON.stringify(verdict.failures));
 });
