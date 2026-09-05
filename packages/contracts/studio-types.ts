@@ -110,7 +110,6 @@ export type AgentFanout = {
  * when a new provider ships.
  */
 export const FANOUT_ISOLATION_KINDS = ['worktree', 'none'] as const;
-export type FanoutIsolationKind = (typeof FANOUT_ISOLATION_KINDS)[number];
 
 /** An agent IS a skill directory; this is the parsed view of its SKILL.md. */
 export type AgentDefinition = {
@@ -349,7 +348,6 @@ export type InstructionSeed = {
  * future graph-memory backend (an earlier Zep attempt was removed).
  */
 export const KB_BACKENDS = ['filesystem'] as const;
-export type KbBackendId = (typeof KB_BACKENDS)[number];
 
 /**
  * KB binding (R1-01 amendment) — replaces the old loose `scope` enum. A KB
