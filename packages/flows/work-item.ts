@@ -232,6 +232,32 @@ export function serializeWorkItem(w: WorkItem): string {
 }
 
 /**
+ * Where `gateRequiredPaths` takes the branch-diff requirement from. Declared
+ * HERE, beside the only function that acts on it, and imported by the class
+ * table's `requiredPathsSource` column rather than re-declared there — the same
+ * move the table already makes for `CHANGE_CLASSES`, and for the same reason:
+ * two unions with equal contents are what drift looks like the day someone
+ * edits one of them.
+ *
+ * Every value has a real implementation below and a class that could take it.
+ * A value with no honest consumer does not belong here: the column's first
+ * draft also offered `'manifest.creates'`, which named a manifest field that
+ * does not exist, and `'none'`, which is the empty required-paths list that let
+ * a vacuous exit-0 gate false-pass at iter-0 on 2026-07-11 (see below). Both
+ * were cut rather than given a branch, so adding a value is a compile error
+ * until something reads it.
+ *
+ *  - `wi.creates`      the priority chain below: creates, else
+ *                      verification_artifact, else files_in_scope. The
+ *                      narrowest true statement of what the WI must produce.
+ *  - `files-in-scope`  the declared scope, always, ignoring `creates`. Stricter:
+ *                      it says the WI must touch everything it declared, which
+ *                      is the right requirement for work that EDITS named files
+ *                      rather than creating new ones.
+ */
+export type RequiredPathsSource = 'wi.creates' | 'files-in-scope';
+
+/**
  * Paths the gate-tightening layer requires in the branch diff before an
  * exit-0 gate may count as passed. Prefers the WI's explicit `creates`
  * declaration, then `verification_artifact`, then `files_in_scope` (which is
@@ -246,7 +272,8 @@ export function serializeWorkItem(w: WorkItem): string {
  * (requiring ALL of a broader path set would false-skip WIs whose scope files
  * were touched by siblings).
  */
-export function gateRequiredPaths(w: WorkItem): readonly string[] {
+export function gateRequiredPaths(w: WorkItem, source: RequiredPathsSource = 'wi.creates'): readonly string[] {
+  if (source === 'files-in-scope') return w.files_in_scope;
   if (w.creates !== undefined && w.creates.length > 0) return w.creates;
   if (w.verification_artifact !== undefined && w.verification_artifact.length > 0) return [w.verification_artifact];
   return w.files_in_scope;

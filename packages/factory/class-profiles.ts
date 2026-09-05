@@ -28,8 +28,11 @@
  * and act on the columns.
  */
 
+import { readFileSync } from 'node:fs';
+
 import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
-import { CHANGE_CLASSES } from '@forge/flows/manifest.ts';
+import { CHANGE_CLASSES, parseManifest } from '@forge/flows/manifest.ts';
+import type { RequiredPathsSource } from '@forge/flows/work-item.ts';
 
 /** The manifest field's own union — not a second declaration of it. */
 export type ChangeClass = InitiativeManifest['class'];
@@ -39,8 +42,13 @@ export { CHANGE_CLASSES };
 export type GateProfile = {
   /** Must the per-WI quality gate FAIL on the untouched base before iteration 1? */
   iter0FailFirst: 'required' | 'advisory' | 'off';
-  /** Where the ralph runner's diff-inclusion list comes from. */
-  requiredPathsSource: 'wi.creates' | 'manifest.creates' | 'none';
+  /**
+   * Where the ralph runner's diff-inclusion list comes from. The union is
+   * `@forge/flows`' own (`work-item.ts`, beside `gateRequiredPaths`), not a
+   * copy of it — see the module header on why this table declares no
+   * vocabulary of its own.
+   */
+  requiredPathsSource: RequiredPathsSource;
   /** Which `testProcess.*` the ORCHESTRATOR runs at the merge boundary, in order; [] = none. */
   mergeBoundaryTest: ReadonlyArray<'ci' | 'local' | 'acceptance'>;
   /** An orchestrator verb run at the merge boundary in addition to the above; null = none. */
@@ -122,4 +130,17 @@ export function isChangeClass(value: unknown): value is ChangeClass {
  */
 export function profileFor(cls: ChangeClass): GateProfile {
   return CLASS_PROFILES[cls];
+}
+
+/**
+ * The initiative's change class, read from its manifest. NOT best-effort: the
+ * class selects the gate profile, so an unreadable manifest here has no honest
+ * default — running under a guessed policy is worse than refusing to run.
+ *
+ * It lives with the table because every caller that reads a profile needs it
+ * first, and two independent manifest reads would be two answers to the same
+ * question the moment one of them grew a fallback.
+ */
+export function readChangeClass(manifestPath: string): ChangeClass {
+  return parseManifest(readFileSync(manifestPath, 'utf8')).class;
 }
