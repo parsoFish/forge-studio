@@ -220,6 +220,29 @@ export default {
         { fill: 'session-answer', with: `The quality gate is \`${GATE}\`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation.` },
         { press: 'submit-answers' },
       ],
+      // AMENDED 2026-09-05 (ruling 220, bead `forge-8vfn.6.11.10`). This beat
+      // stands on a REAL AGENT: `SessionInteractivePanel` renders
+      // `[data-field="session-answer"]` only inside a `question-form`
+      // affordance — only once the onboarding agent has ASKED. Runs 1, 2 and 3
+      // all reported `no element carries that handle`, and run 3's
+      // `describeControl` proved the handle was ABSENT rather than disabled or
+      // slow. The cause was the runner, not the product: one bound,
+      // `READY_TIMEOUT_MS = 15_000`, for a DOM update and for an agent's first
+      // question alike. #438 gives a beat its own bound; this declares it.
+      //
+      // 10 minutes is a STATED GUESS, not a measurement, and it is the first
+      // thing the next run turns into a number: no run has ever reached this
+      // state, so the true figure is only known to be larger than anything
+      // observed. It is generous enough to be a real measurement and short
+      // enough that a genuine product red does not hold the host for half an
+      // hour — and the verdict now names which bound gave up, so the next run
+      // record cannot confuse "the agent was slow" with "the product is wrong".
+      //
+      // Ruling 214(d) said beat 6 was untouched; it was written before ruling
+      // 220 established that this beat cannot pass without a declared wait.
+      // Landing amend-3 without this would spend S1 run 4's $25 re-measuring a
+      // beat that cannot pass.
+      wait: { for: 'agent', upTo: 600_000 },
       expect: {
         route: '/sessions/onboarding/<sessionId>',
         data: {
@@ -330,9 +353,46 @@ export default {
       // `[data-action="back-to-project"]` renders on every session shell in
       // every phase (W7-A2), so it is.
       act: 'Return to the project, apply the auto-fixable clauses and record a decision on the ones that need your judgement',
+      // AMENDED 2026-09-05 (operator ruling 214 (a)+(b), T1 ruling 217), and
+      // BOTH halves were defects no run could see until run 3 reached this
+      // beat for the first time.
+      //
+      // (a) THE PRESS HAD NOTHING TO APPLY. `ContractResolutionPanel.tsx:270`
+      // disables `apply-clause-decision` while `(notes[c.id] ?? '').trim() ===
+      // ''`; the operator types the decision into
+      // `[data-field="clause-decision-<clauseId>"]` (:262) first. Run 3's own
+      // log names the clause — `locator resolved to <button disabled
+      // data-apply-clause-id="C1b" …>` — so the fill is `clause-decision-C1b`
+      // and not a guess. C1b is the CI mirror clause, and gitweave's
+      // post-auto-fix contract carries `testProcess.local` and no `ci`.
+      //
+      // (b) THE COUNT WAS UNSATISFIABLE BY CONSTRUCTION. The pinned
+      // `resolution-failing-count: '0'` asked for a value only the element's
+      // ABSENCE can produce: `ContractResolutionPanel.tsx:180` is `if
+      // (failing.length === 0) return null` and `:185` carries the count, so
+      // at zero no element carries the key at all — `beats.mjs`'s resolver
+      // sends it to `shared`, every record scores 0, and the beat reds on a
+      // key that cannot exist. §15.175, the same trap the H6 sitting fixed in
+      // S2 beat 5 and S3 beat 5 and left here because no run had reached beat
+      // 9.
+      //
+      // The replacement values are MEASURED, not chosen: on a restored
+      // gitweave copy carrying run 3's `.forge/`, `applyPreflightAutoFixes`
+      // (the function this beat's second press calls) cleared C2 and C4 — the
+      // only two HARD clauses — taking `runPreflight().ok` false → true and
+      // failing 6 → 4; declaring `testProcess.ci`, which is the C1b decision's
+      // whole job, leaves `ok: true` with failing 3 / user 0 / agent 3 (C8,
+      // DEMO-SKILL, DEMO-ALIGN). So readiness and the counts are true
+      // TOGETHER, which is why they sit in one beat (ruling 217, branch (ii)),
+      // and `section: 'contract-resolution'` is named so a future zero cannot
+      // silently revert this beat to §15.175's trap.
       do: [
         { press: 'back-to-project' },
         { press: 'apply-preflight-auto' },
+        {
+          fill: 'clause-decision-C1b',
+          with: "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command.",
+        },
         { press: 'apply-clause-decision' },
       ],
       expect: {
@@ -342,7 +402,10 @@ export default {
           'project-id': 'gitweave',
           'preflight-status': 'ok',
           'flow-ready': 'true',
-          'resolution-failing-count': '0',
+          section: 'contract-resolution',
+          'resolution-failing-count': '3',
+          'resolution-user-count': '0',
+          'resolution-agent-count': '3',
         },
       },
       say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
@@ -363,7 +426,16 @@ export default {
       // gate and asserts `architect-phase` there, which is the same fact read
       // where the operator actually decides on it.
       act: 'Press "Plan with Architect" and describe the first piece of work',
+      // AMENDED 2026-09-05 (ruling 214 (c) as re-scoped by ruling 215). Run 3
+      // reported `no element carries that handle` for `plan-with-architect` —
+      // a handle `ProjectArchitectEntry` renders UNCONDITIONALLY, in every
+      // branch of `[data-section="project-roadmap"]`. It was one tab away: the
+      // project page's tab buttons carried `data-tab`/`data-tab-active` and no
+      // `data-action`, and `beats.mjs` resolves `[data-action=…]` only, so no
+      // story could reach the roadmap tab. Bead `forge-8vfn.6.11.9` (#436)
+      // declared it; this presses it.
       do: [
+        { press: 'project-tab-roadmap' },
         { press: 'plan-with-architect' },
         { fill: 'idea', with: IDEA },
         { fill: 'cost-ceiling-usd', with: CEILING },
