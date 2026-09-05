@@ -139,6 +139,10 @@
             "press": "submit-answers"
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 600000
+        },
         "expect": {
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
@@ -198,6 +202,10 @@
             "press": "apply-preflight-auto"
           },
           {
+            "fill": "clause-decision-C1b",
+            "with": "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command."
+          },
+          {
             "press": "apply-clause-decision"
           }
         ],
@@ -208,7 +216,10 @@
             "project-id": "gitweave",
             "preflight-status": "ok",
             "flow-ready": "true",
-            "resolution-failing-count": "0"
+            "section": "contract-resolution",
+            "resolution-failing-count": "3",
+            "resolution-user-count": "0",
+            "resolution-agent-count": "3"
           }
         }
       },
@@ -216,6 +227,9 @@
         "act": "Press \"Plan with Architect\" and describe the first piece of work",
         "say": "With a contract in place the Architect can plan. It interviews the operator, reads the project, and produces a roadmap for review — the first Gate a human stands at. A real Agent costs money, so the operator caps this run before starting it, and forge names the session it just minted on the page they are standing on rather than sweeping them into it.",
         "do": [
+          {
+            "press": "project-tab-roadmap"
+          },
           {
             "press": "plan-with-architect"
           },
@@ -321,12 +335,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "sessionId": "2026-09-05T03-17-09-67ecbdd1"
+        "sessionId": "2026-09-05T06-38-10-ace5d1d4"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-05T03-17-09-67ecbdd1",
+        "onboard-session-id": "2026-09-05T06-38-10-ace5d1d4",
         "onboard-attaching": "false"
       },
       "frame": "frames/04-open-brief-the-agent-give-it-the-north-s.png"
@@ -352,7 +366,7 @@
       "say": "This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator's. The secrets stage names the environment variables and never their values.",
       "status": "red",
       "failures": [
-        "could not fill [data-field=\"session-answer\"] with \"The quality gate is `python -m pytest tests/`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-answer\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "could not fill [data-field=\"session-answer\"] with \"The quality gate is `python -m pytest tests/`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-answer\"]').first()\u001b[22m\n. no element carries that handle."
       ],
       "bindings": {},
       "data": {
@@ -364,13 +378,11 @@
     {
       "act": "Select the demo stage and hand it to the demo builder — the heavy one",
       "say": "Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.",
-      "status": "red",
-      "failures": [
-        "data-action: expected \"view-demo-session\", got \"back-to-project\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
-        "action": "back-to-project",
+        "action": "view-demo-session",
         "stage-detail-stage": "demo"
       },
       "frame": "frames/07-select-the-demo-stage-and-hand-it-to-the.png"
@@ -391,26 +403,36 @@
       "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
       "status": "red",
       "failures": [
-        "could not press [data-action=\"apply-clause-decision\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"apply-clause-decision\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <button disabled data-apply-clause-id=\"C1b\" data-action=\"apply-clause-decision\" title=\"Auto-fixes are applying — one clause at a time\">Apply with agent</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    10 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "data-flow-ready: expected \"true\", got \"false\"",
+        "data-resolution-failing-count: expected \"3\", got \"4\"",
+        "data-resolution-user-count: expected \"0\", got \"1\""
       ],
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "gitweave"
+        "project-id": "gitweave",
+        "section": "contract-resolution",
+        "resolution-failing-count": "4",
+        "resolution-user-count": "1",
+        "resolution-agent-count": "3",
+        "preflight-status": "ok",
+        "flow-ready": "false"
       },
       "frame": "frames/09-return-to-the-project-apply-the-auto-fix.png"
     },
     {
       "act": "Press \"Plan with Architect\" and describe the first piece of work",
       "say": "With a contract in place the Architect can plan. It interviews the operator, reads the project, and produces a roadmap for review — the first Gate a human stands at. A real Agent costs money, so the operator caps this run before starting it, and forge names the session it just minted on the page they are standing on rather than sweeping them into it.",
-      "status": "red",
-      "failures": [
-        "could not press [data-action=\"plan-with-architect\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"plan-with-architect\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
-      ],
-      "bindings": {},
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "architectSessionId": "2026-09-05T06-38-37-56cb82d4"
+      },
       "data": {
         "page": "projects",
-        "project-id": "gitweave"
+        "project-id": "gitweave",
+        "section": "new-idea",
+        "architect-session-id": "2026-09-05T06-38-37-56cb82d4"
       },
       "frame": "frames/10-press-plan-with-architect-and-describe-t.png"
     },
@@ -419,7 +441,7 @@
       "say": "The plan is approved and committed. An existing repo that forge knew nothing about half an hour ago is now an onboarded project with a contract, a demo, a knowledge profile and an approved roadmap — ready for a Factory to build.",
       "status": "red",
       "failures": [
-        "could not press [data-action=\"view-architect-session\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"view-architect-session\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
       ],
       "bindings": {},
       "data": {},
@@ -429,14 +451,32 @@
   "reap": {
     "reaped": [
       {
-        "pid": 670104,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T03-17-09-200-qfsl",
+        "pid": 2562420,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 670071,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T03-17-09-200-qfsl",
+        "pid": 2551264,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 2541411,
+        "dir": "/home/parso/forge-m5-b/_logs/_agent-onboarding-agent-2026-09-05T06-38-10-271-a3b8",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 2541122,
+        "dir": "/home/parso/forge-m5-b/_logs/_agent-onboarding-agent-2026-09-05T06-38-10-271-a3b8",
+        "signal": "SIGTERM",
+        "via": "cwd"
+      },
+      {
+        "pid": 2550551,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
         "signal": "SIGTERM",
         "via": "cwd"
       }
