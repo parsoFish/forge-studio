@@ -139,16 +139,40 @@ export default {
       say: 'A flow’s goal is not decoration: it is what every agent in it is told it is working towards, so it is written before the stations are. The operator says what the flow is for in one sentence, and the header records that the flow now has one.',
     },
     {
-      // NOT expressible, and deliberately left so — see the header. The palette
-      // chip carries `[data-palette-chip][data-chip-ref="architect"]
-      // [data-chip-placeable="true"]` and no `data-action`; the edge is drawn
-      // between two `[data-handleid]` handles. `do` names `data-field` and
-      // `data-action` values only, so there is no honest step to write, and
-      // inventing a `data-action` would be inventing the contract this story
-      // exists to hold the product to. The beat asserts the canvas the operator
-      // would be looking at: `component`, `node-count` and `edge-count` are all
-      // the canvas <div>'s own.
+      // FULLY expressible since bead `5.12` declared the builder's handles,
+      // and AMENDED 2026-09-05 (H6, ruling 170, operator present) to use them.
+      // The beat's `act`, `expect` and `say` are UNTOUCHED — it always asserted
+      // `node-count="4"` and `edge-count="3"`; what it lacked was a way to
+      // produce them. `apps/studio` now declares `place-station-<ref>` and
+      // `connect-from-<ref>` / `connect-into-<ref>`, so the drag and the wiring
+      // are nameable acts rather than mouse gestures no story can express.
+      //
+      // PROVEN GREEN before it was written here, twice, by throwaway probe
+      // `probe512` — before and after the `FlowStationNode` split
+      // (`_1.0/evidence/m5-b-probe512-green.log`, `…-after-split.log`): the
+      // place press takes the canvas to four nodes, and the two connect
+      // presses to three edges.
+      //
+      // ⚠ SUFFICIENT FOR THIS BEAT, AND NOT YET FOR THE STORY. Probe `probe167`
+      // drove this same `do` on to a save: beats 1–4 green, and then the saved
+      // flow is one the product cannot read back. `completeInto` draws the edge
+      // through `stationEdgeShape(source, target)` with NO `artifact` (the
+      // pointer-drag path opens the ArtifactPicker afterwards; the declared
+      // handles do not), the save route's `validateFlow` never runs
+      // `validateArtifactRef`, so the PUT returns 200 and writes `edges:
+      // [{from, to}]`; `loadFlowDefinition` then requires `artifact` and
+      // throws, `loadAllFlows` silently skips the flow, and `/flows/<id>`
+      // renders `data-page="not-found"`. Bead `forge-8vfn.5.12.1` (P1) owns it,
+      // and ruling 175 sequences the fix. So landing this `do` moves S4 from
+      // 6/12 to 7/12 and turns beats 6 and 7 — green today — RED. **S4 is not
+      // re-run until `5.12.1` lands** (ruling 170); this sitting authors the
+      // beat and stops.
       act: 'Drag the "architect" agent out of the palette onto the canvas, and wire it into "plan"',
+      do: [
+        { press: 'place-station-architect' },
+        { press: 'connect-from-architect' },
+        { press: 'connect-into-plan' },
+      ],
       expect: {
         route: '/flows/new',
         data: {
