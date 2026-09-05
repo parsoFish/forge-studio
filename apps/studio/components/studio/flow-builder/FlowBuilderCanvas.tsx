@@ -58,6 +58,7 @@ import {
   nextStationPosition,
   canConnect,
   pickerAnchorFor,
+  cssEscape,
 } from '@/lib/flow-builder-acts';
 import {
   ConnectActsContext,
@@ -70,18 +71,6 @@ import {
 // ---------------------------------------------------------------------------
 // Layout constants (from the mockup autolayout logic)
 // ---------------------------------------------------------------------------
-/**
- * `CSS.escape` where it exists, and a conservative fallback where it does not.
- * Station ids are `stationIdForRef`'s output — an agent ref, or an `fn-<hex>`
- * for a placed station — so the fallback's character class covers every id the
- * builder can mint, and anything outside it is escaped rather than passed
- * through into a selector.
- */
-const cssEscape = (v: string): string =>
-  typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-    ? CSS.escape(v)
-    : v.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-
 const COL_W = 200;
 const ROW_H = 120;
 const PAD_X = 120;

@@ -22,6 +22,7 @@ import {
   nextStationPosition,
   canConnect,
   pickerAnchorFor,
+  cssEscape,
 } from './flow-builder-acts';
 
 const nodes = [
@@ -159,5 +160,20 @@ describe('the declared connect handle asks the question the pointer path asks', 
     // zeroes, which is indistinguishable from "the top-left corner" unless the
     // rule says so.
     expect(pickerAnchorFor({ left: 0, top: 0, right: 0, bottom: 0 }, VIEW)).toBeNull();
+  });
+});
+
+describe('a station id reaches a selector escaped, never raw', () => {
+  test('the ids the builder actually mints pass through unchanged', () => {
+    expect(cssEscape('architect')).toBe('architect');
+    expect(cssEscape('fn-9c2b71')).toBe('fn-9c2b71');
+  });
+
+  test('anything outside that alphabet is escaped rather than passed through', () => {
+    // The fallback branch is what runs where `CSS.escape` is absent, and a
+    // selector built from an unescaped id is how a lookup silently matches
+    // nothing (or something else). Probed rather than assumed (§15.162).
+    expect(cssEscape('a b')).not.toBe('a b');
+    expect(cssEscape('a"]')).not.toContain('"]');
   });
 });

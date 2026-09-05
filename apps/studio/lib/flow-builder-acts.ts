@@ -131,3 +131,18 @@ export function pickerAnchorFor(
     y: clamp(rect.bottom + PICKER_OFFSET, viewport.height),
   };
 }
+
+/**
+ * `CSS.escape` where the runtime has it, and a conservative fallback where it
+ * does not (jsdom without the shim, older runtimes).
+ *
+ * A pure string rule, so it lives here with the other rules rather than beside
+ * the one call site that needs it. Station ids are `stationIdForRef`'s output —
+ * an agent ref, or an `fn-<hex>` for a placed station — so the fallback's
+ * character class covers every id the builder can mint; anything outside it is
+ * escaped rather than passed through into a selector.
+ */
+export function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return value.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+}
