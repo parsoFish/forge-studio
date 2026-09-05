@@ -19,6 +19,7 @@ import type { SdkHooksOption } from '../studio/hook-dispatch.ts';
 import { withIdleDeadline } from '../stream-deadline.ts';
 import { gitIdentityEnvOverlay, type GitIdentity } from '@forge/kernel';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
+import { extractPath, truncate } from '../tool-event-emit.ts';
 
 export type { GitIdentity };
 
@@ -484,12 +485,6 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
   };
 }
 
-function extractPath(input: unknown): string | null {
-  if (typeof input !== 'object' || input === null) return null;
-  const obj = input as Record<string, unknown>;
-  const candidate = obj.file_path ?? obj.notebook_path ?? obj.path;
-  return typeof candidate === 'string' ? candidate : null;
-}
 
 /**
  * Phase A — derive a `{ filePath, op }` file-change descriptor for a tool call,
@@ -547,7 +542,3 @@ export function summarizeToolInput(name: string, input: unknown): string {
   }
 }
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
-}

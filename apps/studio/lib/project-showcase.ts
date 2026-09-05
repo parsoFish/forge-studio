@@ -124,11 +124,20 @@ export type ShowcaseStats = {
  * of anything the model doesn't genuinely carry. Absent fields render their
  * honest empty value (`0` / `null`), never a fabricated non-zero standing in
  * for a fact the model doesn't have.
+ *
+ * The AC verdict counts come from the REVIEW record, not the demo (spec §5
+ * item 5): the demo is the evidence, and the read-only reviewer is what judges
+ * it. Passing `null` for the review — no review has run yet — yields 0/0/0,
+ * which is the honest count of verdicts that exist, not a claim that every
+ * criterion missed.
  */
-export function deriveShowcaseStats(model: DemoModel): ShowcaseStats {
+/** The slice of a review-findings record these stats read. */
+export type ReviewVerdictSource = { acEvaluations?: Array<{ verdict?: 'met' | 'partial' | 'missed' }> };
+
+export function deriveShowcaseStats(model: DemoModel, review: ReviewVerdictSource | null): ShowcaseStats {
   const acVerdictCounts: ShowcaseAcVerdictCounts = { met: 0, partial: 0, missed: 0 };
-  for (const evaluation of model.acEvaluations ?? []) {
-    acVerdictCounts[evaluation.verdict] += 1;
+  for (const evaluation of review?.acEvaluations ?? []) {
+    if (evaluation.verdict) acVerdictCounts[evaluation.verdict] += 1;
   }
   return {
     testEvidenceCount: model.testEvidence?.length ?? null,

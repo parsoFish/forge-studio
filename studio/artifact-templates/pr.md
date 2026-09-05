@@ -11,15 +11,19 @@ schema:
     - demo/<initiative-id>/DEMO.md
   requiredFields:
     - title
-    - acEvaluations
+    - acceptanceCriteria
 ---
 
 # PR artifact contract
 
 The self-contained, demo-embedded pull request: a PR description plus the demo artifact
 (`demo.json` → `DEMO.md`, ADR 021 schema; DEMO.html retired in F4), validated by `validateDemoModel` in the
-`pr_self_contained` gate. `acEvaluations[]` (criterion → met/partial/missed + evidence) is the
-intent-vs-outcome surface a human reviewer approves against — evidence, not a test-name table.
+`pr_self_contained` gate. `acceptanceCriteria[]` is the list the initiative was decomposed against —
+the evidence a human reviewer approves against.
+
+**The per-criterion VERDICT is not here.** It is the read-only review agent's, in
+`review-findings.json` (`acEvaluations[]`: criterion → met/partial/missed + evidence), because the agent
+that assembles the evidence must not also be the one that scores it (spec §5 item 5).
 
 R4-10-F1 relocated the whole bundle onto the demo node: the demo agent authors `demo.json` AND
 `.forge/pr-description.md` (the unifier's former job), and the pipeline renders `DEMO.md`. Requiring

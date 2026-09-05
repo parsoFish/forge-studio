@@ -84,9 +84,9 @@ test('loadShowcase honours a requested ELIGIBLE cycle; an unknown/foreign reques
     fetched.push(cycleId);
     return null;
   };
-  const picked = await loadShowcase({ cycles, projectId: 'gitpulse', fetchDemo, requestedCycleId: '2026-07-01T00-00-00_INIT-old' });
+  const picked = await loadShowcase({ cycles, projectId: 'gitpulse', fetchDemo, fetchReview: async () => null, requestedCycleId: '2026-07-01T00-00-00_INIT-old' });
   expect(picked).toMatchObject({ kind: 'loaded', cycleId: '2026-07-01T00-00-00_INIT-old' });
-  const fallback = await loadShowcase({ cycles, projectId: 'gitpulse', fetchDemo, requestedCycleId: 'not-eligible' });
+  const fallback = await loadShowcase({ cycles, projectId: 'gitpulse', fetchDemo, fetchReview: async () => null, requestedCycleId: 'not-eligible' });
   expect(fallback).toMatchObject({ kind: 'loaded', cycleId: '2026-07-11T17-26-34_INIT-new' });
   // The fetch ran with exactly the resolved ids — never the raw request.
   expect(fetched).toEqual(['2026-07-01T00-00-00_INIT-old', '2026-07-11T17-26-34_INIT-new']);
@@ -94,8 +94,8 @@ test('loadShowcase honours a requested ELIGIBLE cycle; an unknown/foreign reques
 
 test('deriveShowcaseStats: ABSENT testEvidence → null ("not captured"); present-but-empty → a real 0', () => {
   const base: DemoModel = { title: 't', essence: 'e', project: 'p', diffStat: '', checkpoints: [] };
-  expect(deriveShowcaseStats(base).testEvidenceCount).toBeNull();
-  expect(deriveShowcaseStats({ ...base, testEvidence: [] } as DemoModel).testEvidenceCount).toBe(0);
+  expect(deriveShowcaseStats(base, null).testEvidenceCount).toBeNull();
+  expect(deriveShowcaseStats({ ...base, testEvidence: [] } as DemoModel, null).testEvidenceCount).toBe(0);
 });
 
 // ---- actionable-now (projects-18) -------------------------------------------

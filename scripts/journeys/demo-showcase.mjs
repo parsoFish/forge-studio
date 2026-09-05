@@ -132,16 +132,20 @@ export const journey = defineJourney({
         const testsTile = tiles.find((t) => t.label === 'Tests');
         const metTile = tiles.find((t) => t.label === 'AC met');
         check(testsTile?.value === '3', `demo-showcase-render: the Tests tile shows the seeded demo.json's real testEvidence count (got "${testsTile?.value}")`);
-        check(metTile?.value === '2', `demo-showcase-render: the AC met tile shows the seeded demo.json's real acEvaluations verdict count (got "${metTile?.value}")`);
+        check(metTile?.value === '2', `demo-showcase-render: the AC met tile shows the seeded REVIEW record's real verdict count — the per-criterion verdict is the read-only reviewer's, not the demo's (got "${metTile?.value}")`);
 
         const evidencePresent = await page.locator('[data-section="showcase-evidence"] [data-section="demo-comparison"]').count() > 0;
         check(evidencePresent, 'demo-showcase-render: [data-section="showcase-evidence"] renders the SAME <DemoComparison> the per-run /artifact view uses');
-        const evalCount = await page.locator('[data-section="showcase-evidence"] [data-section="demo-evaluation"]').getAttribute('data-ac-eval-count').catch(() => null);
-        check(evalCount === '2', `demo-showcase-render: the Intent & Outcome table carries the real per-AC evaluation count (data-ac-eval-count, got "${evalCount}")`);
+        // The evidence gallery carries the CRITERIA; their verdicts render on the
+        // review panel (`data-section="ac-verdicts"`), which this page does not
+        // show. Asserting a verdict table here would assert a section the demo no
+        // longer owns — the tile above is what proves the verdicts reached the page.
+        const acCount = await page.locator('[data-section="showcase-evidence"] [data-section="demo-acs"] li').count().catch(() => 0);
+        check(acCount === 2, `demo-showcase-render: the evidence gallery lists the initiative's real acceptance criteria (got ${acCount})`);
         const title = await page.locator('[data-section="showcase-evidence"] [data-section="demo-comparison"]').first().evaluate((el) => el.querySelector('div')?.textContent ?? '').catch(() => '');
         check(title.includes('--write'), `demo-showcase-render: the rendered evidence is the seeded cycle's own demo (got title text "${title}")`);
 
-        await caption(page, 'Stats strip + the full evidence gallery — both derived from the same real demo.json the merged cycle produced.');
+        await caption(page, 'Stats strip + the full evidence gallery — the evidence from the merged cycle\'s demo, the verdicts from the reviewer that judged it.');
         await frame(page, 'showcase-2-render', 'R4-14 — the demo showcase: a real stats strip above the reused evidence gallery', { key: true });
       },
     },
@@ -197,8 +201,8 @@ export const journey = defineJourney({
           ).then(() => true).catch(() => false);
           check(ready, 'demo-showcase-refresh: the showcase reloads clean ([data-page-ready="true"])');
 
-          const evalCount = await page.locator('[data-section="showcase-evidence"] [data-section="demo-evaluation"]').getAttribute('data-ac-eval-count').catch(() => null);
-          check(evalCount === '1', `demo-showcase-refresh: the evaluation table's real count flips to the NEWER cycle's own (data-ac-eval-count, expected "1", got "${evalCount}")`);
+          const acCount = await page.locator('[data-section="showcase-evidence"] [data-section="demo-acs"] li').count().catch(() => 0);
+          check(acCount === 1, `demo-showcase-refresh: the criteria list flips to the NEWER cycle's own (expected 1, got ${acCount})`);
           const title = await page.locator('[data-section="showcase-evidence"] [data-section="demo-comparison"]').first().evaluate((el) => el.querySelector('div')?.textContent ?? '').catch(() => '');
           check(title.includes('--check'), `demo-showcase-refresh: the rendered evidence is the NEWER cycle's own demo, not the stale one (got title text "${title}")`);
 

@@ -52,6 +52,7 @@ import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
+import { fetchReviewFindings } from '@/lib/flow-run-detail-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
 import { deriveShowcaseStats, listShowcaseCycleIds, resolveShowcaseSelectValue, type ShowcaseStats } from '@/lib/project-showcase';
@@ -103,6 +104,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
         cycles,
         projectId: id,
         fetchDemo: fetchDemoModel,
+        fetchReview: fetchReviewFindings,
         ...(pickedCycleId ? { requestedCycleId: pickedCycleId } : {}),
       });
       if (signal.cancelled) return;
@@ -128,7 +130,8 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
 
   const model: DemoModel | null = result?.kind === 'loaded' ? result.model : null;
   const cycleId: string | undefined = result?.kind === 'loaded' ? result.cycleId : undefined;
-  const stats: ShowcaseStats | null = model ? deriveShowcaseStats(model) : null;
+  const review = result?.kind === 'loaded' ? result.review : null;
+  const stats: ShowcaseStats | null = model ? deriveShowcaseStats(model, review) : null;
   // Honest empty: no eligible cycle at all (`kind: 'empty'`) OR a terminal
   // cycle exists but its demo.json never landed (`kind: 'loaded', model: null`)
   // — either way there is nothing real to render, never a fabricated gallery.

@@ -23,16 +23,17 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { coerceDemoModel, validateDemoModel, type AcEvaluation, type DemoModel } from '../demo-model.ts';
+import { profileFor, type ChangeClass } from '../class-profiles.ts';
+import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
-import { worktreeDemoJsonPath } from '@forge/flows/demo-paths.ts';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
   type ReviewFinding,
+  type ReviewFindingsExpectation,
   type ReviewFindingsRecord,
 } from '@forge/flows/flow-artifacts.ts';
 import type { EventLogger } from '@forge/kernel';
@@ -59,6 +60,12 @@ export type AdversarialReviewInput = {
   worktreePath: string;
   cycleId: string;
   logsRoot: string;
+  /**
+   * The initiative's change class (ADR 051). It selects the review lenses from
+   * the class → gate-profile table — the whole reason this pipeline is ONE agent
+   * rather than a fixed four-lens critique (spec §5 item 5).
+   */
+  changeClass: ChangeClass;
   /** Initiative cost budget — resolves declared share caps. */
   costBudgetUsd?: number;
   /** Managed-project name for the Brain-3 advisory context (skipped when absent). */
@@ -82,9 +89,38 @@ export type AdversarialReviewResult =
     };
 
 /** ADR-039 declared-data fail-loud guard (exported so tests pin the throws). */
+/**
+ * The reviewer's entire tool set. Read-only by construction: it can look at the
+ * tree and write its one findings file, and there is nothing here through which
+ * a command, a cell, a subagent or the network can be reached.
+ */
+export const REVIEW_ALLOWED_TOOLS: readonly string[] = ['Read', 'Grep', 'Glob'];
+
+/**
+ * `Write` is FENCE-GATED, not granted and not forbidden: it must appear on
+ * neither list. On `allowed-tools` the SDK pre-approves it and never consults
+ * the write fence; on `disallowed-tools` the reviewer cannot author its own
+ * findings file at all. Its one legal destination is decided per call by
+ * `writeRootFenceOptions` (T1 ruling 249).
+ */
+export const REVIEW_FENCED_TOOL = 'Write';
+
+/** Every way to execute something, each of which must be refused BY NAME. */
+export const REVIEW_EXECUTION_TOOLS: readonly string[] = [
+  'Bash',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+  'Task',
+  'Agent',
+  'WebFetch',
+  'WebSearch',
+];
+
 export function assertAdversarialReviewDeclaration(def: {
   budgets: { maxTurns?: number; maxBudgetUsd?: number; maxBudgetUsdShare?: number };
   allowedTools: string[];
+  disallowedTools: string[];
 }): void {
   if (def.budgets.maxTurns === undefined) {
     throw new Error('adversarial-review SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (ADR-039)');
@@ -94,15 +130,32 @@ export function assertAdversarialReviewDeclaration(def: {
       'adversarial-review SKILL.md must declare a budget cap (budgets.maxBudgetUsd and/or maxBudgetUsdShare) — an uncapped unattended agent re-opens the F-42/F-43 silent-spend vector',
     );
   }
-  if (def.allowedTools.includes('Edit') || def.allowedTools.includes('MultiEdit')) {
+  if (def.allowedTools.includes(REVIEW_FENCED_TOOL) || def.disallowedTools.includes(REVIEW_FENCED_TOOL)) {
     throw new Error(
-      'adversarial-review SKILL.md must not grant Edit — the reviewer judges and never edits; fixes are the develop agent\'s job (R4-08-F2)',
+      `adversarial-review SKILL.md must leave ${REVIEW_FENCED_TOOL} off BOTH lists — pre-approving it skips the write fence entirely, and forbidding it leaves the reviewer unable to author its findings; the fence decides per call (T1 ruling 249)`,
     );
   }
-  if (def.allowedTools.includes('Bash')) {
+
+  // ALLOWLIST, not a denylist of three names (spec §5 item 5, containment review
+  // 2026-09-05). The previous guard refused `Edit`, `MultiEdit` and `Bash` — and
+  // would have passed `Task` or `Agent`, either of which reaches execution by
+  // DELEGATION to a subagent that has Bash, and `NotebookEdit`, which executes
+  // cells. A denylist over an open tool vocabulary is decorative: every tool the
+  // SDK gains is granted by default until someone remembers to name it. This
+  // closes the class instead of chasing it — anything not on the read-only set
+  // is refused, including a tool that does not exist yet.
+  const extra = def.allowedTools.filter((t) => !REVIEW_ALLOWED_TOOLS.includes(t));
+  if (extra.length > 0) {
     throw new Error(
-      'adversarial-review SKILL.md must not grant Bash — arbitrary execution defeats the mechanical scope guard and the judges-never-runs posture (ADR-036)',
+      `adversarial-review SKILL.md grants ${extra.join(', ')} — the reviewer judges and never runs or edits, so its tools are exactly ${REVIEW_ALLOWED_TOOLS.join(', ')} (ADR 036). Execution reached by delegation (Task/Agent) or by a cell (NotebookEdit) is still execution.`,
     );
+  }
+  for (const t of REVIEW_EXECUTION_TOOLS) {
+    if (!def.disallowedTools.includes(t)) {
+      throw new Error(
+        `adversarial-review SKILL.md must DISALLOW ${t} explicitly — an empty allow-list is not a fence when the runtime's default tool set is not empty (ADR 036)`,
+      );
+    }
   }
 }
 
@@ -189,7 +242,35 @@ export async function runAdversarialReview(
   // strand .forge/review-input/ or a findings copy untracked in the worktree.
   let lastErrors: string[] = [];
   try {
-    // Band 2 — briefing inputs from develop output + the demo's AC-proof.
+    // ── The write fence (T1 ruling 249) ─────────────────────────────────────
+    //
+    // A tool-name allowlist is not a fence. `Write` used to be pre-approved on
+    // this agent, which meant the ONE agent that judges an initiative could
+    // write anywhere in the worktree it was judging — including the source it
+    // was reviewing. The scope guard below CATCHES that after the fact; this
+    // stops it happening, using the same three-setting shape
+    // `packages/sessions/session-write-fence.ts` paid for with a live escape:
+    // `permissionMode: 'default'`, `Write` NOT pre-approved (so the SDK routes
+    // the call through the handler) and never on `disallowedTools` (so it stays
+    // callable), and `canUseTool` deciding per call against one root.
+    //
+    // The root is the run's own `.forge/` directory — the reviewer's single
+    // legal output lives there and nothing else it could write is wanted.
+    const fenceRoot = join(input.worktreePath, '.forge');
+    mkdirSync(fenceRoot, { recursive: true });
+    const writeFence = writeRootFenceOptions({
+      writeRoots: [realpathSync(fenceRoot)],
+      allowedTools: def.allowedTools,
+      cwd: input.worktreePath,
+    });
+
+    // The class's lenses (spec §5 item 5). Read ONCE, here, and threaded to both
+    // the prompt (what to critique under) and the validator (what a finding may
+    // claim) — one source, so a record cannot be judged against a set the agent
+    // was never shown.
+    const lenses = profileFor(input.changeClass).reviewLenses;
+
+    // Band 2 — briefing inputs from the develop output.
     const wiDir = join(input.worktreePath, '.forge', 'work-items');
     const workItems: Array<{ id: string; title: string; status: string }> = [];
     const acceptanceCriteria: string[] = [];
@@ -205,7 +286,6 @@ export async function runAdversarialReview(
         }
       }
     }
-    const acEvaluations = readDemoAcEvaluations(input.worktreePath, input.initiativeId, emit);
     const brainContext: Array<{ path: string; content: string }> = [];
     if (input.projectName) {
       const profileAbs = join(projectBrainDir(input.forgeRoot ?? FORGE_ROOT, input.projectName), 'profile.md');
@@ -226,7 +306,7 @@ export async function runAdversarialReview(
       acceptanceCriteria,
       workItems,
       changedFiles,
-      acEvaluations,
+      lenses,
       brainContext,
     });
     const systemPrompt = buildAdversarialReviewSystemPrompt();
@@ -260,6 +340,7 @@ export async function runAdversarialReview(
           streamGuard: { label: AGENT_SLUG, signal: opts.signal },
           bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
           queryFn: opts.queryFn,
+          ...writeFence,
         });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
@@ -310,12 +391,12 @@ export async function runAdversarialReview(
       }
 
       // Band 4 — harvest + validate (+ identity-echo verification).
-      const harvest = harvestFindings(findingsAbs, findingsRel, {
-        initiative_id: input.initiativeId,
-        cycleId: input.cycleId,
-        baseRef: BASE_REF,
-        headSha,
-      });
+      const harvest = harvestFindings(
+        findingsAbs,
+        findingsRel,
+        { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha },
+        { lenses, criteria: acceptanceCriteria },
+      );
       if (!harvest.ok) {
         lastErrors = harvest.errors;
         emit('review.author.invalid', { attempt, errors: harvest.errors });
@@ -338,30 +419,11 @@ export async function runAdversarialReview(
   }
 }
 
-function readDemoAcEvaluations(
-  worktreePath: string,
-  initiativeId: string,
-  emit: (message: string, metadata?: Record<string, unknown>, extra?: { event_type?: 'log' | 'error' }) => void,
-): AcEvaluation[] {
-  const demoJsonAbs = worktreeDemoJsonPath(worktreePath, initiativeId);
-  if (!existsSync(demoJsonAbs)) return [];
-  try {
-    const { model } = coerceDemoModel(JSON.parse(readFileSync(demoJsonAbs, 'utf8')));
-    if (validateDemoModel(model).length > 0) {
-      emit('review.input.demo-unreadable', { path: demoJsonAbs }, { event_type: 'error' });
-      return [];
-    }
-    return (model as DemoModel).acEvaluations ?? [];
-  } catch {
-    emit('review.input.demo-unreadable', { path: demoJsonAbs }, { event_type: 'error' });
-    return [];
-  }
-}
-
 function harvestFindings(
   findingsAbs: string,
   findingsRel: string,
   identity: { initiative_id: string; cycleId: string; baseRef: string; headSha: string },
+  expected: ReviewFindingsExpectation,
 ): { ok: true; record: ReviewFindingsRecord } | { ok: false; errors: string[] } {
   if (!existsSync(findingsAbs)) {
     return {
@@ -377,7 +439,7 @@ function harvestFindings(
   } catch (err) {
     return { ok: false, errors: [`${findingsRel} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
   }
-  const errors = validateReviewFindings(raw);
+  const errors = validateReviewFindings(raw, expected);
   if (errors.length > 0) return { ok: false, errors };
   const record = raw as ReviewFindingsRecord;
   // Identity-echo verification — a record claiming a different run identity is

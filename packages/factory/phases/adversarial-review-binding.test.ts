@@ -18,7 +18,7 @@ function baseInput(): AdversarialReviewUserPromptInput {
     acceptanceCriteria: ['(WI-1) GIVEN a request WHEN handled THEN 200'],
     workItems: [{ id: 'WI-1', title: 'handler', status: 'complete' }],
     changedFiles: ['src/handler.ts', 'src/router.ts'],
-    acEvaluations: [{ criterion: '(WI-1) GIVEN a request WHEN handled THEN 200', verdict: 'met', evidence: 'checkpoint shows 200' }],
+    lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
     brainContext: [{ path: 'brain/projects/fix/profile.md', content: 'Convention: handlers never throw.' }],
   };
 }
@@ -42,17 +42,33 @@ test('user prompt carries run identity, review-input paths, ACs, WIs, changed fi
   assert.ok(p.includes(`.forge/${REVIEW_FINDINGS_FILENAME}`));
 });
 
-test('user prompt states the severity + category vocabularies and the findings contract', () => {
+test('user prompt states the severity vocabulary and the findings contract', () => {
   const p = renderAdversarialReviewUserPrompt(baseInput());
   assert.ok(/blocker.*major.*minor.*info/s.test(p), 'severity vocabulary verbatim');
-  assert.ok(/correctness.*regression-risk.*contract-fit.*convention-drift/s.test(p), 'category vocabulary verbatim');
   assert.ok(/findings:\s*\[\]|findings.*\[\]/s.test(p), 'empty-findings clean pass stated');
 });
 
-test('demo acEvaluations render as the AC-proof to critique, not to trust', () => {
+test('the category vocabulary in the prompt is the CLASS\'s lens set, not a fixed four', () => {
+  // The prompt the agent is judged against must offer the SAME lenses the
+  // validator enforces; a prompt naming one vocabulary while the check enforced
+  // another rejects correct work for a reason nobody was told.
+  const code = renderAdversarialReviewUserPrompt(baseInput());
+  for (const lens of ['correctness', 'containment', 'test-strength', 'boundary']) {
+    assert.ok(code.includes(lens), `code lens ${lens} named in the prompt`);
+  }
+  const docs = renderAdversarialReviewUserPrompt({
+    ...baseInput(),
+    lenses: ['accuracy-against-source', 'link-integrity', 'forbidden-tokens', 'structure'],
+  });
+  assert.ok(docs.includes('link-integrity'));
+  assert.ok(!docs.includes('regression-risk'), 'a docs review is not critiqued for regression risk');
+});
+
+test('the prompt demands one verdict per criterion, matched verbatim, plus the Why/What/How', () => {
   const p = renderAdversarialReviewUserPrompt(baseInput());
-  assert.ok(p.includes('checkpoint shows 200'));
-  assert.ok(/does not cover|NOT cover/i.test(p));
+  assert.ok(p.includes('acEvaluations'), 'the per-AC verdict is part of the authored contract');
+  assert.ok(/VERBATIM/i.test(p), 'the criterion string is copied verbatim, not paraphrased');
+  assert.ok(p.includes('whyWhatHow'));
 });
 
 test('brain context renders marked advisory; omitted cleanly when absent', () => {

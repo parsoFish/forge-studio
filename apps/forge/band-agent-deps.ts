@@ -16,6 +16,7 @@
  */
 
 import { runDemoAgentPipeline } from '@forge/factory/phases/demo-agent.ts';
+import { isChangeClass, type ChangeClass } from '@forge/factory/class-profiles.ts';
 import { runAdversarialReview } from '@forge/factory/phases/adversarial-review.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { getPaths } from '@forge/flows/queue.ts';
@@ -29,11 +30,28 @@ import type { BandAgentDeps } from '@forge/agents/band-agent-run.ts';
  * side fails the repo-wide typecheck HERE (COMMON §15.71) rather than passing
  * against the fakes in the package's own tests.
  */
+/**
+ * The manifest's `class` reaches `packages/agents` as a plain string — that
+ * package may not name the example factory's class vocabulary. Narrowing it is
+ * the assembly's job, and it FAILS CLOSED: an unknown class is not reviewed
+ * under a guessed policy.
+ */
+function asChangeClass(value: string): ChangeClass {
+  if (!isChangeClass(value)) {
+    throw new Error(
+      value === ''
+        ? 'band dispatch: the initiative declares no `class` — the change class selects the review lenses (ADR 051) and has no default'
+        : `band dispatch: "${value}" is not a change class the installed factory knows — no lens profile can be selected for it`,
+    );
+  }
+  return value;
+}
+
 export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
   runPipeline: async ({ kind, input, logger, queryFn }) =>
     kind === 'demo'
       ? await runDemoAgentPipeline(input, logger, { queryFn })
-      : await runAdversarialReview(input, logger, { queryFn }),
+      : await runAdversarialReview({ ...input, changeClass: asChangeClass(input.changeClass) }, logger, { queryFn }),
 };
