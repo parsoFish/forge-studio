@@ -2140,3 +2140,32 @@ baselines: **tightened → FAIL** (`existsSync: baseline 0 -> now 1`, exit 1);
 **loose → PASS** (exit 0, reported only as a `tighten:` hint). Recording that as
 a residual for a later session, on the one file this PR is splitting, is the
 declared-data-fails-open shape ruling 102 was written for. No code changed.
+
+### M5-A — one new sink, guarded at the sink: `git check-ignore` for ADR 051's third `creates:` rule
+
+| file | sink | count | classification |
+|---|---|---|---|
+| `packages/flows/phases/gitignored-creates.ts` | `spawnSync` | 1 | **guarded** |
+
+**What the sink is.** ADR 051 decision 5 adds a third `creates:` rule to the
+ADR 037 spec compiler: a path under a gitignored directory can never appear in
+the diff the required-paths check reads, so that check passes on its *absence*
+and the work is graded done against invisible evidence. Answering "does git see
+this path?" means running `git -C <worktree> check-ignore --stdin`, and
+`<worktree>` reaches the compiler from a manifest — request-derived.
+
+**Why it is `guarded`, and guarded HERE.** The module calls
+`isContainedWorktreePath` — the same predicate `writeManifest`'s choke point
+uses — before it spawns anything, and an uncontained root yields the EMPTY set,
+so the rule declines rather than running git in a directory nobody sanctioned.
+The check lives at the sink rather than only at the caller deliberately: a
+caller-side check protects today's caller, and this module's next caller would
+inherit nothing. Proven by a test that hands the module a REAL repository
+outside the sanctioned roots whose `.gitignore` would otherwise match, and
+asserts the empty set.
+
+**The paths themselves are not an argv surface.** They go to git over STDIN, so
+a `creates:` entry beginning with `-` is a pathname to `--stdin`, never an
+option. That is why the batched `--stdin` form was chosen over one
+`check-ignore -q <path>` per entry — one process for a set of any size, and no
+path ever reaches argv.
