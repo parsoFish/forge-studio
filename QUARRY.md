@@ -304,6 +304,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
 | packages/factory/phases/executor-deps.ts | factory | rewritten | 284 |
+| packages/factory/phases/pm-rejected-set.ts | factory | verbatim | 95 |
 | packages/factory/phases/executor-table.ts | factory | rewritten | 676 |
 | packages/flows/phase-wiring.ts | flows | verbatim | 48 |
 | apps/forge/factory-wiring.ts | apps/forge | verbatim | 27 |
