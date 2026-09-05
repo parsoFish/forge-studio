@@ -2549,7 +2549,19 @@ is what this contract reads — but it cannot be the only distinguisher.
   and a missing one renders the word MISSING plus a `title` saying why.
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
-  with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
+  with an Editor/Roadmap tab bar
+  (`[data-tab="editor"|"roadmap"][data-tab-active="true"|"false"]
+  [data-action="project-tab-editor"|"project-tab-roadmap"]`,
+  `components/studio/project-builder/ProjectTabs.tsx`). The `data-action` half
+  landed at M5 (bead `forge-8vfn.6.11.9`) for the same reason the KB tabs
+  needed it (§ Knowledge, Tabs): **`data-tab` is STATE — which tab is which —
+  and a beat presses a CONTROL.** Until it existed, everything behind Roadmap
+  was unreachable to a story, including `[data-action="plan-with-architect"]`,
+  which `ProjectArchitectEntry` renders unconditionally in EVERY branch of
+  `[data-section="project-roadmap"]`: S1 run 3's beat 10 read "no element
+  carries that handle" for a handle that was one tab away. The act sits BESIDE
+  the qualifiers, never replacing them, so every `data-tab` reader is
+  untouched. Render-tested: `lib/dom-contract-handles.test.ts`.
   A stale/bad `:id` (not `new`, not in `fetchStudioProjects()`) renders the
   shared not-found page instead of a blank editor —
   `main[data-page="not-found"][data-not-found-kind="project"]` with the back

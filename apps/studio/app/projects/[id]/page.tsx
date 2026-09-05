@@ -54,6 +54,7 @@ import { buildProjectSavePayload } from '@/lib/project-save-payload';
 import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
+import { ProjectTabs, type ProjectTab } from '@/components/studio/project-builder/ProjectTabs';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
@@ -100,7 +101,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // so the operator knows to run `forge run skill demo-design --project <id>`.
   const [demoDesignNeeded, setDemoDesignNeeded] = useState(false);
   // S6: Editor|Roadmap tab + the read-only roadmap read model.
-  const [tab, setTab] = useState<'editor' | 'roadmap'>('editor');
+  const [tab, setTab] = useState<ProjectTab>('editor');
   // W7-A3: `/projects/<id>#roadmap` (the architect committed panel's "Open the
   // roadmap →") lands on the Roadmap tab. Read on mount only — SSR renders the
   // editor tab and the hash is a client-only fact.
@@ -497,31 +498,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       </div>
 
       {/* Editor | Roadmap tab bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 2,
-        padding: '0 28px',
-            borderBottom: '1px solid var(--line)',
-        background: 'var(--bg-2)',
-      }}>
-        {(['editor', 'roadmap'] as const).map((t) => (
-          <button
-            key={t}
-            data-tab={t}
-            data-tab-active={tab === t ? 'true' : 'false'}
-            onClick={() => setTab(t)}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
- fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
-              color: tab === t ? 'var(--text)' : 'var(--faint)',
-              padding: '10px 14px 8px',
-            borderBottom: tab === t ? '2px solid var(--c-project)' : '2px solid transparent',
-              textTransform: 'capitalize',
-            }}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
+      <ProjectTabs tab={tab} onSelect={setTab} />
 
       {/* W7-B6 (operator note 11 / orch-02): the PRIMARY action group, above
           the fold on BOTH tabs — Plan · Start development · Run a flow ·
