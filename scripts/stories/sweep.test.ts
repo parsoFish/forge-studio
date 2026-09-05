@@ -25,10 +25,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import {
+  applyFence,
+  describeFence,
   fenceBreaches,
   fixturePathsFor,
   parseGitPorcelain,
@@ -295,4 +297,86 @@ test('another story\'s artifact IS a breach — the allowance is this run\'s id,
 test('the fence refuses an unsafe story id before it interpolates one into a path', () => {
   assert.throws(() => fenceBreaches([], [], '../../etc'), /unsafe story id/);
   assert.throws(() => productFixturePathsFor('..', '/r'), /unsafe story id/);
+});
+
+/**
+ * bead `forge-8vfn.6.12` — the fence must record WHAT it removed, not only that
+ * it removed something.
+ *
+ * S4 run 2's fence caught a real containment escape: the run created three
+ * forge-wide skill directories, `skills/dev/`, `skills/plan/` and
+ * `skills/review/`, outside its artifacts and outside its ground. It removed
+ * them and printed three lines naming the paths — and with the directories
+ * gone, the one question worth asking ("what was IN them, and therefore who
+ * wrote them?") became unanswerable. Ruling 242 sent the lane looking for the
+ * writer by reading source; the read narrowed it and could not pin it, because
+ * a scaffolded `SKILL.md` and an empty directory leave the same trace once both
+ * are deleted.
+ *
+ * So the fence now lists each removed tree before it removes it. Bounded, and
+ * the bound is disclosed rather than silent: a runaway directory must not turn
+ * a verdict line into a wall of text.
+ */
+test('AT-6.12-1 (RED) the fence records the CONTENTS of a directory it removes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-record-'));
+  try {
+    mkdirSync(join(root, 'skills', 'dev'), { recursive: true });
+    const skillBody = '---\nname: dev\n---\n';
+    writeFileSync(join(root, 'skills', 'dev', 'SKILL.md'), skillBody, 'utf8');
+
+    const fence = applyFence({ restore: [], remove: ['skills/dev'] }, root);
+
+    assert.deepEqual(fence.removed, ['skills/dev'], 'the path is still reported as before');
+    assert.ok(!existsSync(join(root, 'skills', 'dev')), 'and it is still actually removed');
+    const record = fence.removedContents.find((r) => r.path === 'skills/dev');
+    assert.ok(record, `the fence must record what it removed. Got: ${JSON.stringify(fence.removedContents)}`);
+    assert.deepEqual(record.entries.map((e) => e.path), ['SKILL.md'], JSON.stringify(record));
+    assert.equal(
+      record.entries[0].bytes,
+      Buffer.byteLength(skillBody),
+      'the size travels with it — an empty scaffold and a real one differ by nothing else',
+    );
+    assert.equal(record.truncated, false);
+
+    const said = describeFence(fence).join('\n');
+    assert.match(said, /skills\/dev/, said);
+    assert.match(said, /SKILL\.md/, `the printed line must name the contents too. Got: ${said}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-2 a removed FILE records itself, with no contents list', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-record-'));
+  try {
+    writeFileSync(join(root, 'stray.txt'), 'x', 'utf8');
+    const fence = applyFence({ restore: [], remove: ['stray.txt'] }, root);
+    assert.deepEqual(fence.removed, ['stray.txt']);
+    assert.equal(fence.removedContents.length, 0, 'a file IS its own evidence — no listing is owed');
+    assert.doesNotMatch(describeFence(fence).join('\n'), /contained/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-3 the listing is BOUNDED, and says so rather than truncating in silence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'fence-record-'));
+  try {
+    mkdirSync(join(root, 'runaway'), { recursive: true });
+    for (let i = 0; i < 40; i += 1) writeFileSync(join(root, 'runaway', `f${i}.txt`), 'x', 'utf8');
+    const fence = applyFence({ restore: [], remove: ['runaway'] }, root);
+    const record = fence.removedContents.find((r) => r.path === 'runaway');
+    assert.ok(record);
+    assert.equal(record.truncated, true, 'a runaway directory must not become a wall of text');
+    assert.ok(record.entries.length <= 20, `bounded — got ${record.entries.length}`);
+    assert.match(describeFence(fence).join('\n'), /and \d+ more/, 'the bound is disclosed in the line itself');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.12-4 (positive control) a clean fence still says clean, and carries an empty record', () => {
+  const fence = applyFence({ restore: [], remove: [] }, tmpdir());
+  assert.deepEqual(fence.removedContents, []);
+  assert.deepEqual(describeFence(fence), ['[stories] fence: clean — the run wrote nothing outside its own artifacts']);
 });
