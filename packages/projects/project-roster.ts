@@ -10,17 +10,11 @@
  * to change moved with it — see the two dependency-injection notes below.
  *
  * `GET /api/studio/projects/attention` and `GET /api/studio/projects/:id/
- * roadmap` did NOT carve (still in `apps/forge/bridge-studio.ts`): their helpers
- * (`buildProjectAttention` → `scanProjectManifests`, `buildProjectRoadmap`)
- * read `@forge/flows` (queue/manifest/scheduler/work-item/run-list-cache), a
- * STRICTLY HIGHER package rank than `projects`
- * (`scripts/check-boundaries.mjs`'s `PACKAGE_RANK`: kernel=1 <
- * {library,knowledge,projects}=2 < agents=3 < sessions=4 < flows=5) — moving
- * them here would be a NEW, unbaselinable `package-layer-order` violation
- * (the baseline is a shrink-only ratchet; there is no `--write-baseline`).
+ * roadmap` did NOT carve (still in `apps/forge/bridge-studio.ts`): their
+ * helpers read `@forge/flows`, which outranks `projects` — `design.md`'s
+ * "What this package deliberately does not own" carries the derivation.
  * `loadProjectsWithMeta` below has NO flows dependency and DID move; the
- * attention route (staying in `apps/forge/bridge-studio.ts`) imports it back from
- * here for its one remaining call.
+ * attention route imports it back from here for its one remaining call.
  *
  * TWO INJECTED DEPENDENCIES, both because a rank-2 `projects` package may not
  * import a same-or-higher rank package directly (`packages/kernel/

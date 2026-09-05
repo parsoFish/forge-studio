@@ -6,21 +6,12 @@
  * Siblings: `project-config-types.ts` (the `ProjectConfig` type family),
  * `project-config-sidecar.ts` (the `.forge/quality_gate_cmd` sidecar).
  *
- * `validateProjectConfig` itself (the dispatcher) and `parseRepo` stay in the
- * barrel rather than moving here with the rest of the field parsers.
- * `parseRepo` is the one parser with a cross-package import
- * (`REPO_RE` from `@forge/flows/trigger-payload.ts`) — the SAME already-
- * baselined edge `resolveProjectIdForRepo` needs
- * (`scripts/baselines/boundaries.json`,
- * `package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts`).
- * Moving `parseRepo` here would add a SECOND, unbaselined edge from this file
- * to the same target; moving `validateProjectConfig` here too (so it could
- * call a barrel-resident `parseRepo` without duplicating it) would instead
- * create a real barrel↔validate.ts import cycle (the barrel already needs
- * `validateProjectConfig` for `loadProjectConfig`). This worker was told not
- * to touch `scripts/baselines/` and not to create a cycle, so both stay
- * together in the barrel. See `project-config.ts`'s header and this split's
- * report for the full reasoning.
+ * `validateProjectConfig` (the dispatcher) and `parseRepo` stay in the barrel
+ * rather than moving here with the other field parsers: `parseRepo` carries
+ * the one already-baselined `@forge/flows/trigger-payload.ts` edge, and
+ * bringing `validateProjectConfig` along to reach it would create a real
+ * barrel<->validate import cycle. `project-config.ts`'s own header carries the
+ * full reasoning and quotes the baseline row.
  */
 
 import {
