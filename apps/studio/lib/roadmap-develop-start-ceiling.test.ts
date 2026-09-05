@@ -11,9 +11,9 @@
  * DISPLAYED field value with no opt-in gate, so opening the tab and clicking
  * "Start development" on a card ALWAYS sent `costCeilingUsd`, silently
  * stamping the generic per-run default (10) onto a manifest whose own
- * `cost_budget_usd`-derived ceiling (`readManifestCostCeiling`'s budget +
- * `DERIVED_CEILING_MARGIN_USD`) could be dramatically higher (e.g. a
- * 100-budget initiative's 140 derived ceiling silently clamped to 10) —
+ * `cost_budget_usd`-derived ceiling (`readManifestCostCeiling`'s budget x
+ * (1 + `DERIVED_CEILING_MARGIN_SHARE`)) could be dramatically higher (e.g. a
+ * 100-budget initiative's 150 derived ceiling silently clamped to 10) —
  * worse than the zero-writer state this WI set out to close.
  *
  * THE FIX: `resolveDevelopStartCeilingToSend(fieldValue, ceilingTouched)`

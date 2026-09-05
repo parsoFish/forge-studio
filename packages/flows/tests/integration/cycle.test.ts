@@ -28,7 +28,7 @@ import {
   type CiCommandRunner,
 } from '../../ci-gate.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { serializeManifest, DERIVED_CEILING_MARGIN_USD, type InitiativeManifest } from '../../manifest.ts';
+import { serializeManifest, DERIVED_CEILING_MARGIN_SHARE, type InitiativeManifest } from '../../manifest.ts';
 import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
@@ -76,7 +76,7 @@ test('resolveCostCeilingOverride: env wins over manifest', () => {
   const prev = process.env.FORGE_COST_CEILING_USD;
   process.env.FORGE_COST_CEILING_USD = '200';
   try {
-    assert.equal(resolveCostCeilingOverride(path), 200);
+    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: 200, source: 'env' });
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
@@ -88,24 +88,24 @@ test('resolveCostCeilingOverride: falls back to manifest when env unset', () => 
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
   try {
-    assert.equal(resolveCostCeilingOverride(path), 120);
+    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: 120, source: 'manifest' });
   } finally {
     if (prev !== undefined) process.env.FORGE_COST_CEILING_USD = prev;
   }
 });
 
-test('resolveCostCeilingOverride: derives cost_budget_usd + margin when ceiling unset; bad env ignored', () => {
+test('resolveCostCeilingOverride: derives cost_budget_usd x (1 + margin share) when ceiling unset; bad env ignored', () => {
   const path = writeManifestWithCeiling(undefined); // fixture carries cost_budget_usd: 25
-  const derived = 25 + DERIVED_CEILING_MARGIN_USD;
+  const derived = 25 * (1 + DERIVED_CEILING_MARGIN_SHARE);
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
   try {
-    assert.equal(resolveCostCeilingOverride(path), derived);
+    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
     process.env.FORGE_COST_CEILING_USD = 'not-a-number';
-    assert.equal(resolveCostCeilingOverride(path), derived);
+    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
     process.env.FORGE_COST_CEILING_USD = '-5';
-    assert.equal(resolveCostCeilingOverride(path), derived);
-    assert.equal(resolveCostCeilingOverride('/nonexistent/manifest.md'), undefined);
+    assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: derived, source: 'derived' });
+    assert.deepEqual(resolveCostCeilingOverride('/nonexistent/manifest.md'), { ceilingUsd: undefined, source: 'none' });
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
