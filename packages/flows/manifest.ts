@@ -406,29 +406,43 @@ export function readManifestFlowId(manifestPath: string): string | null {
 }
 
 /**
- * Margin added on top of the architect's `cost_budget_usd` when deriving a
- * per-run ceiling for a manifest that carries no explicit `cost_ceiling_usd`.
- * The budget estimates the dev-loop spend only; unifier + review + reflect
- * legs of the same saga bill against the same ceiling, so a flat flow ceiling
- * (or the bare budget) stops cycles between phases mid-saga.
+ * Margin over the architect's `cost_budget_usd` when a manifest carries no
+ * explicit `cost_ceiling_usd`. The budget estimates the dev loop only; the
+ * architect, PM, review and reflect bill against the same ceiling.
+ *
+ * A SHARE, not a flat figure (bead forge-8vfn.6.10.23). The flat $40 it replaces
+ * was written for a saga whose unifier is now retired, and did not scale: it
+ * turned G2's $18 docs budget into a $58 ceiling. Sized from the two real runs
+ * on disk — G2 spent $23.9721 deduplicated against an $18 budget (1.33x, of
+ * which $3.79 was non-dev-loop legs); G1 run 3 spent ~$6.84 on a ~$3.05 dev loop
+ * (~$3.8 of legs). Near-fixed legs, a variable dev loop: 0.5 covers the worst
+ * measured ratio with ~12% headroom and cannot triple a small budget.
+ *
+ * A policy number. An operator wanting another bound sets `cost_ceiling_usd` on
+ * the manifest or `FORGE_COST_CEILING_USD` on the run; both win, and say so.
  */
-export const DERIVED_CEILING_MARGIN_USD = 40;
+export const DERIVED_CEILING_MARGIN_SHARE = 0.5;
 
 /**
- * Read the per-run cost ceiling (USD) off the manifest frontmatter.
- * Precedence: explicit `cost_ceiling_usd` ?? `cost_budget_usd` + margin.
+ * Read the per-run cost ceiling (USD) off the manifest frontmatter, WITH the
+ * field it came from — an explicit `cost_ceiling_usd` and a ceiling derived
+ * from `cost_budget_usd` bound a run very differently, and a stopped run has
+ * to be able to say which one stopped it (bead forge-8vfn.6.10.23).
+ * Precedence: explicit `cost_ceiling_usd` ?? `cost_budget_usd` x (1 + margin share).
  * Returns null only when neither field yields a positive number (caller
  * falls back to the flow's own `costCeilingUsd`). Best-effort: a
  * missing/unparseable manifest yields null.
  */
-export function readManifestCostCeiling(manifestPath: string): number | null {
+export function readManifestCostCeiling(
+  manifestPath: string,
+): { ceilingUsd: number; source: 'manifest' | 'derived' } | null {
   try {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
     if (typeof m.cost_ceiling_usd === 'number' && m.cost_ceiling_usd > 0) {
-      return m.cost_ceiling_usd;
+      return { ceilingUsd: m.cost_ceiling_usd, source: 'manifest' };
     }
     if (typeof m.cost_budget_usd === 'number' && m.cost_budget_usd > 0) {
-      return m.cost_budget_usd + DERIVED_CEILING_MARGIN_USD;
+      return { ceilingUsd: m.cost_budget_usd * (1 + DERIVED_CEILING_MARGIN_SHARE), source: 'derived' };
     }
     return null;
   } catch {
@@ -477,7 +491,7 @@ export function persistManifestCycleId(manifestPath: string, cycleId: string): v
  * forge-shc WI-1: persist an operator-supplied per-run cost ceiling onto the
  * manifest's frontmatter (`cost_ceiling_usd`) at develop-start time, read
  * back by `resolveCostCeilingOverride` (orchestrator/cycle.ts) ahead of the
- * `cost_budget_usd` + `DERIVED_CEILING_MARGIN_USD` derived fallback. Unlike
+ * `cost_budget_usd` x (1 + `DERIVED_CEILING_MARGIN_SHARE`) derived fallback. Unlike
  * `persistManifestCycleId` this is NOT one-shot: a later develop/start with a
  * different ceiling overwrites the prior one (the operator's latest explicit
  * choice wins). The caller is responsible for validating `costCeilingUsd`

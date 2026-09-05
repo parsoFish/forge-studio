@@ -44,7 +44,7 @@ export { compileWorkItemSpecs } from './phases/wi-spec-compile.ts';
 
 // ---- Queue state machine, manifests and initiatives ------------------------
 export { type QueuePaths, type QueueState, getPaths, listInFlight } from './queue.ts';
-export { DERIVED_CEILING_MARGIN_USD, initiativeTitle, mintAndPersistManifestCycleId, parseManifest, persistManifestCostCeiling, persistManifestSpecs, serializeManifest } from './manifest.ts';
+export { DERIVED_CEILING_MARGIN_SHARE, initiativeTitle, mintAndPersistManifestCycleId, parseManifest, persistManifestCostCeiling, persistManifestSpecs, serializeManifest } from './manifest.ts';
 export { isContainedProjectRepoPath, isSafeProjectName } from './manifest-path-guard.ts';
 export { promoteManifests } from './promote-manifests.ts';
 export { listPlannedInitiatives } from './planned-initiatives.ts';
