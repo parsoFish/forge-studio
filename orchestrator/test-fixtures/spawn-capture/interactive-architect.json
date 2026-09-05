@@ -59,6 +59,7 @@
           ]
         }
       },
+      "cwd": "<TMP>/projects/project",
       "disallowedTools": [
         "Task",
         "Agent"

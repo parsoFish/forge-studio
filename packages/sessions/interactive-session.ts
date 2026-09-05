@@ -326,12 +326,18 @@ export async function runStructuredTurn<T>(args: {
    *  `PhaseAgentSpec.skill` via `sdkHooksForAgent`. Absent (the shape for every
    *  agent that binds none) leaves the options bag byte-identical. */
   hooks?: SdkHooksOption;
+  /** Bead forge-8vfn.6.10.19 — the ground this turn runs ON. Without it the SDK
+   *  session inherits the BRIDGE's cwd (the forge repo root), so any relative
+   *  write by that session lands in forge's own tree. Honest-absent: omitted
+   *  leaves the options bag byte-identical for callers that pass none. */
+  cwd?: string;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     model: args.model,
     allowedTools: args.allowedTools,
     outputFormat: { type: 'json_schema', schema: args.schema },
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
+    ...(args.cwd !== undefined ? { cwd: args.cwd } : {}),
   };
   if (args.disallowedTools !== undefined && args.disallowedTools.length > 0) {
     options.disallowedTools = args.disallowedTools;
