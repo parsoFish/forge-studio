@@ -295,7 +295,13 @@ export function parseLogging(raw: unknown): LoggingConfig | undefined {
   return { heartbeat_seconds };
 }
 
-// empty string is allowed here; the business-level emptiness check lives in validateProject.
+// An empty string is allowed here, deliberately: this parser judges the
+// CONTRACT FILE's shape, not whether the operator has written a north star
+// yet. It used to say the business-level emptiness check "lives in
+// validateProject" — that function had no production caller and was deleted
+// (bead `forge-8vfn.6.10.10`, ruling 204). The check that actually runs is
+// `ContractReadiness`'s `ns.length > 0`, which is what gates `flow-ready` and
+// therefore what a Flow refuses on.
 export function parseNorthStar(v: unknown): string | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== 'string') {
