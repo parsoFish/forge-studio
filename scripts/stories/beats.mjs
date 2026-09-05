@@ -459,8 +459,13 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
   let waitedForHandle = false;
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
-    const fills = Object.hasOwn(step, 'fill');
-    const key = fills ? step.fill : step.press;
+    // `fillAll` — bead `forge-8vfn.6.11.21` (ruling 271). Same `data-field`
+    // vocabulary as `fill`; it differs only in HOW MANY matches it acts on,
+    // because a round of architect questions renders one box per question and
+    // the count is model-determined.
+    const fillsAll = Object.hasOwn(step, 'fillAll');
+    const fills = fillsAll || Object.hasOwn(step, 'fill');
+    const key = fillsAll ? step.fillAll : fills ? step.fill : step.press;
     const handle = `[data-${fills ? 'field' : 'action'}="${key}"]`;
 
     if (i > 0) {
@@ -507,6 +512,22 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
     }
 
     try {
+      if (fillsAll) {
+        // Every match, or a red naming the field. ZERO is never a silent pass:
+        // a round with nothing to answer means the product did not publish the
+        // question form, which is exactly the gap S2 run 3 spent $25 finding.
+        const n = await page.locator(handle).count();
+        if (n === 0) {
+          return {
+            waitedForHandle,
+            error: `could not fill every ${handle} with "${step.with}": no element carries that handle.`,
+          };
+        }
+        for (let k = 0; k < n; k += 1) {
+          await page.locator(handle).nth(k).fill(step.with, { timeout: left() });
+        }
+        continue;
+      }
       if (!fills) {
         // Bounded by the RUNNER's timeout, not by `context.setDefaultTimeout`.
         // Playwright's click already retries until the control is visible,
