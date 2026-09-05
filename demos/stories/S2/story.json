@@ -72,8 +72,8 @@
         }
       },
       {
-        "act": "Check the contract came out green, before pointing a Flow at it",
-        "say": "This is the promise a starter exists to keep. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow.",
+        "act": "Check the project is ready for a Flow, and what it still owes",
+        "say": "This is the promise a starter exists to keep, stated exactly. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow. Ready does not mean finished. Forge wrote every file it could write from a template; what a template cannot write is a demo of THIS project, and the form says so rather than showing a green tick it has not earned.",
         "do": [],
         "expect": {
           "route": "/projects/story-s2",
@@ -86,8 +86,8 @@
         }
       },
       {
-        "act": "Look at what forge says is still unresolved",
-        "say": "The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.",
+        "act": "Look at what forge says is still unresolved, and who owes it",
+        "say": "The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.",
         "do": [],
         "expect": {
           "route": "/projects/story-s2",
@@ -95,7 +95,9 @@
             "page": "projects",
             "project-id": "story-s2",
             "section": "contract-resolution",
-            "resolution-failing-count": "0"
+            "resolution-failing-count": "2",
+            "resolution-user-count": "0",
+            "resolution-agent-count": "2"
           }
         }
       },
@@ -130,7 +132,19 @@
       {
         "act": "Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project",
         "say": "Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.",
-        "do": [],
+        "do": [
+          {
+            "fill": "demo-step-1",
+            "with": "Build the CLI (npm run build) and capture the stage timings it prints — that is the before state for this project."
+          },
+          {
+            "fill": "demo-step-2",
+            "with": "Run npm run acceptance — the built binary against the checked-in slow-pipeline fixture — and show the per-stage table it produces."
+          },
+          {
+            "press": "save-project"
+          }
+        ],
         "expect": {
           "route": "/projects/story-s2",
           "data": {
@@ -161,7 +175,7 @@
       },
       {
         "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
-        "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and opens it.",
+        "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.",
         "do": [
           {
             "fill": "idea",
@@ -176,12 +190,11 @@
           }
         ],
         "expect": {
-          "route": "/sessions/architect/<architectSessionId>",
+          "route": "/architect/new",
           "data": {
-            "page": "session",
-            "page-ready": "true",
-            "session-kind": "architect",
-            "session-phase": "working"
+            "page": "architect-new",
+            "section": "new-idea",
+            "architect-session-id": "<architectSessionId>"
           }
         }
       },
@@ -287,34 +300,35 @@
       "frame": "frames/03-name-it-say-what-it-is-for-pick-the-type.png"
     },
     {
-      "act": "Check the contract came out green, before pointing a Flow at it",
-      "say": "This is the promise a starter exists to keep. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow.",
-      "status": "red",
-      "failures": [
-        "data-flow-ready: expected \"true\", got \"false\""
-      ],
+      "act": "Check the project is ready for a Flow, and what it still owes",
+      "say": "This is the promise a starter exists to keep, stated exactly. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow. Ready does not mean finished. Forge wrote every file it could write from a template; what a template cannot write is a demo of THIS project, and the form says so rather than showing a green tick it has not earned.",
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "story-s2",
         "preflight-status": "ok",
-        "flow-ready": "false"
+        "flow-ready": "true"
       },
-      "frame": "frames/04-check-the-contract-came-out-green-before.png"
+      "frame": "frames/04-check-the-project-is-ready-for-a-flow-an.png"
     },
     {
-      "act": "Look at what forge says is still unresolved",
-      "say": "The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.",
+      "act": "Look at what forge says is still unresolved, and who owes it",
+      "say": "The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.",
       "status": "red",
       "failures": [
-        "data-resolution-failing-count: expected \"0\", got \"4\""
+        "data-resolution-failing-count: expected \"2\", got \"3\"",
+        "data-resolution-user-count: expected \"0\", got \"1\""
       ],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "story-s2",
         "section": "contract-resolution",
-        "resolution-failing-count": "4"
+        "resolution-failing-count": "3",
+        "resolution-user-count": "1",
+        "resolution-agent-count": "2"
       },
       "frame": "frames/05-look-at-what-forge-says-is-still-unresol.png"
     },
@@ -380,28 +394,30 @@
     },
     {
       "act": "Describe the first piece of work, cap what this run may spend, and press \"Start architect\"",
-      "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and opens it.",
+      "say": "The Architect is a real Agent and a real Agent costs money, so the operator sets this run's ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.",
       "status": "red",
       "failures": [
-        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+        "data-architect-session-id: expected a value to bind as <architectSessionId>, got \"\""
       ],
       "bindings": {},
-      "data": {},
+      "data": {
+        "page": "architect-new",
+        "section": "new-idea",
+        "architect-session-id": ""
+      },
       "frame": "frames/10-describe-the-first-piece-of-work-cap-wha.png"
     },
     {
       "act": "While it works, check Monitor",
       "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.",
-      "status": "red",
-      "failures": [
-        "data-session-kind: expected \"architect\", got \"kb-cleanup\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "monitor",
         "page-ready": "true",
         "fetch-status": "ok",
-        "session-kind": "kb-cleanup"
+        "session-kind": "architect"
       },
       "frame": "frames/11-while-it-works-check-monitor.png"
     },
@@ -429,5 +445,40 @@
       },
       "frame": "frames/13-open-the-plan-and-stand-at-the-gate.png"
     }
-  ]
+  ],
+  "reap": {
+    "reaped": [
+      {
+        "pid": 301004,
+        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 300809,
+        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 300802,
+        "dir": "/home/parso/forge-m5-b-author/_logs/_architect-2026-09-05T02-03-02-641bb6b6",
+        "signal": "SIGTERM",
+        "via": "cwd"
+      }
+    ],
+    "skipped": []
+  },
+  "sweep": {
+    "removed": [
+      "/home/parso/forge-m5-b-author/projects/story-s2",
+      "/home/parso/forge-m5-b-author/brain/projects/story-s2"
+    ],
+    "failed": []
+  },
+  "fence": {
+    "restored": [],
+    "removed": [],
+    "failed": []
+  }
 }
