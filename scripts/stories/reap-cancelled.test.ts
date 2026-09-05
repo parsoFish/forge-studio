@@ -44,7 +44,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { recordReapedCancellations, describeReap, reapReasonFor } from './reap.mjs';
+import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
+import { describeReap } from './reap.mjs';
 
 type Ground = { root: string; logDir: string; projectsRoot: string; statusPath: string };
 
