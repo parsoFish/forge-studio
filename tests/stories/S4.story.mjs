@@ -153,25 +153,38 @@ export default {
       // place press takes the canvas to four nodes, and the two connect
       // presses to three edges.
       //
-      // ⚠ SUFFICIENT FOR THIS BEAT, AND NOT YET FOR THE STORY. Probe `probe167`
-      // drove this same `do` on to a save: beats 1–4 green, and then the saved
-      // flow is one the product cannot read back. `completeInto` draws the edge
-      // through `stationEdgeShape(source, target)` with NO `artifact` (the
-      // pointer-drag path opens the ArtifactPicker afterwards; the declared
-      // handles do not), the save route's `validateFlow` never runs
-      // `validateArtifactRef`, so the PUT returns 200 and writes `edges:
-      // [{from, to}]`; `loadFlowDefinition` then requires `artifact` and
-      // throws, `loadAllFlows` silently skips the flow, and `/flows/<id>`
-      // renders `data-page="not-found"`. Bead `forge-8vfn.5.12.1` (P1) owns it,
-      // and ruling 175 sequences the fix. So landing this `do` moves S4 from
-      // 6/12 to 7/12 and turns beats 6 and 7 — green today — RED. **S4 is not
-      // re-run until `5.12.1` lands** (ruling 170); this sitting authors the
-      // beat and stops.
+      // AMENDED AGAIN 2026-09-05 (ruling 200, mechanical — a press whose handle
+      // now exists, with `act`, `expect` and `say` byte-identical). The fourth
+      // press ANSWERS the artifact picker, which is the pointer path's own last
+      // step: an edge has always had to say which artifact crosses it, and
+      // until `forge-8vfn.5.12.1` the declared handles were the one way to draw
+      // one that did not ask.
+      //
+      // WHY IT IS PART OF THE BEAT, not a workaround. `connect-into-plan` now
+      // pushes the edge AND opens `ArtifactPicker` (`FlowBuilderCanvas.tsx`'s
+      // `completeInto`), so `node-count: '4'` / `edge-count: '3'` are already
+      // true when the picker is up. Leaving it unanswered is not "the same beat
+      // with fewer presses": the picker closes on the next outside mousedown,
+      // so beat 5's `Save Flow` DISMISSES it and saves the artifact-less edge —
+      // `probe167`'s chain, in which the save returns 200, `loadFlowDefinition`
+      // throws on read-back, `loadAllFlows` skips the flow, and the page the
+      // operator is redirected to renders `data-page="not-found"`.
+      //
+      // PROVEN BOTH WAYS before it was written here, costlessly, on the same
+      // tree (`_1.0/evidence/m5-b-s5-probe200a/`):
+      //   `probe200a`    — this `do` → GREEN 6/6, the saved flow reads back and
+      //                    its launcher is `kickoff-kind: 'idea'`.
+      //   `probe200aneg` — identical, the fourth press REMOVED → RED 4/6,
+      //                    `data-page: expected "flow-monitor", got "not-found"`.
+      // So the press is necessary as well as sufficient, and the negative
+      // control reproduces `probe167`'s chain on current main rather than
+      // citing it.
       act: 'Drag the "architect" agent out of the palette onto the canvas, and wire it into "plan"',
       do: [
         { press: 'place-station-architect' },
         { press: 'connect-from-architect' },
         { press: 'connect-into-plan' },
+        { press: 'pick-artifact-plan' },
       ],
       expect: {
         route: '/flows/new',
