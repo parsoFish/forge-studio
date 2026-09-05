@@ -205,6 +205,29 @@ const ERROR_SENTINELS = [
 /** How long to wait for a page to declare itself ready before judging it. */
 const READY_TIMEOUT_MS = 15_000;
 
+/**
+ * The bound this beat's waits get, and the NAME of the bound that fired.
+ *
+ * Bead `forge-8vfn.6.11.10` (T1 ruling 220). Three beats across three stories
+ * — S1 beat 6 and S2 beat 12 (`session-answer` absent until the agent asks)
+ * and S4 beat 11 (`session-phase` still `interviewing`) — were red not because
+ * the product was wrong but because `READY_TIMEOUT_MS` was the runner's ONLY
+ * bound, and fifteen seconds is right for a DOM update and absurd for an
+ * architect's interview. Same family as `6.11.6`: the wait existed; the BOUND
+ * was wrong for what it was waiting on.
+ *
+ * DECLARED, never inferred, and never global. Raising `READY_TIMEOUT_MS`
+ * would make every genuine product red take fifteen times longer to fail, so
+ * a beat that stands on an agent says so — `wait: { for: 'agent', upTo: <ms> }`
+ * — and only that beat waits longer. §3.1 states it so no story has to read
+ * this file to learn it.
+ */
+function beatBound(beat, domTimeoutMs) {
+  const declared = beat.wait;
+  if (declared === undefined || declared === null) return { ms: domTimeoutMs, label: null };
+  return { ms: declared.upTo, label: `agent wait (declared ${declared.upTo} ms)` };
+}
+
 /** How often `waitForConsequence` re-reads the page while it waits. */
 const CONSEQUENCE_POLL_MS = 100;
 
@@ -288,6 +311,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   }
   const beat = Object.freeze({ ...rawBeat, expect: Object.freeze({ ...rawBeat.expect, route: target }) });
   const steps = beat.do ?? [];
+  // `6.11.10`: one bound per beat, resolved once, used by every wait this call
+  // makes — the step waits, the consequence wait and the ready wait alike. A
+  // beat that declared an agent-scale wait and still reds must SAY which bound
+  // gave up, or "red at 15 s" and "red at ten minutes" read identically in a
+  // run record.
+  const bound = beatBound(rawBeat, timeoutMs);
+  const named = (verdict) =>
+    bound.label === null || verdict.status !== 'red'
+      ? verdict
+      : Object.freeze({ ...verdict, failures: Object.freeze([...verdict.failures, `gave up at the ${bound.label}`]) });
 
   if (index === 0) {
     await page.goto(baseUrl + target, { waitUntil: 'domcontentloaded' });
@@ -297,7 +330,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // beat's page — before this beat's state is judged. All nine operator flows
   // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
-  const stepError = await performSteps(page, steps, timeoutMs);
+  const stepError = await performSteps(page, steps, bound.ms);
   if (stepError !== null) {
     return stuckVerdict(beat, await readObserved(page, beat), stepError);
   }
@@ -335,12 +368,12 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // real money and still report the product never started.
   if (steps.length > 0 && new URL(page.url()).pathname !== target) {
     await page
-      .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
+      .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
       .catch(() => {
         /* the press did not navigate here — the nav resolution below reports it honestly */
       });
   } else if (steps.length > 0) {
-    await waitForConsequence(page, beat, timeoutMs);
+    await waitForConsequence(page, beat, bound.ms);
   }
 
   // Already there: the operator acted on this page and stayed on it, or the
@@ -401,12 +434,12 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   }
 
   await page
-    .waitForSelector('main[data-page][data-page-ready="true"]', { timeout: READY_TIMEOUT_MS })
+    .waitForSelector('main[data-page][data-page-ready="true"]', { timeout: bound.ms })
     .catch(() => {
       /* not ready — the verdict below reports that honestly rather than throwing */
     });
 
-  return beatVerdict(beat, await readObserved(page, beat));
+  return named(beatVerdict(beat, await readObserved(page, beat)));
 }
 
 /**
