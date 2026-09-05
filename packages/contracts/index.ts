@@ -85,7 +85,6 @@ export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
  * split across two packages.
  */
 export const TOGGLE_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip'] as const;
-export type ToggleGuardId = (typeof TOGGLE_GUARD_IDS)[number];
 
 /**
  * The full closed set of platform guard ids (ADR-027 R3-03 amendment) — the
