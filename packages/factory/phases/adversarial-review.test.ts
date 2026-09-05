@@ -117,6 +117,16 @@ const CRITERION = '(WI-1) GIVEN a request WHEN handled THEN it returns 200';
 /** What every record in this file is validated against (the run's own facts). */
 const EXPECTED = { lenses: CODE_LENSES, criteria: [CRITERION] };
 
+/**
+ * The acceptance criteria THIS prompt injected, verbatim. The pipeline reviews
+ * per work item (bead forge-8vfn.6.10.24), so each spawn is shown only its own
+ * chunk's criteria and a stub that always echoed a fixed one would be judging a
+ * criterion its prompt never declared — which the validator rejects, correctly.
+ */
+function criteriaFromPrompt(prompt: string): string[] {
+  return [...prompt.matchAll(/^\d+\. (\(WI-[^)]+\) GIVEN .+)$/gm)].map((m) => m[1]!);
+}
+
 function validFindingsJson(prompt: string, overrides: Record<string, unknown> = {}): string {
   const id = identityFromPrompt(prompt);
   return JSON.stringify({
@@ -124,9 +134,9 @@ function validFindingsJson(prompt: string, overrides: Record<string, unknown> = 
     reviewedAt: '2026-07-24T00:00:00.000Z',
     summary: 'one major correctness finding',
     lenses: CODE_LENSES,
-    acEvaluations: [
-      { criterion: CRITERION, verdict: 'partial', evidence: 'the handler returns 200 only on the happy path' },
-    ],
+    acEvaluations: criteriaFromPrompt(prompt).map((criterion) => ({
+      criterion, verdict: 'partial', evidence: 'the handler returns 200 only on the happy path',
+    })),
     whyWhatHow: { why: 'the caller needs a 200', what: 'a handler', how: 'a slice bound' },
     findings: [
       {
@@ -190,7 +200,17 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     assert.ok(existsSync(p));
     const rec = JSON.parse(readFileSync(p, 'utf8'));
     assert.deepEqual(validateReviewFindings(rec, EXPECTED), []);
-    assert.equal(rec.findings[0].id, 'RF-1');
+    // Two chunks: WI-1 (its declared `src.ts`) and the unattributed remainder
+    // (`demo/…/demo.json`, which no work item claims). Ids are namespaced by
+    // their chunk, so a merged list can still refer to a finding and a reader
+    // can see which work item it is about (bead forge-8vfn.6.10.24).
+    assert.deepEqual(rec.findings.map((f: { id: string }) => f.id), ['WI-1/RF-1', 'unattributed/RF-1']);
+    const planned = events.find((e) => e.message === 'review.chunks.planned');
+    assert.ok(planned, 'the chunk plan is evented — a review whose shape is invisible cannot be audited');
+    assert.deepEqual((planned!.metadata as Record<string, unknown>).labels, ['WI-1', 'unattributed']);
+    // Each chunk is briefed with ONLY its own files.
+    assert.ok(prompts[0]!.includes('src.ts') && !prompts[0]!.includes('demo.json'));
+    assert.ok(prompts[1]!.includes('demo.json') && !prompts[1]!.includes('- `src.ts`'));
     // Worktree scrubbed — nothing untracked left to block a later merge.
     assert.ok(!existsSync(join(fx.worktree, '.forge', 'review-findings.json')), 'findings worktree copy deleted');
     assert.ok(!existsSync(join(fx.worktree, '.forge', 'review-input')), 'review-input dir deleted');
@@ -206,7 +226,8 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     assert.ok(events.some((e) => e.message === 'review.input.assembled'));
     const authored = events.find((e) => e.message === 'review.findings.authored');
     assert.ok(authored);
-    assert.equal((authored!.metadata as Record<string, unknown>).major, 1);
+    assert.equal((authored!.metadata as Record<string, unknown>).major, 2, 'one finding per chunk, merged');
+    assert.equal((authored!.metadata as Record<string, unknown>).chunks, 2);
   } finally {
     fx.cleanup();
     restore();
@@ -225,7 +246,10 @@ test('missing findings file: one retry naming it, then success', async () => {
     ], prompts);
     const res = await run(fx, qf, logger);
     assert.equal(res.status, 'complete');
-    assert.equal(prompts.length, 2);
+    // Three spawns, not two: chunk WI-1 misses then retries, and the
+    // unattributed chunk is its own review. The retry budget is PER CHUNK,
+    // which is what "bounded by construction" buys.
+    assert.equal(prompts.length, 3);
     assert.ok(/review-findings\.json/.test(prompts[1]!));
     assert.equal(events.filter((e) => e.message === 'review.author.invalid').length, 1);
   } finally {
@@ -290,6 +314,39 @@ test('scope guard: reviewer edits project code → hard scope-violation', async 
     assert.ok((res as { detail: string }).detail.includes('src.ts'));
     assert.equal(prompts.length, 1);
     assert.ok(events.some((e) => e.message === 'review.scope-violation'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "a budget kill is reported anonymously": the failure NAMES the work item whose chunk was too large (ruling 290)', async () => {
+  // G2's failure read `adversarial-review spawn terminated by the SDK
+  // (error_max_turns) — raise the declared budgets or shrink the diff`. It named
+  // nothing, so the only actions it suggested were the two that must not be
+  // taken: widen the budget, or guess which part of the diff was the problem.
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    let calls = 0;
+    const qf = ((_p: { prompt: string }) => {
+      calls += 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 1.0, usage: { input_tokens: 1, output_tokens: 1 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
+    const detail = (res as { detail: string }).detail;
+    assert.match(detail, /^WI-1 is too large for review/, 'the message opens with the work item, not with the SDK');
+    assert.match(detail, /Split the work item, not the budget/, 'and it names the action that is allowed');
+    assert.doesNotMatch(detail, /raise the declared budgets/, 'widening the budget is exactly what must not be suggested');
+    assert.equal(calls, 1, 'no retry, and no later chunk is attempted once one has failed');
+    const evt = events.find((e) => e.message === 'review.budget-exhausted');
+    assert.equal((evt!.metadata as Record<string, unknown>).chunk, 'WI-1');
   } finally {
     fx.cleanup();
     restore();
