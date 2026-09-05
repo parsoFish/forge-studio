@@ -42,7 +42,7 @@ clause 2, and it is what M5-A exit row 5 closes.
    daemon — boots and serves.
 
    **Amended 2026-09-05 (M5-A session 4), from "one resolution seam" to "a fixed, enumerated set", for a measured reason.
-   Provisional under T1 ruling 261; operator ratification pending.**
+   Accepted under T1 ruling 261 and RATIFIED by the operator on 2026-09-06 (window 8, ruling 300).**
    The seam the bridge resolves at boot puts every specifier it names into the bridge's STATIC module graph. Folding the
    CLI's own example verbs into that one file — `demo.ts`, which drags in `demo-capture.ts`/`demo-runtime.ts` and their
    `execFileSync`/`mkdirSync`, and `gates/docs-gate.ts` with its own reads — added **seventeen new (file, sink) pairs

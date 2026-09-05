@@ -48,8 +48,8 @@ export type GateProfile = {
    * `failOnHollowIter0Gate` boolean, and giving it one meant editing
    * `packages/agents` at exactly its cap. The `infra` row it was written for now
    * reads `'required'`, the safe direction: a gate that passes before any work
-   * exists still stops the work item. Narrowed under T1 ruling 292; operator
-   * ratification pending.
+   * exists still stops the work item. Narrowed under T1 ruling 292 and RATIFIED
+   * by the operator in window 8 (ruling 300).
    */
   iter0FailFirst: 'required' | 'off';
   /**
@@ -57,6 +57,10 @@ export type GateProfile = {
    * `@forge/flows`' own (`work-item.ts`, beside `gateRequiredPaths`), not a
    * copy of it — see the module header on why this table declares no
    * vocabulary of its own.
+   *
+   * `docs` is the one row off the `'wi.creates'` priority chain (ruling 300):
+   * the chain stops at `creates`, so a docs WI that declared two pages to
+   * revise and created one new page passed its gate touching neither.
    */
   requiredPathsSource: RequiredPathsSource;
   /**
@@ -66,7 +70,7 @@ export type GateProfile = {
    *
    * `'acceptance'` was dropped from the union with `'advisory'` and for the same
    * reason: no gate implements it and no row selected it. Narrowed under T1
-   * ruling 292; operator ratification pending.
+   * ruling 292 and RATIFIED by the operator in window 8 (ruling 300).
    */
   mergeBoundaryTest: ReadonlyArray<'ci' | 'local'>;
   /** An orchestrator verb run at the merge boundary in addition to the above; null = none. */
@@ -103,7 +107,8 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
   },
   docs: {
     iter0FailFirst: 'off',
-    requiredPathsSource: 'wi.creates',
+    // Ruling 300: the declared scope, always — see the column's own comment.
+    requiredPathsSource: 'files-in-scope',
     mergeBoundaryTest: [],
     mergeBoundaryVerb: 'gate docs',
     capture: 'none',
