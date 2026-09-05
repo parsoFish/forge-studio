@@ -40,6 +40,11 @@ root (`data-onboard-session-id`, `data-architect-session-id`,
 `data-session-id`) and offers the way in as a separate act
 (`[data-action="view-onboarding-session"|"view-architect-session"|
 "view-demo-session"]` — the shared `components/studio/session/SessionMinted.tsx`).
+**No id, no key** (`forge-8vfn.6.11.5`): the root publishes the attribute only
+once the id exists. A key rendered present-and-empty is indistinguishable from
+one that is about to be filled, so any consumer waiting for it to appear — the
+story runner's post-`do` wait among them — is answered by a value that names
+nothing.
 `router.push`ing from inside the click that mints the id leaves it observable to
 nothing, so no automation can bind `/sessions/<kind>/<id>`.
 
@@ -2873,7 +2878,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`Instructions`), `[data-field="skills-search"]` (`SkillsBind`),
   `[data-field="demo-step-<n>"]` one per demo step, 1-based in render order
   (`DemoTimeline`), and `[data-field="clause-decision-<clauseId>"]` on each
-  USER-tier clause box (`ContractResolutionPanel`).
+  USER-tier clause box (`ContractResolutionPanel`). `DemoTimeline` also declares
+  `[data-action="add-demo-step"]` on "+ Add step" (`forge-8vfn.6.11.3`) — it was
+  the one control in that panel outside this contract, beside `move-step-up`,
+  `move-step-down`, `iterate-element` and `launch-demo-builder`, so a story
+  could change the steps the starter wrote but never add one.
   The editor aside also carries two PERMANENT read-only surfaces (R4-12), on
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
@@ -3347,8 +3356,10 @@ is what this contract reads — but it cannot be the only distinguisher.
   `/sessions/architect/new` (the two entries converge — no more bounce link).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
   [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
-  `data-architect-session-id` is empty until Start mints one and then carries it
-  beside `[data-action="view-architect-session"]` (M1-G, `forge-8vfn.5.5`); the project field
+  `data-architect-session-id` is ABSENT until Start mints one and then carries it
+  beside `[data-action="view-architect-session"]` (M1-G, `forge-8vfn.5.5`;
+  `forge-8vfn.6.11.5` — it used to render empty from first paint, so a consumer
+  waiting for the key to appear was answered by a value naming no session); the project field
   (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
   `name (id)`) — an unknown `?project=` prefill surfaces
   `[data-unknown-project="<id>"]` and is never submitted
