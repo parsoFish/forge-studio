@@ -155,6 +155,15 @@ export function ArchitectQuestionForm({
                 );
               })}
               <textarea
+                // `data-field` names the field KIND, exactly as the generic
+                // panel's `session-answer` does, so a story can address this box
+                // with the same vocabulary every other beat uses (§3.1 gives an
+                // author `data-field`/`data-action` VALUES and no CSS selector).
+                // The indexed handle stays: it is what distinguishes one
+                // question's box from another's, and four journeys select on it.
+                // Bead `forge-8vfn.6.11.21` — S2 run 3 spent its last funded run
+                // discovering this form published no `data-field` at all.
+                data-field="question-freetext"
                 data-question-freetext={i}
                 value={freeText[i] ?? ''}
                 onChange={(e) => setFreeText((ft) => ({ ...ft, [i]: e.target.value }))}
