@@ -29,7 +29,10 @@ const el = (
   navigatesTo: string | null = null,
   effect: { afterMs: number; patch: Record<string, string> } | null = null,
   enabledAfterMs: number | null = 0,
-) => ({ tag, attrs, navigatesTo, effect, enabledAfterMs });
+  /** When the element MOUNTS, measured from page start — an agent's first
+   *  question appearing in the session panel. `0` = present from first paint. */
+  appearsAfterMs = 0,
+) => ({ tag, attrs, navigatesTo, effect, enabledAfterMs, appearsAfterMs });
 
 const READY_MAIN = (page: string) => el('main', { 'data-page': page, 'data-page-ready': 'true' });
 
@@ -87,7 +90,10 @@ function fakeStudio(spec: {
   const isDisabled = (n: ReturnType<typeof el>) =>
     n.enabledAfterMs === null || Date.now() - startedAt < n.enabledAfterMs;
   const here = () => spec.pages[route] ?? { elements: [], data: {} };
-  const findAll = (sel: string) => here().elements.filter((n) => sel.split(',').some((c) => matchesClause(n, c.trim())));
+  const findAll = (sel: string) =>
+    here()
+      .elements.filter((n) => Date.now() - startedAt >= (n.appearsAfterMs ?? 0))
+      .filter((n) => sel.split(',').some((c) => matchesClause(n, c.trim())));
   const find = (sel: string) => findAll(sel)[0] ?? null;
 
   const locator = (sel: string): any => ({
@@ -126,9 +132,32 @@ function fakeStudio(spec: {
       }
     },
     waitFor: ({ timeout }: { timeout: number }) => until(() => find(sel) !== null, timeout, sel),
-    async evaluate(fn: (n: any) => unknown) {
+    async fill(value: string, opts: { timeout?: number } = {}) {
+      const timeout = opts.timeout ?? spec.defaultTimeoutMs ?? 5000;
+      await until(() => find(sel) !== null, timeout, sel).catch(() => {
+        throw new Error(`locator.fill: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
+      selected.push({ handle: sel, value });
+    },
+    async selectOption(value: string, opts: { timeout?: number } = {}) {
+      const timeout = opts.timeout ?? spec.defaultTimeoutMs ?? 5000;
+      await until(() => find(sel) !== null, timeout, sel).catch(() => {
+        throw new Error(`locator.selectOption: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
+      selected.push({ handle: sel, value });
+    },
+    async evaluate(fn: (n: any) => unknown, _arg?: unknown, opts: { timeout?: number } = {}) {
+      // Real playwright's `locator.evaluate` WAITS for the element, bounded by
+      // the call's timeout or the context default. Modelling that bound is the
+      // second half of bead `forge-8vfn.6.11.10`: S1 run 4's beat 6 declared a
+      // ten-minute agent wait and still died at `locator.evaluate: Timeout
+      // 5000ms exceeded`, because this call took no timeout at all.
+      const timeout = opts.timeout ?? spec.defaultTimeoutMs ?? 5000;
+      await until(() => find(sel) !== null, timeout, sel).catch(() => {
+        throw new Error(`locator.evaluate: Timeout ${timeout}ms exceeded waiting for ${sel}`);
+      });
       const node = find(sel);
-      if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
+      if (node === null) throw new Error(`locator.evaluate: Timeout ${timeout}ms exceeded waiting for ${sel}`);
       // Enough of a DOM node for `readShape` in beats.mjs: a SELECT carries
       // no radio/checkbox child, so `querySelector` answering null is exact.
       return fn({
@@ -436,4 +465,70 @@ test('6.11.10: a declared agent wait still FAILS CLOSED at its own bound, and th
   assert.ok(Date.now() - started < 2000, 'a declared wait must respect its own bound, not hang');
   assert.match(v.failures.join(' | '), /agent wait/i);
   assert.match(v.failures.join(' | '), /300/);
+});
+
+/* ------------------------------------------------------------------------ *
+ * Bead `forge-8vfn.6.11.10`, SECOND HALF — the declared bound must reach the
+ * FILL, not only the waits and the press (T1 ruling 225).
+ *
+ * Found by S1 run 4, the very run #438 was landed to unblock. Beat 6 declares
+ * `wait: { for: 'agent', upTo: 600_000 }` and still failed with:
+ *
+ *   could not fill [data-field="session-answer"] …:
+ *     locator.evaluate: Timeout 5000ms exceeded.
+ *
+ * 5000 ms is `context.setDefaultTimeout(5000)` (`run.mjs`), not the declared
+ * bound. #438 bounded every WAIT `driveBeat` makes and the PRESS
+ * (`click({ timeout })`, `6.11.6`'s fix) — but `setControl`'s `fill` and its
+ * two control-reading `evaluate` calls took no timeout at all and fell back to
+ * playwright's per-action default.
+ *
+ * `6.11.6`'s class a second time, in the file that had just been edited: the
+ * wait existed, the BOUND was wrong for what it was waiting on. Session 4's
+ * own outcome had named the 5 s fill bound as deliberately deferred, and the
+ * connection was not made when #438 was written.
+ * ------------------------------------------------------------------------ */
+
+/** A field that only APPEARS after the DOM bound — the agent's first question. */
+const lateFieldPage = (afterMs: number) => ({
+  '/sessions/onboarding/onb-2': {
+    elements: [
+      READY_MAIN('session-detail'),
+      el('button', { 'data-action': 'ask' }, null, { afterMs: 0, patch: {} }),
+      el('textarea', { 'data-field': 'session-answer' }, null, null, 0, afterMs),
+    ],
+    data: { page: 'session-detail', answered: 'no' },
+  },
+});
+
+test('6.11.10 (second half): a declared agent wait reaches the FILL, not only the waits and the press', async () => {
+  // THE DEFECT: with the bound applied to waits alone, this fill dies at
+  // playwright's 5 s default however long the beat declared.
+  const page = fakeStudio({ start: '/sessions/onboarding/onb-2', commitMs: 0, pages: lateFieldPage(600), defaultTimeoutMs: 200 });
+  const beat = {
+    act: 'Answer the agent',
+    do: [{ fill: 'session-answer', with: 'the gate is npm test' }],
+    wait: { for: 'agent', upTo: 3000 },
+    expect: { route: '/sessions/onboarding/onb-2', data: { page: 'session-detail' } },
+    say: 'The operator answers once the agent has asked.',
+  };
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('6.11.10 (second half): an UNDECLARED beat still gives up at the DOM bound on a fill', async () => {
+  // The guard against the opposite wrong fix — bounding every fill by the
+  // agent scale, which would make a genuinely missing field take ten minutes
+  // to report. Disclosed: it passes both ways by design.
+  const page = fakeStudio({ start: '/sessions/onboarding/onb-2', commitMs: 0, pages: lateFieldPage(600), defaultTimeoutMs: 200 });
+  const beat = {
+    act: 'Answer the agent',
+    do: [{ fill: 'session-answer', with: 'the gate is npm test' }],
+    expect: { route: '/sessions/onboarding/onb-2', data: { page: 'session-detail' } },
+    say: 'The operator answers once the agent has asked.',
+  };
+  const started = Date.now();
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  assert.ok(Date.now() - started < 500, 'an undeclared fill must not inherit the agent bound');
 });
