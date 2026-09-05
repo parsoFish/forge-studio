@@ -65,9 +65,15 @@ export class WedgeKillError extends Error {
 // CostTracker
 // ---------------------------------------------------------------------------
 
+/** Which knob set this run's ceiling — carried on every warn and stop event so a
+ *  stopped run names what bound it (bead forge-8vfn.6.10.23). */
+export type CeilingSource = 'env' | 'manifest' | 'derived' | 'flow' | 'none';
+
 export type CostTrackerOptions = {
   /** Cost ceiling in USD. 0 or undefined → enforcement disabled. */
   ceilingUsd: number;
+  /** The knob `ceilingUsd` came from; carried on every warn and stop event. */
+  ceilingSource?: CeilingSource;
   initiativeId: string;
   logger: EventLogger;
 };
@@ -94,11 +100,11 @@ export type CostTrackerOptions = {
  *      ceiling does not bound what the cycle actually spent.
  *
  * Emits:
- *   - flow.cost-warn (once, at ≥70%) with { spentUsd, ceilingUsd, pct }
+ *   - flow.cost-warn (once, at ≥70%) with { spentUsd, ceilingUsd, ceilingSource, pct }
  *   - flow.cost-ceiling-stop (at ≥100%, on checkCeiling() — every call while
- *     over ceiling) with { spentUsd, ceilingUsd, stoppedBeforeNode }
+ *     over ceiling) with { spentUsd, ceilingUsd, ceilingSource, stoppedBeforeNode }
  *   - flow.cost-ceiling-stop from stopReasonBeforeNextWorkItem(), at most once
- *     PER LIMIT, carrying { limit: 'cycle' | 'work-item', spentUsd, ceilingUsd,
+ *     PER LIMIT, carrying { limit: 'cycle' | 'work-item', spentUsd, ceilingUsd, ceilingSource,
  *     pct, stoppedBeforeWorkItem: true, work_item_id? } — the figures are the
  *     BREACHED limit's, not always the cycle's.
  */
@@ -133,11 +139,13 @@ export class CostTracker {
   private readonly iterationPhases = new Set<string>();
   private readonly spentByWorkItemMap = new Map<string, number>();
   private readonly ceilingUsd: number;
+  private readonly ceilingSource: CeilingSource;
   private readonly initiativeId: string;
   private readonly logger: EventLogger;
 
   constructor(opts: CostTrackerOptions) {
     this.ceilingUsd = opts.ceilingUsd ?? 0;
+    this.ceilingSource = opts.ceilingSource ?? 'none';
     this.initiativeId = opts.initiativeId;
     this.logger = opts.logger;
   }
@@ -234,6 +242,7 @@ export class CostTracker {
         metadata: {
           spentUsd: this.spentUsd,
           ceilingUsd: this.ceilingUsd,
+          ceilingSource: this.ceilingSource,
           pct: Math.round(pct * 10) / 10,
         },
       });
@@ -335,6 +344,7 @@ export class CostTracker {
         limit: opts.limit,
         spentUsd: opts.spentUsd,
         ceilingUsd: opts.ceilingUsd,
+        ceilingSource: this.ceilingSource,
         pct: Math.round(pct * 10) / 10,
         stoppedBeforeWorkItem: true,
         ...(opts.workItemId !== undefined ? { work_item_id: opts.workItemId } : {}),
@@ -366,6 +376,7 @@ export class CostTracker {
       metadata: {
         spentUsd: this.spentUsd,
         ceilingUsd: this.ceilingUsd,
+        ceilingSource: this.ceilingSource,
         pct: Math.round(pct * 10) / 10,
         stoppedBeforeNode: opts.nextNodeId ?? null,
       },
