@@ -319,6 +319,22 @@ export default {
       // own — S2's worked vocabulary, which costs a spawn to observe live.
       act: 'Open the session from Monitor and wait for the Architect to finish drafting',
       do: [{ press: 'open-session' }],
+      // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).
+      // A `wait` field changes no expectation and no act — it names the bound
+      // the beat is judged under.
+      //
+      // This beat stands on a REAL AGENT. S4 run 1's own archived
+      // `_architect/<id>/status.json` reads `"phase": "interviewing"` at reap,
+      // and the beat reported `data-session-phase: expected
+      // "awaiting-verdict", got "interviewing"`. Runs measured on merged
+      // main showed the beat red not because the product was wrong but because
+      // `beats.mjs` had ONE bound, `READY_TIMEOUT_MS = 15_000`, for a local DOM
+      // update and for an architect's interview alike (bead
+      // `forge-8vfn.6.11.10`, #438). Ten minutes is a STATED GUESS that the
+      // next run turns into a number, and the verdict now names which bound
+      // gave up — so that run cannot confuse "the agent was slow" with "the
+      // product is wrong".
+      wait: { for: 'agent', upTo: 600_000 },
       expect: {
         route: '/sessions/architect/<architectSessionId>',
         data: {
