@@ -71,7 +71,20 @@
       {
         "act": "Drag the \"architect\" agent out of the palette onto the canvas, and wire it into \"plan\"",
         "say": "This is the act the builder exists for. The starter’s \"plan\" station is a stub; this flow wants the real Architect in front of it, so that a run can begin from an idea instead of from an initiative somebody already planned. Four stations now, three edges — and the flow has stopped being a copy of the starter.",
-        "do": [],
+        "do": [
+          {
+            "press": "place-station-architect"
+          },
+          {
+            "press": "connect-from-architect"
+          },
+          {
+            "press": "connect-into-plan"
+          },
+          {
+            "press": "pick-artifact-plan"
+          }
+        ],
         "expect": {
           "route": "/flows/new",
           "data": {
@@ -278,18 +291,15 @@
     {
       "act": "Drag the \"architect\" agent out of the palette onto the canvas, and wire it into \"plan\"",
       "say": "This is the act the builder exists for. The starter’s \"plan\" station is a stub; this flow wants the real Architect in front of it, so that a run can begin from an idea instead of from an initiative somebody already planned. Four stations now, three edges — and the flow has stopped being a copy of the starter.",
-      "status": "red",
-      "failures": [
-        "data-node-count: expected \"4\", got \"3\"",
-        "data-edge-count: expected \"3\", got \"2\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "flow-monitor",
         "flow-id": "new",
         "component": "flow-builder-canvas",
-        "node-count": "3",
-        "edge-count": "2"
+        "node-count": "4",
+        "edge-count": "3"
       },
       "frame": "frames/04-drag-the-architect-agent-out-of-the-pale.png"
     },
@@ -335,45 +345,43 @@
     {
       "act": "Open the launcher",
       "say": "How a flow is launched follows from what its first station is. This one begins with the Architect, so forge asks for an idea rather than for an initiative someone has already planned — which is what makes it startable against a project that has never been planned against before.",
-      "status": "red",
-      "failures": [
-        "data-kickoff-kind: expected \"idea\", got \"generic\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "section": "flow-kickoff",
-        "kickoff-kind": "generic"
+        "kickoff-kind": "idea"
       },
       "frame": "frames/08-open-the-launcher.png"
     },
     {
       "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
       "say": "A flow built ten minutes ago is now dispatching a real Agent against a real repository, so the operator sets the ceiling before starting rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on.",
-      "status": "red",
-      "failures": [
-        "could not fill [data-field=\"project\"] with \"gitpulse\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"project\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
-      ],
-      "bindings": {},
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "architectSessionId": "2026-09-05T05-52-07-edbb779c"
+      },
       "data": {
         "page": "flow-monitor",
-        "flow-id": "story-s4"
+        "flow-id": "story-s4",
+        "section": "new-idea",
+        "architect-session-id": "2026-09-05T05-52-07-edbb779c"
       },
       "frame": "frames/09-point-the-flow-at-gitpulse-describe-the-.png"
     },
     {
       "act": "While it works, check Monitor",
       "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". One thing is live on it — a run of a flow that did not exist at the start of this story, against a project forge has never planned against. That is the whole of S4 in a single number.",
-      "status": "red",
-      "failures": [
-        "data-monitor-live: expected \"1\", got \"0\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "monitor",
         "page-ready": "true",
-        "monitor-live": "0",
+        "monitor-live": "1",
         "fetch-status": "ok"
       },
       "frame": "frames/10-while-it-works-check-monitor.png"
@@ -383,10 +391,15 @@
       "say": "The session is the same shared surface every kind of agent run uses, so a flow the operator built themselves is watched exactly the way the shipped ones are. When the plan is drafted the session stops and waits for a human.",
       "status": "red",
       "failures": [
-        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+        "data-session-phase: expected \"awaiting-verdict\", got \"interviewing\""
       ],
       "bindings": {},
-      "data": {},
+      "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "interviewing"
+      },
       "frame": "frames/11-open-the-session-from-monitor-and-wait-f.png"
     },
     {
@@ -394,13 +407,43 @@
       "say": "This is where S4 ends: a flow the operator assembled, linted and launched has produced a plan, and forge is holding it at a gate for a decision. Nothing is approved — that decision belongs to the operator, and it is S10 that makes it. What this story proves is that a flow built in the builder runs like a flow that shipped with forge.",
       "status": "red",
       "failures": [
-        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
       ],
       "bindings": {},
-      "data": {
-        "fetch-status": "ok"
-      },
+      "data": {},
       "frame": "frames/12-open-the-plan-and-stand-at-the-verdict.png"
     }
-  ]
+  ],
+  "reap": {
+    "reaped": [
+      {
+        "pid": 2076498,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-52-07-edbb779c",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 2076491,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-52-07-edbb779c",
+        "signal": "SIGTERM",
+        "via": "cwd"
+      }
+    ],
+    "skipped": []
+  },
+  "sweep": {
+    "removed": [
+      "/home/parso/forge-m5-b/studio/flows/story-s4"
+    ],
+    "failed": []
+  },
+  "fence": {
+    "restored": [],
+    "removed": [
+      "skills/dev/",
+      "skills/plan/",
+      "skills/review/"
+    ],
+    "failed": []
+  }
 }
