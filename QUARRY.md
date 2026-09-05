@@ -149,6 +149,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/contract-compliance-loop.ts | projects | verbatim | 167 |
 | packages/projects/contract-stages.ts | projects | verbatim | 324 |
 | packages/factory/cycle-recap.ts | factory | verbatim | 395 |
+| packages/factory/class-profiles.ts | factory | rewritten | 113 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-capture.ts | factory | verbatim | 48 |
 | packages/factory/demo-model.ts | factory | verbatim | 744 |
