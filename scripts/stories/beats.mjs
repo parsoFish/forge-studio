@@ -215,6 +215,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const bound = beatBound(rawBeat, timeoutMs);
   // What ENDED the wait, so the verdict can say it. `null` = the bound did.
   let stalled = null;
+  // Bead `forge-8vfn.6.11.19` (T1 ruling 254). Did a waiter that can actually
+  // OBSERVE the agent take this beat's declared bound? The URL wait and the
+  // page-ready wait both consume it and neither watches an agent — which is
+  // precisely how `6.11.17` hid — so neither sets this.
+  let agentWaitConsumed = false;
   const named = (verdict) => {
     if (verdict.status !== 'red') return verdict;
     const why =
@@ -236,7 +241,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // beat's page — before this beat's state is judged. All nine operator flows
   // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
-  const stepError = await performSteps(page, steps, bound.ms, bound.label !== null);
+  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null);
+  const stepError = steps_.error;
+  if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
     return stuckVerdict(beat, await readObserved(page, beat), stepError);
   }
@@ -294,7 +301,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // declared to go, on the state the beat is actually waiting for.
     if (new URL(page.url()).pathname === target) {
       const left = bound.ms - (Date.now() - waitedFrom);
-      if (left > 0) stalled = await waitForConsequence(page, beat, left, bound.label !== null);
+      if (left > 0) {
+        stalled = await waitForConsequence(page, beat, left, bound.label !== null);
+        agentWaitConsumed = true;
+      }
     }
   }
 
@@ -361,7 +371,25 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       /* not ready — the verdict below reports that honestly rather than throwing */
     });
 
-  return named(beatVerdict(beat, await readObserved(page, beat)));
+  const verdict = named(beatVerdict(beat, await readObserved(page, beat)));
+  // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
+  // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
+  // that passes without its declared wait ever running passed by luck, and a
+  // gate that accepts luck is the fail-open shape this campaign keeps paying
+  // for. `6.11.17` was exactly that — a ten-minute bound spent on a URL change,
+  // and a verdict that then named the bound as though it had fired.
+  if (bound.label === null || agentWaitConsumed) return verdict;
+  return Object.freeze({
+    ...verdict,
+    status: 'red',
+    failures: Object.freeze([
+      ...verdict.failures,
+      `this beat declared ${JSON.stringify(rawBeat.wait)} and NO WAITER CONSUMED IT — the ${bound.ms} ms bound ` +
+        'bounded nothing on this path. A URL wait and a page-ready wait both take the bound and neither watches ' +
+        'an agent, so neither counts. Give the beat a `do` block or expectations a waiter can observe, or drop ' +
+        'the declaration: a bound that bounds nothing makes every later verdict about it a lie.',
+    ]),
+  });
 }
 
 /**
@@ -391,6 +419,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
  * as ONE beat instead of splitting one operator act across two.
  */
 async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
+  // `waitedForHandle` feeds `6.11.19`'s guard: it says whether this block gave
+  // the beat's declared bound to a waiter that watches the PAGE for a handle
+  // the agent has to produce, rather than to a URL change.
+  let waitedForHandle = false;
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
     const fills = Object.hasOwn(step, 'fill');
@@ -412,13 +444,16 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
       const stall = await waitForHandleOrStall(page, handle, timeoutMs, watchLifecycle);
+      waitedForHandle = true;
       if (stall !== null) {
-        return (
-          `the session's own lifecycle read "${LIFECYCLE_STALLED}" ${Math.round(stall.afterMs / 1000)}s into the ` +
-          `agent wait, while this step waited for ${handle}. The product had already declared this session hung, ` +
-          'so the beat stopped there rather than spending its declared bound twice over — once here and again in ' +
-          'the act that follows.'
-        );
+        return {
+          waitedForHandle,
+          error:
+            `the session's own lifecycle read "${LIFECYCLE_STALLED}" ${Math.round(stall.afterMs / 1000)}s into the ` +
+            `agent wait, while this step waited for ${handle}. The product had already declared this session hung, ` +
+            'so the beat stopped there rather than spending its declared bound twice over — once here and again in ' +
+            'the act that follows.',
+        };
       }
     }
 
@@ -437,15 +472,17 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false) {
         continue;
       }
       const refusal = await setControl(page, handle, step.with, timeoutMs);
-      if (refusal !== null) return refusal;
+      if (refusal !== null) return { waitedForHandle, error: refusal };
     } catch (e) {
-      return (
-        `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
-        `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`
-      );
+      return {
+        waitedForHandle,
+        error:
+          `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
+          `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`,
+      };
     }
   }
-  return null;
+  return { waitedForHandle, error: null };
 }
 
 /**

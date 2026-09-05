@@ -334,3 +334,90 @@ test('AT-6.11.17-10 (positive control) a beat with no declared agent wait keeps 
     'the early red stays scoped to beats that declared an agent wait',
   );
 });
+
+/**
+ * The GUARD, bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class re-planned
+ * rather than patched a fourth time.
+ *
+ * Three times now a declared `wait` has failed to bound what it named:
+ * `6.11.6` (a bound wrong for what it waited on), `6.11.10` (one bound serving
+ * two different waits), and this milestone (`6.11.17`: a declared agent bound
+ * applied to a URL change, and spent twice in `performSteps`). Every time the
+ * field was parsed, surfaced in the verdict, and enforced nowhere — and every
+ * time the verdict then NAMED a bound that had not fired, so the run record
+ * could not tell "the agent was slow" from "the runner never waited".
+ *
+ * A fourth fix would close a fourth instance. This closes the class: a beat
+ * that declares `wait: { for: 'agent' }` is RED unless a waiter that can
+ * actually observe the agent consumed that bound on this beat's path. The URL
+ * wait and the page-ready wait both take the bound and neither observes an
+ * agent — which is exactly how `6.11.17` hid — so neither counts.
+ *
+ * It fires whatever the verdict would otherwise have been. A beat that PASSES
+ * without its declared wait ever running passed by luck, and a gate that
+ * accepts luck is the fail-open shape this campaign keeps paying for.
+ */
+
+/** A beat declaring an agent wait whose route needs no navigation and whose
+ *  `do` block is empty — no waiter can consume the bound. */
+const strandedWaitBeat = {
+  act: 'Stand on the session and declare a wait nothing can consume',
+  wait: { for: 'agent', upTo: 5_000 },
+  expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true' } },
+  say: 'A declared bound that bounds nothing.',
+};
+
+test('AT-6.11.19-1 (RED) a declared agent wait that NO waiter consumed reds the beat, naming it', async () => {
+  // The page already satisfies every expectation, so without the guard this
+  // beat is GREEN — green by luck, with a ten-second bound that bounded
+  // nothing. That is the shape the guard exists to refuse.
+  const page = fakeStudio({ commitMs: 0, phaseAfterMs: 0, stalledAfterMs: null });
+  await page.goto('http://localhost:4124' + SESSION);
+  const verdict = await driveBeat(page as never, strandedWaitBeat, 0, 'http://localhost:4124');
+
+  assert.equal(
+    verdict.status,
+    'red',
+    `a beat whose declared wait bounded nothing must not pass. Failures: ${JSON.stringify(verdict.failures)}`,
+  );
+  const said = verdict.failures.join(' | ');
+  assert.match(said, /declared/, said);
+  assert.match(said, /no waiter/i, `the failure must name the missing consumer. Got: ${said}`);
+  assert.match(said, /5000/, `and the bound it declared. Got: ${said}`);
+});
+
+test('AT-6.11.19-2 (positive control) the SAME beat with a consumer runs, and the guard stays silent', async () => {
+  // Identical declaration, but a `do` block gives `performSteps`/the
+  // consequence wait something to consume the bound with.
+  const page = fakeStudio({ commitMs: 20, phaseAfterMs: 400, stalledAfterMs: null });
+  const verdict = await driveBeat(page as never, openSessionBeat(4_000), 1, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+  assert.doesNotMatch(verdict.failures.join(' | '), /no waiter/i, 'a consumed bound must not trip the guard');
+});
+
+test('AT-6.11.19-3 (positive control) a beat that declares NO wait is never judged by this guard', async () => {
+  const page = fakeStudio({ commitMs: 0, phaseAfterMs: 0, stalledAfterMs: null });
+  await page.goto('http://localhost:4124' + SESSION);
+  const noWait = { ...strandedWaitBeat, wait: undefined };
+  const verdict = await driveBeat(page as never, noWait as never, 0, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+  assert.doesNotMatch(verdict.failures.join(' | '), /no waiter/i, said2(verdict));
+});
+
+function said2(v: { failures: readonly string[] }) {
+  return `the guard is scoped to beats that DECLARED a wait. Got: ${JSON.stringify(v.failures)}`;
+}
+
+test('AT-6.11.19-4 (RED) a URL wait alone does NOT count as consuming an agent bound', async () => {
+  // This is 6.11.17's exact shape: the beat navigates, the URL wait takes the
+  // declared bound, and nothing ever observes the agent. Before #456 that
+  // combination reported `gave up at the agent wait` after about a second. The
+  // guard must refuse it even if a future change removed the consequence wait
+  // again — so this pin asserts the RULE, not the current wiring: a beat whose
+  // only bound-consuming waiter is the URL wait is red.
+  const page = fakeStudio({ commitMs: 20, phaseAfterMs: 0, stalledAfterMs: null });
+  const verdict = await driveBeat(page as never, openSessionBeat(3_000), 1, 'http://localhost:4124');
+  // With the consequence wait in place this is green — the control that proves
+  // the guard is not simply always-on for navigating beats.
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+});
