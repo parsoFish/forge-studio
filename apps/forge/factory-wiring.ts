@@ -159,7 +159,6 @@ export const reviewCommentsBinding = {
   remove: (...a: Parameters<InstalledFactory['reviewComments']['deleteComment']>) => installedExample().reviewComments.deleteComment(...a),
   verdict: (...a: Parameters<InstalledFactory['reviewComments']['deriveVerdictFromComments']>) => installedExample().reviewComments.deriveVerdictFromComments(...a),
   path: (logsRoot: string, cycleId: string) => installedExample().reviewComments.reviewCommentsPath(logsRoot, cycleId),
-  isSafeCycleId: (cycleId: string) => installedExample().reviewComments.isSafeCycleId(cycleId),
   get max(): number { return installedExample().reviewComments.REVIEW_COMMENTS_MAX; },
 } as const;
 
