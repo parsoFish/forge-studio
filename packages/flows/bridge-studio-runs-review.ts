@@ -49,6 +49,14 @@ export type StudioPostContext = StudioContext & {
    * does NOT block the merge (the in-cycle DRAFT changelog is the fallback).
    */
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /**
+   * ADR 048 / 051 — the example factory's class → gate-profile table, reached
+   * by INJECTION because it is a deletable package this one may not import.
+   * Returns `null` for a class the installed table does not know; ABSENT when
+   * no factory is installed, in which case the plan gate enforces no class
+   * rule, which is what "deletable" has to mean.
+   */
+  singleWiAllowedFor?: (changeClass: string) => boolean | null;
   broadcastArchitectChanged: () => void;
   spawnArchitectTurnFn?: (forgeRoot: string, project: string, sessionId: string) => void;
 };
