@@ -375,13 +375,31 @@ export default {
       // resolves; the beat is re-measured by the next run, not re-authored
       // here. What the beat's `do` steps say is the way back in:
       // the Monitor card wraps `a[data-action="open-session"]`, and answering
-      // is `[data-field="session-answer"]` + `[data-action="submit-answers"]`
-      // on the shared session surface. Bead `forge-8vfn.5.5`.
+      // is `[data-field="question-freetext"]` + `[data-action="submit-answers"]`
+      // on the architect's own question form. Bead `forge-8vfn.5.5`.
+      //
+      // AMENDED 2026-09-05 (M5-B s7, bead `forge-8vfn.6.11.21`, T1 rulings
+      // 266/271): the FILL is made consistent with the PRESS of this same beat.
+      // The intent — answer the architect's questions and submit — is
+      // unchanged; only the selector named the wrong surface.
+      // S2 run 3 (this lane's LAST funded S2 run) measured it: the architect
+      // asked THREE questions at 118.5 s, the page read
+      // `data-session-phase="awaiting-answers"`, and the beat still waited its
+      // full 600 000 ms for `[data-field="session-answer"]` — a handle only the
+      // GENERIC `SessionInteractivePanel` publishes. The architect kind is
+      // excluded from that affordance BY DESIGN
+      // (`bridge-studio-sessions-affordance-shell.ts`: "never `architect` (no
+      // writable affordance)"), so an architect session renders
+      // `ArchitectQuestionForm`, which published no `data-field` at all until
+      // #468. `fillAll` (#471) exists because Submit stays disabled until EVERY
+      // question is answered and the count is model-determined — two in one
+      // measured turn, three in another — so a fixed number of `fill` steps
+      // cannot answer a variable round.
       act: 'Open the session again and answer the Architect\'s questions about the project',
       do: [
         { press: 'open-session' },
         {
-          fill: 'session-answer',
+          fillAll: 'question-freetext',
           with: 'The gate command is `npm test`. The timings come from the build tool\'s own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive.',
         },
         { press: 'submit-answers' },
