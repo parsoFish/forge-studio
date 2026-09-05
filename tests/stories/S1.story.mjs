@@ -395,6 +395,28 @@ export default {
         },
         { press: 'apply-clause-decision' },
       ],
+      // AMENDED 2026-09-05 (T1 ruling 230; ruling 200's mechanical class as
+      // extended by 222). A `wait` field changes no expectation and no act —
+      // it names the bound the beat is judged under.
+      //
+      // THIS BEAT STANDS ON A REAL AGENT, and amendment 3 gave the declaration
+      // only to beat 6. `apply-clause-decision`'s handler is `submitUser`
+      // (`ContractResolutionPanel.tsx:161`), which calls `preflightFixAgent`
+      // and polls the run it dispatches; the panel's own header says so — "this
+      // tier — and only this tier — genuinely dispatches + polls an agent
+      // turn". Run 4 pressed it for the first time in the story's life and read
+      // the counts back at STATE B (`failing 4 / user 1`), i.e. before the
+      // decision landed, because the runner gave an agent's work the 15 s
+      // bound meant for a DOM update. §15.183 a second time, in this story.
+      //
+      // 200 000 ms is MEASURED, not guessed: the panel's own poll ceiling is
+      // `DEFAULT_POLL_INTERVAL_MS 2000 × DEFAULT_POLL_MAX_ATTEMPTS 90` = 180 s
+      // (`apps/studio/lib/agent-dispatch.ts:49,51`), after which it renders
+      // `data-poll-state="timed-out"` with a `re-check` affordance and these
+      // counts can never move from that poll. A bound above the product's own
+      // bound would buy nothing, so the beat waits exactly as long as the
+      // product is still able to answer, plus a margin for the re-render.
+      wait: { for: 'agent', upTo: 200_000 },
       expect: {
         route: '/projects/gitweave',
         data: {
