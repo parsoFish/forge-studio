@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CHANGE_CLASSES, CLASS_PROFILES, isChangeClass, profileFor, type ChangeClass, type GateProfile } from './class-profiles.ts';
+import { CHANGE_CLASSES, CLASS_PROFILES, isChangeClass, profileFor, readChangeClass, type ChangeClass, type GateProfile } from './class-profiles.ts';
+import { gateRequiredPaths, type RequiredPathsSource, type WorkItem } from '@forge/flows/work-item.ts';
 import { CHANGE_CLASSES as CHANGE_CLASSES_FROM_THE_VALIDATOR } from '@forge/flows/manifest.ts';
 
 const FACTORY_DIR = import.meta.dirname;
@@ -56,7 +57,6 @@ const COLUMNS: ReadonlyArray<keyof GateProfile> = [
  */
 const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
   'iter0FailFirst',      // spec §5 item 4 — the integrate band's per-WI gate
-  'requiredPathsSource', // spec §5 item 3 — the ralph runner's diff-inclusion list
   'mergeBoundaryTest',   // spec §5 item 4 — the class-selected merge gate
   'mergeBoundaryVerb',   // spec §5 item 6 — `forge gate docs`
   'reflect',             // spec §5 item 4 — the reflector's class rule
@@ -67,13 +67,20 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
 // `validateReviewFindings`, so a finding cannot be judged against a vocabulary
 // the agent was never shown.
 //
+// `requiredPathsSource` came off with item 9: `phases/developer-loop.ts` reads
+// it ONCE per run and hands it to `gateRequiredPaths`, so the paths the
+// gate-tightening layer demands in the branch diff are the class's, not a
+// constant. Landing it CUT two of the column's drafted values — see the union
+// in `@forge/flows/work-item.ts` for why neither could be given an honest
+// consumer.
+//
 // `capture` came off with item 4, read by the integrate band
 // (`phases/integrate.ts`) to choose between running the project's declared demo
 // commands, recording the gate's own output, and recording the diff alone.
 //
 // `singleWiAllowed` came off this list first, and where it landed corrected the
 // draft: it is enforced by the project manager's SET rules, not the plan gate,
-// because at the plan gate there are no work items to count. FIVE columns left,
+// because at the plan gate there are no work items to count. FOUR columns left,
 // and each names the spec item that lands it.
 
 // Every column is on the list as this lands, and that is the honest state of a
@@ -177,5 +184,51 @@ describe('class profiles — every column is enforced somewhere', () => {
       [],
       'this column now HAS a consumer — remove it from COLUMNS_AWAITING_A_CONSUMER so the check covers it',
     );
+  });
+});
+
+describe('class profiles — the required-paths source is the table\'s, and it is total', () => {
+  it('kills "the source column is decorative": every class\'s declared value is one the real function acts on, and the two act differently', () => {
+    // A WI that both CREATES a file and declares a wider scope — the only shape
+    // where the two sources disagree, and therefore the only one that can tell
+    // a wired column from an ignored one.
+    const wi = {
+      work_item_id: 'WI-1',
+      initiative_id: 'INIT-x',
+      title: 't',
+      files_in_scope: ['docs/a.md', 'docs/b.md'],
+      creates: ['docs/c.md'],
+      acceptance_criteria: [],
+      depends_on: [],
+      quality_gate_cmd: ['true'],
+    } as unknown as WorkItem;
+
+    assert.deepEqual([...gateRequiredPaths(wi, 'wi.creates')], ['docs/c.md']);
+    assert.deepEqual([...gateRequiredPaths(wi, 'files-in-scope')], ['docs/a.md', 'docs/b.md']);
+
+    for (const cls of CHANGE_CLASSES) {
+      const source = profileFor(cls).requiredPathsSource;
+      const paths = gateRequiredPaths(wi, source);
+      assert.ok(paths.length > 0, `${cls}: a class must never resolve to an EMPTY required-paths list — that is the 2026-07-11 vacuous-gate defect`);
+      assert.deepEqual(
+        [...paths],
+        source === 'files-in-scope' ? ['docs/a.md', 'docs/b.md'] : ['docs/c.md'],
+        `${cls}: the paths must be the ones its declared source names`,
+      );
+    }
+  });
+
+  it('kills "a class could ask for no required paths at all": the union offers no such value', () => {
+    // Structural, not a value check: `'none'` and `'manifest.creates'` were cut
+    // from the drafted union, so a table row asking for either is a compile
+    // error rather than a silently disabled diff-touch check.
+    const legal: RequiredPathsSource[] = ['wi.creates', 'files-in-scope'];
+    for (const cls of CHANGE_CLASSES) {
+      assert.ok(legal.includes(profileFor(cls).requiredPathsSource), `${cls} declares a source outside the union`);
+    }
+  });
+
+  it('kills "the dev-loop reads the manifest itself": readChangeClass is the one reader, and it refuses an unreadable manifest', () => {
+    assert.throws(() => readChangeClass(join(FACTORY_DIR, 'no-such-manifest.md')), /ENOENT|no such file/i);
   });
 });
