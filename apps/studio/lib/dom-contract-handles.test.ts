@@ -30,6 +30,7 @@ import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { ArtifactPicker } from '@/components/studio/flow-builder/ArtifactPicker';
+import { ProjectTabs } from '@/components/studio/project-builder/ProjectTabs';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const render = (component: unknown, props: Record<string, unknown> = {}): string =>
@@ -165,4 +166,31 @@ test('5.12.1: every artifact option is a declared ACT, not just a qualifier', ()
 test('5.12.1: leaving an edge unlabelled is a declared act too — the operator\'s other real answer', () => {
   const html = render(ArtifactPicker, { anchorX: 100, anchorY: 100, onPick: () => {}, onClose: () => {} });
   expect(html).toContain('data-action="leave-edge-unlabelled"');
+});
+
+// ── forge-8vfn.6.11.9 — the project page's own tab bar ───────────────────────
+
+test('6.11.9: the project page tab buttons declare the act they perform, so a story can reach the roadmap tab', () => {
+  const html = render(ProjectTabs, { tab: 'editor', onSelect: () => {} });
+  // THE DEFECT (S1 run 3, beat 10): the buttons carried `data-tab` and
+  // `data-tab-active` — QUALIFIERS, not acts — and no `data-action` at all.
+  // `scripts/stories/beats.mjs` resolves `[data-field=…]`/`[data-action=…]`
+  // only, so no story could switch this page to its roadmap tab; and
+  // `plan-with-architect` renders unconditionally inside
+  // `ProjectArchitectEntry`, in EVERY branch of
+  // `[data-section="project-roadmap"]`. Beat 10 therefore read "no element
+  // carries that handle" for a handle that was one tab away. `6.11.3`'s class,
+  // second instance.
+  expect(html).toContain('data-action="project-tab-editor"');
+  expect(html).toContain('data-action="project-tab-roadmap"');
+});
+
+test('6.11.9: the act sits BESIDE the qualifiers, never replacing them — no journey reader loses its selector', () => {
+  const html = render(ProjectTabs, { tab: 'roadmap', onSelect: () => {} });
+  expect(html).toContain('data-tab="editor"');
+  expect(html).toContain('data-tab="roadmap"');
+  // The active flag still discriminates, so a beat can assert WHICH tab it
+  // landed on rather than only that it pressed something.
+  expect(html).toContain('data-tab="roadmap" data-tab-active="true"');
+  expect(html).toContain('data-tab="editor" data-tab-active="false"');
 });
