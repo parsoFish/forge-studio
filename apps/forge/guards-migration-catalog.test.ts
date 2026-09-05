@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { validateCatalog } from '../../orchestrator/studio/validate.ts';
+import { validateCatalog } from '@forge/library/studio/library-validate.ts';
 import { loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
 import type { Catalog } from '@forge/contracts/studio/types.ts';
