@@ -267,6 +267,8 @@ export type StructuredResult<T> = {
   output: T | null;
   /** Every `file_path` the agent Read this turn — callers filter (e.g. brain/). */
   reads: string[];
+  /** This turn's spend (SDK `total_cost_usd`; 0 when absent). Bead forge-8vfn.18. */
+  costUsd: number;
 };
 
 /**
@@ -339,6 +341,7 @@ export async function runStructuredTurn<T>(args: {
 
   let structured: T | null = null;
   let rawText = '';
+  let turnCostUsd = 0;
   let toolSeq = 0;
   const reads: string[] = [];
   let lastHeartbeatMs = 0;
@@ -391,11 +394,13 @@ export async function runStructuredTurn<T>(args: {
     if (m.structured_output && typeof m.structured_output === 'object') {
       structured = m.structured_output as T;
     }
+    const c = (m as { total_cost_usd?: unknown }).total_cost_usd;
+    if (typeof c === 'number') turnCostUsd = c;
     break;
   }
 
   const output = structured ?? parseFencedJson<T>(rawText);
-  return { output, reads };
+  return { output, reads, costUsd: turnCostUsd };
 }
 
 

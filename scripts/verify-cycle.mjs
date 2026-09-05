@@ -76,11 +76,11 @@ import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
 import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
+import { sumRunCost } from './verify-cycle-cost.mjs';
 import {
   DEFAULT_PROJECT,
   buildOutcomeChecks,
   classifyReflectorProgress,
-  sumAuthoritativeCostFromLines,
 } from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -240,12 +240,11 @@ function resetRepo(repoPath) {
  *  defect C — a naive per-line sum double-counts developer-loop/unifier
  *  phases, which restate their `iteration` cost on per-work-item and
  *  phase-level `end` events; delegates to the one restatement rule via
- *  `sumAuthoritativeCostFromLines`, not a second copy of it). */
-function sumCycleCost(cycleId) {
-  try {
-    const lines = readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n');
-    return sumAuthoritativeCostFromLines(lines);
-  } catch { return 0; }
+ *  `sumRunCost`, which delegates to the one cost rule — not a second copy). */
+function sumCycleCost(cycleId, architectSessionId = null) {
+  // bead forge-8vfn.18 — the cycle log is stages 2-3; stage 1 is the architect
+  // session's own log, and `driveArchitect` has always returned that id.
+  return sumRunCost(cycleId, architectSessionId, join(FORGE_ROOT, '_logs'));
 }
 
 /** Work-item completion from the event log: { total, complete, failed }. */
@@ -1041,7 +1040,7 @@ async function main() {
   // Plan-everything-before-kickoff: the session may promote N dependent
   // initiatives; ONE serve pass decomposes them all (the dependency gate is
   // flow_id-aware — decompose flows never wait on prerequisite merges).
-  const { initiatives } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
+  const { initiatives, sessionId: architectSessionId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
   const architectStage = await runServeStage(page, 'architect');
   // Focus the first threaded cycle in the dashboard for the frame gallery.
   try {
@@ -1133,7 +1132,7 @@ async function main() {
   for (const init of initiatives) {
     const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
     const finalEvents = await cycleEventCountFromLog(init.cycleId);
-    const cost = sumCycleCost(init.cycleId);
+    const cost = sumCycleCost(init.cycleId, architectSessionId);
     const { checks, wi } = assessOutcomes({
       finalStatus, cost, repoPath,
       cycleId: init.cycleId, initiativeId: init.initiativeId,
