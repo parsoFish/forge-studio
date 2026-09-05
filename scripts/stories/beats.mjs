@@ -209,7 +209,7 @@ const READY_TIMEOUT_MS = 15_000;
 const CONSEQUENCE_POLL_MS = 100;
 
 /**
- * Wait for a same-route act's CONSEQUENCE — the first data-* state this beat
+ * Wait for a same-route act's CONSEQUENCE — EVERY data-* state this beat
  * declared — to settle before the beat is judged. `driveBeat`'s other waits
  * are all keyed to a URL change, so a `do` block that acts on the route it
  * already stands on gets none of them; a press there can still start real
@@ -217,22 +217,36 @@ const CONSEQUENCE_POLL_MS = 100;
  * reading immediately reports on work that is provably still in flight. Bead
  * `forge-8vfn.2.25`.
  *
- * Polls with the SAME reader the eventual verdict uses (`readObserved`), so
- * what satisfies this wait and what `beatVerdict` judges can never disagree
- * — no second notion of "the page's data" to drift from the first. Bounded
- * and never throws: on timeout it simply returns, and `beatVerdict` below
- * reports the honest mismatch (which attribute, expected vs. got) on its own
- * terms — the same catch-and-let-the-verdict-explain shape every other wait
- * in this function already uses.
+ * It waits for ALL of them. Waiting on the FIRST declared key alone made the
+ * ORDER of keys in an `expect.data` object silently decide what the runner
+ * waited for — a rule no story author could learn from §3.1, only by reading
+ * this function. Measured on S1 beat 7 (H6 sitting, 2026-09-05): the beat
+ * declares `stage-detail-stage` first, the press before it satisfies that key
+ * instantly, and the page was read while `launch-demo-builder`'s POST was
+ * still in flight — `data-action: expected "view-demo-session", got
+ * "back-to-project"` on a handoff that run 1 had proved works. Swapping the
+ * beat's keys would have turned it green and pinned the trap into a gate;
+ * bead `forge-8vfn.6.11.7`, ruling 196. §3.1 states the semantics now.
+ *
+ * Asks the question `beatVerdict` asks, through `resolveExpectations` — the
+ * SAME reader (`readObserved`) AND the same resolution — so what satisfies
+ * this wait and what the verdict judges can never disagree. A per-key search
+ * of `[data, ...nested]` was a second notion of "the page's data": it could
+ * be satisfied by a record the verdict would never pick (§15.161).
+ *
+ * Bounded and never throws: on timeout it simply returns, and `beatVerdict`
+ * below reports the honest mismatch (which attribute, expected vs. got) on
+ * its own terms — the same catch-and-let-the-verdict-explain shape every
+ * other wait in this function already uses.
  */
 async function waitForConsequence(page, beat, timeoutMs) {
-  const [attr, want] = Object.entries(beat.expect.data)[0] ?? [];
-  if (attr === undefined) return;
+  const wanted = Object.entries(beat.expect.data);
+  if (wanted.length === 0) return;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const { data, nested } = await readObserved(page, beat);
-    const record = [data, ...nested].find((r) => Object.hasOwn(r, attr));
-    if (record !== undefined && answers(record[attr], want)) return;
+    const observed = await readObserved(page, beat);
+    const seen = resolveExpectations(beat.expect.data, observed);
+    if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return;
     if (Date.now() >= deadline) return;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
   }
@@ -453,7 +467,16 @@ async function performSteps(page, steps, timeoutMs) {
 
     try {
       if (!fills) {
-        await page.locator(handle).first().click();
+        // Bounded by the RUNNER's timeout, not by `context.setDefaultTimeout`.
+        // Playwright's click already retries until the control is visible,
+        // ENABLED and stable — it just does it for 5 s (`run.mjs`), while the
+        // runner is willing to wait `READY_TIMEOUT_MS`. S1 beat 9's
+        // `apply-clause-decision` is disabled while the product applies
+        // auto-fixes one clause at a time, and the press died at 5 s on a
+        // control that frees itself: `element is not enabled`, twice, in two
+        // live runs. Bead `forge-8vfn.6.11.6`. The bound was the defect; the
+        // wait was always there.
+        await page.locator(handle).first().click({ timeout: timeoutMs });
         continue;
       }
       const refusal = await setControl(page, handle, step.with);
@@ -461,11 +484,40 @@ async function performSteps(page, steps, timeoutMs) {
     } catch (e) {
       return (
         `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
-        `${e?.message ?? e}. The control is absent, disabled, obscured or not yet rendered.`
+        `${e?.message ?? e}. ${await describeControl(page, handle)}`
       );
     }
   }
   return null;
+}
+
+/**
+ * Why a control could not be acted on, read from the control itself.
+ *
+ * The shipped text guessed — "The control is absent, disabled, obscured or
+ * not yet rendered" — four causes and no answer, so every such red arrived
+ * unattributable and each one cost a story run to diagnose. A control that is
+ * MISSING and a control that is BUSY are different findings: the first is a
+ * product gap or a stale story, the second is the product serialising real
+ * work and the story arriving early.
+ *
+ * Best-effort and never throws: this runs inside a `catch` that already has a
+ * failure to report, and a description that threw would replace a real
+ * finding with an error about describing it.
+ */
+async function describeControl(page, handle) {
+  try {
+    const one = page.locator(handle).first();
+    if ((await page.locator(handle).count()) === 0) return 'no element carries that handle.';
+    return await one.evaluate((n) => {
+      const off = n.disabled === true || n.getAttribute('disabled') !== null;
+      if (!off) return 'The control is present and enabled — it was obscured, detached or never became stable.';
+      const title = (n.title ?? '').trim();
+      return `The control is present but still DISABLED${title === '' ? '' : ` (title: "${title}")`}.`;
+    });
+  } catch {
+    return 'The control could not be inspected after the failure.';
+  }
 }
 
 /**

@@ -16,13 +16,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { driveBeat } from './beats.mjs';
 
-/** One element: a tag, its attrs, the route a click navigates to, and a delayed data-* effect. */
+/**
+ * One element: a tag, its attrs, the route a click navigates to, a delayed
+ * data-* effect, and WHEN it becomes enabled — `0` from first paint, `n` after
+ * n ms, `null` never. The product serialises real work behind a `disabled`
+ * button (S1 beat 9's one-clause-at-a-time apply), so a double that cannot be
+ * disabled cannot express bead `forge-8vfn.6.11.6` at all.
+ */
 const el = (
   tag: string,
   attrs: Record<string, string>,
   navigatesTo: string | null = null,
   effect: { afterMs: number; patch: Record<string, string> } | null = null,
-) => ({ tag, attrs, navigatesTo, effect });
+  enabledAfterMs: number | null = 0,
+) => ({ tag, attrs, navigatesTo, effect, enabledAfterMs });
 
 const READY_MAIN = (page: string) => el('main', { 'data-page': page, 'data-page-ready': 'true' });
 
@@ -62,10 +69,23 @@ function fakeStudio(spec: {
   start: string;
   commitMs: number;
   pages: Record<string, { elements: ReturnType<typeof el>[]; data: Record<string, string> }>;
+  /**
+   * What `context.setDefaultTimeout(...)` bounds a locator action to when the
+   * call passes none — 5000 in `run.mjs`. Scaled down in the disabled-control
+   * tests so a press that fails to pass its OWN bound is measurably red in
+   * milliseconds instead of only after five real seconds.
+   */
+  defaultTimeoutMs?: number;
 }) {
   let route = spec.start;
   let patched: Record<string, string> = {};
   const selected: Array<{ handle: string; value: string }> = [];
+  // Playwright's actionability clock. `enabledAfterMs` is measured from the
+  // moment the page exists, which is the closest a double gets to "the product
+  // is busy and will free itself".
+  const startedAt = Date.now();
+  const isDisabled = (n: ReturnType<typeof el>) =>
+    n.enabledAfterMs === null || Date.now() - startedAt < n.enabledAfterMs;
   const here = () => spec.pages[route] ?? { elements: [], data: {} };
   const findAll = (sel: string) => here().elements.filter((n) => sel.split(',').some((c) => matchesClause(n, c.trim())));
   const find = (sel: string) => findAll(sel)[0] ?? null;
@@ -73,9 +93,25 @@ function fakeStudio(spec: {
   const locator = (sel: string): any => ({
     first: () => locator(sel),
     count: async () => findAll(sel).length,
-    async click() {
+    async click(opts: { timeout?: number } = {}) {
+      // Real playwright's click performs actionability checks — visible,
+      // ENABLED, stable — and retries until ITS timeout, which is the
+      // context default (5s, `run.mjs`) unless the call passes one. Modelling
+      // that bound is the whole of bead `forge-8vfn.6.11.6`.
+      const timeout = opts.timeout ?? spec.defaultTimeoutMs ?? 5000;
+      const ready = () => {
+        const n = find(sel);
+        return n !== null && !isDisabled(n);
+      };
+      await until(ready, timeout, sel).catch(() => {
+        const n = find(sel);
+        throw new Error(
+          `locator.click: Timeout ${timeout}ms exceeded.\nCall log:\n` +
+            (n === null ? `  - waiting for locator('${sel}')` : '    - element is not enabled'),
+        );
+      });
       const node = find(sel);
-      if (node === null) throw new Error(`locator.click: Timeout 5000ms exceeded waiting for ${sel}`);
+      if (node === null) throw new Error(`locator.click: Timeout ${timeout}ms exceeded waiting for ${sel}`);
       if (node.navigatesTo !== null) {
         const to = node.navigatesTo;
         setTimeout(() => {
@@ -95,7 +131,16 @@ function fakeStudio(spec: {
       if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
       // Enough of a DOM node for `readShape` in beats.mjs: a SELECT carries
       // no radio/checkbox child, so `querySelector` answering null is exact.
-      return fn({ tagName: node.tag.toUpperCase(), textContent: '', type: '', value: '', querySelector: () => null });
+      return fn({
+        tagName: node.tag.toUpperCase(),
+        textContent: '',
+        type: '',
+        value: '',
+        querySelector: () => null,
+        disabled: isDisabled(node),
+        title: node.attrs.title ?? '',
+        getAttribute: (k: string) => (k === 'disabled' ? (isDisabled(node) ? '' : null) : (node.attrs[k] ?? null)),
+      });
     },
     async selectOption(value: string) {
       selected.push({ handle: sel, value });
@@ -180,4 +225,140 @@ test('a do block whose SECOND step never finds its handle times out at its bound
   assert.equal(v.status, 'red');
   assert.ok(Date.now() - started < 2000, 'the wait must respect its bound, not hang');
   assert.match(v.failures.join(' | '), /could not fill \[data-field="template-category"\]/);
+});
+
+/* ------------------------------------------------------------------------ *
+ * Bead `forge-8vfn.6.11.7` — the post-`do` wait covers EVERY declared key.
+ *
+ * Measured live on S1 run 2 (H6 authoring sitting, 2026-09-05): beat 7
+ * declares `stage-detail-stage` first and `action` second; the press before
+ * it satisfies the FIRST key instantly, `waitForConsequence` returned on it,
+ * and the page was read while `launch-demo-builder`'s POST was still in
+ * flight — `data-action: expected "view-demo-session", got "back-to-project"`.
+ * The order of keys in an `expect.data` object silently decided what the
+ * runner waited for, and nothing in §3.1 said so (ruling 196, §15.179).
+ * ------------------------------------------------------------------------ */
+
+/** S1 beat 7's shape: a first key already true, a second the press mints late. */
+const handoffPage = (effect: { afterMs: number; patch: Record<string, string> } | null) => ({
+  '/sessions/onboarding/onb-1': {
+    elements: [READY_MAIN('session-detail'), el('button', { 'data-action': 'launch-demo-builder' }, null, effect)],
+    data: { page: 'session-detail', 'stage-detail-stage': 'demo', action: 'back-to-project' },
+  },
+});
+
+const handoffBeat = (data: Record<string, string>) => ({
+  act: 'Press "Launch the demo builder"',
+  do: [{ press: 'launch-demo-builder' }],
+  expect: { route: '/sessions/onboarding/onb-1', data },
+  say: 'The onboarding session hands off to a demo-builder session.',
+});
+
+const MINTED = { afterMs: 300, patch: { action: 'view-demo-session' } };
+
+test('the post-do wait covers EVERY declared key, not just the first — S1 beat 7, live', async () => {
+  // THE DEFECT: `stage-detail-stage: 'demo'` is true from first paint, so the
+  // shipped wait returned instantly and read `action` while the POST was in
+  // flight. Declared FIRST here, exactly as the pinned beat declares it.
+  const page = fakeStudio({ start: '/sessions/onboarding/onb-1', commitMs: 0, pages: handoffPage(MINTED) });
+  const v = await driveBeat(page, handoffBeat({ 'stage-detail-stage': 'demo', action: 'view-demo-session' }), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('the order of keys in expect.data carries NO meaning — the same beat, keys swapped', async () => {
+  // §15.179: swapping the keys to pass would have pinned the trap into a gate.
+  // Both orders must reach the same verdict, so no story can encode an
+  // ordering rule the runner honours and §3.1 never states.
+  const page = fakeStudio({ start: '/sessions/onboarding/onb-1', commitMs: 0, pages: handoffPage(MINTED) });
+  const v = await driveBeat(page, handoffBeat({ action: 'view-demo-session', 'stage-detail-stage': 'demo' }), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('a later key that NEVER arrives times out at its bound and stays red', async () => {
+  // Fail-CLOSED: the first key stays true forever and the second never mints,
+  // so waiting for all of them must still give up at the bound and report the
+  // honest mismatch — never hang, never pass on the satisfied key alone.
+  const page = fakeStudio({ start: '/sessions/onboarding/onb-1', commitMs: 0, pages: handoffPage(null) });
+  const started = Date.now();
+  const v = await driveBeat(page, handoffBeat({ 'stage-detail-stage': 'demo', action: 'view-demo-session' }), 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  assert.ok(Date.now() - started < 2000, 'the wait must respect its bound, not hang');
+  assert.match(v.failures.join(' | '), /data-action: expected "view-demo-session", got "back-to-project"/);
+});
+
+/* ------------------------------------------------------------------------ *
+ * Bead `forge-8vfn.6.11.6` — a press is bounded by the RUNNER's timeout.
+ *
+ * Measured live on S1 runs 1 and 2: `apply-clause-decision` is disabled while
+ * the product applies auto-fixes one clause at a time, and the press failed
+ * with `locator.click: Timeout 5000ms exceeded … element is not enabled`.
+ * Playwright DOES wait for enabled — at `context.setDefaultTimeout(5000)`
+ * (`run.mjs`), not at the runner's own `READY_TIMEOUT_MS`. So the fix is the
+ * BOUND, not a new wait; and the failure text must name what actually blocked
+ * instead of guessing between four causes.
+ * ------------------------------------------------------------------------ */
+
+const clausePage = (enabledAfterMs: number | null) => ({
+  '/projects/gitweave': {
+    elements: [
+      READY_MAIN('project-detail'),
+      el(
+        'button',
+        { 'data-action': 'apply-clause-decision', title: 'Auto-fixes are applying — one clause at a time' },
+        null,
+        { afterMs: 10, patch: { 'clause-decision': 'applied' } },
+        enabledAfterMs,
+      ),
+    ],
+    data: { page: 'project-detail', 'clause-decision': 'pending' },
+  },
+});
+
+const clauseBeat = {
+  act: 'Apply the clause decision',
+  do: [{ press: 'apply-clause-decision' }],
+  expect: { route: '/projects/gitweave', data: { 'clause-decision': 'applied' } },
+  say: 'The operator applies one contract clause.',
+};
+
+test('a press waits for a BUSY control past playwright\'s 5s default, up to the runner\'s bound — S1 beat 9, live', async () => {
+  // THE DEFECT: the control frees at 8s, inside READY_TIMEOUT_MS (15s) and
+  // outside the context default (5s), so the shipped press failed on a
+  // control that was about to become pressable.
+  // The control frees at 300ms: OUTSIDE the context default (100ms here,
+  // 5000ms live) and INSIDE the runner's bound (600ms here, 15000ms live).
+  // That gap is the defect — a press that never passes its own timeout can
+  // only ever wait the context default, however long the runner would allow.
+  const page = fakeStudio({ start: '/projects/gitweave', commitMs: 0, defaultTimeoutMs: 100, pages: clausePage(300) });
+  const v = await driveBeat(page, clauseBeat, 1, 'http://localhost:4124', {}, 600);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('a press on a control disabled FOREVER reds at the bound, naming the title', async () => {
+  // Fail-CLOSED, and the red must be attributable: the shipped message guessed
+  // "absent, disabled, obscured or not yet rendered" — four causes, no answer.
+  const page = fakeStudio({ start: '/projects/gitweave', commitMs: 0, defaultTimeoutMs: 100, pages: clausePage(null) });
+  const started = Date.now();
+  const v = await driveBeat(page, clauseBeat, 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  assert.ok(Date.now() - started < 2000, 'the press must respect its bound, not hang');
+  const text = v.failures.join(' | ');
+  assert.match(text, /still DISABLED/);
+  assert.match(text, /Auto-fixes are applying — one clause at a time/);
+});
+
+test('a press whose handle is ABSENT reds saying so — not "disabled"', async () => {
+  // The other side of the same message: a control that is missing and a
+  // control that is busy are different findings and must read differently.
+  const page = fakeStudio({
+    start: '/projects/gitweave',
+    commitMs: 0,
+    defaultTimeoutMs: 100,
+    pages: { '/projects/gitweave': { elements: [READY_MAIN('project-detail')], data: { page: 'project-detail' } } },
+  });
+  const v = await driveBeat(page, clauseBeat, 1, 'http://localhost:4124', {}, 200);
+  assert.equal(v.status, 'red');
+  const text = v.failures.join(' | ');
+  assert.match(text, /no element carries that handle/);
+  assert.doesNotMatch(text, /still DISABLED/);
 });
