@@ -253,3 +253,51 @@ test('a wait with no upTo, a non-integer, or an out-of-range bound is REFUSED', 
   assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 0 })), /wait\.upTo/);
   assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 60 * 60 * 1000 })), /wait\.upTo/);
 });
+
+/**
+ * `fillAll` — one step answers a WHOLE round (bead `forge-8vfn.6.11.21`,
+ * T1 ruling 271).
+ *
+ * `ArchitectQuestionForm` requires EVERY question answered before Submit
+ * enables (`data-questions-answered`), and the question COUNT is
+ * model-determined — two in one measured architect turn, three in another. So a
+ * fixed number of `fill` steps cannot answer a variable number of questions,
+ * and one `data-field` value on N textareas trips playwright strict mode on the
+ * first `fill`. The step is additive: `fill` is untouched.
+ */
+test('AT-6.11.21-5 (RED) a `fillAll` step is accepted and carried through validation', () => {
+  const story = validateStory({
+    ...ok,
+    beats: [{
+      act: 'Answer every question',
+      do: [{ fillAll: 'question-freetext', with: 'The gate is npm test.' }, { press: 'submit-answers' }],
+      expect: { route: '/sessions/architect/x', data: { page: 'session' } },
+      say: 'The operator answers.',
+    }],
+  });
+  assert.deepEqual(story.beats[0].do[0], { fillAll: 'question-freetext', with: 'The gate is npm test.' });
+  assert.deepEqual(story.beats[0].do[1], { press: 'submit-answers' });
+});
+
+test('AT-6.11.21-6 `fillAll` demands its `with`, by name — never a silent default', () => {
+  assert.throws(
+    () => validateStory({
+      ...ok,
+      beats: [{ act: 'a', do: [{ fillAll: 'question-freetext' }], expect: { route: '/x', data: { page: 'x' } }, say: 's' }],
+    }),
+    // Named as `.with`, not merely a message that happens to contain the word:
+    // before `fillAll` existed this threw "expected exactly one of {fill, with}
+    // …" for an unrelated reason and would have passed a loose matcher.
+    /do\[0\]\.with/,
+  );
+});
+
+test('AT-6.11.21-7 a step may not name BOTH fill and fillAll', () => {
+  assert.throws(
+    () => validateStory({
+      ...ok,
+      beats: [{ act: 'a', do: [{ fill: 'a', fillAll: 'b', with: 'v' }], expect: { route: '/x', data: { page: 'x' } }, say: 's' }],
+    }),
+    /exactly one/,
+  );
+});
