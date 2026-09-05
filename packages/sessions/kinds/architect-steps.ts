@@ -193,7 +193,7 @@ export async function runInterviewStep(
   ].join('\n');
 
   const { output: out } = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
-    logger, initiativeId,
+    logger, initiativeId, cwd: status.project_repo_path,
     queryFn,
     prompt,
     schema: INTERVIEW_SCHEMA,
@@ -315,7 +315,7 @@ async function runExploreStep(args: ArchitectStepArgs): Promise<ExploreFindings 
   ].join('\n');
 
   const { output } = await runStructured<ExploreFindings>({
-    logger, initiativeId,
+    logger, initiativeId, cwd: status.project_repo_path,
     queryFn,
     prompt,
     schema: EXPLORE_SCHEMA,
@@ -478,7 +478,7 @@ export async function runDraftStep(
   ].join('\n');
 
   let { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId,
+    logger, initiativeId, cwd: status.project_repo_path,
     queryFn,
     prompt,
     schema: DRAFT_SCHEMA,
@@ -508,7 +508,7 @@ export async function runDraftStep(
     });
     const forceEmitSection = loadForceEmitTurnSection(input.skillPromptPath);
     const retry = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId,
+    logger, initiativeId, cwd: status.project_repo_path,
       queryFn,
       prompt: `${prompt}\n\n${forceEmitSection}`,
       schema: DRAFT_SCHEMA,
@@ -643,6 +643,17 @@ async function runStructured<T>(args: {
    *  field here would let a call site silently spawn hook-blind. */
   logger: EventLogger;
   initiativeId: string;
+  /** Bead forge-8vfn.6.10.19 — the PROJECT GROUND this turn runs on, passed to
+   *  the SDK as `cwd`. REQUIRED, like `logger` above and for the same reason: an
+   *  optional field here would let a call site silently spawn ground-blind, and
+   *  a ground-blind architect session inherits the BRIDGE's cwd — the forge repo
+   *  root — so a relative write by it lands in forge's own tree.
+   *
+   *  It comes from `ArchitectStatus.project_repo_path`, which the start route
+   *  already validated through `rejectStartProjectRepoPath` before the session
+   *  record existed; this is the same value being USED rather than a fresh
+   *  request-derived path entering here. */
+  cwd: string;
   /** ADR-043 §3 amendment (wave-6): the session's requested kickoff tier
    *  (`status.modelTier`), resolved against `architectAgentSpec` — absent
    *  resolves to the unchanged `ARCHITECT_MODEL` default. */
@@ -657,6 +668,7 @@ async function runStructured<T>(args: {
     prompt: args.prompt,
     schema: args.schema,
     model: resolveSessionModel(architectAgentSpec, args.modelTier),
+    cwd: args.cwd,
     allowedTools: architectAgentSpec.allowedTools,
     disallowedTools: architectAgentSpec.disallowedTools,
     ...(() => {
