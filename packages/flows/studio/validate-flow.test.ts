@@ -255,6 +255,74 @@ describe('validateFlow — edge-ref', () => {
   });
 });
 
+describe('validateFlow — edge-artifact (bead forge-8vfn.5.12.1, half (b))', () => {
+  // The save route (`PUT /api/studio/flows/:id`) runs validateFlow and nothing
+  // else; `validateArtifactRef` is `forge studio lint`-only. So an edge with no
+  // artifact label passed validation, `serializeFlowDefinition` wrote
+  // `edges: [{from,to}]`, and the very next read — `parseFlowEdge`'s
+  // `reqString(e,'artifact')` — THREW. `loadAllFlows` caught it and SKIPPED the
+  // flow, so the page the operator was just redirected to rendered
+  // `data-page="not-found"`: the flow they had built, saved successfully, was
+  // invisible.
+  //
+  // These pins hold the writer to the READER'S OWN PREDICATE. `reqString`
+  // (packages/kernel/studio/yaml-fields.ts:12) rejects a non-string or an empty
+  // string and nothing else — so this check must reject exactly those, no more.
+  // A trimming check would refuse `' '`, which the loader accepts, and the two
+  // would disagree again in the opposite direction.
+
+  it('edge with an empty artifact → error edge-artifact naming the edge', () => {
+    const flow = makeFlow({
+      edges: [{ from: 'step-a', to: 'gate', artifact: '' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'edge-artifact');
+    assert.ok(f, 'expected edge-artifact finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('step-a'), f.message);
+    assert.ok(f.message.includes('gate'), f.message);
+  });
+
+  it('edge with NO artifact key at all → error edge-artifact (the builder\'s real shape)', () => {
+    // `rfEdgesToFlow` maps `artifact: e.data?.artifact`, which is `undefined`
+    // for an edge the declared connect handle drew or the picker left
+    // unlabelled. The type says `artifact: string`; the PUT route receives JSON
+    // from a browser, so the cast is what actually crosses the boundary.
+    const flow = makeFlow({
+      edges: [{ from: 'step-a', to: 'gate' } as unknown as FlowDefinition['edges'][number]],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'edge-artifact');
+    assert.ok(f, 'expected edge-artifact finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('edge whose artifact is not a string → error edge-artifact', () => {
+    const flow = makeFlow({
+      edges: [{ from: 'step-a', to: 'gate', artifact: 7 } as unknown as FlowDefinition['edges'][number]],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(findings.some((x) => x.check === 'edge-artifact'));
+  });
+
+  it('whitespace-only artifact → NO edge-artifact finding, because the loader accepts it', () => {
+    // Deliberate, and the reason it is a test: the check mirrors `reqString`,
+    // which does not trim. Refusing `' '` here would make the save route
+    // stricter than the reader — the same disagreement this bead exists to
+    // close, pointing the other way.
+    const flow = makeFlow({
+      edges: [{ from: 'step-a', to: 'gate', artifact: ' ' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'edge-artifact'));
+  });
+
+  it('every edge labelled → no edge-artifact finding', () => {
+    const findings = validateFlow(makeFlow(), makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'edge-artifact'));
+  });
+});
+
 describe('validateFlow — acyclic', () => {
   it('cycle a→b→a → error acyclic', () => {
     const flow = makeFlow({

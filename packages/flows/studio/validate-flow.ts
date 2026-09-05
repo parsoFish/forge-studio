@@ -136,6 +136,33 @@ export function validateFlow(
     }
   }
 
+  // edge-artifact: every edge MUST carry a non-empty artifact label (bead
+  // forge-8vfn.5.12.1, half (b)). The save route runs THIS function and nothing
+  // else — `validateArtifactRef` below is `forge studio lint`-only — so before
+  // this check a flow built through the builder saved 200 OK, was written as
+  // `edges: [{from,to}]`, and then threw on the very next read: `parseFlowEdge`
+  // (packages/flows/studio/flow-registry.ts:76) calls `reqString(e,'artifact')`.
+  // `loadAllFlows` catches and SKIPS an unreadable flow, so the operator was
+  // redirected to `data-page="not-found"` for the flow they had just created.
+  //
+  // The predicate is `reqString`'s, deliberately and exactly — a non-string or
+  // an empty string, with no trimming. A stricter check here would refuse a
+  // label the loader accepts and re-open the same disagreement pointing the
+  // other way. A write the reader cannot read back is the defect; this refuses
+  // it at save time, where the builder already renders flow-save-findings.
+  for (const edge of flow.edges) {
+    const label: unknown = edge.artifact;
+    if (typeof label !== 'string' || label.length === 0) {
+      findings.push(
+        err(
+          obj,
+          'edge-artifact',
+          `Edge "${edge.from}"→"${edge.to}" carries no artifact label — the flow would be written but could not be read back`,
+        ),
+      );
+    }
+  }
+
   // edge-ref: from/to must be known node ids
   for (const edge of flow.edges) {
     if (!nodeIdSet.has(edge.from)) {
