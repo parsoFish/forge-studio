@@ -125,3 +125,22 @@ test('5.9: a clause decision box names its own clause — .first() cannot say wh
   });
   expect(html).toContain('data-field="clause-decision-C6"');
 });
+
+// ── forge-8vfn.6.11.3 — the one control in the demo panel with no handle ─────
+
+test('6.11.3: adding a demo step is a declared act — the panel\'s other four controls all declare theirs', () => {
+  const html = render(DemoTimeline, {
+    project: 'story-s2',
+    steps: [
+      { kind: 'capture', text: 'build the binary' },
+      { kind: 'present', text: 'show the timings' },
+    ],
+    hasLockedDemo: false,
+    onChange: () => {},
+  });
+  // THE DEFECT: `+ Add step` rendered as a bare <button onClick={...}> — the
+  // only control in this panel outside the contract, beside move-step-up,
+  // move-step-down, iterate-element and launch-demo-builder. S2 beat 8 asks
+  // for a third step and no story could press anything to create one.
+  expect(html).toContain('data-action="add-demo-step"');
+});
