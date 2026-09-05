@@ -123,6 +123,7 @@ function manifestText(initId: string, cycleId: string, flowId = 'forge-architect
     'created_at: 2026-02-01T00:00:00.000Z',
     'iteration_budget: 5',
     'cost_budget_usd: 20.0',
+    'class: code',
     `cycle_id: ${cycleId}`,
     `flow_id: ${flowId}`,
     '---',

@@ -36,6 +36,8 @@ export function realManifest(overrides: Partial<InitiativeManifest> = {}): Initi
     created_at: '2026-01-01T00:00:00.000Z',
     iteration_budget: 10,
     cost_budget_usd: 5,
+    class: 'code',
+    acceptance_criteria: [],
     phase: 'pending',
     origin: 'architect',
     body: '# Fixture initiative\n\nDo the thing.\n',

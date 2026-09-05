@@ -36,6 +36,7 @@ project_repo_path: /tmp/${project}
 created_at: 2026-07-18T10:00:00.000Z
 iteration_budget: 5
 cost_budget_usd: 2.0
+class: code
 phase: pending
 flow_id: forge-develop
 ${cycleBlock}---

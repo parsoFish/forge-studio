@@ -51,6 +51,7 @@ function manifestText(opts: { title?: string; body: string }): string {
     "created_at: '2026-01-01T00:00:00Z'\n" +
     'iteration_budget: 10\n' +
     'cost_budget_usd: 5\n' +
+    'class: code\n' +
     'phase: pending\n' +
     'origin: architect\n' +
     'flow_id: forge-develop\n' +
@@ -111,7 +112,9 @@ test('W7A4-01: buildManifest (the architect producer) threads DraftInitiative.ti
     title: 'Add a --version flag to the CLI',
     iteration_budget: 5,
     cost_budget_usd: 5,
-    body: '## Summary\n\nPrint the version.\n\n## Acceptance criteria\n\n- `--version` prints it.\n',
+    class: 'code',
+    acceptance_criteria: [{ given: 'the CLI is installed', when: '--version is passed', then: 'it prints the version' }],
+    body: '## Summary\n\nPrint the version.\n',
   };
   const m = buildManifest(draft, ARCHITECT_STATUS, '2026-08-19', '2026-08-19T00:00:00.000Z');
   assert.equal(m.initiative_id, 'INIT-2026-08-19-add-version-flag');
@@ -192,6 +195,8 @@ test('W7A4-01 (FIX): a structured-output draft with a missing or non-string titl
     slug: 'add-version-flag',
     iteration_budget: 5,
     cost_budget_usd: 5,
+    class: 'code',
+    acceptance_criteria: [{ given: 'the drafted scope', when: 'the work merges', then: 'the outcome is observable' }],
     body: '# Add a --version flag\n\nPrint the version.\n',
   } as unknown as DraftInitiative;
   const missing = buildManifest(untitled, ARCHITECT_STATUS, '2026-08-19', '2026-08-19T00:00:00.000Z');

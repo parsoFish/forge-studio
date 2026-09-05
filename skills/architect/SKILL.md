@@ -67,12 +67,14 @@ After reading, emit `architect.brain-query` listing paths consulted. Include eve
 
 ## Initiative body — single source of intent
 
-Each initiative body **MUST contain ≥1 acceptance criterion**, one per independently-deliverable outcome. Prefer **Given-When-Then** blocks; where better expressed as a capability, use **EARS notation**: `WHEN [condition] THE SYSTEM SHALL [behavior]`.
+Each initiative **MUST declare ≥1 acceptance criterion in the typed `acceptance_criteria` field** (ADR 051), one per independently-deliverable outcome — an array of `{given, when, then}`. They are a FIELD, not prose in the body: nothing parses the body for criteria any more, so a criterion written only in the body does not exist. `when` may be an empty string when the criterion is a state assertion with no trigger (`given` and `then` may not be empty). A malformed entry is a hard error that names its index, not a criterion quietly dropped.
+
+Each initiative **MUST also declare its `class`** — `code`, `docs`, `config` or `infra` (ADR 051). The class selects the gate profile the work is judged by, so it is the single most consequential field you set; there is no default and an initiative without one is refused. Choose by what is DELIVERED, not by what the repository is written in: a README change in a Go repo is `docs`.
 
 - **No `features[]` list.** Hierarchy is 3-level (initiative → WI → file), not 4.
 - Write ACs at the grain of independently-runnable outcomes.
 - **Do NOT size work items or set `quality_gate_cmd`.** The PM owns all sizing and gate selection.
-- **Gates/ACs MUST match the deliverable type.** A docs-only initiative (README, ADR, skill-markdown, docs-site content — no source code delivered) gets docs-appropriate ACs: build/render passes, links resolve, rendered output matches source-of-truth. It MUST NOT carry a demo-evidence or test-count AC — the PM has no code gate to hang one on, and forcing one costs ~4 wasted PM decomposition retries per cycle. Code initiatives keep test/demo-evidence ACs as usual. The PM inherits its gate choice from how you frame the AC, so frame it as the deliverable actually is.
+- **Gates/ACs MUST match the deliverable type — and since ADR 051 the `class` field is how you say so.** A docs-only initiative (README, ADR, skill-markdown, docs-site content — no source code delivered) is `class: docs`, and its profile already selects docs gates; give it docs-appropriate ACs (build/render passes, links resolve, rendered output matches source-of-truth) and never a demo-evidence or test-count AC. Code initiatives are `class: code` and keep test/demo-evidence ACs as usual. Before the class field the PM had to infer the gate from how the AC was phrased, which is what cost ~4 wasted decomposition retries per docs cycle.
 - Cross-initiative ordering via `depends_on` on the initiative (scheduler gate).
 - **State NOT-DOING positively.** Every initiative body must include a `### Not in scope` block naming what this initiative deliberately does NOT implement — prevents scope creep, gives the reviewer a clear rejection criterion.
 
@@ -197,7 +199,7 @@ Before drafting, ENUMERATE what could break or be forgotten: edge cases, failure
 <!-- turn: draft -->
 ## Your task this turn: draft the initiative(s)
 
-Produce one or more coherent, releasable initiatives. For each: a kebab `slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), and a markdown `body` spec with concrete, Given-When-Then acceptance criteria (one GWT block per independently-deliverable outcome). The PM decomposes those ACs directly into work items — there is no intermediate feature layer.
+Produce one or more coherent, releasable initiatives. For each: a kebab `slug`, a `title`, an `iteration_budget` (>0), a `cost_budget_usd` (>0), a **`class`** (`code` | `docs` | `config` | `infra`), a non-empty **`acceptance_criteria`** array of `{given, when, then}`, and a markdown `body` spec giving the context and scope. The PM decomposes the typed criteria directly into work items — there is no intermediate feature layer, and the body is context for that decomposition, not the place criteria live.
 
 ### Build order (cross-initiative dependencies)
 

@@ -51,7 +51,19 @@ export type ProposedInitiative = {
   estimated_cost_usd?: number;
   /** Initiative-level dependencies on other initiatives (mirrors manifest.ts). */
   depends_on_initiatives?: string[];
-  /** Raw manifest body — preserved verbatim in the PLAN.md drawer; carries GWT ACs. */
+  /**
+   * ADR 051 — the change class the operator CONFIRMS at this gate. It is shown
+   * in the proposal table because approving a plan approves the gates its work
+   * will be judged by, and those are selected by this field.
+   */
+  class: 'code' | 'docs' | 'config' | 'infra';
+  /**
+   * ADR 051 — the initiative's typed criteria, rendered as-is. Before this
+   * field the renderer recovered them from `body` with `extractGwtBlocks`, and
+   * a criterion the regex missed was silently not shown.
+   */
+  acceptance_criteria: ReadonlyArray<{ given: string; when: string; then: string }>;
+  /** Raw manifest body — preserved verbatim in the PLAN.md drawer. */
   body: string;
 };
 
@@ -198,12 +210,12 @@ export function renderPlanDoc(session: ArchitectSession): string {
   // --- Proposed initiatives ---
   parts.push('## Proposed initiatives');
   parts.push('');
-  parts.push('| ID | Title | Iteration budget | Depends on |');
-  parts.push('|---|---|---|---|');
+  parts.push('| ID | Title | Class | Iteration budget | Depends on |');
+  parts.push('|---|---|---|---|---|');
   for (const init of session.initiatives) {
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
     parts.push(
-      `| \`${init.initiative_id}\` | ${init.title} | ${init.iteration_budget} | ${dep} |`,
+      `| \`${init.initiative_id}\` | ${init.title} | \`${init.class}\` | ${init.iteration_budget} | ${dep} |`,
     );
   }
   parts.push('');

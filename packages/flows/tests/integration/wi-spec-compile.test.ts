@@ -34,7 +34,7 @@ function fixture(overrides: Partial<WorkItem> = {}): WorkItem {
 
 function manifestFixture(overrides: Partial<InitiativeManifest> = {}): InitiativeManifest {
   return {
-    initiative_id: 'INIT-2026-05-08-demo',
+    initiative_id: 'INIT-2026-05-08-demo', class: 'code', acceptance_criteria: [],
     project: 'demo',
     project_repo_path: './projects/demo',
     created_at: '2026-05-08T00:00:00Z',

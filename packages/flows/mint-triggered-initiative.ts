@@ -197,6 +197,19 @@ export function mintTriggeredInitiative(
       created_at: now.toISOString(),
       iteration_budget: budgets.defaultIterationBudget,
       cost_budget_usd: budgets.defaultCostBudgetUsd,
+      // ADR 051. A triggered initiative has no architect turn to set its class,
+      // so it is DECLARED here, at one greppable site, rather than defaulted
+      // inside the parser where no reader could see it. `code` is what every
+      // trigger kind that ships today mints (a merged PR, a raised issue, a
+      // cron sweep of a project repo). Spec §5 item 8 replaces this line with
+      // the TARGET FLOW's declared class, which is where the answer belongs:
+      // the flow knows what kind of work it runs, this call site is guessing.
+      class: 'code',
+      // The architect writes criteria; a trigger has none to write. Empty is
+      // the honest value and `validateManifest` accepts it — the "an
+      // initiative must state criteria" rule belongs to the plan gate, which a
+      // triggered initiative does not pass through.
+      acceptance_criteria: [],
       phase: 'pending',
       origin: 'triggered',
       flow_id: flowId,

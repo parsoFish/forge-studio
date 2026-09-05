@@ -107,6 +107,12 @@ export type InitiativeManifest = {
    */
   specs?: string[];
   body: string;                // markdown initiative spec
+  /** The change class (ADR 051): set by the architect, confirmed at the plan
+   *  gate, inherited by every work item; it selects the gate profile. No default. */
+  class: 'code' | 'docs' | 'config' | 'infra';
+  /** Typed acceptance criteria (ADR 051), shared by architect, PM, review and
+   *  PLAN.html. An entry that does not parse is an error, not an absence. */
+  acceptance_criteria: ReadonlyArray<{ given: string; when: string; then: string }>;
   /**
    * Optional per-project quality-gate command. Used by both the dev-loop
    * (Ralph stop condition) and the reviewer (orchestrator-side gate). When

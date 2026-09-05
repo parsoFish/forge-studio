@@ -210,6 +210,7 @@ project_repo_path: projects/trafficGame
 created_at: 2026-05-10T18:00:00Z
 iteration_budget: 1
 cost_budget_usd: 1.0
+class: code
 phase: pending
 flow_id: ${flowId}
 ${depsBlock}---
@@ -376,6 +377,7 @@ project_repo_path: projects/trafficGame
 created_at: 2026-05-10T18:00:00Z
 iteration_budget: 1
 cost_budget_usd: 1.0
+class: code
 phase: in-flight
 ${retryLine}${priorBlock}---
 
@@ -603,7 +605,7 @@ test('annotateManifest: replaces folded >- scalar without leaving continuation l
   const dir = mkdtempSync(join(tmpdir(), 'forge-annotate-'));
   try {
     const longPath = '/home/parso/forge/_worktrees/INIT-2026-06-08-release-definition-artifact-trigger-enhancements';
-    const manifest = parseManifest(`---\ninitiative_id: INIT-2026-06-08-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-06-08T10:00:00Z'\niteration_budget: 10\ncost_budget_usd: 10\nphase: pending\norigin: architect\n---\n# body\n`);
+    const manifest = parseManifest(`---\ninitiative_id: INIT-2026-06-08-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-06-08T10:00:00Z'\niteration_budget: 10\ncost_budget_usd: 10\nclass: code\nphase: pending\norigin: architect\n---\n# body\n`);
     const withPath = { ...manifest, worktree_path: longPath };
     const p = join(dir, 'INIT-2026-06-08-x.md');
     writeFileSync(p, serializeManifest(withPath));

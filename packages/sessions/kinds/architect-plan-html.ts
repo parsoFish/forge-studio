@@ -30,183 +30,6 @@ function esc(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * Extract GWT blocks from a markdown manifest body.
- *
- * W7-B7 (artifact-plan-29): the architect emits acceptance criteria as
- * bold-markdown PROSE — `**Given** …` / `**When** …` / `**Then** …`, each
- * clause on its own line (demo-project 2026-08-18) or all three inline on one
- * line (betterado 2026-07-01) — but this parser only ever matched YAML-ish
- * `given:`/`when:`/`then:` key lines, which the architect never writes. So
- * `gwtBlocks` was [] on 100% of real plans and every initiative card rendered
- * "No GWT blocks parsed" — the plan's primary review evidence, missing at the
- * exact moment the operator is asked to approve.
- *
- * WI-7a (regate row artifact-plan-29, still open after that hardening): the
- * W7-B7 fix required BOLD (`**Given**`) as the GWT-intent signal, on the
- * theory that bare keywords fabricate blocks out of ordinary prose. Measured
- * against the real corpus, the actual architect writes acceptance criteria as
- * PLAIN prose under a `## Acceptance criteria` heading with `### AC-N`
- * sub-headings — never bolded — so the bold requirement still returned []
- * for the majority of real manifests. CONTEXT, not bolding, is the real
- * intent signal: a bare Given/When/Then clause run is only trusted while
- * inside an acceptance-criteria section (see `acceptance-criteria context`
- * tracking below). Outside that context bare prose still does not parse —
- * the W7-B7 anti-fabrication tests are unchanged and still pass.
- *
- * Recognised shapes, in order:
- *   1. the inline triple    — `**Given** a, **When** b, **Then** c`
- *   2. per-clause bold prose — `**Given** …` (works anywhere in the body —
- *                               bold IS its own intent signal, context or not)
- *   3. YAML key style        — `- given: "…"` (unchanged, frozen-fixture compat)
- *   4. per-clause PLAIN prose — `Given …` / `When …` / `Then …`, no bold,
- *                               ONLY inside an acceptance-criteria context.
- *                               Inside that context a Given+Then run with no
- *                               When is a genuine partial AC (the real
- *                               architect writes these constantly) and is
- *                               kept — `when` renders as `''`, never dropped
- *                               and never fabricated. Full triples still
- *                               require Given-then-When-then-Then in order.
- *
- * Exported for direct tests (cli/ is not surface-capped).
- */
-export function extractGwtBlocks(body: string): Array<{ given: string; when: string; then: string }> {
-  const blocks: Array<{ given: string; when: string; then: string }> = [];
-  const lines = body.split('\n');
-  let cur: Partial<{ given: string; when: string; then: string }> = {};
-  // True when `cur` was opened by the PLAIN-prose path (shape 4) — the only
-  // path allowed to flush with `when` absent (a genuine Given+Then AC).
-  let curPlainInContext = false;
-  const flush = (): void => {
-    if (cur.given && cur.when && cur.then) {
-      blocks.push({ given: cur.given, when: cur.when, then: cur.then });
-    } else if (curPlainInContext && cur.given && cur.then && !cur.when) {
-      // Given + Then only, no When — a real partial AC (WI-7a constraint 2).
-      // Render the missing clause honestly rather than dropping the AC.
-      blocks.push({ given: cur.given, when: '', then: cur.then });
-    }
-    cur = {};
-    curPlainInContext = false;
-  };
-  // A prose clause line: optional bullet, the BOLD keyword (`**Given**` —
-  // bold is REQUIRED here: it is the author's GWT-intent signal outside of
-  // an acceptance-criteria context; W7-B7 review r1 found that accepting
-  // bare keywords fabricated blocks out of ordinary sentences that merely
-  // start with Given/When/Then), an optional colon inside or after the
-  // bold, then the clause text. Trailing hard-break spaces + a trailing
-  // comma (the multi-line prose separator) are stripped.
-  const clause = (keyword: string, line: string): string | null => {
-    const m = new RegExp(`^\\s*(?:[-*]\\s+)?\\*\\*${keyword}:?\\*\\*[:\\s]\\s*(.+?)\\s*$`, 'i').exec(line);
-    if (!m) return null;
-    return m[1].replace(/,\s*$/, '').trim();
-  };
-  // Same clause shape, WITHOUT the bold requirement. Only ever consulted
-  // while `acActive` is true (see the heading-tracking loop below) — context
-  // is the intent signal here, not markup.
-  const plainClause = (keyword: string, line: string): string | null => {
-    const m = new RegExp(`^\\s*(?:[-*]\\s+)?${keyword}[:,]?\\s+(.+?)\\s*$`, 'i').exec(line);
-    if (!m) return null;
-    return m[1].replace(/,\s*$/, '').trim();
-  };
-  const inlineTriple = /(?:^|\s)\*\*given\*\*\s+(.+?),?\s+\*\*when\*\*\s+(.+?),?\s+\*\*then\*\*\s+(.+?)\s*$/i;
-
-  // --- Acceptance-criteria context tracking ---
-  // Opens on a heading whose text contains "acceptance criteria" (case
-  // insensitive — covers `## Acceptance criteria` / `## Acceptance Criteria`)
-  // or on an `### AC-N …` sub-heading. Closes at the next heading whose level
-  // is the same as or shallower than the heading that opened the context,
-  // UNLESS that heading is itself an `### AC-N` heading (so `## Not in
-  // scope` after `## Acceptance criteria` closes it; the next `### AC-2`
-  // sub-heading does not). Fenced code blocks are tracked only so their
-  // ``` delimiter lines are never mistaken for headings — content inside a
-  // fence within an open context stays in that context.
-  let acActive = false;
-  let acGateLevel = Number.POSITIVE_INFINITY;
-  let inFence = false;
-  const headingRe = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-  const acSectionRe = /acceptance criteria/i;
-  const acNRe = /^AC-\d+\b/i;
-
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (!inFence) {
-      const h = headingRe.exec(line);
-      if (h) {
-        const level = h[1].length;
-        const text = h[2].trim();
-        if (acSectionRe.test(text)) {
-          acActive = true;
-          acGateLevel = level;
-        } else if (acNRe.test(text)) {
-          if (!acActive) { acActive = true; acGateLevel = level; }
-        } else if (acActive && level <= acGateLevel) {
-          acActive = false;
-          acGateLevel = Number.POSITIVE_INFINITY;
-        }
-        continue;
-      }
-    }
-
-    // 1. All three clauses inline on one line.
-    const tri = inlineTriple.exec(line);
-    if (tri) {
-      flush();
-      blocks.push({ given: tri[1].trim(), when: tri[2].trim(), then: tri[3].trim() });
-      continue;
-    }
-    // 2/3. YAML key style + per-clause bold prose share the same accumulator.
-    // The YAML regexes run first so quoted values keep their exact de-quoting.
-    const gy = /^\s*-?\s*given:\s*["']?(.*?)["']?\s*$/.exec(line);
-    const wy = /^\s*when:\s*["']?(.*?)["']?\s*$/.exec(line);
-    const ty = /^\s*then:\s*["']?(.*?)["']?\s*$/.exec(line);
-    if (gy) {
-      flush();
-      cur = { given: gy[1]?.trim() ?? '' };
-      continue;
-    }
-    if (wy && cur.given) { cur.when = wy[1]?.trim() ?? ''; continue; }
-    if (ty && cur.given) { cur.then = ty[1]?.trim() ?? ''; continue; }
-
-    const gp = clause('given', line);
-    if (gp !== null) {
-      flush();
-      cur = { given: gp };
-      continue;
-    }
-    if (cur.given && !cur.when) {
-      const wp = clause('when', line);
-      if (wp !== null) { cur.when = wp; continue; }
-    }
-    if (cur.given && cur.when && !cur.then) {
-      const tp = clause('then', line);
-      if (tp !== null) { cur.then = tp; continue; }
-    }
-
-    // 4. Plain (unbolded) prose — ONLY inside an acceptance-criteria context.
-    if (acActive) {
-      const gp2 = plainClause('given', line);
-      if (gp2 !== null) {
-        flush();
-        cur = { given: gp2 };
-        curPlainInContext = true;
-        continue;
-      }
-      if (curPlainInContext && cur.given && !cur.when) {
-        const wp2 = plainClause('when', line);
-        if (wp2 !== null) { cur.when = wp2; continue; }
-      }
-      if (curPlainInContext && cur.given && !cur.then) {
-        const tp2 = plainClause('then', line);
-        if (tp2 !== null) { cur.then = tp2; continue; }
-      }
-    }
-  }
-  flush();
-  return blocks;
-}
 
 /**
  * D3 — Render a self-contained, genuinely rich HTML viewer for the architect
@@ -235,7 +58,11 @@ export function renderPlanHtml(session: ArchitectSession): string {
   function renderInitiativeCard(init: ProposedInitiative, idx: number): string {
     const hue = (idx * 67) % 360;
     const dep = (init.depends_on_initiatives ?? []).join(', ') || '—';
-    const gwtBlocks = extractGwtBlocks(init.body);
+    // ADR 051: the criteria are DECLARED on the initiative, not recovered from
+    // its prose. What was `extractGwtBlocks(init.body)` — four regex shapes
+    // accreted from four real runs, each addition made after a run produced
+    // something the parser did not expect, and every miss a silent absence.
+    const gwtBlocks = init.acceptance_criteria;
     // A clause can be genuinely absent from the source AC (Given+Then, no
     // When — WI-7a constraint 2). Render that honestly as an em-dash rather
     // than an empty cell (which reads as a rendering bug) or fabricated text.
@@ -244,7 +71,7 @@ export function renderPlanHtml(session: ArchitectSession): string {
       ? gwtBlocks.map((b, i) =>
           `<tr><td>${i + 1}</td><td>${cell(b.given)}</td><td>${cell(b.when)}</td><td>${cell(b.then)}</td></tr>`
         ).join('\n')
-      : `<tr><td colspan="4" class="empty">No GWT blocks parsed — see manifest body below.</td></tr>`;
+      : `<tr><td colspan="4" class="empty">This initiative declares no acceptance criteria.</td></tr>`;
     return `<div class="init-card" data-initiative-id="${esc(init.initiative_id)}" style="--card-accent: hsl(${hue}, 55%, 50%)">
   <div class="init-header">
     <div class="init-title-block">

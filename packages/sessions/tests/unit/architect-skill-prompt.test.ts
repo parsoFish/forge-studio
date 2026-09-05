@@ -135,7 +135,7 @@ function validDraftOutput(): unknown {
   return {
     vision: 'v',
     initiatives: [
-      { slug: 'x', title: 'X', iteration_budget: 2, cost_budget_usd: 3, body: 'Given a, when b, then c.' },
+      { slug: 'x', title: 'X', iteration_budget: 2, cost_budget_usd: 3, class: 'code', acceptance_criteria: [{ given: 'the drafted scope', when: 'the work merges', then: 'the outcome is observable' }], body: 'Given a, when b, then c.' },
     ],
   };
 }
@@ -644,9 +644,16 @@ const FROZEN_ARCHITECT: ArchitectFrozenEntry[] = [
     text: 'recommended option with one-line rationale and an other (specify) escape',
   },
   {
-    label: 'draft-step summary — "Concrete GWT ... ACs" persists (draft turn section)',
-    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
-    text: 'one gwt block per independently-deliverable outcome',
+    // RETIRED BY ADR 051, not lost in a reshuffle — and the distinction is the
+    // whole point of this frozen set. The instruction said criteria live as GWT
+    // BLOCKS IN THE BODY, one per outcome, and nothing parses the body for
+    // criteria any more: they are the typed `acceptance_criteria` field, one
+    // entry per outcome. The obligation the sentence carried survives verbatim
+    // in its successor text below; the vehicle it named does not, so freezing
+    // the old wording would pin the skill to a shape the product refuses.
+    label: 'draft-step summary — one criterion per independently-deliverable outcome (draft turn section)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn"), retired to the typed field by ADR 051',
+    text: 'one per independently-deliverable outcome',
   },
   {
     label: 'draft-step summary — "### Not in scope block" persists (Initiative body section)',

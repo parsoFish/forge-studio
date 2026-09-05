@@ -29,6 +29,8 @@ function seedTriggeredManifest(queueRoot: string, id: string, flowId: string): v
   mkdirSync(paths.pending, { recursive: true });
   const manifest: InitiativeManifest = {
     initiative_id: id,
+    class: 'code',
+    acceptance_criteria: [],
     project: 'someproj',
     project_repo_path: '/tmp/someproj',
     created_at: new Date().toISOString(),
