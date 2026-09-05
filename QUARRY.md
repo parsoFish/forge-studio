@@ -150,6 +150,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/contract-stages.ts | projects | verbatim | 324 |
 | packages/factory/cycle-recap.ts | factory | verbatim | 395 |
 | packages/factory/class-profiles.ts | factory | rewritten | 113 |
+| packages/factory/gates/docs-gate.ts | factory | rewritten | 114 |
 | packages/factory/phases/pm-prompt-context.ts | factory | rewritten | 139 |
 | packages/factory/phases/pm-class-set-rules.ts | factory | rewritten | 45 |
 | packages/factory/phases/pm-decomposition-doc.ts | factory | rewritten | 68 |
@@ -491,5 +492,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 596 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 225 |
 | packages/projects/routes.ts | projects | verbatim | 385 |
+| apps/forge/cli-gate.ts | apps/forge | rewritten | 66 |
+| apps/forge/cli-brain-lint.ts | apps/forge | rewritten | 80 |
 | packages/projects/studio/validate-project.ts | projects | rewritten | 122 |
 | packages/sessions/index.ts | sessions | verbatim | 11 |
