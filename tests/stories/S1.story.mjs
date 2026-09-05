@@ -53,6 +53,17 @@
  * assertion on both acts; folding them would have dropped one in silence.
  * Beats 8–11 are the old 7–10 renumbered. Recorded in
  * `_1.0/gate-manifests/M1-C-S1.amend-1.md`.
+ *
+ * AMENDED AGAIN 2026-09-05, LATER THE SAME SITTING (operator present) — beat 7
+ * only, correcting an error the amendment above introduced and the run caught
+ * hours later. Beat 7 bound `<demoSessionId>` from `session-id`, a key the
+ * SESSION SHELL'S OWN ROOT carries, so it bound the onboarding session's id
+ * and beat 8 reported both ids side by side. `resolveExpectations` answers a
+ * key from the page root and never consults the nested elements when it can,
+ * so on that surface no key `SessionMinted` carries is reachable and the id
+ * cannot be bound there by any beat. Beat 7 now asserts that the handoff
+ * happened and minted something, and binds nothing; beat 8 keeps its route and
+ * stands red with a product owner. Recorded in `M1-C-S1.amend-2.md`.
  */
 
 /** The gate command GitWeave's own repo answers to — `tests/` is pytest. */
@@ -239,27 +250,65 @@ export default {
       // page it is standing on — the S4 beat-9 shape — and the next one walks
       // in. The original beat's two acts each keep an assertion; folding them
       // would have dropped one of them silently.
+      // AMENDED AGAIN 2026-09-05 (H6, operator present) — the 2026-09-05 run
+      // caught an authoring error in this beat's FIRST amendment, made hours
+      // earlier in the same sitting, and this is the correction.
+      //
+      // The first version asked for `session-id: '<demoSessionId>'` alongside
+      // `page`, `page-ready` and `session-kind`. It bound the ONBOARDING
+      // session's id, and beat 8 reported the two ids side by side:
+      // `no real-nav path to /sessions/demo/2026-09-05T02-06-32-703c9252 from
+      // /sessions/demo/2026-09-05T02-06-53-05028a45`.
+      //
+      // The cause is not the answered-together rule, which is what the first
+      // reading assumed. `resolveExpectations` (`scripts/stories/beats.mjs`)
+      // computes `missing` as the keys the PAGE ROOT does not carry and only
+      // then looks at nested records — so a key the root carries is answered
+      // by the root and the nested elements are never consulted at all. The
+      // session shell puts `data-session-id` on its root
+      // (`app/sessions/[kind]/[sessionId]/page.tsx:398`), so on this surface
+      // `session-id` can only ever mean "the session you are looking at".
+      // `data-session-kind` is on the root too. **No key `SessionMinted`
+      // carries is reachable here**, so `<demoSessionId>` cannot be bound on
+      // this page by any beat — which is why this beat no longer tries.
+      //
+      // What it CAN say honestly is that the handoff happened and minted
+      // something: `stage-detail-stage` is carried by exactly one element, and
+      // `action` is not on the root at all, so the value picks out
+      // `SessionMinted`'s anchor — the way in that only exists once a session
+      // has been created (`SessionMinted.tsx:19`, "No id, no element").
+      //
+      // Beat 8 keeps its route and reds with a PRODUCT owner. The fix is the
+      // one `OnboardWithAgent` already ships: publish the minted id under a
+      // distinctly-named key (`data-onboard-session-id`) that no page root
+      // shadows. Bead raised to T1.
       act: 'Select the demo stage and hand it to the demo builder — the heavy one',
       do: [{ press: 'select-stage-demo' }, { press: 'launch-demo-builder' }],
       expect: {
         route: '/sessions/onboarding/<sessionId>',
         data: {
-          page: 'session',
-          'page-ready': 'true',
-          'session-kind': 'onboarding',
           'stage-detail-stage': 'demo',
-          'session-id': '<demoSessionId>',
+          action: 'view-demo-session',
         },
       },
       say: 'Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.',
     },
     {
-      // Fully expressible; the second half of the beat this session split.
-      // `<demoSessionId>` was bound by the beat above, so the route resolves,
-      // and `view-demo-session` (`SessionMinted.tsx:26`) is the way in. All
-      // four keys are the demo session shell's own root — the same shared
-      // session surface the onboarding session uses, which is the point: one
-      // surface, four kinds, no bespoke runner per kind.
+      // NOT expressible today, and left standing red on purpose (the
+      // 2026-08-29 ruling: author the true flow). `view-demo-session`
+      // (`SessionMinted.tsx:26`) is a real handle and the four keys below are
+      // the demo session shell's own root — the same shared surface the
+      // onboarding session uses, which is the point: one surface, four kinds,
+      // no bespoke runner per kind.
+      //
+      // What is missing is the SEGMENT. `<demoSessionId>` cannot be bound by
+      // any earlier beat, because the only page that renders it is the
+      // onboarding session, whose own root carries `data-session-id` and
+      // therefore answers that key before `resolveExpectations` ever reaches
+      // the nested anchor (see beat 7). PRODUCT owner: publish the minted id
+      // under a distinctly-named key, exactly as `OnboardWithAgent` already
+      // does with `data-onboard-session-id` — bead raised 2026-09-05. Until
+      // then this beat reds on an unbound segment and says so.
       act: 'Come back to the demo builder when it has finished',
       do: [{ press: 'view-demo-session' }],
       expect: {
