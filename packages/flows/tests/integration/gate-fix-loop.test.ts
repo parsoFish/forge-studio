@@ -52,6 +52,7 @@ function setup(opts: { reviewRounds?: number; gateFailure?: string } = {}): Fixt
       "created_at: '2026-08-02T00:00:00.000Z'",
       'iteration_budget: 2',
       'cost_budget_usd: 1',
+      'class: code',
       'phase: in-flight',
       'origin: architect',
       `worktree_path: ${wt}`,

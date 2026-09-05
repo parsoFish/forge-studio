@@ -157,7 +157,7 @@ test('decideAutoRetry: W8-F3 end-to-end — the REAL classifier verdict grants Z
     const id = 'INIT-2026-08-14-betterado-gap-registry';
     writeFileSync(
       join(paths.inFlight, `${id}.md`),
-      `---\ninitiative_id: ${id}\nproject: betterado\nproject_repo_path: projects/betterado\ncreated_at: 2026-08-14T00:00:00Z\niteration_budget: 1\ncost_budget_usd: 12\nphase: in-flight\n---\n\n# ${id}\n`,
+      `---\ninitiative_id: ${id}\nproject: betterado\nproject_repo_path: projects/betterado\ncreated_at: 2026-08-14T00:00:00Z\niteration_budget: 1\ncost_budget_usd: 12\nclass: code\nphase: in-flight\n---\n\n# ${id}\n`,
     );
     const cls = classifyCycleFailure(pmDeterministicFailure('internal/provider/rate_limit.go'));
     const logPath = join(dir, 'events.jsonl');

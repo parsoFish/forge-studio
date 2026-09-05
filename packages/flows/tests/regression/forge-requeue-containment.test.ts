@@ -60,6 +60,7 @@ function rawManifest(overrides: Record<string, unknown>): string {
     created_at: '2026-08-06T00:00:00.000Z',
     iteration_budget: 5,
     cost_budget_usd: 2.0,
+    class: 'code',
     ...overrides,
   };
   const yamlLines = Object.entries(data).map(

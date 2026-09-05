@@ -20,6 +20,8 @@ import { DEVELOP_FLOW_ID } from '../../enqueue-develop-run.ts';
 function manifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManifest {
   return {
     initiative_id: 'INIT-2026-06-21-toc',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'mdtoc',
     project_repo_path: '/tmp/mdtoc',
     created_at: '2026-06-21T00:00:00Z',

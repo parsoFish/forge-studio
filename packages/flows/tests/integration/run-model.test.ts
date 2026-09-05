@@ -48,7 +48,7 @@ function writeManifest(dir: string, state: string, initId: string, extra: Record
     project_repo_path: '/tmp/test',
     created_at: '2026-01-01T00:00:00Z',
     iteration_budget: 10,
-    cost_budget_usd: 5,
+    cost_budget_usd: 5, class: 'code',
     phase: state,
     origin: 'architect',
     ...extra,
@@ -234,7 +234,7 @@ test('aggregateRun: complete-release-definition real fixture — status gated, 5
     const manifestPath = writeManifest(root, 'ready-for-review', initId, {
       cycle_id: cycleId,
       iteration_budget: 24,
-      cost_budget_usd: 30,
+      cost_budget_usd: 30, class: 'code',
     });
 
     const logDir = join(root, '_logs', cycleId);

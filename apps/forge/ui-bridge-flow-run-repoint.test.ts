@@ -55,6 +55,7 @@ function manifestBody(id: string, flowId: string): string {
     `created_at: '2026-08-18T13:33:48.787Z'`,
     'iteration_budget: 3',
     'cost_budget_usd: 2',
+    'class: code',
     'phase: pending',
     'origin: architect',
     `flow_id: ${flowId}`,

@@ -35,6 +35,7 @@ project_repo_path: /tmp/demo-fixture
 created_at: 2026-05-10T12:00:00Z
 iteration_budget: 5
 cost_budget_usd: 1.5
+class: code
 phase: done
 quality_gate_cmd:
   - npm

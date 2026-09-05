@@ -31,6 +31,7 @@ project_repo_path: ./projects/testproj
 created_at: 2026-05-20T00:00:00Z
 iteration_budget: 3
 cost_budget_usd: 1
+class: code
 phase: in-flight
 origin: architect
 ---

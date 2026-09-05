@@ -61,6 +61,7 @@ project_repo_path: /tmp/test-project
 created_at: 2026-08-09T10:00:00.000Z
 iteration_budget: 5
 cost_budget_usd: ${costBudgetUsd}
+class: code
 phase: pending
 flow_id: forge-architect
 specs:

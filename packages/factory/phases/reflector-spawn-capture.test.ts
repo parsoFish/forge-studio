@@ -79,6 +79,7 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
         'created_at: 2026-01-01T00:00:00Z',
         'iteration_budget: 3',
         'cost_budget_usd: 1.0',
+        'class: code',
         'phase: done',
         'origin: architect',
         '---',

@@ -37,6 +37,7 @@ project_repo_path: /tmp/${PROJECT_ID}
 created_at: 2026-06-13T10:00:00.000Z
 iteration_budget: 5
 cost_budget_usd: 2.0
+class: code
 phase: pending
 flow_id: ${flowId}
 ${depsBlock}${cycleBlock}${titleBlock}---

@@ -58,6 +58,7 @@ function writeManifest(root: string, state: string, initId: string, extra: Recor
     created_at: '2026-01-01T00:00:00Z',
     iteration_budget: 10,
     cost_budget_usd: 5,
+    class: 'code',
     phase: state,
     origin: 'architect',
     flow_id: 'forge-develop',

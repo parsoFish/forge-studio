@@ -856,7 +856,7 @@ test('DELETE /api/studio/flows/:id — an active run locks deletion (423)', asyn
       'project: demo',
       'created_at: 2026-08-20T00:00:00.000Z',
       'iteration_budget: 3',
-      'cost_budget_usd: 5',
+      'cost_budget_usd: 5', 'class: code',
       'flow_id: tpl-user',
       'cycle_id: INIT-B4-DEL-LOCK',
       '---',

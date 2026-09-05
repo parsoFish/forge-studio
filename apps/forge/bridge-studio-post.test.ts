@@ -48,6 +48,7 @@ function makeManifest(worktreePath: string, initiativeId: string): string {
     'created_at: 2026-01-01T00:00:00.000Z',
     'iteration_budget: 5',
     'cost_budget_usd: 2.0',
+    'class: code',
     'origin: architect',
     '---',
     '',

@@ -40,6 +40,7 @@ project_repo_path: ${join(root, 'projects', 'testproj')}
 created_at: '2026-05-24T00:00:00.000Z'
 iteration_budget: 5
 cost_budget_usd: 1.0
+class: code
 worktree_path: ${overrides.worktreePath ?? join(root, '_worktrees', 'INIT-2026-05-24-rq-test')}
 retry_count: 2
 previous_failure_modes:
@@ -323,6 +324,7 @@ project_repo_path: ${projectRepoPath}
 created_at: '2026-05-24T00:00:00.000Z'
 iteration_budget: 5
 cost_budget_usd: 1.0
+class: code
 worktree_path: ${worktreePath}
 cycle_id: ${cycleId}
 ---

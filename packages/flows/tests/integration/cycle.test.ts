@@ -54,6 +54,8 @@ function writeManifestWithCeiling(ceiling: number | undefined): string {
   const dir = mkdtempSync(join(tmpdir(), 'forge-ceiling-'));
   const m: InitiativeManifest = {
     initiative_id: 'INIT-2026-06-19-ceiling',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'demo',
     project_repo_path: '/tmp/demo',
     created_at: '2026-06-19T00:00:00Z',
@@ -428,6 +430,8 @@ test('execCommandVector: strips the named env var from the child process (A3, re
 function cycleManifestFixture(extra: Partial<InitiativeManifest> = {}): InitiativeManifest {
   return {
     initiative_id: 'INIT-2026-06-08-p4test',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'test-project',
     project_repo_path: '/tmp/test-project',
     created_at: '2026-06-08T00:00:00Z',

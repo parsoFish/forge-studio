@@ -25,9 +25,15 @@ import {
   type InitiativeManifest,
 } from '../../manifest.ts';
 
+function fixtureWith(overrides: Partial<InitiativeManifest>): InitiativeManifest {
+  return { ...fixture(), ...overrides };
+}
+
 function fixture(): InitiativeManifest {
   return {
     initiative_id: 'INIT-2026-05-04-x',
+    class: 'code',
+    acceptance_criteria: [],
     project: 'demo',
     project_repo_path: '/tmp/demo',
     created_at: '2026-05-04T18:00:00Z',
@@ -156,7 +162,7 @@ test('writeManifest: refuses to write an invalid manifest', () => {
 });
 
 test('parseManifest: tolerates manifests with body only (no optional fields)', () => {
-  const md = `---\ninitiative_id: INIT-2026-05-04-y\nproject: demo\ncreated_at: 2026-05-04T18:00:00Z\niteration_budget: 10\ncost_budget_usd: 5\nphase: pending\n---\n\n# Body only\n`;
+  const md = `---\ninitiative_id: INIT-2026-05-04-y\nproject: demo\ncreated_at: 2026-05-04T18:00:00Z\niteration_budget: 10\ncost_budget_usd: 5\nclass: code\nphase: pending\n---\n\n# Body only\n`;
   const parsed = parseManifest(md);
   assert.match(parsed.body, /Body only/);
   assert.equal(parsed.quality_gate_cmd, undefined);
@@ -171,7 +177,7 @@ test('parseManifest: throws on missing required fields', () => {
 // ---- F-04 quality_gate_cmd round trip ----
 
 test('parseManifest: extracts quality_gate_cmd from frontmatter', () => {
-  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nphase: pending\nquality_gate_cmd:\n  - pytest\n  - -q\n  - tests/\n---\n\n# body\n`;
+  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nclass: code\nphase: pending\nquality_gate_cmd:\n  - pytest\n  - -q\n  - tests/\n---\n\n# body\n`;
   const parsed = parseManifest(md);
   assert.deepEqual(parsed.quality_gate_cmd, ['pytest', '-q', 'tests/']);
 });
@@ -186,7 +192,7 @@ test('serializeManifest → parseManifest: quality_gate_cmd round-trips', () => 
 });
 
 test('parseManifest: missing quality_gate_cmd is undefined (allowed)', () => {
-  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nphase: pending\n---\nbody`;
+  const md = `---\ninitiative_id: INIT-2026-05-10-qgate\nproject: demo\ncreated_at: 2026-05-10T00:00:00Z\niteration_budget: 5\ncost_budget_usd: 1\nclass: code\nphase: pending\n---\nbody`;
   const parsed = parseManifest(md);
   assert.equal(parsed.quality_gate_cmd, undefined);
 });
@@ -220,6 +226,7 @@ test('parseManifest: origin defaults to architect when frontmatter omits it', ()
     'created_at: 2026-05-04T18:00:00Z',
     'iteration_budget: 10',
     'cost_budget_usd: 2',
+    'class: code',
     'phase: pending',
     '---',
     '',
@@ -247,6 +254,7 @@ test('serializeManifest: always writes origin (legacy manifest gains the tag on 
     'created_at: 2026-05-04T18:00:00Z',
     'iteration_budget: 10',
     'cost_budget_usd: 2',
+    'class: code',
     'phase: pending',
     '---',
     '',
@@ -274,7 +282,7 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   assert.equal(parseManifest(resuming).resume_from, 'demo');
 
   // ADR 026: the retired 'developer' resume value is dropped on parse (undefined).
-  const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
+  const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nclass: code\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
   assert.equal(parseManifest(legacy).resume_from, undefined);
 });
 
@@ -488,6 +496,7 @@ function frontmatterWith(field: string, raw: string): string {
     "created_at: '2026-05-04T18:00:00Z'",
     'iteration_budget: 50',
     'cost_budget_usd: 25',
+    'class: code',
     'phase: pending',
     'origin: architect',
     `${field}: ${raw}`,
@@ -584,4 +593,74 @@ test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifes
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// ADR 051 — `class` and typed `acceptance_criteria`
+//
+// WHICH WRONG IMPLEMENTATION EACH TEST KILLS is named per test. The defect
+// being closed is declared-data-fails-open: the shape these replace was prose
+// recovered by regex, where a criterion the parser missed was silently absent
+// rather than an error, so review could not return a verdict on it.
+// ---------------------------------------------------------------------------
+
+test('ADR 051: class and acceptance_criteria round-trip through serialize → parse', () => {
+  const m = fixtureWith({
+    class: 'docs',
+    acceptance_criteria: [
+      { given: 'the registry page', when: 'a consumer lands on it', then: 'it shows the new syntax' },
+      { given: 'roadmap.md', when: '', then: 'it names the follow-on migration' },
+    ],
+  });
+  const round = parseManifest(serializeManifest(m));
+  assert.equal(round.class, 'docs');
+  assert.deepEqual(round.acceptance_criteria, m.acceptance_criteria);
+});
+
+test('ADR 051: a manifest with no `class` is a parse ERROR — kills "absent means code"', () => {
+  const withoutClass = serializeManifest(fixture()).replace(/^class: .*\n/m, '');
+  assert.doesNotMatch(withoutClass, /^class:/m, 'the fixture must actually be missing the field');
+  assert.throws(() => parseManifest(withoutClass), /missing required field: class/);
+});
+
+test('ADR 051: an unknown class is a validateManifest error naming the four — kills "any string passes"', () => {
+  const m = { ...fixture(), class: 'chore' as unknown as InitiativeManifest['class'] };
+  const errors = validateManifest(m);
+  assert.ok(
+    errors.some((e) => e.includes('class must be one of') && e.includes('chore')),
+    `expected a class error naming what arrived, got ${JSON.stringify(errors)}`,
+  );
+});
+
+test('ADR 051: a malformed acceptance criterion is an ERROR NAMING ITS INDEX — kills "skip what does not parse"', () => {
+  const raw = serializeManifest(fixture()).replace(
+    /^acceptance_criteria: \[\]\n/m,
+    'acceptance_criteria:\n  - given: ok\n    when: ok\n    then: ok\n  - given: ok\n    when: ok\n',
+  );
+  assert.throws(
+    () => parseManifest(raw),
+    /acceptance_criteria\[1\]\.then must be a non-empty string/,
+    'the second entry is the broken one and the message must say so — an index-free message sends a reader to the wrong criterion',
+  );
+});
+
+test('ADR 051: an EMPTY when is legal, an empty given or then is not — a criterion may lack a trigger, never a precondition or an expectation', () => {
+  const ok = serializeManifest(fixture()).replace(
+    /^acceptance_criteria: \[\]\n/m,
+    "acceptance_criteria:\n  - given: a state\n    when: ''\n    then: an expectation\n",
+  );
+  assert.equal(parseManifest(ok).acceptance_criteria[0]?.when, '');
+  const bad = serializeManifest(fixture()).replace(
+    /^acceptance_criteria: \[\]\n/m,
+    "acceptance_criteria:\n  - given: ''\n    when: a trigger\n    then: an expectation\n",
+  );
+  assert.throws(() => parseManifest(bad), /acceptance_criteria\[0\]\.given must be a non-empty string/);
+});
+
+test('ADR 051: acceptance_criteria that is not a list is an error, not an empty list — kills "coerce anything"', () => {
+  const raw = serializeManifest(fixture()).replace(
+    /^acceptance_criteria: \[\]\n/m,
+    'acceptance_criteria: "given X when Y then Z"\n',
+  );
+  assert.throws(() => parseManifest(raw), /acceptance_criteria must be a list/);
 });
