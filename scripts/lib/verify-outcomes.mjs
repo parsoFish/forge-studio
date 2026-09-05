@@ -207,6 +207,20 @@ export function classifyReflectorProgress(logLines) {
  * @returns {number} authoritative total cost in USD
  */
 export function sumAuthoritativeCostFromLines(lines) {
+  return costBreakdownFromLines(lines).totalUsd;
+}
+
+/**
+ * The same sum, plus the ARCHITECT's share of it (bead forge-8vfn.6.10.22). The
+ * cycle log already carries the architect's out-of-cycle spend, so a caller that
+ * also sums the session log counts it twice — half of the harness's $28.64 for a
+ * run that spent $23.97. Answered from the SAME parse under the same rule, never
+ * by re-reading the file with a second set of eyes.
+ *
+ * @param {readonly string[]} lines raw JSONL lines; malformed lines are skipped
+ * @returns {{ totalUsd: number, architectUsd: number }}
+ */
+export function costBreakdownFromLines(lines) {
   const events = [];
   for (const line of lines) {
     if (!line) continue;
@@ -216,5 +230,8 @@ export function sumAuthoritativeCostFromLines(lines) {
       /* skip malformed line */
     }
   }
-  return sumAuthoritativeCostUsd(events);
+  return {
+    totalUsd: sumAuthoritativeCostUsd(events),
+    architectUsd: sumAuthoritativeCostUsd(events.filter((e) => e.phase === 'architect')),
+  };
 }

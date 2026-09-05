@@ -206,54 +206,83 @@ export default {
       say: 'The onboarding session opens on the shared session surface. Its live artifact is the same five-stage Contract Buildout the project page shows — contract, instructions, secrets, demo, roadmap — so the operator watches the Agent close the gaps in the same vocabulary the gate will judge.',
     },
     {
-      // Partly expressible. Answering IS expressible —
-      // `[data-field="session-answer"]` + `[data-action="submit-answers"]`.
-      // Walking the stages is NOT: `StageSelector.tsx` renders one
-      // `[data-action="select-stage"]` per stage and distinguishes them by
-      // `data-stage`, while `do`'s press verb resolves `[data-action=...]`
-      // and takes `.first()` — so a beat cannot say WHICH stage to open, and
-      // this beat's `buildout-active-stage: 'secrets'` is unreachable. A
-      // generic `select-stage` press would open whichever stage happens to be
-      // first and pretend it was `secrets`, so the story does not write one.
-      act: 'Answer the Agent\'s questions about the quality gate and what GitWeave must never touch, stage by stage, until the contract and secrets stages read present',
-      do: [
-        { fill: 'session-answer', with: `The quality gate is \`${GATE}\`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation.` },
-        { press: 'submit-answers' },
-      ],
-      // AMENDED 2026-09-05 (ruling 220, bead `forge-8vfn.6.11.10`). This beat
-      // stands on a REAL AGENT: `SessionInteractivePanel` renders
-      // `[data-field="session-answer"]` only inside a `question-form`
-      // affordance — only once the onboarding agent has ASKED. Runs 1, 2 and 3
-      // all reported `no element carries that handle`, and run 3's
-      // `describeControl` proved the handle was ABSENT rather than disabled or
-      // slow. The cause was the runner, not the product: one bound,
-      // `READY_TIMEOUT_MS = 15_000`, for a DOM update and for an agent's first
-      // question alike. #438 gives a beat its own bound; this declares it.
+      // RE-AUTHORED 2026-09-06 (M5-B s7, bead `forge-8vfn.6.11.25`, T1 ruling
+      // 285). This beat used to ANSWER the Agent's questions —
+      // `[data-field="session-answer"]` + `[data-action="submit-answers"]` —
+      // and it could never pass, on any product, for a reason no bound could
+      // fix: THE ONBOARDING KIND NEVER ASKS ANYTHING.
       //
-      // 10 minutes is a STATED GUESS, not a measurement, and it is the first
-      // thing the next run turns into a number: no run has ever reached this
-      // state, so the true figure is only known to be larger than anything
-      // observed. It is generous enough to be a real measurement and short
-      // enough that a genuine product red does not hold the host for half an
-      // hour — and the verdict now names which bound gave up, so the next run
-      // record cannot confuse "the agent was slow" with "the product is wrong".
+      // A `question-form` affordance is built in exactly one place
+      // (`packages/sessions/studio/session-kinds-affordances.ts`) and only for
+      // a phase row carrying BOTH `step: 'noop'` AND `awaits: 'questions'`.
+      // `studio/session-kinds.yaml`'s onboarding panel declares three rows and
+      // no others — `{running, step: agent}`, `{complete, step: terminal}`,
+      // `{failed, step: terminal}` — so it publishes no answer field of EITHER
+      // name, and the yaml says why in its own words: onboarding "is NOT a
+      // turn-loop … a fire-and-forget dispatch with exactly three phase
+      // values". Runs 1, 2 and 3 all reported `no element carries that
+      // handle`, and run 3's `describeControl` proved it ABSENT rather than
+      // slow; that evidence was read as "the agent has not asked yet" and
+      // drove `6.11.10`'s ten-minute bound. The bound is right for other
+      // beats. For this one the handle was never coming.
       //
-      // Ruling 214(d) said beat 6 was untouched; it was written before ruling
-      // 220 established that this beat cannot pass without a declared wait.
-      // Landing amend-3 without this would spend S1 run 4's $25 re-measuring a
-      // beat that cannot pass.
+      // So the beat now asserts what onboarding DOES: a dispatched agent
+      // session that runs to a terminal phase. The declared wait stays — this
+      // still stands on a real agent doing real work — and the operator's own
+      // knowledge still enters the story at beat 4, where the product actually
+      // asks for it (`northStar` + `gateCommand` on the brief form).
+      //
+      // One thing the old beat carried DOES leave the story and is not
+      // replaced: the untouchable-paths instruction ("never touch infra/ state
+      // or config/orgs/*.yaml"). No surface on the onboarding path asks for
+      // it, so the story cannot supply it without inventing a field. That is
+      // the same product question as the interview — bead
+      // `forge-8vfn.7.2.5` (M6) — and it is named here rather than papered
+      // over.
+      //
+      // Still NOT expressible, and still not invented: walking to a NAMED
+      // stage. `StageSelector.tsx` renders one `[data-action="select-stage"]`
+      // per stage and distinguishes them by `data-stage`, while `do`'s press
+      // verb resolves `[data-action=…]` and takes `.first()`. A generic
+      // `select-stage` press would open whichever stage happens to be first
+      // and pretend it was `secrets`, so the story does not write one, and
+      // this beat no longer claims a stage it cannot reach.
+      act: 'Watch the Agent work through the contract until the onboarding session finishes',
+      do: [],
+      // The declared wait SURVIVES the re-authoring, and it is what makes
+      // this beat cost something: `running` is written by POST
+      // /api/studio/onboarding/start the moment the dispatch begins
+      // (`cli/ui-bridge.ts:3504`), so a beat that only asserted "a session
+      // exists" would pass in milliseconds against no work at all. `complete`
+      // is written by `writeSessionTerminalPhase(…, 'complete')` when `forge
+      // agent dispatch --session-dir` observes the run FINISH
+      // (`cli/agent-run.ts:198`, called at `:420`/`:440`) — so waiting for it
+      // is waiting for the whole onboarding agent, which is the point.
+      //
+      // Introduced 2026-09-05 by ruling 220 (bead `forge-8vfn.6.11.10`) for a
+      // different reason — one bound, `READY_TIMEOUT_MS = 15_000`, covered a
+      // DOM update and an agent's first question alike, and #438 gave a beat
+      // its own. That reasoning is superseded (the question never comes) but
+      // the bound is not: it now bounds a terminal phase instead.
+      //
+      // 10 minutes remains a STATED GUESS, not a measurement — no S1 run has
+      // ever reached a terminal onboarding phase, so the true figure is only
+      // known to be larger than anything observed. It is generous enough to
+      // be a real measurement and short enough that a genuine product red
+      // does not hold the host for half an hour, and the verdict names which
+      // bound gave up, so the next run record cannot confuse "the agent was
+      // slow" with "the product is wrong".
       wait: { for: 'agent', upTo: 600_000 },
       expect: {
         route: '/sessions/onboarding/<sessionId>',
         data: {
+          page: 'session',
+          'page-ready': 'true',
           'session-kind': 'onboarding',
-          'session-stage': 'secrets',
-          'buildout-mode': 'detail',
-          'buildout-active-stage': 'secrets',
-          'stage-detail-status': 'present',
+          'session-phase': 'complete',
         },
       },
-      say: 'This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator\'s. The secrets stage names the environment variables and never their values.',
+      say: 'Onboarding is a dispatch, not a conversation. What only a human can say went in at the brief — the north star and the quality gate — and from here the Agent works the contract criteria alone, invoking the Skills built for the purpose, until the session reaches a terminal phase. The clip is the wait, and the wait is the work.',
     },
     {
       // AMENDED 2026-09-05 (H6, operator present) — SPLIT IN TWO, and both
