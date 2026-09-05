@@ -72,22 +72,15 @@ export function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
-// W6-CR-3 (HISTORY) — the now-retired community-refresh interactive session
-// kind (mechanism A; superseded by the deterministic `forge community
-// refresh` / `POST /api/studio/community/refresh`, W8-B5) anchored under
-// this ONE fixed, dot-prefixed pseudo-project (mirrors KB_SEEDING_ANCHOR_
-// PREFIX's own non-project carve-out immediately below, but unparameterized:
-// there was exactly ONE community registry, forge-wide, not N per-id KBs,
-// so a single literal constant was the honest shape rather than a prefix +
-// variable slug). `discoverProjects` (@forge/kernel/project-layout.ts)
-// already filters every dot-prefixed directory, so this anchor never
-// surfaced as a phantom project. The kickoff route and verdict dispatch that
-// used to import this are gone (W8-B5b), but the constant stays exported:
-// `invalidProjectReason`'s carve-out below still recognizes it so sessions
-// that finished under this anchor before retirement remain reachable, and
-// forge-ui's session-shell "back to project" link (apps/studio/lib/session-
-// shell-view.ts) still maps it to `/community` via a parity test against
-// this SSOT (apps/studio/lib/session-shell-view.test.ts).
+// W6-CR-3 (HISTORY) — the retired community-refresh kind's anchor: ONE fixed,
+// dot-prefixed pseudo-project (unparameterized, unlike KB_SEEDING_ANCHOR_PREFIX
+// below, because there was exactly one community registry forge-wide). It never
+// surfaced as a phantom project — `discoverProjects` filters dot-prefixed dirs.
+// Its kickoff route and verdict dispatch are gone (W8-B5b) but the constant
+// STAYS EXPORTED for two live reasons: `invalidProjectReason`'s carve-out below
+// keeps pre-retirement sessions reachable, and forge-ui's session-shell
+// back-link maps it to `/community` via a parity test against this SSOT
+// (apps/studio/lib/session-shell-view.test.ts).
 export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding

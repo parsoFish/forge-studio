@@ -18,7 +18,7 @@ import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge/brain-l
 import { guardAgentKbEdits, snapshotBrainTree, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
 import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 
-import { writeRootFenceOptions } from '../interactive-session.ts';
+import { writeRootFenceOptions } from '../session-write-fence.ts';
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';
 
 // ---------------------------------------------------------------------------
