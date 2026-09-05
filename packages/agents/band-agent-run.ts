@@ -65,16 +65,16 @@ import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
-/** The two band-guard slugs runnable standalone here → their pipeline kind. */
+/** Band-guard slugs runnable standalone → pipeline kind. `demo-agent` came off when its band stopped
+ *  spawning a model (§5 item 4): its SKILL.md is a declaration carrier, and a carrier has no turn to re-run. */
 const STANDALONE_BAND_SLUGS: Record<string, BandPipelineKind> = {
-  'demo-agent': 'demo',
   'adversarial-review': 'review',
 };
 
 /** Safe manifest-file stem — no path separators / traversal (it is joined into a queue path). */
 const SAFE_INITIATIVE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type BandPipelineKind = 'demo' | 'review';
+export type BandPipelineKind = 'review';
 
 /**
  * The six queue state directories this surface reads. Declared with every field

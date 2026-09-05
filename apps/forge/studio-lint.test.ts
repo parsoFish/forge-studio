@@ -986,10 +986,10 @@ test('AT-40: runStudioLint(process.cwd()) surfaces the 4 real unverifiable-endpo
   const flags = result.findings.filter((f) => f.check === 'template-library/unverifiable-endpoints');
   // W7-C1: retiring the onboard-project flow wrapper removed the last DAG
   // edge that carried "contract", so it joins the honest orchestrator-band
-  // set (verdict/work-items/demo-fix-spec).
-  assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags (verdict/work-items/demo-fix-spec/contract), got: ${JSON.stringify(flags)}`);
+  // set (verdict/work-items).
+  assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags (verdict/work-items/contract), got: ${JSON.stringify(flags)}`);
   assert.ok(flags.every((f) => f.level === 'flag'));
-  for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
+  for (const id of ['verdict', 'work-items', 'contract']) {
     assert.ok(flags.some((f) => f.message.includes(`"${id}"`)), `expected a flag naming "${id}"`);
   }
 });

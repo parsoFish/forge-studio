@@ -37,7 +37,7 @@ export { type TriggerCheckOpts, checkFlowTriggers } from './studio/validate-trig
 // ---- The cycle the develop flow runs ---------------------------------------
 export { resolveCostCeilingOverride } from './cycle.ts';
 export { type ClosureResult, type CycleInput, type CycleOutcome, type LintStatus, REFLECTION_LOST_EVENT, REFLECT_MODE_FILE, type ReflectMode, type ReflectionStatus, type ReflectorPhaseResult, type ReleaseFinalizePhaseResult, type ReviewerOutcome, recordBrainGateResult } from './cycle-context.ts';
-export { type MergeGateResult, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, openPrInline, preservingForgeScratch, runMergeBoundaryGate } from './cycle-helpers.ts';
+export { type MergeGateResult, type MergeGateEvidence, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, openPrInline, preservingForgeScratch, runMergeBoundaryGate } from './cycle-helpers.ts';
 export { promoteMergedToDone, runClosure } from './phases/closure.ts';
 export { CAPTURE_NONCE_ENV, buildDemoCaptureArgv, commitOrchestratedCaptureArtifacts, demoJsonWantsCapture, generateCaptureNonce, preflightDemoCaptureCommands, resolveDemoCaptureTimeoutMs, runOrchestratorCommand } from './phases/orchestrated-capture.ts';
 export { compileWorkItemSpecs } from './phases/wi-spec-compile.ts';
@@ -56,7 +56,6 @@ export { createWiWorktree, removeWiWorktree, wiWorktreePath } from './wi-worktre
 export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPublish, mergeWiIntoCycle } from './wi-merge-back.ts';
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';
 export { reviewCapExhaustedPath, writeMergeGateConfigErrorMarker, writeReviewCapExhaustedMarker } from './fix-work-items.ts';
-export { enqueueDemoFixWorkItems } from './demo-fix-loop.ts';
 export { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 
 // ---- Triggers and staged flow runs -----------------------------------------
@@ -83,7 +82,7 @@ export { add } from './worktree.ts';
 export { finalizeMergedReadyForReview } from './finalize-merged.ts';
 
 // ---- Artifacts, demo paths and budgets -------------------------------------
-export { type DemoFixProposal, type DemoFixSpecRecord, type ReviewFinding, type ReviewFindingsRecord, demoFixSpecJsonPath, reviewFindingsJsonPath, validateDemoFixSpec, validateReviewFindings, writeDemoFixSpecJson, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
+export { type ReviewFinding, type ReviewFindingsRecord, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
 export { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.ts';
 

@@ -20,7 +20,6 @@ see `orchestrator/studio/template-library.ts` for the unifying registry.
 | `pr` | Pull Request | file | demo-agent → adversarial-review | yes — `forge-develop` (`demo→adversarial-review`) |
 | `review-findings` | Review Findings | file | adversarial-review → review | yes — `forge-develop` (`adversarial-review→review`) |
 | `verdict` | Verdict | file | review → reflector | no — orchestrator-band re-entry |
-| `demo-fix-spec` | Demo Fix Spec | file | demo-agent → developer-ralph | no — orchestrator-band re-entry |
 | `contract` | Contract | file | onboarding-agent → contract-check | yes — `onboard-project` (`onboard→contract-check`) |
 
 **Edge-backed** means the artifact is the declared `artifact:` label on a real edge in one of

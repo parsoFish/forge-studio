@@ -59,19 +59,22 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
   'requiredPathsSource', // spec §5 item 3 — the ralph runner's diff-inclusion list
   'mergeBoundaryTest',   // spec §5 item 4 — the class-selected merge gate
   'mergeBoundaryVerb',   // spec §5 item 6 — `forge gate docs`
-  'capture',             // spec §5 item 4 — what the integrate band captures
   'reflect',             // spec §5 item 4 — the reflector's class rule
 ];
 
 // `reviewLenses` came off with spec §5 item 5: `phases/adversarial-review.ts`
 // reads it ONCE and threads the same array to the launch prompt and to
 // `validateReviewFindings`, so a finding cannot be judged against a vocabulary
-// the agent was never shown. Six columns left on this branch; `capture` comes
-// off in the integrate-band PR (spec §5 item 4), which lands next.
+// the agent was never shown.
+//
+// `capture` came off with item 4, read by the integrate band
+// (`phases/integrate.ts`) to choose between running the project's declared demo
+// commands, recording the gate's own output, and recording the diff alone.
 //
 // `singleWiAllowed` came off this list first, and where it landed corrected the
 // draft: it is enforced by the project manager's SET rules, not the plan gate,
-// because at the plan gate there are no work items to count. Seven columns left.
+// because at the plan gate there are no work items to count. FIVE columns left,
+// and each names the spec item that lands it.
 
 // Every column is on the list as this lands, and that is the honest state of a
 // table whose consumers are spec §5 items 3 to 6: the DATA is ratified now

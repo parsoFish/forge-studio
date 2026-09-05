@@ -15,7 +15,6 @@
  * stays in the package that owns the seam.
  */
 
-import { runDemoAgentPipeline } from '@forge/factory/phases/demo-agent.ts';
 import { isChangeClass, type ChangeClass } from '@forge/factory/class-profiles.ts';
 import { runAdversarialReview } from '@forge/factory/phases/adversarial-review.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
@@ -50,8 +49,6 @@ function asChangeClass(value: string): ChangeClass {
 export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
-  runPipeline: async ({ kind, input, logger, queryFn }) =>
-    kind === 'demo'
-      ? await runDemoAgentPipeline(input, logger, { queryFn })
-      : await runAdversarialReview({ ...input, changeClass: asChangeClass(input.changeClass) }, logger, { queryFn }),
+  runPipeline: async ({ input, logger, queryFn }) =>
+    await runAdversarialReview({ ...input, changeClass: asChangeClass(input.changeClass) }, logger, { queryFn }),
 };

@@ -1,10 +1,10 @@
 ---
 name: demo-agent
-description: forge's demo agent — takes a develop phase's output and composes the initiative's demo from the studio demo-element library and the project's typed demoProcess, authoring demo.json (with per-AC acEvaluations) against the initiative's acceptance criteria. Judges AC-misses and scopes fix proposals for the develop agent to execute; never edits project code, never runs render or capture (derivation and evidence execution are orchestrator-owned, ADR 036).
+description: "The declaration carrier and display identity for the develop flow's `demo` node — the INTEGRATE band (spec §5 item 4). The band is an orchestrator verb: it derives the demo bundle and the PR body from the acceptance criteria, the merge gate's own evidence and the diff, then renders and captures. No model is spawned on any path — see 'What this is, honestly' below."
 library: true
 phase: demo
 surface: unattended
-purpose: Compose the initiative demo from develop output — author demo.json grounded in the initiative's ACs, judge each AC met/partial/missed, and scope fix proposals for misses.
+purpose: Declare the `demo-band` guard and its display identity for the develop flow's demo node. The orchestrator derives the bundle; this def carries no runtime process.
 composition:
   skills: [demo]
   tools: []
@@ -16,126 +16,64 @@ runtime:
   model: claude-sonnet-4-6
   loopStrategy: one-shot
 brainAccess: advisory
-interactivity: Fully autonomous; never blocks on the operator.
-allowed-tools: [Read, Grep, Glob, Write, Edit]
+interactivity: Never runs. The orchestrator-band executor (execDemo) performs the whole band directly and spawns nothing, on every path — there is no standalone dispatch either (`demo-agent` was removed from STANDALONE_BAND_SLUGS when the LLM node was deleted).
+allowed-tools: []
 disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch, Task, Agent]
-budgets: {maxTurns: 60, maxBudgetUsd: 2.0, maxBudgetUsdShare: 0.15}
+budgets: {maxTurns: 1, maxBudgetUsd: 0}
 ---
 
 # demo-agent skill
 
-> Runs once per initiative, after the develop phase's work-items are all
-> complete. The adversarial review agent (R4-08) handles review — you do
-> not build, you do not gate; you compose the evidence the operator judges
-> at the verdict.
+## What this is, honestly
 
-## Mission
+This SKILL.md is **not a running agent**. It is the declaration carrier and
+display identity the `demo-band` guard needs to exist as a first-class citizen
+of the platform (a `composition.guards` entry, a `studio/catalog.yaml` display
+row, a real roster member `forge studio lint` can validate) — nothing more. It
+is the same shape [`skills/contract-check/SKILL.md`](../contract-check/SKILL.md)
+already has for the `onboard-preflight` band.
 
-Compose ONE behavioural-delta demo for the initiative, grounded in its
-acceptance criteria, from the develop phase's finished output. The demo IS
-the evidence surface the operator judges at the verdict gate (ADR 021) — not
-a summary of it.
+The develop flow's `demo` node carries `agent: "demo-agent"` (ADR-039 declared
+dispatch); at runtime `execAgent`
+([`packages/factory/phases/executor-table.ts`](../../packages/factory/phases/executor-table.ts))
+resolves the declared `demo-band` guard and routes the node to `execDemo`, which
+runs the band **directly, orchestrator-side**. No agent is spawned, no prompt is
+assembled, and no budget is drawn.
 
-## What you receive
+## What the band does instead
 
-The orchestrator's per-cycle run context, injected before you write anything:
+The band is spec §5 item 4's `integrate` step. In order:
 
-- **Initiative id + acceptance criteria** — aggregated from the initiative's
-  work-item specs (each line prefixed with its WI id). These are your judging
-  rubric: one `acEvaluations` entry per criterion, verbatim.
-- **Work-item list + statuses** — every WI compiled into this initiative and
-  how each closed. Context for what changed; not something to re-derive by
-  reading diffs from scratch.
-- **The orchestrator-derived `diffStat` + head SHA** — computed by the
-  orchestrator against branch tip at dispatch time. **Never re-derive this
-  yourself, and never trust an inherited demo.json's `diffStat`.** After a
-  multi-branch fan-in the branch tip moves past whatever a prior demo.json
-  recorded; a stale diffStat silently describes the wrong changeset. Use the
-  injected value verbatim.
-- **The demo directory path** — already `artifactRoot`-resolved (default
-  `demo/<initiative-id>/`, or `<artifactRoot>/history/<initiative-id>/demo/`
-  for a project with a sub-root, e.g. betterado's `forge/`). Write there; you
-  do not resolve `artifactRoot` yourself.
-- **The project's typed `demoProcess` steps** (`.forge/project.json`) —
-  `capture` / `verify` / `present`, the executed-demo declaration
-  (`docs/forge-project-contract.md` §DEMO). They tell you what evidence this
-  project can produce and how it is asserted.
-- **The demo-element bodies** the `demoProcess` steps reference — the
-  `studio/demo-elements/` library entries backing each step, inlined in
-  order. `capture` elements are authoring guidance for checkpoints (declare a
-  `command`), `verify` elements shape `acEvaluations`/`testEvidence`,
-  `present` elements shape `essence`/`summary`. When a step names no element,
-  you get the library index instead — match the step's kind to the closest
-  element yourself.
+1. **boundary commit** — commit stragglers so the gate and the bundle see the
+   real branch tip;
+2. **sync invariant** — push/sync the integrated branch;
+3. **empty-branch guard** — a dev loop that produced nothing opens no PR;
+4. **merge-boundary gate** — the full suite on the integrated tip, failing LOUD
+   on a project-config error (no agent can fix a config it cannot see);
+5. **derive** ([`derive-demo-model.ts`](../../packages/factory/phases/derive-demo-model.ts),
+   [`derive-pr-body.ts`](../../packages/factory/phases/derive-pr-body.ts)) — the
+   `demo.json`, the `DEMO.md` and `.forge/pr-description.md` are built from the
+   work items' acceptance criteria, the gate evidence those gates just produced,
+   and the diff;
+6. **capture where the class says so** — the class → gate-profile table's
+   `capture` column selects checkpoint capture, plan output, or neither.
 
-## What you author
+## Why the author was deleted
 
-Three files — the two demo files under the given demo directory, plus the PR
-body at `.forge/pr-description.md`. Write nothing else (no project code):
+The demo used to be authored by a model here, validated afterwards, and retried
+with the errors pasted back into the prompt. Everything it wrote was already
+known to the orchestrator, so the authoring bought nothing and cost a spawn, two
+retries, a token-overlap coverage heuristic and a fix-proposal loop. Deriving the
+same artifacts is reproducible and cannot fail validation, so all of that went
+with it.
 
-1. **`demo.json`** — the `skills/demo` contract (schema `DemoModel`,
-   `cli/demo-model.ts`). Required core: `title`, `essence`, `project`,
-   `initiativeId`, `diffStat` (the injected value, verbatim), ≥1
-   `checkpoints[]`. **`acEvaluations[]`** — one entry per initiative AC, no
-   merging or splitting, each `{ criterion, verdict, evidence }` with
-   `verdict` one of `met | partial | missed`. **`testEvidence`** — author it
-   as a JSON ARRAY of `{ name, result: "pass"|"fail"|"skip", delta? }`; never
-   an object map (the schema only tolerates a map as a legacy back-compat
-   coercion — always author the array form).
-2. **`.forge/pr-description.md`** — the pull-request body. Treat the whole initiative branch as ONE self-contained
-   PR and author exactly three sections, in order: `## Why` (the intent — what
-   problem this solves), `## What` (the behavioural change delivered), `## How`
-   (how the diff achieves it). Anchor What/How ONLY on the injected changed-file
-   list — never claim a file the diff does not contain. Do NOT add a `## Demo`
-   section: the orchestrator appends it from your `demo.json`. This file is the
-   ONLY thing you write outside the demo directory; `openPrInline` reads it via
-   `--body-file`, so a missing or section-less body means no PR opens.
-3. **`fix-proposals.json`** — ONLY when at least one `acEvaluations` verdict
-   is `partial` or `missed`. An all-`met` demo writes no fix-proposals file
-   at all. An array of proposals, field names deliberately mirroring the
-   WorkItem shape (`acceptance_criteria` GWT, `files_in_scope`) so a later
-   pass can compile them into real work items mechanically:
-   - `id` — `FIX-1`, `FIX-2`, … in order.
-   - `criterion` — verbatim, copied from the failing `acEvaluations` entry.
-   - `verdict` — `partial` or `missed` (never `met`).
-   - `evidence` — why the demo cannot show this criterion passing.
-   - `title` — one-line scoped fix mission.
-   - `acceptance_criteria` — non-empty array of `{ given, when, then }`, the
-     develop agent's checklist for the fix.
-   - `files_in_scope` — non-empty array of worktree-relative paths.
-   - `rationale` — why this scope is the right fix, not a larger or smaller one.
+**One thing is deliberately NOT derived: the per-criterion verdict.** An
+orchestrator that scored the criteria it also built the evidence for would be
+grading its own work. That verdict belongs to the read-only review agent.
 
-## Hard rules
+## The name
 
-- **Never fabricate a visual or a piece of evidence.** If it wasn't produced
-  by the develop phase's work and isn't independently verifiable from what
-  you were given, don't write it.
-- **Never mark an AC `met` without pointing at real evidence** (skills/demo's
-  Evidence discipline).
-- **Baseline is never "broken."** Same discipline as skills/demo — every
-  checkpoint frames prior → new, never error → fixed.
-- **Never run `forge demo render` or `forge demo capture`.** Deriving
-  `DEMO.md` from `demo.json` and capturing real before/after evidence are
-  orchestrator-owned (ADR 036) — the pipeline runs both after you finish.
-  Your job is authoring WHAT to capture; producing the evidence is forge's.
-- **Never edit project code.** A fix is a proposal FOR the develop agent to
-  execute next, never an edit you make yourself.
-- **Write only the demo directory and `.forge/pr-description.md`.** `demo.json`,
-  the PR body, and (conditionally) `fix-proposals.json` are the only files you
-  touch — anything else on the branch is project-code editing and hard-fails.
-- **A checkpoint needing before/after output declares a `command` and leaves
-  `beforeOutput`/`afterOutput` absent** (skills/demo's capture discipline —
-  hand-written values are overwritten).
-
-## Judging ACs
-
-Every initiative acceptance criterion gets exactly one verdict (`met` /
-`partial` / `missed` — skills/demo's Verdict vocabulary), and the verdict is
-what decides what you write next.
-
-A `partial` or `missed` verdict is a **judgment**, not a failure state — it
-produces `fix-proposals.json` entries; it does not mean you did something
-wrong. **Do not soften a verdict to avoid writing a proposal.** An honest
-`missed` with a well-scoped fix proposal is the correct outcome; a dishonest
-`met` that papers over a gap is the one failure mode this agent exists to
-prevent.
+The band's spec word is `integrate`. Its node id, band guard, slug and
+`resume_from` value are still `demo` because renaming them costs a pinned
+golden, a pinned story, a contracts union member, an API field and a CLI flag,
+and buys no gate (T1 ruling 245). The rename is priced separately.

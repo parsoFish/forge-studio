@@ -118,10 +118,10 @@ function byId(entries: readonly TemplateLibraryEntry[], id: string): TemplateLib
 // ===========================================================================
 
 describe('listTemplateLibrary — real repo union + categories', () => {
-  it('AT-1: the real repo surfaces exactly 17 templates: 8 planning + 6 demo-output + 3 project-scaffold', () => {
+  it('AT-1: the real repo surfaces exactly 16 templates: 7 planning + 6 demo-output + 3 project-scaffold', () => {
     const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
-    assert.equal(entries.length, 17, `got ids: ${entries.map((e) => e.id).join(', ')}`);
-    assert.equal(entries.filter((e) => e.category === 'planning').length, 8);
+    assert.equal(entries.length, 16, `got ids: ${entries.map((e) => e.id).join(', ')}`);
+    assert.equal(entries.filter((e) => e.category === 'planning').length, 7);
     assert.equal(entries.filter((e) => e.category === 'demo-output').length, 6);
     assert.equal(entries.filter((e) => e.category === 'project-scaffold').length, 3);
   });
@@ -147,7 +147,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
     const planning = entries.filter((e) => e.category === 'planning').map((e) => e.id).sort();
     const demoOutput = entries.filter((e) => e.category === 'demo-output').map((e) => e.id).sort();
     const scaffold = entries.filter((e) => e.category === 'project-scaffold').map((e) => e.id).sort();
-    assert.deepEqual(planning, ['contract', 'demo-fix-spec', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
+    assert.deepEqual(planning, ['contract', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
     assert.deepEqual(demoOutput, ['api-verify', 'cli-capture', 'code-diff', 'narrative', 'screenshot', 'test-evidence']);
     assert.deepEqual(scaffold, ['typescript-api', 'typescript-cli', 'typescript-web']);
   });
@@ -251,9 +251,9 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     assert.deepEqual(entry.usedBy, ['forge-develop:adversarial-review→gate:review']);
   });
 
-  it('AT-16: verdict / work-items / demo-fix-spec travel by band re-entry — zero flow edges, usedBy: []', () => {
+  it('AT-16: verdict / work-items travel by band re-entry — zero flow edges, usedBy: []', () => {
     const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    for (const id of ['verdict', 'work-items']) {
       assert.deepEqual(byId(entries, id).usedBy, [], `${id} must have empty usedBy (no DAG edge carries it)`);
     }
   });
@@ -380,19 +380,22 @@ describe('D4 — producer/consumer cross-check', () => {
     assert.equal(reviewFindings.declaredConsumer, 'review', 'must stay the bare frontmatter value, not the resolved gate:review form');
   });
 
-  it('AT-26: verdict / work-items / demo-fix-spec / contract have zero edges → endpointsVerified: false + exactly 4 lint flags naming them, 0 errors', () => {
+  it('AT-26: verdict / work-items / contract have zero edges → endpointsVerified: false + exactly 3 lint flags naming them, 0 errors', () => {
     // W7-C1: `contract` joined this set when the OOTB onboard flow wrapper
     // (the one DAG edge that carried it) was retired — the template stays
     // registered for authored flows, so unverifiable-endpoints is the
-    // honest classification, same as the band-re-entry three.
+    // honest classification, same as the band-re-entry pair. `demo-fix-spec`
+    // LEFT the set with spec §5 item 4: its producer and its consumer were both
+    // deleted, so the template described an artifact nothing writes — a
+    // declared endpoint with no producer is deleted, not reclassified.
     const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
+    for (const id of ['verdict', 'work-items', 'contract']) {
       assert.equal(byId(entries, id).endpointsVerified, false, `${id} must be endpointsVerified: false (unverifiable)`);
     }
     const flags = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((f) => f.check === 'template-library/unverifiable-endpoints');
-    assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
+    assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
     assert.ok(flags.every((f) => f.level === 'flag'));
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
+    for (const id of ['verdict', 'work-items', 'contract']) {
       assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
     }
     const errors = lintTemplateLibrary(REPO_ROOT, fixtureFlowSource).filter((f) => f.check === 'template-library/endpoint-mismatch' && f.level === 'error');

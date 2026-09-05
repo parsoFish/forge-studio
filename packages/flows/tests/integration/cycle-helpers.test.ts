@@ -174,7 +174,10 @@ test('runMergeBoundaryGate: green full-suite → ok, clears the last-gate-failur
   try {
     writeFileSync(fx.lastFailurePath, '# stale prior failure'); // must be cleared on a green pass
     const res = runMergeBoundaryGate(fx.input, fx.logger);
-    assert.deepEqual(res, { ok: true });
+    // The evidence rows name the gate that actually ran — a green result with an
+    // EMPTY evidence list would mean nothing executed, which is the shape this
+    // function exists to make impossible.
+    assert.deepEqual(res, { ok: true, evidence: [{ gate: 'local', cmd: ['true'], ok: true, outputTail: '' }] });
     assert.ok(!existsSync(fx.lastFailurePath), 'a passing gate clears .forge/last-gate-failure.md (present ⇒ fresh)');
   } finally {
     fx.cleanup();
@@ -214,7 +217,8 @@ test('runMergeBoundaryGate: dryRun passes without running anything', async () =>
   const fx = setupGateProject({ local: { cmd: ['false'] } }); // would be red if it ran
   try {
     const res = runMergeBoundaryGate({ ...fx.input, dryRun: true }, fx.logger);
-    assert.deepEqual(res, { ok: true });
+    // No gate ran, so there is no evidence — stated, never a fabricated green row.
+    assert.deepEqual(res, { ok: true, evidence: [] });
     assert.ok(!existsSync(fx.lastFailurePath), 'dry run never writes the seam');
   } finally {
     fx.cleanup();
@@ -232,7 +236,8 @@ test('runMergeBoundaryGate: the LOCAL gate honours FORGE_GATE_TIMEOUT_MS, NOT FO
   const fx = setupGateProject({ local: { cmd: ['sleep', '0.3'] } }); // ~300ms
   try {
     const res = runMergeBoundaryGate(fx.input, fx.logger);
-    assert.deepEqual(res, { ok: true }, 'the slow-but-under-FORGE_GATE local suite passes (CI timeout must not apply to the local gate)');
+    assert.equal(res.ok, true, 'the slow-but-under-FORGE_GATE local suite passes (CI timeout must not apply to the local gate)');
+    assert.deepEqual(res.ok ? res.evidence.map((e) => [e.gate, e.ok]) : [], [['local', true]]);
   } finally {
     fx.cleanup();
     if (priorLocal === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS; else process.env.FORGE_GATE_TIMEOUT_MS = priorLocal;

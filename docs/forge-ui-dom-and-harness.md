@@ -4877,8 +4877,8 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **`/templates` + `/templates/[id]` — the templates library (R3-06).** One
   registry unifying three previously-siloed on-disk sources into a single
   browsable library: `studio/artifact-templates/*.md` (category `planning`,
-  8 templates — `contract`, `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
-  `demo-fix-spec`, `review-findings`), `studio/demo-elements/*.md` (category
+  7 templates — `contract`, `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
+  `review-findings`), `studio/demo-elements/*.md` (category
   `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
   `api-verify`, `test-evidence`, `narrative`), and
   `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
@@ -4914,8 +4914,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`data-endpoints-verified="true"` means the declaration was cross-checked
   against a real flow edge and agreed; `"false"` means either it contradicts
   the edge — a lint error — or the template carries zero flow edges so the
-  claim is unverifiable, not wrong: `verdict`, `work-items`, and
-  `demo-fix-spec` travel by orchestrator-band re-entry today, not a DAG edge,
+  claim is unverifiable, not wrong: `verdict` and `work-items`
+  travel by orchestrator-band re-entry today, not a DAG edge,
   so they fall in the latter case); and `[data-section="used-by"][data-used-by-count]`
   with per-entry `[data-used-by-entry="<label>"]` (an empty result renders
   "scanned N, none found", never a bare zero). `[data-template-preview]`
