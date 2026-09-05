@@ -18,9 +18,10 @@
  *   · it is date-independent, so a run on any day cleans any day's residue —
  *     the date-stamped per-id cleanups it replaces could not.
  */
-import { rmSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { rmSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
+import { homedir } from 'node:os';
 
 /** A story id must be a single safe path segment — it is interpolated into
  *  paths that are then removed recursively. `..` or a separator would resolve
@@ -311,6 +312,104 @@ function describeRemoved(path, removedContents) {
     .map((e) => (e.bytes === null ? e.path : `${e.path} (${e.bytes} B)`))
     .join(', ');
   return ` — contained ${named}${record.truncated ? ` and ${record.total - record.entries.length} more` : ''}`;
+}
+
+/**
+ * The env var and the operator-root file the story sweep's DELETE token is read
+ * from. Constants, not literals at the call site: they name where an operator
+ * puts a credential that can delete repositories, and that location is a
+ * decision, not an implementation detail.
+ *
+ * The path is deliberately OUTSIDE the repo and outside every agent env. A
+ * `delete_repo` token reaches EVERY repository the account owns, so it is never
+ * the token the agents run under: never `AGENT_ENV_ALLOWLIST`, never a project
+ * `secrets.env`, never a spawned session's env.
+ */
+export const SWEEP_DELETE_TOKEN_ENV = 'FORGE_STORY_SWEEP_DELETE_TOKEN';
+export const SWEEP_DELETE_TOKEN_PATH = join(homedir(), '.config', 'forge', 'story-sweep-token');
+
+/** Read the delete token, or null. Operator-root file first, then the env var
+ *  the operator may export from it; a missing or empty token is `null`, never
+ *  an empty string that would reach `gh` as a credential. */
+function readSweepDeleteToken() {
+  try {
+    const raw = readFileSync(SWEEP_DELETE_TOKEN_PATH, 'utf8').trim();
+    if (raw !== '') return raw;
+  } catch { /* absent is an ordinary state, not an error */ }
+  const env = process.env[SWEEP_DELETE_TOKEN_ENV];
+  return typeof env === 'string' && env.trim() !== '' ? env.trim() : null;
+}
+
+/**
+ * Delete the GitHub remotes a story's run created — bead `forge-8vfn.6.11.2`,
+ * T1 ruling 255. The sweep owns every fixture a story authors (#407/#412), and
+ * `gh repo create` at project creation makes one of those a real repository.
+ *
+ * TWO INDEPENDENT CONDITIONS gate every delete, and neither is sufficient
+ * alone: the repo must appear in the RUN'S OWN creation manifest, AND its name
+ * must carry the story's `story-<id>` prefix. A manifest is written by the run
+ * and a prefix is a string; `delete_repo` is not a permission to be one mistake
+ * away from.
+ *
+ * Absent the token this REFUSES LOUDLY BY NAME — naming both the env var and
+ * the path — rather than skipping quietly. An un-swept remote nobody is told
+ * about is how a story leaks a repository per run, and the token is not yet
+ * issued, so the refusal is the expected state today.
+ *
+ * `readToken` and `runGh` are injected so no test touches a real credential or
+ * a real GitHub.
+ */
+export function sweepStoryRemotes({ storyId, created = [], readToken = readSweepDeleteToken, runGh = null }) {
+  const deleted = [];
+  const refusals = [];
+  const failed = [];
+  if (created.length === 0) return { deleted, refusals, failed };
+
+  const prefix = `story-${String(storyId).toLowerCase()}`;
+  // The manifest is the AUTHORITY; the prefix is the second, independent check.
+  const authorised = [];
+  for (const entry of created) {
+    const nameWithOwner = typeof entry === 'string' ? entry : entry?.nameWithOwner;
+    if (typeof nameWithOwner !== 'string' || nameWithOwner === '') continue;
+    const repo = nameWithOwner.split('/').pop() ?? '';
+    if (!repo.startsWith(prefix)) {
+      refusals.push(
+        `REFUSING to delete ${nameWithOwner}: it is in this run's creation manifest but its name does not ` +
+          `carry the "${prefix}" story prefix. Both conditions must hold before a delete_repo token is used.`,
+      );
+      continue;
+    }
+    authorised.push(nameWithOwner);
+  }
+  if (authorised.length === 0) return { deleted, refusals, failed };
+
+  const token = readToken();
+  if (token === null) {
+    refusals.push(
+      `REFUSING to delete ${authorised.length} remote(s) this run created (${authorised.join(', ')}): no delete ` +
+        `token. Provide it at ${SWEEP_DELETE_TOKEN_PATH} (mode 0600) or as ${SWEEP_DELETE_TOKEN_ENV}. ` +
+        'The sweep does not fall back to the agents\' own gh auth: delete_repo reaches every repository the ' +
+        'account owns, so it is deliberately not a permission the agents run under. Delete these by hand.',
+    );
+    return { deleted, refusals, failed };
+  }
+
+  const gh =
+    runGh ??
+    ((args) =>
+      execFileSync('gh', args, {
+        encoding: 'utf8',
+        env: { ...process.env, GH_TOKEN: token },
+      }).toString());
+  for (const nameWithOwner of authorised) {
+    try {
+      gh(['repo', 'delete', nameWithOwner, '--yes']);
+      deleted.push(nameWithOwner);
+    } catch (e) {
+      failed.push({ path: nameWithOwner, error: e?.message ?? String(e) });
+    }
+  }
+  return { deleted, refusals, failed };
 }
 
 /** The fence's report, always printed — a clean run says so (§15.92). */
