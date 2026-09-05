@@ -15,8 +15,16 @@ From the forge wave-5 campaign: ~1,000 acceptance tests pinned across 18 merged 
 4. **Red→green proof**: the tests must be RED at base and GREEN on the candidate. A test that never went red proves nothing.
 5. **The orchestrator runs every gate itself.** A worker's pass/fail claim is not evidence.
 6. Only the test-writer amends tests; amendments re-pin and are recorded.
+7. **A manifest is DERIVED from the glob that defines it** — `scripts/pin-glob-check.sh <repo> <campaign> <manifest-glob>` expands the scope recorded in `<name>.globs` and REFUSES any match the `.sha256` does not list. Step 2 says what a manifest must cover; without this, nothing checks that it still does.
+
+| script | answers |
+|---|---|
+| `scripts/pin-glob-check.sh` | does this manifest still list everything its own declared scope matches? Exit 1 = drift (each file named) · 3 = the manifest declares no scope · 0 = complete, with the count |
 
 ## Why a green test lies — the catalogue
+
+**A file that is not listed cannot fail.** Measured (M5-B, 2026-09-05): a manifest whose stated scope was `scripts/stories/*.mjs` + `*.test.ts` listed **21** of the **28** such files on main, and `sha256sum -c` printed `0 FAILED` throughout. Every absentee had arrived legitimately — a split at a line cap, or a new test — and one of them held the very waits the milestone's P1 bead existed to fix, editable without the pin noticing. A hand audit closed the glob I had gone looking at; `pin-glob-check.sh`, on its first run against the real manifest, found **two more** under a glob I had looked past, in the same session. Absence of red is not presence of green, and that holds one layer above the tests too.
+
 
 Each of these was caught live. They are the reason the discipline exists.
 

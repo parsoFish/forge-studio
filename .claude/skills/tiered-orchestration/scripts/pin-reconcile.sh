@@ -24,6 +24,24 @@ FROM="${4:?from sha}"; TO="${5:?to sha}"; LABEL="${6:?label}"
 G="$CAMP/gate-manifests"
 [ -d "$G" ] || { echo "pin-reconcile.sh: no gate-manifests dir: $G" >&2; exit 2; }
 
+# Bead forge-8vfn.6.9.2 (ruling 258). §15.169 says to reconcile only from a tree asserted AT the
+# to-sha, and it fired on its own author: a confident `0 -> 0` produced from the MERGE'S PARENT,
+# for a merge that changed five pinned files. The rehash below reads `sha256sum` of the WORKING
+# TREE, so a tree one commit behind hashes the old bytes and prints a clean verdict for a pin it
+# has just made wrong. A rule that lives only in prose is decoration; this puts it in the script.
+# A SHORT to-sha is accepted when it names this very commit — the operator writes `a63322a2`.
+HEAD_SHA=$(git -C "$R" rev-parse HEAD 2>/dev/null || true)
+case "$HEAD_SHA" in
+  "$TO"*) ;;
+  *)
+    echo "pin-reconcile.sh: REFUSING — the tree at $R is HEAD $HEAD_SHA, not the to-sha $TO." >&2
+    echo "  This script rehashes the WORKING TREE, so reconciling from anywhere else records the" >&2
+    echo "  wrong bytes and prints a clean verdict for a pin it just made wrong (§15.169)." >&2
+    echo "  Advance that tree to $TO and re-run." >&2
+    exit 2
+    ;;
+esac
+
 T=$(mktemp); trap 'rm -f "$T"' EXIT
 git -C "$R" diff --name-only "$FROM" "$TO" > "$T"
 found=0
