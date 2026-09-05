@@ -2,17 +2,37 @@
  * Project definition validation (ADR 027, §6) — the `project` half of what was
  * `orchestrator/studio/validate.ts`, moved here by T1 ruling 159.
  *
- * Two rules, one per shape a project arrives in: `validateProject` checks a
- * single `ProjectDefinition` (the studio object), `validateDiscoveredProjects`
- * checks the disk-discovered SET that `discoverProjects` returns. Pure semantic
- * checks — no I/O, no mutation of inputs.
+ * ONE rule, over the shape a project actually arrives in:
+ * `validateDiscoveredProjects` checks the disk-discovered SET that
+ * `discoverProjects` returns, and `apps/forge/studio-lint.ts` calls it. A pure
+ * semantic check — no I/O, no mutation of inputs.
  *
  * The `.forge/project.json` CONTRACT file is a different subject with a
  * different parser: `project-config-validate.ts` in this package.
+ *
+ * `validateProject` USED to sit here, over a single `ProjectDefinition`, and it
+ * was DELETED 2026-09-05 (bead `forge-8vfn.6.10.10`, operator ruling 204) after
+ * its four rules were traced one by one:
+ *
+ *   - `readiness/north-star` (> 140) — `parseNorthStar` THROWS on it;
+ *   - `demoProcess/kind`            — `parseDemoProcess` THROWS on it;
+ *   - `skills/type`                 — `parseSkills` THROWS on it;
+ *   - `slug`                        — `validateDiscoveredProjects`, below,
+ *                                     checks it on the set `studio-lint`
+ *                                     actually passes.
+ *
+ * Three of four were already enforced MORE strictly than a finding, and the
+ * fourth was already here. The one rule with no other home — northStar EMPTY,
+ * the "business-level emptiness check" `project-config-validate.ts` named this
+ * function for — ran over `ProjectDefinition`, and **nothing in the repository
+ * constructs one**: `grep -rn ProjectDefinition` answers its own declaration in
+ * `packages/contracts`, this file, and this file's test. Wiring it would have
+ * meant inventing the producer whose absence made it dead, which is the
+ * opposite of ruling 204's question. The type itself is left for
+ * `packages/contracts`' own prune (M5-A's ruling-199 census) rather than
+ * reached into from here.
  */
 
-import type { ProjectDefinition } from '@forge/contracts/studio/types.ts';
-import { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
 import { type Finding, err, flag } from '@forge/kernel/findings.ts';
 import { PROJECT_ID_RE } from '@forge/kernel/ids.ts';
 
@@ -30,54 +50,6 @@ function findDuplicates(ids: string[]): string[] {
     seen.add(id);
   }
   return [...dupes];
-}
-
-export function validateProject(def: ProjectDefinition): Finding[] {
-  const findings: Finding[] = [];
-  const obj = `project:${def.id}`;
-
-  // id rule (W7-A4: case-preserving, matched exactly — see PROJECT_ID_RE)
-  if (!PROJECT_ID_RE.test(def.id)) {
-    findings.push(err(obj, 'slug', `Project id "${def.id}" does not match ${PROJECT_ID_RE}`));
-  }
-
-  // northStar: empty → flag; >140 → error
-  if (!def.northStar.trim()) {
-    findings.push(flag(obj, 'readiness/north-star', 'Project northStar is missing or blank'));
-  } else if (def.northStar.length > 140) {
-    findings.push(
-      err(
-        obj,
-        'readiness/north-star',
-        `Project northStar must be ≤ 140 characters (got ${def.northStar.length})`,
-      ),
-    );
-  }
-
-  // demoProcess: each step's kind must be in the enum
-  for (let i = 0; i < def.demoProcess.length; i++) {
-    const step = def.demoProcess[i];
-    if (!DEMO_STEP_KINDS.includes(step.kind)) {
-      findings.push(
-        err(
-          obj,
-          'demoProcess/kind',
-          `demoProcess[${i}].kind "${step.kind}" must be one of capture|verify|present`,
-        ),
-      );
-    }
-  }
-
-  // skills: all entries must be strings
-  for (let i = 0; i < def.skills.length; i++) {
-    if (typeof def.skills[i] !== 'string') {
-      findings.push(
-        err(obj, 'skills/type', `skills[${i}] must be a string (got ${typeof def.skills[i]})`),
-      );
-    }
-  }
-
-  return findings;
 }
 
 /**
