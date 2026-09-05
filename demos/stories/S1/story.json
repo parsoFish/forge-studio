@@ -164,11 +164,8 @@
         "expect": {
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
-            "page": "session",
-            "page-ready": "true",
-            "session-kind": "onboarding",
             "stage-detail-stage": "demo",
-            "session-id": "<demoSessionId>"
+            "action": "view-demo-session"
           }
         }
       },
@@ -324,12 +321,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "sessionId": "2026-09-05T02-06-32-703c9252"
+        "sessionId": "2026-09-05T03-17-09-67ecbdd1"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-05T02-06-32-703c9252",
+        "onboard-session-id": "2026-09-05T03-17-09-67ecbdd1",
         "onboard-attaching": "false"
       },
       "frame": "frames/04-open-brief-the-agent-give-it-the-north-s.png"
@@ -367,16 +364,13 @@
     {
       "act": "Select the demo stage and hand it to the demo builder — the heavy one",
       "say": "Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.",
-      "status": "green",
-      "failures": [],
-      "bindings": {
-        "demoSessionId": "2026-09-05T02-06-32-703c9252"
-      },
+      "status": "red",
+      "failures": [
+        "data-action: expected \"view-demo-session\", got \"back-to-project\""
+      ],
+      "bindings": {},
       "data": {
-        "page": "session",
-        "page-ready": "true",
-        "session-kind": "onboarding",
-        "session-id": "2026-09-05T02-06-32-703c9252",
+        "action": "back-to-project",
         "stage-detail-stage": "demo"
       },
       "frame": "frames/07-select-the-demo-stage-and-hand-it-to-the.png"
@@ -386,15 +380,10 @@
       "say": "The operator can leave a heavy session and come back — the session is the record, not the terminal it was started from. This is the beat that proves it: the demo builder was started from one surface, left alone, and read from another, and the work is there and finished.",
       "status": "red",
       "failures": [
-        "no real-nav path to \"/sessions/demo/2026-09-05T02-06-32-703c9252\" from \"/sessions/demo/2026-09-05T02-06-53-05028a45\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+        "route \"/sessions/demo/<demoSessionId>\" needs <demoSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
       ],
       "bindings": {},
-      "data": {
-        "page": "session",
-        "page-ready": "true",
-        "session-kind": "demo",
-        "session-phase": "briefing"
-      },
+      "data": {},
       "frame": "frames/08-come-back-to-the-demo-builder-when-it-ha.png"
     },
     {
@@ -402,7 +391,7 @@
       "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
       "status": "red",
       "failures": [
-        "could not press [data-action=\"apply-clause-decision\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"apply-clause-decision\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <button disabled data-apply-clause-id=\"C1b\" data-action=\"apply-clause-decision\" title=\"Auto-fixes are applying — one clause at a time\">Apply with agent</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    9 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 500ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+        "could not press [data-action=\"apply-clause-decision\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"apply-clause-decision\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <button disabled data-apply-clause-id=\"C1b\" data-action=\"apply-clause-decision\" title=\"Auto-fixes are applying — one clause at a time\">Apply with agent</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    10 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
       "data": {
@@ -440,14 +429,14 @@
   "reap": {
     "reaped": [
       {
-        "pid": 315498,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T02-06-32-279-f7l1",
+        "pid": 670104,
+        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T03-17-09-200-qfsl",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 315453,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T02-06-32-279-f7l1",
+        "pid": 670071,
+        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T03-17-09-200-qfsl",
         "signal": "SIGTERM",
         "via": "cwd"
       }
