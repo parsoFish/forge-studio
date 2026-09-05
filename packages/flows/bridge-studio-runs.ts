@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { parseManifest, serializeManifest } from './manifest.ts';
 import type { ArchitectStatus } from '@forge/sessions/kinds/architect.ts';
 import { getPaths } from './queue.ts';
-import { PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
+import { PROJECT_ID_RE } from '@forge/kernel';
 import { runRequeue } from './forge-requeue.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';

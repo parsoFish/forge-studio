@@ -1,10 +1,7 @@
 [
   "assembly-to-legacy|apps/forge/bridge-studio-triggers.test.ts|orchestrator/test-fixtures/flow-run-request.ts",
   "assembly-to-legacy|apps/forge/bridge-studio-writes.ts|orchestrator/studio/validate.ts",
-  "assembly-to-legacy|apps/forge/bridge-studio.ts|orchestrator/studio/validate.ts",
   "assembly-to-legacy|apps/forge/dispatch-decision-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
-  "assembly-to-legacy|apps/forge/guards-migration-catalog.test.ts|orchestrator/studio/validate.ts",
-  "assembly-to-legacy|apps/forge/id-rule.test.ts|orchestrator/studio/validate.ts",
   "assembly-to-legacy|apps/forge/onboard-flow-gate.test.ts|orchestrator/studio/validate.ts",
   "assembly-to-legacy|apps/forge/routes.ts|orchestrator/studio/validate.ts",
   "assembly-to-legacy|apps/forge/seed-data.test.ts|orchestrator/studio/validate.ts",
@@ -92,7 +89,6 @@
   "package-to-legacy|packages/factory/phases/demo-agent-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/factory/phases/reflector-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
   "package-to-legacy|packages/factory/pm-spawn-capture.test.ts|orchestrator/test-fixtures/spawn-capture/normalize.ts",
-  "package-to-legacy|packages/flows/bridge-studio-runs.ts|orchestrator/studio/validate.ts",
   "package-to-legacy|packages/flows/claim-validator.ts|orchestrator/studio/validate.ts",
   "package-to-legacy|packages/flows/tests/contract/flow-run-request-fixture-parity.test.ts|orchestrator/test-fixtures/flow-run-request.ts",
   "package-to-legacy|packages/flows/tests/integration/trigger-provenance.test.ts|orchestrator/test-fixtures/flow-run-request.ts",

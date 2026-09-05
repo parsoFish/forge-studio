@@ -39,7 +39,7 @@ import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
-import { SLUG_RE, PROJECT_ID_RE } from '../../orchestrator/studio/validate.ts';
+import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
