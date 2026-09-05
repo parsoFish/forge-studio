@@ -149,33 +149,55 @@ export default {
       say: 'It does not resolve. Nor do the other eight. The skills are on disk — they sit where this project was told to put them when it was onboarded, and the contract every project written since puts them somewhere else. Nothing is broken enough to fail a gate, which is exactly why it has gone unnoticed: the project is drifting away from forge, one convention at a time.',
     },
     {
-      // NOT expressible, and deliberately left so. There is no "Rebuild
-      // contract" control anywhere on this page — the full data-* inventory of
-      // the live page carries no action, section or field matching reset,
-      // rebuild, regenerate or drift. `forge project reset` + Studio's
-      // "Rebuild contract" land in the projects lane at M4 (1.0.md §3), and
-      // this beat is what proves it, so the beat carries no `do` block: there
-      // is nothing honest to name, and naming an invented `data-action` would
-      // be inventing the contract this story exists to hold the product to.
+      // FULLY expressible, and AMENDED 2026-09-05 (H6, ruling 170, operator
+      // present) — this is the beat S3 was written to prove, and the
+      // capability it waited for has shipped. `RebuildContractPanel.tsx`
+      // declares the whole act: `rebuild-contract` computes the drift,
+      // `contract-drift` carries the report the act says the operator reads,
+      // and `apply-contract-reset` applies it.
       //
-      // The DRIFT REPORT is the second half of this act and has no handle
-      // either — see the header. What the beat CAN assert is the state only a
-      // rebuild produces: a contract regenerated from the current template
-      // leaves nothing unresolved. `section`, `resolution-failing-count` and
-      // `resolution-agent-count` are all the same <div>, so the three are
-      // answerable together; today they read `1` and `1` (DEMO-ALIGN).
+      // The `do` is four presses because this ground has no persisted app
+      // type: the panel answers `needs-app-type` and will not compute a drift
+      // until a template is named, so `rebuild-app-type` + the preview press
+      // stand between the first press and the report. **`typescript-cli` is a
+      // PLACEHOLDER, and it is not what this ground is.** It is a Go provider
+      // over Terraform, and forge ships three starters that all name a
+      // language it does not use. The operator's 2026-09-05 direction is that
+      // starters lose their language prefix for generic style types (API,
+      // WebApp, CLI, Package); when that lands, this value is a one-word
+      // re-amendment. It is safe to name today only because bead `6.4` (PR
+      // #414) made the reset PRESERVE what a template has no right to
+      // regenerate — proven on this exact ground, `testProcess.local` and the
+      // hand-authored 3-step Go/ADO `demoProcess` byte-identical, ground hash
+      // `665dcf49a3982d6b` unchanged. Before #414 this `do` would have bought
+      // a false green by rewriting the contract it was measuring.
+      //
+      // The `expect` moves to what the ACT describes. The pinned
+      // `resolution-failing-count: '0'` beside `section:
+      // 'contract-resolution'` was UNSATISFIABLE BY CONSTRUCTION —
+      // `ContractResolutionPanel.tsx:179` is `if (failing.length === 0) return
+      // null`, so a count of zero unmounts the section the same beat names.
+      // (The identical defect sat in S2 beat 5; both are corrected in this
+      // sitting.) `contract-drift-applied` and its `preflight-ok` are one
+      // element and say the stronger thing anyway: the rebuild ran, and
+      // preflight is MET afterwards.
       act: 'Press "Rebuild contract", and read the drift report it produces before applying it',
+      do: [
+        { press: 'rebuild-contract' },
+        { fill: 'rebuild-app-type', with: 'typescript-cli' },
+        { press: 'preview-contract-reset' },
+        { press: 'apply-contract-reset' },
+      ],
       expect: {
         route: '/projects/terraform-provider-betterado',
         data: {
           page: 'projects',
           'project-id': 'terraform-provider-betterado',
-          section: 'contract-resolution',
-          'resolution-failing-count': '0',
-          'resolution-agent-count': '0',
+          section: 'contract-drift-applied',
+          'preflight-ok': 'true',
         },
       },
-      say: 'Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Applying it closes the gaps, so nothing is left for a human or an agent to resolve by hand.',
+      say: 'Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and it shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Only then does it rewrite anything. Applying it leaves preflight MET on a project whose north star, instructions and secrets forge never had the right to touch — which is what the next four beats go and check, one at a time.',
     },
     {
       // Fully expressible. The same <span> as beat 4, now expected to resolve:
