@@ -16,6 +16,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
+import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
+
 /** A reviewer comment anchored to a demo region (W3C-annotation-ish). */
 export type ReviewComment = {
   /** Stable, append-only id (never renumbered — the anchor handle). */
@@ -59,16 +61,9 @@ export type DerivedVerdict =
   | { kind: 'send-back'; rationale: string; acceptanceCriteria: AcceptanceCriterion[] };
 
 const SIDECAR_FILE = 'review-comments.json';
-/** A cycle id is a single path segment — never a traversal or nested path. */
-const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Defence-in-depth cap on a single cycle's review comments (an absurd ceiling). */
 export const REVIEW_COMMENTS_MAX = 500;
-
-/** True when a cycleId is a safe single path segment (callers should 400 otherwise). */
-export function isSafeCycleId(cycleId: string): boolean {
-  return SAFE_CYCLE_ID_RE.test(cycleId);
-}
 
 /** Absolute path to the sidecar for a cycle (does not create it). */
 export function reviewCommentsPath(logsRoot: string, cycleId: string): string {
@@ -78,7 +73,7 @@ export function reviewCommentsPath(logsRoot: string, cycleId: string): string {
 /** Read the sidecar; an empty (but well-formed) sidecar when absent/unsafe/unparseable. */
 export function readReviewComments(logsRoot: string, cycleId: string): ReviewCommentsSidecar {
   const empty: ReviewCommentsSidecar = { cycleId, comments: [] };
-  if (!SAFE_CYCLE_ID_RE.test(cycleId)) return empty;
+  if (!isSafeCycleId(cycleId)) return empty;
   const p = reviewCommentsPath(logsRoot, cycleId);
   if (!existsSync(p)) return empty;
   try {
@@ -92,7 +87,7 @@ export function readReviewComments(logsRoot: string, cycleId: string): ReviewCom
 
 /** Write the sidecar. Throws on a path-traversal cycleId (never escapes logsRoot). */
 export function writeReviewComments(logsRoot: string, cycleId: string, sidecar: ReviewCommentsSidecar): void {
-  if (!SAFE_CYCLE_ID_RE.test(cycleId)) {
+  if (!isSafeCycleId(cycleId)) {
     throw new Error(`unsafe cycleId for review-comments sidecar: ${cycleId}`);
   }
   const logsAbs = resolve(logsRoot);
