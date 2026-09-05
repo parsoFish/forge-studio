@@ -535,3 +535,85 @@ test('AT-6.11.22-6 (positive control) a beat that SUCCEEDS carries no probe nois
   assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
   assert.doesNotMatch(verdict.failures.join(' | '), /anything at all/, 'diagnosis rides on FAILURE only');
 });
+
+/**
+ * `fillAll` in the runner (bead `forge-8vfn.6.11.21`, T1 ruling 271).
+ *
+ * `ArchitectQuestionForm` renders one free-text box per question and enables
+ * Submit only once EVERY question is answered. The count is model-determined —
+ * two questions in one measured architect turn, three in another — so a story
+ * cannot name a fixed number of `fill` steps, and a single `fill` against a
+ * `data-field` shared by N boxes trips playwright strict mode on the first one.
+ */
+
+/** A page with `n` boxes all sharing one `data-field`, plus a submit action. */
+function fakeStudioWithN(n: number) {
+  const filled: string[] = [];
+  const locator = (sel: string): any => ({
+    first: () => locator(sel),
+    count: async () => (sel.includes('question-freetext') ? n : sel.includes('submit-answers') ? 1 : 0),
+    nth: (i: number) => ({
+      async fill(v: string) { filled[i] = v; },
+      async evaluate(fn: (x: any) => unknown) {
+        return fn({ tagName: 'TEXTAREA', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+      },
+    }),
+    async fill(v: string) { filled[0] = v; },
+    async click() { /* submit */ },
+    waitFor: async () => {},
+    async evaluate(fn: (x: any) => unknown) {
+      return fn({ tagName: 'TEXTAREA', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+    },
+  });
+  return {
+    filled,
+    url: () => 'http://localhost:4124' + SESSION,
+    goto: async () => {},
+    locator,
+    waitForURL: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => ({
+      data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' },
+      nested: [], lifecycle: 'working',
+    }),
+  };
+}
+
+const answerAllBeat = {
+  act: "Answer every one of the Architect's questions",
+  do: [{ fillAll: 'question-freetext', with: 'The gate command is `npm test`.' }, { press: 'submit-answers' }],
+  expect: { route: SESSION, data: { page: 'session', 'page-ready': 'true', 'session-phase': 'awaiting-answers' } },
+  say: 'The operator answers the whole round.',
+};
+
+test('AT-6.11.21-8 (RED) fillAll fills EVERY match — a round of three is fully answered', async () => {
+  const page = fakeStudioWithN(3);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', `Failures: ${JSON.stringify(verdict.failures)}`);
+  assert.deepEqual(
+    page.filled,
+    Array(3).fill('The gate command is `npm test`.'),
+    'every box, not just the first — Submit stays disabled until all are answered',
+  );
+});
+
+test('AT-6.11.21-9 (RED) fillAll with ZERO matches is red, naming the field', async () => {
+  const page = fakeStudioWithN(0);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124', {}, 400);
+  assert.equal(verdict.status, 'red', 'a round with nothing to answer must not pass silently');
+  assert.match(
+    verdict.failures.join(' | '),
+    /question-freetext/,
+    `the field must be NAMED. Got: ${JSON.stringify(verdict.failures)}`,
+  );
+});
+
+test('AT-6.11.21-10 (positive control) a single match is filled exactly as `fill` would', async () => {
+  const page = fakeStudioWithN(1);
+  await page.goto();
+  const verdict = await driveBeat(page as never, answerAllBeat, 0, 'http://localhost:4124');
+  assert.equal(verdict.status, 'green', JSON.stringify(verdict.failures));
+  assert.deepEqual(page.filled, ['The gate command is `npm test`.']);
+});
