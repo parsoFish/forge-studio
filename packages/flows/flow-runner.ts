@@ -36,7 +36,7 @@
 
 import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
-import type { EventLogger } from '@forge/kernel';
+import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { CostTracker, WedgeDetector, RateLimitGate } from './flow-budgets.ts';
@@ -178,6 +178,17 @@ export type FlowRunArgs = {
    * `@forge/factory`'s `createProjectGate()` builds the shipped one; it arrives through `packages/flows/phase-wiring.ts` (ADR 048).
    */
   projectGate: ProjectGate;
+  /**
+   * Cost-bearing events this cycle incurred BEFORE the runner existed, so the
+   * tracker can count them (spec §5 item 7, ruling 257). One supplier today:
+   * the architect, which runs out-of-cycle, and whose synthetic `architect.end`
+   * `cycle.ts` emits with the raw logger before `runFlow` is called — so until
+   * this port its dollars were in the log, on the report and in Studio, and
+   * absent from every ceiling the run was actually stopped by. Declared as
+   * EVENTS so `isAuthoritativeCostEvent` decides them like any other, and named
+   * for the shape not the phase, because the runner imports no phase.
+   */
+  priorSpendEvents?: readonly EventLogEntry[];
   /**
    * Close the run when a node asks to terminate early (R4-10-F2). It is the
    * RUNNER's act, not a station's — the walk stops here — so it stays outside
@@ -387,6 +398,7 @@ export async function runFlow({
   nodeBudgets,
   rateLimitGate: injectedGate,
   costCeilingUsd,
+  priorSpendEvents,
 }: FlowRunArgs): Promise<{
   cycleOutcome: CycleOutcome;
   reflectionStatus: string;
@@ -416,6 +428,11 @@ export async function runFlow({
     initiativeId: rawInput.initiativeId,
     logger,
   });
+  // Seed the tracker with spend from before it existed (see `priorSpendEvents`).
+  // Through `noteEvent`, so the authoritative rule and the per-bucket
+  // attribution apply as to any node's event — never by adding to a total.
+  for (const entry of priorSpendEvents ?? []) costTracker.noteEvent(entry);
+
   const rateLimitGate = injectedGate ?? new RateLimitGate();
 
   // M0-A Task 1: give the dev-loop node a way to consult the ceiling at a
@@ -427,7 +444,7 @@ export async function runFlow({
   // in place or rebuilding it per node.
   const input: CycleInput = {
     ...rawInput,
-    shouldStopBeforeWorkItem: () => costTracker.stopReasonBeforeNextWorkItem(),
+    shouldStopBeforeWorkItem: (workItemId: string) => costTracker.stopReasonBeforeNextWorkItem(workItemId),
   };
 
   const order = topoSort(flow);
