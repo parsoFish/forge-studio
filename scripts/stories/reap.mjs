@@ -120,6 +120,7 @@ import { join } from 'node:path';
 
 import { readProcCwd } from './bridge.mjs';
 import { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from '@forge/agents/spawn-marker.ts';
+import { CANCELLED_PHASE } from '@forge/sessions/session-status-io.ts';
 
 /** How long a dispatched agent gets to exit on SIGTERM before SIGKILL. */
 const DEFAULT_GRACE_MS = 5_000;
@@ -568,5 +569,10 @@ export function describeReap(report) {
       (r) => `[stories] reaped dispatched agent pid ${r.pid} (${r.signal}, by ${r.via ?? 'record'}) — ${r.dir}`,
     ),
     ...report.skipped.map((s) => `[stories] NOT reaped: ${s.reason}`),
+    ...(report.cancelled ?? []).map((c) =>
+      c.written
+        ? `[stories] session cancelled: ${c.kind}/${c.sessionId} (project ${c.project}) — phase "${c.cancelledFrom}" -> "${CANCELLED_PHASE}"`
+        : `[stories] session NOT cancelled: ${c.kind ?? 'unknown'}/${c.sessionId ?? 'unknown'} — ${c.reason}`,
+    ),
   ];
 }
