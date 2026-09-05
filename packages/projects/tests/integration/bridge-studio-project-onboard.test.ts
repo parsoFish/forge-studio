@@ -35,7 +35,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import { makeOnboardHandlers, demoProcessChanged, type OnboardDeps } from '../../bridge-studio-project-onboard.ts';
+import { makeOnboardHandlers, demoProcessChanged, ONBOARD_SCAFFOLD_SKILLS, type OnboardDeps } from '../../bridge-studio-project-onboard.ts';
+import { checkSkills } from '../../preflight-skills.ts';
 import { projectStartersDir } from '../../project-create.ts';
 import { PathGuardContainmentError, FORGE_ROOT, type RouteContext } from '@forge/kernel';
 
@@ -547,4 +548,99 @@ test('demoProcessChanged: pure decision rule smoke test', () => {
   assert.equal(demoProcessChanged(steps, undefined), true, 'first-ever demoProcess IS a change');
   assert.equal(demoProcessChanged(undefined, steps), false, 'a save without the field never signals');
   assert.equal(demoProcessChanged('not-an-array', steps), false);
+});
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.6.11.13 (T1 rulings 231/233) — an ONBOARDED project can
+// reach flow-ready.
+//
+// THE GAP, measured on S1 run 4's archived ground. `ContractReadiness` requires
+// "≥ 1 relevant skill bound" for `data-flow-ready` and reads it from
+// `p.skills ?? []`. Every STARTER already satisfies that — each of
+// `typescript-{api,cli,web}` declares `{api,cli,web}-conventions` AND ships it
+// project-local at `.forge/skills/<id>/SKILL.md` — but the ONBOARD scaffold
+// wrote no `skills` key at all and created no `.forge/skills/`, so gitweave
+// read `readyCount` 4 of 5 and `flow-ready: false` however green its preflight
+// was. A SYMMETRY GAP between two scaffolds, not a missing feature: the create
+// path was never broken.
+// ---------------------------------------------------------------------------
+
+test('[6.11.13] onboard: the scaffolded contract binds at least one skill — an onboarded project can reach flow-ready', async () => {
+  const forgeRoot = baseForgeRoot();
+  try {
+    const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
+    const { res, captured } = mockRes();
+    await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'gitweave', qualityGateCmd: 'python -m pytest tests/' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(captured.status, 200, `expected 200, got ${captured.status} body=${captured.body}`);
+    const cfg = JSON.parse(readFileSync(join(forgeRoot, 'projects', 'gitweave', '.forge', 'project.json'), 'utf8'));
+    assert.ok(Array.isArray(cfg.skills), 'the scaffold must declare a skills array');
+    // This IS ContractReadiness's predicate (`skills.length > 0`, from
+    // `setSkills(p.skills ?? [])`) — the one unmet element of its five.
+    assert.ok(cfg.skills.length > 0, 'an onboarded project with no bound skill can never read flow-ready');
+    assert.deepEqual(cfg.skills, [...ONBOARD_SCAFFOLD_SKILLS]);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('[6.11.13] every id in ONBOARD_SCAFFOLD_SKILLS resolves against the SHIPPED library — the binding cannot rot', () => {
+  // The one thing a declared skill must never be is dead: `checkSkills` is a
+  // HARD clause, so a constant that drifted out of `skills/` would turn every
+  // future onboard hard-red. This asserts against the REAL forge root, not a
+  // fixture, which is what makes it a conformance test rather than a restatement.
+  const dir = mkdtempSync(join(tmpdir(), 'onboard-skill-'));
+  try {
+    const clause = checkSkills(dir, { skills: [...ONBOARD_SCAFFOLD_SKILLS] } as never, FORGE_ROOT);
+    assert.equal(clause.pass, true, `SKILLS must pass for the scaffolded binding — ${clause.detail}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('[6.11.13] the scaffolded binding resolves FORGE-WIDE, which is the property that makes it work', () => {
+  // An onboarded project has no project-local skills by definition — that is
+  // the whole difference from a starter — so a binding that only resolved
+  // project-local would be exactly as dead as no binding at all. The empty
+  // temp dir above IS that condition; here it is stated as its own claim so a
+  // future edit cannot satisfy the test by shipping a project-local copy and
+  // quietly leaving onboarded projects broken.
+  const bare = mkdtempSync(join(tmpdir(), 'onboard-skill-bare-'));
+  try {
+    for (const id of ONBOARD_SCAFFOLD_SKILLS) {
+      assert.equal(
+        existsSync(join(bare, '.forge', 'skills', id, 'SKILL.md')),
+        false,
+        'the fixture must have no project-local copy, or this proves nothing',
+      );
+      assert.ok(
+        existsSync(join(FORGE_ROOT, 'skills', id, 'SKILL.md')),
+        `${id} must exist forge-wide at skills/${id}/SKILL.md`,
+      );
+    }
+  } finally {
+    rmSync(bare, { recursive: true, force: true });
+  }
+});
+
+test('[6.11.13] the STARTERS were never broken — each ships its declared skill project-local', () => {
+  // The measurement that narrowed ruling 231 to the onboard path (ruling 233),
+  // pinned so the narrowing stays true: if a starter ever stops shipping its
+  // skill, that is a DIFFERENT defect and this says so by name rather than
+  // letting the onboard fix look like it covered both.
+  const starters = projectStartersDir(FORGE_ROOT);
+  for (const type of ['typescript-api', 'typescript-cli', 'typescript-web']) {
+    const cfgPath = join(starters, type, '.forge', 'project.json');
+    assert.ok(existsSync(cfgPath), `${type} must ship a .forge/project.json`);
+    const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+    assert.ok(Array.isArray(cfg.skills) && cfg.skills.length > 0, `${type} must declare a skill`);
+    for (const id of cfg.skills) {
+      assert.ok(
+        existsSync(join(starters, type, '.forge', 'skills', id, 'SKILL.md')),
+        `${type} declares ${id} but does not ship .forge/skills/${id}/SKILL.md`,
+      );
+    }
+  }
 });

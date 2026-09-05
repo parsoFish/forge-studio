@@ -120,6 +120,31 @@ export function demoProcessChanged(incoming: unknown, stored: unknown): boolean 
 }
 
 /**
+ * The skills an ONBOARDED project is bound to at scaffold time (bead
+ * `forge-8vfn.6.11.13`, T1 rulings 231/233).
+ *
+ * `ContractReadiness` requires "≥ 1 relevant skill bound" for `data-flow-ready`
+ * and reads it from `p.skills ?? []`. Every STARTER already satisfies that (each
+ * declares a `*-conventions` id AND ships it project-local); this scaffold wrote
+ * no `skills` key at all, so an onboarded project read 4 of 5 and never became
+ * flow-ready however green its preflight was.
+ *
+ * The binding must resolve FORGE-WIDE, because an onboarded project has no
+ * project-local skills by definition — `checkSkills` supports both, and
+ * `offeredSkills` puts the forge-wide catalog first in the operator's own picker,
+ * so this is a default the operator could have chosen by hand. `demo-design` is
+ * the generator for the `demoProcess` written a few lines below, and it AGES
+ * CORRECTLY: `checkSkills` looks project-local first, so once
+ * `forge run skill demo-design` generates `.forge/skills/demo-design/SKILL.md`,
+ * the same id resolves to the project's own copy with no rebinding.
+ *
+ * A conformance test asserts every id here resolves against the shipped library:
+ * `checkSkills` is HARD, so a constant drifted to a dead id would turn every
+ * future onboard hard-red.
+ */
+export const ONBOARD_SCAFFOLD_SKILLS: readonly string[] = ['demo-design'];
+
+/**
  * Builds the three create/onboard/update project route handlers. A factory
  * rather than plain exports because `handleProjectsOnboard` needs the three
  * injected dependencies in `OnboardDeps` above.
@@ -423,6 +448,10 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         // fields (flat keys are rejected by the validator). The legacy `demo`
         // block (shape/command) had no reader and is no longer scaffolded.
         testProcess: { local: { cmd: qualityGate } },
+        // Ruling 231: an onboarded project binds the same default the operator's
+        // own picker offers first, so it can reach flow-ready. See
+        // ONBOARD_SCAFFOLD_SKILLS for why this id and why forge-wide.
+        skills: [...ONBOARD_SCAFFOLD_SKILLS],
         kb: kbBound,
       };
       try { validateProjectConfig(cfg); }
