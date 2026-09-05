@@ -74,6 +74,7 @@ import {
   isDryBridge,
   refuseDryBridge,
   type RouteContext,
+  guardedFile,
 } from '@forge/kernel';
 
 import { runPreflight } from './preflight.ts';
@@ -124,25 +125,35 @@ export function demoProcessChanged(incoming: unknown, stored: unknown): boolean 
  * `forge-8vfn.6.11.13`, T1 rulings 231/233).
  *
  * `ContractReadiness` requires "≥ 1 relevant skill bound" for `data-flow-ready`
- * and reads it from `p.skills ?? []`. Every STARTER already satisfies that (each
- * declares a `*-conventions` id AND ships it project-local); this scaffold wrote
- * no `skills` key at all, so an onboarded project read 4 of 5 and never became
- * flow-ready however green its preflight was.
+ * (`p.skills ?? []`). Every STARTER satisfies it — each declares a
+ * `*-conventions` id AND ships it project-local — but this scaffold wrote no
+ * `skills` key, so an onboarded project read 4 of 5 and never became flow-ready
+ * however green its preflight was. A symmetry gap, not a missing feature.
  *
- * The binding must resolve FORGE-WIDE, because an onboarded project has no
- * project-local skills by definition — `checkSkills` supports both, and
- * `offeredSkills` puts the forge-wide catalog first in the operator's own picker,
- * so this is a default the operator could have chosen by hand. `demo-design` is
- * the generator for the `demoProcess` written a few lines below, and it AGES
- * CORRECTLY: `checkSkills` looks project-local first, so once
- * `forge run skill demo-design` generates `.forge/skills/demo-design/SKILL.md`,
- * the same id resolves to the project's own copy with no rebinding.
+ * The binding resolves FORGE-WIDE, because an onboarded project has no
+ * project-local skills by definition. `checkSkills` allows both sources and
+ * `offeredSkills` puts the forge-wide catalog first in the operator's own
+ * picker, so this is a default the operator could have chosen by hand;
+ * `demo-design` generates the `demoProcess` written below. It AGES CORRECTLY:
+ * `checkSkills` looks project-local first, so once the project's own copy is
+ * generated the same id resolves there with no rebinding.
  *
- * A conformance test asserts every id here resolves against the shipped library:
- * `checkSkills` is HARD, so a constant drifted to a dead id would turn every
- * future onboard hard-red.
+ * ONLY WHAT RESOLVES IS WRITTEN, and the suite taught that rather than my
+ * reasoning: declaring the id unconditionally turned two `onboard-born-green`
+ * cases red, because in a forge root without the library the scaffold wrote a
+ * binding that does not resolve — `checkSkills` is HARD, so it had created
+ * exactly the LYING BINDING that clause exists to catch. A missing library now
+ * yields no `skills` key at all, which is the honest state.
  */
 export const ONBOARD_SCAFFOLD_SKILLS: readonly string[] = ['demo-design'];
+
+/** The subset of {@link ONBOARD_SCAFFOLD_SKILLS} that actually resolves under
+ *  `forgeRoot` — never a binding this scaffold cannot verify. */
+export function resolvableScaffoldSkills(forgeRoot: string): string[] {
+  return ONBOARD_SCAFFOLD_SKILLS.filter(
+    (id) => guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read') !== null,
+  );
+}
 
 /**
  * Builds the three create/onboard/update project route handlers. A factory
@@ -448,12 +459,14 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         // fields (flat keys are rejected by the validator). The legacy `demo`
         // block (shape/command) had no reader and is no longer scaffolded.
         testProcess: { local: { cmd: qualityGate } },
-        // Ruling 231: an onboarded project binds the same default the operator's
-        // own picker offers first, so it can reach flow-ready. See
-        // ONBOARD_SCAFFOLD_SKILLS for why this id and why forge-wide.
-        skills: [...ONBOARD_SCAFFOLD_SKILLS],
         kb: kbBound,
       };
+      // Ruling 231/233: an onboarded project binds the same default the
+      // operator's own picker offers first, so it can reach flow-ready — but
+      // only when the binding RESOLVES (see ONBOARD_SCAFFOLD_SKILLS).
+      const scaffoldSkills = resolvableScaffoldSkills(ctx.forgeRoot);
+      if (scaffoldSkills.length > 0) cfg.skills = scaffoldSkills;
+
       try { validateProjectConfig(cfg); }
       catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
 

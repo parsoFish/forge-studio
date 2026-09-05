@@ -565,8 +565,20 @@ test('demoProcessChanged: pure decision rule smoke test', () => {
 // path was never broken.
 // ---------------------------------------------------------------------------
 
+/** The shipped library, as the scaffold sees it: a forge root that actually
+ *  carries the skill the scaffold binds. Production always does — the
+ *  conformance test below pins that — but a bare fixture does not, and the
+ *  difference is exactly what the scaffold must react to. */
+function withScaffoldSkills(forgeRoot: string): string {
+  for (const id of ONBOARD_SCAFFOLD_SKILLS) {
+    mkdirSync(join(forgeRoot, 'skills', id), { recursive: true });
+    writeFileSync(join(forgeRoot, 'skills', id, 'SKILL.md'), `---\nname: ${id}\n---\n`);
+  }
+  return forgeRoot;
+}
+
 test('[6.11.13] onboard: the scaffolded contract binds at least one skill — an onboarded project can reach flow-ready', async () => {
-  const forgeRoot = baseForgeRoot();
+  const forgeRoot = withScaffoldSkills(baseForgeRoot());
   try {
     const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
     const { res, captured } = mockRes();
@@ -642,5 +654,28 @@ test('[6.11.13] the STARTERS were never broken — each ships its declared skill
         `${type} declares ${id} but does not ship .forge/skills/${id}/SKILL.md`,
       );
     }
+  }
+});
+
+test('[6.11.13] a forge root WITHOUT the skill gets NO binding — the scaffold never writes one it cannot verify', async () => {
+  // The rule the suite taught rather than the one I reasoned out. The first cut
+  // declared the id unconditionally, and `onboard-born-green`'s two cases went
+  // red: `checkSkills` is HARD, so an unresolvable binding stops a project being
+  // born contract-green — the scaffold had created exactly the LYING BINDING
+  // that clause exists to catch. A missing library is not an error here; it just
+  // means there is nothing honest to bind.
+  const forgeRoot = baseForgeRoot(); // deliberately WITHOUT the skills/ library
+  try {
+    const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
+    const { res, captured } = mockRes();
+    await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'gitweave', qualityGateCmd: 'echo ok' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(captured.status, 200, `expected 200, got ${captured.status} body=${captured.body}`);
+    const cfg = JSON.parse(readFileSync(join(forgeRoot, 'projects', 'gitweave', '.forge', 'project.json'), 'utf8'));
+    assert.equal('skills' in cfg, false, 'no key at all — an absent binding, not an empty or dead one');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
