@@ -145,7 +145,14 @@ export default {
       // Fully expressible. `preflight-status` and `flow-ready` are the SAME
       // element (the readiness panel), so the pair is answerable by one
       // element as the nested-read rule requires.
-      act: 'Check the contract came out green, before pointing a Flow at it',
+      //
+      // AMENDED 2026-09-05 (H6, operator present; ruling 169) — WORDING ONLY.
+      // The `expect` is untouched and has measured green since 2026-09-02.
+      // What changed is what the beat CLAIMS: ruling 169 stopped the create
+      // form promising a finished contract, so "came out green" is no longer
+      // the act. The operator checks readiness and reads what is still owed —
+      // the same two keys, an honest sentence over them.
+      act: 'Check the project is ready for a Flow, and what it still owes',
       expect: {
         route: '/projects/story-s2',
         data: {
@@ -155,7 +162,7 @@ export default {
           'flow-ready': 'true',
         },
       },
-      say: 'This is the promise a starter exists to keep. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow.',
+      say: 'This is the promise a starter exists to keep, stated exactly. Onboarding an existing repo needs an Agent to fill the contract in, question by question; creating one from a starter should not, because forge wrote every file itself. So the operator checks the two things that decide it: preflight MET, and the project ready for a Flow. Ready does not mean finished. Forge wrote every file it could write from a template; what a template cannot write is a demo of THIS project, and the form says so rather than showing a green tick it has not earned.',
     },
     {
       // Fully expressible, and deliberately a beat of its own rather than
@@ -163,17 +170,39 @@ export default {
       // `[data-section="contract-resolution"]`, NOT on the readiness panel
       // beat 4 reads. Folding them together would assert a combination no
       // single element makes — narrowing the read scope, not the story.
-      act: 'Look at what forge says is still unresolved',
+      //
+      // AMENDED 2026-09-05 (H6, operator present; ruling 169). The pinned
+      // `resolution-failing-count: '0'` was UNSATISFIABLE BY CONSTRUCTION, and
+      // three runs at $0.00 never reached far enough to say so:
+      // `ContractResolutionPanel.tsx:179` is `if (failing.length === 0) return
+      // null`, so a count of zero unmounts the very section this beat also
+      // asserts. A beat can name that panel, or it can name an empty contract;
+      // it can never name both.
+      //
+      // Ruling 169 replaces the claim as well as the number. A created project
+      // reads "n unresolved · m agent-generated pending" until the demo agent
+      // has run, and the panel's own four counts are that sentence's DOM: with
+      // C6 resolved at creation (ruling 168, bead `forge-8vfn.6.11.2`) and C1b
+      // declared by the starter (ruling 164, PR D), the two clauses left are
+      // DEMO-SKILL and DEMO-ALIGN — both `resolution: 'agent'` in
+      // `preflight-resolve.ts`, measured in `_1.0/stories/S2.md`. So
+      // `user-count: '0'` is the operator-facing promise (nothing is waiting on
+      // you), `agent-count: '2'` is the honest debt, and `failing-count: '2'`
+      // holds them to being the SAME two — a fifth cause of any other kind
+      // reds this beat rather than hiding inside a subtotal.
+      act: 'Look at what forge says is still unresolved, and who owes it',
       expect: {
         route: '/projects/story-s2',
         data: {
           page: 'projects',
           'project-id': 'story-s2',
           section: 'contract-resolution',
-          'resolution-failing-count': '0',
+          'resolution-failing-count': '2',
+          'resolution-user-count': '0',
+          'resolution-agent-count': '2',
         },
       },
-      say: 'The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.',
+      say: 'The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.',
     },
     {
       // Fully expressible. `section` and `checklist-row-count` are the same
@@ -209,16 +238,41 @@ export default {
       say: 'Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.',
     },
     {
-      // NOT expressible, and deliberately left so. The project editor declares
-      // NO `data-field` on ANY input — verified live on this page: north star,
-      // gate command, demo step text, the skills search and both clause
-      // decision boxes are all bare, and the only declared handles are
-      // buttons. So a review that CHANGES an element has nothing to name, and
-      // writing an invented `data-field` would be inventing the contract this
-      // story exists to hold the product to. The beat states the operator's
-      // real act and the state it produces; `save-project` is a real
-      // `data-action`, but there is nothing to make dirty before pressing it.
+      // PARTLY expressible since #246, and the half that is missing is the
+      // half this beat measures. The comment this replaces said the project
+      // editor declares no `data-field` on any input; that has not been true
+      // since #246, and `DemoTimeline.tsx:321` declares
+      // `[data-field="demo-step-<n>"]` on every step's textarea. So EDITING
+      // the demo the starter wrote is expressible, and `save-project`
+      // (`projects/[id]/page.tsx:491`) commits it.
+      //
+      // AMENDED 2026-09-05 (H6, operator present). The `do` below performs the
+      // operator's real edits to the two steps the `typescript-cli` starter
+      // ships and saves them, so the beat now proves the review-and-save path
+      // instead of asserting a number nothing pressed. It does NOT reach
+      // `step-count: '3'`, and the `expect` is deliberately left demanding it:
+      // ADDING a step has no declared handle. `DemoTimeline.tsx:350` renders
+      // `<button className="btn btn-ghost" onClick={() => addStep('capture',
+      // '')}>+ Add step</button>` with no `data-action` at all — the only
+      // control in this panel without one, beside `move-step-up`,
+      // `move-step-down`, `iterate-element` and `launch-demo-builder` which
+      // all declare theirs. So this beat's remaining red is PRODUCT
+      // (`apps/studio`), not authoring as `_1.0/plans/M5-B-amendments.md`
+      // classified it: a story cannot press a button the page does not
+      // declare, and inventing the handle here would invent the contract this
+      // story exists to hold the product to. Bead raised to T1.
       act: 'Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project',
+      do: [
+        {
+          fill: 'demo-step-1',
+          with: 'Build the CLI (npm run build) and capture the stage timings it prints — that is the before state for this project.',
+        },
+        {
+          fill: 'demo-step-2',
+          with: 'Run npm run acceptance — the built binary against the checked-in slow-pipeline fixture — and show the per-stage table it produces.',
+        },
+        { press: 'save-project' },
+      ],
       expect: {
         route: '/projects/story-s2',
         data: { page: 'projects', 'project-id': 'story-s2', 'step-count': '3' },
@@ -246,15 +300,23 @@ export default {
       say: 'With a contract in place the Architect can plan. Studio carries the new project through, so the only thing still missing is the one thing forge cannot know: what the operator wants built first.',
     },
     {
-      // NOT expressible, and left so deliberately. `<architectSessionId>`
-      // cannot be bound: `NewIdeaBox`'s `start-architect` POST returns the id
-      // straight into `router.push('/sessions/architect/<sid>')`, so the id is
-      // never rendered as a `data-*` value an earlier beat could observe. The
-      // runner resolves a beat's route BEFORE its `do` steps run, so no press
-      // on this beat can supply it either. Bead `forge-8vfn.5.5`. The `do`
-      // steps are written out regardless — they are the operator's real
-      // actions, and dropping them would make the generated tutorial claim a
-      // run was started with no ceiling on it.
+      // AMENDED 2026-09-05 (H6, operator present) — bead `forge-8vfn.5.5` is
+      // CLOSED and this beat is now fully expressible. The comment this
+      // replaces said `NewIdeaBox`'s `start-architect` POST pushes the minted
+      // id straight into `router.push('/sessions/architect/<sid>')`; it does
+      // not, and has not since 5.5 landed. `NewIdeaBox.tsx:107-111` sets
+      // `startedSessionId` and publishes it as
+      // `[data-section="new-idea"][data-architect-session-id]`, and
+      // `app/architect/new/page.tsx` navigates nowhere — only its docstring
+      // still claims it does.
+      //
+      // So the beat takes the S4 beat-9 shape: it acts on the page it is
+      // STANDING on and binds the id there, rather than naming a route no
+      // earlier beat can supply. That is the only shape that works, because
+      // `driveBeat` resolves `expect.route` BEFORE the `do` steps run — which
+      // is exactly why this story has spent $0.00 on three runs: the press
+      // that dispatches the Architect was never once reached. Beat 12 consumes
+      // `<architectSessionId>` for the route it could not otherwise name.
       act: 'Describe the first piece of work, cap what this run may spend, and press "Start architect"',
       do: [
         { fill: 'idea', with: IDEA },
@@ -262,15 +324,14 @@ export default {
         { press: 'start-architect' },
       ],
       expect: {
-        route: '/sessions/architect/<architectSessionId>',
+        route: '/architect/new',
         data: {
-          page: 'session',
-          'page-ready': 'true',
-          'session-kind': 'architect',
-          'session-phase': 'working',
+          page: 'architect-new',
+          section: 'new-idea',
+          'architect-session-id': '<architectSessionId>',
         },
       },
-      say: 'The Architect is a real Agent and a real Agent costs money, so the operator sets this run\'s ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and opens it.',
+      say: 'The Architect is a real Agent and a real Agent costs money, so the operator sets this run\'s ceiling before starting it rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on — the run exists, and it is nameable, before anything navigates anywhere.',
     },
     {
       // Fully expressible. `/monitor` is a nav pillar, so the runner reaches
@@ -291,8 +352,11 @@ export default {
       say: 'Monitor is the one surface that answers "what is running, and what is stuck". The architect run is on it — a Flow run against a project that did not exist a few minutes ago, which is the whole point of S2.',
     },
     {
-      // NOT expressible — the same unbound segment as beat 7, and for the
-      // same reason. What the beat's `do` steps CAN say is the way back in:
+      // WAS not expressible — the same unbound segment as beat 10, and for the
+      // same reason. Beat 10's 2026-09-05 amendment binds
+      // `<architectSessionId>` on the page that mints it, so this route now
+      // resolves; the beat is re-measured by the next run, not re-authored
+      // here. What the beat's `do` steps say is the way back in:
       // the Monitor card wraps `a[data-action="open-session"]`, and answering
       // is `[data-field="session-answer"]` + `[data-action="submit-answers"]`
       // on the shared session surface. Bead `forge-8vfn.5.5`.
