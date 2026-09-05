@@ -19,7 +19,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 import { detectProjectLanguage } from './gate-recipes.ts';
-import { projectBrainDir } from '@forge/kernel';
+import { projectBrainDir, rootManagesProject, rootMismatchReason } from '@forge/kernel';
 import { runPreflight, SCRATCH_PATHS, BUILD_ARTIFACT_HINTS, type ClauseId, type ClauseResult } from './preflight.ts';
 
 export type PreflightAutoFixResult = {
@@ -96,6 +96,14 @@ function fixBuildArtifacts({ projectDir }: FixContext): FixOutcome {
 }
 
 function fixArchContext({ projectDir, forgeRoot, projectName }: FixContext): FixOutcome {
+  // Bead `forge-8vfn.6.11.26` — this function writes to TWO roots, and S1 run 5
+  // proved they can disagree. `rootManagesProject` carries the incident and the
+  // reasoning; the caller's job is only to refuse, out loud. `ok: false` becomes
+  // a named `skipped[]` entry, so a mismatch can never be silent.
+  if (!rootManagesProject(forgeRoot, projectDir)) {
+    return { ok: false, detail: `refusing to scaffold Brain 3: ${rootMismatchReason(forgeRoot, projectDir)}` };
+  }
+
   const created: string[] = [];
 
   const roadmap = join(projectDir, 'roadmap.md');
