@@ -95,6 +95,15 @@ jobs:
       - name: Per-package LOC caps (QUARRY.md, bead 5.18)
         run: node scripts/check-package-caps.mjs
 
+      # ADR 048 clause 3 — deleting the example package leaves the platform
+      # running, proven by execution. DESTRUCTIVE (it removes packages/factory
+      # from the checkout), so it is deliberately the LAST step of this job and
+      # nothing may be added after it. A step rather than a job: the four
+      # required contexts are what the merge protocol waits on, and a fifth
+      # would change that set without changing what is proven.
+      - name: Deletable example factory (ADR 048)
+        run: node --experimental-strip-types scripts/factory-deletable.mjs
+
   # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
   # (production build; dry-bridge + no-spawn seams — nothing can spawn an
   # agent, touch a git remote or start the daemon), crawls every reachable

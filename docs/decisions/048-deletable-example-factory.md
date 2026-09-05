@@ -20,6 +20,13 @@ So today, deleting `packages/factory` does not degrade the platform to "no examp
 flows and in the assembly. Spec §7 clause 2 makes the opposite a definition-of-1.0 clause: *"deleting the example package
 leaves the platform running"*. An unenforced clause of that kind is decoration (1.0.md §2.2).
 
+**Re-measured on `parsoFish/main` `f212255a` (2026-09-05, M5-A session 4), because a stale measurement makes a clause look
+unmet that has been met:** clause 1 is now satisfied in production. `grep -rn "@forge/factory" packages/` returns three
+hits and all three are COMMENTS (`packages/flows/phase-wiring.ts` ×2, `packages/agents/band-agent-run.ts` ×1); no package
+imports the example statically or dynamically, and `finalize-merged.ts`'s reflector call is a `runReflector` port injected
+by the assembly. `apps/studio` names the package nowhere at all — the UI talks to the bridge over HTTP. What remained was
+clause 2, and it is what M5-A exit row 5 closes.
+
 ## Decision
 
 **`@forge/factory` is a deletable package, and deletability is a CI test, not a claim.**
@@ -29,12 +36,34 @@ leaves the platform running"*. An unenforced clause of that kind is decoration (
    assembly binds it — the `SessionStatusIoPort` / `SdkAvailabilityFn` shape already ratified in M4 (rulings 99, 137).
    `finalize-merged.ts`'s reflector call becomes `ReflectorPort`, bound at `apps/forge`. This closes handoff F2's three
    `package-layer-order` rows by construction rather than by baseline.
-2. **`apps/forge` reaches factory only through one resolution seam**, and that seam treats absence as a supported state,
-   not an error: an example package that is not installed yields no develop flow, no phase executors and no factory routes,
-   and every other surface — Studio, projects, library, knowledge, sessions, the daemon — boots and serves.
-3. **The clause is proven by execution.** A CI job removes `packages/factory` in a scratch worktree and boots `forge studio`;
-   the job fails if the boot fails, and it fails if any non-factory package acquires a factory import. It is paid for, under
-   the guardrail budget (1.0.md §2.3), by the retirement of the `demo-fix` loop in the same milestone.
+2. **`apps/forge` reaches factory only through a fixed, enumerated set of resolution seam modules**, and every one of them
+   treats absence as a supported state, not an error: an example package that is not installed yields no develop flow, no
+   phase executors and no factory routes, and every other surface — Studio, projects, library, knowledge, sessions, the
+   daemon — boots and serves.
+
+   **Amended 2026-09-05 (M5-A session 4), from "one resolution seam" to "a fixed, enumerated set", for a measured reason.
+   Provisional under T1 ruling 261; operator ratification pending.**
+   The seam the bridge resolves at boot puts every specifier it names into the bridge's STATIC module graph. Folding the
+   CLI's own example verbs into that one file — `demo.ts`, which drags in `demo-capture.ts`/`demo-runtime.ts` and their
+   `execFileSync`/`mkdirSync`, and `gates/docs-gate.ts` with its own reads — added **seventeen new (file, sink) pairs
+   reachable from a bridge route**, every one reported by `scripts/check-request-path-sinks.mjs`, for surfaces no bridge
+   route calls. Widening that baseline to keep a one-file rule would have traded a real security-surface ratchet for a
+   cosmetic one. The set is therefore two: `apps/forge/factory-wiring.ts` (what the bridge resolves) and
+   `apps/forge/factory-cli-wiring.ts` (what only the CLI resolves). The invariant that carries the clause is unchanged —
+   no package may import the example, and the assembly names it in a set that is ENUMERATED, so a third module is a
+   decision rather than an accident. `scripts/factory-deletable.mjs` holds the list and fails on any importer outside it.
+3. **The clause is proven by execution.** `scripts/factory-deletable.mjs` removes `packages/factory` and its workspace link
+   and then boots the bridge in-process, asserting `/api/health` answers as `forge-bridge` and that an example-owned route
+   answers **501** — absence as a supported state, never a crash and never a wrong answer. It fails if the boot fails, and it
+   fails if any production file outside the seam set acquires a factory import. It is paid for, under the guardrail budget
+   (1.0.md §2.3), by the retirement of the `demo-fix` loop in the same milestone.
+
+   **As built (2026-09-05):** a STEP at the end of `build-and-test`, not a fifth CI job — the four required contexts are what
+   the merge protocol waits on, and a fifth would change that set without changing what is proven. It is last because it is
+   destructive. It boots the BRIDGE rather than `forge studio` because `forge studio` is the bridge plus a static Next build
+   that imports no package (`grep -rn "@forge/factory" apps/studio` = 0): the bridge is the half that resolves the example,
+   so it is the half whose boot proves anything, and booting it on an OS-assigned port keeps the check off the host-global
+   4123/4124 pair.
 4. **What "the example" means is fixed by this ADR:** the six phase agents and their SKILL.mds, the develop `FlowDef`, the
    artifact templates, and the class → gate-profile table (ADR 051). Anything in `packages/factory` that a second, unrelated
    factory would also need is misplaced and belongs in `flows`, `agents` or `kernel`.
