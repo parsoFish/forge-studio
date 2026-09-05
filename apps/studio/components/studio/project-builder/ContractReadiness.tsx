@@ -45,6 +45,26 @@ export function ContractReadiness({
   // Preflight status attribute value for automation / e2e.
   const preflightStatus = !preflightLoaded ? 'pending' : hardFailures.length > 0 ? 'hard-fail' : 'ok';
 
+  // Ruling 169 (bead `forge-8vfn.6.5`): a created project reads what is still
+  // OPEN until the demo agent has run, rather than being told by the create
+  // form that its contract is finished. The two numbers are the same ones
+  // `ContractResolutionPanel` derives — `failing = clauses.filter(c => !c.pass)`
+  // and its `agent` subset — read here from the same `preflight` prop so they
+  // cannot drift apart. `null` while preflight has not answered: pending is not
+  // zero, and a panel that says "0 unresolved" before it has looked is the
+  // overpromise this ruling removed one layer up.
+  //
+  // TEXT ONLY, deliberately: no new `data-*` key. The machine-readable form
+  // already exists on `[data-section="contract-resolution"]`
+  // (`data-resolution-failing-count`, `data-resolution-agent-count`), and a
+  // second copy here would put one fact in two places.
+  const openCounts = preflightLoaded
+    ? (() => {
+        const failing = preflight!.clauses.filter((c) => !c.pass);
+        return { unresolved: failing.length, agentPending: failing.filter((c) => c.resolution === 'agent').length };
+      })()
+    : null;
+
   return (
     <div>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>Contract Readiness</div>
@@ -87,6 +107,11 @@ export function ContractReadiness({
           </div>
         )}
       </div>
+      {openCounts !== null && openCounts.unresolved > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>
+          contract: {openCounts.unresolved} unresolved · {openCounts.agentPending} agent-generated pending
+        </div>
+      )}
       <div style={{ fontSize: 11, color: 'var(--faint)', fontStyle: 'italic', marginTop: 8, lineHeight: 1.5 }}>
         A flow won&apos;t accept a project that isn&apos;t contract-ready.
       </div>

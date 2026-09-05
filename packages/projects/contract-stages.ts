@@ -159,13 +159,22 @@ function deriveInstructionsRow(projectDir: string): ContractStageRow {
   return { stage: 'instructions', status: 'absent', source: AGENT_INSTRUCTION_FILES.join(' | '), detail: [], bytes: null };
 }
 
-/** Builds the `secrets` stage row — D3: NAMES ONLY, driven by
- *  `requiresEnv.length > 0`, never by whether the surrounding `acceptance`
- *  block exists. `secrets.env` is never opened. */
+/** The ONE fixed sentence the `secrets` row renders when the acceptance tier
+ *  declares it needs no environment variables — a literal, pinned byte-exact by
+ *  `ALLOWED_DETAIL_PATTERNS` + AT-10 so no verdict language can ride inside it. */
+const SECRETS_NONE_REQUIRED_DETAIL = 'no environment variables are required — the acceptance tier declares none';
+
+/** Builds the `secrets` stage row — D3: NAMES ONLY; `secrets.env` is never
+ *  opened. Driven by whether `requiresEnv` is DECLARED, not by its length
+ *  (rulings 203/209, bead `forge-8vfn.6.5`): omit it and you still owe it,
+ *  write `[]` and you have ANSWERED. D11 is unchanged — the status stays
+ *  `present | absent` and the answer is carried by `detail`, because a row
+ *  reports presence and never a verdict. */
 function deriveSecretsRow(config: ProjectConfig | null): ContractStageRow {
-  const requiresEnv = config?.testProcess.acceptance?.requiresEnv ?? [];
-  const status: ContractStageStatus = requiresEnv.length > 0 ? 'present' : 'absent';
-  return { stage: 'secrets', status, source: '.forge/project.json', detail: [...requiresEnv], bytes: null };
+  const requiresEnv = config?.testProcess.acceptance?.requiresEnv;
+  const status: ContractStageStatus = requiresEnv === undefined ? 'absent' : 'present';
+  const detail = requiresEnv === undefined ? [] : requiresEnv.length > 0 ? [...requiresEnv] : [SECRETS_NONE_REQUIRED_DETAIL];
+  return { stage: 'secrets', status, source: '.forge/project.json', detail, bytes: null };
 }
 
 /** Builds the `demo` stage row — present iff EITHER `demoProcess[]` is
