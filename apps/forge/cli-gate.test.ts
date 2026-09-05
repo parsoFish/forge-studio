@@ -17,13 +17,13 @@ import { join } from 'node:path';
 import { cmdGate } from './cli-gate.ts';
 
 /** Run the verb with stdout/stderr silenced, and return its exit code. */
-function run(args: string[]): number {
+async function run(args: string[]): Promise<number> {
   const outs = { log: console.log, error: console.error };
   console.log = () => {};
   console.error = () => {};
   process.exitCode = 0;
   try {
-    cmdGate(args);
+    await cmdGate(args);
     return process.exitCode ?? 0;
   } finally {
     console.log = outs.log;
@@ -32,46 +32,46 @@ function run(args: string[]): number {
   }
 }
 
-test('a clean document exits 0', () => {
+test('a clean document exits 0', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cli-gate-'));
   try {
     writeFileSync(join(dir, 'a.md'), '# T\n\n## Overview\n\nprose\n');
-    assert.equal(run(['docs', '--sections', 'Overview', join(dir, 'a.md')]), 0);
+    assert.equal(await run(['docs', '--sections', 'Overview', join(dir, 'a.md')]), 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('a document with findings exits 1', () => {
+test('a document with findings exits 1', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cli-gate-'));
   try {
     writeFileSync(join(dir, 'a.md'), '# T\n\nthe unifier ran\n');
-    assert.equal(run(['docs', '--forbid', 'unifier', join(dir, 'a.md')]), 1);
+    assert.equal(await run(['docs', '--forbid', 'unifier', join(dir, 'a.md')]), 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('NO PATHS exits 2, never 0 — kills "a gate that greens on nothing to check"', () => {
-  assert.equal(run(['docs']), 2);
-  assert.equal(run(['docs', '--forbid', 'unifier']), 2, 'flags alone are still no documents');
+test('NO PATHS exits 2, never 0 — kills "a gate that greens on nothing to check"', async () => {
+  assert.equal(await run(['docs']), 2);
+  assert.equal(await run(['docs', '--forbid', 'unifier']), 2, 'flags alone are still no documents');
 });
 
-test('an unknown flag exits 2 — a mis-typed gate invocation fails loud instead of silently checking less', () => {
-  assert.equal(run(['docs', '--section', 'Overview', 'a.md']), 2, 'a near-miss flag name must not be ignored');
+test('an unknown flag exits 2 — a mis-typed gate invocation fails loud instead of silently checking less', async () => {
+  assert.equal(await run(['docs', '--section', 'Overview', 'a.md']), 2, 'a near-miss flag name must not be ignored');
 });
 
-test('an unknown subcommand exits 2', () => {
-  assert.equal(run(['code']), 2);
-  assert.equal(run([]), 2);
+test('an unknown subcommand exits 2', async () => {
+  assert.equal(await run(['code']), 2);
+  assert.equal(await run([]), 2);
 });
 
-test('--no-links turns the link check off without turning the others off', () => {
+test('--no-links turns the link check off without turning the others off', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cli-gate-'));
   try {
     writeFileSync(join(dir, 'a.md'), '# T\n\n[bad](ghost.md)\nthe unifier ran\n');
-    assert.equal(run(['docs', '--no-links', join(dir, 'a.md')]), 0, 'links off, nothing else asked for');
-    assert.equal(run(['docs', '--no-links', '--forbid', 'unifier', join(dir, 'a.md')]), 1, 'the forbidden check still runs');
+    assert.equal(await run(['docs', '--no-links', join(dir, 'a.md')]), 0, 'links off, nothing else asked for');
+    assert.equal(await run(['docs', '--no-links', '--forbid', 'unifier', join(dir, 'a.md')]), 1, 'the forbidden check still runs');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

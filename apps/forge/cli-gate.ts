@@ -19,9 +19,11 @@
  * failure this milestone keeps finding).
  */
 
-import { runDocsGate, type DocsGateSpec } from '@forge/factory/gates/docs-gate.ts';
+import { requireDocsGate } from './factory-cli-wiring.ts';
 
-export function cmdGate(rest: string[]): void {
+type DocsGateSpec = { sections?: string[]; forbidden?: string[]; links?: boolean };
+
+export async function cmdGate(rest: string[]): Promise<void> {
   const sub = rest[0];
   if (sub !== 'docs') {
     console.error('forge gate: subcommands: docs');
@@ -50,7 +52,10 @@ export function cmdGate(rest: string[]): void {
     return;
   }
 
-  const findings = runDocsGate(paths, spec);
+  // ADR 048: this verb is the EXAMPLE's, and its absence is a usage error
+  // (exit 2), never a pass — a gate that greens because its rules could not be
+  // found is the failure this file's own header is about.
+  const findings = (await requireDocsGate('forge gate docs'))(paths, spec);
   for (const f of findings) console.error(`${f.path}:${f.line} [${f.check}] ${f.detail}`);
   console.log(
     findings.length === 0
