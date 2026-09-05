@@ -249,18 +249,34 @@ export default {
       // AMENDED 2026-09-05 (H6, operator present). The `do` below performs the
       // operator's real edits to the two steps the `typescript-cli` starter
       // ships and saves them, so the beat now proves the review-and-save path
-      // instead of asserting a number nothing pressed. It does NOT reach
-      // `step-count: '3'`, and the `expect` is deliberately left demanding it:
-      // ADDING a step has no declared handle. `DemoTimeline.tsx:350` renders
+      // instead of asserting a number nothing pressed. It did NOT then reach
+      // `step-count: '3'`, and the `expect` was deliberately left demanding it:
+      // ADDING a step had no declared handle. `DemoTimeline.tsx:350` rendered
       // `<button className="btn btn-ghost" onClick={() => addStep('capture',
       // '')}>+ Add step</button>` with no `data-action` at all — the only
       // control in this panel without one, beside `move-step-up`,
       // `move-step-down`, `iterate-element` and `launch-demo-builder` which
-      // all declare theirs. So this beat's remaining red is PRODUCT
+      // all declared theirs. So the beat's remaining red was PRODUCT
       // (`apps/studio`), not authoring as `_1.0/plans/M5-B-amendments.md`
       // classified it: a story cannot press a button the page does not
       // declare, and inventing the handle here would invent the contract this
       // story exists to hold the product to. Bead raised to T1.
+      //
+      // AMENDED AGAIN 2026-09-05 (ruling 200, mechanical — a press whose handle
+      // now exists, with `act`, `expect` and `say` byte-identical). That bead
+      // is `forge-8vfn.6.11.3`, closed by #429: `DemoTimeline.tsx:357` now
+      // declares `data-action="add-demo-step"` beside the four controls that
+      // always had one. The `expect` this beat has carried since it was
+      // authored — `step-count: '3'` — is what the press was missing, and it
+      // is the third step the `act` has always described.
+      //
+      // PROVEN BOTH WAYS before it was written here, costlessly, on the same
+      // tree (`_1.0/evidence/m5-b-s5-probe200b/`):
+      //   `probe200b`    — this `do` → GREEN 4/4, `step-count: '3'` survives
+      //                    the save.
+      //   `probe200bneg` — identical, the press REMOVED → RED 3/4,
+      //                    `data-step-count: expected "3", got "2"`.
+      // So the press is necessary as well as sufficient.
       act: 'Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project',
       do: [
         {
@@ -271,6 +287,7 @@ export default {
           fill: 'demo-step-2',
           with: 'Run npm run acceptance — the built binary against the checked-in slow-pipeline fixture — and show the per-stage table it produces.',
         },
+        { press: 'add-demo-step' },
         { press: 'save-project' },
       ],
       expect: {
