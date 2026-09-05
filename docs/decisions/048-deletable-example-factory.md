@@ -52,15 +52,22 @@ clause 2, and it is what M5-A exit row 5 closes.
    `apps/forge/factory-cli-wiring.ts` (what only the CLI resolves). The invariant that carries the clause is unchanged —
    no package may import the example, and the assembly names it in a set that is ENUMERATED, so a third module is a
    decision rather than an accident. `scripts/factory-deletable.mjs` holds the list and fails on any importer outside it.
-3. **The clause is proven by execution.** `scripts/factory-deletable.mjs` removes `packages/factory` and its workspace link
-   and then boots the bridge in-process, asserting `/api/health` answers as `forge-bridge` and that an example-owned route
-   answers **501** — absence as a supported state, never a crash and never a wrong answer. It fails if the boot fails, and it
+3. **The clause is proven by execution.** `scripts/factory-deletable.mjs` builds a THROWAWAY `git worktree` of HEAD without
+   `packages/factory` and without a workspace link to it, and boots the bridge from THAT tree, asserting `/api/health`
+   answers as `forge-bridge` and that an example-owned route answers **501** — absence as a supported state, never a crash and never a wrong answer. It fails if the boot fails, and it
    fails if any production file outside the seam set acquires a factory import. It is paid for, under the guardrail budget
    (1.0.md §2.3), by the retirement of the `demo-fix` loop in the same milestone.
 
+   **Amended 2026-09-05 (bead `forge-8vfn.6.10.21`): the proof runs in a scratch worktree, and says so.** Its first shape
+   deleted in place. CI's checkout is ephemeral so CI was fine — but `gate.sh` replicates every `ci.yml` step in a
+   PERSISTENT worktree, and one green gate left that worktree with no example package, so the next gate failed the build,
+   32 tests and four guards on empty populations. A proof that destroys the thing it is run against is not a proof. The
+   script now asserts `git status --porcelain -- packages/factory` is empty on the caller's tree BEFORE and AFTER, and a
+   planted in-place deletion fails it by name.
+
    **As built (2026-09-05):** a STEP at the end of `build-and-test`, not a fifth CI job — the four required contexts are what
-   the merge protocol waits on, and a fifth would change that set without changing what is proven. It is last because it is
-   destructive. It boots the BRIDGE rather than `forge studio` because `forge studio` is the bridge plus a static Next build
+   the merge protocol waits on, and a fifth would change that set without changing what is proven. It is last by habit rather than necessity now that it is
+   non-destructive. It boots the BRIDGE rather than `forge studio` because `forge studio` is the bridge plus a static Next build
    that imports no package (`grep -rn "@forge/factory" apps/studio` = 0): the bridge is the half that resolves the example,
    so it is the half whose boot proves anything, and booting it on an OS-assigned port keeps the check off the host-global
    4123/4124 pair.
