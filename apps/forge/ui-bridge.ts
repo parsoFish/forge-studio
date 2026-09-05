@@ -42,6 +42,7 @@ import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest
 import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
 import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
+import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
 
 import lockfile from 'proper-lockfile';
 import {
@@ -97,8 +98,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
 import {
   NO_EXAMPLE_INSTALLED, installedExample as example, peekInstalledFactory,
-  resolveInstalledFactory, reviewCommentsBinding as rc, type InstalledFactory,
-} from './factory-wiring.ts';
+  resolveInstalledFactory, reviewCommentsBinding as rc, type InstalledFactory } from './factory-wiring.ts';
 
 
 
@@ -1617,7 +1617,7 @@ async function handleHttp(
   if (url.startsWith('/api/review-comments/') && peekInstalledFactory() === null) { sendJson(res, 501, { error: NO_EXAMPLE_INSTALLED }, origin); return; }
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
-    if (!cycleId || !rc.isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
+    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
     const sidecar = rc.read(ctx.logsRoot, cycleId);
     sendJson(res, 200, { ...sidecar, derivedVerdict: rc.verdict(sidecar.comments) }, origin);
     return;
@@ -1631,7 +1631,7 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
       const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
       const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
       if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
@@ -1650,7 +1650,7 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.remove(sidecar, commentId));
       sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
     } catch (err) {
@@ -1663,7 +1663,7 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !rc.isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolve(sidecar, commentId));
       sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
     } catch (err) {
@@ -1677,7 +1677,7 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
       const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
-      if (!cycleId || !rc.isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
+      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
       if (rc.read(ctx.logsRoot, cycleId).comments.length >= rc.max) {
         sendJson(res, 409, { error: `review-comment cap reached (${rc.max}) for this cycle` }, origin);
         return;
