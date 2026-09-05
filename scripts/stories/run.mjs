@@ -45,7 +45,13 @@ import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './b
 import { driveBeat } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
-import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import {
+  collectAgentRuns,
+  reapAgentRuns,
+  describeReap,
+  recordReapedCancellations,
+  reapReasonFor,
+} from './reap.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STORY_DIR = join(ROOT, 'tests', 'stories');
@@ -167,6 +173,13 @@ async function main() {
     // very teardown that is supposed to be ending it.
     try {
       const report = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
+      // 6.11.12: a kill writes nothing for itself, so the terminal phase is
+      // written here — otherwise the turn we just ended reads as still working
+      // on every Studio surface, forever.
+      report.cancelled = recordReapedCancellations(report, {
+        projectsRoot: join(ROOT, 'projects'),
+        reason: 'story runner: the run ended before this turn did (abort backstop)',
+      });
       for (const line of describeReap(report)) console.log(line);
     } catch (err) {
       // A teardown that throws loses the verdict the run just produced.
@@ -240,6 +253,16 @@ async function runStory(story, uiUrl, startedMs) {
   // by the gate that started it, and a kill nobody can read afterwards is a
   // side effect rather than evidence (`forge-8vfn.5.37`, reap.mjs header).
   const reap = await reapAgentRuns(collectAgentRuns(ROOT, startedMs), { ownRoot: ROOT });
+  // 6.11.12 (T1 ruling 232): the kill cannot write its own ending, so the
+  // reserved terminal phase is stamped here — the same act, through the same
+  // guarded seam, as the generic cancel route. The reason quotes the run's
+  // FIRST RED BEAT, whose failure text already names the bound that fired
+  // (`beatBound`'s label, bead 6.11.10), so the session says why it stopped
+  // rather than only that it did.
+  reap.cancelled = recordReapedCancellations(reap, {
+    projectsRoot: join(ROOT, 'projects'),
+    reason: reapReasonFor(story, beats),
+  });
   for (const line of describeReap(reap)) console.log(line);
 
   // §3.1's trailing duty: the fixtures this story CREATED in the product. Not
