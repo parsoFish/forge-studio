@@ -1,9 +1,17 @@
 'use client';
 
 /**
- * ArtifactPicker — popover shown immediately after port→port edge creation.
- * Lists the known artifact types; picking one sets the edge's artifact label.
- * "Leave unlabelled" closes without setting an artifact.
+ * ArtifactPicker — popover shown immediately after edge creation, by BOTH the
+ * port→port drag and the declared `connect-into-<station>` handle
+ * (`forge-8vfn.5.12.1`). Lists the known artifact types; picking one sets the
+ * edge's artifact label. "Leave unlabelled" closes without setting one.
+ *
+ * Every option declares a `data-action` beside its `data-artifact-option`, so
+ * the choice is reachable through forge-ui's declared contract rather than by
+ * a CSS selector no story is allowed to name. Until this existed the picker
+ * could be OPENED by a story and never answered — `data-artifact-option` is a
+ * qualifier, not an act, and `scripts/stories/beats.mjs` resolves a press as
+ * `[data-action="…"]` only.
  */
 
 import { useEffect, useRef } from 'react';
@@ -100,6 +108,7 @@ export function ArtifactPicker({ anchorX, anchorY, onPick, onClose }: Props): JS
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel-3)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             data-artifact-option={ar.id}
+            data-action={`pick-artifact-${ar.id}`}
           >
             <span style={{
               width: 7,
@@ -131,6 +140,7 @@ export function ArtifactPicker({ anchorX, anchorY, onPick, onClose }: Props): JS
         Or{' '}
         <button
           onClick={() => onPick(null)}
+          data-action="leave-edge-unlabelled"
           style={{
             background: 'none',
             border: 'none',

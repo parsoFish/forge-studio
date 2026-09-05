@@ -29,6 +29,7 @@ import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+import { ArtifactPicker } from '@/components/studio/flow-builder/ArtifactPicker';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const render = (component: unknown, props: Record<string, unknown> = {}): string =>
@@ -143,4 +144,25 @@ test('6.11.3: adding a demo step is a declared act — the panel\'s other four c
   // move-step-down, iterate-element and launch-demo-builder. S2 beat 8 asks
   // for a third step and no story could press anything to create one.
   expect(html).toContain('data-action="add-demo-step"');
+});
+
+// ── forge-8vfn.5.12.1 — the picker can be OPENED by a story and not answered ──
+
+test('5.12.1: every artifact option is a declared ACT, not just a qualifier', () => {
+  const html = render(ArtifactPicker, { anchorX: 100, anchorY: 100, onPick: () => {}, onClose: () => {} });
+  // THE DEFECT: the options carried `data-artifact-option` alone. That is a
+  // qualifier — `scripts/stories/beats.mjs` resolves a press as
+  // `[data-action="…"]` and names no CSS selector on purpose — so a story
+  // could reach the picker and then had no way to answer it. Landing the
+  // canvas half without this would have made S4 strictly worse: the edge
+  // drawn, the picker open, and nothing able to close it with an artifact.
+  expect(html).toContain('data-action="pick-artifact-plan"');
+  expect(html).toContain('data-action="pick-artifact-work-items"');
+  // The qualifier stays — it is what the DOM contract reads.
+  expect(html).toContain('data-artifact-option="plan"');
+});
+
+test('5.12.1: leaving an edge unlabelled is a declared act too — the operator\'s other real answer', () => {
+  const html = render(ArtifactPicker, { anchorX: 100, anchorY: 100, onPick: () => {}, onClose: () => {} });
+  expect(html).toContain('data-action="leave-edge-unlabelled"');
 });
