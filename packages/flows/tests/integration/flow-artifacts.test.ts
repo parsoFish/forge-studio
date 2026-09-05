@@ -219,6 +219,11 @@ test('writeVerdictJson: writes the record; overwrite:false keeps the first', () 
 // review-findings — the R4-08-F1 critique artifact (adversarial-review → verdict gate)
 // ---------------------------------------------------------------------------
 
+/** The run's own facts a record is checked against — the class's lenses and the
+ *  criteria the pipeline injected. Both arrive as DATA (spec §5 item 5). */
+const CRIT_A = '(WI-1) GIVEN a page WHEN it is requested THEN every row appears';
+const EXPECTED = { lenses: ['correctness', 'containment'], criteria: [CRIT_A] };
+
 function validFindings(): ReviewFindingsRecord {
   return {
     initiative_id: 'INIT-x',
@@ -227,6 +232,9 @@ function validFindings(): ReviewFindingsRecord {
     headSha: 'abc1234',
     reviewedAt: '2026-07-24T00:00:00.000Z',
     summary: 'one major correctness finding; contract fit clean',
+    lenses: ['correctness', 'containment'],
+    acEvaluations: [{ criterion: CRIT_A, verdict: 'missed', evidence: 'the last row of every page is dropped' }],
+    whyWhatHow: { why: 'pages must be complete', what: 'a cursor advance', how: 'the boundary check moved' },
     findings: [
       {
         id: 'RF-1',
@@ -241,41 +249,80 @@ function validFindings(): ReviewFindingsRecord {
 }
 
 test('validateReviewFindings: a valid record returns no errors', () => {
-  assert.deepEqual(validateReviewFindings(validFindings()), []);
+  assert.deepEqual(validateReviewFindings(validFindings(), EXPECTED), []);
 });
 
 test('validateReviewFindings: an empty findings array is a legal explicit clean pass', () => {
   const rec = { ...validFindings(), findings: [] };
-  assert.deepEqual(validateReviewFindings(rec), []);
+  assert.deepEqual(validateReviewFindings(rec, EXPECTED), []);
 });
 
 test('validateReviewFindings: missing core fields and bad shapes are named errors', () => {
-  assert.ok(validateReviewFindings(null).length > 0);
-  const errs = validateReviewFindings({ cycleId: 'CY-1' });
+  assert.ok(validateReviewFindings(null, EXPECTED).length > 0);
+  const errs = validateReviewFindings({ cycleId: 'CY-1' }, EXPECTED);
   assert.ok(errs.some((e) => e.includes('initiative_id')));
   assert.ok(errs.some((e) => e.includes('headSha')));
   assert.ok(errs.some((e) => e.includes('findings')));
 });
 
-test('validateReviewFindings: severity/category vocabularies are enforced with alternatives named', () => {
+test('validateReviewFindings: severity is a fixed vocabulary; category is the CLASS\'s lens set', () => {
   const rec = validFindings();
   (rec.findings[0] as { severity: string }).severity = 'catastrophic';
-  const errs = validateReviewFindings(rec);
+  const errs = validateReviewFindings(rec, EXPECTED);
   assert.ok(errs.some((e) => e.includes('catastrophic') && e.includes('blocker') && e.includes('info')));
 
   const rec2 = validFindings();
   (rec2.findings[0] as { category: string }).category = 'vibes';
-  assert.ok(validateReviewFindings(rec2).some((e) => e.includes('vibes') && e.includes('correctness')));
+  assert.ok(validateReviewFindings(rec2, EXPECTED).some((e) => e.includes('vibes') && e.includes('correctness')));
+
+  // A lens that is legitimate for ANOTHER class is still not legitimate here —
+  // which is the whole point of the class table: `link-integrity` is a docs lens.
+  const rec3 = validFindings();
+  (rec3.findings[0] as { category: string }).category = 'link-integrity';
+  assert.ok(validateReviewFindings(rec3, EXPECTED).some((e) => e.includes('link-integrity')));
+});
+
+test('validateReviewFindings: AC coverage is EXACT set membership, both directions', () => {
+  const unjudged = { ...validFindings(), acEvaluations: [] };
+  assert.ok(
+    validateReviewFindings(unjudged, EXPECTED).some((e) => e.includes('left unjudged') && e.includes(CRIT_A)),
+    'a criterion nobody judged is named verbatim',
+  );
+
+  // A near-miss the retired token-overlap heuristic would have accepted at 0.8.
+  const nearMiss = {
+    ...validFindings(),
+    acEvaluations: [{ criterion: CRIT_A.replace('every row appears', 'every row appears in order'), verdict: 'met', evidence: 'e' }],
+  };
+  const errs = validateReviewFindings(nearMiss, EXPECTED);
+  assert.ok(errs.some((e) => e.includes('left unjudged')), 'the real criterion is still unjudged');
+  assert.ok(errs.some((e) => e.includes('never declared')), 'and the paraphrase is a criterion nobody declared');
+});
+
+test('validateReviewFindings: the record cannot legalise its own lens set', () => {
+  const selfDeclared = { ...validFindings(), lenses: ['vibes'], findings: [{ ...validFindings().findings[0]!, category: 'vibes' }] };
+  assert.ok(
+    validateReviewFindings(selfDeclared, EXPECTED).some((e) => e.includes('do not match the class')),
+    "a record naming its own lenses would otherwise make any category legal",
+  );
+});
+
+test('validateReviewFindings: the Why/What/How narrative is required and non-empty', () => {
+  for (const field of ['why', 'what', 'how'] as const) {
+    const rec = validFindings();
+    (rec.whyWhatHow as Record<string, string>)[field] = '  ';
+    assert.ok(validateReviewFindings(rec, EXPECTED).some((e) => e.includes(`whyWhatHow.${field}`)));
+  }
 });
 
 test('validateReviewFindings: every finding needs ≥1 evidence pointer with a file', () => {
   const rec = validFindings();
   rec.findings[0].evidence = [];
-  assert.ok(validateReviewFindings(rec).some((e) => e.includes('evidence')));
+  assert.ok(validateReviewFindings(rec, EXPECTED).some((e) => e.includes('evidence')));
 
   const rec2 = validFindings();
   (rec2.findings[0].evidence[0] as { file: string }).file = '';
-  assert.ok(validateReviewFindings(rec2).some((e) => e.includes('file')));
+  assert.ok(validateReviewFindings(rec2, EXPECTED).some((e) => e.includes('file')));
 });
 
 test('writeReviewFindingsJson: round-trips beside verdict.json without touching it', () => {

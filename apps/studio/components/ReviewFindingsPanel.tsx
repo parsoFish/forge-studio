@@ -27,6 +27,15 @@ export type ReviewFindingsDoc = {
   headSha?: string;
   reviewedAt?: string;
   summary?: string;
+  /** The lenses this class was reviewed under — recorded so "no finding under
+   *  this lens" is distinguishable from "this lens was never applied". */
+  lenses?: string[];
+  /** One verdict per acceptance criterion. The REVIEWER's, not the author's
+   *  (spec §5 item 5): the read-only agent that did not build the branch is the
+   *  one that judges whether a criterion is met. */
+  acEvaluations?: Array<{ criterion?: string; verdict?: 'met' | 'partial' | 'missed'; evidence?: string }>;
+  /** The reviewer's narrative of the change. */
+  whyWhatHow?: { why?: string; what?: string; how?: string };
   findings?: Array<{
     id?: string;
     severity?: 'blocker' | 'major' | 'minor' | 'info';
@@ -36,6 +45,12 @@ export type ReviewFindingsDoc = {
     evidence?: Array<{ file?: string; line?: number; excerpt?: string }>;
     acRef?: string;
   }>;
+};
+
+const VERDICT_COLOURS: Record<string, string> = {
+  met: 'var(--green, #3fb950)',
+  partial: 'var(--amber, #d29922)',
+  missed: 'var(--red, #f85149)',
 };
 
 const SEVERITY_COLOURS: Record<string, string> = {
@@ -84,6 +99,9 @@ export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false
       </div>
     );
   }
+  const evaluations = doc.acEvaluations ?? [];
+  const whyWhatHow = doc.whyWhatHow;
+  const lenses = doc.lenses ?? [];
   const findings = [...(doc.findings ?? [])].sort(
     (a, b) => SEVERITY_ORDER.indexOf(a.severity ?? 'info') - SEVERITY_ORDER.indexOf(b.severity ?? 'info'),
   );
@@ -92,6 +110,7 @@ export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false
       data-section="review-findings"
       data-findings-state="present"
       data-findings-count={findings.length}
+      data-review-lenses={lenses.join(',')}
       style={{ border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', overflow: 'hidden' }}
     >
       <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'baseline', gap: 10 }}>
@@ -104,10 +123,44 @@ export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false
         </span>
       </div>
       {doc.summary && (
-        <div style={{ padding: '10px 16px', fontSize: 13, color: 'var(--dim)', borderBottom: findings.length > 0 ? '1px solid var(--line)' : 'none' }}>
+        <div style={{ padding: '10px 16px', fontSize: 13, color: 'var(--dim)', borderBottom: '1px solid var(--line)' }}>
           {doc.summary}
         </div>
       )}
+      {whyWhatHow && (
+        <div
+          data-section="why-what-how"
+          style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 6 }}
+        >
+          {(['why', 'what', 'how'] as const).map((k) =>
+            whyWhatHow[k] ? (
+              <div key={k} data-narrative={k} style={{ fontSize: 12, color: 'var(--dim)' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)', marginRight: 8 }}>{k}</span>
+                {whyWhatHow[k]}
+              </div>
+            ) : null,
+          )}
+        </div>
+      )}
+      <div
+        data-section="ac-verdicts"
+        data-ac-eval-count={evaluations.length}
+        style={{ padding: '10px 16px', borderBottom: findings.length > 0 ? '1px solid var(--line)' : 'none', display: 'flex', flexDirection: 'column', gap: 4 }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+          Acceptance criteria
+        </span>
+        {evaluations.length === 0 ? (
+          <span style={{ fontSize: 12, color: 'var(--dim)' }}>this initiative declared no acceptance criteria</span>
+        ) : (
+          evaluations.map((e, i) => (
+            <div key={i} data-ac-verdict={e.verdict ?? 'missed'} style={{ fontSize: 12, color: 'var(--dim)', display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: VERDICT_COLOURS[e.verdict ?? 'missed'] }}>{e.verdict}</span>
+              <span>{e.criterion}{e.evidence ? ` — ${e.evidence}` : ''}</span>
+            </div>
+          ))
+        )}
+      </div>
       {findings.map((f, i) => (
         <div
           key={f.id ?? i}

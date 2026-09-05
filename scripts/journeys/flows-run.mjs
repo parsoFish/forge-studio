@@ -988,12 +988,12 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
               await page.waitForSelector('[data-component="demo-review-surface"]', { timeout: 15000 });
               await caption(page, 'The interactive review page: the rendered DEMO.md, a before/after slider, and per-region comments that ARE the verdict.');
-              await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
+              await page.locator('[data-section="ac-verdicts"]').scrollIntoViewIfNeeded().catch(() => {}); // §5 item 5: the verdict is the reviewer's
               await sleep(READ);
               await frame(page, 'r4-0-review-partial', 'R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)');
-              await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict]', 2, 'review demo foregrounds per-AC evaluated output');
+              await countAtLeast(page, '[data-section="ac-verdicts"] [data-ac-verdict]', 2, 'the review foregrounds a verdict per acceptance criterion');
               check(
-                await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count() > 0,
+                await page.locator('[data-section="ac-verdicts"] [data-ac-verdict="partial"]').count() > 0,
                 'an AC reads PARTIAL on round 1 — the gap the operator sends back on',
               );
               // DEC-5 surfaces: rendered DEMO.md iframe, per-region anchors, the before/after slider.
@@ -1194,12 +1194,12 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-page-ready="true"]', { timeout: 30000 }).catch(() => {});
               await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15000 });
               await caption(page, 'Partial → corrected → met. The loop closed on your criterion.');
-              await page.locator('[data-section="demo-evaluation"]').scrollIntoViewIfNeeded().catch(() => {});
+              await page.locator('[data-section="ac-verdicts"]').scrollIntoViewIfNeeded().catch(() => {});
               await sleep(READ);
               await frame(page, 'r4-3-rereview-met', 'R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)', { key: true });
-              const partialCount = await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count();
+              const partialCount = await page.locator('[data-section="ac-verdicts"] [data-ac-verdict="partial"]').count();
               check(partialCount === 0, `re-review: partial AC count == 0 after dev-loop rerun (got ${partialCount})`);
-              await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
+              await countAtLeast(page, '[data-section="ac-verdicts"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
               // R4-08-F3: the round-2 critique is an explicit clean pass — the panel
               // still renders (findings: [] is a statement, not an absence).
               check(

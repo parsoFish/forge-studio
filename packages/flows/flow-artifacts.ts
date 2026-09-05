@@ -188,7 +188,16 @@ export function writeVerdictJson(
 
 export type ReviewFindingSeverity = 'blocker' | 'major' | 'minor' | 'info';
 
-export type ReviewFindingCategory = 'correctness' | 'regression-risk' | 'contract-fit' | 'convention-drift';
+/**
+ * A finding's lens. NOT a fixed vocabulary any more (spec §5 item 5): the lenses
+ * a review runs are the change class's, from the class → gate-profile table's
+ * `reviewLenses` column, so a docs initiative is critiqued for accuracy against
+ * source and link integrity rather than for regression risk. The type is `string`
+ * because this package cannot see the table — the allowed set arrives as DATA at
+ * `validateReviewFindings`, which is what keeps the check honest without giving
+ * `packages/flows` an opinion about the example factory's classes.
+ */
+export type ReviewFindingCategory = string;
 
 export type ReviewFinding = {
   id: string; // 'RF-1'…
@@ -202,6 +211,25 @@ export type ReviewFinding = {
   acRef?: string;
 };
 
+/**
+ * One acceptance criterion's verdict — the reviewer's, not the author's.
+ *
+ * This used to live on the demo model, authored by the same agent that composed
+ * the evidence it was scoring. Spec §5 item 5 moves it here: the read-only
+ * review agent, which cannot run anything and did not build the branch, is the
+ * one that judges whether a criterion is met. `evidence` is prose pointing at
+ * what the reviewer READ — it is a claim the operator weighs at the verdict
+ * gate, never a gate by itself (ADR 021).
+ */
+export type AcEvaluation = {
+  criterion: string;
+  verdict: 'met' | 'partial' | 'missed';
+  evidence: string;
+};
+
+/** The reviewer's narrative of the change (spec §5 item 5). */
+export type WhyWhatHow = { why: string; what: string; how: string };
+
 export type ReviewFindingsRecord = {
   initiative_id: string;
   cycleId: string;
@@ -210,6 +238,16 @@ export type ReviewFindingsRecord = {
   reviewedAt: string;
   summary: string;
   findings: ReviewFinding[];
+  /**
+   * The lenses this review actually ran, from the initiative class's profile.
+   * Recorded so a reader can tell "no finding under this lens" from "this lens
+   * was never applied" — the two look identical in a findings list.
+   */
+  lenses: string[];
+  /** One verdict per acceptance criterion — exactly the criteria the run injected. */
+  acEvaluations: AcEvaluation[];
+  /** The reviewer's Why / What / How of the change. */
+  whyWhatHow: WhyWhatHow;
 };
 
 export function reviewFindingsJsonPath(logsRoot: string, cycleId: string): string {
@@ -217,7 +255,7 @@ export function reviewFindingsJsonPath(logsRoot: string, cycleId: string): strin
 }
 
 const FINDING_SEVERITIES = ['blocker', 'major', 'minor', 'info'] as const;
-const FINDING_CATEGORIES = ['correctness', 'regression-risk', 'contract-fit', 'convention-drift'] as const;
+const AC_VERDICTS = ['met', 'partial', 'missed'] as const;
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -228,7 +266,22 @@ function blank(v: unknown): boolean {
 }
 
 /** Pure shape validation; errors name the offending field and the allowed vocabulary. */
-export function validateReviewFindings(raw: unknown): string[] {
+/**
+ * What a review record is checked AGAINST. Both fields are the run's own facts,
+ * handed in rather than assumed: the lenses come from the initiative class's
+ * profile, and the criteria are the ones the pipeline injected into the prompt.
+ *
+ * Checking AC coverage by exact set membership is the point of typed acceptance
+ * criteria (ADR 051). What it replaces is a token-overlap similarity with a 0.8
+ * threshold, which answered "does this look like the same sentence" when the
+ * question was "is this the same criterion".
+ */
+export type ReviewFindingsExpectation = {
+  lenses: readonly string[];
+  criteria: readonly string[];
+};
+
+export function validateReviewFindings(raw: unknown, expected: ReviewFindingsExpectation): string[] {
   const errors: string[] = [];
   if (!isObj(raw)) return ['review-findings must be a JSON object'];
   for (const f of ['initiative_id', 'cycleId', 'baseRef', 'headSha', 'reviewedAt', 'summary'] as const) {
@@ -248,8 +301,8 @@ export function validateReviewFindings(raw: unknown): string[] {
     if (!FINDING_SEVERITIES.includes(f.severity as (typeof FINDING_SEVERITIES)[number])) {
       errors.push(`${at}.severity "${String(f.severity)}" invalid — allowed: ${FINDING_SEVERITIES.join(' | ')}`);
     }
-    if (!FINDING_CATEGORIES.includes(f.category as (typeof FINDING_CATEGORIES)[number])) {
-      errors.push(`${at}.category "${String(f.category)}" invalid — allowed: ${FINDING_CATEGORIES.join(' | ')}`);
+    if (!expected.lenses.includes(f.category as string)) {
+      errors.push(`${at}.category "${String(f.category)}" is not a lens this class is reviewed under — allowed: ${expected.lenses.join(' | ')}`);
     }
     if (blank(f.title)) errors.push(`${at}.title must be a non-empty string`);
     if (blank(f.detail)) errors.push(`${at}.detail must be a non-empty string`);
@@ -261,6 +314,49 @@ export function validateReviewFindings(raw: unknown): string[] {
       });
     }
   });
+
+  // The lenses the record claims must be the ones the class actually declares —
+  // a record that names its own lens set could otherwise legalise any category.
+  if (!Array.isArray(raw.lenses) || raw.lenses.length === 0) {
+    errors.push('lenses must be a non-empty array — the record states which lenses this class was reviewed under');
+  } else if ([...raw.lenses].sort().join('|') !== [...expected.lenses].sort().join('|')) {
+    errors.push(`lenses ${JSON.stringify(raw.lenses)} do not match the class's declared lenses ${JSON.stringify(expected.lenses)}`);
+  }
+
+  if (!isObj(raw.whyWhatHow)) {
+    errors.push('whyWhatHow must be an object with non-empty why / what / how');
+  } else {
+    for (const f of ['why', 'what', 'how'] as const) {
+      if (blank((raw.whyWhatHow as Record<string, unknown>)[f])) errors.push(`whyWhatHow.${f} must be a non-empty string`);
+    }
+  }
+
+  // EXACT set membership, both directions. A missing criterion is an unjudged
+  // one; an extra criterion is a judgment about something nobody asked for, and
+  // both used to be invisible behind a similarity threshold.
+  if (!Array.isArray(raw.acEvaluations)) {
+    errors.push('acEvaluations must be an array — one verdict per injected acceptance criterion');
+  } else {
+    raw.acEvaluations.forEach((e: unknown, i: number) => {
+      const at = `acEvaluations[${i}]`;
+      if (!isObj(e)) {
+        errors.push(`${at} must be an object`);
+        return;
+      }
+      if (blank(e.criterion)) errors.push(`${at}.criterion must be a non-empty string`);
+      if (!AC_VERDICTS.includes(e.verdict as (typeof AC_VERDICTS)[number])) {
+        errors.push(`${at}.verdict "${String(e.verdict)}" invalid — allowed: ${AC_VERDICTS.join(' | ')}`);
+      }
+      if (blank(e.evidence)) errors.push(`${at}.evidence must be a non-empty string — a verdict with no evidence is an assertion`);
+    });
+    const judged = new Set((raw.acEvaluations as Array<Record<string, unknown>>).map((e) => String(e?.criterion ?? '')));
+    for (const c of expected.criteria) {
+      if (!judged.has(c)) errors.push(`acceptance criterion left unjudged (verbatim): ${c}`);
+    }
+    for (const c of judged) {
+      if (c !== '' && !expected.criteria.includes(c)) errors.push(`acEvaluations judges a criterion this initiative never declared: ${c}`);
+    }
+  }
   return errors;
 }
 

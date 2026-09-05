@@ -59,6 +59,7 @@ function fakeParseManifest(content: string) {
   return {
     worktree_path: field('worktree_path'),
     project_repo_path: field('project_repo_path'),
+    class: field('class'),
     ...(budget === undefined ? {} : { cost_budget_usd: Number(budget) }),
   };
 }
@@ -98,7 +99,7 @@ function writeManifest(stateDir: string, worktreePath: string): void {
   writeFileSync(join(stateDir, `${INIT}.md`), [
     '---', `initiative_id: ${INIT}`, 'project: fix', `project_repo_path: ${worktreePath}`,
     "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
-    'phase: ready-for-review', 'origin: architect', `worktree_path: ${worktreePath}`, `cycle_id: ${INIT}`,
+    'phase: ready-for-review', 'origin: architect', 'class: code', `worktree_path: ${worktreePath}`, `cycle_id: ${INIT}`,
     '---', `# ${INIT}`, '',
   ].join('\n'));
 }

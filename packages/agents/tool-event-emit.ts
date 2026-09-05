@@ -242,3 +242,18 @@ export function extractLiveToolDetails(message: unknown, seqOffset: number): Too
   }
   return out;
 }
+
+/** The path a tool call names, and a bounded string — the two helpers every
+ *  tool-event renderer needs. Byte-identical copies lived in `ralph/claude-agent.ts`
+ *  and `_adapters/gemini/index.ts`: one edit to either changed one adapter's events. */
+export function extractPath(input: unknown): string | null {
+  if (typeof input !== 'object' || input === null) return null;
+  const obj = input as Record<string, unknown>;
+  const candidate = obj.file_path ?? obj.notebook_path ?? obj.path;
+  return typeof candidate === 'string' ? candidate : null;
+}
+
+export function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + '…';
+}

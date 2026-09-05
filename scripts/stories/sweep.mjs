@@ -18,9 +18,9 @@
  *   · it is date-independent, so a run on any day cleans any day's residue —
  *     the date-stamped per-id cleanups it replaces could not.
  */
-import { rmSync, existsSync } from 'node:fs';
+import { rmSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 /** A story id must be a single safe path segment — it is interpolated into
  *  paths that are then removed recursively. `..` or a separator would resolve
@@ -214,15 +214,69 @@ export function fenceBreaches(before, after, storyId) {
 }
 
 /**
+ * How many entries of a removed tree the fence records before it stops. A
+ * runaway directory must not turn one verdict line into a wall of text — and
+ * when it does stop, it SAYS so (`truncated`), because a silently short list
+ * reads exactly like a genuinely short one.
+ */
+const FENCE_LISTING_MAX = 20;
+
+/**
+ * What a directory held, just before the fence removed it.
+ *
+ * Bead `forge-8vfn.6.12`. S4 run 2's fence caught a real containment escape —
+ * the run created `skills/dev/`, `skills/plan/` and `skills/review/`
+ * forge-wide, outside its artifacts and outside its ground — removed them, and
+ * printed three lines naming the paths. With the directories gone, the one
+ * question worth asking became unanswerable: what was IN them, and therefore
+ * who wrote them? A scaffolded `SKILL.md` and an empty directory leave the same
+ * trace once both are deleted, and ruling 242's source read could narrow the
+ * writer to three candidate routes without pinning it.
+ *
+ * Sizes travel with the names because an empty scaffold and a real one differ
+ * by nothing else. Never throws: evidence-gathering must not be able to stop
+ * the fence from doing its actual job.
+ */
+function listRemovedTree(root, path) {
+  const abs = join(root, path);
+  let top;
+  try {
+    if (!statSync(abs).isDirectory()) return null;
+    top = readdirSync(abs, { recursive: true, withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const files = top.filter((d) => d.isFile());
+  const entries = files.slice(0, FENCE_LISTING_MAX).map((d) => {
+    const rel = relative(abs, join(d.parentPath ?? d.path, d.name));
+    let bytes = null;
+    try {
+      bytes = statSync(join(abs, rel)).size;
+    } catch {
+      /* raced or unreadable — the name alone is still evidence */
+    }
+    return { path: rel, bytes };
+  });
+  if (entries.length === 0) return null;
+  return { path, entries, truncated: files.length > entries.length, total: files.length };
+}
+
+/**
  * Put the tree back. Never throws — a fence that dies takes the run's verdict
  * with it. Every failure is returned and reported by name (§15.92): a tree left
  * dirty must be a distinct, named outcome, never a silence.
  *
- * @returns {{restored: string[], removed: string[], failed: {path: string, error: string}[]}}
+ * `removed` stays a plain path list — it is the shape `story.json` and every
+ * reader already carry — and the listing rides beside it in `removedContents`,
+ * present only for directories that actually held something. A removed FILE
+ * owes no listing: it is its own evidence.
+ *
+ * @returns {{restored: string[], removed: string[], removedContents: {path: string, entries: {path: string, bytes: number|null}[], truncated: boolean, total: number}[], failed: {path: string, error: string}[]}}
  */
 export function applyFence(breaches, root) {
   const restored = [];
   const removed = [];
+  const removedContents = [];
   const failed = [];
   for (const path of breaches.restore) {
     try {
@@ -237,13 +291,26 @@ export function applyFence(breaches, root) {
   }
   for (const path of breaches.remove) {
     try {
+      // Read it BEFORE removing it — this is the only moment the evidence exists.
+      const listing = listRemovedTree(root, path);
       rmSync(join(root, path), { recursive: true, force: true });
       removed.push(path);
+      if (listing !== null) removedContents.push(listing);
     } catch (e) {
       failed.push({ path, error: e?.message ?? String(e) });
     }
   }
-  return { restored, removed, failed };
+  return { restored, removed, removedContents, failed };
+}
+
+/** `skills/dev — contained SKILL.md (19 B)`, or `… and 21 more`. */
+function describeRemoved(path, removedContents) {
+  const record = removedContents.find((r) => r.path === path);
+  if (record === undefined) return '';
+  const named = record.entries
+    .map((e) => (e.bytes === null ? e.path : `${e.path} (${e.bytes} B)`))
+    .join(', ');
+  return ` — contained ${named}${record.truncated ? ` and ${record.total - record.entries.length} more` : ''}`;
 }
 
 /** The fence's report, always printed — a clean run says so (§15.92). */
@@ -253,7 +320,11 @@ export function describeFence(fence) {
   }
   return [
     ...fence.restored.map((p) => `[stories] fence: RESTORED ${p} — the run wrote a repo-tracked file outside its artifacts`),
-    ...fence.removed.map((p) => `[stories] fence: REMOVED ${p} — created by the run, not its artifact`),
+    ...fence.removed.map(
+      (p) =>
+        `[stories] fence: REMOVED ${p} — created by the run, not its artifact` +
+        describeRemoved(p, fence.removedContents ?? []),
+    ),
     ...fence.failed.map((f) => `[stories] fence: COULD NOT clear ${f.path}: ${f.error} — the tree is left dirty`),
   ];
 }

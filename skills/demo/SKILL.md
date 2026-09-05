@@ -137,32 +137,15 @@ collapses them gracefully when absent, but their absence means a less useful dem
   bullets describing what the new capability unlocks for the operator. Distinct from
   `essence` (which is the technical delta) — `impact` is the "so what".
 
-- **`acceptanceCriteria[]`** (optional) — the raw AC strings, kept for back-compat.
-  Prefer `acEvaluations` (below) which supersedes this for the review screen.
+- **`acceptanceCriteria[]`** — the criteria the initiative was decomposed against,
+  one string per criterion, carried verbatim.
 
-- **`acEvaluations[]`** (required when ≥1 AC was proved) — **the primary AC surface**.
-  One entry per acceptance criterion with a concrete verdict and evidence. The review
-  screen foregrounds this as an "Intent & Outcome" table at the TOP of the demo,
-  before checkpoints. Schema (mirrors `AcEvaluation` in `cli/demo-model.ts`):
-
-  ```json
-  "acEvaluations": [
-    {
-      "criterion": "GIVEN a release definition WHEN applied THEN ADO returns 200",
-      "verdict": "met",
-      "evidence": "terraform apply exited 0; GET /api/release/{id} returned the resource."
-    }
-  ]
-  ```
-
-  **Verdict vocabulary:**
-  - `"met"` — the AC is fully proved by the evidence.
-  - `"partial"` — the AC is mostly met; document the gap in `evidence`.
-  - `"missed"` — the AC was not reached; document why in `evidence`.
-
-  **Evidence discipline:** state a concrete, observable fact — a test name + result,
-  an API response, a measured value. Never write "see code" or "tests pass" without
-  naming the test. One entry per AC; do not merge or split.
+  **Their VERDICTS are not yours to write.** The per-criterion `met | partial | missed`
+  judgment moved to the read-only review agent's own artifact, `review-findings.json`
+  (spec §5 item 5): the agent that assembles a demo must not also be the agent that
+  scores it against the criteria, and the reviewer that judges it never ran anything.
+  A demo that carries a verdict field is scoring its own evidence — `DemoModel` no
+  longer declares one, and nothing reads one.
 
 ### Three load-bearing disciplines
 

@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { DemoModel, DemoModelCheckpoint, DemoApiDiffEntry, DemoAcEvaluation } from '@/lib/bridge-client';
+import type { DemoModel, DemoModelCheckpoint, DemoApiDiffEntry } from '@/lib/bridge-client';
 import { submitVerdict } from '@/lib/bridge-client';
 import {
   fetchReviewComments,
@@ -281,12 +281,15 @@ export function DemoReviewSurface({
 function buildRegions(model: DemoModel, _cycleId: string): Region[] {
   const regions: Region[] = [];
 
-  // 1. Per-AC outcome (the prime comment anchors).
-  (model.acEvaluations ?? []).forEach((e, i) => {
+  // 1. Acceptance criteria — the list the initiative was decomposed against.
+  //    Their VERDICTS are the reviewer's (spec §5 item 5) and render on the
+  //    review-findings panel; this surface anchors comments to the criteria
+  //    themselves, which exist whether or not a review has run yet.
+  (model.acceptanceCriteria ?? []).forEach((criterion, i) => {
     regions.push({
       id: `ac-${i + 1}`,
-      title: `AC ${i + 1} — ${e.verdict.toUpperCase()}`,
-      render: () => <AcEvidence evaluation={e} />,
+      title: `AC ${i + 1}`,
+      render: () => <AcEvidence criterion={criterion} />,
     });
   });
 
@@ -311,15 +314,14 @@ function buildRegions(model: DemoModel, _cycleId: string): Region[] {
   return regions;
 }
 
-function AcEvidence({ evaluation }: { evaluation: DemoAcEvaluation }): JSX.Element {
-  const colour = evaluation.verdict === 'met' ? '#2ea043' : evaluation.verdict === 'partial' ? '#d29922' : '#f85149';
+/** One acceptance criterion, as a comment anchor. The VERDICT is the reviewer's
+ *  and renders on the review-findings panel — this surface deliberately shows
+ *  the criterion without one, because the criteria exist from decomposition and
+ *  a review may not have run yet. */
+function AcEvidence({ criterion }: { criterion: string }): JSX.Element {
   return (
     <div>
-      <div style={{ fontSize: 13, color: '#c9d1d9' }} data-ac-verdict={evaluation.verdict}>{evaluation.criterion}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: '#8b949e' }}>
-        <span style={{ color: colour, fontWeight: 600, textTransform: 'uppercase' }}>{evaluation.verdict}</span>
-        {' — '}{evaluation.evidence}
-      </div>
+      <div style={{ fontSize: 13, color: '#c9d1d9' }}>{criterion}</div>
     </div>
   );
 }
@@ -561,9 +563,9 @@ function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element 
 /** Minimal fallback markdown when no DEMO.md is served yet (keeps the iframe non-empty). */
 function fallbackMarkdown(model: DemoModel): string {
   const lines = [`# ${model.title}`, '', `> ${model.essence}`, ''];
-  if (model.acEvaluations?.length) {
-    lines.push('## Intent & Outcome', '');
-    model.acEvaluations.forEach((e, i) => lines.push(`${i + 1}. **${e.verdict.toUpperCase()}** — ${e.criterion}`));
+  if (model.acceptanceCriteria?.length) {
+    lines.push('## Acceptance criteria', '');
+    model.acceptanceCriteria.forEach((c, i) => lines.push(`${i + 1}. ${c}`));
   }
   return lines.join('\n');
 }

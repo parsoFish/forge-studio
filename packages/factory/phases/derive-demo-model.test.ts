@@ -106,10 +106,14 @@ describe('deriveDemoModel — the class decides what evidence is captured', () =
 });
 
 describe('deriveDemoModel — what it refuses to invent', () => {
-  it('kills self-grading: the derived model carries NO acEvaluations, whatever the input', () => {
+  it('kills self-grading: the derived model carries NO per-criterion verdict, whatever the input', () => {
+    // `DemoModel` no longer DECLARES a verdict field — the reviewer owns it
+    // (spec §5 item 5) — so the type is the first line of defence. This asserts
+    // the second: nothing is written under that key at runtime either, which is
+    // what would fire if someone re-added the field and quietly filled it.
     for (const capture of ['checkpoints', 'none', 'plan-output'] as const) {
-      const model = modelOf(baseInput({ capture }));
-      assert.equal(model.acEvaluations, undefined, `capture=${capture} must not score its own criteria`);
+      const model = modelOf(baseInput({ capture })) as unknown as Record<string, unknown>;
+      assert.equal('acEvaluations' in model, false, `capture=${capture} must not score its own criteria`);
     }
   });
 

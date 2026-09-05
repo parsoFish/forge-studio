@@ -156,7 +156,7 @@ demo.json MUST carry:
 - `essence` — prior → new behaviour (2–3 sentences).
 - `checkpoints[]` — ≥1, each with `label`, `caption`, `beforeNote`, `afterNote`.
 - [evidence-specific sections based on the form]
-- `acEvaluations[]` — one entry per demoProcess verify step, with `verdict` and
+- `acceptanceCriteria[]` — the criteria the initiative was decomposed against, verbatim. NOT their verdicts: the per-criterion judgment is the read-only review agent's (spec §5 item 5), in `review-findings.json`.
   concrete `evidence` (never "see code").
 
 Run `forge demo render <initiative-id>` after writing demo.json to derive DEMO.md.

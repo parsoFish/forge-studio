@@ -108,6 +108,17 @@ test('runBandAgentStandalone with the PRODUCTION deps: the standalone review pip
           headSha,
           reviewedAt: '2026-09-05T00:00:00Z',
           summary: 'one pointer-backed finding on the changed file',
+          // Spec §5 item 5: the record carries the class's lenses, ONE verdict per
+          // injected criterion (matched verbatim, exact set membership) and the
+          // reviewer's narrative. The criterion string is the one the WI above
+          // declares, rendered the way the pipeline renders it into the prompt.
+          lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
+          acEvaluations: [{
+            criterion: '(WI-1) GIVEN the CLI is built WHEN it runs bare THEN usage prints',
+            verdict: 'partial',
+            evidence: 'usage prints, but the changed constant is unasserted',
+          }],
+          whyWhatHow: { why: 'the CLI must print usage when run bare', what: 'a constant and its call site', how: 'the exported value moved from 1 to 2' },
           findings: [{
             id: 'RF-1',
             severity: 'minor',

@@ -1310,8 +1310,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes) —
   `[data-section="review-findings"][data-findings-state="present|absent|error"]
-  [data-findings-count]` with per-row
-  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`;
+  [data-findings-count][data-review-lenses]` with per-row
+  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`.
+  Since spec §5 item 5 the same panel also carries the reviewer's PER-CRITERION
+  VERDICT — `[data-section="ac-verdicts"][data-ac-eval-count]` with per-row
+  `[data-ac-verdict="met|partial|missed"]` — and the reviewer's narrative,
+  `[data-section="why-what-how"]` with `[data-narrative="why|what|how"]`. Those
+  three attributes MOVED here from `DemoComparison`: the demo is the evidence, and
+  the read-only review agent is what judges it, so a verdict rendered off the demo
+  would be the bundle scoring itself. `data-review-lenses` records which lenses
+  the initiative's change class was reviewed under, so "no finding under this
+  lens" is distinguishable from "this lens was never applied";
   a known-absent artifact renders the explicit `data-findings-state="absent"`
   one-liner (artifact-plan-16 — fetched only when the flow's own
   review-findings producer node completed, same rule as the run page; the
@@ -1321,8 +1330,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   then the review-shape summary
   (`[data-section="review-summary"][data-region-count][data-blocking-count]`
   with `a[data-action="jump-to-blocking"]` when a blocker exists), then
-  `[data-section="demo-comparison"]` /
-  `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
+  `[data-section="demo-comparison"]` (DemoComparison — the criteria list at
+  `[data-section="demo-acs"]`; their verdicts are on the review panel above) plus
   the per-region cards — each `[data-demo-region][data-region-comment-count]
   [data-region-collapsed]` with a `[data-action="toggle-region"]` header
   (regions collapse by default only on walls of > 12 regions, unless they
@@ -3025,13 +3034,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   fetch (no separate showcase-only schema):
   `[data-section="showcase-stats"]` — a small stats strip
   (`deriveShowcaseStats`, `forge-ui/lib/project-showcase.ts`) of real counts
-  read off the fetched `DemoModel` (test-evidence count, AC met/partial/missed,
-  branch/commit/PR-link tiles when the model carries them) — above
+  read off the fetched `DemoModel` (test-evidence count, branch/commit/PR-link
+  tiles when the model carries them) plus the AC met/partial/missed counts read
+  off the SAME cycle's `review-findings.json` — the verdict is the reviewer's,
+  and a cycle with no review yet renders 0/0/0, which is the count of verdicts
+  that exist rather than a claim that every criterion missed — above
   `[data-section="showcase-evidence"]`, which wraps the reused
   `<DemoComparison>` **unchanged** from `/artifact?type=demo` (same
-  `[data-section="demo-comparison"]` / `[data-section="demo-evaluation"]
-  [data-ac-eval-count][data-ac-verdict]` contract documented above — one
-  renderer, two surfaces). **Honest empty:**
+  `[data-section="demo-comparison"]` / `[data-section="demo-acs"]` contract
+  documented above — one renderer, two surfaces). **Honest empty:**
   `[data-section="showcase-empty"]` renders instead whenever there is nothing
   real to show — either no eligible cycle at all, OR a terminal cycle exists
   but its `demo.json` never landed (`loadShowcase`'s `{kind:'loaded',
