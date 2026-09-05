@@ -5,7 +5,7 @@
  * items, and emits decomposition telemetry.
  */
 
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 
@@ -13,7 +13,6 @@ import type { EventLogger } from '@forge/kernel';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '@forge/flows/manifest.ts';
 import {
   PM_BRAIN_ACCESS,
-  PM_ALWAYS_RELEVANT_THEMES,
   DECOMPOSITION_STATE_FILENAME,
   buildPmSystemPrompt,
   parseDecompositionState,
@@ -39,6 +38,8 @@ import { skillPath } from '@forge/agents/skill-path.ts';
 import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
+import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
+import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -683,177 +684,4 @@ function appendStandingAcs(
       return item; // best-effort — never fail the PM pass on a write error
     }
   });
-}
-
-/**
- * Write `.forge/work-items/_decomposition.md` — a greppable WI list for a
- * fast operator sanity check. Lists each WI (id + the files it touches, so
- * off-target scope is obvious). Excluded from `readWorkItemsFromDir` so it
- * is never parsed as a WI.
- */
-function writeDecompositionDoc(
-  workItemsDir: string,
-  manifest: InitiativeManifest,
-  items: ReadonlyArray<WorkItem>,
-): void {
-  const lines: string[] = [
-    `# Work-item decomposition — ${manifest.initiative_id}`,
-    '',
-    `${items.length} work item(s) emitted.`,
-    '',
-  ];
-
-  // A1 advisory (2026-06-06): a top-level-scope summary so the operator can
-  // eyeball off-target decomposition AT A GLANCE. If the PM mis-grounds (e.g.
-  // hallucinates off the title and touches `releases/`, `docs/`, or `brain/`
-  // instead of the project's source tree), the stray top-level dir shows up
-  // here immediately. Advisory only — not a hard gate (a legit WI may touch
-  // docs/examples); the teeth are the restate-the-target step + the live-acc-WI
-  // requirement.
-  const topLevel = new Map<string, number>();
-  for (const item of items) {
-    for (const f of item.files_in_scope) {
-      const seg = f.split('/')[0] || f;
-      topLevel.set(seg, (topLevel.get(seg) ?? 0) + 1);
-    }
-  }
-  if (topLevel.size > 0) {
-    lines.push('## Top-level scope (eyeball for off-target dirs)');
-    for (const [seg, count] of [...topLevel.entries()].sort((a, b) => b[1] - a[1])) {
-      lines.push(`- \`${seg}/\` — ${count} file ref(s)`);
-    }
-    lines.push('');
-  }
-
-  for (const item of items) {
-    lines.push(`## ${item.work_item_id}`);
-    for (const f of item.files_in_scope) lines.push(`- ${f}`);
-    lines.push('');
-  }
-  try {
-    writeFileSync(join(workItemsDir, '_decomposition.md'), lines.join('\n'));
-  } catch {
-    /* best-effort telemetry artifact — never fail the PM pass on a write error */
-  }
-}
-
-/**
- * Read the project-shape context files off the worktree. Each is
- * optional — skipped if the file isn't present. Caps each file at
- * 8 KB so a freak large CLAUDE.md / package.json doesn't blow the
- * prompt budget; trims aren't ideal but the agent only needs enough
- * to identify the tooling.
- *
- * Surfaced 2026-05-25 by the claude-harness cycle 8 audit: PM was
- * hallucinating `jest` in a `node:test` project. Inlining
- * package.json's actual scripts makes it impossible to ignore.
- */
-function readProjectContext(worktreePath: string): {
-  packageJson?: string;
-  pyprojectToml?: string;
-  cargoToml?: string;
-  forgeProjectJson?: string;
-  claudeMd?: string;
-  treeListing?: string;
-} {
-  const safeRead = (rel: string): string | undefined => {
-    const p = resolve(worktreePath, rel);
-    if (!existsSync(p)) return undefined;
-    try {
-      const raw = readFileSync(p, 'utf8');
-      return raw.length > 8192 ? raw.slice(0, 8192) + '\n… (truncated)' : raw;
-    } catch {
-      return undefined;
-    }
-  };
-  return {
-    packageJson: safeRead('package.json'),
-    pyprojectToml: safeRead('pyproject.toml'),
-    cargoToml: safeRead('Cargo.toml'),
-    forgeProjectJson: safeRead('.forge/project.json'),
-    claudeMd: safeRead('CLAUDE.md'),
-    treeListing: buildTreeListing(worktreePath),
-  };
-}
-
-/**
- * Plan 2.11 (G8 rescoped): pre-fetch the brain files EVERY PM run needs —
- * the project profile + the always-relevant themes SKILL.md Step 0 names —
- * so they ride in the prompt instead of costing agent turns. Domain-specific
- * project themes stay agent-discovered (the navigation index in the system
- * prompt covers them); only the deterministic reads are pinned here.
- * Best-effort per file (missing profile on a new project is fine); each
- * capped at 8 KB like the project-context reads.
- */
-function readPmBrainContext(
-  forgeRoot: string,
-  projectName: string,
-): Array<{ path: string; content: string }> {
-  const rels = [
-    `brain/projects/${projectName}/profile.md`,
-    ...PM_ALWAYS_RELEVANT_THEMES,
-  ];
-  const out: Array<{ path: string; content: string }> = [];
-  for (const rel of rels) {
-    const p = resolve(forgeRoot, rel);
-    if (!existsSync(p)) continue;
-    try {
-      const raw = readFileSync(p, 'utf8');
-      out.push({
-        path: rel,
-        content: raw.length > 8192 ? raw.slice(0, 8192) + '\n… (truncated)' : raw,
-      });
-    } catch {
-      /* best-effort — an unreadable theme is skipped, not fatal */
-    }
-  }
-  return out;
-}
-
-/** Bounds for the injected worktree listing (plan 2.11 — closes the
- *  six-broad-Globs gap from the 07-10 max-turns theme). */
-const TREE_LISTING_MAX_DEPTH = 3;
-const TREE_LISTING_MAX_ENTRIES = 400;
-const TREE_LISTING_SKIP_DIRS = new Set([
-  'node_modules', 'vendor', 'dist', 'build', 'out', 'coverage',
-  '.git', '.next', '.forge', '.terraform', '__pycache__', 'target',
-]);
-
-/**
- * Depth- and entry-capped worktree listing, injected into the PM prompt so
- * the agent structurally sees the tree instead of re-deriving it with
- * repeated broad Globs (the 2026-07-10 theme recorded 6 Glob scans before
- * any WI write). Dot-entries and dependency/build dirs are skipped; deeper
- * paths remain reachable via targeted Glob.
- */
-function buildTreeListing(worktreePath: string): string | undefined {
-  const lines: string[] = [];
-  const walk = (dir: string, rel: string, depth: number): void => {
-    if (depth > TREE_LISTING_MAX_DEPTH || lines.length >= TREE_LISTING_MAX_ENTRIES) return;
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      if (lines.length >= TREE_LISTING_MAX_ENTRIES) return;
-      if (entry.name.startsWith('.') || TREE_LISTING_SKIP_DIRS.has(entry.name)) continue;
-      const childRel = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        lines.push(`${childRel}/`);
-        walk(join(dir, entry.name), childRel, depth + 1);
-      } else {
-        lines.push(childRel);
-      }
-    }
-  };
-  walk(worktreePath, '', 1);
-  if (lines.length === 0) return undefined;
-  const suffix =
-    lines.length >= TREE_LISTING_MAX_ENTRIES
-      ? `\n… (truncated at ${TREE_LISTING_MAX_ENTRIES} entries — use targeted Glob for deeper paths)`
-      : '';
-  return lines.join('\n') + suffix;
 }

@@ -2169,3 +2169,30 @@ a `creates:` entry beginning with `-` is a pathname to `--stdin`, never an
 option. That is why the batched `--stdin` form was chosen over one
 `check-ignore -q <path>` per entry — one process for a set of any size, and no
 path ever reaches argv.
+
+### Relocated in M5-A — `project-manager.ts` split under the 800-line cap (six sink pairs, no new surface)
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/factory/phases/project-manager.ts` | `existsSync` | 3 | 1 |
+| `packages/factory/phases/project-manager.ts` | `readFileSync` | 4 | 2 |
+| `packages/factory/phases/project-manager.ts` | `readdirSync` | 1 | **row deleted** |
+| `packages/factory/phases/project-manager.ts` | `writeFileSync` | 2 | 1 |
+| `packages/factory/phases/pm-prompt-context.ts` | `existsSync` / `readFileSync` / `readdirSync` | — | 2 / 2 / 1 |
+| `packages/factory/phases/pm-decomposition-doc.ts` | `writeFileSync` | — | 1 |
+
+**No new surface — every pair is CONSERVED across the move**, and the arithmetic
+is asserted per sink rather than eyeballed: `existsSync` 3 = 1 + 2,
+`readFileSync` 4 = 2 + 2, `readdirSync` 1 = 0 + 1, `writeFileSync` 2 = 1 + 1.
+The checker's own total agrees — **1,365 sink calls before and after**. The
+`readdirSync` row is DELETED from the parent rather than left at zero, because a
+ratchet that permits a call in a file containing none will pass a regression that
+adds one (ruling 102's shape).
+
+**Why the file was split at all:** `project-manager.ts` stood at 859 against the
+800-line cap with a baseline exemption, and M5-A exit row 8 requires it split by
+concern, *never baselined*. The two seams are one-way and read in one direction:
+`pm-prompt-context.ts` is what the PM prompt is BUILT FROM (the worktree reads
+and the brain read, before the turn), `pm-decomposition-doc.ts` is the artifact
+the pass WRITES after its set is validated. **The file-size exemption is deleted,
+not re-keyed** — the file is 687 lines and the baseline drops from 66 rows to 65.
