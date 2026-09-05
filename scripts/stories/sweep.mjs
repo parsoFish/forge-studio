@@ -313,18 +313,54 @@ function describeRemoved(path, removedContents) {
   return ` — contained ${named}${record.truncated ? ` and ${record.total - record.entries.length} more` : ''}`;
 }
 
+/**
+ * The starter agents a flow SAVE may legitimately materialise into the roster.
+ *
+ * Bead `forge-8vfn.6.12` (T1 ruling 275). `PUT /api/studio/flows/:id` copies a
+ * starter package into `skills/<slug>` so a seeded canvas validates on a fresh
+ * install (`apps/forge/bridge-studio-writes.ts:191/225-266/449`) — designed,
+ * documented, a CLOSED slug set, and an existing `skills/<slug>` always wins.
+ * S4 runs 2 and 3 both had the fence remove three of them and call each an
+ * escape.
+ *
+ * The removal is right: run 2 must not inherit run 1's roster. The WORDING was
+ * not — calling a designed write an escape trains a reader to skim the fence's
+ * own output, which is the one place a real escape appears.
+ *
+ * DERIVED from `studio/starters/agents/`, the same directory `listStarterAgents`
+ * enumerates, never a hardcoded `dev|plan|review`: a hardcoded list drifts the
+ * moment a starter is added and would quietly stop naming the new one. A tree
+ * without the directory yields none, so every removal reads exactly as before.
+ */
+export function starterAgentSlugs(root) {
+  try {
+    return readdirSync(join(root, 'studio', 'starters', 'agents'), { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 /** The fence's report, always printed — a clean run says so (§15.92). */
-export function describeFence(fence) {
+export function describeFence(fence, expectedStarters = []) {
   if (fence.restored.length === 0 && fence.removed.length === 0 && fence.failed.length === 0) {
     return ['[stories] fence: clean — the run wrote nothing outside its own artifacts'];
   }
   return [
     ...fence.restored.map((p) => `[stories] fence: RESTORED ${p} — the run wrote a repo-tracked file outside its artifacts`),
-    ...fence.removed.map(
-      (p) =>
-        `[stories] fence: REMOVED ${p} — created by the run, not its artifact` +
-        describeRemoved(p, fence.removedContents ?? []),
-    ),
+    ...fence.removed.map((p) => {
+      const slug = /^skills\/([^/]+)$/.exec(p)?.[1];
+      const expected = slug !== undefined && expectedStarters.includes(slug);
+      return (
+        `[stories] fence: REMOVED ${p} — ` +
+        (expected
+          ? 'EXPECTED: a flow save materialises this starter agent into the roster (bead forge-8vfn.6.12); removed so the next run does not inherit it'
+          : 'created by the run, not its artifact') +
+        describeRemoved(p, fence.removedContents ?? [])
+      );
+    }),
     ...fence.failed.map((f) => `[stories] fence: COULD NOT clear ${f.path}: ${f.error} — the tree is left dirty`),
   ];
 }

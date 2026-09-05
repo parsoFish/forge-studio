@@ -38,6 +38,7 @@ import {
   applyFence,
   describeFence,
   fenceBreaches,
+  starterAgentSlugs,
   readGitPorcelain,
   sweepProductFixtures,
   sweepStoryResidue,
@@ -277,7 +278,10 @@ async function runStory(story, uiUrl, startedMs) {
 
   // And the fence, over everything the product wrote that carries no story id.
   const fence = applyFence(fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id), ROOT);
-  for (const line of describeFence(fence)) console.log(line);
+  // Bead `forge-8vfn.6.12` (ruling 275) — a flow save legitimately materialises
+  // starter agents into the roster, so the fence names those as EXPECTED while
+  // still removing them; anything else is still an escape.
+  for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
 
   const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);
