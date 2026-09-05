@@ -24,9 +24,10 @@
  *   (1) A single-id batch with a valid `costCeilingUsd` stamps
  *       `cost_ceiling_usd` onto the initiative's manifest, such that
  *       `resolveCostCeilingOverride(manifestPath)` (orchestrator/cycle.ts)
- *       returns EXACTLY that value — not the `cost_budget_usd +
- *       DERIVED_CEILING_MARGIN_USD` (40) fallback a manifest with no explicit
- *       ceiling would derive.
+ *       returns EXACTLY that value — not the `cost_budget_usd x (1 +
+ *       DERIVED_CEILING_MARGIN_SHARE)` fallback a manifest with no explicit
+ *       ceiling would derive — and reports `source: 'manifest'`, so a stopped
+ *       run names the knob the operator actually set (bead 6.10.23).
  *   (2) An out-of-bounds / non-positive / non-finite `costCeilingUsd` → 400,
  *       BEFORE any side effect: the target manifest is never repointed at
  *       forge-develop (still `flow_id: forge-architect` on disk) and never
@@ -49,7 +50,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { resolveCostCeilingOverride } from '@forge/flows/cycle.ts';
 import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { DERIVED_CEILING_MARGIN_USD, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
+import { DERIVED_CEILING_MARGIN_SHARE, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -113,8 +114,9 @@ function manifestPathFor(id: string): string {
 test('POST /api/develop/start: single-id batch with costCeilingUsd stamps cost_ceiling_usd onto the manifest, and resolveCostCeilingOverride reads EXACTLY that value — not the cost_budget_usd+margin derived fallback', async () => {
   const id = 'INIT-2026-08-09-ceiling-stamp';
   const COST_BUDGET_USD = 2.0;
-  const CEILING = 17; // deliberately far from the derived fallback (2.0 + 40 = 42)
-  assert.notEqual(CEILING, COST_BUDGET_USD + DERIVED_CEILING_MARGIN_USD, 'sanity: the two values must be distinguishable');
+  const DERIVED_FALLBACK = COST_BUDGET_USD * (1 + DERIVED_CEILING_MARGIN_SHARE);
+  const CEILING = 17; // deliberately far from the derived fallback (2.0 x 1.5 = 3)
+  assert.notEqual(CEILING, DERIVED_FALLBACK, 'sanity: the two values must be distinguishable');
 
   const manifestPath = manifestPathFor(id);
   writeFileSync(manifestPath, pendingManifest(id, COST_BUDGET_USD));
@@ -140,10 +142,10 @@ test('POST /api/develop/start: single-id batch with costCeilingUsd stamps cost_c
   );
 
   const resolved = resolveCostCeilingOverride(manifestPath);
-  assert.equal(
+  assert.deepEqual(
     resolved,
-    CEILING,
-    `resolveCostCeilingOverride must read the stamped ceiling (${CEILING}) via the manifest's cost_ceiling_usd field, not the derived cost_budget_usd+${DERIVED_CEILING_MARGIN_USD} fallback (${COST_BUDGET_USD + DERIVED_CEILING_MARGIN_USD}) that a manifest with no explicit ceiling would resolve to — got ${resolved}`,
+    { ceilingUsd: CEILING, source: 'manifest' },
+    `resolveCostCeilingOverride must read the stamped ceiling (${CEILING}) via the manifest's cost_ceiling_usd field and name it as the manifest's, not the derived cost_budget_usd x (1 + ${DERIVED_CEILING_MARGIN_SHARE}) fallback (${DERIVED_FALLBACK}) that a manifest with no explicit ceiling would resolve to — got ${JSON.stringify(resolved)}`,
   );
 });
 
