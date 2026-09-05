@@ -84,7 +84,7 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [];
 // iteration-0 check, record it, do not fail the work item") has no mapping onto
 // the runner's boolean, and inventing one would have meant editing
 // `packages/agents` at exactly its cap. The `infra` row now reads `'required'`,
-// the safe direction. Narrowed under T1 ruling 292; operator ratification pending.
+// the safe direction. Narrowed under T1 ruling 292, RATIFIED in window 8 (300).
 //
 // `mergeBoundaryTest` + `mergeBoundaryVerb` — read together by
 // `phases/executor-deps.ts`, which passes the class's SELECTION down into
@@ -254,6 +254,36 @@ describe('class profiles — the required-paths source is the table\'s, and it i
     for (const cls of CHANGE_CLASSES) {
       assert.ok(legal.includes(profileFor(cls).requiredPathsSource), `${cls} declares a source outside the union`);
     }
+  });
+
+  it('kills "a docs work item passes by creating a page it never had to edit": the docs row demands the files it DECLARED', () => {
+    // Operator ruling 300 (window 8), adopting T1's B4. Under `'wi.creates'` a
+    // docs work item that declares two pages to revise and creates one new page
+    // satisfied its gate the moment the new page appeared: the priority chain
+    // returns `creates` and never looks at `files_in_scope`, so the revision the
+    // initiative was FOR was never required to be in the branch diff. Docs work
+    // is editing named files; the class that edits declares its scope and must
+    // touch it.
+    const docsWi = {
+      work_item_id: 'WI-1',
+      initiative_id: 'INIT-x',
+      title: 'revise the two pages the gap registry names',
+      files_in_scope: ['docs/registry.md', 'docs/gaps.md'],
+      creates: ['docs/new-index.md'],
+      acceptance_criteria: [],
+      depends_on: [],
+      quality_gate_cmd: ['true'],
+    } as unknown as WorkItem;
+
+    const required = gateRequiredPaths(docsWi, profileFor('docs').requiredPathsSource);
+    assert.deepEqual([...required], ['docs/registry.md', 'docs/gaps.md']);
+    assert.ok(
+      !required.includes('docs/new-index.md'),
+      'the created page is not the requirement — a docs WI that only creates has not done the editing it declared',
+    );
+    // The value itself, pinned: reverting the row to the priority chain is a red
+    // here and not a silent policy change one character wide.
+    assert.equal(profileFor('docs').requiredPathsSource, 'files-in-scope');
   });
 
   it('kills "the dev-loop reads the manifest itself": readChangeClass is the one reader, and it refuses an unreadable manifest', () => {
