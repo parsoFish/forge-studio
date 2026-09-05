@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import {
   applyFence,
+  sweepStoryRemotes,
   starterAgentSlugs,
   describeFence,
   fenceBreaches,
@@ -380,6 +381,85 @@ test('AT-6.12-4 (positive control) a clean fence still says clean, and carries a
   const fence = applyFence({ restore: [], remove: [] }, tmpdir());
   assert.deepEqual(fence.removedContents, []);
   assert.deepEqual(describeFence(fence), ['[stories] fence: clean — the run wrote nothing outside its own artifacts']);
+});
+
+/**
+ * Deleting a story's GitHub remote (bead `forge-8vfn.6.11.2`, T1 ruling 255).
+ *
+ * `#468`'s sibling — `gh repo create` at project creation — makes a story's
+ * project a real GitHub repository so C6 resolves and S2 beat 5 can read
+ * `resolution-user-count: '0'`. The sweep owns every fixture a story authors
+ * (#407/#412), so it owns that remote too.
+ *
+ * DELETION IS THE DANGEROUS HALF AND IS TREATED AS SUCH:
+ *
+ *   - `delete_repo` reaches EVERY repository the account owns, so the token is
+ *     never the one the agents run under. It is read ONLY from an operator-root
+ *     path, outside the repo and outside every agent env — never
+ *     `AGENT_ENV_ALLOWLIST`, never a project `secrets.env`, never a spawned
+ *     session's env.
+ *   - The token is not yet issued. Absent it the sweep REFUSES LOUDLY BY NAME
+ *     rather than skipping quietly: an un-swept remote that nobody is told
+ *     about is how a story leaks a repository per run.
+ *   - Two independent conditions gate every delete: the repo must be in the
+ *     run's OWN creation manifest, AND its name must carry the story prefix.
+ *     Either alone is insufficient — a manifest is written by the run and a
+ *     prefix is a string, and `delete_repo` is not a permission to be one
+ *     mistake away from.
+ */
+test('AT-6.11.2-5 (RED) with no token, the sweep REFUSES BY NAME and deletes nothing', () => {
+  const calls: string[][] = [];
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [{ nameWithOwner: 'parsoFish/story-s2-abc123' }],
+    readToken: () => null,
+    runGh: (a: string[]) => { calls.push(a); return ''; },
+  });
+  assert.equal(res.deleted.length, 0);
+  assert.deepEqual(calls, [], 'nothing outward-facing without a token');
+  assert.equal(res.refusals.length, 1);
+  assert.match(res.refusals[0], /FORGE_STORY_SWEEP_DELETE_TOKEN/, res.refusals[0]);
+  assert.match(res.refusals[0], /story-sweep-token/, `the PATH is named too: ${res.refusals[0]}`);
+});
+
+test('AT-6.11.2-6 (RED) with a token, only manifest-listed repos carrying the story prefix are deleted', () => {
+  const calls: string[][] = [];
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [{ nameWithOwner: 'parsoFish/story-s2-abc123' }],
+    readToken: () => 'ghp_fake',
+    runGh: (a: string[]) => { calls.push(a); return ''; },
+  });
+  assert.deepEqual(res.deleted, ['parsoFish/story-s2-abc123']);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].slice(0, 3), ['repo', 'delete', 'parsoFish/story-s2-abc123']);
+  assert.ok(calls[0].includes('--yes'), `non-interactive: ${calls[0].join(' ')}`);
+});
+
+test('AT-6.11.2-7 a repo NOT in the run\'s manifest is never deleted, even with the prefix', () => {
+  const calls: string[][] = [];
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [],                                   // the run created nothing
+    alsoSeen: ['parsoFish/story-s2-someone-elses'], // but something with the prefix exists
+    readToken: () => 'ghp_fake',
+    runGh: (a: string[]) => { calls.push(a); return ''; },
+  });
+  assert.deepEqual(res.deleted, []);
+  assert.deepEqual(calls, [], 'the manifest is the authority — a prefix alone never authorises a delete');
+});
+
+test('AT-6.11.2-8 a manifest-listed repo WITHOUT the story prefix is refused, naming it', () => {
+  const calls: string[][] = [];
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [{ nameWithOwner: 'parsoFish/some-real-project' }],
+    readToken: () => 'ghp_fake',
+    runGh: (a: string[]) => { calls.push(a); return ''; },
+  });
+  assert.deepEqual(res.deleted, []);
+  assert.deepEqual(calls, [], 'both conditions must hold — a manifest entry alone is not enough');
+  assert.match(res.refusals.join(' '), /some-real-project/, JSON.stringify(res.refusals));
 });
 
 /**

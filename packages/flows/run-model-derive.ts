@@ -23,7 +23,7 @@ import { join, resolve } from 'node:path';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-view-types.ts';
-import { phasesWithIterationEvents, sumAuthoritativeCostUsd } from '@forge/kernel';
+import { costStreamFacts, sumAuthoritativeCostUsd } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Constants (used by derivation helpers only)
@@ -527,11 +527,11 @@ export function deriveWorkItems(
   // so a WI that crashed before iterating never counts a restated 'end'
   // rollup the phase badge excludes (event-cost.ts rule; feeds the WI hex's
   // data-wi-cost-usd, mirroring data-phase-cost-usd).
-  const iterationPhases = phasesWithIterationEvents(events);
+  const facts = costStreamFacts(events);
 
   return wiOrder.map((id) => {
     const delivered = findDelivered(events, id); // M5: this WI's own net delta (success-only)
-    const costUsd = sumAuthoritativeCostUsd(buckets.get(id) ?? [], iterationPhases);
+    const costUsd = sumAuthoritativeCostUsd(buckets.get(id) ?? [], facts);
     let status = wiStatusFor(buckets.get(id) ?? []);
     // A WI that auto-committed real work then crashed (or is on a later
     // retry) is recoverable, not a red failure — show 'retrying'. Phase 4/2

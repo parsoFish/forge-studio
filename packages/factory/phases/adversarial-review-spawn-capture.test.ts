@@ -147,7 +147,9 @@ function validFindingsJson(prompt: string): string {
     summary: 'one major correctness finding',
     lenses: ['correctness', 'containment', 'test-strength', 'boundary'],
     acEvaluations: [
-      { criterion: '(WI-1) GIVEN a request WHEN handled THEN it returns 200', verdict: 'partial', evidence: 'the handler returns 200 only on the happy path' },
+      ...[...prompt.matchAll(/^\d+\. (\(WI-[^)]+\) GIVEN .+)$/gm)].map((m) => ({
+        criterion: m[1]!, verdict: 'partial' as const, evidence: 'the handler returns 200 only on the happy path',
+      })),
     ],
     whyWhatHow: {
       why: 'the caller needs a 200 on a handled request',
@@ -172,9 +174,14 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
   try {
     const logger = createLogger(CYCLE_ID, fx.logsRoot);
 
-    let captured: { prompt: string; options?: Record<string, unknown> } | null = null;
+    // EVERY spawn is captured, not just the last. The pipeline reviews per work
+    // item (bead forge-8vfn.6.10.24), and ruling 290 requires each chunk to run
+    // under the SAME fence and the SAME class lenses — a property this test
+    // proves by comparing the captured option bags rather than by asserting it
+    // about the one spawn that happened to be recorded.
+    const spawns: Array<{ prompt: string; options?: Record<string, unknown> }> = [];
     const queryFn: StreamQueryFn = ((params: { prompt: string; options?: Record<string, unknown> }) => {
-      captured = { prompt: params.prompt, options: params.options };
+      spawns.push({ prompt: params.prompt, options: params.options });
       async function* gen(): AsyncGenerator<unknown> {
         writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(params.prompt));
         yield { type: 'result', subtype: 'success', total_cost_usd: 0.2, usage: { input_tokens: 5, output_tokens: 7 } };
@@ -188,8 +195,19 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
       { queryFn },
     );
 
-    assert.equal(res.status, 'complete', 'sanity: the fixture must drive the pipeline to a clean single-pass completion');
-    assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
+    assert.equal(res.status, 'complete', 'sanity: the fixture must drive the pipeline to a clean completion');
+    assert.ok(spawns.length >= 1, 'queryFn must have been invoked');
+    // Ruling 290, proved by EXECUTION: every chunk's spawn carries a byte-identical
+    // option bag — same tool set, same fence, same turn cap. Only the evidence
+    // each one is shown differs, which is the whole point of chunking.
+    const optionsOf = (sp: { options?: Record<string, unknown> }): string =>
+      JSON.stringify({ ...sp.options, canUseTool: 'canUseTool' in (sp.options ?? {}) ? '<fn>' : undefined });
+    for (const sp of spawns.slice(1)) {
+      assert.equal(optionsOf(sp), optionsOf(spawns[0]!), 'a chunk reviewed under different options is a second, weaker reviewer');
+    }
+    assert.ok(spawns.every((sp) => sp.prompt.includes('correctness')), 'every chunk carries the class lenses');
+    // The golden pins the FIRST chunk — the one that reviews a work item.
+    const captured: { prompt: string; options?: Record<string, unknown> } = spawns[0]!;
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: fx.worktree, encoding: 'utf8' }).trim();
     // `canUseTool` is a FUNCTION, and `JSON.stringify` drops a function silently
     // — a golden written straight from this bag would record the fence's ABSENCE

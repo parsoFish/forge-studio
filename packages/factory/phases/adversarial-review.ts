@@ -42,7 +42,8 @@ import { runAgent } from '@forge/agents/run-agent.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
-import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
+import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
+import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk } from './review-chunks.ts';
 import {
   buildAdversarialReviewSystemPrompt,
   renderAdversarialReviewUserPrompt,
@@ -206,12 +207,14 @@ export async function runAdversarialReview(
   assertAdversarialReviewDeclaration(def);
 
   // Band 1 — assemble the review inputs (orchestrator-owned; full stdout).
-  const diff = gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`]);
-  const diffStat = gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`]);
+  // The DIFF itself is captured per chunk, not here: the whole-initiative patch
+  // this used to write was overwritten by the first chunk's before any agent
+  // read it (bead forge-8vfn.6.10.24), so writing it was three dead file writes
+  // and three extra request-reachable path sinks for a file nobody consumed.
   const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', `${BASE_REF}...HEAD`]);
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
-  if (!diff.ok || !diffStat.ok || !changedFilesRes.ok || !headShaRes.ok) {
-    const detail = `git derivation error: ${[diff, diffStat, changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+  if (!changedFilesRes.ok || !headShaRes.ok) {
+    const detail = `git derivation error: ${[changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
     // Event name deliberately avoids the 'review'+'failed' substring pair —
     // failure-classifier.ts's reviewer signature would misclassify it as a
     // terminal reviewer-convergence failure (adversarial review finding #12).
@@ -222,9 +225,6 @@ export async function runAdversarialReview(
   const changedFiles = changedFilesRes.out.trim().split('\n').filter(Boolean);
   const inputDirAbs = join(input.worktreePath, REVIEW_INPUT_REL_DIR);
   mkdirSync(inputDirAbs, { recursive: true });
-  writeFileSync(join(inputDirAbs, 'diff.patch'), diff.out);
-  writeFileSync(join(inputDirAbs, 'diffstat.txt'), diffStat.out);
-  writeFileSync(join(inputDirAbs, 'changed-files.txt'), changedFiles.join('\n') + '\n');
   emit('review.input.assembled', { changed_files: changedFiles.length, head_sha: headSha, base_ref: BASE_REF });
 
   const findingsAbs = join(input.worktreePath, '.forge', REVIEW_FINDINGS_FILENAME);
@@ -240,7 +240,6 @@ export async function runAdversarialReview(
 
   // Everything from here is scrub-covered — a throw anywhere below must never
   // strand .forge/review-input/ or a findings copy untracked in the worktree.
-  let lastErrors: string[] = [];
   try {
     // ── The write fence (T1 ruling 249) ─────────────────────────────────────
     //
@@ -270,22 +269,24 @@ export async function runAdversarialReview(
     // was never shown.
     const lenses = profileFor(input.changeClass).reviewLenses;
 
-    // Band 2 — briefing inputs from the develop output.
+    // Band 2 — briefing inputs from the develop output. The FULL records are
+    // kept, not just the display list: the partition below cuts the diff by the
+    // paths each work item declared (bead forge-8vfn.6.10.24).
     const wiDir = join(input.worktreePath, '.forge', 'work-items');
-    const workItems: Array<{ id: string; title: string; status: string }> = [];
-    const acceptanceCriteria: string[] = [];
+    const wiRecords: WorkItem[] = [];
     if (existsSync(wiDir)) {
       const { items, parseErrors } = readWorkItemsFromDir(wiDir);
       if (Object.keys(parseErrors).length > 0) {
         emit('review.input.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
       }
-      for (const wi of items) {
-        workItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
-        for (const ac of wi.acceptance_criteria) {
-          acceptanceCriteria.push(`(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
-        }
-      }
+      wiRecords.push(...items);
     }
+    const displayOf = (wi: WorkItem): { id: string; title: string; status: string } => ({
+      id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status,
+    });
+    const criteriaOf = (wi: WorkItem): string[] =>
+      wi.acceptance_criteria.map((ac) => `(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
+    const acceptanceCriteria = wiRecords.flatMap(criteriaOf);
     const brainContext: Array<{ path: string; content: string }> = [];
     if (input.projectName) {
       const profileAbs = join(projectBrainDir(input.forgeRoot ?? FORGE_ROOT, input.projectName), 'profile.md');
@@ -298,122 +299,215 @@ export async function runAdversarialReview(
       }
     }
 
-    const basePrompt = renderAdversarialReviewUserPrompt({
-      initiativeId: input.initiativeId,
-      cycleId: input.cycleId,
-      baseRef: BASE_REF,
-      headSha,
-      acceptanceCriteria,
-      workItems,
-      changedFiles,
-      lenses,
-      brainContext,
-    });
     const systemPrompt = buildAdversarialReviewSystemPrompt();
 
-    // Guard integrity fails LOUD in both directions (finding #1): a failed
-    // pre-snapshot must not blame the agent for orchestrator files, and a
-    // failed post-snapshot must not silently bypass the guard.
-    const preSnap = takeScopeSnapshot(input.worktreePath);
-    if (!preSnap.ok) {
-      emit('review.scope-guard-degraded', { when: 'pre-spawn', error: preSnap.error }, { event_type: 'error' });
-      return { status: 'failed', reason: 'derive-failed', detail: `scope-guard pre-snapshot unavailable: ${preSnap.error}` };
+    // ── Bounded by construction: one review per WORK ITEM (bead 6.10.24) ─────
+    //
+    // G2 died here — `error_max_turns`, no findings artifact, no verdict gate,
+    // no merge — because one spawn read the whole initiative's diff: its work
+    // scaled with the change while its budget did not. The chunk is the work
+    // item, which introduces NO NEW NUMBER: the PM already bounded it, one agent
+    // authored it, and its gate already ran over it. Files no work item claims
+    // become one `unattributed` chunk, so nothing in the diff escapes review.
+    const planned = partitionChangedFiles(changedFiles, wiRecords);
+    // An empty diff keeps the pre-chunking shape — one chunk of nothing, which
+    // the prompt renderer already words as "empty diff — say so in the summary".
+    const chunks: ReviewChunk[] = planned.length > 0 ? planned : [{ workItemId: null, files: [] }];
+    const byId = new Map(wiRecords.map((w) => [w.work_item_id, w] as const));
+    emit('review.chunks.planned', {
+      chunks: chunks.length,
+      changed_files: changedFiles.length,
+      labels: chunks.map(chunkLabel),
+      unattributed_files: chunks.find((c) => c.workItemId === null)?.files.length ?? 0,
+    });
+
+    // Work items whose declared files are absent from this diff produce no
+    // chunk, so no agent is ever shown their criteria. They are judged by the
+    // orchestrator at merge time — see `mergeChunkRecords`.
+    const chunked = new Set(chunks.map((c) => c.workItemId).filter((id): id is string => id !== null));
+    const unjudgedCriteria = wiRecords
+      .filter((w) => !chunked.has(w.work_item_id))
+      .flatMap((w) => criteriaOf(w).map((criterion) => ({ criterion, workItemId: w.work_item_id })));
+
+    /**
+     * One chunk's review: the same spawn, the same write fence, the same class
+     * lenses and the same scope guard the whole-diff review used — only the
+     * evidence it is given is narrower.
+     */
+    const reviewChunk = async (
+      chunk: ReviewChunk,
+    ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
+      const label = chunkLabel(chunk);
+      const wi = chunk.workItemId === null ? undefined : byId.get(chunk.workItemId);
+      const criteria = wi ? criteriaOf(wi) : [];
+
+      // This chunk's evidence, written where the whole diff used to be. Scrubbed
+      // with the rest of `.forge/review-input/` in the `finally` below.
+      const chunkDiff = chunk.files.length > 0
+        ? gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        : { ok: true, out: '', err: '' };
+      const chunkStat = chunk.files.length > 0
+        ? gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        : { ok: true, out: '', err: '' };
+      if (!chunkDiff.ok || !chunkStat.ok) {
+        const detail = `git derivation error for chunk ${label}: ${[chunkDiff, chunkStat].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+        emit('review.input.derive-error', { detail, chunk: label }, { event_type: 'error' });
+        return { ok: false, failure: { status: 'failed', reason: 'derive-failed', detail } };
+      }
+      writeFileSync(join(inputDirAbs, 'diff.patch'), chunkDiff.out);
+      writeFileSync(join(inputDirAbs, 'diffstat.txt'), chunkStat.out);
+      writeFileSync(join(inputDirAbs, 'changed-files.txt'), chunk.files.join('\n') + '\n');
+
+      const basePrompt = renderAdversarialReviewUserPrompt({
+        initiativeId: input.initiativeId,
+        cycleId: input.cycleId,
+        baseRef: BASE_REF,
+        headSha,
+        acceptanceCriteria: criteria,
+        workItems: wi ? [displayOf(wi)] : [],
+        changedFiles: [...chunk.files],
+        lenses,
+        brainContext,
+      });
+
+      // Guard integrity fails LOUD in both directions (finding #1): a failed
+      // pre-snapshot must not blame the agent for orchestrator files, and a
+      // failed post-snapshot must not silently bypass the guard. Taken PER
+      // CHUNK, after this chunk's inputs are written, so the pipeline's own
+      // writes are never attributable to the agent.
+      const preSnap = takeScopeSnapshot(input.worktreePath);
+      if (!preSnap.ok) {
+        emit('review.scope-guard-degraded', { when: 'pre-spawn', chunk: label, error: preSnap.error }, { event_type: 'error' });
+        return { ok: false, failure: { status: 'failed', reason: 'derive-failed', detail: `scope-guard pre-snapshot unavailable: ${preSnap.error}` } };
+      }
+
+      let lastErrors: string[] = [];
+      for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
+        if (existsSync(findingsAbs)) unlinkSync(findingsAbs); // fresh attempt = fresh judgment
+        const prompt =
+          attempt === 1
+            ? basePrompt
+            : `${basePrompt}\n\n## Previous attempt rejected (fix EXACTLY these, change nothing else)\n\n${lastErrors.map((e) => `- ${e}`).join('\n')}`;
+
+        // Band 3 — the one-shot spawn (caller lifecycle: this pipeline owns events).
+        let spawn;
+        try {
+          spawn = await runAgent(def, {
+            runId: input.initiativeId,
+            workdir: input.worktreePath,
+            cwd: input.worktreePath,
+            prompt,
+            systemPrompt,
+            lifecycle: 'caller',
+            streamGuard: { label: AGENT_SLUG, signal: opts.signal },
+            bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
+            queryFn: opts.queryFn,
+            ...writeFence,
+          });
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          // 'spawn-error' (not '…failed') — the failure-classifier's reviewer
+          // signature matches 'review'+'failed' substrings (finding #12).
+          emit('review.spawn-error', { detail, attempt, chunk: label }, { event_type: 'error' });
+          return { ok: false, failure: { status: 'failed', reason: 'spawn-failed', detail } };
+        }
+        emit('review.agent-pass', { attempt, chunk: label, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
+
+        // Only budget/turn kills are exhaustion; other error_* subtypes (e.g.
+        // error_during_execution) are spawn failures — telling the operator to
+        // raise budgets for those is a misdiagnosis (finding #3).
+        if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_max_')) {
+          emit('review.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt, chunk: label }, { event_type: 'error' });
+          // Ruling 290: name the chunk. A budget kill on ONE work item is a
+          // fact about that work item's diff, and reporting it anonymously is
+          // what made G2's failure unactionable. Never skipped, never retried
+          // with a wider budget.
+          return {
+            ok: false,
+            failure: {
+              status: 'failed',
+              reason: 'budget-exhausted',
+              detail:
+                `${label} is too large for review: its spawn was terminated by the SDK (${spawn.resultSubtype}). ` +
+                `${chunk.files.length} file(s) in this chunk. Split the work item, not the budget.`,
+            },
+          };
+        }
+        if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+          emit('review.spawn-error', { result_subtype: spawn.resultSubtype, attempt, chunk: label }, { event_type: 'error' });
+          return {
+            ok: false,
+            failure: {
+              status: 'failed',
+              reason: 'spawn-failed',
+              detail: `adversarial-review spawn for ${label} ended with SDK subtype ${spawn.resultSubtype} (execution failure, not a budget kill)`,
+            },
+          };
+        }
+
+        // Mechanical scope guard: the reviewer's only legal write is the
+        // findings file (review-input was pipeline-written pre-snapshot; the
+        // snapshot layers cover untracked-dir collapse + gitignored .forge —
+        // agent-scope-guard.ts).
+        const postSnap = takeScopeSnapshot(input.worktreePath);
+        if (!postSnap.ok) {
+          emit('review.scope-guard-degraded', { when: 'post-spawn', chunk: label, error: postSnap.error }, { event_type: 'error' });
+          return { ok: false, failure: { status: 'failed', reason: 'derive-failed', detail: `scope-guard post-snapshot unavailable: ${postSnap.error}` } };
+        }
+        const newDirt = scopeViolations(preSnap, postSnap, (p) => p === findingsRel);
+        if (newDirt.length > 0) {
+          emit('review.scope-violation', { paths: newDirt, chunk: label }, { event_type: 'error' });
+          return {
+            ok: false,
+            failure: {
+              status: 'failed',
+              reason: 'scope-violation',
+              detail: `adversarial-review wrote outside ${findingsRel}: ${newDirt.join(', ')} — the reviewer judges, it never edits`,
+            },
+          };
+        }
+
+        // Band 4 — harvest + validate (+ identity-echo verification).
+        const harvest = harvestFindings(
+          findingsAbs,
+          findingsRel,
+          { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha },
+          { lenses, criteria },
+        );
+        if (!harvest.ok) {
+          lastErrors = harvest.errors;
+          emit('review.author.invalid', { attempt, chunk: label, errors: harvest.errors });
+          continue;
+        }
+        return { ok: true, record: harvest.record };
+      }
+      return { ok: false, failure: { status: 'failed', reason: 'author-invalid', detail: `${label}: ${lastErrors.join('; ')}` } };
+    };
+
+    const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+    for (const chunk of chunks) {
+      const outcome = await reviewChunk(chunk);
+      if (!outcome.ok) return outcome.failure;
+      chunkRecords.push({ label: chunkLabel(chunk), record: outcome.record });
     }
 
-    for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
-      if (existsSync(findingsAbs)) unlinkSync(findingsAbs); // fresh attempt = fresh judgment
-      const prompt =
-        attempt === 1
-          ? basePrompt
-          : `${basePrompt}\n\n## Previous attempt rejected (fix EXACTLY these, change nothing else)\n\n${lastErrors.map((e) => `- ${e}`).join('\n')}`;
-
-      // Band 3 — the one-shot spawn (caller lifecycle: this pipeline owns events).
-      let spawn;
-      try {
-        spawn = await runAgent(def, {
-          runId: input.initiativeId,
-          workdir: input.worktreePath,
-          cwd: input.worktreePath,
-          prompt,
-          systemPrompt,
-          lifecycle: 'caller',
-          streamGuard: { label: AGENT_SLUG, signal: opts.signal },
-          bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
-          queryFn: opts.queryFn,
-          ...writeFence,
-        });
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        // 'spawn-error' (not '…failed') — the failure-classifier's reviewer
-        // signature matches 'review'+'failed' substrings (finding #12).
-        emit('review.spawn-error', { detail, attempt }, { event_type: 'error' });
-        return { status: 'failed', reason: 'spawn-failed', detail };
-      }
-      emit('review.agent-pass', { attempt, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
-
-      // Only budget/turn kills are exhaustion; other error_* subtypes (e.g.
-      // error_during_execution) are spawn failures — telling the operator to
-      // raise budgets for those is a misdiagnosis (finding #3).
-      if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_max_')) {
-        emit('review.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
-        return {
-          status: 'failed',
-          reason: 'budget-exhausted',
-          detail: `adversarial-review spawn terminated by the SDK (${spawn.resultSubtype}) — raise the declared budgets or shrink the diff before re-running`,
-        };
-      }
-      if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
-        emit('review.spawn-error', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
-        return {
-          status: 'failed',
-          reason: 'spawn-failed',
-          detail: `adversarial-review spawn ended with SDK subtype ${spawn.resultSubtype} (execution failure, not a budget kill)`,
-        };
-      }
-
-      // Mechanical scope guard: the reviewer's only legal write is the
-      // findings file (review-input was pipeline-written pre-snapshot; the
-      // snapshot layers cover untracked-dir collapse + gitignored .forge —
-      // agent-scope-guard.ts).
-      const postSnap = takeScopeSnapshot(input.worktreePath);
-      if (!postSnap.ok) {
-        emit('review.scope-guard-degraded', { when: 'post-spawn', error: postSnap.error }, { event_type: 'error' });
-        return { status: 'failed', reason: 'derive-failed', detail: `scope-guard post-snapshot unavailable: ${postSnap.error}` };
-      }
-      const newDirt = scopeViolations(preSnap, postSnap, (p) => p === findingsRel);
-      if (newDirt.length > 0) {
-        emit('review.scope-violation', { paths: newDirt }, { event_type: 'error' });
-        return {
-          status: 'failed',
-          reason: 'scope-violation',
-          detail: `adversarial-review wrote outside ${findingsRel}: ${newDirt.join(', ')} — the reviewer judges, it never edits`,
-        };
-      }
-
-      // Band 4 — harvest + validate (+ identity-echo verification).
-      const harvest = harvestFindings(
-        findingsAbs,
-        findingsRel,
-        { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha },
-        { lenses, criteria: acceptanceCriteria },
-      );
-      if (!harvest.ok) {
-        lastErrors = harvest.errors;
-        emit('review.author.invalid', { attempt, errors: harvest.errors });
-        continue;
-      }
-
-      // Band 5 — persist + scrub.
-      const persisted = writeReviewFindingsJson(input.logsRoot, harvest.record);
-      if (!persisted) {
-        return { status: 'failed', reason: 'author-invalid', detail: 'failed to persist review-findings.json (IO error)' };
-      }
-      const counts: Record<string, number> = { total: harvest.record.findings.length, blocker: 0, major: 0, minor: 0, info: 0 };
-      for (const f of harvest.record.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
-      emit('review.findings.authored', { ...counts, path: persisted, head_sha: headSha });
-      return { status: 'complete', findingsPath: persisted, counts };
+    // Band 5 — merge into the ONE artifact the verdict gate reads, validate the
+    // MERGED record against the whole initiative's criteria (each chunk was only
+    // validated against its own), persist, scrub.
+    const merged = mergeChunkRecords(chunkRecords, unjudgedCriteria);
+    const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria });
+    if (mergedErrors.length > 0) {
+      emit('review.merged.invalid', { errors: mergedErrors, chunks: chunkRecords.length }, { event_type: 'error' });
+      return { status: 'failed', reason: 'author-invalid', detail: `merged review-findings invalid: ${mergedErrors.join('; ')}` };
     }
-    return { status: 'failed', reason: 'author-invalid', detail: lastErrors.join('; ') };
+    const persisted = writeReviewFindingsJson(input.logsRoot, merged);
+    if (!persisted) {
+      return { status: 'failed', reason: 'author-invalid', detail: 'failed to persist review-findings.json (IO error)' };
+    }
+    const counts: Record<string, number> = { total: merged.findings.length, blocker: 0, major: 0, minor: 0, info: 0 };
+    for (const f of merged.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
+    emit('review.findings.authored', { ...counts, path: persisted, head_sha: headSha, chunks: chunkRecords.length });
+    return { status: 'complete', findingsPath: persisted, counts };
   } finally {
     scrub();
   }
