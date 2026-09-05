@@ -14,10 +14,11 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { parseManifest, serializeManifest } from './manifest.ts';
 import type { ArchitectStatus } from '@forge/sessions/kinds/architect.ts';
+import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE } from '@forge/kernel';
 import { runRequeue } from './forge-requeue.ts';
-import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadDir, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { sendJson, allowedOrigin, sanitizeError, SAFE_ID_RE, pathOnly } from '@forge/kernel';
 
@@ -197,6 +198,40 @@ export async function applyPlanVerdict(
     // spawned.
     const refuse = (): void => sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     if (kind === 'approve') {
+      // ADR 051 / ruling 229 half B — the class rule, BEFORE any spend. Read
+      // from the draft manifests the operator is approving (never from
+      // status.json, which does not carry them), through the same guarded
+      // family as every other read on this path: a symlinked `manifests` dir
+      // yields [] rather than being followed out of root.
+      const refusals = planGateClassRefusals(
+        (guardedReadDir(ctx.projectsRoot, [...dirSegments, 'manifests']) ?? [])
+          .filter((f) => f.endsWith('.md'))
+          .flatMap((f) => {
+            const raw = guardedReadFile(ctx.projectsRoot, [...dirSegments, 'manifests', f]);
+            if (raw === null) return [];
+            try {
+              const m = parseManifest(raw);
+              return [{
+                initiative_id: m.initiative_id,
+                class: m.class,
+                acceptanceCriteriaCount: m.acceptance_criteria.length,
+              }];
+            } catch {
+              // A draft that does not parse is the finalize step's problem to
+              // report, not this rule's to guess about.
+              return [];
+            }
+          }),
+        ctx.singleWiAllowedFor,
+      );
+      if (refusals.length > 0) {
+        sendJson(res, 409, {
+          error: 'the plan does not pass the class gate',
+          refusals,
+          sessionId,
+        }, origin);
+        return;
+      }
       if (rationale) {
         if (guardedWriteFile(ctx.projectsRoot, [...dirSegments, 'feedback.md'], rationale.trim() + '\n') === null) {
           refuse();

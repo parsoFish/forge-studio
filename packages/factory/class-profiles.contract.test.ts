@@ -62,8 +62,11 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [
   'capture',             // spec §5 item 4 — what the integrate band captures
   'reviewLenses',        // spec §5 item 5 — the one read-only review agent
   'reflect',             // spec §5 item 4 — the reflector's class rule
-  'singleWiAllowed',     // spec §5 item 3 — the plan gate's lane check
 ];
+
+// `singleWiAllowed` came off this list first, and where it landed corrected the
+// draft: it is enforced by the project manager's SET rules, not the plan gate,
+// because at the plan gate there are no work items to count. Seven columns left.
 
 // Every column is on the list as this lands, and that is the honest state of a
 // table whose consumers are spec §5 items 3 to 6: the DATA is ratified now
