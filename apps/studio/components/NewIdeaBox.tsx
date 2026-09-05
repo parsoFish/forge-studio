@@ -50,6 +50,14 @@ export function NewIdeaBox({
   // forge-8vfn.5.5: the id this form MINTS, rendered before the navigation
   // that consumes it — the `data-onboard-session-id` convention, which was the
   // one place in Studio where a session id was observable in time.
+  //
+  // forge-8vfn.6.11.5: it is published only ONCE IT EXISTS. The wrapper used
+  // to render `data-architect-session-id={startedSessionId ?? ''}` — present
+  // and empty from first paint — so a consumer waiting for the key to appear
+  // was answered instantly by a value naming no session, and S2 beat 10 read
+  // `expected a value to bind as <architectSessionId>, got ""` on a run whose
+  // architect really had started. `SessionMinted` below states the rule this
+  // now follows: no id, no claim.
   const [startedSessionId, setStartedSessionId] = useState<string | null>(null);
 
   // crosscut-21: honour a ?project= prefill ONLY when it names a real roster
@@ -108,7 +116,7 @@ export function NewIdeaBox({
       data-section="new-idea"
       data-new-idea-ready={canSubmit ? 'true' : 'false'}
       data-roster-state={rosterState}
-      data-architect-session-id={startedSessionId ?? ''}
+      {...(startedSessionId === null ? {} : { 'data-architect-session-id': startedSessionId })}
       style={{
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius)',

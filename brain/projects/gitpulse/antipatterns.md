@@ -28,3 +28,11 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+
+### Auto-linked (re-file under a curated heading when convenient)
+
+- [`2026-09-05-unused-opts-param-silent-tagrange-discard`](./themes/2026-09-05-unused-opts-param-silent-tagrange-discard.md) — renderSummaryMarkdown accepted _opts?: { tagRange? } but never read it; runCli passed { tagRange } at the call site when --since-tag/--until-tag were active; silently discarded. No AC required the combined flag path; no unit test exercised non-null tagRange. The _opts underscore prefix made the gap invisible to compiler and linter.
+
+- [`2026-09-05-gitignored-scratch-tenth-cycle`](./themes/2026-09-05-gitignored-scratch-tenth-cycle.md) — ralph.uncommitted-work-swept fired for all 3 WIs in the --markdown cycle (fix_plan.md, AGENT.md untracked). Tenth consecutive gitpulse cycle. projects/gitpulse/AGENT.md does not exist. The autocommit safety net is the only guard; ten data points with zero delivery impact.
+
+- [`2026-09-04-gitignored-scratch-ninth-cycle`](./themes/2026-09-04-gitignored-scratch-ninth-cycle.md) — ralph.uncommitted-work-swept fired for all 3 WIs in the include-path-filter cycle (fix_plan.md, AGENT.md untracked). Ninth consecutive gitpulse cycle with this recurrence. projects/gitpulse has no AGENT.md worktree template; the forge autocommit safety net is the only guard.

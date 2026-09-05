@@ -345,9 +345,21 @@ export function DemoTimeline({
             })}
           </div>
 
-          {/* Add step — a new step the operator binds to a forge element (or leaves free text). */}
+          {/* Add step — a new step the operator binds to a forge element (or
+              leaves free text). `data-action` per `forge-8vfn.6.11.3`: this was
+              the only control in the panel outside forge-ui's declared
+              contract, beside move-step-up, move-step-down, iterate-element
+              and launch-demo-builder, so no story could add a step at all. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, paddingLeft: 46 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => addStep('capture', '')}>+ Add step</button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-action="add-demo-step"
+              style={{ fontSize: 13 }}
+              onClick={() => addStep('capture', '')}
+            >
+              + Add step
+            </button>
           </div>
         </div>
       </div>
