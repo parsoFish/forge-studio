@@ -12,8 +12,8 @@
  */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel';
+import { dirname, join, resolve } from 'node:path';
+import { FORGE_ROOT, guardedReadFile } from '@forge/kernel';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CeilingSource } from './flow-budgets.ts';
@@ -115,6 +115,44 @@ export function resolveCostCeilingOverride(
  *
  * Exported for use by flow-runner.ts's default `emitSyntheticArchitect` dep.
  */
+/**
+ * The architect rows this cycle's log already holds. The log file IS the cycle,
+ * so its contents answer "has this cycle already emitted its architect"; a named
+ * session narrows the match. Best-effort: an unreadable log yields no rows and
+ * the caller emits — a cycle must not be blocked by a bookkeeping guard.
+ */
+function readEmittedArchitectEvents(logFilePath: string, sessionId: string | undefined): EventLogEntry[] {
+  // Through `guardedReadFile`, not a raw read: the cycle's log directory is the
+  // logger's own already-resolved root and `events.jsonl` rides as the segment,
+  // so the leaf gets the same symlink/`nlink` check every other request-reachable
+  // log read gets (`metrics.ts`'s SEC-04 note). A rejected or absent file is
+  // `null` either way, and the caller emits.
+  const raw = guardedReadFile(dirname(logFilePath), ['events.jsonl'], 'utf8');
+  if (raw === null) return [];
+  const rows: EventLogEntry[] = [];
+  let sawEnd = false;
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue;
+    let e: EventLogEntry;
+    try {
+      e = JSON.parse(line) as EventLogEntry;
+    } catch {
+      continue; // a truncated final line is not a reason to restate the architect
+    }
+    if (e.phase !== 'architect') continue;
+    if (sessionId !== undefined) {
+      const rowSession = (e.metadata as { session_id?: unknown } | undefined)?.session_id;
+      if (rowSession !== sessionId) continue;
+    }
+    rows.push(e);
+    if (e.event_type === 'end') sawEnd = true;
+  }
+  // Only a COMPLETE prior emission counts. A log holding a `start` without its
+  // `end` is a cycle that died between the two writes, and the honest repair is
+  // to emit the pair rather than to hand back a spend row that does not exist.
+  return sawEnd ? rows : [];
+}
+
 export function emitSyntheticArchitectEvents(
   input: CycleInput,
   logger: EventLogger,
@@ -132,6 +170,19 @@ export function emitSyntheticArchitectEvents(
   } catch {
     /* best-effort — a missing/unreadable manifest must not block the cycle */
   }
+
+  // IDEMPOTENT PER CYCLE (bead forge-8vfn.6.10.22). `runCycle` can be entered
+  // twice for one `cycle_id` — the claim, then a second serve pass — and each
+  // entry used to write a fresh pair whose `end` restates the architect's WHOLE
+  // spend (G2, 2026-09-05: $26.3048 logged against $23.9721 spent).
+  //
+  // The existing rows are RETURNED, never an empty array: this is handed to
+  // `runFlow` as `priorSpendEvents`, the only path by which the architect's
+  // dollars reach the CostTracker (ruling 257), so returning nothing would trade
+  // a reporting defect for a blind ceiling.
+  const alreadyEmitted = readEmittedArchitectEvents(logger.logFilePath, architectSessionId);
+  if (alreadyEmitted.length > 0) return alreadyEmitted;
+
   const emitted: EventLogEntry[] = [];
   emitted.push(logger.emit({
     initiative_id: input.initiativeId,

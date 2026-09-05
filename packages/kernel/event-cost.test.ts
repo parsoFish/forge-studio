@@ -81,7 +81,7 @@ test('isAuthoritativeCostEvent: honors an externally supplied iteration-phase se
   const iterPhases = new Set(['developer-loop']);
   const restatedEnd = ev('developer-loop', 'end', { cost_usd: 0.2, message: 'ralph.end', work_item_id: 'WI-2' });
   assert.equal(isAuthoritativeCostEvent(restatedEnd, iterPhases), false);
-  assert.ok(sumAuthoritativeCostUsd([restatedEnd], iterPhases) === 0);
+  assert.ok(sumAuthoritativeCostUsd([restatedEnd], { iterationPhases: iterPhases, restatedEventIds: new Set() }) === 0);
   // ...while a phase outside the set keeps its end cost.
   const pmEnd = ev('project-manager', 'end', { cost_usd: 0.4 });
   assert.equal(isAuthoritativeCostEvent(pmEnd, iterPhases), true);

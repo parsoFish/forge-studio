@@ -5,7 +5,7 @@
  */
 
 import type { EventLogEntry, Phase } from '@forge/kernel';
-import { isAuthoritativeCostEvent, phasesWithIterationEvents } from '@forge/kernel';
+import { costStreamFacts, countsTowardCost } from '@forge/kernel';
 import { guardedReadFile } from '@forge/kernel';
 
 export type CycleMetrics = {
@@ -73,12 +73,14 @@ export function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetric
   const m = emptyCycle(cycleId);
   const initiatives = new Set<string>();
 
-  // Pre-scan: determine which phases emit at least one 'iteration' event.
-  // For phases WITH iteration events (developer-loop, unifier) the same dollar
-  // amount is re-stated on the per-WI 'ralph.end' AND the phase-level 'end'
-  // event — counting all three would triple/double the cost. The rule lives in
-  // orchestrator/event-cost.ts (single source, shared with the run model).
-  const phasesWithIterations = phasesWithIterationEvents(events);
+  // Pre-scan for the two stream-level facts the cost rule needs. (1) Which
+  // phases emit an 'iteration' event: for those (developer-loop) the same
+  // dollars are re-stated on the per-WI 'ralph.end' AND the phase rollup 'end'.
+  // (2) Which synthetic architect rows restate a session already counted (bead
+  // forge-8vfn.6.10.22 — this aggregate was one of the readers that "agreed
+  // with the log and was wrong together"). The rules live in
+  // packages/kernel/event-cost.ts, single source, shared with the run model.
+  const facts = costStreamFacts(events);
 
   for (const e of events) {
     initiatives.add(e.initiative_id);
@@ -97,13 +99,14 @@ export function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetric
     m.per_phase[e.phase].duration_ms += e.duration_ms ?? 0;
     if (e.event_type === 'iteration') m.per_phase[e.phase].iterations += 1;
 
-    // Cost attribution: count only the authoritative (non-restating) events
-    // per phase. If a phase has iteration events, only those carry the
-    // canonical per-turn cost; 'end' events re-state the same dollars and
-    // must be excluded. If a phase has no iteration events, its cost is on
-    // 'end' events only (count everything). Same rule for per_skill — its
-    // old unconditional sum inflated iteration-loop skills 2-3x (item 1.8).
-    const countCost = isAuthoritativeCostEvent(e, phasesWithIterations);
+    // Cost attribution: count only the events that carry spend nothing else
+    // already carried. If a phase has iteration events, only those hold the
+    // canonical per-turn cost; 'end' events re-state the same dollars. If a
+    // phase has no iteration events, its cost is on 'end' events (count them)
+    // — unless the row restates an architect session the stream already
+    // counted. Same rule for per_skill, whose old unconditional sum inflated
+    // iteration-loop skills 2-3x (item 1.8).
+    const countCost = countsTowardCost(e, facts);
     if (countCost) {
       const cost = e.cost_usd ?? 0;
       m.per_phase[e.phase].cost_usd += cost;
