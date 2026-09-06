@@ -153,3 +153,46 @@ test('309b: the run\'s OWN tree is not one of its siblings', () => {
   const escapes = siblingWorktreeEscapes(sibling, baseline);
   assert.deepEqual(escapes, [], 'the run owns its own tree — the fence proper judges that');
 });
+
+// --- 6.11.28: git COLLAPSES an untracked directory, and the defer missed it ---
+
+test('6.11.28: a collapsed ancestor still defers the ground brain and removes the rest', () => {
+  // REPRODUCED, not theorised. `git status --porcelain -z` reports the TOP-MOST
+  // untracked directory — `?? brain/`, never `?? brain/projects/gitweave/` — so
+  // `'brain/'.startsWith('brain/projects/gitweave/')` was false, the defer never
+  // matched, and ruling 308's hold silently did nothing. The ground brain was
+  // left behind twice (S1 runs 6 and 7) while the fence reported `clean`, 18-19
+  // minutes after the directory was written, which is what ruled out a race.
+  //
+  // This is the SAME git behaviour #491 found and fixed with `-uall` — for
+  // SIBLING worktrees only. The fact was known and applied to one read; this is
+  // the other one.
+  //
+  // Deferring the whole collapsed `brain/` would be wrong in the other
+  // direction: it could hold a FOREIGN project's brain the run also created,
+  // which is exactly the escape the fence exists to catch. So the collapsed
+  // entry is expanded and classified file by file.
+  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', 'gitweave', {
+    expand: (p) => (p === 'brain/'
+      ? ['brain/projects/gitweave/profile.md', 'brain/projects/gitweave/kb.yaml', 'brain/projects/someone-else/profile.md']
+      : [p]),
+  });
+
+  assert.deepEqual(
+    [...b.defer].sort(),
+    ['brain/projects/gitweave/kb.yaml', 'brain/projects/gitweave/profile.md'],
+    'the ground brain is held',
+  );
+  assert.deepEqual(b.remove, ['brain/projects/someone-else/profile.md'], 'a foreign brain is still an escape');
+});
+
+test('6.11.28: with no ground declared, a collapsed entry is not expanded at all', () => {
+  // The expansion exists only to serve the ground exemption. A story with no
+  // ground has nothing to except, so the cheap path stays cheap.
+  let expanded = 0;
+  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', null, {
+    expand: (p) => { expanded += 1; return [p]; },
+  });
+  assert.equal(expanded, 0, 'no expansion when nothing could be exempt');
+  assert.deepEqual(b.remove, ['brain/']);
+});
