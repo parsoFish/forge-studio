@@ -291,3 +291,60 @@ test('6.11.34: only UNOWNED growth reds the run — the decision that ends a run
   assert.deepEqual(unownedEscapes([owned, orphan]), [orphan], 'and it does not mask the one that can');
   assert.deepEqual(unownedEscapes(undefined), [], 'a run that never looked has nothing to answer for');
 });
+
+// --- 6.11.32: an escape into a GITIGNORED path was invisible to the fence ----
+//
+// MEASURED: `projects/story-s2` sat in the MAIN CHECKOUT from 2026-08-30 — an
+// M1-era S2 run, before the fence existed — and every sibling snapshot since
+// looked straight past it. `git status --porcelain -uall` does not list
+// ignored paths, and this repo ignores `projects/*` (`.gitignore:68`), `_logs/*`
+// and `_queue/pending/*`. So the one place a story run creates its GROUND is
+// precisely the place the fence could not see.
+//
+// The pair below is the rule: the same planted directory, once proven
+// invisible to git and once named by the fence.
+
+/** A repo whose `projects/` is gitignored, exactly as forge's own is. */
+function makeRepoIgnoringProjects() {
+  const dir = makeRepo();
+  writeFileSync(join(dir, '.gitignore'), 'projects/*\n_logs/*\n', 'utf8');
+  const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'pipe' });
+  git('add', '.gitignore');
+  git('commit', '-qm', 'ignore projects');
+  mkdirSync(join(dir, 'projects'), { recursive: true });
+  return dir;
+}
+
+test('6.11.32: a ground planted in a sibling\'s IGNORED projects/ is NAMED — git status cannot see it, the fence must', () => {
+  const main = makeRepoIgnoringProjects();
+  const sibling = join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', 'lane', sibling], { cwd: main, stdio: 'pipe' });
+
+  const baseline = snapshotSiblingWorktrees(sibling);
+
+  // The escape: a whole ground appears in a tree this run does not own.
+  mkdirSync(join(main, 'projects', 'story-s2', '.forge'), { recursive: true });
+  writeFileSync(join(main, 'projects', 'story-s2', '.forge', 'project.json'), '{}\n', 'utf8');
+
+  // THE PREMISE, asserted rather than assumed: git itself reports nothing.
+  const porcelain = execFileSync('git', ['status', '--porcelain', '-uall'], { cwd: main, encoding: 'utf8' });
+  assert.doesNotMatch(porcelain, /story-s2/, 'the incident: git status is blind to an ignored path, so the old fence was too');
+
+  const escapes = siblingWorktreeEscapes(sibling, baseline, { liveRoots: () => new Map() });
+  assert.equal(escapes.length, 1, 'the fence sees what git status does not');
+  assert.equal(escapes[0].root, main);
+  assert.ok(escapes[0].paths.some((p) => p.includes('projects/story-s2')), `the ground is named: ${escapes[0].paths.join(', ')}`);
+});
+
+test('6.11.32: a ground that was ALREADY there is not charged to this run', () => {
+  const main = makeRepoIgnoringProjects();
+  const sibling = join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', 'lane', sibling], { cwd: main, stdio: 'pipe' });
+
+  // Pre-existing dirt in someone else's tree — the operator's own ground.
+  mkdirSync(join(main, 'projects', 'gitweave'), { recursive: true });
+  const baseline = snapshotSiblingWorktrees(sibling);
+
+  const escapes = siblingWorktreeEscapes(sibling, baseline, { liveRoots: () => new Map() });
+  assert.deepEqual(escapes, [], 'the baseline covers it, exactly as it does for tracked dirt');
+});
