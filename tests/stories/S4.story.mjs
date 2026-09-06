@@ -72,9 +72,33 @@
 const GOAL =
   'Plan a change to gitpulse and take it to a reviewed verdict, with the architect drafting the initiative before any code is written.';
 
-/** The first piece of work the operator asks the new flow to plan. */
+/**
+ * The first piece of work the operator asks the new flow to plan.
+ *
+ * ROTATED 2026-09-06 (T1 ruling 313, operator-confirmed). The previous idea —
+ * "add a --since flag" — was ALREADY BUILT on this ground, and S4 run 4 spent
+ * $1.05 discovering what a correct architect does about that: it refuses to
+ * plan and interviews instead. Its round-1 question, verbatim:
+ *
+ *   "The --since <YYYY-MM-DD> flag already exists and is fully implemented:
+ *    it's documented in README, validated (invalid format exits 2), and covered
+ *    by 8 tests in test/window.test.ts ... What are you actually looking to add
+ *    or fix?"
+ *
+ * The ground had outrun the story, and G1's own runs are what moved it
+ * (`parsoFish/gitpulse` #15 merged the include-path filter, #16 the markdown
+ * output flag — the second of which was one of the two gaps this architect then
+ * OFFERED). §15.205: a story pinned to a live, evolving ground can age out of
+ * its own premise, and every remaining story carries that risk.
+ *
+ * This idea is the OTHER gap the architect named in round 2 — chosen from what
+ * the product itself said was missing, not invented — checked against gitpulse
+ * at `1f1193a` (method-C ground hash `3f4d76708ff073b3`). The ground stays
+ * LIVE: pinning it was considered and refused, because a pinned ground stops
+ * the story exercising the real repo, which is the whole point of S4.
+ */
 const IDEA =
-  'Add a --since flag so the report covers only commits after a given date, with the date parsing tested and a documented default.';
+  'Add test coverage for --compare combined with --since, so the two window filters are proven to work together rather than only apart.';
 
 /** This run's ceiling, in dollars — the same figure the ground declares. */
 const CEILING = '25';
@@ -318,13 +342,39 @@ export default {
       // by beat 9. `session-kind` and `session-phase` are the session root's
       // own — S2's worked vocabulary, which costs a spawn to observe live.
       act: 'Open the session from Monitor, answer the Architect\'s questions about the work, and wait for it to finish drafting',
+      //
+      // AMENDED 2026-09-06 (T1 rulings 312/317, operator-confirmed). One submit
+      // assumed a SINGLE interview round. `bridge-studio-architect.ts:380`
+      // writes `{ phase: 'interviewing', round: round + 1 }` and spawns another
+      // turn on EVERY submission, and no ceiling exists anywhere in the product
+      // (bead `forge-8vfn.6.10.28`), so the round count is the architect's
+      // judgement exactly as the question count already is. S4 run 4 measured
+      // `round: 2` with one round of answers recorded, and red at
+      // `awaiting-answers` after the whole 600 000 ms — the /proc probe over
+      // 1601 samples reporting the agent WORKING throughout, so neither a hang
+      // nor a bound short by a margin.
+      //
+      // A fixed number of submits is wrong in BOTH directions: too few never
+      // reaches the draft, and too many press `submit-answers`, which exists
+      // only at `awaiting-answers` (`studio/session-kinds.yaml:88` is the only
+      // row declaring `awaits: questions`), so the surplus press reds on a
+      // control that is correctly gone. `repeat` answers until the phase leaves
+      // the interview, bounded by this beat's own declared wait.
+      //
+      // The answer NAMES A PIECE OF WORK. Run 4's reply was a constraint
+      // ("scope it to the commit range the flag already accepts"), which is not
+      // an answer to "what do you want built", and the architect asked again.
       do: [
         { press: 'open-session' },
         {
-          fillAll: 'question-freetext',
-          with: 'Scope it to the commit range the flag already accepts — no new range syntax. The gate command is `npm test`, and the human-readable output must keep working exactly as it does now.',
+          repeat: [
+            {
+              fillAll: 'question-freetext',
+              with: 'Cover --compare together with --since: a test that sets both and asserts the intersection, plus one that pins the precedence when the ranges do not overlap. The gate command is `npm test`, and no existing output format changes.',
+            },
+            { press: 'submit-answers' },
+          ],
         },
-        { press: 'submit-answers' },
       ],
       // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).
       // A `wait` field changes no expectation and no act — it names the bound

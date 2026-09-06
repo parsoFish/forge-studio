@@ -2,6 +2,7 @@ import {
   PLACEHOLDER, answers, resolveExpectations, ERROR_SENTINELS, readObserved,
   LIFECYCLE_STALLED, waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
+import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 
 /**
  * beats.mjs — judging one story beat.
@@ -265,7 +266,28 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // beat's page — before this beat's state is judged. All nine operator flows
   // are form-driven, and until this existed the runner could only follow
   // links, so a story stopped dead at the first form.
-  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe);
+  // `{ repeat: [...] }`'s stop condition IS the beat's own expectation — the
+  // loop invents nothing to reach and nothing to bound itself by (§3.1,
+  // rulings 312/317). Built here because this is where `beat` lives; only the
+  // repeat branch ever calls it, so a beat without one pays no DOM read.
+  const expectationAnswered = async () => {
+    // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
+    // under it ("Execution context was destroyed"). A repeat polls this between
+    // acts that submit and re-render, so it will meet that race — and an
+    // unguarded throw here aborts the WHOLE run and drops every later story's
+    // doc and gallery row, which is the same reason the click below is wrapped.
+    // A read that could not happen is simply "not satisfied yet": the next poll
+    // reads the settled page, and the beat's own bound still governs.
+    try {
+      const seen = resolveExpectations(beat.expect.data, await readObserved(page, beat));
+      return Object.entries(beat.expect.data).every(
+        ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
+      );
+    } catch {
+      return false;
+    }
+  };
+  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe, expectationAnswered);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
@@ -450,7 +472,17 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
  * lets a story express "press the create CTA and fill in the form it opens"
  * as ONE beat instead of splitting one operator act across two.
  */
-async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null) {
+/**
+ * Test seam for `{ repeat: [...] }` (§3.1). `performSteps` is the whole
+ * behaviour under test and driving it through a real browser would test
+ * playwright, not the loop — so the loop is exercised against a fake page that
+ * models the ONE thing that matters: the product decides when to stop.
+ */
+export async function performStepsForTest(page, steps, timeoutMs, isSatisfied) {
+  return performSteps(page, steps, timeoutMs, false, null, isSatisfied);
+}
+
+async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, isSatisfied = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -466,14 +498,28 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
   let waitedForHandle = false;
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
+
+    // `{ repeat: [...] }` — §3.1, T1 rulings 312/317. Its whole body lives in
+    // `beats-repeat.mjs`; `performSteps` is injected because a repeat runs its
+    // inner steps through the very function that dispatches it, and importing
+    // back would be a cycle.
+    if (Object.hasOwn(step, 'repeat')) {
+      const r = await runRepeatStep({
+        page, step, left, isSatisfied, timeoutMs, watchLifecycle, probe,
+        run: (inner, ms) => performSteps(page, inner, ms, watchLifecycle, probe, isSatisfied),
+      });
+      if (r.waitedForHandle) waitedForHandle = true;
+      if (r.error !== null) return { waitedForHandle, error: r.error };
+      continue;
+    }
+
     // `fillAll` — bead `forge-8vfn.6.11.21` (ruling 271). Same `data-field`
     // vocabulary as `fill`; it differs only in HOW MANY matches it acts on,
     // because a round of architect questions renders one box per question and
     // the count is model-determined.
     const fillsAll = Object.hasOwn(step, 'fillAll');
     const fills = fillsAll || Object.hasOwn(step, 'fill');
-    const key = fillsAll ? step.fillAll : fills ? step.fill : step.press;
-    const handle = `[data-${fills ? 'field' : 'action'}="${key}"]`;
+    const handle = handleFor(step);
 
     if (i > 0) {
       if (!Object.hasOwn(steps[i - 1], 'fill')) {
