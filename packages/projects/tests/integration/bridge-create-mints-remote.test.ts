@@ -32,7 +32,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, cpSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, cpSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ServerResponse } from 'node:http';
@@ -168,6 +168,53 @@ test('323: an ABSENT config is the same as off — the switch fails closed', asy
     await handleProjectsCreate(mockReq(), res, ctx(forgeRoot, STORY_BODY), '/api/studio/projects/create', 'POST');
     assert.equal(captured.status, 200);
     assert.deepEqual(ghCalls, [], 'no config must not mean "yes"');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Bead `forge-8vfn.6.11.36`, T1 ruling 343 as re-shaped.
+ *
+ * `6.11.35` moved the IDENTITY check before the scaffold, so the whole "wrong
+ * account" class now costs nothing. What remains — a network failure, a name
+ * collision — happens at `gh repo create`, which runs LAST for the containment
+ * reason `project-create.ts:476-478` states: the unwind deletes a staged
+ * directory and CANNOT delete a GitHub repository, so minting earlier would
+ * trade a recoverable local residue for an unrecoverable remote orphan.
+ *
+ * So the project genuinely IS created and the mint genuinely fails. S2 run 6
+ * showed what the operator got in that case: a bare "create failed" beside a
+ * complete, `.create-complete`-marked project on disk, and the next create of
+ * that name colliding with a directory they were told did not happen.
+ *
+ * Driven at the ROUTE (ruling 326) — the claim is about what the OPERATOR is
+ * told, and the operator is on the other side of this route.
+ */
+test('6.11.36: when the mint fails, the route says WHICH step failed and that the project EXISTS on disk', async () => {
+  const forgeRoot = forgeRootWithStarters();
+  setRemoteSwitch(forgeRoot, true);
+  try {
+    const { handleProjectsCreate } = makeOnboardHandlers({
+      runGh: (args: string[]) => {
+        if (args[0] === 'auth') return 'gho_fixture_token';
+        if (args[0] === 'api') return 'parsoFish';           // identity is FINE — 6.11.35 passed
+        throw new Error('HTTP 422: name already exists on this account'); // the class that remains
+      },
+    } as never);
+    const { res, captured } = mockRes();
+
+    await handleProjectsCreate(mockReq(), res, ctx(forgeRoot, STORY_BODY), '/api/studio/projects/create', 'POST');
+
+    const { error } = JSON.parse(captured.body) as { error: string };
+    assert.match(error, /gh repo create/, 'the failing STEP is named — not a bare "create failed"');
+    assert.match(error, /name already exists/, "and gh's own reason survives");
+    assert.match(error, /is on disk|IS on disk/, 'and the operator is told the project EXISTS');
+    assert.match(error, /story-s2/, 'named, so they can find it');
+
+    // The half that makes the message true: the project really is there.
+    assert.equal(existsSync(join(forgeRoot, 'projects', 'story-s2', '.forge', 'project.json')), true,
+      'the scaffold is committed — the mint runs last on purpose (476-478), so this is the state the message must describe');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
