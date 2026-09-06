@@ -16,6 +16,25 @@ import { join, resolve } from 'node:path';
 export type ForgeConfig = {
   /** Where managed projects are cloned/symlinked. Defaults to `./projects`. */
   projectsDir?: string;
+  /** Managed-project policy. */
+  projects?: {
+    /**
+     * Whether creating a greenfield project also mints its GitHub remote —
+     * bead `forge-8vfn.6.11.27`, operator ruling 323.
+     *
+     * DEFAULT OFF, and deliberately so: minting is an irreversible OUTWARD
+     * side effect (a real repository under the operator's account) attached to
+     * an otherwise local, routine act, so a mistyped name would leave a repo
+     * behind. Gated the same way the story sweep's DELETE is gated (ruling
+     * 303), so creation and deletion are symmetrical rather than one being
+     * free and the other guarded.
+     *
+     * Without it, preflight clause C6 cannot pass for a greenfield project:
+     * `checkC6` requires `git remote get-url origin` to name a github.com
+     * remote, and a project that is its own repo from birth has none.
+     */
+    remote?: { create?: boolean };
+  };
   /** Scheduler tuning. Currently only `maxConcurrentInitiatives` is honoured. */
   scheduler?: {
     maxConcurrentInitiatives?: number;
