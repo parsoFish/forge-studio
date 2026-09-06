@@ -2,7 +2,7 @@
  * Ruling 38 fix (a), M4-projects-reset — an UNKNOWN app type HARD-ERRORS.
  * The shipped PR #289 defect (found by running `forge project reset` against
  * `terraform-provider-betterado`, a Go/Terraform provider): `resolveAppType`
- * used to GUESS a starter (`typescript-cli`, or the first one alphabetically)
+ * used to GUESS a starter (`cli`, or the first one alphabetically)
  * whenever neither an explicit `--app-type` nor a persisted `appType` was
  * available — silently proposing to rewrite that project's Go test/release
  * contract into a TypeScript one. A no-op that prints a plausible-looking
@@ -70,7 +70,7 @@ test('computeContractDrift throws AppTypeUnresolvedError when starters exist but
         assert.match((err as Error).message, /--app-type/, 'the message must tell the operator to pass --app-type explicitly');
         assert.deepEqual(
           (err as AppTypeUnresolvedError).availableAppTypes.sort(),
-          ['typescript-api', 'typescript-cli', 'typescript-web'],
+          ['api', 'cli', 'webapp'],
           'a programmatic caller (Studio) must be able to render the real choices without parsing the message',
         );
         return true;
@@ -87,8 +87,8 @@ test('computeContractDrift resolves cleanly when an explicit opts.appType is giv
   const forgeRoot = isolatedForgeRoot();
   const projectDir = goShapedProjectNoAppType();
   try {
-    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
-    assert.equal(drift.appType, 'typescript-cli', 'the explicit --app-type must be used — an informed operator choice, not a guess');
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'cli' });
+    assert.equal(drift.appType, 'cli', 'the explicit --app-type must be used — an informed operator choice, not a guess');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
@@ -102,11 +102,11 @@ test('computeContractDrift resolves cleanly from a PERSISTED config.appType, wit
     mkdirSync(join(dir, '.forge'), { recursive: true });
     writeFileSync(
       join(dir, '.forge', 'project.json'),
-      `${JSON.stringify({ name: 'scaffolded-thing', appType: 'typescript-api', testProcess: { local: { cmd: ['npm', 'test'] } } }, null, 2)}\n`,
+      `${JSON.stringify({ name: 'scaffolded-thing', appType: 'api', testProcess: { local: { cmd: ['npm', 'test'] } } }, null, 2)}\n`,
       'utf8',
     );
     const drift = computeContractDrift(dir, { forgeRoot });
-    assert.equal(drift.appType, 'typescript-api', 'a persisted appType (ruling 38 fix c) must resolve without an explicit flag');
+    assert.equal(drift.appType, 'api', 'a persisted appType (ruling 38 fix c) must resolve without an explicit flag');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
@@ -120,11 +120,11 @@ test('computeContractDrift: an explicit opts.appType overrides a different persi
     mkdirSync(join(dir, '.forge'), { recursive: true });
     writeFileSync(
       join(dir, '.forge', 'project.json'),
-      `${JSON.stringify({ name: 'migrated-thing', appType: 'typescript-cli', testProcess: { local: { cmd: ['npm', 'test'] } } }, null, 2)}\n`,
+      `${JSON.stringify({ name: 'migrated-thing', appType: 'cli', testProcess: { local: { cmd: ['npm', 'test'] } } }, null, 2)}\n`,
       'utf8',
     );
-    const drift = computeContractDrift(dir, { forgeRoot, appType: 'typescript-web' });
-    assert.equal(drift.appType, 'typescript-web', 'an explicit --app-type must win over a stale persisted value');
+    const drift = computeContractDrift(dir, { forgeRoot, appType: 'webapp' });
+    assert.equal(drift.appType, 'webapp', 'an explicit --app-type must win over a stale persisted value');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });

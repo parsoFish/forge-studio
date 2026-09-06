@@ -178,7 +178,7 @@ export type ResetResult = {
  * PERSISTED `config.appType`, fix c) names something `listProjectStarters`
  * doesn't have, or — the shipped PR #289 defect this closes — NEITHER was
  * given at all while starters DO exist, which used to fall back to a guessed
- * default (`typescript-cli`, or the first one alphabetically) instead of
+ * default (`cli`, or the first one alphabetically) instead of
  * refusing.
  *
  * SHAPE CHOSEN: a thrown, exported, typed `Error` subclass — not a
@@ -225,7 +225,7 @@ export class AppTypeUnresolvedError extends Error {
  *   - Neither is given, and starters DO exist ⇒ throws
  *     `AppTypeUnresolvedError`. THIS is fix (a): guessing a default here was
  *     the shipped defect (PR #289) — a Go/Terraform project silently treated
- *     as `typescript-cli`, its whole test/release contract rewritten into
+ *     as `cli`, its whole test/release contract rewritten into
  *     another language's. "No appType known" is no longer an ordinary,
  *     silently-resolved outcome; the operator must say so explicitly.
  */
@@ -286,7 +286,7 @@ function jsonEqual(a: unknown, b: unknown): boolean {
  * `testProcess.local` would be silently WIPED by any reset whose matched
  * starter doesn't happen to declare that section (true of ALL THREE shipped
  * starters for `standing_work_item_acs`/`testProcess.ci`/`buildProcess`
- * always, and of `typescript-cli`/`typescript-api`/`typescript-web` for
+ * always, and of `cli`/`api`/`webapp` for
  * `releaseProcess` specifically — the shipped PR #289 defect this file's own
  * tests now pin, `reset-preservation.test.ts`). RULING 38 fix (b),
  * M4-projects-reset: `driftRow`'s row-level invariant (below) closes this for
@@ -328,10 +328,10 @@ function driftRow(
   // BEAD forge-8vfn.6.4 — SECTION-LEVEL preservation. Ruling 38 fix (b) below
   // asks "is the matched starter silent on this section?", which cannot reach
   // a section the starter DOES declare. Measured on the real ground
-  // (`_1.0/evidence/M4-projects-s3-S3/reset-dryrun-typescript-cli.txt`): a Go
+  // (`_1.0/evidence/M4-projects-s3-S3/reset-dryrun-cli.txt`): a Go
   // provider's `go test -tags all -count=1 ./azuredevops/...` became
   // `npm test`, and its hand-authored 3-step Go/ADO `demoProcess` became the
-  // 2-step npm one, because `typescript-cli` has an opinion on both.
+  // 2-step npm one, because `cli` has an opinion on both.
   //
   // The question that discriminates is not "does it differ from the starter we
   // are resetting TO" — every regeneration differs from that — but "does it

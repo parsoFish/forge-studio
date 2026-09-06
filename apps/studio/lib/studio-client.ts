@@ -2120,8 +2120,17 @@ export async function createProject(
 }
 
 /** The curated greenfield app-type templates (R4-03). */
-export async function fetchProjectStarters(): Promise<string[]> {
-  const data = await studioRead<{ appTypes?: string[] }>('/api/studio/projects/starters');
+export type ProjectStarter = {
+  /** The starter directory name — the option's VALUE, and what every whitelist checks. */
+  id: string;
+  /** What the style is called, for the operator's eyes only. */
+  label: string;
+  /** The language its scaffold is written in, or `null` when the starter does not declare one. */
+  language: string | null;
+};
+
+export async function fetchProjectStarters(): Promise<ProjectStarter[]> {
+  const data = await studioRead<{ appTypes?: ProjectStarter[] }>('/api/studio/projects/starters');
   return Array.isArray(data.appTypes) ? data.appTypes : [];
 }
 

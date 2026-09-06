@@ -158,7 +158,7 @@ test('create: a valid greenfield request scaffolds the project and answers 200',
     const { handleProjectsCreate } = makeOnboardHandlers(fakeDeps());
     const { res, captured } = mockRes();
     const answered = await handleProjectsCreate(
-      mockReq(), res, ctx(forgeRoot, { name: 'My Tool', appType: 'typescript-cli', northStar: 'ship the thing' }),
+      mockReq(), res, ctx(forgeRoot, { name: 'My Tool', appType: 'cli', northStar: 'ship the thing' }),
       '/api/studio/projects/create', 'POST',
     );
     assert.equal(answered, true);
@@ -643,7 +643,7 @@ test('[6.11.13] the STARTERS were never broken — each ships its declared skill
   // skill, that is a DIFFERENT defect and this says so by name rather than
   // letting the onboard fix look like it covered both.
   const starters = projectStartersDir(FORGE_ROOT);
-  for (const type of ['typescript-api', 'typescript-cli', 'typescript-web']) {
+  for (const type of ['api', 'cli', 'webapp']) {
     const cfgPath = join(starters, type, '.forge', 'project.json');
     assert.ok(existsSync(cfgPath), `${type} must ship a .forge/project.json`);
     const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));

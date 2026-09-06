@@ -58,7 +58,7 @@ before(async () => {
     matter.stringify('\n# Narrative\n', { id: 'narrative', name: 'Narrative essence', phase: 'present', description: 'd' }),
   );
 
-  const scaffoldDir = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli');
+  const scaffoldDir = join(forgeRoot, 'studio', 'starters', 'projects', 'cli');
   mkdirSync(scaffoldDir, { recursive: true });
   writeFileSync(join(scaffoldDir, 'package.json'), JSON.stringify({ name: '{{NAME}}' }), 'utf8');
 
@@ -94,7 +94,7 @@ test('AT-41: GET /api/studio/templates returns { templates: [...] } with the lib
   assert.ok(narrative, 'the fixture demo-output template must appear');
   assert.equal(narrative!.category, 'demo-output');
 
-  const scaffold = body.templates.find((t) => t.id === 'typescript-cli');
+  const scaffold = body.templates.find((t) => t.id === 'cli');
   assert.ok(scaffold, 'the fixture project-scaffold template must appear');
   assert.equal(scaffold!.category, 'project-scaffold');
 });

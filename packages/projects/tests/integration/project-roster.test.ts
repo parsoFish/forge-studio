@@ -84,6 +84,89 @@ test('handleProjectsStarters: GET /api/studio/projects/starters answers 200 with
   }
 });
 
+/**
+ * The DOOR test for bead `forge-8vfn.6.11.4` (operator ruling 301), written to
+ * ruling 326's closing criterion: the claim is "the ROUTE answers
+ * `{id, label, language}`", so the route is what is driven — a
+ * `describeProjectStarters` call with the same fixture would prove the
+ * function and say nothing about the wire.
+ *
+ * Mutation-proved rather than red-first, and the mutation is recorded: pointing
+ * the handler back at `listProjectStarters` fails this test on all three
+ * assertions (`AssertionError: Expected values to be strictly deep-equal` —
+ * bare strings where objects are expected).
+ */
+test('handleProjectsStarters: the route answers {id, label, language} per starter — the id is the VALUE, the rest is presentation', async () => {
+  const forgeRoot = makeForgeRoot();
+  try {
+    const startersDir = join(forgeRoot, 'studio', 'starters', 'projects');
+    for (const d of ['api', 'cli', 'webapp']) mkdirSync(join(startersDir, d), { recursive: true });
+    writeFileSync(
+      join(startersDir, 'starters.json'),
+      JSON.stringify({
+        api: { label: 'API', language: 'TypeScript' },
+        cli: { label: 'CLI', language: 'TypeScript' },
+        webapp: { label: 'WebApp', language: 'TypeScript' },
+      }),
+      'utf8',
+    );
+
+    const { res, captured } = mockRes();
+    const answered = await handleProjectsStarters(
+      mockReq(), res, ctxFor(forgeRoot), '/api/studio/projects/starters', 'GET',
+    );
+    assert.equal(answered, true);
+    assert.equal(captured.status, 200, captured.body);
+    assert.deepEqual(JSON.parse(captured.body), {
+      appTypes: [
+        { id: 'api', label: 'API', language: 'TypeScript' },
+        { id: 'cli', label: 'CLI', language: 'TypeScript' },
+        { id: 'webapp', label: 'WebApp', language: 'TypeScript' },
+      ],
+    });
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('handleProjectsStarters: a starter the manifest does not name is still offered — under its own id, with no invented language', async () => {
+  const forgeRoot = makeForgeRoot();
+  try {
+    const startersDir = join(forgeRoot, 'studio', 'starters', 'projects');
+    for (const d of ['cli', 'provider']) mkdirSync(join(startersDir, d), { recursive: true });
+    writeFileSync(join(startersDir, 'starters.json'), JSON.stringify({ cli: { label: 'CLI', language: 'TypeScript' } }), 'utf8');
+
+    const { res, captured } = mockRes();
+    await handleProjectsStarters(mockReq(), res, ctxFor(forgeRoot), '/api/studio/projects/starters', 'GET');
+    assert.equal(captured.status, 200, captured.body);
+    assert.deepEqual(JSON.parse(captured.body), {
+      appTypes: [
+        { id: 'cli', label: 'CLI', language: 'TypeScript' },
+        { id: 'provider', label: 'provider', language: null },
+      ],
+    });
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('handleProjectsStarters: a malformed manifest answers 500 — never a silently unlabelled form', async () => {
+  const forgeRoot = makeForgeRoot();
+  try {
+    const startersDir = join(forgeRoot, 'studio', 'starters', 'projects');
+    mkdirSync(join(startersDir, 'cli'), { recursive: true });
+    writeFileSync(join(startersDir, 'starters.json'), '{ not json', 'utf8');
+
+    const { res, captured } = mockRes();
+    const answered = await handleProjectsStarters(mockReq(), res, ctxFor(forgeRoot), '/api/studio/projects/starters', 'GET');
+    assert.equal(answered, true, 'the route owns this url — it answers the failure rather than declining it');
+    assert.equal(captured.status, 500);
+    assert.match(JSON.parse(captured.body).error, /starters\.json/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
 test('handleProjectsStarters: a non-matching url/method declines (returns false, sends nothing)', async () => {
   const forgeRoot = makeForgeRoot();
   try {

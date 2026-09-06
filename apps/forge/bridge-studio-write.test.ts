@@ -383,7 +383,7 @@ test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a templ
   cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
   const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
     name: 'Greenfield Demo',
-    appType: 'typescript-cli',
+    appType: 'cli',
     northStar: 'ship the greenfield thing',
   });
   assert.equal(res.status, 200);
@@ -417,7 +417,7 @@ test('(RED) [SEC-03 round 3] POST /api/studio/projects/create: after a seedProje
 
     const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
       name: 'Halfcreated Http Blocker',
-      appType: 'typescript-cli',
+      appType: 'cli',
       northStar: 'ship the thing',
     });
     assert.notEqual(res.status, 200, `sanity: the containment rejection must not report success — got ${res.status}: ${await res.text()}`);
@@ -484,7 +484,7 @@ test('(RED) [SEC-03 round 4] POST /api/studio/projects/create: an UNRELATED EACC
   try {
     const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
       name: 'Eacces Phantom Http Blocker',
-      appType: 'typescript-cli',
+      appType: 'cli',
       northStar: 'ship the thing',
     });
     const text = await res.text();
@@ -512,7 +512,7 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
   cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
   const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
     name: 'Normal Http Greenfield',
-    appType: 'typescript-cli',
+    appType: 'cli',
     northStar: 'ship the thing',
   });
   const text = await res.text();

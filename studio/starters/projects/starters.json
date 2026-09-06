@@ -1,0 +1,5 @@
+{
+  "api": { "label": "API", "language": "TypeScript" },
+  "cli": { "label": "CLI", "language": "TypeScript" },
+  "webapp": { "label": "WebApp", "language": "TypeScript" }
+}

@@ -159,13 +159,16 @@ export default {
       // The `do` is four presses because this ground has no persisted app
       // type: the panel answers `needs-app-type` and will not compute a drift
       // until a template is named, so `rebuild-app-type` + the preview press
-      // stand between the first press and the report. **`typescript-cli` is a
-      // PLACEHOLDER, and it is not what this ground is.** It is a Go provider
-      // over Terraform, and forge ships three starters that all name a
-      // language it does not use. The operator's 2026-09-05 direction is that
-      // starters lose their language prefix for generic style types (API,
-      // WebApp, CLI, Package); when that lands, this value is a one-word
-      // re-amendment. It is safe to name today only because bead `6.4` (PR
+      // stand between the first press and the report.
+      //
+      // RE-AMENDED 2026-09-06 (amendment 9, bead `forge-8vfn.6.11.4`, operator
+      // ruling 301): `typescript-cli` → **`cli`** — the one-word re-amendment
+      // the paragraph that stood here predicted, made by the rename it named.
+      // **It is STILL a placeholder in substance**: `cli` is a style, this
+      // ground is a Go provider over Terraform, and every starter forge ships
+      // is a TypeScript scaffold. Only a starter with a non-TypeScript variant
+      // would make this value honest — option (C) fully built, which ruling
+      // 301 did not choose. It is safe to name today only because bead `6.4` (PR
       // #414) made the reset PRESERVE what a template has no right to
       // regenerate — proven on this exact ground, `testProcess.local` and the
       // hand-authored 3-step Go/ADO `demoProcess` byte-identical, ground hash
@@ -184,7 +187,7 @@ export default {
       act: 'Press "Rebuild contract", and read the drift report it produces before applying it',
       do: [
         { press: 'rebuild-contract' },
-        { fill: 'rebuild-app-type', with: 'typescript-cli' },
+        { fill: 'rebuild-app-type', with: 'cli' },
         { press: 'preview-contract-reset' },
         { press: 'apply-contract-reset' },
       ],

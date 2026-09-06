@@ -44,7 +44,7 @@ function isolatedForgeRoot(): string {
 }
 
 function manifest(over: Partial<CreationManifest> = {}): CreationManifest {
-  return { name: 'My Tool', appType: 'typescript-cli', language: 'typescript', northStar: 'ship the thing', ...over };
+  return { name: 'My Tool', appType: 'cli', language: 'typescript', northStar: 'ship the thing', ...over };
 }
 
 /** Moved from project-create.ts (dead export, zero production callers — cull
@@ -59,18 +59,18 @@ function hasUnsubstitutedTokens(text: string): boolean {
 test('F1 validateCreationManifest: missing/invalid fields throw; valid → typed', () => {
   assert.throws(() => validateCreationManifest({ name: 'x' }), /appType.*required/);
   assert.throws(() => validateCreationManifest({ name: 'x', appType: 'a', language: 'ts', northStar: 'y'.repeat(141) }), /≤140/);
-  const m = validateCreationManifest({ name: ' My Tool ', appType: 'typescript-cli', language: 'typescript', northStar: 'go' });
+  const m = validateCreationManifest({ name: ' My Tool ', appType: 'cli', language: 'typescript', northStar: 'go' });
   assert.equal(m.name, 'My Tool');
-  assert.equal(m.appType, 'typescript-cli');
+  assert.equal(m.appType, 'cli');
 });
 
 test('F2: the curated starter library lists ≥2 app types', () => {
   const types = listProjectStarters(FORGE_ROOT);
-  assert.ok(types.includes('typescript-cli') && types.includes('typescript-api'), `got ${types.join(', ')}`);
+  assert.ok(types.includes('cli') && types.includes('api'), `got ${types.join(', ')}`);
   assert.ok(types.length >= 2);
 });
 
-for (const appType of ['typescript-cli', 'typescript-api']) {
+for (const appType of ['cli', 'api']) {
   test(`F2/F3: scaffolding "${appType}" reaches preflight HARD-green with no manual surgery`, () => {
     const forgeRoot = isolatedForgeRoot();
     try {
@@ -94,7 +94,7 @@ for (const appType of ['typescript-cli', 'typescript-api']) {
   });
 }
 
-for (const appType of ['typescript-cli', 'typescript-api', 'typescript-web']) {
+for (const appType of ['cli', 'api', 'webapp']) {
   test(`forge-8vfn.5.8: "${appType}" declares >=1 skill that actually RESOLVES — the starter FILLS the contract element rather than leaving it for the operator to repair (S2's operator ruling)`, () => {
     const forgeRoot = isolatedForgeRoot();
     try {
@@ -123,11 +123,11 @@ for (const appType of ['typescript-cli', 'typescript-api', 'typescript-web']) {
 test('ruling 38 fix (c): appType is persisted into .forge/project.json and survives loadProjectConfig — the root fix for PR #289 (reset.ts used to GUESS appType because none was ever recorded)', () => {
   const forgeRoot = isolatedForgeRoot();
   try {
-    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'typescript-api' }), forgeRoot });
+    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'api' }), forgeRoot });
     const raw = JSON.parse(readFileSync(join(out.projectDir, '.forge', 'project.json'), 'utf8')) as { appType?: string };
-    assert.equal(raw.appType, 'typescript-api', 'the scaffolded appType must be written verbatim into .forge/project.json — never left for reset.ts to guess later');
+    assert.equal(raw.appType, 'api', 'the scaffolded appType must be written verbatim into .forge/project.json — never left for reset.ts to guess later');
     const loaded = loadProjectConfig(out.projectDir);
-    assert.equal(loaded?.appType, 'typescript-api', 'loadProjectConfig must round-trip the persisted appType');
+    assert.equal(loaded?.appType, 'api', 'loadProjectConfig must round-trip the persisted appType');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
@@ -167,7 +167,7 @@ test('F2: a value containing a $-replacement pattern is inserted literally (no l
 });
 
 test('F1: a manifest field with a newline/control char is rejected', () => {
-  assert.throws(() => validateCreationManifest({ name: 'x\ny', appType: 'typescript-cli', language: 'ts', northStar: 'z' }), /single line/);
+  assert.throws(() => validateCreationManifest({ name: 'x\ny', appType: 'cli', language: 'ts', northStar: 'z' }), /single line/);
 });
 
 test('F3: an unknown appType throws with the available list', () => {
@@ -191,31 +191,31 @@ test('F3: a duplicate project id is refused', () => {
 
 test('the shipped templates carry no stray files that would break substitution', () => {
   // Each app-type dir has the load-bearing files.
-  for (const appType of ['typescript-cli', 'typescript-api']) {
+  for (const appType of ['cli', 'api']) {
     const entries = readdirSync(join(projectStartersDir(FORGE_ROOT), appType));
     assert.ok(entries.includes('package.json') && entries.includes('AGENTS.md') && entries.includes('roadmap.md'));
   }
 });
 
 // ---------------------------------------------------------------------------
-// R3-06-F3 — a third scaffold, typescript-web, joins the curated library.
-// RED until the F3 WI adds studio/starters/projects/typescript-web/ — the
+// R3-06-F3 — a third scaffold, webapp, joins the curated library.
+// RED until the F3 WI adds studio/starters/projects/webapp/ — the
 // starter doesn't exist yet, so listProjectStarters won't include it and
 // scaffoldGreenfieldProject will throw "unknown appType" in the meantime.
 // ---------------------------------------------------------------------------
 
-test('AT-46: F3 — listProjectStarters(FORGE_ROOT) includes "typescript-web" alongside "typescript-cli"/"typescript-api"', () => {
+test('AT-46: F3 — listProjectStarters(FORGE_ROOT) includes "webapp" alongside "cli"/"api"', () => {
   const types = listProjectStarters(FORGE_ROOT);
   assert.ok(
-    types.includes('typescript-web') && types.includes('typescript-cli') && types.includes('typescript-api'),
-    `expected typescript-web + typescript-cli + typescript-api, got: ${types.join(', ')}`,
+    types.includes('webapp') && types.includes('cli') && types.includes('api'),
+    `expected webapp + cli + api, got: ${types.join(', ')}`,
   );
 });
 
-test('AT-47: F3 — scaffolding "typescript-web" reaches preflight HARD-green, with every template token substituted', () => {
+test('AT-47: F3 — scaffolding "webapp" reaches preflight HARD-green, with every template token substituted', () => {
   const forgeRoot = isolatedForgeRoot();
   try {
-    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'typescript-web' }), forgeRoot });
+    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'webapp' }), forgeRoot });
     assert.equal(
       out.hardGreen,
       true,

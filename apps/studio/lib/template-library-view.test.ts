@@ -39,14 +39,14 @@ test('AT-48: groupTemplateLibrary(entries) splits into planning / demo-output / 
     entry({ id: 'zeta-plan', category: 'planning' }),
     entry({ id: 'cli-capture', category: 'demo-output' }),
     entry({ id: 'alpha-plan', category: 'planning' }),
-    entry({ id: 'typescript-cli', category: 'project-scaffold' }),
+    entry({ id: 'cli', category: 'project-scaffold' }),
   ];
 
   const grouped = groupTemplateLibrary(entries);
 
   expect(grouped.planning.map((e) => e.id)).toEqual(['zeta-plan', 'alpha-plan']);
   expect(grouped.demoOutput.map((e) => e.id)).toEqual(['cli-capture']);
-  expect(grouped.projectScaffold.map((e) => e.id)).toEqual(['typescript-cli']);
+  expect(grouped.projectScaffold.map((e) => e.id)).toEqual(['cli']);
 
   // Counts are always derived from the arrays themselves, never independently
   // set fields that could drift from reality.
@@ -63,11 +63,11 @@ test('AT-49: filterTemplates(entries, q) matches on name + description, case-ins
   const entries = [
     entry({ id: 'plan', category: 'planning', name: 'Plan', description: 'Approved plan and decomposition.' }),
     entry({ id: 'narrative', category: 'demo-output', name: 'Narrative essence', description: 'A tight prose lead.' }),
-    entry({ id: 'typescript-cli', category: 'project-scaffold', name: 'TypeScript CLI', description: 'A CLI starter.' }),
+    entry({ id: 'cli', category: 'project-scaffold', name: 'TypeScript CLI', description: 'A CLI starter.' }),
   ];
 
   expect(filterTemplates(entries, 'prose').map((e) => e.id)).toEqual(['narrative']);
-  expect(filterTemplates(entries, 'CLI').map((e) => e.id), 'case-insensitive on name').toEqual(['typescript-cli']);
+  expect(filterTemplates(entries, 'CLI').map((e) => e.id), 'case-insensitive on name').toEqual(['cli']);
   expect(filterTemplates(entries, 'decomposition').map((e) => e.id), 'matches on description too').toEqual(['plan']);
 
   const all = filterTemplates(entries, '');
@@ -91,7 +91,7 @@ test('AT-50: templateBadges(entry) derives tokens from real fields — never a f
   const errored = entry({ id: 'broken', category: 'planning', error: 'cannot parse frontmatter' });
   expect(templateBadges(errored)).toContain('error');
 
-  const clean = entry({ id: 'typescript-cli', category: 'project-scaffold' });
+  const clean = entry({ id: 'cli', category: 'project-scaffold' });
   expect(templateBadges(clean)).not.toContain('error');
   expect(templateBadges(clean)).not.toContain('unverified');
 

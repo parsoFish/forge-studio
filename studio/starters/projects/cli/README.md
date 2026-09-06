@@ -2,7 +2,7 @@
 
 {{NORTH_STAR}}
 
-A dependency-light TypeScript CLI scaffolded by forge (R4-03 `typescript-cli`
+A dependency-light TypeScript CLI scaffolded by forge (the `cli`
 starter).
 
 ```bash

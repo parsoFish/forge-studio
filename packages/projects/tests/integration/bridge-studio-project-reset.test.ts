@@ -173,7 +173,7 @@ test('dry-run: an unknown project id 404s', async () => {
 
 test('dry-run: a malformed JSON body is refused 400', async () => {
   const forgeRoot = isolatedForgeRoot();
-  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'typescript-cli');
+  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'cli');
   try {
     const { res, captured } = mockRes();
     const answered = await handleProjectContractResetDryRun(
@@ -192,7 +192,7 @@ test('dry-run: a malformed JSON body is refused 400', async () => {
 
 test('dry-run: computes and returns a real drift report, and writes NOTHING at all (byte-level snapshot)', async () => {
   const forgeRoot = isolatedForgeRoot();
-  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'typescript-cli');
+  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'cli');
   try {
     const before = snapshotTree(projectDir);
     const { res, captured } = mockRes();
@@ -202,7 +202,7 @@ test('dry-run: computes and returns a real drift report, and writes NOTHING at a
     const body = JSON.parse(captured.body);
     assert.equal(body.ok, true);
     assert.equal(body.drift.projectId, 'demoproj');
-    assert.equal(body.drift.appType, 'typescript-cli');
+    assert.equal(body.drift.appType, 'cli');
     assert.ok(Array.isArray(body.drift.rows) && body.drift.rows.length > 0, 'a real DriftReport carries rows');
     for (const row of body.drift.rows) {
       assert.ok(typeof row.section === 'string' && row.section.length > 0);
@@ -221,12 +221,12 @@ test('dry-run: an explicit appType in the body resolves cleanly even with NO per
   try {
     const { res, captured } = mockRes();
     const answered = await handleProjectContractResetDryRun(
-      mockReq(), res, ctx(forgeRoot, { appType: 'typescript-cli' }), '/api/studio/projects/demoproj/contract-reset', 'POST',
+      mockReq(), res, ctx(forgeRoot, { appType: 'cli' }), '/api/studio/projects/demoproj/contract-reset', 'POST',
     );
     assert.equal(answered, true);
     assert.equal(captured.status, 200);
     const body = JSON.parse(captured.body);
-    assert.equal(body.drift.appType, 'typescript-cli');
+    assert.equal(body.drift.appType, 'cli');
   } finally {
     cleanup(forgeRoot, projectDir);
   }
@@ -248,7 +248,7 @@ test('dry-run: an unresolvable app type surfaces as a readable 400 with availabl
     assert.match(body.error, /--app-type|appType/i, 'the message must be readable, not the bare error class name');
     assert.deepEqual(
       [...body.availableAppTypes].sort(),
-      ['typescript-api', 'typescript-cli', 'typescript-web'],
+      ['api', 'cli', 'webapp'],
       'the control populates its app-type field from EXACTLY this list',
     );
   } finally {
@@ -279,7 +279,7 @@ test('apply: an unresolvable app type ALSO surfaces as a readable 400, and write
 
 test('apply: writes the regenerated sections and reports them', async () => {
   const forgeRoot = isolatedForgeRoot();
-  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'typescript-cli');
+  const projectDir = projectWithAppType(forgeRoot, 'demoproj', 'cli');
   try {
     const { res, captured } = mockRes();
     const answered = await handleProjectContractResetApply(mockReq(), res, ctx(forgeRoot, {}), '/api/studio/projects/demoproj/contract-reset/apply', 'POST');
@@ -291,7 +291,7 @@ test('apply: writes the regenerated sections and reports them', async () => {
     assert.ok(typeof body.result.preflight === 'object' && body.result.preflight !== null, 'apply re-runs preflight and reports it');
 
     const written = JSON.parse(readFileSync(join(projectDir, '.forge', 'project.json'), 'utf8'));
-    assert.equal(written.appType, 'typescript-cli', 'the persisted appType survives the reset untouched');
+    assert.equal(written.appType, 'cli', 'the persisted appType survives the reset untouched');
   } finally {
     cleanup(forgeRoot, projectDir);
   }
