@@ -1,3 +1,5 @@
+import { delimiter, resolve } from 'node:path';
+
 /**
  * R5-02 (G8 env-pin, allowlist hardening) — the single allowlist governing
  * which AMBIENT (inherited) env vars an SDK-spawned agent child may see, and
@@ -178,4 +180,34 @@ export function buildChildEnv(
     result[key] = value;
   }
   return result;
+}
+
+/**
+ * The forge install a run's children must resolve `forge` to.
+ *
+ * `bin/forge` — the launcher `npm link` puts on PATH (README §Install) — hands
+ * off to `apps/forge/cli.ts`, which derives its root from `import.meta.dirname`
+ * and chdirs to it. The CLI therefore operates on ITS OWN install whatever cwd
+ * it is handed. On a host with more than one checkout (a second clone, or the
+ * git worktrees forge itself uses for parallel work) that makes the linked
+ * `forge` a hard-wired reference to ONE tree: an agent dispatched by a run in
+ * another tree that types `forge preflight converge` — which its own PROMPT.md
+ * instructs it to — reads and writes that other tree's `projects/` and
+ * `brain/`. Bead forge-8vfn.6.11.26: it moved the operator's own ground twice
+ * before it was named, and it is invisible to a worktree-local fence because
+ * the writes never land in the tree being watched.
+ *
+ * So every forge process leads its children's PATH with its own `bin`. `PATH`
+ * is already an `AGENT_ENV_ALLOWLIST` member, so `buildChildEnv` carries the
+ * corrected value through to the SDK child with no allowlist change and no new
+ * environment knob — the run's own forge simply wins the lookup.
+ *
+ * Idempotent, and order-preserving for everything else: a forge child of a
+ * forge process does not stack duplicate entries, and the operator's own PATH
+ * is otherwise untouched.
+ */
+export function forgeBinOnPath(forgeRoot: string, currentPath: string | undefined): string {
+  const bin = resolve(forgeRoot, 'bin');
+  const rest = (currentPath ?? '').split(delimiter).filter((entry) => entry !== '' && entry !== bin);
+  return [bin, ...rest].join(delimiter);
 }

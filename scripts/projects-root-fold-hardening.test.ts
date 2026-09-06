@@ -241,11 +241,15 @@ test('F17: every fold-allowlist row carries an audited positive-integer occurren
 });
 
 test('F18: a surplus occurrence beyond the audited count is kept as ONE build-failing finding', () => {
+  // The fold is DERIVED from the audited row, never spelled out: a fixture that
+  // hardcodes the site silently stops testing the audit the day the site is
+  // re-pointed (6.11.26 did exactly that).
+  const site = PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target')!.site;
   withFixture(
     {
       // apps/forge/cli.ts + folded "target" is audited for count 1 in the real
       // allowlist; this fixture holds TWO occurrences of the identical fold.
-      'apps/forge/cli.ts': "const a = resolve('projects', target);\nconst b = resolve('projects', target);\n",
+      'apps/forge/cli.ts': `const a = ${site};\nconst b = ${site};\n`,
       // Remaining fold-scope modules present but benign, so the scan sees a
       // complete module set rather than skipping absent files.
       'packages/agents/agent-run.ts': 'export const noop = true;\n',
@@ -255,7 +259,7 @@ test('F18: a surplus occurrence beyond the audited count is kept as ONE build-fa
     (root) => {
       const onDisk = readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8');
       assert.equal(
-        (onDisk.match(/resolve\('projects', target\)/g) ?? []).length,
+        onDisk.split(site).length - 1,
         2,
         'precondition: the fixture holds exactly two occurrences of the audited "target" fold',
       );
@@ -280,14 +284,16 @@ test('F18: a surplus occurrence beyond the audited count is kept as ONE build-fa
 test('F19: exactly the audited number of occurrences is fully suppressed (0 kept)', () => {
   withFixture(
     {
-      'apps/forge/cli.ts': "const a = resolve('projects', target);\n",
+      'apps/forge/cli.ts': `const a = ${PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target')!.site};\n`,
       'packages/agents/agent-run.ts': 'export const noop = true;\n',
       'packages/agents/agent-dispatch.ts': 'export const noop = true;\n',
       'packages/flows/scheduler.ts': 'export const noop = true;\n',
     },
     (root) => {
       assert.ok(
-        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes(
+          PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target')!.site,
+        ),
         'precondition: the audited-count fold is present in the fixture',
       );
       const res = runLint({ root });

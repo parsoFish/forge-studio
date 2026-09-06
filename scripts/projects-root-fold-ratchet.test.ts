@@ -144,6 +144,18 @@ test('8: the fold allowlist carries the audited residual rows, folded-token-keye
   assert.ok(has('packages/flows/scheduler.ts', 'm.project'), 'the guarded-downstream residual is audited');
 });
 
+/**
+ * The audited `apps/forge/cli.ts` + "target" site, read from the allowlist
+ * rather than spelled out. Bead forge-8vfn.6.11.26 re-pointed that row (the
+ * old literal `resolve('projects', target)` ignored FORGE_PROJECTS_DIR) and
+ * every fixture that had hardcoded the old spelling silently stopped exercising
+ * the audit it names — three files' worth. Derive it, and a re-point can never
+ * rot a fixture again.
+ */
+const AUDITED_CLI_SITE = PROJECTS_ROOT_FOLD_ALLOWLIST.find(
+  (r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target',
+)!.site;
+
 // =============================================================================
 // INTEGRATION — runLint fails an un-allowlisted fold, suppresses the residual
 // =============================================================================
@@ -152,7 +164,7 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
   withFixture(
     {
       // The audited-trusted dual-mode residual (allowlisted by file+folded).
-      'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
+      'apps/forge/cli.ts': `const asManaged = ${AUDITED_CLI_SITE};\n`,
       // A fresh, un-audited fold — must fail the build. The fixture subject is
       // `find-session-project.ts` because that is what `PROJECTS_ROOT_FOLD_MODULES`
       // now scopes: M4-agents s3 split `agent-run.ts`, and the real
@@ -171,7 +183,7 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
         'precondition: the un-allowlisted fold is present in the fixture',
       );
       assert.ok(
-        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes(AUDITED_CLI_SITE),
         'precondition: the audited residual fold is present in the fixture',
       );
 
@@ -194,14 +206,14 @@ test('9: runLint FAILS an un-allowlisted fold, suppresses the audited residual',
 test('10: runLint PASSES when the only fold is an audited residual', () => {
   withFixture(
     {
-      'apps/forge/cli.ts': "const asManaged = resolve('projects', target);\n",
+      'apps/forge/cli.ts': `const asManaged = ${AUDITED_CLI_SITE};\n`,
       'packages/agents/find-session-project.ts': "export const noop = true;\n",
       'packages/agents/agent-dispatch.ts': "export const noop = true;\n",
       'packages/flows/scheduler.ts': "export const noop = true;\n",
     },
     (root) => {
       assert.ok(
-        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes("resolve('projects', target)"),
+        readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8').includes(AUDITED_CLI_SITE),
         'precondition: the audited residual fold is present in the fixture',
       );
       const res = runLint({ root });

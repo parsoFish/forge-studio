@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from './spawn-env.ts';
+import { delimiter } from 'node:path';
+import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv, forgeBinOnPath } from './spawn-env.ts';
 
 test('AGENT_ENV_ALLOWLIST: does not include ANTHROPIC_BASE_URL or any HEADROOM_* var (the recurring G8 leak)', () => {
   assert.ok(!AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_BASE_URL'), 'ANTHROPIC_BASE_URL must never be inheritable');
@@ -226,4 +227,37 @@ test('MOVE PIN: buildChildEnv layers overrides UNCONDITIONALLY — the credentia
   // And the constant the untrusted caller is required to filter against is
   // reachable from this module, which is the whole reason it lives here.
   assert.ok(HOOK_ENV_CREDENTIAL_EXCLUSIONS.has('ANTHROPIC_API_KEY'));
+});
+
+// ---------------------------------------------------------------------------
+// forgeBinOnPath — bead forge-8vfn.6.11.26. The run's own forge wins the
+// lookup for every child, without touching the allowlist.
+// ---------------------------------------------------------------------------
+
+test('forgeBinOnPath: the forge root\'s own bin LEADS the returned PATH', () => {
+  const out = forgeBinOnPath('/trees/alpha', '/usr/bin:/bin');
+  assert.equal(out.split(delimiter)[0], '/trees/alpha/bin');
+});
+
+test('forgeBinOnPath: every other entry is preserved, in order — the operator\'s PATH is not rewritten', () => {
+  const out = forgeBinOnPath('/trees/alpha', '/usr/local/bin:/usr/bin:/bin');
+  assert.deepEqual(out.split(delimiter), ['/trees/alpha/bin', '/usr/local/bin', '/usr/bin', '/bin']);
+});
+
+test('forgeBinOnPath: idempotent — a forge child of a forge process does not stack duplicate entries', () => {
+  const once = forgeBinOnPath('/trees/alpha', '/usr/bin');
+  assert.equal(forgeBinOnPath('/trees/alpha', once), once);
+});
+
+test('forgeBinOnPath: a DIFFERENT tree\'s bin is displaced, never merely joined — two checkouts on one host is the whole defect', () => {
+  const beta = forgeBinOnPath('/trees/beta', '/usr/bin');
+  const alpha = forgeBinOnPath('/trees/alpha', beta);
+  assert.equal(alpha.split(delimiter)[0], '/trees/alpha/bin');
+  assert.ok(alpha.split(delimiter).includes('/trees/beta/bin'), 'the other tree stays reachable by absolute path — it just stops winning the bare-name lookup');
+});
+
+test('forgeBinOnPath: an absent or empty PATH yields the bin alone, never a stray empty entry (an empty PATH element means CWD)', () => {
+  assert.equal(forgeBinOnPath('/trees/alpha', undefined), '/trees/alpha/bin');
+  assert.equal(forgeBinOnPath('/trees/alpha', ''), '/trees/alpha/bin');
+  assert.equal(forgeBinOnPath('/trees/alpha', '/usr/bin::/bin'), ['/trees/alpha/bin', '/usr/bin', '/bin'].join(delimiter));
 });
