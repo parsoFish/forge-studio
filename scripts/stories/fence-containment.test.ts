@@ -35,9 +35,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
-import { fenceBreaches, describeFence, siblingWorktreeEscapes, snapshotSiblingWorktrees } from './sweep.mjs';
+import { fenceBreaches, describeFence, siblingWorktreeEscapes, snapshotSiblingWorktrees, unownedEscapes } from './sweep.mjs';
 
 // --- 308: the ground's Brain 3 is an expected artifact, held for the verdict --
 
@@ -195,4 +195,99 @@ test('6.11.28: with no ground declared, a collapsed entry is not expanded at all
   });
   assert.equal(expanded, 0, 'no expansion when nothing could be exempt');
   assert.deepEqual(b.remove, ['brain/']);
+});
+
+// --- 6.11.34 / ruling 340: growth in a tree someone else is working in ------
+//
+// MEASURED INCIDENT, 2026-09-06 (M5-B session 9): a concurrent gate in
+// `/home/parso/forge-gate-m5` ran `scripts/check-boundaries.test.ts`, which
+// plants `apps/studio/lib/__ws_probe__.ts` in its OWN tree, and this run
+// reported `CONTAINMENT FAILURE` over a story whose beats were 2/2 green — the
+// `&&` chain then skipped `proof` entirely. `siblingWorktreeEscapes` diffs a
+// before/after snapshot per sibling, so it attributes by TIME WINDOW rather
+// than by writer, and two things running at once is this campaign's normal
+// state.
+//
+// The pair below is the whole rule: the SAME planted growth, once with a live
+// process rooted in that tree and once without.
+
+/** A real sleeper whose cwd is `dir`, so `/proc/<pid>/cwd` genuinely points there. */
+function sleeperIn(dir) {
+  const child = spawn('sleep', ['30'], { cwd: dir, detached: true, stdio: 'ignore' });
+  child.unref();
+  return child;
+}
+
+/** The planted growth both cases share, so the only variable is who owns the tree. */
+function plantGrowth(main) {
+  mkdirSync(join(main, 'apps', 'studio', 'lib'), { recursive: true });
+  writeFileSync(join(main, 'apps', 'studio', 'lib', '__ws_probe__.ts'), '// probe\n');
+}
+
+test('6.11.34: growth in a tree with a LIVE process rooted in it is UNATTRIBUTABLE — named with the pid, not fatal', () => {
+  const main = makeRepo();
+  const sibling = join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', 'lane', sibling], { cwd: main, stdio: 'pipe' });
+
+  const baseline = snapshotSiblingWorktrees(sibling);
+  const sleeper = sleeperIn(main);
+  try {
+    plantGrowth(main);
+    const escapes = siblingWorktreeEscapes(sibling, baseline);
+
+    assert.equal(escapes.length, 1, 'the growth is still SEEN — this rule changes attribution, never visibility');
+    assert.equal(escapes[0].root, main);
+    assert.ok(escapes[0].paths.some((p) => p.includes('__ws_probe__.ts')), 'the path is still named in full');
+    assert.notEqual(escapes[0].live, null, 'a process rooted in that tree means somebody else was working there');
+    assert.equal(escapes[0].live.pid, sleeper.pid, 'and the report names WHICH process, so it can be chased');
+
+    const said = describeFence({ removed: [], restored: [], failed: [], defer: [], escapes }, []).join('\n');
+    assert.match(said, /UNATTRIBUTABLE/, 'the line says the run cannot be shown to have written it');
+    assert.match(said, new RegExp(`pid ${sleeper.pid}`), 'with the pid');
+    assert.doesNotMatch(said, /ESCAPED/, 'and does not also call it an escape');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('6.11.34: the SAME growth with NO process rooted there is still an ESCAPE — the guard is not weakened', () => {
+  const main = makeRepo();
+  const sibling = join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', 'lane', sibling], { cwd: main, stdio: 'pipe' });
+
+  const baseline = snapshotSiblingWorktrees(sibling);
+  plantGrowth(main);
+  const escapes = siblingWorktreeEscapes(sibling, baseline);
+
+  assert.equal(escapes.length, 1);
+  assert.equal(escapes[0].live, null, 'nobody else was working there, so the growth is this run\'s');
+
+  const said = describeFence({ removed: [], restored: [], failed: [], defer: [], escapes }, []).join('\n');
+  assert.match(said, /ESCAPED/, 'and it is still reported as an escape, which reds the run');
+});
+
+test('6.11.34: the classifier is injectable, so the rule is testable without depending on a real /proc', () => {
+  const main = makeRepo();
+  const sibling = join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane');
+  execFileSync('git', ['worktree', 'add', '-q', '-b', 'lane', sibling], { cwd: main, stdio: 'pipe' });
+
+  const baseline = snapshotSiblingWorktrees(sibling);
+  plantGrowth(main);
+
+  const asIfOwned = siblingWorktreeEscapes(sibling, baseline, {
+    liveRoots: (dirs) => new Map(dirs.map((d) => [d, { pid: 4242, cwd: d }])),
+  });
+  assert.deepEqual(asIfOwned[0].live, { pid: 4242, cwd: main });
+
+  const asIfQuiet = siblingWorktreeEscapes(sibling, baseline, { liveRoots: () => new Map() });
+  assert.equal(asIfQuiet[0].live, null);
+});
+
+test('6.11.34: only UNOWNED growth reds the run — the decision that ends a run has its own name and its own test', () => {
+  const owned = { root: '/w/gate', paths: ['apps/studio/lib/__ws_probe__.ts'], live: { pid: 4242, cwd: '/w/gate' } };
+  const orphan = { root: '/w/other', paths: ['brain/projects/gitweave/profile.md'], live: null };
+
+  assert.deepEqual(unownedEscapes([owned]), [], 'a tree somebody else is working in cannot red a funded run on its own');
+  assert.deepEqual(unownedEscapes([owned, orphan]), [orphan], 'and it does not mask the one that can');
+  assert.deepEqual(unownedEscapes(undefined), [], 'a run that never looked has nothing to answer for');
 });
