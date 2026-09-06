@@ -42,6 +42,7 @@ import {
   readGitPorcelain,
   snapshotSiblingWorktrees,
   siblingWorktreeEscapes,
+  unownedEscapes,
   removePaths,
   sweepProductFixtures,
   sweepStoryResidue,
@@ -360,11 +361,16 @@ async function runStory(story, uiUrl, startedMs) {
   // even when every beat is green. S1 run 5 was the reverse of this: a run that
   // wrote into the main checkout and reported `fence: clean`, because nothing
   // looked. A containment failure is not a footnote on a green verdict.
-  const escaped = (fence.escapes ?? []).reduce((n, e) => n + e.paths.length, 0);
+  // Ruling 340 / bead `forge-8vfn.6.11.34`: growth in a tree where ANOTHER
+  // process was working is named in full and is NOT fatal — attribution by
+  // time window cannot tell a concurrent lane's own writes from this run's,
+  // and a funded run must not go red on a reading nobody can make.
+  const unowned = unownedEscapes(fence.escapes);
+  const escaped = unowned.reduce((n, e) => n + e.paths.length, 0);
   if (escaped > 0) {
     console.error(
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${escaped} path(s) written into ` +
-      `${fence.escapes.length} worktree(s) this run does not own (named above). The run is RED ` +
+      `${unowned.length} worktree(s) this run does not own (named above). The run is RED ` +
       'regardless of its beats.',
     );
     return 1;

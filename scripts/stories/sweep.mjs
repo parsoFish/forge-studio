@@ -18,9 +18,9 @@
  *   · it is date-independent, so a run on any day cleans any day's residue —
  *     the date-stamped per-id cleanups it replaces could not.
  */
-import { rmSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { rmSync, existsSync, readdirSync, statSync, readFileSync, readlinkSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, relative, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 /** A story id must be a single safe path segment — it is interpolated into
@@ -315,22 +315,101 @@ export function snapshotSiblingWorktrees(root) {
 }
 
 /**
- * What GREW in a sibling worktree since `baseline` — the escapes this run is
- * answerable for. Pre-existing dirt in someone else's tree is never charged to
- * this run.
+ * What GREW in a sibling worktree since `baseline`. Pre-existing dirt in
+ * someone else's tree is never charged to this run.
+ *
+ * Each entry carries `live`: the process rooted in that tree, or `null`.
+ * `null` means nobody else was working there, so the growth is this run's and
+ * the run is RED. A pid means the growth is UNATTRIBUTABLE — named in full,
+ * with the pid and cwd, but not fatal (bead `forge-8vfn.6.11.34`, ruling 340).
  *
  * @param {string} root the run's own worktree
  * @param {Map<string,Set<string>>} baseline from `snapshotSiblingWorktrees` before the run
- * @returns {Array<{root: string, paths: string[]}>}
+ * @param {{liveRoots?: (dirs: string[]) => Map<string,{pid:number,cwd:string}>}} [opts] injection seam for the test
+ * @returns {Array<{root: string, paths: string[], live: {pid:number,cwd:string}|null}>}
  */
-export function siblingWorktreeEscapes(root, baseline) {
+export function siblingWorktreeEscapes(root, baseline, opts = {}) {
   const grown = [];
   for (const [dir, paths] of snapshotSiblingWorktrees(root)) {
     const was = baseline.get(dir) ?? new Set();
     const added = [...paths].filter((p) => !was.has(p)).sort();
     if (added.length > 0) grown.push({ root: dir, paths: added });
   }
-  return grown;
+  if (grown.length === 0) return grown;
+  const live = (opts.liveRoots ?? liveProcessRoots)(grown.map((g) => g.root));
+  return grown.map((g) => ({ ...g, live: live.get(g.root) ?? null }));
+}
+
+/**
+ * The subset of sibling growth this run is ANSWERABLE for — the trees nobody
+ * else was working in. `run.mjs` reds the run on these and only these.
+ *
+ * A separate exported function rather than an inline filter so the decision
+ * that ends a run has a name and a test of its own: the difference between
+ * "reported" and "fatal" is the whole of ruling 340, and it should not live as
+ * a predicate inside a `reduce`.
+ */
+export function unownedEscapes(escapes) {
+  return (escapes ?? []).filter((e) => e.live == null);
+}
+
+/**
+ * Which of `dirs` has a live process ROOTED in it — `readlink /proc/<pid>/cwd`.
+ *
+ * Bead `forge-8vfn.6.11.34`, T1 ruling 340. `siblingWorktreeEscapes` diffs a
+ * before/after snapshot per sibling worktree, which attributes growth by TIME
+ * WINDOW rather than by writer: measured 2026-09-06, a concurrent gate in
+ * `/home/parso/forge-gate-m5` ran `scripts/check-boundaries.test.ts`, which
+ * plants `apps/studio/lib/__ws_probe__.ts` in its OWN tree, and this run
+ * reported `CONTAINMENT FAILURE` over a story whose beats were 2/2 green.
+ *
+ * A process whose cwd is inside a sibling means SOMEBODY ELSE is working
+ * there. This run's own processes — the bridge, the browser, the agent — are
+ * rooted in the run's own worktree, which is never in `dirs`
+ * (`snapshotSiblingWorktrees` skips it). **Stated rather than hidden:** if one
+ * of this run's own processes ever chdir'd INTO a sibling and wrote there, the
+ * growth would be reported unattributable instead of failing the run. The
+ * paths are still named in full, loudly, on every line — what changes is
+ * whether an ambiguous reading is allowed to fail a funded run on its own.
+ *
+ * Never throws: an unreadable `/proc`, a pid that exits mid-walk, or a process
+ * owned by another user all mean "cannot attribute this one", not "no live
+ * process" — so each is skipped and the walk continues.
+ */
+export function liveProcessRoots(dirs) {
+  const live = new Map();
+  if (dirs.length === 0) return live;
+  // `/proc/<pid>/cwd` is a link to the REAL path, so a root reached through a
+  // symlink (`/tmp` on some hosts, a worktree under a symlinked home) would
+  // never match a plain `resolve`. Fall back to `resolve` for a root that
+  // cannot be realpathed — a tree that is gone cannot own a process anyway.
+  const real = (d) => { try { return realpathSync(d); } catch { return resolve(d); } };
+  const roots = dirs.map((d) => ({ dir: d, resolved: real(d) }));
+  let pids = [];
+  try {
+    pids = readdirSync('/proc', { withFileTypes: true })
+      .filter((e) => /^[0-9]+$/.test(e.name))
+      .map((e) => e.name);
+  } catch {
+    return live; // no /proc: nothing can be attributed, so nothing is excused
+  }
+  for (const pid of pids) {
+    if (Number(pid) === process.pid) continue;
+    let cwd = '';
+    try {
+      cwd = readlinkSync(join('/proc', pid, 'cwd'));
+    } catch {
+      continue; // gone, or another user's — not evidence either way
+    }
+    for (const { dir, resolved } of roots) {
+      if (live.has(dir)) continue;
+      if (cwd === resolved || cwd.startsWith(`${resolved}${sep}`)) {
+        live.set(dir, { pid: Number(pid), cwd });
+        break;
+      }
+    }
+  }
+  return live;
 }
 
 /**
@@ -601,10 +680,14 @@ export function describeFence(fence, expectedStarters = []) {
       'is recorded, then removed by the trailing sweep',
     ),
     // Ruling 309(b) — a tree this run does not own. Never removed from here.
-    ...escapes.flatMap(({ root, paths }) =>
+    ...escapes.flatMap(({ root, paths, live }) =>
       paths.map((p) =>
-        `[stories] fence: ESCAPED ${p} — written into ${root}, a worktree this run does not own; ` +
-        'NOT removed (that tree is not the fence\'s to edit) — investigate before trusting this run',
+        live == null
+          ? `[stories] fence: ESCAPED ${p} — written into ${root}, a worktree this run does not own; ` +
+            'NOT removed (that tree is not the fence\'s to edit) — investigate before trusting this run'
+          : `[stories] fence: UNATTRIBUTABLE ${p} — appeared in ${root} while pid ${live.pid} was working ` +
+            `there (cwd ${live.cwd}); this run cannot be shown to have written it, so it does not fail the ` +
+            'run — investigate if that tree was supposed to be quiet',
       ),
     ),
     ...fence.restored.map((p) => `[stories] fence: RESTORED ${p} — the run wrote a repo-tracked file outside its artifacts`),
