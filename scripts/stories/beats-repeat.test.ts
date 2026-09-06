@@ -184,3 +184,149 @@ test('312: a stop-condition read that throws is "not yet", never a run-ending cr
   assert.equal(r.error, null, 'the throw must not end the run');
   assert.equal(page.state.phase, 'awaiting-verdict', 'and the loop still finishes its work');
 });
+
+// ===========================================================================
+// Bead `forge-8vfn.6.11.38` (P1, ruling 349) — the loop must not overshoot the
+// thing it is waiting for.
+//
+// Read from the S1 run 8 archive, not hypothesised: the session was at
+// `phase: "awaiting-verdict", round: 4` while the loop was still filling round
+// 4's field, and beat 11 died after 357 s on `could not fill question-freetext
+// … element was detached from the DOM`. Two causes: `until` was evaluated once
+// per ROUND (a round is several actions long, and the product can leave the
+// interview between them), and a DETACHED control was reported as the failure
+// rather than as the page moving — which is the very event `until` exists to
+// notice. `until` is a DOM read, so the product can have moved while the page
+// is still re-rendering, and the single post-error re-check ran too early.
+// ===========================================================================
+
+/**
+ * The interview above, plus the two things the archive shows: the fill can find
+ * its element detaching, and the PAGE's rendered phase can lag the session's
+ * own. `visibleAfter` is how many matcher reads pass before the rendered phase
+ * catches up — the gap the single post-error re-check fell into.
+ */
+function movingInterviewPage({ detachFills = 0, visibleAfter = 0 }) {
+  const state = { phase: 'awaiting-answers', visible: 'awaiting-answers', filled: [], submits: 0, reads: 0, detached: 0 };
+  const present = (handle) =>
+    handle.includes('question-freetext') || handle.includes('submit-answers')
+      ? state.phase === 'awaiting-answers'
+      : true;
+  const fill = async (v) => {
+    if (state.detached < detachFills) {
+      state.detached += 1;
+      // The product leaves the interview; the DOM has not caught up yet.
+      state.phase = 'awaiting-verdict';
+      throw new Error('element was detached from the DOM');
+    }
+    state.filled.push(v);
+  };
+  return {
+    state,
+    locator(handle) {
+      return {
+        count: async () => (present(handle) ? 1 : 0),
+        nth: () => ({ fill }),
+        waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
+        first: () => ({
+          waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
+          click: async () => {
+            if (!present(handle)) throw new Error('no element carries that handle');
+            if (handle.includes('submit-answers')) { state.submits += 1; state.phase = 'awaiting-verdict'; }
+          },
+          fill,
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+}
+
+/** Reads the RENDERED phase, which catches up to the session's only after `visibleAfter` reads. */
+const laggingMatcher = (page, visibleAfter) => async (spec) => {
+  page.state.reads += 1;
+  if (page.state.reads > visibleAfter) page.state.visible = page.state.phase;
+  return Object.entries(spec).every(([k, v]) => (k === 'session-phase' ? page.state.visible === v : false));
+};
+
+test('6.11.38: a control that DETACHES mid-round is the page moving, not this beat failing', async () => {
+  // The fill detaches because the architect drafted underneath it. The rendered
+  // phase lags by one read, so the single post-error re-check says "not yet" —
+  // exactly what put 357 s and a red verdict on S1 run 8's beat 11.
+  const page = movingInterviewPage({ detachFills: 1, visibleAfter: 2 });
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, laggingMatcher(page, 2));
+
+  assert.equal(r.error, null, `a detached control must send the loop back to its \`until\`, got: ${r.error}`);
+  assert.equal(page.state.phase, 'awaiting-verdict', 'and the product really had moved on');
+});
+
+test('6.11.38: `until` is re-read BEFORE EVERY action in a round — the press is never even ATTEMPTED once the interview has ended', async () => {
+  // The fill SUCCEEDS and is what moves the product on (no error anywhere), so
+  // nothing forces the loop to look: only a re-read before the next action can
+  // stop it. The observable is whether the click was ATTEMPTED — asserting on
+  // `submits` alone would pass either way, because the press throws on the
+  // missing control before it increments anything. That is the difference
+  // between testing the fix and testing around it.
+  const page = movingInterviewPage({ detachFills: 0, visibleAfter: 0 });
+  page.state.attempts = 0;
+  const present = (handle) =>
+    handle.includes('question-freetext') || handle.includes('submit-answers')
+      ? page.state.phase === 'awaiting-answers'
+      : true;
+  page.locator = (handle) => ({
+    count: async () => (present(handle) ? 1 : 0),
+    nth: () => ({ fill: async () => { page.state.phase = 'awaiting-verdict'; } }),
+    waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
+    first: () => ({
+      waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
+      fill: async () => { page.state.phase = 'awaiting-verdict'; },
+      click: async () => {
+        if (handle.includes('submit-answers')) page.state.attempts += 1;
+        if (!present(handle)) throw new Error('no element carries that handle');
+      },
+    }),
+  });
+
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, laggingMatcher(page, 0));
+
+  assert.equal(r.error, null);
+  assert.equal(
+    page.state.attempts,
+    0,
+    'the press was attempted against a session that had already drafted — `submit-answers` exists only at `awaiting-answers`, so this is the loop acting after the product moved',
+  );
+});
+
+test('6.11.38 POSITIVE CONTROL: detachment is softened, but a control that never resolves still reds at the bound', async () => {
+  // A page that detaches EVERY fill and never leaves the interview in the
+  // page's own view. Softening detachment must not make a stuck loop green —
+  // that would turn every genuinely wedged interview into a pass.
+  const page = movingInterviewPage({ detachFills: Number.MAX_SAFE_INTEGER, visibleAfter: 0 });
+  page.state.phase = 'awaiting-answers';
+  const stuck = async () => false;
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1200, stuck);
+
+  assert.notEqual(r.error, null, 'a loop that never met its condition must NOT report success');
+  assert.match(r.error, /declared bound/);
+  assert.match(r.error, /session-phase/, 'and the failure must name the `until` that was never met');
+});
+
+test('6.11.38: a NON-detached inner failure still reds, naming its round — detachment is the only softened case', async () => {
+  const page = movingInterviewPage({ detachFills: 0, visibleAfter: 0 });
+  // The press is disabled rather than gone: a real failure, not the page moving.
+  page.locator = (handle) => ({
+    count: async () => 1,
+    nth: () => ({ fill: async () => {} }),
+    waitFor: async () => {},
+    first: () => ({
+      waitFor: async () => {},
+      fill: async () => {},
+      click: async () => { throw new Error('the control is disabled'); },
+    }),
+  });
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 5000, async () => false);
+
+  assert.notEqual(r.error, null);
+  assert.match(r.error, /repeat, round 1:/);
+  assert.match(r.error, /disabled/);
+});
