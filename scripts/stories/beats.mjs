@@ -1,6 +1,6 @@
 import {
   PLACEHOLDER, answers, resolveExpectations, ERROR_SENTINELS, readObserved,
-  LIFECYCLE_STALLED, waitForConsequence, waitForHandleOrStall,
+  waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
@@ -250,8 +250,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (verdict.status !== 'red') return verdict;
     const why =
       stalled !== null
-        ? `the session's own lifecycle read "${LIFECYCLE_STALLED}" ${Math.round(stalled.afterMs / 1000)}s into the ` +
-          `${bound.label} — the product had already declared this session hung, so the beat stopped there instead ` +
+        ? `${stalled.why} ${Math.round(stalled.afterMs / 1000)}s into the ` +
+          `${bound.label} — the product had already said so about this session, so the beat stopped there instead ` +
           'of sitting out its declared bound'
         : bound.label === null
           ? null
@@ -542,8 +542,8 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
         return {
           waitedForHandle,
           error:
-            `the session's own lifecycle read "${LIFECYCLE_STALLED}" ${Math.round(stall.afterMs / 1000)}s into the ` +
-            `agent wait, while this step waited for ${handle}. The product had already declared this session hung, ` +
+            `${stall.why} ${Math.round(stall.afterMs / 1000)}s into the ` +
+            `agent wait, while this step waited for ${handle}. The product had already said so about this session, ` +
             'so the beat stopped there rather than spending its declared bound twice over — once here and again in ' +
             'the act that follows.',
         };
