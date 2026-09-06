@@ -285,6 +285,45 @@ export function fenceBreaches(before, after, storyId, groundProject = null, deps
  * @param {string} root the run's OWN worktree, excluded from the result
  * @returns {Map<string,Set<string>>} sibling worktree dir -> its dirty paths
  */
+/**
+ * The roots a story run creates a GROUND in, and which `git status` cannot see.
+ *
+ * Bead `forge-8vfn.6.11.32`. `git status --porcelain -uall` does not list
+ * IGNORED paths, and this repo ignores `projects/*` (`.gitignore:68`),
+ * `_logs/*` and `_queue/pending/*` — so the one place a run creates a ground
+ * was precisely the place the fence could not look. Measured:
+ * `projects/story-s2` sat in the MAIN CHECKOUT from 2026-08-30, an M1-era S2
+ * run from before the fence existed, and every sibling snapshot since looked
+ * straight past it.
+ */
+const FENCE_IGNORED_ROOTS = ['projects', '_logs', '_queue'];
+
+/**
+ * The immediate children of each ignored root — a whole ground appearing is a
+ * new entry here.
+ *
+ * DEPTH ONE, deliberately and with the limit stated rather than implied: a
+ * write INSIDE an existing ground (`projects/gitpulse/**`) is still invisible
+ * to this. Those grounds are real clones — recursing one would walk
+ * `node_modules` in every sibling on every snapshot, twice a run. The class
+ * this closes is "a tree this run does not own gained a ground", which is the
+ * one the incident was; the ground-hash check each funded run already does
+ * before and after (§15.127) is what covers writes within a ground.
+ */
+function ignoredRootEntries(dir) {
+  const out = [];
+  for (const root of FENCE_IGNORED_ROOTS) {
+    let names;
+    try {
+      names = readdirSync(join(dir, root));
+    } catch {
+      continue; // absent root: nothing to see, not a finding
+    }
+    for (const name of names) out.push(`${root}/${name}`);
+  }
+  return out;
+}
+
 export function snapshotSiblingWorktrees(root) {
   const trees = new Map();
   let listing = '';
@@ -309,7 +348,9 @@ export function snapshotSiblingWorktrees(root) {
     } catch {
       continue; // a pruned or unreadable tree is not this run's finding
     }
-    trees.set(dir, new Set(rows.map((r) => r.path)));
+    // Bead `forge-8vfn.6.11.32`: what git reports, PLUS what it is configured
+    // not to report. A ground is created in an ignored root by design.
+    trees.set(dir, new Set([...rows.map((r) => r.path), ...ignoredRootEntries(dir)]));
   }
   return trees;
 }
