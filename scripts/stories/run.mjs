@@ -49,6 +49,7 @@ import {
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
 import { snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes } from './ground-hash.mjs';
+import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
 import { driveBeat, resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -263,6 +264,11 @@ async function runStory(story, uiUrl, startedMs) {
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
       beats.push({ ...verdict, frame });
+      // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
+      // captured while the page still exists. The session dir below says what
+      // the product HAD; this says what was on the screen, and S2 run 8's open
+      // question is exactly the difference between the two.
+      if (verdict.status !== 'green') await captureBeatDom(page, ROOT, story.id, i, beat.act);
       const mark = verdict.status === 'green' ? '✓' : '✗';
       console.log(`  ${mark} ${i + 1}. ${beat.act}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
@@ -318,6 +324,20 @@ async function runStory(story, uiUrl, startedMs) {
   // used to stand here ("the smoke story creates none") was true of `smoke` and
   // false of `proof`, S2 and S4, which left `projects/story-<id>`,
   // `brain/projects/story-<id>` and a saved flow behind every run.
+  // Bead `forge-8vfn.6.11.42` (ruling 356b) — ON A RED RUN THE SWEEP WAITS.
+  // S2 run 8's ground was removed before anything read
+  // `_architect/<sid>/questions.json`, so "the questions were written late" and
+  // "the page rendered them late" — different defects with byte-identical JSON —
+  // could not be told apart, and the answer would have cost a third funded run.
+  // The sweep below is unchanged; it simply no longer runs first. A GREEN run
+  // reads nothing and sweeps exactly as before.
+  const redEvidence = captureRedEvidence({
+    root: ROOT,
+    storyId: story.id,
+    red: beats.some((b) => b.status !== 'green'),
+  });
+  for (const line of describeRedEvidence(redEvidence, ROOT)) console.log(line);
+
   const sweep = sweepProductFixtures(story.id, ROOT);
   for (const p of sweep.removed) console.log(`[stories] trailing sweep removed ${p}`);
   // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
