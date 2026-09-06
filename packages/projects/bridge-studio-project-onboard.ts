@@ -108,6 +108,14 @@ export type OnboardDeps = {
   readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
+  /**
+   * How the route runs `gh`, injected (`forge-8vfn.6.11.27`). Minting is the
+   * one thing this route does that leaves the machine, and an un-injectable
+   * network call cannot be tested without reaching GitHub — which is how
+   * #477's `mintRemote` came to be proven by a unit test that bypassed this
+   * route entirely. Omitted → `project-create.ts` uses a real `gh`.
+   */
+  runGh?: (args: string[], cwd?: string) => string;
 };
 
 /**
@@ -194,13 +202,22 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       if (!name || !appType || !northStar) {
         sendJson(res, 400, { error: 'name, appType and northStar are required' }, origin); return true;
       }
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      // ONE read: `projectsDir` and the remote switch are both operator
+      // settings and must not disagree about which file they came from.
+      const cfg = loadConfig(defaultConfigPath(ctx.forgeRoot));
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), cfg);
       let out;
       try {
+        // Ruling 323 — mint only when `projects.remote.create` is on (default
+        // OFF; the field's own docstring says why). Until this, the route never
+        // passed `remote`, so `mintRemote` was unreachable and C6 stayed
+        // unresolved on every created project (S2 run 4, beat 5).
+        const mintRemote = cfg.projects?.remote?.create === true;
         out = scaffoldGreenfieldProject({
           manifest: { name, appType, language: str('language') || 'typescript', northStar, ...(str('architecture') ? { architecture: str('architecture') } : {}) },
           forgeRoot: ctx.forgeRoot,
           projectsRoot: projectsDir,
+          ...(mintRemote ? { remote: { create: true, ...(deps.runGh ? { runGh: deps.runGh } : {}) } } : {}),
         });
       } catch (err) {
         // Validation / unknown-app-type / duplicate-id are operator errors → 400.
@@ -215,6 +232,9 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
           appType: out.appType,
           ready: out.hardGreen,
           filesWritten: out.filesWritten.length,
+          // "No remote, no key" — a present-and-empty field would tell a
+          // caller a repo exists when none does (cf. #490, one layer up).
+          ...(out.remoteUrl !== undefined ? { remoteUrl: out.remoteUrl } : {}),
           failingClauses: out.failingClauses.map((c) => ({ id: c.clause, title: c.title, detail: c.detail })),
         },
         origin,

@@ -536,6 +536,12 @@ export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): Cr
         ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
       },
       forgeRoot,
+      // Ruling 323 — the SAME switch the bridge route reads, so both doors into
+      // creation agree; a CLI that minted while the UI did not would make the
+      // config a lie about half the product. Default OFF.
+      ...(loadConfig(defaultConfigPath(forgeRoot)).projects?.remote?.create === true
+        ? { remote: { create: true } }
+        : {}),
     });
     return { ok: true, kind: 'scaffolded', exitCode: out.hardGreen ? 0 : 1, out };
   } catch (err) {
