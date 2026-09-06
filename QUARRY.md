@@ -471,6 +471,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/flows/index.ts | flows | verbatim | 11 |
 | packages/kernel/config.ts | kernel | verbatim | 493 |
+| packages/kernel/gh-identity.ts | kernel | verbatim | 106 |
 | packages/kernel/ids.ts | kernel | verbatim | 117 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 63 |
 | packages/kernel/index.ts | kernel | verbatim | 30 |

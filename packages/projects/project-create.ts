@@ -41,7 +41,10 @@ import { dirname, join, resolve } from 'node:path';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import { isReservedId } from '@forge/agents/skill-path.ts';
-import { projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote } from '@forge/kernel';
+import {
+  projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote,
+  assertGhOwner, ghRunnerFor, loadConfig, defaultConfigPath,
+} from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -250,6 +253,7 @@ function sweepStagingLeftovers(root: string, id: string): void {
  */
 /** Operator-owned facts (ruling 168), constants because they decide WHERE an
  *  outward-facing repository appears and how visible it is. */
+/** Fallback owner when config names none. Bead `forge-8vfn.6.11.35`: config wins. */
 const REMOTE_ACCOUNT = 'parsoFish';
 const REMOTE_VISIBILITY = '--private';
 
@@ -272,10 +276,11 @@ function mintRemote(
   remote: { account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string },
   forgeRoot?: string,
 ): string {
-  const runGh =
-    remote.runGh ??
-    ((args: string[], cwd?: string) => execFileSync('gh', args, { cwd, encoding: 'utf8' }).toString());
   const account = remote.account ?? REMOTE_ACCOUNT;
+  // Bead `forge-8vfn.6.11.35`: pinned to the CONFIGURED owner's token, never to
+  // whatever account is active on the host (S2 run 6 ran as an Enterprise
+  // Managed User, which cannot create outside its enterprise at all).
+  const runGh = remote.runGh ?? ghRunnerFor(account);
   const visibility = remote.visibility ?? REMOTE_VISIBILITY;
   // `id` is request-derived (the operator types the NAME the slug comes from),
   // and this hands a directory to an OUTWARD-FACING subprocess. So the path
@@ -287,16 +292,10 @@ function mintRemote(
     throw new Error(`project "${id}": refusing to create a remote for a path that does not resolve inside ${projectsRoot}`);
   }
   const projectDir = guarded.realPath;
-  try {
-    runGh(['auth', 'status']);
-  } catch (err) {
-    throw new Error(
-      `project "${id}" was scaffolded locally, but its GitHub remote was NOT created: \`gh auth status\` failed ` +
-        `(${err instanceof Error ? err.message : String(err)}). Authenticate gh and add the remote deliberately — ` +
-        'forge does not fall back to a local-only project, because a silently remote-less project reads as an ' +
-        'unresolved contract clause and costs a run to diagnose.',
-    );
-  }
+  // The `gh auth status` gate that stood here is REPLACED, not dropped, by
+  // `assertGhOwner` — run BEFORE the scaffold, and asking whether THIS identity
+  // is the configured owner rather than whether anyone is logged in at all.
+  // The old question passed throughout the very run that failed.
   const out = runGh(
     ['repo', 'create', `${account}/${id}`, visibility, '--source', projectDir, '--remote', 'origin', '--push'],
     projectDir,
@@ -332,6 +331,13 @@ export function scaffoldGreenfieldProject(input: {
     throw new Error(`unknown appType "${manifest.appType}" — available: ${available.join(', ') || '(none)'}`);
   }
   const templateDir = join(projectStartersDir(input.forgeRoot), manifest.appType);
+  // Bead `forge-8vfn.6.11.35` — AFTER the free local refusals, BEFORE a single
+  // file is written. The mint runs LAST for a containment reason stated at its
+  // own call site, so an identity failure found THERE leaves a committed
+  // project behind while the operator is told the create failed.
+  const owner = input.remote?.create !== true ? undefined
+    : input.remote.account ?? loadConfig(defaultConfigPath(input.forgeRoot)).projects?.remote?.owner ?? REMOTE_ACCOUNT;
+  if (owner !== undefined) assertGhOwner(owner, input.remote?.runGh && ((a: string[]) => input.remote!.runGh!(a)));
 
   const projectsRoot = input.projectsRoot ?? join(input.forgeRoot, 'projects');
   const projectDir = resolve(projectsRoot, id);
@@ -475,7 +481,8 @@ export function scaffoldGreenfieldProject(input: {
   // above deletes a staged directory and CANNOT delete a GitHub repository
   // (that needs an operator token this lane does not hold), so a remote minted
   // before a local failure would be an orphan nobody here can remove.
-  const remoteUrl = input.remote?.create === true ? mintRemote(projectsRoot, id, input.remote, input.forgeRoot) : undefined;
+  const remoteUrl = owner === undefined ? undefined
+    : mintRemote(projectsRoot, id, { ...input.remote, account: owner }, input.forgeRoot);
 
   return {
     id,

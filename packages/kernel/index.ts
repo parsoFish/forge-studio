@@ -19,6 +19,9 @@ export * from './logging.ts';
 export * from './event-cost.ts';
 /** Config and layout, plus the env-assertion boundary. */
 export * from './config.ts';
+
+// Which GitHub identity this host acts as for an outward action (6.11.35).
+export * from './gh-identity.ts';
 /** First-run scaffolding: the `_queue/`, `_worktrees/`, `_logs/` layout. */
 export * from './init.ts';
 /** The realpath containment guard every request-derived path passes through. */
