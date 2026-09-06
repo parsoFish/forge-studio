@@ -211,3 +211,44 @@ export function forgeBinOnPath(forgeRoot: string, currentPath: string | undefine
   const rest = (currentPath ?? '').split(delimiter).filter((entry) => entry !== '' && entry !== bin);
   return [bin, ...rest].join(delimiter);
 }
+
+/**
+ * Forward one chunk of an SDK child's stderr into THIS process's stderr, so a
+ * child that dies names its own cause.
+ *
+ * Lives here, beside `buildChildEnv`, for the same reason that does: this is the
+ * child-process contract, and the agents seam only APPLIES it.
+ *
+ * Bead `forge-8vfn.6.11.40`. S2 run 7: the architect's child exited code 1 and
+ * the session's `stderr.log` held only the parent's throw. The child's stderr
+ * was never piped — `sdk.mjs:7605` is
+ * `stderrMode = env.DEBUG_CLAUDE_AGENT_SDK || this.options.stderr ? "pipe" : "ignore"` —
+ * so the bytes were discarded by the OS and nothing could recover them after.
+ *
+ * `process.stderr` and not a resolved path: every spawner already opens the
+ * session's `stderr.log` as this process's stdio[2], which is exactly why the
+ * parent's throw landed there. One sink is then right for every session kind,
+ * with no path to resolve. Never load-bearing — diagnosis that can kill the
+ * turn it diagnoses is worse than none.
+ */
+export function forwardChildStderr(chunk: string, callerSink?: (m: string) => void): void {
+  try {
+    for (const line of chunk.split('\n')) {
+      if (line.trim() !== '') process.stderr.write(`[sdk-child] ${line}\n`);
+    }
+  } catch { /* a log write is never load-bearing */ }
+  try { callerSink?.(chunk); } catch { /* nor is a caller's own sink */ }
+}
+
+/**
+ * The `stderr` option every SDK query is handed, composed for one caller.
+ *
+ * Constructed here rather than at the seam so the whole child-process IO
+ * contract — the env it may see, and where its stderr goes — is one module's
+ * answer. A caller's own sink is composed, never dropped, symmetric with the
+ * way `buildChildEnv` merges a caller's env delta.
+ */
+export function sdkStderrSink(callerOptions?: unknown): (chunk: string) => void {
+  const caller = (callerOptions as { stderr?: (m: string) => void } | undefined)?.stderr;
+  return (chunk: string) => forwardChildStderr(chunk, caller);
+}

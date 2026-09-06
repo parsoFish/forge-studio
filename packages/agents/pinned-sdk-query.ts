@@ -32,7 +32,7 @@
  */
 
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { buildChildEnv } from '@forge/kernel/spawn-env.ts';
+import { buildChildEnv, sdkStderrSink } from '@forge/kernel/spawn-env.ts';
 import { markerEnvOverlay } from './spawn-marker.ts';
 
 /** The exact shape of the SDK's `query` function. */
@@ -68,7 +68,7 @@ export function createPinnedSdkQuery(queryImpl: SdkQueryFn): SdkQueryFn {
   return (params) =>
     queryImpl({
       ...params,
-      options: { ...params.options, env: buildChildEnv(process.env, params.options?.env ?? {}) },
+      options: { ...params.options, env: buildChildEnv(process.env, params.options?.env ?? {}), stderr: sdkStderrSink(params.options) },
     });
 }
 
