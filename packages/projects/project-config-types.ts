@@ -190,13 +190,13 @@ export type ProjectConfig = {
   repo?: string;
   /**
    * The curated app-type template id (`listProjectStarters`) this project was
-   * scaffolded from — e.g. `"typescript-cli"`. Written by `scaffoldGreenfieldProject`
+   * scaffolded from — e.g. `"cli"`. Written by `scaffoldGreenfieldProject`
    * at creation time and never inferred from disk afterward (ruling 38 fix c,
    * M4-projects-reset). Optional: an onboarded project, or one created before
    * this field existed, legitimately has none — `reset.ts`'s `computeContractDrift`
    * requires an explicit `--app-type` in that case rather than guessing one
    * (the shipped PR #289 defect this closes: a Go/Terraform project silently
-   * treated as `typescript-cli`).
+   * treated as `cli`).
    */
   appType?: string;
 };

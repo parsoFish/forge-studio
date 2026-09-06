@@ -2848,6 +2848,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
   `[data-action="create-project"]` button — scaffolds a contract-green project
   from a framework template and navigates to its page.
+  **Amended 2026-09-06 (bead `forge-8vfn.6.11.4`, operator ruling 301):** the
+  starters are named for a STYLE — `api`, `cli`, `webapp` — and
+  `GET /api/studio/projects/starters` answers `{appTypes: [{id, label,
+  language}]}` (`describeProjectStarters`, `packages/kernel/config.ts`, read
+  from the sibling manifest `studio/starters/projects/starters.json`). An
+  option therefore READS `CLI — TypeScript` while its **VALUE stays the id**;
+  a starter that declares no language renders its label alone.
+  `data-app-type-count` counts ENTRIES, so it is unaffected by the labels.
   An existing project's editor aside carries the R4-02-F1 second onboarding
   entry point: `[data-section="onboard-with-agent"]` with a
   `[data-action="run-onboarding-agent"]` button. **Repointed R4-17
@@ -4912,7 +4920,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
   `api-verify`, `test-evidence`, `narrative`), and
   `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
-  — `typescript-api`, `typescript-cli`, `typescript-web`); 17 entries total
+  — `api`, `cli`, `webapp`); 17 entries total
   (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
   declared field: planning usage scans the real flow graph
   (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's

@@ -579,8 +579,8 @@ test('PUT /api/studio/templates/:id updates content; invalid content 400 leaves 
 
 test('PUT /api/studio/templates/:id — unknown 404; scaffold read-only 400', async () => {
   assert.equal((await send('PUT', '/api/studio/templates/no-such-tpl', { content: 'x' })).status, 404);
-  // typescript-cli is a real project scaffold (copied from the repo starters)
-  const res = await send('PUT', '/api/studio/templates/typescript-cli', { content: 'x' });
+  // cli is a real project scaffold (copied from the repo starters)
+  const res = await send('PUT', '/api/studio/templates/cli', { content: 'x' });
   assert.equal(res.status, 400);
 });
 
@@ -598,7 +598,7 @@ test('DELETE /api/studio/templates/:id — used template 409 naming the user; un
 
 test('DELETE /api/studio/templates/:id — unknown 404; scaffold 400', async () => {
   assert.equal((await send('DELETE', '/api/studio/templates/no-such-tpl')).status, 404);
-  assert.equal((await send('DELETE', '/api/studio/templates/typescript-cli')).status, 400);
+  assert.equal((await send('DELETE', '/api/studio/templates/cli')).status, 400);
 });
 
 // ===========================================================================

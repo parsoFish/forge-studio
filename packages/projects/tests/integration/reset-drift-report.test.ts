@@ -11,7 +11,7 @@
  * `AppTypeUnresolvedError` instead (`reset-app-type-required.test.ts`). This
  * file's own concern (skill-relocation mechanics) is orthogonal to which
  * starter gets matched, so both calls now pass an explicit
- * `appType: 'typescript-cli'` — the operator's informed choice a fix-(a)-era
+ * `appType: 'cli'` — the operator's informed choice a fix-(a)-era
  * caller must supply — rather than relying on the pre-fix default guess.
  */
 
@@ -100,7 +100,7 @@ test('computeContractDrift reports the skill relocations it would make, and writ
   try {
     const before = snapshotTree(projectDir);
 
-    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'cli' });
 
     const after = snapshotTree(projectDir);
     assert.deepEqual(after, before, 'computeContractDrift must not create, modify, or delete a single byte of the project tree');
@@ -142,7 +142,7 @@ test('computeContractDrift on an undrifted project (nothing to move) reports ski
       'utf8',
     );
 
-    const drift = computeContractDrift(dir, { forgeRoot, appType: 'typescript-cli' });
+    const drift = computeContractDrift(dir, { forgeRoot, appType: 'cli' });
     const skillsRow = drift.rows.find((r) => r.section === 'skills');
     assert.equal(skillsRow!.action, 'unchanged');
     assert.deepEqual(drift.skillMoves, []);

@@ -16,7 +16,7 @@
  *
  * Every fixture here is either hand-written directly into a fresh
  * `mkdtempSync` root, or `cpSync`'d verbatim from the REAL, already-shipped
- * `studio/starters/projects/typescript-cli` template — never produced by
+ * `studio/starters/projects/cli` template — never produced by
  * calling `runCreate`/`scaffoldGreenfieldProject` itself, so a fix to the bug
  * under test can't quietly invalidate its own fixture.
  *
@@ -50,7 +50,7 @@ const REAL_TYPESCRIPT_CLI_TEMPLATE = resolve(
   'studio',
   'starters',
   'projects',
-  'typescript-cli',
+  'cli',
 );
 
 /** A fresh root somewhere the real FORGE_ROOT (this checkout) could never be:
@@ -66,7 +66,7 @@ test('runCreate: injected forgeRoot is genuinely used, not the module FORGE_ROOT
     const result = runCreate(['list'], { forgeRoot: root });
     assert.equal(result.ok, true);
     assert.equal(result.kind, 'list');
-    // The real FORGE_ROOT ships typescript-api/typescript-cli/typescript-web.
+    // The real FORGE_ROOT ships api/cli/webapp.
     // If the implementation ignored opts.forgeRoot and fell back to the
     // module constant, this list would come back non-empty.
     assert.deepEqual(result.appTypes, []);
@@ -120,11 +120,11 @@ test('runCreate: hard-green scaffold against a temp root -> scaffolded result, e
   try {
     cpSync(
       REAL_TYPESCRIPT_CLI_TEMPLATE,
-      join(root, 'studio', 'starters', 'projects', 'typescript-cli'),
+      join(root, 'studio', 'starters', 'projects', 'cli'),
       { recursive: true },
     );
     const result = runCreate(
-      ['--name', 'probe project', '--app-type', 'typescript-cli', '--north-star', 'a probe project for testing'],
+      ['--name', 'probe project', '--app-type', 'cli', '--north-star', 'a probe project for testing'],
       { forgeRoot: root },
     );
     assert.equal(result.ok, true);

@@ -306,7 +306,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-from-template',
         title: 'Create a greenfield project from a framework template — /projects/new',
-        narration: 'Beyond onboarding an existing repo, the operator stands up a brand-new project from a curated framework template (R4-03): a name, a north star, and an app type (typescript-cli / typescript-api). Studio scaffolds the whole skeleton — package.json with a real quality gate, a unit test, .gitignore, an AGENTS.md that names the gate, roadmap, CI — seeds the central brain, and lands on the project page contract-green, ready for the first architect run. No manual repo surgery.',
+        narration: 'Beyond onboarding an existing repo, the operator stands up a brand-new project from a curated framework template (R4-03): a name, a north star, and an app type (cli / api). Studio scaffolds the whole skeleton — package.json with a real quality gate, a unit test, .gitignore, an AGENTS.md that names the gate, roadmap, CI — seeds the central brain, and lands on the project page contract-green, ready for the first architect run. No manual repo surgery.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R4-03] Create a greenfield project from a template');
@@ -328,7 +328,7 @@ export const journey = defineJourney({
               check(appTypeCount >= 2, `R4-03: the create form offers ≥2 curated app-type templates (got ${appTypeCount})`);
               await page.locator('[data-field="create-name"]').fill(TEMPLATE_NAME).catch(() => {});
               await page.locator('[data-field="create-north-star"]').fill(TEMPLATE_NORTH_STAR).catch(() => {});
-              await page.locator('[data-field="create-app-type"]').selectOption('typescript-cli').catch(() => {});
+              await page.locator('[data-field="create-app-type"]').selectOption('cli').catch(() => {});
               await frame(page, 'r4-03-0-create-form', 'R4-03 — create a greenfield project: name, north star, framework template');
               await page.locator('[data-action="create-project"]').click().catch(() => {});
               await page.waitForURL(new RegExp(`/projects/${TEMPLATE_SLUG}`), { timeout: 20000 }).catch(() => {});

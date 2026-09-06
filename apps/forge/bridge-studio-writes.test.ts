@@ -138,7 +138,7 @@ test('AT-4on-4 (RED) [SEC-05 4on] a FAILED greenfield create must not leave a ph
     if (!armTailFailure(id)) { t.skip('chmod 0o500 does not block writes (running as root?)'); return; }
     assert.ok(!existsSync(join(brainDir, 'kb.yaml')), 'precondition: no kb.yaml before the create');
 
-    const first = await postCreate({ name: id, appType: 'typescript-cli', northStar: 'ship the thing' });
+    const first = await postCreate({ name: id, appType: 'cli', northStar: 'ship the thing' });
 
     if (first.status !== 200) {
       // The operator was told the create FAILED — it must not have leaked a KB.
@@ -154,7 +154,7 @@ test('AT-4on-4 (RED) [SEC-05 4on] a FAILED greenfield create must not leave a ph
       // transient is cleared. RED at base: the projects/<id> orphan → 400
       // "already exists".
       clearInjection(id);
-      const second = await postCreate({ name: id, appType: 'typescript-cli', northStar: 'ship the thing' });
+      const second = await postCreate({ name: id, appType: 'cli', northStar: 'ship the thing' });
       assert.equal(second.status, 200, `the retry after a failed create must succeed — got ${second.status}: ${second.text}`);
     }
 
@@ -172,7 +172,7 @@ test('AT-4on-6 (RED) [SEC-05 4on] a FAILED greenfield create appears in NEITHER 
   try {
     if (!armTailFailure(id)) { t.skip('chmod 0o500 does not block writes (running as root?)'); return; }
 
-    const first = await postCreate({ name: id, appType: 'typescript-cli', northStar: 'ship the thing' });
+    const first = await postCreate({ name: id, appType: 'cli', northStar: 'ship the thing' });
 
     if (first.status !== 200) {
       // RED at base on BOTH surfaces: the half-created projects/<id> is adopted
@@ -184,7 +184,7 @@ test('AT-4on-6 (RED) [SEC-05 4on] a FAILED greenfield create appears in NEITHER 
       assert.ok(!kbs.includes(id), `a FAILED create (status ${first.status}) left a phantom KB "${id}" in GET /api/studio/kbs — got: ${JSON.stringify(kbs)}`);
 
       clearInjection(id);
-      const second = await postCreate({ name: id, appType: 'typescript-cli', northStar: 'ship the thing' });
+      const second = await postCreate({ name: id, appType: 'cli', northStar: 'ship the thing' });
       assert.equal(second.status, 200, `the retry after a failed create must succeed — got ${second.status}: ${second.text}`);
     }
 

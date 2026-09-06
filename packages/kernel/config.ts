@@ -185,6 +185,83 @@ export function listProjectStarters(forgeRoot: string): string[] {
 }
 
 /**
+ * The starter presentation manifest, a SIBLING of the starter directories.
+ *
+ * Never a file inside a starter: `copyTemplate`
+ * (`packages/projects/project-create.ts`) copies every file under
+ * `studio/starters/projects/<id>/` into the created project with no exclusion
+ * list, so per-starter metadata placed there would be stamped into every
+ * project forge creates. `listProjectStarters` filters `isDirectory()`, so a
+ * sibling JSON is invisible to it and to every caller that whitelists an app
+ * type against it.
+ */
+export const PROJECT_STARTERS_MANIFEST = 'starters.json';
+
+/** How a starter is PRESENTED. The id is the value; the rest is for the operator's eyes. */
+export type ProjectStarterDescription = {
+  /** The starter directory name — the value every route and story writes. */
+  id: string;
+  /** What the style is called. Falls back to the id when the manifest says nothing. */
+  label: string;
+  /** The language its scaffold is written in, or `null` when undeclared. */
+  language: string | null;
+};
+
+/**
+ * Describe every starter for a picker: `{ id, label, language }` per directory
+ * (bead `forge-8vfn.6.11.4`, operator ruling 301).
+ *
+ * ADDITIVE beside `listProjectStarters`, which keeps returning bare ids —
+ * `reset.ts`, `project-create.ts`, `cli.ts` and `template-library.ts` all
+ * whitelist an app type against that list and want no presentation.
+ *
+ * The DIRECTORY listing is the truth: a manifest row naming no directory is
+ * ignored, and a directory with no row is still offered under its own id with
+ * `language: null`. The language is never inferred from the scaffold's
+ * contents — a guess printed beside a name reads exactly like a fact.
+ *
+ * A manifest that exists but cannot be read as `{ [id]: {label, language} }`
+ * THROWS, naming the file. The create form's fetch is already fail-closed, and
+ * a form that silently drops every label is how a starter's language quietly
+ * stops being stated.
+ */
+export function describeProjectStarters(forgeRoot: string): ProjectStarterDescription[] {
+  const ids = listProjectStarters(forgeRoot);
+  if (ids.length === 0) return [];
+  const rows = readStartersManifest(join(projectStartersDir(forgeRoot), PROJECT_STARTERS_MANIFEST));
+  return ids.map((id) => {
+    const row = rows[id];
+    return row === undefined ? { id, label: id, language: null } : { id, label: row.label, language: row.language };
+  });
+}
+
+/** Read + validate the manifest at the boundary. `{}` when the file is absent. */
+function readStartersManifest(path: string): Record<string, { label: string; language: string }> {
+  if (!existsSync(path)) return {};
+  const bad = (why: string): never => {
+    throw new Error(`${PROJECT_STARTERS_MANIFEST} is malformed (${path}): ${why}`);
+  };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    return bad(`not valid JSON — ${(err as Error).message}`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return bad('the top level must be an object keyed by starter id');
+  }
+  const out: Record<string, { label: string; language: string }> = {};
+  for (const [id, raw] of Object.entries(parsed as Record<string, unknown>)) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) bad(`"${id}" must be an object with "label" and "language"`);
+    const row = raw as Record<string, unknown>;
+    if (typeof row['label'] !== 'string' || row['label'].trim() === '') bad(`"${id}".label must be a non-empty string`);
+    if (typeof row['language'] !== 'string' || row['language'].trim() === '') bad(`"${id}".language must be a non-empty string`);
+    out[id] = { label: (row['label'] as string).trim(), language: (row['language'] as string).trim() };
+  }
+  return out;
+}
+
+/**
  * Resolve where managed projects live, as an absolute path. Precedence:
  *   1. `FORGE_PROJECTS_DIR` env var (operator/CI override)
  *   2. `projectsDir` from `forge.config.json`

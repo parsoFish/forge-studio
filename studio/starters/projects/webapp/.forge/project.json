@@ -11,6 +11,6 @@
     "ci": { "cmd": ["npm", "run", "ci"] },
     "acceptance": { "match": "npm run acceptance", "required": false, "requiresEnv": [] }
   },
-  "skills": ["web-conventions"],
+  "skills": ["webapp-conventions"],
   "kb": "{{NAME}}"
 }

@@ -21,8 +21,8 @@ function create(args: string[]): { code: number | null; out: string } {
 test('create list: prints the curated app types (exit 0)', () => {
   const r = create(['list']);
   assert.equal(r.code, 0);
-  assert.match(r.out, /typescript-cli/);
-  assert.match(r.out, /typescript-api/);
+  assert.match(r.out, /cli/);
+  assert.match(r.out, /api/);
 });
 
 test('create: missing required flags → exit 2 with usage', () => {

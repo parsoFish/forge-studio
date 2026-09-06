@@ -214,9 +214,9 @@ test('validateProjectConfig: appType absent → undefined (an existing project.j
 test('validateProjectConfig: appType string round-trips', () => {
   const cfg = validateProjectConfig({
     testProcess: { local: { cmd: ['true'] } },
-    appType: 'typescript-cli',
+    appType: 'cli',
   });
-  assert.equal(cfg.appType, 'typescript-cli');
+  assert.equal(cfg.appType, 'cli');
 });
 
 test('validateProjectConfig: appType must be a non-empty string when present', () => {

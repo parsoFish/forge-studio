@@ -16,7 +16,7 @@
  * the first architect run". That promise is what beats 4 and 5 hold it to.
  *
  * GROUND. `story-s2` does not exist when the story starts; beat 3 creates it
- * from the `typescript-cli` starter. The `story-` prefix is the fixture
+ * from the `cli` starter. The `story-` prefix is the fixture
  * namespace `scripts/stories/sweep.mjs` owns, so the crash-safe leading sweep
  * removes the repo and its Brain 3 profile however a run dies. The flow ends
  * at a real architect run, so `realSpawn` is true and `budget_usd` is
@@ -58,7 +58,7 @@
  * story must cover **every** project template type. §3.1's `beats[]` is a flat
  * list with no fork, so beat 3 declares `fork` — the branch point, the field
  * it varies and the three cases — and the runner, which keeps only the fields
- * it knows, silently drops it and runs the `typescript-cli` case alone. The
+ * it knows, silently drops it and runs the `cli` case alone. The
  * requirement therefore stands in the pinned artifact while the schema catches
  * up, exactly as S1 stood with `do` blocks it could not yet perform. Recorded
  * in `_1.0/stories/S2.md` as a `stories` gap: today S2 covers 1 of 3 declared
@@ -82,7 +82,13 @@ const CEILING = '25';
  * forks over all three; the runner performs `STARTERS[1]` until §3.1 gains the
  * verb.
  */
-const STARTERS = ['typescript-api', 'typescript-cli', 'typescript-web'];
+// RE-AMENDED 2026-09-06 (amendment 9, bead `forge-8vfn.6.11.4`, operator
+// ruling 301): the starters are named for a STYLE now, not for the language
+// their scaffold happens to be written in. `STARTERS[1]` is still the CLI
+// starter, `data-app-type-count` is still `3` — it counts entries — and the
+// option's VALUE is still the id, which is why this `fill` and the fork's
+// `cases` are a three-string edit and nothing more.
+const STARTERS = ['api', 'cli', 'webapp'];
 
 export default {
   id: 'S2',
@@ -123,7 +129,7 @@ export default {
       // is forge's own slug of the typed name — the operator types
       // `story-S2`, forge mints `story-s2` — so this beat pins the slug rule
       // as well as the creation.
-      act: 'Name it, say what it is for, pick the "typescript-cli" starter, and press "Create project"',
+      act: 'Name it, say what it is for, pick the "cli" starter, and press "Create project"',
       do: [
         { fill: 'create-name', with: 'story-S2' },
         { fill: 'create-north-star', with: NORTH_STAR },
@@ -247,7 +253,7 @@ export default {
       // (`projects/[id]/page.tsx:491`) commits it.
       //
       // AMENDED 2026-09-05 (H6, operator present). The `do` below performs the
-      // operator's real edits to the two steps the `typescript-cli` starter
+      // operator's real edits to the two steps the `cli` starter
       // ships and saves them, so the beat now proves the review-and-save path
       // instead of asserting a number nothing pressed. It did NOT then reach
       // `step-count: '3'`, and the `expect` was deliberately left demanding it:

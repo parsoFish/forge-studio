@@ -149,7 +149,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
     const scaffold = entries.filter((e) => e.category === 'project-scaffold').map((e) => e.id).sort();
     assert.deepEqual(planning, ['contract', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
     assert.deepEqual(demoOutput, ['api-verify', 'cli-capture', 'code-diff', 'narrative', 'screenshot', 'test-evidence']);
-    assert.deepEqual(scaffold, ['typescript-api', 'typescript-cli', 'typescript-web']);
+    assert.deepEqual(scaffold, ['api', 'cli', 'webapp']);
   });
 });
 
@@ -177,7 +177,7 @@ describe('templateDetail', () => {
   });
 
   it('AT-7: a project-scaffold entry\'s detail carries the whole file tree, sorted lexicographically', () => {
-    const detail = templateDetail(REPO_ROOT, 'typescript-cli', fixtureFlowSource);
+    const detail = templateDetail(REPO_ROOT, 'cli', fixtureFlowSource);
     assert.ok(detail);
     assert.ok(detail!.files.length > 3, 'a real scaffold has more than a handful of files');
     const paths = detail!.files.map((f) => f.path);
@@ -335,7 +335,7 @@ describe('D3 — project-scaffold usedBy is honestly empty (appType is not persi
 
   it('AT-23: FORBIDDEN — a project that happens to share a scaffold\'s file bytes must NOT be attributed to it (no file-shape comparison)', () => {
     const root = makeForgeRoot('template-library-scaffold-');
-    writeScaffold(root, 'typescript-cli', {
+    writeScaffold(root, 'cli', {
       'package.json': JSON.stringify({ name: '{{NAME}}', version: '0.0.0' }, null, 2),
       'AGENTS.md': '{{TITLE}}\n',
     });
@@ -348,7 +348,7 @@ describe('D3 — project-scaffold usedBy is honestly empty (appType is not persi
       'utf8',
     );
 
-    const entry = byId(listTemplateLibrary(root, fixtureFlowSource), 'typescript-cli');
+    const entry = byId(listTemplateLibrary(root, fixtureFlowSource), 'cli');
     assert.deepEqual(entry.usedBy, [], 'a coincidental file-shape match must never populate usedBy');
   });
 });
@@ -483,8 +483,8 @@ describe('D5 — format / provenance / definitionRef', () => {
 
   it('AT-31: project-scaffold format is the fixed literal "directory tree"', () => {
     const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
-    assert.equal(byId(entries, 'typescript-cli').format, 'directory tree');
-    assert.equal(byId(entries, 'typescript-api').format, 'directory tree');
+    assert.equal(byId(entries, 'cli').format, 'directory tree');
+    assert.equal(byId(entries, 'api').format, 'directory tree');
   });
 
   it('AT-32: provenance is category-level, pinned exactly, identical across every entry in a category', () => {
@@ -498,7 +498,7 @@ describe('D5 — format / provenance / definitionRef', () => {
     const entries = listTemplateLibrary(REPO_ROOT, fixtureFlowSource);
     assert.equal(byId(entries, 'plan').definitionRef, 'studio/artifact-templates/plan.md');
     assert.equal(byId(entries, 'test-evidence').definitionRef, 'studio/demo-elements/test-evidence.md');
-    assert.equal(byId(entries, 'typescript-api').definitionRef, 'studio/starters/projects/typescript-api');
+    assert.equal(byId(entries, 'api').definitionRef, 'studio/starters/projects/api');
   });
 });
 
@@ -518,8 +518,8 @@ describe('D6 — previewKind mapping', () => {
       screenshot: 'shots',
       'code-diff': 'doc', // demo-output, phase: present
       narrative: 'doc',
-      'typescript-cli': 'scaffold',
-      'typescript-api': 'scaffold',
+      'cli': 'scaffold',
+      'api': 'scaffold',
     };
     for (const [id, previewKind] of Object.entries(expected)) {
       assert.equal(byId(entries, id).previewKind, previewKind, `"${id}" previewKind mismatch`);

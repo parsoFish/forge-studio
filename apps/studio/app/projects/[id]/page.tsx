@@ -9,7 +9,7 @@ import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight,
   fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
-  type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
+  type ProjectStarter, type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
 import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
@@ -723,7 +723,7 @@ function ContractPanelMount(props: {
 // ---------------------------------------------------------------------------
 
 function NewProjectSurface(): JSX.Element {
-  const [appTypes, setAppTypes] = useState<string[]>([]);
+  const [appTypes, setAppTypes] = useState<ProjectStarter[]>([]);
   const [startersState, setStartersState] = useState<FetchState>('loading');
 
   useEffect(() => {
@@ -760,7 +760,7 @@ function NewProjectSurface(): JSX.Element {
 // starter filled as far as it honestly can (ruling 169 — the project page COUNTS what creation left open; POST /api/studio/projects/create).
 // ---------------------------------------------------------------------------
 
-function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
+function CreateFromTemplate({ appTypes }: { appTypes: ProjectStarter[] }) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [northStar, setNorthStar] = useState('');
@@ -770,7 +770,7 @@ function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
 
   // The default selection is DERIVED from the roster the root fetched, not
   // copied into state by an effect that could run before it arrives.
-  const appType = appTypePicked ?? appTypes[0] ?? '';
+  const appType = appTypePicked ?? appTypes[0]?.id ?? '';
 
   const canSubmit = name.trim().length > 0 && northStar.trim().length > 0 && appType.length > 0;
 
@@ -803,7 +803,7 @@ function CreateFromTemplate({ appTypes }: { appTypes: string[] }) {
         <label style={labelStyle} htmlFor="create-apptype">App type</label>
         <select id="create-apptype" data-field="create-app-type" style={inputStyle} value={appType} onChange={(e) => setAppTypePicked(e.target.value)}>
           {appTypes.length === 0 && <option value="">(no templates found)</option>}
-          {appTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+          {appTypes.map((t) => <option key={t.id} value={t.id}>{t.language === null ? t.label : `${t.label} — ${t.language}`}</option>)}
         </select>
         <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button

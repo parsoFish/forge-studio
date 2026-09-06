@@ -56,7 +56,7 @@ function plantRoot() {
 
 const manifest = {
   name: 'Story Remote Fixture',
-  appType: 'typescript-cli',
+  appType: 'cli',
   language: 'typescript',
   northStar: 'A fixture project proving the creation path can mint its own GitHub remote.',
 };

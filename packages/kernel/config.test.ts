@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
@@ -28,6 +28,8 @@ import {
   gitIdentityConfigArgs,
   projectStartersDir,
   listProjectStarters,
+  describeProjectStarters,
+  PROJECT_STARTERS_MANIFEST,
 } from './config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
@@ -449,4 +451,104 @@ test('projectStartersDir: equals the pre-move composition for both root shapes',
 
 test('listProjectStarters: an absent starters dir yields [] rather than throwing', () => {
   assert.deepEqual(listProjectStarters(join(tmpdir(), `no-such-root-${Date.now()}`)), []);
+});
+
+// ---------------------------------------------------------------------------
+// `describeProjectStarters` — bead `forge-8vfn.6.11.4`, operator ruling 301.
+//
+// The starters are named for a STYLE (`api` / `cli` / `webapp`) and no longer
+// for the language their scaffold happens to be written in. A style name alone
+// tells the operator nothing about what they will get, so the presentation the
+// create form needs — a label and a language — is DECLARED beside the starter
+// directories rather than inferred from their contents.
+//
+// It is ADDITIVE beside `listProjectStarters`, which keeps returning bare ids:
+// four callers whitelist an app type against that list (`reset.ts`,
+// `project-create.ts`, `cli.ts`, `template-library.ts`) and none of them wants
+// presentation. Changing that signature would be a non-additive kernel edit.
+//
+// The manifest is a SIBLING of the starter directories, never a file inside
+// one: `copyTemplate` (`project-create.ts:154`) copies every file under
+// `studio/starters/projects/<id>/` into the created project, with no exclusion
+// list, so per-starter metadata would be stamped into every project forge
+// creates. `listProjectStarters` filters `isDirectory()`, so a sibling JSON is
+// invisible to it.
+// ---------------------------------------------------------------------------
+
+/** A starters dir with the given starter directories and an optional manifest body. */
+function plantStarters(dirs: string[], manifest?: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'forge-starters-'));
+  const startersDir = projectStartersDir(root);
+  for (const d of dirs) mkdirSync(join(startersDir, d), { recursive: true });
+  if (dirs.length === 0) mkdirSync(startersDir, { recursive: true });
+  if (manifest !== undefined) writeFileSync(join(startersDir, PROJECT_STARTERS_MANIFEST), manifest, 'utf8');
+  return root;
+}
+
+test('describeProjectStarters: a manifest row supplies the label and the language', () => {
+  const root = plantStarters(
+    ['api', 'cli', 'webapp'],
+    JSON.stringify({
+      api: { label: 'API', language: 'TypeScript' },
+      cli: { label: 'CLI', language: 'TypeScript' },
+      webapp: { label: 'WebApp', language: 'TypeScript' },
+    }),
+  );
+  try {
+    assert.deepEqual(describeProjectStarters(root), [
+      { id: 'api', label: 'API', language: 'TypeScript' },
+      { id: 'cli', label: 'CLI', language: 'TypeScript' },
+      { id: 'webapp', label: 'WebApp', language: 'TypeScript' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('describeProjectStarters: the DIRECTORY listing is the truth — a row with no directory is ignored, a directory with no row still ships', () => {
+  const root = plantStarters(
+    ['cli', 'unlisted'],
+    JSON.stringify({ cli: { label: 'CLI', language: 'TypeScript' }, ghost: { label: 'Ghost', language: 'Go' } }),
+  );
+  try {
+    assert.deepEqual(describeProjectStarters(root), [
+      { id: 'cli', label: 'CLI', language: 'TypeScript' },
+      // No row: the id is the label, and the language is honestly unknown —
+      // never guessed from the contents, and never dropped from the form.
+      { id: 'unlisted', label: 'unlisted', language: null },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('describeProjectStarters: no manifest at all — every starter is offered under its own id', () => {
+  const root = plantStarters(['api', 'cli']);
+  try {
+    assert.deepEqual(describeProjectStarters(root), [
+      { id: 'api', label: 'api', language: null },
+      { id: 'cli', label: 'cli', language: null },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('describeProjectStarters: an absent starters dir yields [] — the same answer listProjectStarters gives', () => {
+  assert.deepEqual(describeProjectStarters(join(tmpdir(), `no-such-root-${Date.now()}`)), []);
+});
+
+test('describeProjectStarters: a malformed manifest THROWS and names the file — never a silently unlabelled form', () => {
+  for (const body of ['{ not json', '[]', '"a string"', '{"cli": "CLI"}', '{"cli": {"label": 7, "language": "TypeScript"}}', '{"cli": {"label": "CLI"}}']) {
+    const root = plantStarters(['cli'], body);
+    try {
+      assert.throws(
+        () => describeProjectStarters(root),
+        (err: unknown) => err instanceof Error && err.message.includes(PROJECT_STARTERS_MANIFEST),
+        `a manifest body of ${JSON.stringify(body)} must be refused at the boundary`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
 });

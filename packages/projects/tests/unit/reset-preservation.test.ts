@@ -63,7 +63,7 @@ const INSTRUCTIONS = 'See AGENTS.md for project-specific rules (this project kee
 const SECRET_NAME = 'AZDO_PERSONAL_ACCESS_TOKEN';
 const SECRET_CANARY = 'LEAK-CANARY-9f3a1c7d0e21';
 
-/** An isolated forgeRoot carrying the real typescript-cli starter — the same
+/** An isolated forgeRoot carrying the real cli starter — the same
  *  pattern `project-create.test.ts`'s `isolatedForgeRoot()` uses. */
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'reset-preserve-forge-'));
@@ -156,7 +156,7 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
     // like terraform-provider-betterado — a Go/Terraform provider) has no
     // persisted `appType`, and NONE of the three shipped starters is actually
     // a Go template. Before the fix, `computeContractDrift` GUESSED
-    // 'typescript-cli' here and silently rewrote the Go contract into a
+    // 'cli' here and silently rewrote the Go contract into a
     // TypeScript one — the exact shipped PR #289 defect. It now throws
     // (`AppTypeUnresolvedError`, see reset-app-type-required.test.ts) unless
     // the operator explicitly says so via `--app-type` / `opts.appType` — so
@@ -164,8 +164,8 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
     // what a CORRECT reset does even so: it must never silently clear a
     // hand-authored value the matched starter simply has no opinion on
     // (ruling 38 fix b, below).
-    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
-    assert.equal(drift.appType, 'typescript-cli', 'the explicitly requested appType is used — never guessed');
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'cli' });
+    assert.equal(drift.appType, 'cli', 'the explicitly requested appType is used — never guessed');
 
     // RULING 38 fix (b) — row-level invariant: no DriftReport row may carry
     // action:'regenerate' with an `after` of `undefined` (a delete wearing a
@@ -199,10 +199,10 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
     // Ruling 38 fix (b) preserves a section the MATCHED starter is silent on.
     // It could not see the harm measured on the real ground: this fixture's
     // `go test -tags all …` and its Go/ADO demo steps match NO starter forge
-    // ships, yet `typescript-cli` has an opinion on both, so both were
+    // ships, yet `cli` has an opinion on both, so both were
     // rewritten — `go test …` became `npm test`, and a 3-step Go/ADO demo
     // became a 2-step npm one (`_1.0/evidence/M4-projects-s3-S3/
-    // reset-dryrun-typescript-cli.txt`). A value that differs from EVERY
+    // reset-dryrun-cli.txt`). A value that differs from EVERY
     // starter was never template-derived; it is the operator's, and the
     // section level is where that has to be decided, because ruling 38's
     // whole-section-absent test cannot reach inside a section the starter
@@ -243,7 +243,7 @@ test('applyContractReset preserves northStar/instructions/secret-name byte-ident
     assert.equal(reasonOf('releaseProcess')?.reason, 'starter-silent');
 
     // --- PRESERVATION (ruling 38 fix b): releaseProcess ---------------------
-    // typescript-cli declares no releaseProcess at all — the starter has NO
+    // cli declares no releaseProcess at all — the starter has NO
     // OPINION here, so the project's own hand-authored value must survive
     // verbatim, never be cleared for want of a template section. This is
     // exactly the S3-beat scenario the shipped defect broke.
@@ -284,7 +284,7 @@ test('a section that matches ANOTHER starter is template-derived and still regen
   const projectDir = betteradoShapedProject();
   try {
     // Plant the typescript-API starter's demoProcess verbatim, then reset to
-    // typescript-cli. The project never authored these steps — it got them
+    // cli. The project never authored these steps — it got them
     // from a template — so the reset must carry it to the CLI ones.
     const apiDemo = [
       { kind: 'capture', text: 'Start the server and note the before state of the endpoint.' },
@@ -294,7 +294,7 @@ test('a section that matches ANOTHER starter is template-derived and still regen
     const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
     writeFileSync(configPath, `${JSON.stringify({ ...raw, demoProcess: apiDemo }, null, 2)}\n`);
 
-    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'typescript-cli' });
+    const drift = computeContractDrift(projectDir, { forgeRoot, appType: 'cli' });
     const demo = drift.rows.find((r) => r.section === 'demoProcess');
     assert.equal(demo?.action, 'regenerate', 'a demoProcess taken from another starter is not hand-authored');
     assert.deepEqual(demo?.after, [

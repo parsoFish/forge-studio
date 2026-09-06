@@ -78,7 +78,7 @@ function forgeRootWithStarters(): string {
 /** S2 beat 3's request, as the form sends it. */
 const STORY_BODY = {
   name: 'story-S2',
-  appType: 'typescript-cli',
+  appType: 'cli',
   northStar: 'A CLI that reports commit churn, so a maintainer can see where the code moves.',
 };
 

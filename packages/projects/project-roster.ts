@@ -56,9 +56,9 @@ import {
   allowedOrigin,
   sanitizeError,
   pathOnly,
+  describeProjectStarters,
   type StudioContext,
 } from '@forge/kernel';
-import { listProjectStarters } from '@forge/projects/project-create.ts';
 import {
   AGENT_INSTRUCTION_FILES,
   validateProjectConfig,
@@ -410,7 +410,13 @@ export function createStudioStartersHandler(deps: StudioStartersDeps) {
 /**
  * GET /api/studio/projects/starters (R4-03) — the curated greenfield
  * app-type templates the create form offers. No injected dependency:
- * `listProjectStarters` is its own package.
+ * `describeProjectStarters` is its own package.
+ *
+ * Sends `{id, label, language}` per starter (bead `forge-8vfn.6.11.4`,
+ * operator ruling 301): the starters are named for a STYLE now, so the form
+ * has to say what a style is written in. **The `id` stays the option's
+ * VALUE** — every whitelist, every CLI `--app-type` and both story `fill`s
+ * write it.
  */
 export async function handleProjectsStarters(
   req: IncomingMessage,
@@ -423,7 +429,7 @@ export async function handleProjectsStarters(
   const origin = allowedOrigin(req);
   if (url === '/api/studio/projects/starters' && method === 'GET') {
     try {
-      sendJson(res, 200, { appTypes: listProjectStarters(ctx.forgeRoot) }, origin);
+      sendJson(res, 200, { appTypes: describeProjectStarters(ctx.forgeRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

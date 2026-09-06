@@ -43,7 +43,7 @@ function isolatedForgeRoot(): string {
 
 /** Duplicated from project-create.test.ts for the same reason as isolatedForgeRoot. */
 function manifest(over: Partial<CreationManifest> = {}): CreationManifest {
-  return { name: 'My Tool', appType: 'typescript-cli', language: 'typescript', northStar: 'ship the thing', ...over };
+  return { name: 'My Tool', appType: 'cli', language: 'typescript', northStar: 'ship the thing', ...over };
 }
 
 // ---------------------------------------------------------------------------
@@ -69,8 +69,8 @@ function manifest(over: Partial<CreationManifest> = {}): CreationManifest {
 // test's `import` — and the scaffold's OWN gate stays GREEN (preflight does
 // only static command-shape checks; it never runs the scaffolded suite, so the
 // break-out is never compiled or executed at create time — it lands live in
-// the operator's new repo). Sinks: src/server.ts (typescript-api / -web),
-// src/index.ts (typescript-cli).
+// the operator's new repo). Sinks: src/server.ts (api / -web),
+// src/index.ts (cli).
 //
 // The FIX these ATs pin (implemented in a later stage — RED now):
 //   • commentSafe(s) = s.replace(/\*\//g,'* /').replace(/\/\*/g,'/ *'),
@@ -92,9 +92,9 @@ function hwoPayload(marker: string): string {
 
 /** (appType → its entry code file, the JSDoc-header sink). */
 const HWO_STARTERS = [
-  { appType: 'typescript-api', codeFile: 'src/server.ts' },
-  { appType: 'typescript-web', codeFile: 'src/server.ts' },
-  { appType: 'typescript-cli', codeFile: 'src/index.ts' },
+  { appType: 'api', codeFile: 'src/server.ts' },
+  { appType: 'webapp', codeFile: 'src/server.ts' },
+  { appType: 'cli', codeFile: 'src/index.ts' },
 ];
 
 /** Run the scaffolded project's REAL shipped gate, exactly as its package.json
@@ -257,11 +257,11 @@ test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment
   // A sink-only commentSafe fix that leaves the boundary permissive is caught
   // here — the defense-in-depth clause is what these two throws pin.
   assert.throws(
-    () => validateCreationManifest({ name: 'Ok Name', appType: 'typescript-cli', language: 'typescript', northStar: 'break out */ of the header' }),
+    () => validateCreationManifest({ name: 'Ok Name', appType: 'cli', language: 'typescript', northStar: 'break out */ of the header' }),
     'northStar containing the comment terminator "*/" must be rejected at the boundary',
   );
   assert.throws(
-    () => validateCreationManifest({ name: 'bad /* title', appType: 'typescript-cli', language: 'typescript', northStar: 'ship the thing' }),
+    () => validateCreationManifest({ name: 'bad /* title', appType: 'cli', language: 'typescript', northStar: 'ship the thing' }),
     'title (manifest.name) containing the comment opener "/*" must be rejected at the boundary',
   );
 });
@@ -336,7 +336,7 @@ function readIsBlocked(file: string): boolean {
 test('AT-4on-1 (RED) [SEC-05 4on] a copyTemplate invalid-JSON throw mid-Phase-2 leaves NEITHER projects/<id> NOR brain/projects/<id>, and an identical retry succeeds', () => {
   const forgeRoot = isolatedForgeRoot();
   const id = 'my-tool';
-  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'package.json');
+  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'cli', 'package.json');
   try {
     // Corrupt the SHARED template input so copyTemplate's JSON.parse
     // (project-create.ts:157-158) throws AFTER mkdirSync(projectDir) already ran
@@ -357,7 +357,7 @@ test('AT-4on-1 (RED) [SEC-05 4on] a copyTemplate invalid-JSON throw mid-Phase-2 
 
     // Clear the transient (restore the good template) and retry — RED at base:
     // the orphan trips existsSync(projectDir) → "already exists".
-    cpSync(join(projectStartersDir(FORGE_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    cpSync(join(projectStartersDir(FORGE_ROOT), 'cli', 'package.json'), pkgPath);
     let ok = false;
     let err = '';
     try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
@@ -372,7 +372,7 @@ test('AT-4on-1 (RED) [SEC-05 4on] a copyTemplate invalid-JSON throw mid-Phase-2 
 test('AT-4on-2 (RED) [SEC-05 4on] an OS filesystem error mid-copyTemplate leaves no orphan; retry succeeds', (t) => {
   const forgeRoot = isolatedForgeRoot();
   const id = 'my-tool';
-  const srcFile = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'AGENTS.md');
+  const srcFile = join(forgeRoot, 'studio', 'starters', 'projects', 'cli', 'AGENTS.md');
   try {
     // Unreadable template source → readFileSync (project-create.ts:152) throws
     // EACCES mid-copy, AFTER mkdirSync(projectDir). A genuine OS filesystem
@@ -494,7 +494,7 @@ test('AT-4on-5 (RED) [SEC-05 4on] a tail failure AFTER kb.yaml was written is at
 test('AT-4on-7 (RED) [SEC-05 4on] retryability regression lock — a mid-Phase-2 failure then an IDENTICAL create must succeed, never "already exists"', () => {
   const forgeRoot = isolatedForgeRoot();
   const id = 'my-tool';
-  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'package.json');
+  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'cli', 'package.json');
   try {
     writeFileSync(pkgPath, '{ "name": "{{NAME}}", NOPE }', 'utf8');
     assert.throws(
@@ -503,7 +503,7 @@ test('AT-4on-7 (RED) [SEC-05 4on] retryability regression lock — a mid-Phase-2
       'injection precondition: copyTemplate throws mid-Phase-2',
     );
     // Restore the shared template input; the identical create must now succeed.
-    cpSync(join(projectStartersDir(FORGE_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    cpSync(join(projectStartersDir(FORGE_ROOT), 'cli', 'package.json'), pkgPath);
     let ok = false;
     let err = '';
     try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }

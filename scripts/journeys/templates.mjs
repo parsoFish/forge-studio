@@ -241,21 +241,21 @@ export const journey = defineJourney({
       id: 'templates-detail-scaffold',
       title: 'A project-scaffold detail page — the real file tree',
       narration:
-        'The typescript-cli scaffold\'s detail page renders its whole file tree ' +
+        'The cli scaffold\'s detail page renders its whole file tree ' +
         'through the SAME FilePackage component /skills/[id] uses — the file count ' +
         'on the page matches the real files on disk, tab by tab, kind-agnostic reuse ' +
         'of one shared component.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         // ── TPL-3: a project-scaffold detail page (the real file tree, tabbed) ───
-        console.log('\n[TPL-3] A project-scaffold detail page (/templates/typescript-cli)');
-        const realFileCount = countScaffoldFiles(join(FORGE_ROOT, 'studio', 'starters', 'projects', 'typescript-cli'));
+        console.log('\n[TPL-3] A project-scaffold detail page (/templates/cli)');
+        const realFileCount = countScaffoldFiles(join(FORGE_ROOT, 'studio', 'starters', 'projects', 'cli'));
 
-        await page.goto(watch.uiUrl + '/templates/typescript-cli', { waitUntil: 'domcontentloaded' });
+        await page.goto(watch.uiUrl + '/templates/cli', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
           () => document.querySelector('[data-page="template-detail"]')?.getAttribute('data-page-ready') === 'true',
           null, { timeout: 20000 }).catch(() => {});
-        check(await page.locator('main[data-page="template-detail"]').count() > 0, 'TPL-3: /templates/typescript-cli renders [data-page="template-detail"]');
+        check(await page.locator('main[data-page="template-detail"]').count() > 0, 'TPL-3: /templates/cli renders [data-page="template-detail"]');
         check(await page.evaluate(() => document.querySelector('[data-page="template-detail"]')?.getAttribute('data-template-category')) === 'project-scaffold',
           'TPL-3: data-template-category="project-scaffold"');
         check(await page.locator('[data-component="file-package"]').count() > 0, 'TPL-3: [data-component="file-package"] renders');
@@ -263,11 +263,11 @@ export const journey = defineJourney({
         const domFileCount = await page.evaluate(() =>
           parseInt(document.querySelector('[data-component="file-package"]')?.getAttribute('data-file-count') ?? '-1', 10));
         check(domFileCount === realFileCount,
-          `TPL-3: data-file-count matches the real file count under studio/starters/projects/typescript-cli/ (dom=${domFileCount}, real=${realFileCount})`);
+          `TPL-3: data-file-count matches the real file count under studio/starters/projects/cli/ (dom=${domFileCount}, real=${realFileCount})`);
 
         const firstTab = page.locator('[data-file-tab]').first();
         const tabPath = await firstTab.getAttribute('data-file-path');
-        await caption(page, `typescript-cli's scaffold — the whole ${realFileCount}-file tree, tabbed, through the same FilePackage component /skills/[id] uses.`);
+        await caption(page, `cli's scaffold — the whole ${realFileCount}-file tree, tabbed, through the same FilePackage component /skills/[id] uses.`);
         await firstTab.click().catch(() => {});
         await page.waitForFunction(
           (p) => document.querySelector('[data-component="file-package"]')?.getAttribute('data-active-file') === p,
