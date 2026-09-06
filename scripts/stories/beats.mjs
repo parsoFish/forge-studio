@@ -270,7 +270,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // loop invents nothing to reach and nothing to bound itself by (§3.1,
   // rulings 312/317). Built here because this is where `beat` lives; only the
   // repeat branch ever calls it, so a beat without one pays no DOM read.
-  const expectationAnswered = async () => {
+  const matchesData = async (spec) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
     // under it ("Execution context was destroyed"). A repeat polls this between
     // acts that submit and re-render, so it will meet that race — and an
@@ -279,15 +279,15 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // A read that could not happen is simply "not satisfied yet": the next poll
     // reads the settled page, and the beat's own bound still governs.
     try {
-      const seen = resolveExpectations(beat.expect.data, await readObserved(page, beat));
-      return Object.entries(beat.expect.data).every(
+      const seen = resolveExpectations(spec, await readObserved(page, beat));
+      return Object.entries(spec).every(
         ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
       );
     } catch {
       return false;
     }
   };
-  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe, expectationAnswered);
+  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe, matchesData);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
@@ -478,11 +478,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
  * playwright, not the loop — so the loop is exercised against a fake page that
  * models the ONE thing that matters: the product decides when to stop.
  */
-export async function performStepsForTest(page, steps, timeoutMs, isSatisfied) {
-  return performSteps(page, steps, timeoutMs, false, null, isSatisfied);
+export async function performStepsForTest(page, steps, timeoutMs, matches) {
+  return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, isSatisfied = null) {
+async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, matches = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -505,8 +505,8 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
     // back would be a cycle.
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
-        page, step, left, isSatisfied, timeoutMs, watchLifecycle, probe,
-        run: (inner, ms) => performSteps(page, inner, ms, watchLifecycle, probe, isSatisfied),
+        page, step, left, matches, timeoutMs, watchLifecycle, probe,
+        run: (inner, ms) => performSteps(page, inner, ms, watchLifecycle, probe, matches),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };

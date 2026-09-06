@@ -73,10 +73,23 @@ function validateDoSteps(raw, at) {
         if (!Array.isArray(step.repeat) || step.repeat.length === 0) {
           fail(`${where}.repeat`, `expected a non-empty array of steps, got ${JSON.stringify(step.repeat)}`);
         }
+        // `until` is REQUIRED and is the repeat's OWN condition (T1 ruling 320).
+        // It used to borrow the beat's `expect.data`, which is unreachable
+        // whenever the repeat is not the last step — S1 beat 11 runs
+        // `open-plan` and `approve-plan` AFTER its repeat and expects the
+        // post-approval state, so the loop could never stop by answering
+        // questions and burned its whole bound on a disabled control.
+        const until = step.until;
+        if (until === null || typeof until !== 'object' || Array.isArray(until) || Object.keys(until).length === 0) {
+          fail(`${where}.until`, `expected a non-empty object of data-key -> value, got ${JSON.stringify(until)}`);
+        }
+        for (const [k, v] of Object.entries(until)) {
+          if (typeof v !== 'string') fail(`${where}.until.${k}`, `expected a string value, got ${JSON.stringify(v)}`);
+        }
         if (step.repeat.some((inner) => inner !== null && typeof inner === 'object' && Object.hasOwn(inner, 'repeat'))) {
           fail(`${where}.repeat`, 'a repeat cannot nest another repeat');
         }
-        return Object.freeze({ repeat: validateDoSteps(step.repeat, where) });
+        return Object.freeze({ repeat: validateDoSteps(step.repeat, where), until: Object.freeze({ ...step.until }) });
       }
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);

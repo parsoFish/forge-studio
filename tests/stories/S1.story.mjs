@@ -587,7 +587,18 @@ export default {
       // correctly gone.
       do: [
         { press: 'view-architect-session' },
-        { repeat: [{ fillAll: 'question-freetext', with: ANSWER }, { press: 'submit-answers' }] },
+        // `until` is the INTERVIEW's end, not this beat's. AMENDED 2026-09-06
+        // (T1 ruling 320) after S1 run 6 burned its whole bound here: the
+        // repeat borrowed `expect.data`, which is `architect-phase:
+        // 'committed'` — produced by `approve-plan`, two steps LATER — so it
+        // could never stop by answering questions. `status.json` showed the
+        // product was right all along (`phase: "awaiting-verdict", round: 2`,
+        // one round answered): the architect drafted, and the loop kept
+        // submitting to a session that had moved on.
+        {
+          repeat: [{ fillAll: 'question-freetext', with: ANSWER }, { press: 'submit-answers' }],
+          until: { 'session-phase': 'awaiting-verdict' },
+        },
         { press: 'open-plan' },
         { press: 'approve-plan' },
       ],

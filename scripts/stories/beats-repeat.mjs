@@ -18,8 +18,19 @@
  *                (`studio/session-kinds.yaml:88`), so the surplus press reds on
  *                a control that is correctly gone.
  *
- * So this acts UNTIL the beat's own expectation answers, spending what is LEFT
+ * So this acts UNTIL ITS OWN `until` CONDITION answers, spending what is LEFT
  * of the bound the beat already declares: no invented count, no new ceiling.
+ *
+ * `until` IS THE REPEAT'S OWN, NOT THE BEAT'S (T1 ruling 320). Borrowing the
+ * beat's `expect.data` is unreachable whenever the repeat is not the last step,
+ * and that cost two funded runs: S1 beat 11's `do` is
+ * `[view-architect-session, repeat, open-plan, approve-plan]` with an
+ * `expect.data` of `architect-phase: 'committed'` — a state produced by
+ * `approve-plan`, which runs AFTER the repeat. The loop could never stop by
+ * answering questions, so it kept submitting to a session that had already
+ * drafted (`status.json`: `phase: "awaiting-verdict", round: 2`), pressing a
+ * control that disables itself once every answer is not resolved
+ * (`ArchitectQuestionForm.tsx:194`), until the bound expired.
  */
 
 /**
@@ -44,25 +55,26 @@ const POLL_MS = 500;
  * @param {object} input.page              the live page
  * @param {{repeat: object[]}} input.step  the step being run
  * @param {() => number} input.left        ms remaining of the beat's ONE declared bound
- * @param {(() => Promise<boolean>)|null} input.isSatisfied  the beat's own expectation
+ * @param {((spec: Record<string,string>) => Promise<boolean>)|null} input.matches  reads the live page against a data spec
  * @param {number} input.timeoutMs         that bound, for the failure text
  * @param {(steps: object[], ms: number) => Promise<{waitedForHandle: boolean, error: string|null}>} input.run
  * @returns {Promise<{waitedForHandle: boolean, error: string|null}>}
  */
-export async function runRepeatStep({ page, step, left, isSatisfied, timeoutMs, run }) {
+export async function runRepeatStep({ page, step, left, matches, timeoutMs, run }) {
   let waitedForHandle = false;
 
-  // A repeat with nothing to reach would be bounded only by the wait, which is
-  // an authoring error and is named as one rather than silently spun.
-  if (isSatisfied === null) {
+  const until = step.until ?? null;
+  if (until === null || matches === null) {
     return {
       waitedForHandle,
       error:
-        'a `repeat` step needs something to repeat UNTIL: this beat declares no `expect.data` for ' +
-        'it to reach, so the loop would be bounded only by the wait. Give the beat the expectation ' +
-        'the repeated act is meant to produce.',
+        'a `repeat` step needs an `until`: the condition that ends the loop, named by the repeat ' +
+        'itself. Without it the loop would be bounded only by the wait. (T1 ruling 320 — the ' +
+        "beat's own `expect.data` is NOT borrowed: it is unreachable whenever the repeat is not " +
+        'the last step.)',
     };
   }
+  const isSatisfied = () => matches(until);
 
   const gate = handleFor(step.repeat[0]);
   let rounds = 0;
@@ -94,8 +106,8 @@ export async function runRepeatStep({ page, step, left, isSatisfied, timeoutMs, 
       waitedForHandle,
       error:
         `repeat: answered ${rounds} round(s) and this beat's declared bound (${timeoutMs} ms) ran ` +
-        'out before what it waits for arrived — the act kept being available, so the product never ' +
-        'moved on.',
+        `out before its \`until\` (${JSON.stringify(until)}) was met — the act kept being available, ` +
+        'so the product never moved on.',
     };
   }
 

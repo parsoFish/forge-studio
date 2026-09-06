@@ -374,6 +374,11 @@ export default {
             },
             { press: 'submit-answers' },
           ],
+          // This beat's repeat IS its last step, which is the only reason run 5
+          // went green while S1 beat 11 and S2 beat 12 burned their bounds on
+          // the same borrowed condition. Named explicitly so that stops being
+          // luck (T1 ruling 320).
+          until: { 'session-phase': 'awaiting-verdict' },
         },
       ],
       // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).

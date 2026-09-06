@@ -68,17 +68,25 @@ function interviewPage({ roundsBeforeDraft }) {
   };
 }
 
+const UNTIL = { 'session-phase': 'awaiting-verdict' };
+
 const ROUND = [
   { fillAll: 'question-freetext', with: 'the answer' },
   { press: 'submit-answers' },
 ];
 
-/** Satisfied once the fake reaches `awaiting-verdict` — the beat's expectation. */
-const drafted = (page) => async () => page.state.phase === 'awaiting-verdict';
+/**
+ * The runner injects a MATCHER over a data spec — `until`'s own keys — not the
+ * beat's whole expectation. T1 ruling 320: borrowing `expect.data` is
+ * unreachable whenever the repeat is not the last step, which is the defect
+ * that cost S1 run 6 and S2 run 4.
+ */
+const matcher = (page) => async (spec) =>
+  Object.entries(spec).every(([k, v]) => (k === 'session-phase' ? page.state.phase === v : false));
 
 test('312: one round is enough — repeat stops as soon as the expectation answers', async () => {
   const page = interviewPage({ roundsBeforeDraft: 1 });
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 20000, drafted(page));
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
 
   assert.equal(r.error, null);
   assert.equal(page.state.submits, 1, 'it does not submit again after the draft');
@@ -87,7 +95,7 @@ test('312: one round is enough — repeat stops as soon as the expectation answe
 
 test('312: four rounds is also enough — the count is the product\'s, not the story\'s', async () => {
   const page = interviewPage({ roundsBeforeDraft: 4 });
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 20000, drafted(page));
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
 
   assert.equal(r.error, null);
   assert.equal(page.state.submits, 4);
@@ -98,7 +106,7 @@ test('312: a draft that never comes reds at the declared bound, naming the round
   // The S4 run 4 shape: the architect keeps interviewing because the work it was
   // asked for already exists. The beat must say that, not time out anonymously.
   const page = interviewPage({ roundsBeforeDraft: Number.POSITIVE_INFINITY });
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 1200, drafted(page));
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1200, matcher(page));
 
   assert.ok(r.error, 'it must red');
   assert.match(r.error, /repeat/, 'the failure names the step that ran out');
@@ -112,22 +120,46 @@ test('312: repeat never runs when the expectation is already satisfied', async (
   const page = interviewPage({ roundsBeforeDraft: 1 });
   page.state.phase = 'awaiting-verdict';
 
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 20000, drafted(page));
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
 
   assert.equal(r.error, null);
   assert.equal(page.state.submits, 0, 'nothing was pressed');
   assert.equal(page.state.filled.length, 0);
 });
 
-test('312: without a stop condition, repeat refuses rather than looping forever', async () => {
-  // A `repeat` in a beat that declares no expectation to reach is an authoring
-  // error, and it is named as one — never a silent infinite loop bounded only
-  // by the wait.
+test('320: without an `until`, repeat refuses rather than looping forever', async () => {
+  // A repeat with nothing to reach is an authoring error and is named as one —
+  // never a silent loop bounded only by the wait.
   const page = interviewPage({ roundsBeforeDraft: 2 });
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 5000, null);
+  const r = await performStepsForTest(page, [{ repeat: ROUND }], 5000, matcher(page));
 
   assert.ok(r.error, 'it must refuse');
-  assert.match(r.error, /expect/i, 'and say what the beat is missing');
+  assert.match(r.error, /until/i, 'and name what is missing');
+});
+
+test('320: `until` is the repeat\'s OWN condition, NOT the beat\'s expectation', async () => {
+  // THE DEFECT THIS RULING CLOSES, as a test. S1 beat 11's do is
+  // [view-architect-session, repeat, open-plan, approve-plan] and its
+  // expect.data is architect-phase "committed" — a state produced by a step
+  // that runs AFTER the repeat. Borrowing that expectation made the loop
+  // unstoppable: it kept submitting to a session that had already drafted,
+  // pressing a control that disables itself, until the bound expired.
+  // Here the beat-level expectation is UNREACHABLE and the repeat must still
+  // stop, because `until` describes the INTERVIEW's end and nothing else.
+  const page = interviewPage({ roundsBeforeDraft: 2 });
+  const beatExpectationNeverTrue = async (spec) =>
+    Object.entries(spec).every(([k, v]) => (k === 'session-phase' ? page.state.phase === v : false));
+
+  const r = await performStepsForTest(
+    page,
+    [{ repeat: ROUND, until: { 'session-phase': 'awaiting-verdict' } }],
+    20000,
+    beatExpectationNeverTrue,
+  );
+
+  assert.equal(r.error, null, 'the repeat stops on its own condition');
+  assert.equal(page.state.submits, 2);
+  assert.equal(page.state.phase, 'awaiting-verdict');
 });
 
 test('312: a stop-condition read that throws is "not yet", never a run-ending crash', async () => {
@@ -147,7 +179,7 @@ test('312: a stop-condition read that throws is "not yet", never a run-ending cr
   };
   const guarded = async () => { try { return await flaky(); } catch { return false; } };
 
-  const r = await performStepsForTest(page, [{ repeat: ROUND }], 20000, guarded);
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, guarded);
 
   assert.equal(r.error, null, 'the throw must not end the run');
   assert.equal(page.state.phase, 'awaiting-verdict', 'and the loop still finishes its work');
