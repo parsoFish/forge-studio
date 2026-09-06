@@ -34,7 +34,17 @@ export function DemoStageHandoff({ project }: { project: string }): JSX.Element 
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}
+      // M1-G / forge-8vfn.5.5's rule, on the surface S1 beat 7 actually stands
+      // on. #490 put this key on `DemoTimeline`'s root — the PROJECT page's
+      // component — while beat 7 reads the onboarding SESSION page, which
+      // renders THIS handoff, so the beat asserted a key its page never
+      // published. `SessionMinted`'s generic `data-session-id` cannot serve:
+      // the session page root carries that same key and shadows it.
+      // "No id, no key" (6.11.5) — never published present-and-empty.
+      {...(sessionId === null ? {} : { 'data-demo-session-id': sessionId })}
+    >
       <button
         type="button"
         className="btn btn-sm"

@@ -51,11 +51,16 @@ nothing, so no automation can bind `/sessions/<kind>/<id>`.
 (`forge-8vfn.6.11.26`, ruling 307): a minting surface usually renders INSIDE
 another session's page, whose own root also carries `data-session-id`, and the
 story runner's `resolveExpectations` binds the best-covering candidate — so the
-root wins and the key answers with the WRONG session's id. `DemoTimeline`
-published only `SessionMinted`'s generic key for exactly this reason and S1
-beat 8 could never bind `/sessions/demo/<demoSessionId>`; it now publishes
-`data-demo-session-id` on its own `<section>`. Shadowing is silent: the beat
-reds on an unbound segment, never on a wrong value.
+root wins and the key answers with the WRONG session's id. Shadowing is silent:
+the beat reds on an unbound segment, never on a wrong value.
+
+**BOTH demo surfaces publish it, and which one a beat reads depends on the PAGE
+it stands on** — `components/studio/project-builder/DemoTimeline.tsx` on the
+project page, `components/studio/session/DemoStageHandoff.tsx` on a session
+page. S1 beat 7 stands on the onboarding SESSION page, so the first fix (#490)
+closed a real gap in the wrong component for that beat and the beat kept reding
+on a key its page never rendered (T1 ruling 332). When a surface exists in two
+places, publishing the key on one of them is not publishing it.
 
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
