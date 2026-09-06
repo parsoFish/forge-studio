@@ -483,7 +483,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, matches = null) {
+async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, matches = null, actBoundMs = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -493,6 +493,11 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
   // each wait inside it, so every wait below reads what is LEFT of one deadline.
   const deadlineAt = Date.now() + timeoutMs;
   const left = () => Math.max(0, deadlineAt - Date.now());
+  // Bead `forge-8vfn.6.11.41` (ruling 362). What ONE act may wait, which is the
+  // beat's whole remaining bound EXCEPT inside a repeat, where the loop is the
+  // retry and a failed act should cost a poll. Never larger than `left()`: the
+  // declared bound is still the only spend (`6.11.22`).
+  const actLeft = () => (actBoundMs === null ? left() : Math.min(actBoundMs, left()));
   // `waitedForHandle` feeds `6.11.19`'s guard: it says whether this block gave
   // the beat's declared bound to a waiter that watches the PAGE for a handle
   // the agent has to produce, rather than to a URL change.
@@ -507,7 +512,7 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
         page, step, left, matches, timeoutMs, watchLifecycle, probe,
-        run: (inner, ms) => performSteps(page, inner, ms, watchLifecycle, probe, matches),
+        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, watchLifecycle, probe, matches, actMs),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };
@@ -536,7 +541,7 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
       }
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
-      const stall = await waitForHandleOrStall(page, handle, left(), watchLifecycle, probe);
+      const stall = await waitForHandleOrStall(page, handle, actLeft(), watchLifecycle, probe);
       waitedForHandle = true;
       if (stall !== null) {
         return {
@@ -585,7 +590,17 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
           };
         }
         for (let k = 0; k < n; k += 1) {
-          await page.locator(handle).nth(k).fill(step.with, { timeout: left() });
+          // The watcher must describe THE BOX THIS ACT IS ON. `controlState`
+          // reads `.first()`, so while the act was stuck on box k the log
+          // truthfully said box 0 was "present and enabled" — the two-notions-
+          // of-one-thing class `handleFor` exists to prevent, one layer down.
+          // S2 run 9 spent 7 m 41 s inside this loop saying nothing about it.
+          const stopBox = watchControlState(page, `${handle} >> nth=${k}`, (line) => console.log(line));
+          try {
+            await page.locator(handle).nth(k).fill(step.with, { timeout: actLeft() });
+          } finally {
+            stopBox();
+          }
         }
         continue;
       }
@@ -599,10 +614,10 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
         // control that frees itself: `element is not enabled`, twice, in two
         // live runs. Bead `forge-8vfn.6.11.6`. The bound was the defect; the
         // wait was always there.
-        await page.locator(handle).first().click({ timeout: left() });
+        await page.locator(handle).first().click({ timeout: actLeft() });
         continue;
       }
-      const refusal = await setControl(page, handle, step.with, left());
+      const refusal = await setControl(page, handle, step.with, actLeft());
       if (refusal !== null) return { waitedForHandle, error: refusal };
     } catch (e) {
       return {
