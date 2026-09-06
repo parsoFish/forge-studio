@@ -286,8 +286,8 @@ export const journey = defineJourney({
     },
     {
       id: 'projects-skill-bindings',
-      title: 'A project\'s skill bindings stop lying',
-      narration: 'Opening the ready project: its Relevant Skills panel now offers the project\'s OWN skill — the one living at .forge/skills/<id>/SKILL.md, which no forge-wide catalog can see — so an unbound project-local skill can be re-bound (projects-06). And the bound skill that exists nowhere renders as MISSING rather than quietly showing its raw id and reading as a healthy chip (projects-43). Both come from one derivation: build the offered set from every real source, then resolve each binding against it.',
+      title: 'A project\'s skill picker offers what it owns, and says what is missing',
+      narration: 'Opening the ready project: its Relevant Skills panel OFFERS the project\'s OWN skill — the one living at .forge/skills/<id>/SKILL.md, which no forge-wide catalog can see — so an unbound project-local skill can be re-bound (projects-06). And a binding that resolves to nothing SAYS "missing" on screen, not just in an attribute. Story S3 (green, run 2) now asserts the resolution rules themselves on nine real dead bindings — resolved/missing and the source they resolve from — so those checks moved there and left this beat the two things a story cannot express: what the picker OFFERS, and what the operator actually READS.',
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[PROJECTS.3] the ready project — skill bindings');
@@ -310,15 +310,29 @@ export const journey = defineJourney({
           });
           await sleep(ACT);
 
+          // CULLED 2026-09-06 (1.0.md §2.4, M5-B session 9) down to what S3 —
+          // green on the real Go/Terraform ground — does NOT assert. Three
+          // checks left for S3: the bound project-local skill resolves, its
+          // chip says where it lives, and a dead binding reads MISSING. S3
+          // beat 4 pins `resolved: 'missing'` + `skill-source: 'missing'` on
+          // `ado-api-explorer`, one of NINE real dead bindings, and beat 6
+          // pins `resolved: 'ok'` + `skill-source: 'project'` on the same
+          // clause after the rebuild — the same rules against a real corpus
+          // instead of a fixture built to pass.
+          //
+          // The two below stay because no story asserts them, and one of them
+          // no story CAN:
+          //   * what the picker OFFERS is not what the project BINDS, and
+          //     `projects-06` is about re-binding an unbound project-local
+          //     skill. S3 reads bound chips only.
+          //   * `scripts/stories/beats.mjs` resolves `data-*`, by design. A
+          //     story can assert `resolved="missing"`; it cannot assert that
+          //     the WORD reaches the operator's eye. That is a permanent
+          //     expressiveness boundary, not a gap waiting on a beat.
           const bindings = await page.evaluate(({ local, ghost }) => {
-            const chip = (id) => document.querySelector(`.chip[data-kind="skill"][data-skill-id="${id}"]`);
             const offered = (id) => document.querySelector(`[data-skill-id="${id}"][data-skill-source]:not(.chip)`);
-            const localChip = chip(local);
-            const ghostChip = chip(ghost);
+            const ghostChip = document.querySelector(`.chip[data-kind="skill"][data-skill-id="${ghost}"]`);
             return {
-              localChipResolved: localChip?.getAttribute('data-resolved') ?? null,
-              localChipSource: localChip?.getAttribute('data-skill-source') ?? null,
-              ghostChipResolved: ghostChip?.getAttribute('data-resolved') ?? null,
               ghostChipText: (ghostChip?.textContent ?? '').toLowerCase(),
               localOfferedSource: offered(local)?.getAttribute('data-skill-source') ?? null,
             };
@@ -326,17 +340,11 @@ export const journey = defineJourney({
 
           check(bindings.localOfferedSource === 'project',
             `PROJECTS.3 (projects-06): the project's OWN skill is OFFERED by the picker, so an unbound one can be re-bound (got "${bindings.localOfferedSource}")`);
-          check(bindings.localChipResolved === 'ok',
-            `PROJECTS.3: the bound project-local skill resolves — it exists on disk (got "${bindings.localChipResolved}")`);
-          check(bindings.localChipSource === 'project',
-            `PROJECTS.3: and its chip says where it lives (got "${bindings.localChipSource}")`);
-          check(bindings.ghostChipResolved === 'missing',
-            `PROJECTS.3 (projects-43): a bound skill that exists nowhere renders MISSING, not as a normal chip (got "${bindings.ghostChipResolved}")`);
           check(bindings.ghostChipText.includes('missing'),
-            'PROJECTS.3 (projects-43): and it SAYS missing on screen — an attribute nobody renders is not a fix');
+            'PROJECTS.3 (projects-43): a dead binding SAYS missing on screen — an attribute nobody renders is not a fix, and no story beat can read a word');
 
-          await caption(page, 'The project-local skill is offered and resolves; the skill that exists nowhere says MISSING instead of pretending.');
-          await frame(page, 'projects-4-skill-bindings', 'Project page — a project-local skill is offered and bound; a binding that resolves to nothing reads MISSING', { key: true });
+          await caption(page, 'The project-local skill is offered for re-binding; the skill that exists nowhere SAYS missing instead of pretending.');
+          await frame(page, 'projects-4-skill-bindings', 'Project page — a project-local skill is offered for re-binding; a binding that resolves to nothing SAYS missing', { key: true });
           await sleep(READ);
         } finally {
           // The LAST beat that needs the fixtures sweeps them — mirroring
