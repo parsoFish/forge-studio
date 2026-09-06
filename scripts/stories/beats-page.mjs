@@ -47,6 +47,32 @@ export const ERROR_SENTINELS = [
  */
 export const LIFECYCLE_STALLED = 'stalled';
 
+/**
+ * The session's own terminal FAILURE phase.
+ *
+ * Bead `forge-8vfn.6.11.39`, the mirror of `6.11.38`: that one is the loop
+ * overshooting the phase it waits for, this is the loop waiting on a corpse.
+ * Measured on S2 run 7 — the architect's SDK child exited code 1 three seconds
+ * in, `status.json` recorded `phase: "failed"` with its error, and beat 12 then
+ * spent its full declared 600 000 ms because "the act kept being available".
+ * It was: the page still rendered the control. The SESSION was dead, and the
+ * product had said so in its own status.
+ *
+ * The lifecycle bar cannot say it. `deriveSessionLifecycle`'s first rule
+ * collapses every terminal phase to `terminal` with `error: null`, so a failed
+ * session is indistinguishable there from a finished one — which is why this
+ * reads the phase instead.
+ *
+ * And reading it is NOT the re-derivation this file's header forbids. That rule
+ * is "never re-derive the LIFECYCLE from phase names or timestamps". `failed` is
+ * the product's own word for its own state, written by
+ * `writeSessionTerminalPhase(…, 'failed', msg)` and declared
+ * `{ phase: failed, step: terminal }` in `studio/session-kinds.yaml`. Believing
+ * a terminal verdict the product published is the opposite of second-guessing
+ * it.
+ */
+export const TERMINAL_FAILURE_PHASE = 'failed';
+
 /** How often `waitForConsequence` re-reads the page while it waits. */
 const CONSEQUENCE_POLL_MS = 100;
 
@@ -130,7 +156,7 @@ export async function readObserved(page, beat) {
   // Always read the error sentinels alongside the beat's own keys — the
   // verdict cannot judge what was never collected.
   const keys = [...new Set([...Object.keys(beat.expect.data), ...ERROR_SENTINELS.map(([a]) => a)])];
-  const { data, nested, lifecycle } = await page.evaluate(
+  const { data, nested, lifecycle, sessionPhase } = await page.evaluate(
     ({ wanted, safe }) => {
       const root = document.querySelector('main[data-page]') ?? document.body;
       const pick = (el) => {
@@ -149,20 +175,47 @@ export async function readObserved(page, beat) {
       // the generated how-to would start listing an attribute no beat asked
       // about. It is diagnosis, not an expectation, so it travels beside them.
       const bar = document.querySelector('div[data-section="session-lifecycle"][data-lifecycle-state]');
-      return { data: pick(root), nested: kids, lifecycle: bar === null ? null : bar.getAttribute('data-lifecycle-state') };
+      // Read by its OWN selector for the same reason the bar is, and never
+      // folded into `wanted`: it is diagnosis, not an expectation, so it must
+      // not reach `nested` where `resolveExpectations` could return it inside a
+      // matched record and the generated how-to would start listing an
+      // attribute no beat asked about.
+      return {
+        data: pick(root),
+        nested: kids,
+        lifecycle: bar === null ? null : bar.getAttribute('data-lifecycle-state'),
+        sessionPhase: root.getAttribute('data-session-phase'),
+      };
     },
     { wanted: keys, safe: keys.filter((k) => SAFE_KEY.test(k)) },
   );
-  return { route: new URL(page.url()).pathname, data, nested, lifecycle: lifecycle ?? null };
+  return { route: new URL(page.url()).pathname, data, nested, lifecycle: lifecycle ?? null, sessionPhase: sessionPhase ?? null };
 }
 
-/** Is the product itself saying this session is hung? */
-async function stalledNow(page) {
+/**
+ * Is the product itself saying to stop — either that the session is hung, or
+ * that it is terminally failed? Returns the REASON, or `null` to keep waiting.
+ *
+ * One predicate for both so the two can never drift apart, and so a caller
+ * cannot check one and forget the other (which is exactly how `6.11.39`
+ * survived alongside the stall check it sits beside).
+ */
+export function stopReasonFor(observed) {
+  if (observed.sessionPhase === TERMINAL_FAILURE_PHASE) {
+    return `the session's own phase reached the terminal "${TERMINAL_FAILURE_PHASE}"`;
+  }
+  if (observed.lifecycle === LIFECYCLE_STALLED) {
+    return `the session's own lifecycle read "${LIFECYCLE_STALLED}"`;
+  }
+  return null;
+}
+
+/** The same question, against a live read. */
+async function stopNow(page) {
   // Reuses `readObserved` rather than minting a second notion of "the page's
-  // lifecycle" — an empty `expect.data` collects only the error sentinels, and
-  // the bar rides along beside them. §15.161's rule, one layer down.
-  const { lifecycle } = await readObserved(page, { expect: { data: {} } });
-  return lifecycle === LIFECYCLE_STALLED;
+  // state" — an empty `expect.data` collects only the error sentinels, and the
+  // bar and the phase ride along beside them. §15.161's rule, one layer down.
+  return stopReasonFor(await readObserved(page, { expect: { data: {} } }));
 }
 
 /**
@@ -196,7 +249,8 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecyc
     // Diagnosis must never fail a beat that would otherwise pass, so it throws
     // nothing and the beat's outcome does not depend on it.
     if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
-    if (await stalledNow(page)) return Object.freeze({ afterMs: Date.now() - startedAt });
+    const why = await stopNow(page);
+    if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
   }
@@ -248,8 +302,9 @@ export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle, 
     // second-guessed — `stalled` is server-derived, and re-deriving it here
     // from phases or timestamps is the mistake the bar's own header forbids.
     if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
-    if (watchLifecycle && observed.lifecycle === LIFECYCLE_STALLED) {
-      return Object.freeze({ afterMs: Date.now() - startedAt });
+    const why = watchLifecycle ? stopReasonFor(observed) : null;
+    if (why !== null) {
+      return Object.freeze({ afterMs: Date.now() - startedAt, why });
     }
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
