@@ -466,6 +466,45 @@ export default {
       // agent never binds a skill" and that `flow-ready: true` was therefore
       // unreachable on gitweave — that finding is now STALE, superseded by
       // this measurement rather than left standing.
+      //
+      // ── AMENDED 2026-09-06, amendment 8 (operator ruling 329, adopted as
+      // drafted by T1 ruling 335, repaired by T1 ruling 337). THE COUNTS ARE
+      // GONE. What replaces them is what is STABLE about this page: preflight
+      // is MET, the project is Flow-ready, and C1b's row is present as the
+      // operator's to resolve.
+      //
+      // (e) WHY NO COUNTS. The counts moved under this beat three times in
+      // three sessions — `3/0/3` (ruling 217), `2/0/2` (ruling 306), and run 7
+      // read `3` and `1` because the C1b agent had not landed inside the
+      // panel's own 180 s poll ceiling. A count is a fact about how far a
+      // dispatched agent got by the moment the page was read; asserting it
+      // makes the story a stopwatch. `clause-id`/`clause-resolution` are facts
+      // about WHAT C1b IS — the one clause only the operator can decide — and
+      // they do not move.
+      //
+      // (f) THE BEAT DOES NOT ASSERT C1b's ROW GONE after the decision
+      // (ruling 335 a). The decision's 200 s timeout is a PRODUCT observation,
+      // bead `forge-8vfn.6.11.31`, never story tuning.
+      //
+      // (g) `section: 'contract-resolution'` WAS in the drafted set and is NOT
+      // here, and this is measured, not preferred. `_1.0/evidence/m5-b-probe178/`
+      // — a costless throwaway story ($0.0000, nothing dispatched) driven
+      // through the runner's OWN resolver on a live `/projects/gitweave`
+      // reconstructed to state B — read four expectation sets on the same page
+      // moments apart: `clause-id` + `clause-resolution` GREEN; the same pair
+      // PLUS `section` RED with `data-section: expected "contract-resolution",
+      // absent from the page`; the full drafted set RED on that one key; the
+      // set below GREEN. `resolveExpectations` puts a key carried by two or
+      // more elements under the together-rule, six elements on this page carry
+      // `section`, and one `ClauseRow` per failing clause carries `clause-id`
+      // — so no element carries all three and the best-covering candidate
+      // (C1b's row) wins, reporting `section` absent. §15.178.
+      //
+      // Nothing is lost. `ClauseRow` renders ONLY inside
+      // `[data-section="contract-resolution"]` (`ContractResolutionPanel.tsx:322`),
+      // so `clause-id: 'C1b'` already says the panel is up — and it keeps
+      // §15.175's trap shut for the reason the count used to: at zero failing
+      // clauses `:180` returns null, no row renders, and this beat reds.
       do: [
         { press: 'back-to-project' },
         {
@@ -503,11 +542,8 @@ export default {
           'project-id': 'gitweave',
           'preflight-status': 'ok',
           'flow-ready': 'true',
-          section: 'contract-resolution',
-          'ready-count': '5',
-          'resolution-failing-count': '2',
-          'resolution-user-count': '0',
-          'resolution-agent-count': '2',
+          'clause-id': 'C1b',
+          'clause-resolution': 'user',
         },
       },
       say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
