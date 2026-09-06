@@ -240,7 +240,19 @@ function fakeStudio(spec: {
     waitForURL: (pred: (u: string) => boolean, o: { timeout: number }) =>
       until(() => pred(`http://localhost:4124${route}`), o.timeout, 'the URL'),
     waitForSelector: (sel: string, o: { timeout: number }) => until(() => find(sel) !== null, o.timeout, sel),
-    evaluate: async () => ({ data: here().data ?? {}, nested: here().nested ?? [] }),
+    // HONOURS `wanted`, because production does. Bead `forge-8vfn.6.11.45`:
+    // this returned every declared key whatever `readObserved` asked for, so a
+    // key the real read never collects still arrived here and no test could
+    // see the defect that cost S1 run 9 its beat 11. A fake more forgiving
+    // than the thing it stands for cannot fail the way production does — the
+    // rule this file already states about `childInput`, applied to the read.
+    evaluate: async (_fn: unknown, arg?: { wanted?: string[] }) => {
+      const wanted = arg?.wanted ?? null;
+      const only = (rec: Record<string, string>) =>
+        wanted === null ? rec : Object.fromEntries(Object.entries(rec).filter(([k]) => wanted.includes(k)));
+      const nested = (here().nested ?? []).map(only).filter((r) => Object.keys(r).length > 0);
+      return { data: only(here().data ?? {}), nested };
+    },
   };
 }
 
@@ -481,4 +493,95 @@ test('THE NEGATIVE CONTROL: fill on a text control and on a <select> is byte-for
   assert.deepEqual(page.filled, [{ handle: '[data-field="kickoff-prompt"]', value: 'build me a thing' }]);
   assert.deepEqual(page.selected, [{ handle: '[data-field="kickoff-project"]', value: 'mdtoc' }]);
   assert.deepEqual(page.checked, []);
+});
+
+// ── 6.11.45: A REPEAT'S `until` IS READ FROM THE PAGE, NOT ONLY THE BEAT'S KEYS
+//
+// THE INCIDENT, measured on S1 run 9 (funded, $3.7414). The architect finished:
+// `architect turn end (phase=awaiting-verdict)` at 23:46:57.740, with `PLAN.md`
+// and `PLAN.html` written. #516 captured the page at beat 11's red **2 m 24 s
+// later** and it carried, on one element each, `data-session-phase=
+// "awaiting-verdict"`, `data-architect-phase="awaiting-verdict"`,
+// `data-page-ready="true"` and `data-action="open-plan"`. The beat's `until` is
+// `{'session-phase': 'awaiting-verdict'}`. **The page was showing the loop's own
+// stop condition, met, and the loop reported it unmet for the whole bound.**
+//
+// THE CAUSE. `readObserved` collected `[...Object.keys(beat.expect.data),
+// ...ERROR_SENTINELS]` and nothing else. `until` is the repeat's OWN condition
+// (T1 ruling 320) and its keys were never added to that read, so `matchesData`
+// asked `Object.hasOwn(seen, 'session-phase')` for a key nobody collected and
+// answered `false` HOWEVER THE PAGE READ.
+//
+// WHY THE ASYMMETRY IS THE PROOF, and not just a story that fits: S1 beat 11's
+// `expect.data` is `section`/`architect-phase`/`gate-armed`/`plan-mode` — no
+// `session-phase` — so its `until` could never be satisfied on any product. S2
+// beat 12's `expect.data` DOES declare `session-phase`, so its `until` is
+// readable and its red is a different matter entirely.
+//
+// AND WHY NO TEST CAUGHT IT: `fakeStudio.evaluate` returned every declared key
+// whatever the read asked for, so an uncollected key still arrived. That is
+// fixed above, and these two cases stand on the honest fake.
+
+/** The beat S1 beat 11 is, reduced to the shape that carries the defect. */
+const answerUntilVerdict = (expectData: Record<string, string>) => ({
+  act: 'Open the session, read the plan and press Approve',
+  do: [
+    {
+      repeat: [{ fillAll: 'question-freetext', with: 'an answer' }, { press: 'submit-answers' }],
+      until: { 'session-phase': 'awaiting-verdict' },
+    },
+  ],
+  wait: { for: 'agent', upTo: 1500 },
+  expect: { route: '/sessions/architect/x', data: expectData },
+});
+
+/** A drafted session: the interview is over, so no answer control is on the page. */
+const draftedSession = () => ({
+  start: '/sessions/architect/x',
+  commitMs: 0,
+  pages: {
+    '/sessions/architect/x': {
+      elements: [READY_MAIN('session'), el('a', { 'data-action': 'open-plan' })],
+      data: {
+        page: 'session',
+        'page-ready': 'true',
+        'session-kind': 'architect',
+        'session-phase': 'awaiting-verdict',
+        'architect-phase': 'awaiting-verdict',
+      },
+    },
+  },
+});
+
+test('6.11.45 (RED): a repeat stops on an `until` key the beat does not declare — the page is asked for it', async () => {
+  // S1 beat 11's own key set: no `session-phase` among them. On the unfixed
+  // read this loop cannot see `awaiting-verdict` however plainly the page says
+  // it, and spends the whole declared bound before reporting `until` unmet —
+  // which is exactly what a funded run measured, 2 m 24 s after the plan was
+  // on disk.
+  const page = fakeStudio(draftedSession());
+  const beat = answerUntilVerdict({ 'architect-phase': 'awaiting-verdict', page: 'session' });
+  const started = Date.now();
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
+  const elapsed = Date.now() - started;
+
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.ok(elapsed < 1000, `the loop must stop when its own condition is met, not at the bound — took ${elapsed} ms of 1500`);
+  assert.deepEqual(page.clicks, [], 'nothing was submitted: the interview was already over');
+});
+
+test('6.11.45: a beat that DOES declare the `until` key stays green — the positive control', async () => {
+  // S2 beat 12's key set. It worked before this change and must work after:
+  // the read collects the UNION, so a key declared twice is collected once and
+  // nothing that used to be read stops being read.
+  const page = fakeStudio(draftedSession());
+  const beat = answerUntilVerdict({
+    page: 'session',
+    'page-ready': 'true',
+    'session-kind': 'architect',
+    'session-phase': 'awaiting-verdict',
+  });
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
+
+  assert.equal(v.status, 'green', v.failures.join(' | '));
 });
