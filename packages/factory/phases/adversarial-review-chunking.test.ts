@@ -253,7 +253,7 @@ test('kills "a failed pass throws away the chunks that passed": the completed ch
   }
 });
 
-test('kills "a stale record is reused": a chunk record authored against a DIFFERENT head is a miss, not an answer', async () => {
+test('kills "a record whose CONTENT changed is reused": a chunk whose diff moved is re-reviewed, and one whose diff did not is not', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const fx = makeFixture();
   try {
@@ -262,17 +262,65 @@ test('kills "a stale record is reused": a chunk record authored against a DIFFER
     assert.equal((await run(fx, countingStub(fx, first), l1)).status, 'complete');
     assert.equal(first.n, 2, 'both chunks bought on a cold store');
 
-    // The branch moves. Same files, same chunk indexes, different head — so a
-    // reuse here would be a review of code nobody is merging.
+    // A REAL content change to the file WI-1 owns. Its diff moves, so its record
+    // is worthless — that is what the staleness guard is for. The unattributed
+    // chunk's diff is untouched, so its record is still exactly true.
     writeFileSync(join(fx.worktree, 'src.ts'), 'export const v = 3;\n');
     fx.git(['add', '-A']);
-    fx.git(['commit', '-q', '-m', 'a later commit']);
+    fx.git(['commit', '-q', '-m', 'a real change to the reviewed file']);
 
     const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
     const second = { n: 0 };
     assert.equal((await run(fx, countingStub(fx, second), l2)).status, 'complete');
-    assert.equal(second.n, 2, 'every chunk is re-reviewed against the new head');
-    assert.equal(e2.filter((e) => e.message === 'review.chunk.reused').length, 0);
+    assert.equal(second.n, 1, 'the changed chunk is re-reviewed; the unchanged one is not bought twice');
+    const reused = e2.filter((e) => e.message === 'review.chunk.reused');
+    assert.equal(reused.length, 1);
+    assert.equal((reused[0]!.metadata as Record<string, unknown>).chunk, 'unattributed');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('kills "a bookkeeping commit discards the review": the orchestrator\'s OWN commits move the head, and a review keyed on the head dies with them', async () => {
+  // MEASURED on G2 (ledger, 2026-09-06): the integrate band commits twice on
+  // every run — `chore(developer-loop): pre-review boundary snapshot` and
+  // `chore(demo): demo artifacts` — so `headSha` differed on every attempt and
+  // every persisted record was rejected as stale. The store worked perfectly
+  // within one pass and was dead across the only boundary that matters.
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger: l1 } = collectLogger(fx.logsRoot);
+    const first = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, first), l1)).status, 'complete');
+    assert.equal(first.n, 2);
+    const headBefore = fx.git(['rev-parse', 'HEAD']).trim();
+
+    // The orchestrator's own bookkeeping: a commit that touches NOTHING any work
+    // item declared. WI-1's diff is byte-identical afterwards.
+    writeFileSync(join(fx.worktree, 'bookkeeping.md'), 'demo artifacts\n');
+    fx.git(['add', '-A']);
+    fx.git(['commit', '-q', '-m', 'chore(demo): demo artifacts']);
+    const headAfter = fx.git(['rev-parse', 'HEAD']).trim();
+    assert.notEqual(headAfter, headBefore, 'the fixture must actually move the head, or it proves nothing');
+
+    const { logger: l2, events: e2 } = collectLogger(fx.logsRoot);
+    const second = { n: 0 };
+    assert.equal((await run(fx, countingStub(fx, second), l2)).status, 'complete');
+    // WI-1 is reused: its diff did not move. The unattributed chunk IS re-bought,
+    // and correctly — the bookkeeping file is now part of its diff.
+    assert.equal(second.n, 1, 'a review must survive the orchestrator writing its own artifacts');
+    const reused = e2.filter((e) => e.message === 'review.chunk.reused');
+    assert.equal(reused.length, 1);
+    assert.equal((reused[0]!.metadata as Record<string, unknown>).chunk, 'WI-1');
+
+    // And the reused record is RE-STAMPED: `mergeChunkRecords` takes the identity
+    // from the first record, so a reused one carrying its old head would publish
+    // a review of a head nobody is merging.
+    const record = JSON.parse(readFileSync(reviewFindingsJsonPath(fx.logsRoot, CYCLE_ID), 'utf8'));
+    assert.equal(record.headSha, headAfter, 'the merged artifact must name THIS run head, not the head the reused chunk was reviewed at');
+    assert.deepEqual(validateReviewFindings(record, EXPECTED), []);
   } finally {
     fx.cleanup();
     restore();
