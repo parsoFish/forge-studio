@@ -360,36 +360,39 @@ export function FlowBuilderCanvas({
     [],
   );
 
+  // Ruling 302: there is no null branch any more. The picker's every exit —
+  // a pick, Escape, an outside click — arrives here with an artifact id, so an
+  // edge can no longer reach `serializeFlowDefinition` without a label and the
+  // `loadFlowDefinition` throw described at the connect handler below is
+  // unreachable from this surface.
   const handleArtifactPick = useCallback(
-    (artifactId: string | null) => {
+    (artifactId: string) => {
       if (!pickerState) return;
       const { connection } = pickerState;
       const edgeId = `${connection.source ?? ''}__${connection.target ?? ''}`;
-      if (artifactId) {
-        const artifact = ARTIFACTS.find((a) => a.id === artifactId);
-        setRfEdges((eds) =>
-          eds.map((e) =>
-            e.id === edgeId
-              ? {
-                  ...e,
-                  label: artifact?.name ?? artifactId,
-                  labelStyle: {
-                    fontFamily: 'var(--font-mono, monospace)',
-                    fontSize: 10,
-                    fill: 'var(--c-artifact, #fbbf24)',
-                  },
-                  labelBgStyle: {
-                    fill: 'var(--bg-2, #10151f)',
-                    stroke: 'rgba(251,191,36,0.4)',
-                    strokeWidth: 1,
-                    rx: 4,
-                  },
-                  data: { artifact: artifactId },
-                }
-              : e,
-          ),
-        );
-      }
+      const artifact = ARTIFACTS.find((a) => a.id === artifactId);
+      setRfEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId
+            ? {
+                ...e,
+                label: artifact?.name ?? artifactId,
+                labelStyle: {
+                  fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: 10,
+                  fill: 'var(--c-artifact, #fbbf24)',
+                },
+                labelBgStyle: {
+                  fill: 'var(--bg-2, #10151f)',
+                  stroke: 'rgba(251,191,36,0.4)',
+                  strokeWidth: 1,
+                  rx: 4,
+                },
+                data: { artifact: artifactId },
+              }
+            : e,
+        ),
+      );
       setPickerState(null);
     },
     [pickerState],
@@ -759,7 +762,6 @@ export function FlowBuilderCanvas({
           anchorX={pickerState.x}
           anchorY={pickerState.y}
           onPick={handleArtifactPick}
-          onClose={() => setPickerState(null)}
         />
       )}
 
