@@ -322,9 +322,9 @@ packages/flows/worktree.ts execFileSync 10
 packages/flows/worktree.ts existsSync 4
 packages/flows/worktree.ts mkdirSync 1
 packages/flows/worktree.ts rmSync 1
-packages/kernel/config.ts existsSync 1
+packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
-packages/kernel/config.ts readFileSync 1
+packages/kernel/config.ts readFileSync 2
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1

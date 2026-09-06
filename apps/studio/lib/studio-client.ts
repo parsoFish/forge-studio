@@ -2119,16 +2119,8 @@ export async function createProject(
   };
 }
 
-/** The curated greenfield app-type templates (R4-03). */
-export type ProjectStarter = {
-  /** The starter directory name — the option's VALUE, and what every whitelist checks. */
-  id: string;
-  /** What the style is called, for the operator's eyes only. */
-  label: string;
-  /** The language its scaffold is written in, or `null` when the starter does not declare one. */
-  language: string | null;
-};
-
+/** The curated greenfield app-type templates (R4-03). `id` is the option's VALUE and what every whitelist checks; `label`/`language` are presentation, and `language` is `null` when the starter declares none (`forge-8vfn.6.11.4`). */
+export type ProjectStarter = { id: string; label: string; language: string | null };
 export async function fetchProjectStarters(): Promise<ProjectStarter[]> {
   const data = await studioRead<{ appTypes?: ProjectStarter[] }>('/api/studio/projects/starters');
   return Array.isArray(data.appTypes) ? data.appTypes : [];
@@ -2138,7 +2130,6 @@ export async function fetchProjectStarters(): Promise<ProjectStarter[]> {
 export async function createGreenfieldProject(input: {
   name: string;
   appType: string;
-  language?: string;
   northStar: string;
   architecture?: string;
 }): Promise<{ ok: boolean; error?: string; id?: string; ready?: boolean; failingClauses?: FailingClause[] }> {

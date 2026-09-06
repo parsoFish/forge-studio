@@ -9,8 +9,7 @@ import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight,
   fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
-  type ProjectStarter,
-  type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
+  type ProjectStarter, type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
 import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
@@ -804,14 +803,7 @@ function CreateFromTemplate({ appTypes }: { appTypes: ProjectStarter[] }) {
         <label style={labelStyle} htmlFor="create-apptype">App type</label>
         <select id="create-apptype" data-field="create-app-type" style={inputStyle} value={appType} onChange={(e) => setAppTypePicked(e.target.value)}>
           {appTypes.length === 0 && <option value="">(no templates found)</option>}
-          {/* forge-8vfn.6.11.4 (operator ruling 301): a starter is named for a
-              STYLE, so the option has to say what the style is written in. The
-              VALUE stays the id — every whitelist, the CLI's --app-type and
-              both story `fill`s write it, and `data-app-type-count` counts
-              entries, not labels. */}
-          {appTypes.map((t) => (
-            <option key={t.id} value={t.id}>{t.language === null ? t.label : `${t.label} — ${t.language}`}</option>
-          ))}
+          {appTypes.map((t) => <option key={t.id} value={t.id}>{t.language === null ? t.label : `${t.label} — ${t.language}`}</option>)}
         </select>
         <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
