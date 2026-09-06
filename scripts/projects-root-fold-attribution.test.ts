@@ -112,13 +112,25 @@ test('R1: a DIFFERENT fold expression reusing an audited token is kept, at its o
 
   // Line 4 folds the SAME token through a DIFFERENT expression; line 6 is the
   // audited expression itself.
+  // The audited line is DERIVED from the row rather than spelled out —
+  // hardcoding it is what rotted this fixture when the audited site was
+  // re-pointed (6.11.26). The smuggled line must be a fold the scanner really
+  // detects but the row does NOT name, so both properties are asserted below
+  // rather than assumed.
+  const SMUGGLED = "resolve('projects', target)";
+  assert.notEqual(SMUGGLED, row!.site, 'the smuggled expression must differ from the audited one');
+  assert.equal(
+    scanProjectsRootFold(`const x = ${SMUGGLED};\n`, 'apps/forge/cli.ts').length,
+    1,
+    'the smuggled expression must itself be a fold the scanner detects — otherwise this fixture proves nothing',
+  );
   const text = [
     '// fixture',
     'export const a = 1;',
     '',
-    'const smuggled = join(projectsRoot, target);',
+    `const smuggled = ${SMUGGLED};`,
     '',
-    "const asManaged = resolve('projects', target);",
+    `const asManaged = ${row!.site};`,
     '',
   ].join('\n');
 
@@ -144,7 +156,7 @@ test('R1: SWAP — the audited expression removed and another put in its place i
   const text = `// fixture\n\nconst elsewhere = join(projectsRoot, target);\n`;
   withFixture({ 'apps/forge/cli.ts': text, ...benignScope(['apps/forge/cli.ts']) }, (root) => {
     const onDisk = readFileSync(join(root, 'apps/forge/cli.ts'), 'utf8');
-    assert.ok(!onDisk.includes("resolve('projects', target)"), 'precondition: the audited expression is absent');
+    assert.ok(!onDisk.includes(row!.site), 'precondition: the audited expression is absent');
     assert.ok(onDisk.includes('join(projectsRoot, target)'), 'precondition: the substituted expression is present');
 
     const res = runLint({ root });

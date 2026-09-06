@@ -29,7 +29,7 @@ import { runContractComplianceLoop, formatComplianceReport } from '@forge/projec
 import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
 import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
-import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir, runInit,
+import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayout, resolveGuardedPath, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
@@ -52,6 +52,7 @@ const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 // this, not the forge install root.
 const INVOCATION_CWD = process.cwd();
 process.chdir(FORGE_ROOT);
+process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.26 — a child's `forge` is THIS tree's
 
 // R2-01-F3a: `forge agent run <agent-id> <session-id> [--project <name>]` —
 // the generic path over the 4 interactive runners (architect / instructions /
@@ -819,8 +820,8 @@ function resolvePreflightProjectDir(target: string | undefined): string {
     process.exit(2);
   }
   const asPath = resolve(target);
-  const asManaged = resolve('projects', target);
-  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory() ? asPath : asManaged;
+  const projectsDir = resolveProjectsDir(FORGE_ROOT, loadConfig(defaultConfigPath(FORGE_ROOT)));
+  const projectDir = existsSync(asPath) && statSync(asPath).isDirectory() ? asPath : join(projectsDir, target);
   if (!existsSync(projectDir)) {
     console.error(`forge preflight: project directory not found: ${projectDir}`);
     console.error('Pass a directory under projects/ or an absolute path.');
