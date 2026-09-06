@@ -208,7 +208,27 @@ function runArtifactPaths(storyId) {
  * @returns {{restore: string[], remove: string[]}} tracked paths to put back,
  *   and paths that did not exist before this run and are not its artifact.
  */
-export function fenceBreaches(before, after, storyId, groundProject = null) {
+/**
+ * Expand one COLLAPSED untracked directory into the files under it.
+ *
+ * `git status --porcelain` reports the TOP-MOST untracked directory — `?? brain/`,
+ * never `?? brain/projects/gitweave/`. Ruling 308's ground exemption compared
+ * against the full path and therefore never matched, so the hold silently did
+ * nothing and the ground brain was left behind twice while the fence reported
+ * `clean` (bead `forge-8vfn.6.11.28`). Same git behaviour #491 found for SIBLING
+ * worktrees and fixed there with `-uall`; this is the other read.
+ */
+function expandCollapsed(root, path) {
+  try {
+    const out = execFileSync('git', ['status', '--porcelain', '-z', '-uall', '--', path], { cwd: root, encoding: 'utf8' });
+    const rows = parseGitPorcelain(out).map((r) => r.path);
+    return rows.length > 0 ? rows : [path];
+  } catch {
+    return [path];
+  }
+}
+
+export function fenceBreaches(before, after, storyId, groundProject = null, deps = {}) {
   assertSafeStoryId(storyId);
   const wasDirty = new Set(before.map((entry) => entry.path));
   const artifacts = runArtifactPaths(storyId);
@@ -231,6 +251,15 @@ export function fenceBreaches(before, after, storyId, groundProject = null) {
   const defer = [];
   for (const entry of after) {
     if (wasDirty.has(entry.path) || isArtifact(entry.path)) continue;
+    if (groundBrain !== null && entry.xy === '??' && entry.path.endsWith('/') && groundBrain.startsWith(entry.path)) {
+      // A COLLAPSED ancestor of the ground brain. Deferring it whole would hold
+      // a foreign project's brain too — the very escape the fence exists to
+      // catch — so it is expanded and classified file by file.
+      for (const p of (deps.expand ?? ((x) => expandCollapsed(deps.root ?? '.', x)))(entry.path)) {
+        (p.startsWith(groundBrain) ? defer : remove).push(p);
+      }
+      continue;
+    }
     if (groundBrain !== null && entry.path.startsWith(groundBrain)) { defer.push(entry.path); continue; }
     (entry.xy === '??' ? remove : restore).push(entry.path);
   }

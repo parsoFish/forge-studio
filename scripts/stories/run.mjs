@@ -323,7 +323,7 @@ async function runStory(story, uiUrl, startedMs) {
 
   // And the fence, over everything the product wrote that carries no story id.
   const fence = applyFence(
-    fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null),
+    fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null, { root: ROOT }),
     ROOT,
   );
   fence.escapes = siblingWorktreeEscapes(ROOT, siblingsBefore);
