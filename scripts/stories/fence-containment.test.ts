@@ -32,7 +32,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
@@ -211,11 +211,31 @@ test('6.11.28: with no ground declared, a collapsed entry is not expanded at all
 // The pair below is the whole rule: the SAME planted growth, once with a live
 // process rooted in that tree and once without.
 
-/** A real sleeper whose cwd is `dir`, so `/proc/<pid>/cwd` genuinely points there. */
+/**
+ * A real sleeper whose cwd is `dir`, so `/proc/<pid>/cwd` genuinely points
+ * there — and OBSERVED to be there before the caller proceeds.
+ *
+ * The wait is not politeness. `spawn` returns a pid the instant it forks, but
+ * the child may not have exec'd yet; under a loaded full-suite run this test
+ * scanned `/proc` before the sleeper's cwd was its own, found no owner, and
+ * failed on the very assertion it exists to make. A test that asserts a
+ * condition it has not established is a flake with a good story.
+ */
 function sleeperIn(dir) {
   const child = spawn('sleep', ['30'], { cwd: dir, detached: true, stdio: 'ignore' });
   child.unref();
-  return child;
+  const want = realpathSync(dir);
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    let cwd = '';
+    try { cwd = readlinkSync(join('/proc', String(child.pid), 'cwd')); } catch { /* not visible yet */ }
+    if (cwd === want) return child;
+    if (Date.now() >= deadline) {
+      try { process.kill(child.pid); } catch { /* already gone */ }
+      throw new Error(`the sleeper never appeared in /proc with cwd ${want} — this test cannot mean anything without it`);
+    }
+    execFileSync('sleep', ['0.02']);
+  }
 }
 
 /** The planted growth both cases share, so the only variable is who owns the tree. */
