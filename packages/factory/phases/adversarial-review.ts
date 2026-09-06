@@ -499,49 +499,85 @@ export async function runAdversarialReview(
       return { ok: false, failure: { status: 'failed', reason: 'author-invalid', detail: `${label}: ${lastErrors.join('; ')}` } };
     };
 
+    /**
+     * One work item, reviewed a FILE at a time — bead 6.10.26, with its parts
+     * bought once — bead `forge-6fvw`. Each per-file record persists on its own
+     * key (`<chunk>.<file>`) the moment it completes, and a later pass reuses
+     * it: G2's second resume measured a per-file review at $0.9142, and a run
+     * stopped mid-split used to discard every one of them.
+     */
+    const reviewSplit = async (
+      chunk: ReviewChunk,
+      index: number,
+    ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
+      const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+      for (const [subIndex, sub] of splitChunkPerFile(chunk).entries()) {
+        const subLabel = sub.files[0]!;
+        const subKey = `${index}.${subIndex}`;
+        const cached = readChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, headSha });
+        if (cached !== null) {
+          emit('review.chunk.reused', { chunk: subLabel, index: subKey });
+          subs.push({ label: subLabel, record: cached });
+          continue;
+        }
+        const subOutcome = await reviewChunk(sub, subLabel);
+        // A file that exhausts on its own has bottomed out — reported by
+        // `reviewChunk` with the file named, and NOT ground through the
+        // remaining files, which would buy nothing and cost a spawn each.
+        if (!subOutcome.ok) return { ok: false, failure: subOutcome.failure };
+        const at = writeChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, headSha, record: subOutcome.record });
+        emit('review.chunk.persisted', { chunk: subLabel, index: subKey, path: at ?? '(not persisted — this file will be re-reviewed)' });
+        subs.push({ label: subLabel, record: subOutcome.record });
+      }
+      return { ok: true, record: mergeSplitRecords(subs) };
+    };
+
     const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
     for (const [index, chunk] of chunks.entries()) {
       const label = chunkLabel(chunk);
+      const key = String(index);
 
       // Bead 6.10.27: a chunk whose review already completed against THIS head
       // is not bought again. Every not-an-exact-match reads as a miss, so the
       // worst case is the cost the review already had.
-      const reused = readChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha });
+      const reused = readChunkRecord(input.logsRoot, input.cycleId, key, { label, headSha });
       if (reused !== null) {
-        emit('review.chunk.reused', { chunk: label, index });
+        emit('review.chunk.reused', { chunk: label, index: key });
         chunkRecords.push({ label, record: reused });
         continue;
       }
 
-      let outcome = await reviewChunk(chunk);
+      // A chunk whose FIRST per-file record already exists was split at this
+      // head, so the whole-work-item spawn has exactly one possible outcome —
+      // the exhaustion already recorded — at full price ($0.7594 on G2's second
+      // resume). Re-enter the split instead of re-deriving it from a failure.
+      const knownSplit =
+        chunk.files.length > 1 &&
+        readChunkRecord(input.logsRoot, input.cycleId, `${index}.0`, { label: chunk.files[0]!, headSha }) !== null;
 
-      // Bead 6.10.26: the work item is the FIRST cut, not the only one. A budget
-      // kill on a multi-file chunk re-reviews that work item one FILE at a time
-      // — same criteria, same fence, narrower evidence — and merges the parts.
-      // Measured on G2: `WI-2` exhausted 50 turns on eight files while `WI-1`
-      // passed, so the work item's own size, not the reviewer, was the bound.
-      if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
-        const subChunks = splitChunkPerFile(chunk);
-        emit('review.chunk.split', { chunk: label, files: subChunks.length });
-        const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
-        for (const sub of subChunks) {
-          const subLabel = sub.files[0]!;
-          const subOutcome = await reviewChunk(sub, subLabel);
-          // A file that exhausts on its own has bottomed out — reported by
-          // `reviewChunk` with the file named, and NOT ground through the
-          // remaining files, which would buy nothing and cost a spawn each.
-          if (!subOutcome.ok) return subOutcome.failure;
-          subs.push({ label: subLabel, record: subOutcome.record });
+      let outcome: { ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult };
+      if (knownSplit) {
+        emit('review.chunk.split', { chunk: label, files: chunk.files.length, reentered: true });
+        outcome = await reviewSplit(chunk, index);
+      } else {
+        outcome = await reviewChunk(chunk);
+        // Bead 6.10.26: the work item is the FIRST cut, not the only one. A
+        // budget kill on a multi-file chunk re-reviews that work item one FILE
+        // at a time — same criteria, same fence, narrower evidence. Measured on
+        // G2: `WI-2` exhausted 50 turns on eight files while `WI-1` passed, so
+        // the work item's own size, not the reviewer, was the bound.
+        if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
+          emit('review.chunk.split', { chunk: label, files: chunk.files.length });
+          outcome = await reviewSplit(chunk, index);
         }
-        outcome = { ok: true, record: mergeSplitRecords(subs) };
       }
 
       if (!outcome.ok) return outcome.failure;
       // Persisted the moment it is finished, never at the end: the chunk AFTER
       // this one is exactly what might fail, and that is the case this exists
       // for.
-      const at = writeChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha, record: outcome.record });
-      emit('review.chunk.persisted', { chunk: label, index, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
+      const at = writeChunkRecord(input.logsRoot, input.cycleId, key, { label, headSha, record: outcome.record });
+      emit('review.chunk.persisted', { chunk: label, index: key, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
       chunkRecords.push({ label, record: outcome.record });
     }
 
@@ -585,7 +621,13 @@ export async function runAdversarialReview(
 
 type StoredChunk = { label: string; headSha: string; record: ReviewFindingsRecord };
 
-const chunkSegments = (cycleId: string, index: number): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${index}.json`];
+/**
+ * The key is built here from integers only — a chunk's ordinal, and for a
+ * split's part its parent's ordinal and its own (`"3.5"`). It is never
+ * caller-supplied, so it cannot carry a separator or a `..`; the guarded
+ * wrappers below still resolve every segment.
+ */
+const chunkSegments = (cycleId: string, key: string): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${key}.json`];
 
 /**
  * The persisted record for this chunk, or `null` — and `null` for EVERY reason
@@ -597,10 +639,10 @@ const chunkSegments = (cycleId: string, index: number): string[] => [cycleId, 'a
 export function readChunkRecord(
   logsRoot: string,
   cycleId: string,
-  index: number,
+  key: string,
   expect: { label: string; headSha: string },
 ): ReviewFindingsRecord | null {
-  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, index));
+  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, key));
   if (raw === null) return null;
   try {
     const stored = JSON.parse(raw) as Partial<StoredChunk>;
@@ -615,8 +657,8 @@ export function readChunkRecord(
 /** Persist one finished chunk; the written path, or `null` if the guard refused
  *  or the write failed — a durable record must never break the review that
  *  produced it. */
-export function writeChunkRecord(logsRoot: string, cycleId: string, index: number, entry: StoredChunk): string | null {
-  return guardedWriteFile(logsRoot, chunkSegments(cycleId, index), JSON.stringify(entry, null, 2) + '\n');
+export function writeChunkRecord(logsRoot: string, cycleId: string, key: string, entry: StoredChunk): string | null {
+  return guardedWriteFile(logsRoot, chunkSegments(cycleId, key), JSON.stringify(entry, null, 2) + '\n');
 }
 
 function harvestFindings(
