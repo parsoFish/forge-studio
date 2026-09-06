@@ -296,10 +296,12 @@ function mintRemote(
   // `assertGhOwner` — run BEFORE the scaffold, and asking whether THIS identity
   // is the configured owner rather than whether anyone is logged in at all.
   // The old question passed throughout the very run that failed.
-  const out = runGh(
-    ['repo', 'create', `${account}/${id}`, visibility, '--source', projectDir, '--remote', 'origin', '--push'],
-    projectDir,
-  );
+  let out;
+  try {
+    out = runGh(['repo', 'create', `${account}/${id}`, visibility, '--source', projectDir, '--remote', 'origin', '--push'], projectDir);
+  } catch (err) {
+    throw new Error(`\`gh repo create ${account}/${id}\` failed: ${err instanceof Error ? err.message : String(err)} — the project "${id}" IS on disk at ${projectDir}; its remote is not (6.11.36). Add the remote deliberately, or remove the project.`);
+  }
   const url = String(out).trim().split('\n').filter(Boolean).pop() ?? `https://github.com/${account}/${id}`;
   // Bead `forge-8vfn.6.11.29` — record it at MINT time. The sweep's delete has
   // always required this manifest and nothing ever wrote one, so its guard ran
