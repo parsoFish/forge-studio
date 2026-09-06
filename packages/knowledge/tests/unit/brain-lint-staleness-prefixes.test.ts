@@ -22,7 +22,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -148,16 +149,60 @@ test('5.43 the two PRODUCT-CREATED roots stay out: `_interactive-library/` and `
 // the moment the move happened, instead of two milestones later.
 // ---------------------------------------------------------------------------
 
+/**
+ * The repo's TRACKED top-level directories, from the index — which is what this
+ * section's title has always claimed and what a `readdirSync` of `FORGE_ROOT`
+ * cannot answer.
+ *
+ * The filesystem reading needed a hardcoded skip list (`node_modules`, `.git`,
+ * `_walkthrough`, `_worktrees`) and therefore asserted against every OTHER
+ * untracked directory as if it were repo source. Bead `forge-8vfn.6.10.25`: it
+ * reds a green tree twice over — the main checkout carries the gitignored
+ * campaign directory, and a run leaves `_logs`-adjacent scratch behind — and it
+ * has never once red in CI, whose checkout has none of them. A coverage check
+ * that fails on the operator's machine and passes in CI teaches people to
+ * ignore it.
+ *
+ * `git ls-files` is the same enumeration `check-identity.mjs` and
+ * `check-docs-claims.mjs` already use, and it FAILS LOUD: a broken git read must
+ * not read as "no directories to cover", which is §15.92's shape and would make
+ * this coverage test vacuous exactly when it stopped working.
+ */
+export function trackedTopLevelDirs(): string[] {
+  const r = spawnSync('git', ['ls-files', '-z'], { cwd: FORGE_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) {
+    throw new Error(`git ls-files failed in ${FORGE_ROOT} (exit ${r.status}): ${String(r.stderr).trim()}`);
+  }
+  const dirs = new Set<string>();
+  for (const path of r.stdout.split('\0')) {
+    const slash = path.indexOf('/');
+    if (slash > 0) dirs.add(path.slice(0, slash));
+  }
+  if (dirs.size === 0) throw new Error(`git ls-files listed no directories under ${FORGE_ROOT} — the enumeration is broken, not the tree`);
+  return [...dirs].sort();
+}
+
+test('5.24 COVERAGE: the population is the INDEX, not the filesystem — an untracked directory is not repo source', () => {
+  // The defect this replaces: the check `readdirSync`d FORGE_ROOT and filtered a
+  // hardcoded list of four untracked names, so every OTHER untracked directory
+  // was asserted against as if it were source. It red a green tree twice (the
+  // main checkout carries a gitignored campaign dir; a run leaves scratch dirs)
+  // and never once red in CI, whose checkout has neither.
+  const dirs = trackedTopLevelDirs();
+  assert.ok(dirs.includes('packages'), 'a tracked source directory must be in the population');
+  assert.ok(dirs.includes('docs'), 'and so must docs');
+  // `node_modules` exists on disk in every working checkout and is tracked in
+  // none. Under the filesystem reading it was excluded only by being named in a
+  // literal; under the index it cannot appear at all.
+  assert.ok(!dirs.includes('node_modules'), 'an untracked directory that EXISTS must not be in the population');
+  assert.ok(!dirs.includes('.git'), 'nor .git, which is not even a directory in a worktree');
+});
+
 test('5.24 COVERAGE: every tracked top-level source directory is either in the prefix set or in the named exclusion list', () => {
   const excluded = new Set<string>(STALENESS_PREFIX_EXCLUSIONS);
   const covered = new Set(STALENESS_PREFIXES.map((p) => p.replace(/\/$/, '')));
 
-  const topLevelDirs = readdirSync(FORGE_ROOT, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    // Not part of the repo's own source: dependency and build output, and the
-    // scratch dirs a run leaves behind.
-    .filter((n) => !['node_modules', '.git', '_walkthrough', '_worktrees'].includes(n));
+  const topLevelDirs = trackedTopLevelDirs();
 
   const uncovered = topLevelDirs.filter((n) => !covered.has(n) && !excluded.has(n));
   assert.deepEqual(
