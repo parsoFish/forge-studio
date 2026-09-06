@@ -2,6 +2,7 @@ import {
   PLACEHOLDER, answers, resolveExpectations, ERROR_SENTINELS, readObserved,
   LIFECYCLE_STALLED, waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
+import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 
 /**
  * beats.mjs — judging one story beat.
@@ -472,17 +473,6 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
  * as ONE beat instead of splitting one operator act across two.
  */
 /**
- * The `data-*` handle a `do` step acts on. One definition, so the repeat gate
- * and the step executor can never disagree about what a step is waiting for.
- */
-function handleFor(step) {
-  const fillsAll = Object.hasOwn(step, 'fillAll');
-  const fills = fillsAll || Object.hasOwn(step, 'fill');
-  const key = fillsAll ? step.fillAll : fills ? step.fill : step.press;
-  return `[data-${fills ? 'field' : 'action'}="${key}"]`;
-}
-
-/**
  * Test seam for `{ repeat: [...] }` (§3.1). `performSteps` is the whole
  * behaviour under test and driving it through a real browser would test
  * playwright, not the loop — so the loop is exercised against a fake page that
@@ -509,52 +499,17 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
 
-    // `{ repeat: [...] }` — §3.1, T1 rulings 312/317. Act until the beat's own
-    // `expect.data` answers, spending what is LEFT of the beat's declared bound.
-    // The architect decides how many interview ROUNDS it needs, exactly as it
-    // decides how many questions a round holds (`fillAll`'s reason), so no
-    // fixed number of submit steps is ever right: too few never reaches the
-    // draft, and too many presses `submit-answers`, which exists only while the
-    // session awaits answers. Invents no ceiling of its own.
+    // `{ repeat: [...] }` — §3.1, T1 rulings 312/317. Its whole body lives in
+    // `beats-repeat.mjs`; `performSteps` is injected because a repeat runs its
+    // inner steps through the very function that dispatches it, and importing
+    // back would be a cycle.
     if (Object.hasOwn(step, 'repeat')) {
-      if (isSatisfied === null) {
-        return {
-          waitedForHandle,
-          error:
-            'a `repeat` step needs something to repeat UNTIL: this beat declares no `expect.data` for it ' +
-            'to reach, so the loop would be bounded only by the wait. Give the beat the expectation the ' +
-            'repeated act is meant to produce.',
-        };
-      }
-      const gate = handleFor(step.repeat[0]);
-      let rounds = 0;
-      while (left() > 0) {
-        if (await isSatisfied()) break;
-        // Nothing to act on yet — the agent turn between rounds is still
-        // running. Poll rather than spend the bound inside a handle wait that
-        // cannot tell "another round is coming" from "it drafted instead".
-        if ((await page.locator(gate).count()) === 0) {
-          await new Promise((r) => setTimeout(r, Math.min(500, left())));
-          continue;
-        }
-        const inner = await performSteps(page, step.repeat, left(), watchLifecycle, probe, isSatisfied);
-        if (inner.waitedForHandle) waitedForHandle = true;
-        if (inner.error !== null) {
-          // The product may have moved on mid-round — the control vanishing
-          // BECAUSE the expectation is now met is a success, not a failure.
-          if (await isSatisfied()) break;
-          return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
-        }
-        rounds += 1;
-      }
-      if (!(await isSatisfied())) {
-        return {
-          waitedForHandle,
-          error:
-            `repeat: answered ${rounds} round(s) and this beat's declared bound (${timeoutMs} ms) ran out ` +
-            'before what it waits for arrived — the act kept being available, so the product never moved on.',
-        };
-      }
+      const r = await runRepeatStep({
+        page, step, left, isSatisfied, timeoutMs, watchLifecycle, probe,
+        run: (inner, ms) => performSteps(page, inner, ms, watchLifecycle, probe, isSatisfied),
+      });
+      if (r.waitedForHandle) waitedForHandle = true;
+      if (r.error !== null) return { waitedForHandle, error: r.error };
       continue;
     }
 
