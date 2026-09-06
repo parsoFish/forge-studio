@@ -416,6 +416,11 @@ export default {
             },
             { press: 'submit-answers' },
           ],
+          // Explicit even though this beat's own expectation happens to BE the
+          // interview's end — T1 ruling 320 asks every repeat to name its
+          // condition, so no future step appended after it can silently make
+          // the loop unstoppable, which is what S1 beat 11 discovered.
+          until: { 'session-phase': 'awaiting-verdict' },
         },
       ],
       // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).
