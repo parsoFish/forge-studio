@@ -79,10 +79,11 @@ test('6.11.35: an EMPTY token is a missing token — never a silent pin to nothi
 });
 
 test('6.11.35: the token NEVER appears in a thrown message', () => {
-  for (const answers of [
+  const cases: Record<string, string>[] = [
     { 'auth token --user parsoFish': `${SECRET}\n`, 'api user --jq .login': 'someone-else\n' },
     { 'auth token --user parsoFish': `${SECRET}\n` }, // the identity probe itself throws
-  ]) {
+  ];
+  for (const answers of cases) {
     const { exec } = fakeGh(answers);
     try {
       assertGhOwner('parsoFish', exec);
