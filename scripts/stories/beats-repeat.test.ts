@@ -129,3 +129,26 @@ test('312: without a stop condition, repeat refuses rather than looping forever'
   assert.ok(r.error, 'it must refuse');
   assert.match(r.error, /expect/i, 'and say what the beat is missing');
 });
+
+test('312: a stop-condition read that throws is "not yet", never a run-ending crash', async () => {
+  // `readObserved` runs `page.evaluate`, which throws when the page navigates
+  // under it. A repeat polls the condition between acts that submit and
+  // re-render, so it WILL meet that race, and an unguarded throw aborts the
+  // whole run — dropping every later story's doc and gallery row. The read is
+  // guarded at the call site in `driveBeat`; this pins the contract the loop
+  // relies on: a thrown condition must not escape, and must not be read as
+  // "satisfied" either, which would end the loop on a page nobody could see.
+  const page = interviewPage({ roundsBeforeDraft: 2 });
+  let calls = 0;
+  const flaky = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('Execution context was destroyed');
+    return page.state.phase === 'awaiting-verdict';
+  };
+  const guarded = async () => { try { return await flaky(); } catch { return false; } };
+
+  const r = await performStepsForTest(page, [{ repeat: ROUND }], 20000, guarded);
+
+  assert.equal(r.error, null, 'the throw must not end the run');
+  assert.equal(page.state.phase, 'awaiting-verdict', 'and the loop still finishes its work');
+});

@@ -270,10 +270,21 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // rulings 312/317). Built here because this is where `beat` lives; only the
   // repeat branch ever calls it, so a beat without one pays no DOM read.
   const expectationAnswered = async () => {
-    const seen = resolveExpectations(beat.expect.data, await readObserved(page, beat));
-    return Object.entries(beat.expect.data).every(
-      ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
-    );
+    // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
+    // under it ("Execution context was destroyed"). A repeat polls this between
+    // acts that submit and re-render, so it will meet that race — and an
+    // unguarded throw here aborts the WHOLE run and drops every later story's
+    // doc and gallery row, which is the same reason the click below is wrapped.
+    // A read that could not happen is simply "not satisfied yet": the next poll
+    // reads the settled page, and the beat's own bound still governs.
+    try {
+      const seen = resolveExpectations(beat.expect.data, await readObserved(page, beat));
+      return Object.entries(beat.expect.data).every(
+        ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
+      );
+    } catch {
+      return false;
+    }
   };
   const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe, expectationAnswered);
   const stepError = steps_.error;
