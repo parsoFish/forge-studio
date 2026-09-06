@@ -38,6 +38,7 @@ import {
 } from '@forge/flows/flow-artifacts.ts';
 import type { EventLogger } from '@forge/kernel';
 import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { createHash } from 'node:crypto';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
@@ -338,8 +339,37 @@ export async function runAdversarialReview(
      * lenses and the same scope guard the whole-diff review used — only the
      * evidence it is given is narrower.
      */
+    /**
+     * One chunk's evidence, derived ONCE: the reuse key and the bytes the agent
+     * is shown are the same value, so they cannot disagree.
+     */
+    const deriveChunkDiff = (
+      chunk: ReviewChunk,
+      label: string,
+    ): { ok: true; diff: string; stat: string } | { ok: false; failure: AdversarialReviewResult } => {
+      const d = chunk.files.length > 0
+        ? gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        : { ok: true, out: '', err: '' };
+      const st = chunk.files.length > 0
+        ? gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
+        : { ok: true, out: '', err: '' };
+      if (!d.ok || !st.ok) {
+        const detail = `git derivation error for chunk ${label}: ${[d, st].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+        emit('review.input.derive-error', { detail, chunk: label }, { event_type: 'error' });
+        return { ok: false, failure: { status: 'failed', reason: 'derive-failed', detail } };
+      }
+      return { ok: true, diff: d.out, stat: st.out };
+    };
+
+    /** This run's identity — stamped onto a REUSED record, because
+     *  `mergeChunkRecords` takes it from the first record and would otherwise
+     *  publish a review of a head nobody is merging. */
+    const runIdentity = { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha };
+    const restamp = (record: ReviewFindingsRecord): ReviewFindingsRecord => ({ ...record, ...runIdentity });
+
     const reviewChunk = async (
       chunk: ReviewChunk,
+      derived: { diff: string; stat: string },
       // A per-file sub-chunk is named by its FILE in every event, prompt and
       // failure message: once the split has bottomed out, the file is the only
       // actionable fact left, and inheriting the work item's label would report
@@ -352,19 +382,8 @@ export async function runAdversarialReview(
 
       // This chunk's evidence, written where the whole diff used to be. Scrubbed
       // with the rest of `.forge/review-input/` in the `finally` below.
-      const chunkDiff = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', `${BASE_REF}...HEAD`, '--', ...chunk.files])
-        : { ok: true, out: '', err: '' };
-      const chunkStat = chunk.files.length > 0
-        ? gitCapture(input.worktreePath, ['diff', '--stat', `${BASE_REF}...HEAD`, '--', ...chunk.files])
-        : { ok: true, out: '', err: '' };
-      if (!chunkDiff.ok || !chunkStat.ok) {
-        const detail = `git derivation error for chunk ${label}: ${[chunkDiff, chunkStat].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
-        emit('review.input.derive-error', { detail, chunk: label }, { event_type: 'error' });
-        return { ok: false, failure: { status: 'failed', reason: 'derive-failed', detail } };
-      }
-      writeFileSync(join(inputDirAbs, 'diff.patch'), chunkDiff.out);
-      writeFileSync(join(inputDirAbs, 'diffstat.txt'), chunkStat.out);
+      writeFileSync(join(inputDirAbs, 'diff.patch'), derived.diff);
+      writeFileSync(join(inputDirAbs, 'diffstat.txt'), derived.stat);
       writeFileSync(join(inputDirAbs, 'changed-files.txt'), chunk.files.join('\n') + '\n');
 
       const basePrompt = renderAdversarialReviewUserPrompt({
@@ -499,49 +518,97 @@ export async function runAdversarialReview(
       return { ok: false, failure: { status: 'failed', reason: 'author-invalid', detail: `${label}: ${lastErrors.join('; ')}` } };
     };
 
+    /**
+     * One work item, reviewed a FILE at a time — bead 6.10.26, with its parts
+     * bought once — bead `forge-6fvw`. Each per-file record persists on its own
+     * key (`<chunk>.<file>`) the moment it completes, and a later pass reuses
+     * it: G2's second resume measured a per-file review at $0.9142, and a run
+     * stopped mid-split used to discard every one of them.
+     */
+    const reviewSplit = async (
+      chunk: ReviewChunk,
+      index: number,
+    ): Promise<{ ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult }> => {
+      const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
+      for (const [subIndex, sub] of splitChunkPerFile(chunk).entries()) {
+        const subLabel = sub.files[0]!;
+        const subKey = `${index}.${subIndex}`;
+        const subDerived = deriveChunkDiff(sub, subLabel);
+        if (!subDerived.ok) return { ok: false, failure: subDerived.failure };
+        const subDiffSha = diffSha(subDerived.diff);
+        const cached = readChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, diffSha: subDiffSha });
+        if (cached !== null) {
+          emit('review.chunk.reused', { chunk: subLabel, index: subKey });
+          subs.push({ label: subLabel, record: restamp(cached) });
+          continue;
+        }
+        const subOutcome = await reviewChunk(sub, subDerived, subLabel);
+        // A file that exhausts on its own has bottomed out — reported by
+        // `reviewChunk` with the file named, and NOT ground through the
+        // remaining files, which would buy nothing and cost a spawn each.
+        if (!subOutcome.ok) return { ok: false, failure: subOutcome.failure };
+        const at = writeChunkRecord(input.logsRoot, input.cycleId, subKey, { label: subLabel, diffSha: subDiffSha, headSha, record: subOutcome.record });
+        emit('review.chunk.persisted', { chunk: subLabel, index: subKey, path: at ?? '(not persisted — this file will be re-reviewed)' });
+        subs.push({ label: subLabel, record: subOutcome.record });
+      }
+      return { ok: true, record: mergeSplitRecords(subs) };
+    };
+
     const chunkRecords: Array<{ label: string; record: ReviewFindingsRecord }> = [];
     for (const [index, chunk] of chunks.entries()) {
       const label = chunkLabel(chunk);
+      const key = String(index);
 
-      // Bead 6.10.27: a chunk whose review already completed against THIS head
+      const derived = deriveChunkDiff(chunk, label);
+      if (!derived.ok) return derived.failure;
+      const chunkDiffSha = diffSha(derived.diff);
+
+      // Bead 6.10.27: a chunk whose review already completed against THIS DIFF
       // is not bought again. Every not-an-exact-match reads as a miss, so the
-      // worst case is the cost the review already had.
-      const reused = readChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha });
+      // worst case is the cost the review already had. Re-stamped, because the
+      // record carries the identity it was authored under.
+      const reused = readChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: chunkDiffSha });
       if (reused !== null) {
-        emit('review.chunk.reused', { chunk: label, index });
-        chunkRecords.push({ label, record: reused });
+        emit('review.chunk.reused', { chunk: label, index: key });
+        chunkRecords.push({ label, record: restamp(reused) });
         continue;
       }
 
-      let outcome = await reviewChunk(chunk);
+      // A chunk whose FIRST per-file record already exists was split against
+      // this diff, so the whole-work-item spawn has exactly one possible
+      // outcome — the exhaustion already recorded — at full price ($0.7594 on
+      // G2's second resume). Re-enter the split instead of re-deriving it.
+      const firstFile = chunk.files[0];
+      const firstSub = chunk.files.length > 1 && firstFile !== undefined
+        ? deriveChunkDiff({ workItemId: chunk.workItemId, files: [firstFile] }, firstFile)
+        : null;
+      const knownSplit =
+        firstSub !== null && firstSub.ok &&
+        readChunkRecord(input.logsRoot, input.cycleId, `${index}.0`, { label: firstFile!, diffSha: diffSha(firstSub.diff) }) !== null;
 
-      // Bead 6.10.26: the work item is the FIRST cut, not the only one. A budget
-      // kill on a multi-file chunk re-reviews that work item one FILE at a time
-      // — same criteria, same fence, narrower evidence — and merges the parts.
-      // Measured on G2: `WI-2` exhausted 50 turns on eight files while `WI-1`
-      // passed, so the work item's own size, not the reviewer, was the bound.
-      if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
-        const subChunks = splitChunkPerFile(chunk);
-        emit('review.chunk.split', { chunk: label, files: subChunks.length });
-        const subs: Array<{ label: string; record: ReviewFindingsRecord }> = [];
-        for (const sub of subChunks) {
-          const subLabel = sub.files[0]!;
-          const subOutcome = await reviewChunk(sub, subLabel);
-          // A file that exhausts on its own has bottomed out — reported by
-          // `reviewChunk` with the file named, and NOT ground through the
-          // remaining files, which would buy nothing and cost a spawn each.
-          if (!subOutcome.ok) return subOutcome.failure;
-          subs.push({ label: subLabel, record: subOutcome.record });
+      let outcome: { ok: true; record: ReviewFindingsRecord } | { ok: false; failure: AdversarialReviewResult };
+      if (knownSplit) {
+        emit('review.chunk.split', { chunk: label, files: chunk.files.length, reentered: true });
+        outcome = await reviewSplit(chunk, index);
+      } else {
+        outcome = await reviewChunk(chunk, derived);
+        // Bead 6.10.26: the work item is the FIRST cut, not the only one. A
+        // budget kill on a multi-file chunk re-reviews that work item one FILE
+        // at a time — same criteria, same fence, narrower evidence. Measured on
+        // G2: `WI-2` exhausted 50 turns on eight files while `WI-1` passed, so
+        // the work item's own size, not the reviewer, was the bound.
+        if (!outcome.ok && outcome.failure.status === 'failed' && outcome.failure.reason === 'budget-exhausted' && chunk.files.length > 1) {
+          emit('review.chunk.split', { chunk: label, files: chunk.files.length });
+          outcome = await reviewSplit(chunk, index);
         }
-        outcome = { ok: true, record: mergeSplitRecords(subs) };
       }
 
       if (!outcome.ok) return outcome.failure;
       // Persisted the moment it is finished, never at the end: the chunk AFTER
       // this one is exactly what might fail, and that is the case this exists
       // for.
-      const at = writeChunkRecord(input.logsRoot, input.cycleId, index, { label, headSha, record: outcome.record });
-      emit('review.chunk.persisted', { chunk: label, index, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
+      const at = writeChunkRecord(input.logsRoot, input.cycleId, key, { label, diffSha: chunkDiffSha, headSha, record: outcome.record });
+      emit('review.chunk.persisted', { chunk: label, index: key, path: at ?? '(not persisted — this chunk will be re-reviewed)' });
       chunkRecords.push({ label, record: outcome.record });
     }
 
@@ -583,9 +650,40 @@ export async function runAdversarialReview(
 // index that has come to mean something else is a MISS, not a wrong answer.
 // ---------------------------------------------------------------------------
 
-type StoredChunk = { label: string; headSha: string; record: ReviewFindingsRecord };
+type StoredChunk = {
+  label: string;
+  /** sha256 of the exact diff this chunk was reviewed FROM — the reuse key. */
+  diffSha: string;
+  /** The head it was first reviewed at. Provenance only: never the reuse key. */
+  headSha: string;
+  record: ReviewFindingsRecord;
+};
 
-const chunkSegments = (cycleId: string, index: number): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${index}.json`];
+/**
+ * The reuse key: what a review is a review OF.
+ *
+ * It was `headSha`, and G2 measured that wrong (ledger, 2026-09-06): the
+ * integrate band commits TWICE on every run — `chore(developer-loop): pre-review
+ * boundary snapshot` and `chore(demo): demo artifacts` — so the head differed on
+ * every attempt and every persisted record was rejected as stale by the guard
+ * that exists to stop a review of code nobody is merging. The store worked
+ * perfectly within one pass and was dead across the only boundary that matters.
+ *
+ * The diff is the honest key: a chunk whose diff is byte-identical has already
+ * been reviewed, whatever the orchestrator wrote to the branch since, and a
+ * chunk whose diff moved is refused exactly as before.
+ */
+function diffSha(diff: string): string {
+  return createHash('sha256').update(diff).digest('hex');
+}
+
+/**
+ * The key is built here from integers only — a chunk's ordinal, and for a
+ * split's part its parent's ordinal and its own (`"3.5"`). It is never
+ * caller-supplied, so it cannot carry a separator or a `..`; the guarded
+ * wrappers below still resolve every segment.
+ */
+const chunkSegments = (cycleId: string, key: string): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${key}.json`];
 
 /**
  * The persisted record for this chunk, or `null` — and `null` for EVERY reason
@@ -597,15 +695,15 @@ const chunkSegments = (cycleId: string, index: number): string[] => [cycleId, 'a
 export function readChunkRecord(
   logsRoot: string,
   cycleId: string,
-  index: number,
-  expect: { label: string; headSha: string },
+  key: string,
+  expect: { label: string; diffSha: string },
 ): ReviewFindingsRecord | null {
-  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, index));
+  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, key));
   if (raw === null) return null;
   try {
     const stored = JSON.parse(raw) as Partial<StoredChunk>;
-    if (stored.label !== expect.label || stored.headSha !== expect.headSha) return null;
-    if (stored.record === undefined || stored.record.headSha !== expect.headSha) return null;
+    if (stored.label !== expect.label || stored.diffSha !== expect.diffSha) return null;
+    if (stored.record === undefined) return null;
     return stored.record;
   } catch {
     return null;
@@ -615,8 +713,8 @@ export function readChunkRecord(
 /** Persist one finished chunk; the written path, or `null` if the guard refused
  *  or the write failed — a durable record must never break the review that
  *  produced it. */
-export function writeChunkRecord(logsRoot: string, cycleId: string, index: number, entry: StoredChunk): string | null {
-  return guardedWriteFile(logsRoot, chunkSegments(cycleId, index), JSON.stringify(entry, null, 2) + '\n');
+export function writeChunkRecord(logsRoot: string, cycleId: string, key: string, entry: StoredChunk): string | null {
+  return guardedWriteFile(logsRoot, chunkSegments(cycleId, key), JSON.stringify(entry, null, 2) + '\n');
 }
 
 function harvestFindings(
