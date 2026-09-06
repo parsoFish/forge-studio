@@ -449,6 +449,26 @@ function readSweepDeleteToken() {
  * `readToken` and `runGh` are injected so no test touches a real credential or
  * a real GitHub.
  */
+/**
+ * The RUNNER'S DOOR to the delete — bead `forge-8vfn.6.11.29`.
+ *
+ * `sweepStoryRemotes` was correct and unreachable: nothing called it, and
+ * nothing wrote the `created` manifest it needs, so its "refuse an unlisted
+ * repo" guard was proven against a list that could never hold anything. This
+ * reads the manifest the MINT now writes (`recordMintedRemote`, kernel) and
+ * hands it over. Tested through THIS function, not through `sweepStoryRemotes`,
+ * because "a manifest on disk becomes a delete" is the step that was missing.
+ */
+export function sweepStoryRemotesFromManifest({ storyId, root, readToken = readSweepDeleteToken, runGh = null }) {
+  let created = [];
+  try {
+    const raw = readFileSync(join(root, '_logs', 'minted-remotes.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) created = parsed;
+  } catch { /* no manifest = nothing this run minted = nothing to delete */ }
+  return sweepStoryRemotes({ storyId, created, readToken, runGh });
+}
+
 export function sweepStoryRemotes({ storyId, created = [], readToken = readSweepDeleteToken, runGh = null }) {
   const deleted = [];
   const refusals = [];
