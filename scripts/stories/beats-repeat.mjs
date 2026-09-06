@@ -49,6 +49,13 @@ export function handleFor(step) {
 const POLL_MS = 500;
 
 /**
+ * Playwright's word for "the element you were acting on left the DOM". Matched
+ * on the message rather than an error class because `run` hands back a string
+ * the step executor already formatted (`could not fill <handle>: …`).
+ */
+const DETACHED_RE = /detach/i;
+
+/**
  * Run one `repeat` step to its conclusion.
  *
  * @param {object} input
@@ -90,14 +97,36 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
       continue;
     }
 
-    const inner = await run(step.repeat, left());
-    if (inner.waitedForHandle) waitedForHandle = true;
-    if (inner.error !== null) {
+    // A ROUND IS SEVERAL ACTIONS LONG, AND THE PRODUCT CAN LEAVE THE INTERVIEW
+    // BETWEEN THEM (bead `forge-8vfn.6.11.38`, ruling 349). The inner steps are
+    // therefore run ONE AT A TIME with `until` re-read before each, instead of
+    // handing the whole array to `run` and checking once per round. S1 run 8's
+    // archive is the fixture: the session was at `awaiting-verdict, round 4`
+    // while the loop was still filling round 4's field, and the beat died 357 s
+    // later on a control that had correctly gone.
+    let interrupted = false;
+    for (const one of step.repeat) {
+      if (await isSatisfied()) { interrupted = true; break; }
+      const inner = await run([one], left());
+      if (inner.waitedForHandle) waitedForHandle = true;
+      if (inner.error === null) continue;
       // The product may have moved on mid-round — a control vanishing BECAUSE
       // the expectation is now met is a success, not a failure.
-      if (await isSatisfied()) break;
-      return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
+      if (await isSatisfied()) { interrupted = true; break; }
+      // A DETACHED control is the page moving under the loop, which is the very
+      // event `until` exists to notice — not a failure of this beat. `until` is
+      // a DOM read, so the product can have moved while the page is still
+      // re-rendering: give it a poll and re-read rather than reporting the
+      // symptom. Bounded by the beat's own declared wait, which the positive
+      // control below still reds on.
+      if (!DETACHED_RE.test(inner.error)) {
+        return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
+      }
+      await new Promise((r) => setTimeout(r, Math.min(POLL_MS, left())));
+      interrupted = true;
+      break;
     }
+    if (interrupted) continue;
     rounds += 1;
   }
 
