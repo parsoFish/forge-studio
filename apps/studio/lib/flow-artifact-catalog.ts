@@ -25,6 +25,25 @@ export type ArtifactDef = {
   desc: string;
 };
 
+/**
+ * What an edge is labelled when the operator leaves the picker without
+ * choosing (operator ruling 302: "'Leave unlabelled' REMOVED from the flow
+ * builder; the label defaults").
+ *
+ * It is the FIRST entry deliberately: this list is in the develop flow's own
+ * pipeline order, so the first artifact is the first one a flow produces. It
+ * is declared here, beside the list it comes from, and never as a literal at a
+ * use site — a default that lives in two places is a default that drifts.
+ *
+ * Chosen knowing how it fails: an edge from review → unifier that defaults to
+ * `PLAN.md` is semantically wrong and structurally VALID — it lints, it loads,
+ * and the operator can change it. What it replaces was an edge with no
+ * artifact at all, which `loadFlowDefinition` refuses, so the whole flow
+ * rendered `not-found` on the page the save redirected to. Wrong and visible
+ * beats invisible.
+ */
+export const DEFAULT_ARTIFACT_ID = 'plan';
+
 export const ARTIFACTS: ArtifactDef[] = [
   { id: 'plan', name: 'PLAN.md', desc: 'Approved plan: scope, ACs, decomposition.' },
   { id: 'work-items', name: 'work-items/*.md', desc: 'Self-contained work item specs.' },

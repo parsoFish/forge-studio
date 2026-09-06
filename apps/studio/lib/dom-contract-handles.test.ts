@@ -30,6 +30,7 @@ import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { ArtifactPicker } from '@/components/studio/flow-builder/ArtifactPicker';
+import { DEFAULT_ARTIFACT_ID } from '@/lib/flow-artifact-catalog';
 import { ProjectTabs } from '@/components/studio/project-builder/ProjectTabs';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -163,9 +164,27 @@ test('5.12.1: every artifact option is a declared ACT, not just a qualifier', ()
   expect(html).toContain('data-artifact-option="plan"');
 });
 
-test('5.12.1: leaving an edge unlabelled is a declared act too — the operator\'s other real answer', () => {
-  const html = render(ArtifactPicker, { anchorX: 100, anchorY: 100, onPick: () => {}, onClose: () => {} });
-  expect(html).toContain('data-action="leave-edge-unlabelled"');
+// INVERTED 2026-09-06 by operator ruling 302 ("'Leave unlabelled' REMOVED from
+// the flow builder; the label defaults"). 5.12.1 was right that the operator's
+// answer had to be a DECLARED act rather than a CSS selector; 302 removes the
+// answer itself, because it was the one answer that produced an unopenable
+// flow. `FlowBuilderCanvas.tsx`'s own comment records the chain: the save route
+// accepts an edge with no artifact (200 — `validateArtifactRef` is a
+// `forge studio lint`-only pass), `serializeFlowDefinition` writes
+// `edges: [{from, to}]`, `loadFlowDefinition` THROWS on the missing field,
+// `loadAllFlows` skips the unreadable flow, and `/flows/<id>` renders
+// `not-found` — the flow the operator just built, invisible on the page they
+// were redirected to.
+//
+// The contract still has something to say about this handle: that it must not
+// come back.
+test('302: the picker has NO unlabelled exit — every way out of it labels the edge', () => {
+  const html = render(ArtifactPicker, { anchorX: 100, anchorY: 100, onPick: () => {} });
+  expect(html).not.toContain('data-action="leave-edge-unlabelled"');
+  // And the default the dismissal paths apply is NAMED on screen, so an
+  // operator who presses Escape knows what they got. A default nobody can see
+  // is the same silence in a different costume.
+  expect(html).toContain(`data-artifact-default="${DEFAULT_ARTIFACT_ID}"`);
 });
 
 // ── forge-8vfn.6.11.9 — the project page's own tab bar ───────────────────────

@@ -1140,7 +1140,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   node and edge counts but never reach them. Each action carries its subject in
   its own name, per the rule above. The declared handles and the pointer acts
   share one implementation (`lib/flow-builder-acts` + `stationEdgeShape`), so an
-  edge drawn by press and an edge drawn by drag cannot come out different. The save button
+  edge drawn by press and an edge drawn by drag cannot come out different.
+  Drawing an edge — by either route — opens
+  `[data-component="artifact-picker"]`, whose options carry
+  `[data-artifact-option="<id>"]` and `[data-action="pick-artifact-<id>"]`.
+  **Amended 2026-09-06 (operator ruling 302): the picker has NO unlabelled
+  exit.** `[data-action="leave-edge-unlabelled"]` is REMOVED, and Escape and an
+  outside click apply `DEFAULT_ARTIFACT_ID`
+  (`apps/studio/lib/flow-artifact-catalog.ts`) rather than closing without a
+  label — the picker states which, on `[data-artifact-default="<id>"]`. The
+  removed affordance produced the one outcome `loadFlowDefinition` refuses: the
+  save route accepts an edge with no artifact (200 — `validateArtifactRef` is a
+  `forge studio lint`-only pass), `serializeFlowDefinition` writes
+  `edges: [{from, to}]`, the loader throws, `loadAllFlows` skips the flow, and
+  `/flows/<id>` renders `not-found` — the flow the operator just built,
+  invisible on the page the save redirected to. **Automation must not press a
+  handle that no longer exists**; a beat that wants a specific label presses
+  `pick-artifact-<id>`. The save button
   additionally carries **`[data-save-state="saving"|"idle"]`** (W7-B4 review
   finding 11) — the in-flight state used to be visible only as the button's
   `disabled` prop, so the `flows-author` journey guessed with a fixed
