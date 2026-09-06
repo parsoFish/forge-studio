@@ -48,6 +48,7 @@ import {
   sweepStoryResidue,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
+import { snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes } from './ground-hash.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
 import { driveBeat, resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -222,6 +223,12 @@ async function runStory(story, uiUrl, startedMs) {
   // OTHER worktree of this repo is snapshotted too; what grows in one is an
   // escape into a tree this run does not own.
   const siblingsBefore = snapshotSiblingWorktrees(ROOT);
+  // Bead `forge-8vfn.6.11.26` / §15.219 — the path fence above sees a whole
+  // GROUND appearing in a sibling tree, but not an edit inside one that was
+  // already there. S1 run 8 onboarded the operator's own `projects/gitweave`
+  // and the fence said nothing. The ground is hashed by METHOD C here and
+  // again after the run, which is what the launcher already did by hand.
+  const groundsBefore = snapshotSiblingGrounds(story.ground?.project ?? null, { root: ROOT });
   const outDir = join(ROOT, 'demos', 'stories', story.id);
   const framesDir = join(outDir, 'frames');
   const clipTmp = join(outDir, '_clip');
@@ -328,10 +335,12 @@ async function runStory(story, uiUrl, startedMs) {
     ROOT,
   );
   fence.escapes = siblingWorktreeEscapes(ROOT, siblingsBefore);
+  fence.groundEscapes = siblingGroundEscapes(story.ground?.project ?? null, groundsBefore, { root: ROOT });
   // Bead `forge-8vfn.6.12` (ruling 275) — a flow save legitimately materialises
   // starter agents into the roster, so the fence names those as EXPECTED while
   // still removing them; anything else is still an escape.
   for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
+  for (const line of describeGroundEscapes(story.ground?.project ?? null, fence.groundEscapes)) console.log(line);
 
   const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);
@@ -365,6 +374,18 @@ async function runStory(story, uiUrl, startedMs) {
   // process was working is named in full and is NOT fatal — attribution by
   // time window cannot tell a concurrent lane's own writes from this run's,
   // and a funded run must not go red on a reading nobody can make.
+  // A named ground in a tree this run does not own is not somewhere another
+  // lane is incidentally working — it is the operator's copy of the very repo
+  // this run was told to leave alone. Ruling 340's live-process softening does
+  // NOT apply to it, deliberately: this is RED regardless of the beats.
+  if (fence.groundEscapes.length > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — projects/${story.ground?.project} CHANGED in ` +
+      `${fence.groundEscapes.length} worktree(s) this run does not own (files named above). ` +
+      'The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
   const unowned = unownedEscapes(fence.escapes);
   const escaped = unowned.reduce((n, e) => n + e.paths.length, 0);
   if (escaped > 0) {
