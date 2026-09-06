@@ -396,13 +396,27 @@ export default {
       // measured turn, three in another — so a fixed number of `fill` steps
       // cannot answer a variable round.
       act: 'Open the session again and answer the Architect\'s questions about the project',
+      //
+      // AMENDED 2026-09-06 (T1 rulings 312/317, operator-confirmed). One
+      // submit assumed a SINGLE interview round. The architect decides how many
+      // it needs — `bridge-studio-architect.ts:380` increments `round` and
+      // spawns another turn on every submission, and the product has no ceiling
+      // (bead `forge-8vfn.6.10.28`). So `repeat` answers until the phase leaves
+      // the interview, bounded by this beat's own declared wait. S2 may well
+      // draft on round one, because `story-s2`'s idea is genuinely new; that is
+      // a property of THIS GROUND, not of the beat, and a beat must not depend
+      // on it — S4 run 4 measured what that costs.
       do: [
         { press: 'open-session' },
         {
-          fillAll: 'question-freetext',
-          with: 'The gate command is `npm test`. The timings come from the build tool\'s own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive.',
+          repeat: [
+            {
+              fillAll: 'question-freetext',
+              with: 'The gate command is `npm test`. The timings come from the build tool\'s own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive.',
+            },
+            { press: 'submit-answers' },
+          ],
         },
-        { press: 'submit-answers' },
       ],
       // AMENDED 2026-09-05 (ruling 200's mechanical class, per T1 ruling 222).
       // A `wait` field changes no expectation and no act — it names the bound

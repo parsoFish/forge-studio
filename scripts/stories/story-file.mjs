@@ -58,8 +58,25 @@ function validateDoSteps(raw, at) {
       // this one control".
       const isFillAll = Object.hasOwn(step, 'fillAll');
       const isPress = Object.hasOwn(step, 'press');
-      if ([isFill, isFillAll, isPress].filter(Boolean).length !== 1) {
-        fail(where, `expected exactly one of {fill, with}, {fillAll, with} or {press}, got ${JSON.stringify(step)}`);
+      // `repeat` — §3.1, T1 rulings 312/317. Its inner steps are validated by
+      // the SAME rules (one action per step, no nesting), so a typo inside a
+      // repeat is named at authoring time exactly like one outside it. The
+      // architect decides how many interview rounds it needs, so a fixed number
+      // of submit steps is wrong in both directions: too few never reaches the
+      // draft, and too many press a control that exists only while the session
+      // awaits answers.
+      const isRepeat = Object.hasOwn(step, 'repeat');
+      if ([isFill, isFillAll, isPress, isRepeat].filter(Boolean).length !== 1) {
+        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press} or {repeat}, got ${JSON.stringify(step)}`);
+      }
+      if (isRepeat) {
+        if (!Array.isArray(step.repeat) || step.repeat.length === 0) {
+          fail(`${where}.repeat`, `expected a non-empty array of steps, got ${JSON.stringify(step.repeat)}`);
+        }
+        if (step.repeat.some((inner) => inner !== null && typeof inner === 'object' && Object.hasOwn(inner, 'repeat'))) {
+          fail(`${where}.repeat`, 'a repeat cannot nest another repeat');
+        }
+        return Object.freeze({ repeat: validateDoSteps(step.repeat, where) });
       }
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);

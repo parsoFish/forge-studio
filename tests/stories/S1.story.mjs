@@ -80,6 +80,16 @@ const IDEA =
 /** This run's ceiling, in dollars — the same figure the ground declares. */
 const CEILING = '25';
 
+/**
+ * What the operator tells the architect when it interviews. It names a scope
+ * and a constraint — an answer, not a restatement of the idea — because the
+ * architect asks what to build, and S4 run 4 measured what happens when the
+ * reply is a constraint alone: the architect asks again.
+ */
+const ANSWER =
+  'Keep it to the onboarding path only — no changes to the existing scan commands. ' +
+  'The quality gate stays `python -m pytest tests/`, and the human-readable output must not change.';
+
 export default {
   id: 'S1',
   ground: { project: 'gitweave', realSpawn: true, budget_usd: 25 },
@@ -330,10 +340,10 @@ export default {
       // `SessionMinted`'s anchor — the way in that only exists once a session
       // has been created (`SessionMinted.tsx:19`, "No id, no element").
       //
-      // Beat 8 keeps its route and reds with a PRODUCT owner. The fix is the
-      // one `OnboardWithAgent` already ships: publish the minted id under a
-      // distinctly-named key (`data-onboard-session-id`) that no page root
-      // shadows. Bead raised to T1.
+      // Beat 8's fix SHIPPED (PR #490, bead `forge-8vfn.6.11.26`): the minted
+      // id is published on `DemoTimeline`'s own root as `data-demo-session-id`,
+      // the same rule `OnboardWithAgent` already followed. This beat binds it
+      // below, which is what lets beat 8 reach its route at all.
       act: 'Select the demo stage and hand it to the demo builder — the heavy one',
       do: [{ press: 'select-stage-demo' }, { press: 'launch-demo-builder' }],
       expect: {
@@ -341,6 +351,15 @@ export default {
         data: {
           'stage-detail-stage': 'demo',
           action: 'view-demo-session',
+          // AMENDED 2026-09-06 (T1 rulings 306/312, operator-confirmed). The
+          // minted demo session id, published on `DemoTimeline`'s own root by
+          // PR #490 under the DOM contract's own rule — a surface that starts a
+          // session publishes the id on its own root, under a key no page root
+          // shadows. Beat 8's `/sessions/demo/<demoSessionId>` could not be
+          // reached before this: `SessionMinted`'s generic `data-session-id` is
+          // shadowed by the ONBOARDING session page's root, so the key answered
+          // with the wrong session and the segment stayed unbound.
+          'demo-session-id': '<demoSessionId>',
         },
       },
       say: 'Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.',
@@ -381,7 +400,7 @@ export default {
       // expressible only when the navigation is a step too —
       // `[data-action="back-to-project"]` renders on every session shell in
       // every phase (W7-A2), so it is.
-      act: 'Return to the project, apply the auto-fixable clauses and record a decision on the ones that need your judgement',
+      act: 'Return to the project and record a decision on the clause that needs the operator\'s judgement',
       // AMENDED 2026-09-05 (operator ruling 214 (a)+(b), T1 ruling 217), and
       // BOTH halves were defects no run could see until run 3 reached this
       // beat for the first time.
@@ -415,9 +434,40 @@ export default {
       // TOGETHER, which is why they sit in one beat (ruling 217, branch (ii)),
       // and `section: 'contract-resolution'` is named so a future zero cannot
       // silently revert this beat to §15.175's trap.
+      //
+      // ── AMENDED 2026-09-06 (T1 ruling 306, operator-confirmed: "measure it,
+      // don't choose it"). RE-MEASURED against what onboarding leaves TODAY,
+      // and two things moved. Full working:
+      // `_1.0/evidence/m5-b-S1-beat9-measurement.md`.
+      //
+      // (c) `apply-preflight-auto` IS REMOVED, because there is nothing left
+      // for it to apply. The AUTO tier is EMPTY after onboarding — measured
+      // `auto: []`, and run 5's ground diff is exactly `.gitignore` (+5, the
+      // forge-scratch block C2 wants) and `CLAUDE.md` (the C1 gate command),
+      // i.e. the onboarding agent now performs those edits itself.
+      // `ContractResolutionPanel` renders that control only while an auto-tier
+      // clause fails, so run 5 waited its whole 200 000 ms bound for a control
+      // the product is CORRECT not to render. The beat was asserting a path
+      // the product no longer takes (§15.204) — not a product bug, and not a
+      // consequence of the `6.11.26` escape, which is its own defect.
+      //
+      // (d) THE COUNTS MOVE 3/0/3 → 2/0/2. State B (what onboarding leaves) is
+      // `ok: true`, failing 3 = C1b + DEMO-SKILL + DEMO-ALIGN, tiers auto 0 /
+      // agent 2 / user 1. The C1b decision clears C1b — `checkC1b` passes iff
+      // `testProcess.ci` is declared, which is exactly what the fix writes — so
+      // state C is failing 2 / user 0 / agent 2. C8 is no longer among them:
+      // onboarding now writes the gate command into `CLAUDE.md` itself.
+      // Two is still non-zero, so `:180`'s `if (failing.length === 0) return
+      // null` keeps the section mounted and §15.175's trap stays shut.
+      //
+      // `flow-ready: 'true'` and `ready-count: '5'` are measured too, and the
+      // reason matters: all five `uiChecks` pass because onboarding binds
+      // `skills: ['demo-design']`. Session 5 recorded that "the onboarding
+      // agent never binds a skill" and that `flow-ready: true` was therefore
+      // unreachable on gitweave — that finding is now STALE, superseded by
+      // this measurement rather than left standing.
       do: [
         { press: 'back-to-project' },
-        { press: 'apply-preflight-auto' },
         {
           fill: 'clause-decision-C1b',
           with: "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command.",
@@ -454,9 +504,10 @@ export default {
           'preflight-status': 'ok',
           'flow-ready': 'true',
           section: 'contract-resolution',
-          'resolution-failing-count': '3',
+          'ready-count': '5',
+          'resolution-failing-count': '2',
           'resolution-user-count': '0',
-          'resolution-agent-count': '3',
+          'resolution-agent-count': '2',
         },
       },
       say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
@@ -519,7 +570,28 @@ export default {
       // bound, so the walk in is a declared step like the other two. Three
       // presses, three surfaces, all named by the product.
       act: 'Open the session, read the plan and press Approve',
-      do: [{ press: 'view-architect-session' }, { press: 'open-plan' }, { press: 'approve-plan' }],
+      // AMENDED 2026-09-06 (T1 rulings 312/317, operator-confirmed). THE
+      // ARCHITECT INTERVIEWS BEFORE IT PLANS, and it decides how many ROUNDS it
+      // needs — `bridge-studio-architect.ts:380` writes `{ phase:
+      // 'interviewing', round: round + 1 }` and spawns another turn on every
+      // submission, with no ceiling anywhere in the product (bead
+      // `forge-8vfn.6.10.28`). Measured on S4 run 4: `round: 2` with one round
+      // of answers recorded, red at `awaiting-answers` after the full bound.
+      //
+      // So `repeat` answers rounds UNTIL the phase leaves the interview,
+      // bounded by this beat's own declared wait — never a fixed count, which
+      // is wrong in BOTH directions: too few never reaches the draft, and too
+      // many press `submit-answers`, which exists only while the session awaits
+      // answers (`studio/session-kinds.yaml:88` is the only row declaring
+      // `awaits: questions`), so the surplus press reds on a control that is
+      // correctly gone.
+      do: [
+        { press: 'view-architect-session' },
+        { repeat: [{ fillAll: 'question-freetext', with: ANSWER }, { press: 'submit-answers' }] },
+        { press: 'open-plan' },
+        { press: 'approve-plan' },
+      ],
+      wait: { for: 'agent', upTo: 600_000 },
       expect: {
         route: '/artifact',
         data: {
