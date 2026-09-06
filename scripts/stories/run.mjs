@@ -32,6 +32,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
+import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
 import { memoryVerdict, readAvailableMb, acquireHostLock } from './preflight.mjs';
 import {
@@ -95,6 +96,7 @@ function storyFiles() {
 }
 
 async function main() {
+  stampEveryLine();
   const args = parseArgs(process.argv.slice(2));
   // Stamped before anything runs: the reaper only claims sessions THIS run
   // created, so a previous run's residue is never signalled (reap.mjs header).
@@ -236,7 +238,11 @@ async function runStory(story, uiUrl, startedMs) {
   mkdirSync(framesDir, { recursive: true });
   mkdirSync(clipTmp, { recursive: true });
 
-  console.log(`\n[stories] ${story.id} — ${story.docs.title}`);
+  // The blank separator is its own line so the story's title carries a stamp:
+  // a leading `\n` inside the string puts the stamp before the break and the
+  // line the reader sees starts unstamped (measured on the s11 smoke run).
+  console.log('');
+  console.log(`[stories] ${story.id} — ${story.docs.title}`);
 
   const browser = await chromium.launch();
   const context = await browser.newContext({

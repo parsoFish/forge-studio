@@ -330,3 +330,154 @@ test('6.11.38: a NON-detached inner failure still reds, naming its round — det
   assert.match(r.error, /repeat, round 1:/);
   assert.match(r.error, /disabled/);
 });
+
+// ── 6.11.41: ONE ACT MUST NOT BE ABLE TO SPEND THE WHOLE BEAT (T1 ruling 362)
+//
+// THE MEASUREMENT, from S2 run 9's captured ground (#516's first live capture).
+// `questions.json` mtime `23:00:19.132Z`; the product's own
+// `interview round 2 — 2 question(s) for the operator` event `23:00:19.134Z` —
+// two milliseconds later. So the questions were WRITTEN on time. Through the
+// whole gap the runner's `watchControlState` reported
+// `[data-field="question-freetext"]: present and enabled`, so they were
+// RENDERED too. `answers.json` mtime `23:08:00.399Z`: **7 m 41 s** later, all
+// of it inside the runner's own act, on a page that had answered round 1 in
+// 2.2 s.
+//
+// THE DEFECT. `fillAll` handed `left()` — the beat's WHOLE remaining bound — to
+// each individual `.fill()`. A box that is momentarily unfillable therefore
+// consumed the entire beat instead of failing fast and returning to
+// `runRepeatStep`, which re-reads `until` and tries again. The repeat loop's
+// whole design, defeated one layer below it.
+//
+// WHY A BOX GOES MISSING MID-ACT, which is not hypothetical: `n` is counted
+// once, `.nth(k)` is resolved per iteration, and the page's own poll is 3000 ms
+// — so the loop can count a still-displayed round-1 form (three boxes) and then
+// reach for `nth(2)` in the round-2 form that replaced it (two boxes). The fake
+// below models exactly that lag.
+//
+// THE BOUND IS STILL NOT NEW (`6.11.22`, ruling 267): the BEAT's declared wait
+// is unchanged and is still the only spend. What changes is that one ACT inside
+// a repeat may not eat it — the repeat is the retry, so a failed act is cheap.
+// A one-shot act keeps `left()`, because there is no loop to return to and
+// `6.11.6` (S1 beat 9's `apply-clause-decision`, disabled while the product
+// applies auto-fixes one clause at a time) needs that patience.
+
+/**
+ * A fake interview whose FORM LAGS THE ROUND by one read — the 3000 ms page
+ * poll, modelled. `count()` answers the previous round's box count once after
+ * each submit, then the true one; `nth(k).fill` for an index the form does not
+ * have waits out its own timeout and throws, exactly as Playwright does.
+ *
+ * Every selector it is asked for is recorded, so a test can ask WHICH element
+ * the control-state watcher was inspecting while the act ran.
+ */
+function laggingFormPage({ boxesPerRound, roundsBeforeDraft, neverFillable = false }) {
+  const state = { round: 1, phase: 'awaiting-answers', filled: [], submits: 0, stale: true, seen: [], fillsThisRound: 0 };
+  const boxes = () => boxesPerRound[Math.min(state.round, boxesPerRound.length) - 1];
+  const staleBoxes = () => boxesPerRound[Math.max(0, Math.min(state.round, boxesPerRound.length) - 2)];
+  const answering = () => state.phase === 'awaiting-answers';
+
+  return {
+    state,
+    locator(sel) {
+      state.seen.push(sel);
+      const base = sel.replace(/ >> nth=\d+$/, '');
+      const pinned = / >> nth=(\d+)$/.exec(sel);
+      const isBox = base.includes('question-freetext');
+      const isSubmit = base.includes('submit-answers');
+      const visible = () => {
+        if (!isBox && !isSubmit) return 1;
+        if (!answering()) return 0;
+        if (!isBox) return 1;
+        // The form the operator can SEE lags the round: until the page's own
+        // poll lands, the previous round's boxes are still on screen. The poll
+        // is modelled as landing once this round's real boxes have been filled,
+        // which is exactly when the surplus index is reached.
+        return state.stale ? staleBoxes() : boxes();
+      };
+      const fillAt = async (k, v, opts) => {
+        if (!neverFillable && k < visible()) {
+          state.filled.push(v);
+          state.fillsThisRound += 1;
+          if (state.fillsThisRound >= boxes()) state.stale = false;
+          return;
+        }
+        // Absent at that index: Playwright waits, then throws on its own bound.
+        await new Promise((r) => setTimeout(r, opts?.timeout ?? 0));
+        throw new Error(`locator.fill: Timeout ${opts?.timeout ?? 0}ms exceeded.`);
+      };
+      const clickIt = async () => {
+        if (visible() === 0) throw new Error('no element carries that handle');
+        if (!isSubmit) return;
+        state.submits += 1;
+        state.round += 1;
+        state.stale = true;
+        state.fillsThisRound = 0;
+        state.phase = state.submits >= roundsBeforeDraft ? 'awaiting-verdict' : 'awaiting-answers';
+      };
+      return {
+        count: async () => (pinned ? (Number(pinned[1]) < visible() ? 1 : 0) : visible()),
+        nth: (k) => ({ fill: (v, opts) => fillAt(k, v, opts) }),
+        waitFor: async () => { if (visible() === 0) throw new Error('not present'); },
+        first: () => ({
+          waitFor: async () => { if (visible() === 0) throw new Error('not present'); },
+          click: clickIt,
+          fill: (v, opts) => fillAt(pinned ? Number(pinned[1]) : 0, v, opts),
+          evaluate: async (fn) => fn({ disabled: false, readOnly: false, getAttribute: () => null }),
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+}
+
+test('6.11.41 (RED): a box that vanishes mid-act costs a poll, not the beat — the repeat retries and the interview finishes', async () => {
+  // Round 1 renders three boxes, round 2 renders two; the form lags one read.
+  // Kills the implementation that hands `left()` to each `.fill()`: there, the
+  // act on the third box of a two-box form waits out the WHOLE declared bound
+  // and the beat reds naming a Playwright timeout instead of answering.
+  const page = laggingFormPage({ boxesPerRound: [3, 2, 2], roundsBeforeDraft: 3 });
+  const started = Date.now();
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
+  const elapsed = Date.now() - started;
+
+  assert.equal(r.error, null, `expected the interview to finish, got: ${r.error}`);
+  assert.equal(page.state.phase, 'awaiting-verdict');
+  assert.equal(page.state.submits, 3);
+  assert.ok(elapsed < 10000, `a vanished box must cost a poll, not the beat — spent ${elapsed} ms of 20000`);
+});
+
+test('6.11.41: a box that is NEVER fillable still reds on the beat\'s own declared wait, naming `until`', async () => {
+  // The NEGATIVE CONTROL for the case above, and it passes before the fix as
+  // well as after — said plainly, because a control that only ever agrees is
+  // worth nothing unless what it guards is named. What it guards is the fix
+  // OVER-rotating: failing one act fast must not turn a real dead end into a
+  // fast anonymous error. The beat's declared bound is still the whole spend,
+  // and the message must stay the repeat's own — how many rounds it answered
+  // and what it was waiting for — not a Playwright timeout from one act.
+  const page = laggingFormPage({
+    boxesPerRound: [1],
+    roundsBeforeDraft: Number.POSITIVE_INFINITY,
+    neverFillable: true,
+  });
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1500, matcher(page));
+
+  assert.notEqual(r.error, null);
+  assert.match(r.error, /answered 0 round\(s\)/);
+  assert.match(r.error, /1500 ms/, 'the red names the BEAT\'s declared bound, not one act\'s');
+  assert.match(r.error, /session-phase/, 'the red names the `until` it was waiting for');
+});
+
+test('6.11.41 (RED): the control-state watcher inspects the BOX THE ACT IS ON, not box 0', async () => {
+  // `controlState` reads `page.locator(handle).first()` while `fillAll` acts on
+  // `.nth(k)`. So for 7 m 41 s the log truthfully said box 0 was "present and
+  // enabled" while the act was stuck on a box that was not there — the watcher
+  // and the act holding two notions of one thing, the class `handleFor` exists
+  // to prevent one layer up.
+  const page = laggingFormPage({ boxesPerRound: [2], roundsBeforeDraft: 1 });
+  await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
+
+  const pinned = page.state.seen.filter((s) => / >> nth=\d+$/.test(s) && s.includes('question-freetext'));
+  assert.ok(pinned.length > 0, 'the watcher never pinned an index — it is still describing box 0');
+  assert.ok(pinned.some((s) => s.endsWith('>> nth=1')), `no watch on the second box: ${JSON.stringify(pinned)}`);
+});

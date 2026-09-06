@@ -49,6 +49,28 @@ export function handleFor(step) {
 const POLL_MS = 500;
 
 /**
+ * How long ONE act inside a repeat may wait before it hands control back.
+ *
+ * Bead `forge-8vfn.6.11.41`, T1 ruling 362, measured on S2 run 9's captured
+ * ground: `questions.json` was written 2 ms BEFORE the product announced it and
+ * the box was `present and enabled` throughout, yet **7 m 41 s** passed before
+ * the answer landed — all of it inside a single `.fill()` that had been handed
+ * `left()`, the beat's whole remaining bound.
+ *
+ * THIS INVENTS NO CEILING (`6.11.22`, ruling 267). The beat's declared wait is
+ * still the only spend; this only says that ONE act may not eat it, because
+ * the loop above IS the retry — a failed act returns here, `until` is re-read,
+ * and the next attempt costs another poll rather than the beat. Set to the poll
+ * interval's order for exactly that reason: the cost of being wrong once.
+ *
+ * It applies INSIDE A REPEAT ONLY. A one-shot act keeps `left()`: there is no
+ * loop to return to, and `6.11.6` — S1 beat 9's `apply-clause-decision`, which
+ * is disabled while the product applies auto-fixes one clause at a time —
+ * needs precisely that patience.
+ */
+export const ACT_BOUND_MS = 1000;
+
+/**
  * Playwright's word for "the element you were acting on left the DOM". Matched
  * on the message rather than an error class because `run` hands back a string
  * the step executor already formatted (`could not fill <handle>: …`).
@@ -107,7 +129,7 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
     let interrupted = false;
     for (const one of step.repeat) {
       if (await isSatisfied()) { interrupted = true; break; }
-      const inner = await run([one], left());
+      const inner = await run([one], left(), ACT_BOUND_MS);
       if (inner.waitedForHandle) waitedForHandle = true;
       if (inner.error === null) continue;
       // The product may have moved on mid-round — a control vanishing BECAUSE
