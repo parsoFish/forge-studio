@@ -72,15 +72,25 @@ test('AT-6.11.2-1 (RED) with `remote` asked for, the creation path runs gh and r
         create: true,
         runGh: (args: string[]) => {
           calls.push(args);
-          if (args[0] === 'auth') return 'Logged in to github.com';
+          // The identity gate (6.11.35) replaced `auth status`: it reads the
+          // owner's token, then asks WHO that token is.
+          if (args[0] === 'auth') return 'gho_fixture_token';
+          if (args[0] === 'api') return 'parsoFish';
           return 'https://github.com/parsoFish/story-remote-fixture';
         },
       },
     } as never) as never as { remoteUrl?: string; projectDir: string };
 
     assert.equal(res.remoteUrl, 'https://github.com/parsoFish/story-remote-fixture');
-    assert.deepEqual(calls[0], ['auth', 'status'], 'auth is checked BEFORE anything outward-facing');
-    const create = calls[1];
+    // AMENDED for bead `forge-8vfn.6.11.35`. The old contract was `auth status`
+    // FIRST — "is anyone logged in". That question passed throughout S2 run 6,
+    // the run it failed to catch, because the active account WAS logged in; it
+    // was an Enterprise Managed User that cannot create a repository outside
+    // its enterprise at all. The contract is now IDENTITY, and it is asked
+    // BEFORE the scaffold rather than after it.
+    assert.deepEqual(calls[0], ['auth', 'token', '--user', 'parsoFish'], 'the OWNER\'s token is what gets pinned');
+    assert.deepEqual(calls[1], ['api', 'user', '--jq', '.login'], 'and the identity it names is what gets checked');
+    const create = calls[2];
     assert.equal(create[0], 'repo');
     assert.equal(create[1], 'create');
     assert.match(create[2], /^parsoFish\/story-remote-fixture$/, `account/name from constants: ${create[2]}`);
@@ -92,7 +102,7 @@ test('AT-6.11.2-1 (RED) with `remote` asked for, the creation path runs gh and r
   }
 });
 
-test('AT-6.11.2-2 (RED) gh auth absent FAILS LOUD naming gh, and creates NO remote', () => {
+test('AT-6.11.2-2 (RED) no token for the owner FAILS LOUD naming gh, and creates NO remote', () => {
   const root = plantRoot();
   const calls: string[][] = [];
   try {
@@ -111,7 +121,42 @@ test('AT-6.11.2-2 (RED) gh auth absent FAILS LOUD naming gh, and creates NO remo
       } as never),
       /gh/i,
     );
-    assert.deepEqual(calls.map((c) => c[0]), ['auth'], 'it stopped at auth — no repo was created');
+    assert.deepEqual(calls.map((c) => c[0]), ['auth'], 'it stopped at the token read — no repo was created');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-6.11.35 the identity MISMATCH — the run this bead exists for — stops before ANY file is written', () => {
+  const root = plantRoot();
+  const calls: string[][] = [];
+  try {
+    assert.throws(
+      () => scaffoldGreenfieldProject({
+        manifest: manifest as never,
+        forgeRoot: root,
+        remote: {
+          create: true,
+          runGh: (args: string[]) => {
+            calls.push(args);
+            if (args[0] === 'auth') return 'gho_fixture_token';
+            // The host's token belongs to somebody else — S2 run 6's shape.
+            if (args[0] === 'api') return 'david-parsonson_isuctm';
+            return 'https://github.com/parsoFish/story-remote-fixture';
+          },
+        },
+      } as never),
+      (err: unknown) => {
+        const m = err instanceof Error ? err.message : '';
+        return m.includes('parsoFish') && m.includes('david-parsonson_isuctm');
+      },
+      'the mismatch names the owner asked for AND the login actually held',
+    );
+    assert.deepEqual(calls.map((c) => c[0]), ['auth', 'api'], 'it never reached `repo create`');
+    // The POINT of moving the gate before the scaffold: no committed project is
+    // left behind for the operator to find after being told the create failed.
+    assert.equal(existsSync(join(root, 'projects', 'story-remote-fixture')), false, 'nothing was written');
+    assert.equal(existsSync(join(root, 'brain', 'projects', 'story-remote-fixture')), false, 'not even the brain seed');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

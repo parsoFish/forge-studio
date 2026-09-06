@@ -325,6 +325,8 @@ packages/flows/worktree.ts rmSync 1
 packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
 packages/kernel/config.ts readFileSync 2
+packages/kernel/gh-identity.ts exec 3
+packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1
@@ -549,7 +551,7 @@ packages/projects/project-contract-scaffold.ts existsSync 8
 packages/projects/project-contract-scaffold.ts mkdirSync 1
 packages/projects/project-contract-scaffold.ts realpathSync 3
 packages/projects/project-contract-scaffold.ts writeFileSync 4
-packages/projects/project-create.ts execFileSync 4
+packages/projects/project-create.ts execFileSync 3
 packages/projects/project-create.ts existsSync 1
 packages/projects/project-create.ts lstatSync 2
 packages/projects/project-create.ts mkdirSync 2

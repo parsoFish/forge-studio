@@ -90,7 +90,10 @@ test('6.11.27: the CREATE ROUTE mints a remote — the path the operator takes, 
     const { handleProjectsCreate } = makeOnboardHandlers({
       runGh: (args: string[]) => {
         ghCalls.push(args);
-        return args[0] === 'auth' ? 'Logged in to github.com' : '';
+        // 6.11.35: the gate reads the OWNER's token, then asks who it is.
+        if (args[0] === 'auth') return 'gho_fixture_token';
+        if (args[0] === 'api') return 'parsoFish';
+        return '';
       },
     } as never);
     const { res, captured } = mockRes();

@@ -33,7 +33,18 @@ export type ForgeConfig = {
      * `checkC6` requires `git remote get-url origin` to name a github.com
      * remote, and a project that is its own repo from birth has none.
      */
-    remote?: { create?: boolean };
+    remote?: {
+      create?: boolean;
+      /**
+       * WHICH GitHub account forge mints under, and therefore which token every
+       * outward `gh` call is pinned to (bead `forge-8vfn.6.11.35`). Named in
+       * config rather than compiled in, because acting under an identity the
+       * operator did not name is exactly the failure this closes: S2 run 6
+       * minted nothing because the host's ACTIVE account was an Enterprise
+       * Managed User, and nothing asked whether that account was the one meant.
+       */
+      owner?: string;
+    };
   };
   /** Scheduler tuning. Currently only `maxConcurrentInitiatives` is honoured. */
   scheduler?: {
