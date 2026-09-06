@@ -41,7 +41,7 @@ import { dirname, join, resolve } from 'node:path';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import { isReservedId } from '@forge/agents/skill-path.ts';
-import { projectStartersDir, listProjectStarters, resolveGuardedPath } from '@forge/kernel';
+import { projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote } from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -270,6 +270,7 @@ function mintRemote(
   projectsRoot: string,
   id: string,
   remote: { account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string },
+  forgeRoot?: string,
 ): string {
   const runGh =
     remote.runGh ??
@@ -300,7 +301,13 @@ function mintRemote(
     ['repo', 'create', `${account}/${id}`, visibility, '--source', projectDir, '--remote', 'origin', '--push'],
     projectDir,
   );
-  return String(out).trim().split('\n').filter(Boolean).pop() ?? `https://github.com/${account}/${id}`;
+  const url = String(out).trim().split('\n').filter(Boolean).pop() ?? `https://github.com/${account}/${id}`;
+  // Bead `forge-8vfn.6.11.29` — record it at MINT time. The sweep's delete has
+  // always required this manifest and nothing ever wrote one, so its guard ran
+  // against a permanently empty list. Recorded even if the sweep never runs: a
+  // remote nobody wrote down is a remote nobody can clean up.
+  if (forgeRoot !== undefined) recordMintedRemote(forgeRoot, `${account}/${id}`);
+  return url;
 }
 
 export function scaffoldGreenfieldProject(input: {
@@ -468,7 +475,7 @@ export function scaffoldGreenfieldProject(input: {
   // above deletes a staged directory and CANNOT delete a GitHub repository
   // (that needs an operator token this lane does not hold), so a remote minted
   // before a local failure would be an orphan nobody here can remove.
-  const remoteUrl = input.remote?.create === true ? mintRemote(projectsRoot, id, input.remote) : undefined;
+  const remoteUrl = input.remote?.create === true ? mintRemote(projectsRoot, id, input.remote, input.forgeRoot) : undefined;
 
   return {
     id,

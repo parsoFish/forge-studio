@@ -341,8 +341,11 @@ packages/kernel/path-guard.ts readFileSync 1
 packages/kernel/path-guard.ts realpathSync 2
 packages/kernel/path-guard.ts renameSync 1
 packages/kernel/path-guard.ts writeFileSync 1
-packages/kernel/project-layout.ts existsSync 1
+packages/kernel/project-layout.ts existsSync 2
+packages/kernel/project-layout.ts mkdirSync 1
 packages/kernel/project-layout.ts readdirSync 1
+packages/kernel/project-layout.ts readFileSync 1
+packages/kernel/project-layout.ts writeFileSync 1
 packages/kernel/studio-object.ts readFileSync 2
 packages/kernel/studio/yaml-fields.ts readFileSync 1
 packages/knowledge/brain-fix-auto.ts execFileSync 2

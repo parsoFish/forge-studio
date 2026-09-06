@@ -45,6 +45,7 @@ import {
   removePaths,
   sweepProductFixtures,
   sweepStoryResidue,
+  sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
 import { driveBeat, resolveBeatRoute } from './beats.mjs';
@@ -311,6 +312,13 @@ async function runStory(story, uiUrl, startedMs) {
   // `brain/projects/story-<id>` and a saved flow behind every run.
   const sweep = sweepProductFixtures(story.id, ROOT);
   for (const p of sweep.removed) console.log(`[stories] trailing sweep removed ${p}`);
+  // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
+  // GitHub remotes this run minted. Unreached until now, so every run that
+  // minted one leaked it.
+  const remotes = sweepStoryRemotesFromManifest({ storyId: story.id, root: ROOT });
+  for (const r of remotes.deleted) console.log(`[stories] trailing sweep DELETED remote ${r}`);
+  for (const r of remotes.refusals) console.warn(`[stories] ${r}`);
+  for (const f of remotes.failed) console.warn(`[stories] could not delete remote ${f.nameWithOwner ?? f}: ${f.error ?? ''}`);
   for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
 
   // And the fence, over everything the product wrote that carries no story id.

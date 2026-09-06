@@ -15,8 +15,8 @@
  * it is the door, kernel is the owner.
  */
 
-import { readdirSync, existsSync } from 'node:fs';
-import { join, resolve, relative, sep, isAbsolute } from 'node:path';
+import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve, relative, sep, isAbsolute, dirname } from 'node:path';
 
 import { PROJECT_ID_RE } from './ids.ts';
 import { resolveProjectsDir } from './config.ts';
@@ -123,6 +123,46 @@ export function projectBrainDir(forgeRoot: string, projectName: string): string 
 /** Brain 3 (project) — a managed project's theme dir, central (ADR 035). */
 export function projectThemesDir(forgeRoot: string, projectName: string): string {
   return resolve(projectBrainDir(forgeRoot, projectName), 'themes');
+}
+
+/**
+ * Where a run records the GitHub remotes it MINTED — bead `forge-8vfn.6.11.29`.
+ *
+ * `sweepStoryRemotes` has always required a creation manifest as its first of
+ * two independent conditions, and **nothing ever wrote one**, so its `created`
+ * list was permanently empty: the guard that refuses an unlisted repo was being
+ * proven against a list that could not contain anything. Both the caller AND
+ * its only real input were missing (`6.11.2`, reopened).
+ *
+ * The path lives here because two packages must agree on it — `packages/projects`
+ * writes it at mint time, `scripts/stories` reads it at the trailing sweep — and
+ * a second definition is how they would come to disagree.
+ */
+export function mintedRemotesManifestPath(forgeRoot: string): string {
+  return resolve(forgeRoot, '_logs', 'minted-remotes.json');
+}
+
+/**
+ * Append one `owner/repo` to that manifest.
+ *
+ * It lives beside the path rather than in the package that writes it because
+ * the file's SHAPE is a contract between two packages — `packages/projects`
+ * appends, `scripts/stories` reads — and a second implementation of the append
+ * is how the two would come to disagree about it.
+ *
+ * Never throws: a project creation must not fail because its bookkeeping did.
+ * The failure is not silent in the way that matters — an unrecorded remote is
+ * one the sweep then REFUSES to delete, which is the safe direction.
+ */
+export function recordMintedRemote(forgeRoot: string, nameWithOwner: string): void {
+  try {
+    const path = mintedRemotesManifestPath(forgeRoot);
+    mkdirSync(dirname(path), { recursive: true });
+    const prior = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as unknown) : [];
+    const rows = Array.isArray(prior) ? prior : [];
+    rows.push({ nameWithOwner, at: new Date().toISOString() });
+    writeFileSync(path, `${JSON.stringify(rows, null, 2)}\n`);
+  } catch { /* bookkeeping only — see the docstring */ }
 }
 
 /**
