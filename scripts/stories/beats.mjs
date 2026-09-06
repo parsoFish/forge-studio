@@ -3,6 +3,7 @@ import {
   LIFECYCLE_STALLED, waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
+import { watchControlState } from './beats-control-state.mjs';
 
 /**
  * beats.mjs — judging one story beat.
@@ -564,6 +565,13 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
       };
     }
 
+    // Bead `forge-8vfn.6.11.30` (ruling 330) — say what the control IS while the
+    // act waits, at the first poll and on every change. `describeControl` below
+    // already computed this and printed it only after the bound expired: S2 run
+    // 4, S1 run 6 and S1 run 7 each spent 461-515 s on a control that was
+    // disabled the whole time, then said so. The information was never missing;
+    // the timing was.
+    const stopWatch = watchControlState(page, handle, (line) => console.log(line));
     try {
       if (fillsAll) {
         // Every match, or a red naming the field. ZERO is never a silent pass:
@@ -603,6 +611,8 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
           `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
           `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`,
       };
+    } finally {
+      stopWatch();
     }
   }
   return { waitedForHandle, error: null };
