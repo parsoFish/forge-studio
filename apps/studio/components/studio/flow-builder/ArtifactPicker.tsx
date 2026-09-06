@@ -4,7 +4,14 @@
  * ArtifactPicker — popover shown immediately after edge creation, by BOTH the
  * port→port drag and the declared `connect-into-<station>` handle
  * (`forge-8vfn.5.12.1`). Lists the known artifact types; picking one sets the
- * edge's artifact label. "Leave unlabelled" closes without setting one.
+ * edge's artifact label.
+ *
+ * **There is no unlabelled exit** (operator ruling 302). A pick, Escape and an
+ * outside click all label the edge; the last two apply `DEFAULT_ARTIFACT_ID`,
+ * which the picker names on screen so the operator knows what dismissing gives
+ * them. The affordance that used to close without a label produced the one
+ * outcome `loadFlowDefinition` refuses — see `FlowBuilderCanvas.tsx`'s note on
+ * the same chain.
  *
  * Every option declares a `data-action` beside its `data-artifact-option`, so
  * the choice is reachable through forge-ui's declared contract rather than by
@@ -15,30 +22,29 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
+import { ARTIFACTS, DEFAULT_ARTIFACT_ID } from '@/lib/flow-artifact-catalog';
 
 type Props = {
   /** Screen position to anchor the popover near */
   anchorX: number;
   anchorY: number;
-  /** Called with the chosen artifact id, or null for "leave unlabelled" */
-  onPick: (artifactId: string | null) => void;
-  /** Called when the picker should close without a pick */
-  onClose: () => void;
+  /** The edge's label. Every exit calls this — dismissal with `DEFAULT_ARTIFACT_ID`. */
+  onPick: (artifactId: string) => void;
 };
 
-export function ArtifactPicker({ anchorX, anchorY, onPick, onClose }: Props): JSX.Element {
+export function ArtifactPicker({ anchorX, anchorY, onPick }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  // Dismissal is an ANSWER, not an escape hatch (ruling 302): an outside click
+  // and Escape both label the edge with the default rather than leaving it bare.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
+        onPick(DEFAULT_ARTIFACT_ID);
       }
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onPick(DEFAULT_ARTIFACT_ID);
     }
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKey);
@@ -46,13 +52,14 @@ export function ArtifactPicker({ anchorX, anchorY, onPick, onClose }: Props): JS
       document.removeEventListener('mousedown', handleClick);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [onClose]);
+  }, [onPick]);
 
   // Adjust position so the picker stays in viewport
   const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1200;
   const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
   const PICKER_W = 240;
   const PICKER_H = 340;
+  const defaultName = ARTIFACTS.find((a) => a.id === DEFAULT_ARTIFACT_ID)?.name ?? DEFAULT_ARTIFACT_ID;
   const left = Math.min(anchorX, viewportW - PICKER_W - 16);
   const top = anchorY + PICKER_H > viewportH ? anchorY - PICKER_H : anchorY;
 
@@ -136,23 +143,12 @@ export function ArtifactPicker({ anchorX, anchorY, onPick, onClose }: Props): JS
         ))}
       </div>
 
-      <div style={{ padding: '4px 10px 10px', fontSize: 11.5, color: 'var(--faint)', fontStyle: 'italic' }}>
-        Or{' '}
-        <button
-          onClick={() => onPick(null)}
-          data-action="leave-edge-unlabelled"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--steel)',
-            cursor: 'pointer',
-            fontSize: 11.5,
-            padding: 0,
-            textDecoration: 'underline',
-          }}
-        >
-          leave unlabelled
-        </button>
+      {/* The default is STATED, because dismissing the picker now applies it. */}
+      <div
+        data-artifact-default={DEFAULT_ARTIFACT_ID}
+        style={{ padding: '4px 10px 10px', fontSize: 11.5, color: 'var(--faint)', fontStyle: 'italic' }}
+      >
+        Esc, or a click outside, labels it {defaultName}.
       </div>
     </div>
   );

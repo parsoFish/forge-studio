@@ -21,7 +21,7 @@ import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ARTIFACTS, type ArtifactDef } from './flow-artifact-catalog.ts';
+import { ARTIFACTS, DEFAULT_ARTIFACT_ID, type ArtifactDef } from './flow-artifact-catalog.ts';
 
 // Walk up from this test file (forge-ui/lib/) to the repo root (two levels:
 // forge-ui/lib -> forge-ui -> repo root), then into studio/artifact-templates/.
@@ -77,4 +77,24 @@ test('AT-53: the known orphans ("reflection", "demo", "demo-fix-spec") are gone 
   // the template described an artifact nothing writes any more.
   expect(ids).not.toContain('demo-fix-spec');
   expect(ARTIFACTS.length).toBe(7);
+});
+
+/**
+ * Operator ruling 302: dismissing the ArtifactPicker now LABELS the edge with
+ * `DEFAULT_ARTIFACT_ID` instead of leaving it bare. That makes the default
+ * load-bearing in a way it was not before — every edge the operator dismisses
+ * carries it into `flow.yaml`.
+ *
+ * So it must name a real template. If it drifted to an id with no template on
+ * disk, every dismissed edge would author a flow that `forge studio lint`
+ * refuses (`artifact/no-template`, R2-05-F1) — the failure this file's main
+ * assertion exists to prevent for the LIST, reaching the flow builder through
+ * a single value instead.
+ */
+test('302: the picker\'s default artifact is a real catalog entry, and therefore a real on-disk template', () => {
+  expect(ARTIFACTS.map((a: ArtifactDef) => a.id)).toContain(DEFAULT_ARTIFACT_ID);
+});
+
+test('302: the default is the FIRST entry — the catalog is in pipeline order, so the default is the first artifact a flow produces', () => {
+  expect(ARTIFACTS[0]?.id).toBe(DEFAULT_ARTIFACT_ID);
 });
