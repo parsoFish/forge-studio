@@ -1,5 +1,9 @@
 # ADR 010 — Brain-first research
 
+**Amended-by:** [ADR 035](./035-forge-owned-central-artifacts.md) (2026-06-20) — the Brain 3 read-policy paths move to `brain/projects/<name>/themes/`.
+
+**Amended-by:** [ADR 037](./037-compiled-wi-contracts.md) (2026-07-11) — this ADR's *enforcement mechanism* changes (not its policy): the deterministic compiler stage at the PM seam closes the brain-encoding gap.
+
 **Status:** Amended 2026-05-16 — brain-first is **narrowed to the
 planner/architect and reflector**; the dev-loop and reviewer
 deliberately do NOT read the brain (their intent is wholly in the
@@ -123,4 +127,4 @@ Full rationale: `brain/cycles/themes/brain-read-policy.md`.
 - [Karpathy LLM-wiki gist](https://gist.github.com/karpathy/) — the philosophy
 - ADR 027 §4 (as amended 2026-08-09) — the `band?:` qualifier shape on `{kind: flow}` bindings
 - ADR 018 / ADR 035 — the prior scoping-only amendment chain this entry is the first to deliberately break
-- `docs/roadmaps/R1-contract-componentry.md` R1-06 — the initiative carrying this amendment; operator decision 3 (2026-08-03) — ingest stays reflection-only
+- `docs/roadmaps/archive/R1-contract-componentry.md` R1-06 — the initiative carrying this amendment; operator decision 3 (2026-08-03) — ingest stays reflection-only

@@ -7,7 +7,7 @@
  * part of a split is bought exactly once (6.10.27, `forge-6fvw`).
  *
  * The pipeline itself is `adversarial-review.test.ts`; the fixture both drive is
- * `adversarial-review-fixture.test.ts`.
+ * `../test-fixtures/adversarial-review-fixture.ts`.
  */
 
 import assert from 'node:assert/strict';
@@ -21,7 +21,7 @@ import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import {
   CRITERION, CYCLE_ID, EXPECTED, collectLogger, makeFixture, run, validFindingsJson,
   withoutSpawnSuppressionEnv, type Fixture,
-} from './adversarial-review-fixture.test.ts';
+} from '../test-fixtures/adversarial-review-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Bead forge-8vfn.6.10.26 — a work item too large for ONE review pass is

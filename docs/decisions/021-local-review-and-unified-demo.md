@@ -1,5 +1,7 @@
 # ADR 021 — Local in-UI review + a unified structured demo
 
+**Amended-by:** [ADR 036](./036-orchestrator-owned-gate-execution.md) (2026-06-26) — who *runs* the gates changes; the in-UI review surface and unified artifact stand.
+
 - **Status:** accepted
 - **Date:** 2026-05-30
 - **Supersedes / amends:** amends the "PR-as-feedback-surface" position of the

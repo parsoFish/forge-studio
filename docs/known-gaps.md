@@ -95,7 +95,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    post-refinement cycle evidence before committing. — *superseded 2026-07-17
    (R5-07-F6):* this question (collapse architect+PM into one phase) is
    superseded by the **Q2-B architect/plan split** (`docs/roadmaps/README.md`
-   §1; `docs/roadmaps/R4-ootb-suite.md` R4-04) — the roadmap direction adds a
+   §1; `docs/roadmaps/archive/R4-ootb-suite.md` R4-04) — the roadmap direction adds a
    **new plan agent alongside** the architect rather than collapsing the two;
    architect-flow retirement is a separate, deferred future initiative
    (R4-D1).
@@ -227,7 +227,7 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    agent `composition.skills`), the ONE creation entry point
    (`[data-action="new-skill"]`, D8), and a marketplace draft→scan→approve→
    re-review install pipeline (`orchestrator/studio/skill-library.ts`,
-   `packages/library/bridge-studio-skills.ts` — see `docs/roadmaps/R3-library-componentry.md`
+   `packages/library/bridge-studio-skills.ts` — see `docs/roadmaps/archive/R3-library-componentry.md`
    baseline R3-B8). (Item 11 above — UI-created skills invisible to the catalog
    palette — was already resolved as of R3-01-F2.) **NOT closed by this:** a
    surface to EDIT an existing local skill's SKILL.md body — `/skills/[id]` is
@@ -469,7 +469,7 @@ can pick them up:
 R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred / to-watch:
 
 - **F3 (`/skills` library view) + F4 (marketplace install) — CLOSED 2026-08-04**, per the operator's §4b.1
-  design session (the studio-endstate-v2 mockup). See `docs/roadmaps/R3-library-componentry.md` baseline
+  design session (the studio-endstate-v2 mockup). See `docs/roadmaps/archive/R3-library-componentry.md` baseline
   **R3-B8** for the as-built detail. Carried forward, NOT closed: no edit surface for an existing local
   skill's body (§4b.8 stays open — `/skills/[id]` is read-only).
 - **The physical `skills/` role-subfolder move (§6) precondition is now met** — the shared

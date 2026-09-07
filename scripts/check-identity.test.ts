@@ -122,20 +122,29 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
       'docs/superpowers/specs/blueprint.md': 'the ideas machine\n',
       'docs/roadmaps/1.0.md': 'the unifier is retired\n',
       'docs/roadmaps/1.0-kickoffs.md': 'the unifier is retired\n',
-      'docs/roadmaps/R4-ootb-suite.md': 'the unifier\n',
+      'docs/roadmaps/archive/R4-ootb-suite.md': 'the unifier\n',
+      'docs/roadmaps/archive/README.md': 'the unifier\n',
+      // M6 archived R1-R8: the RECORD is docs/roadmaps/archive/README.md, and
+      // docs/roadmaps/README.md is now a current-state index. Both are asserted,
+      // so the exclusion cannot silently widen back over the live index.
       'docs/roadmaps/README.md': 'the unifier\n',
       'docs/roadmaps/2.0.md': 'the unifier\n',
     },
     (r) => {
       assert.equal(r.code, 1, r.out);
       assert.match(r.out, /docs\/roadmaps\/2\.0\.md/, `a new roadmap doc must be policed:\n${r.out}`);
+      assert.match(
+        r.out,
+        /docs\/roadmaps\/README\.md/,
+        `the live roadmap index is current-state prose and must be policed:\n${r.out}`,
+      );
       for (const excluded of [
         'docs/decisions/024-x.md',
         'docs/superpowers/specs/blueprint.md',
         'docs/roadmaps/1.0.md',
         'docs/roadmaps/1.0-kickoffs.md',
-        'docs/roadmaps/R4-ootb-suite.md',
-        'docs/roadmaps/README.md',
+        'docs/roadmaps/archive/R4-ootb-suite.md',
+        'docs/roadmaps/archive/README.md',
       ]) {
         assert.doesNotMatch(
           r.out,

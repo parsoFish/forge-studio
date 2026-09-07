@@ -1,5 +1,7 @@
 # ADR 003 — All "agents" are Claude Code skills
 
+**Amended-by:** [ADR 024](./024-phases-as-subagents-invoking-skills.md) (2026-05-31) — 024 *refines* this decision: a phase is an agent that composes skills, so `SKILL.md` becomes the runtime prompt rather than the whole agent.
+
 **Status:** Accepted (scaffold)
 **Date:** 2026-04-24
 

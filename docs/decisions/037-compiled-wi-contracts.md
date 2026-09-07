@@ -11,7 +11,7 @@ Phase 3, item 3.1.
 
 ## 2026-07-18 amendment (R4-05-F3): accepted at the plan-agent seam
 
-ADR-037 is **Accepted**. It lives at the **plan-agent seam** ([R4-05](../roadmaps/R4-ootb-suite.md)
+ADR-037 is **Accepted**. It lives at the **plan-agent seam** ([R4-05](../roadmaps/archive/R4-ootb-suite.md)
 evolves the `project-manager` skill into forge's plan agent): the deterministic
 compile stage runs inside the plan agent's `runOnePmPass` post-agent pipeline,
 after the agent returns and before `validateWorkItemSet`/`detectHiddenCoupling`.
