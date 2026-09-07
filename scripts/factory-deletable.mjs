@@ -34,7 +34,7 @@
  * has uncommitted changes, because a scratch worktree of HEAD would silently
  * prove the WRONG tree deletable.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 import { createFactorylessWorktree, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
@@ -132,11 +132,39 @@ try {
     if (body.service !== 'forge-bridge') fail(`/api/health served ${JSON.stringify(body.service)}, not forge-bridge`);
     console.log(`factory-deletable: live — the bridge booted at ${bridge.url} and serves /api/health as forge-bridge.`);
 
-    const example = await fetch(`${bridge.url}/api/review-comments/TEST-no-example`);
-    if (example.status !== 501) {
-      fail(`an example-owned route answered ${example.status}; absence must be a SUPPORTED state (501), never a crash or a wrong answer`);
+    // THE SURVIVAL PROBE (T1 ruling 485). This used to assert that an
+    // example-owned route answers 501. That subject moved: the review-comment
+    // store is platform code now, so it answers 200 with the example deleted,
+    // and no route 501s any more.
+    //
+    // What replaced it is a stronger reading of the same clause. `/api/reflect/
+    // <id>/answer` fires the reflector rerun, which IS the example's work, and
+    // with no example installed this exact request used to end the process:
+    // the route sends its 200 first, `example()` threw synchronously past it,
+    // and the outer catch tried to send a 500 on an answered response —
+    // ERR_HTTP_HEADERS_SENT. "Absence is a supported state, never a crash and
+    // never a wrong answer" is therefore proven by SURVIVING the request rather
+    // than by a status code: the platform answers, the example's part is
+    // skipped on the record, and the bridge is still there afterwards.
+    const cycleId = 'FACTORY-DELETABLE-probe';
+    mkdirSync(join(scratch, '_logs', cycleId), { recursive: true });
+    writeFileSync(join(scratch, '_logs', cycleId, 'events.jsonl'), '');
+    const answered = await fetch(`${bridge.url}/api/reflect/${cycleId}/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', origin: bridge.url },
+      body: JSON.stringify({ freeform: 'factory-deletable probe' }),
+    });
+    if (answered.status !== 200) {
+      fail(`the reflect-answer route answered ${answered.status} with no example installed; capture is the platform's own bookkeeping and must proceed`);
     }
-    console.log('factory-deletable: live — an example-owned route answers 501, not 500 and not an answer.');
+    const stillAlive = await fetch(`${bridge.url}/api/health`);
+    if (!stillAlive.ok) fail('the bridge stopped answering after a request that reaches the example — absence must not be fatal');
+
+    const events = readFileSync(join(scratch, '_logs', cycleId, 'events.jsonl'), 'utf8');
+    if (!events.includes('bridge.reflect-rerun-skipped-no-example')) {
+      fail('the skipped rerun left no record — a skip nothing reports is indistinguishable from a rerun that silently did nothing');
+    }
+    console.log('factory-deletable: live — the example\'s work is SKIPPED ON THE RECORD, the route still answers 200, and the bridge survives.');
   } finally {
     await bridge.close();
   }

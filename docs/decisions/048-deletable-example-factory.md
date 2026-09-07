@@ -54,7 +54,7 @@ clause 2, and it is what M5-A exit row 5 closes.
    decision rather than an accident. `scripts/factory-deletable.mjs` holds the list and fails on any importer outside it.
 3. **The clause is proven by execution.** `scripts/factory-deletable.mjs` builds a THROWAWAY `git worktree` of HEAD without
    `packages/factory` and without a workspace link to it, and boots the bridge from THAT tree, asserting `/api/health`
-   answers as `forge-bridge` and that an example-owned route answers **501** — absence as a supported state, never a crash and never a wrong answer. It fails if the boot fails, and it
+   answers as `forge-bridge` and that, **with no example installed, example-owned hooks are not bound; the bridge survives any request that would have used one and `/api/health` still answers** — absence as a supported state, never a crash and never a wrong answer. It fails if the boot fails, and it
    fails if any production file outside the seam set acquires a factory import. It is paid for, under the guardrail budget
    (1.0.md §2.3), by the retirement of the `demo-fix` loop in the same milestone.
 

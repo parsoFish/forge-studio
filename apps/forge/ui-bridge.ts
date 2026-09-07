@@ -81,12 +81,13 @@ import {
   type ReleaseFinalizeHookInput,
 } from '@forge/flows/bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
+import { bindReleaseFinalize, fireReflectorRerun } from './example-hooks.ts';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
-import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { EventLogEntry } from '@forge/kernel';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
@@ -97,8 +98,9 @@ import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
 import {
-  NO_EXAMPLE_INSTALLED, installedExample as example, peekInstalledFactory,
-  resolveInstalledFactory, reviewCommentsBinding as rc, type InstalledFactory } from './factory-wiring.ts';
+  installedExample as example, peekInstalledFactory,
+  resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
+import * as rc from '@forge/flows/review-comments.ts';
 
 
 
@@ -229,12 +231,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
-  const runReleaseFinalizeFn =
-    opts.runReleaseFinalize ??
-    (async (input: ReleaseFinalizeHookInput): Promise<{ release_status: string }> => {
-      const logger = createLogger(input.cycleId, logsRoot);
-      return example().runReleaseFinalize(input, logger);
-    });
+  // Bound only when an example is installed — `example-hooks.ts` owns that
+  // decision and its header carries the reasoning (ADR 048, rulings 485/488).
+  const runReleaseFinalizeFn = bindReleaseFinalize(opts.runReleaseFinalize, logsRoot);
   // D — auto-rerun the reflector on operator feedback. Default delegates to the
   // real helper; the POST handler + startup reconcile both call this.
   const rerunReflectorFn: RerunReflectorFn =
@@ -780,8 +779,13 @@ type HttpContext = {
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
-  /** WS-A — finalise the release on the PR branch before merge (opt-in; log-and-continue). */
-  runReleaseFinalize: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
+  /**
+   * WS-A — finalise the release on the PR branch before merge (opt-in;
+   * log-and-continue). OPTIONAL, and the `?` is the ADR 048 statement (ruling
+   * 485): a required field could only be satisfied by a function that throws
+   * when the example is absent, and that throw was being swallowed.
+   */
+  runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
   rerunReflector: RerunReflectorFn;
 };
@@ -899,17 +903,17 @@ function isAcShape(v: unknown): boolean {
 async function withReviewCommentLock(
   logsRoot: string,
   cycleId: string,
-  mutate: (sidecar: ReturnType<typeof rc.read>) => ReturnType<typeof rc.read>,
-): Promise<ReturnType<typeof rc.read>> {
-  // Ensure the sidecar exists so proper-lockfile has a target (rc.write
+  mutate: (sidecar: rc.ReviewCommentsSidecar) => rc.ReviewCommentsSidecar,
+): Promise<rc.ReviewCommentsSidecar> {
+  // Ensure the sidecar exists so proper-lockfile has a target (rc.writeReviewComments
   // throws on a traversal cycleId — that propagates as a 500, never a write).
-  if (!existsSync(rc.path(logsRoot, cycleId))) {
-    rc.write(logsRoot, cycleId, { cycleId, comments: [] });
+  if (!existsSync(rc.reviewCommentsPath(logsRoot, cycleId))) {
+    rc.writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
   }
-  const release = await lockfile.lock(rc.path(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  const release = await lockfile.lock(rc.reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
   try {
-    const next = mutate(rc.read(logsRoot, cycleId));
-    rc.write(logsRoot, cycleId, next);
+    const next = mutate(rc.readReviewComments(logsRoot, cycleId));
+    rc.writeReviewComments(logsRoot, cycleId, next);
     return next;
   } finally {
     try { await release(); } catch { /* ignore */ }
@@ -1612,14 +1616,13 @@ async function handleHttp(
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
   // read-modify-write is atomic per cycle). Verdict derivation is over the set:
   // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
-  // ADR 048 clause 2: the sidecar is the EXAMPLE's surface — 501 once, ahead of
-  // the whole group, rather than each handler discovering it separately.
-  if (url.startsWith('/api/review-comments/') && peekInstalledFactory() === null) { sendJson(res, 501, { error: NO_EXAMPLE_INSTALLED }, origin); return; }
+  // The store is platform code (`@forge/flows/review-comments.ts`), so these
+  // routes answer with or without the example — this stopped being its surface.
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
-    const sidecar = rc.read(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.verdict(sidecar.comments) }, origin);
+    const sidecar = rc.readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.deriveVerdictFromComments(sidecar.comments) }, origin);
     return;
   }
   // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
@@ -1637,9 +1640,9 @@ async function handleHttp(
       if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
       if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.edit(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+        rc.editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
       );
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1651,8 +1654,8 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.remove(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1664,8 +1667,8 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolve(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1678,18 +1681,18 @@ async function handleHttp(
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
       const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
-      if (rc.read(ctx.logsRoot, cycleId).comments.length >= rc.max) {
-        sendJson(res, 409, { error: `review-comment cap reached (${rc.max}) for this cycle` }, origin);
+      if (rc.readReviewComments(ctx.logsRoot, cycleId).comments.length >= rc.REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${rc.REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
         return;
       }
       const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.append(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+        rc.appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
       );
       sendJson(res, 200, {
         ...result,
         comment: result.comments[result.comments.length - 1],
-        derivedVerdict: rc.verdict(result.comments),
+        derivedVerdict: rc.deriveVerdictFromComments(result.comments),
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -2180,36 +2183,19 @@ async function handleReflect(
       if (!isDryBridge()) {
         // D — auto-rerun the reflector so the feedback is distilled into retro.md +
         // brain themes. Detached (don't block the HTTP response on a full reflector
-        // pass), but observable: success AND failure emit an event into the cycle's
+        // pass), but observable: fired, skipped or failed, it emits into the cycle's
         // events.jsonl (not console), so a lost rerun is visible and the startup
         // reconcile can recover it. The UI owns reflection without the CLI.
-        const reflectLogger = createLogger(cycleId, ctx.logsRoot);
-        ctx
-          .rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot })
-          .then(() =>
-            reflectLogger.emit({
-              initiative_id: cycleId,
-              phase: 'reflection',
-              skill: 'bridge',
-              event_type: 'log',
-              input_refs: [join(dir, 'user-feedback.md')],
-              output_refs: [],
-              message: 'bridge.reflect-rerun-fired',
-              metadata: { trigger: 'feedback-submit' },
-            }),
-          )
-          .catch((err) =>
-            reflectLogger.emit({
-              initiative_id: cycleId,
-              phase: 'reflection',
-              skill: 'bridge',
-              event_type: 'log',
-              input_refs: [],
-              output_refs: [],
-              message: 'bridge.reflect-rerun-failed',
-              metadata: { error: String(err) },
-            }),
-          );
+        //
+        // Absence of the example, and a synchronous throw from the rerun, are both
+        // `example-hooks.ts`'s to handle — its header carries the measured incident.
+        fireReflectorRerun({
+          rerunReflector: ctx.rerunReflector,
+          cycleId,
+          logsRoot: ctx.logsRoot,
+          queueRoot: ctx.queueRoot,
+          feedbackPath: join(dir, 'user-feedback.md'),
+        });
       }
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);

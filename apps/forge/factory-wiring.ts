@@ -40,8 +40,6 @@ export type InstalledFactory = {
   isChangeClass(value: string): boolean;
   /** The band pipeline: the one read-only review agent (spec §5 item 5). */
   runAdversarialReview: typeof import('@forge/factory/phases/adversarial-review.ts')['runAdversarialReview'];
-  /** The review-comment store behind `/api/review-comments/*`. */
-  readonly reviewComments: typeof import('@forge/factory/review-comments.ts');
   /** The release-finalize phase behind the verdict hook. */
   runReleaseFinalize: typeof import('@forge/factory/phases/release-finalize.ts')['runReleaseFinalize'];
   /** Feedback reconciliation at bridge boot. */
@@ -75,14 +73,13 @@ export function isFactoryNotInstalled(err: unknown): boolean {
 export async function resolveInstalledFactory(): Promise<InstalledFactory | null> {
   if (resolved !== undefined) return resolved;
   try {
-    const [executorTable, executorDeps, reflector, classProfiles, review, reviewComments, releaseFinalize, reflectReconcile, reflectorRerun] =
+    const [executorTable, executorDeps, reflector, classProfiles, review, releaseFinalize, reflectReconcile, reflectorRerun] =
       await Promise.all([
         import('@forge/factory/phases/executor-table.ts'),
         import('@forge/factory/phases/executor-deps.ts'),
         import('@forge/factory/phases/reflector.ts'),
         import('@forge/factory/class-profiles.ts'),
         import('@forge/factory/phases/adversarial-review.ts'),
-        import('@forge/factory/review-comments.ts'),
         import('@forge/factory/phases/release-finalize.ts'),
         import('@forge/factory/reflect-reconcile.ts'),
         import('@forge/factory/reflector-rerun.ts'),
@@ -100,7 +97,6 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
       },
       isChangeClass: (value: string) => classProfiles.isChangeClass(value),
       runAdversarialReview: review.runAdversarialReview,
-      reviewComments,
       runReleaseFinalize: releaseFinalize.runReleaseFinalize,
       reconcileReflectFeedback: reflectReconcile.reconcileReflectFeedback,
       rerunReflector: reflectorRerun.rerunReflector,
@@ -143,24 +139,6 @@ export function installedExample(): InstalledFactory {
   if (!resolved) throw new Error(NO_EXAMPLE_INSTALLED);
   return resolved;
 }
-
-/**
- * The review-comment sidecar, bound. These live in the seam rather than at the
- * bridge because the seam is where the assembly names the example — the bridge
- * only calls them.
- */
-export const reviewCommentsBinding = {
-  read: (logsRoot: string, cycleId: string) => installedExample().reviewComments.readReviewComments(logsRoot, cycleId),
-  write: (logsRoot: string, cycleId: string, sidecar: ReturnType<InstalledFactory['reviewComments']['readReviewComments']>) =>
-    installedExample().reviewComments.writeReviewComments(logsRoot, cycleId, sidecar),
-  append: (...a: Parameters<InstalledFactory['reviewComments']['appendReviewComment']>) => installedExample().reviewComments.appendReviewComment(...a),
-  resolve: (...a: Parameters<InstalledFactory['reviewComments']['resolveComment']>) => installedExample().reviewComments.resolveComment(...a),
-  edit: (...a: Parameters<InstalledFactory['reviewComments']['editComment']>) => installedExample().reviewComments.editComment(...a),
-  remove: (...a: Parameters<InstalledFactory['reviewComments']['deleteComment']>) => installedExample().reviewComments.deleteComment(...a),
-  verdict: (...a: Parameters<InstalledFactory['reviewComments']['deriveVerdictFromComments']>) => installedExample().reviewComments.deriveVerdictFromComments(...a),
-  path: (logsRoot: string, cycleId: string) => installedExample().reviewComments.reviewCommentsPath(logsRoot, cycleId),
-  get max(): number { return installedExample().reviewComments.REVIEW_COMMENTS_MAX; },
-} as const;
 
 /**
  * The example, or a loud exit. For CLI verbs that ARE the example's: with none
