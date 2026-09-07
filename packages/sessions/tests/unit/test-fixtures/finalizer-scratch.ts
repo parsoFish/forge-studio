@@ -50,7 +50,7 @@ import { copyStagingToLibrary } from '../../../interactive-finalizers.ts';
  * *before* invoking the finalizer and byte-compares it *after*, so a
  * rejection is proven to be containment, not an accidental miss (the
  * "counter-proof" discipline already established in
- * packages/kernel/path-guard.test.ts SEC-04 P1 etc.). Every symlink/hardlink
+ * packages/kernel/tests/unit/path-guard.test.ts SEC-04 P1 etc.). Every symlink/hardlink
  * fixture asserts its own precondition (lstat/nlink) before reading the
  * verdict, and skips cleanly via `t.skip` if the platform cannot create the
  * link — never silently passes.

@@ -19,7 +19,7 @@
  * The seam pinned here:
  *   - the shared mapping, now `packages/kernel/provenance.ts` (moved from
  *     `cli/studio-provenance.ts` with QUARRY:76; its own cases live in
- *     `packages/kernel/provenance.test.ts`):
+ *     `packages/kernel/tests/unit/provenance.test.ts`):
  *       export type Provenance = 'ootb' | 'operator' | 'unknown';
  *       export function provenanceOfOrigin(origin?: string | null): Provenance;
  *       export const AGENT_PROVENANCE: Provenance;   // 'unknown'
@@ -290,7 +290,7 @@ test('AT-2 n/a-invariant: unstamped kb + agent + project report the literal "unk
 // that drifts (derive-status-dont-store-it rule 2).
 // ---------------------------------------------------------------------------
 
-// AT-3a — the pure mapping cases — moved to `packages/kernel/provenance.test.ts`
+// AT-3a — the pure mapping cases — moved to `packages/kernel/tests/unit/provenance.test.ts`
 // with the module itself (QUARRY:76). They never needed the bridge this file
 // boots, and a kernel module's own test belongs beside it. AT-3b/AT-3c below
 // stay: their subject is that the two CONSUMERS use the shared mapping rather

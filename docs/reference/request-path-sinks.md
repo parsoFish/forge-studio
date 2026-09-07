@@ -202,7 +202,7 @@ write path with none of a rename's atomicity. Its `renameSync` call takes
 (`scripts/request-path-sinks.baseline.txt`, `packages/kernel/path-guard.ts
 renameSync 1` — the ratchet flagged it on introduction, in the PR that
 introduced it, which is the ratchet working). Pinned by 13 containment cases in
-`packages/kernel/path-guard-rename.test.ts`, every one written RED first:
+`packages/kernel/tests/unit/path-guard-rename.test.ts`, every one written RED first:
 `..` on each side, an absolute-shaped segment on each side, a symlinked source
 dir, a symlinked destination parent, a symlinked intermediate on each side, a
 dangling destination leaf, the clobber refusal with a source-survives
@@ -1049,7 +1049,7 @@ every one of these sites resolves a path from a **slug-validated** id —
 over 100 characters before a join happens — and the walk sites take a
 **directory** argument that is composed from a fixed root, never from request
 bytes. `assertSkillSlug` itself moved to `@forge/kernel/ids.ts` in the same PR;
-`packages/kernel/ids.test.ts` pins which shapes it rejects, so the move cannot
+`packages/kernel/tests/unit/ids.test.ts` pins which shapes it rejects, so the move cannot
 quietly widen it.
 
 ### R4-23 — `loadSkillTurnPrompt`'s `readFileSync` (`orchestrator/skill-path.ts`)
