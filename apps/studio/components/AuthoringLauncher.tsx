@@ -30,17 +30,17 @@ import { defaultKickoffTier } from '@/lib/kickoff-view';
  */
 export function AuthoringLauncher({
   knownProjects = [],
-  onStarted,
 }: {
   knownProjects?: string[];
-  /** `project` is passed alongside `sessionId` because the generic session
-   *  shell (`/sessions/authoring/<sessionId>?project=<p>`) needs it in the
-   *  URL — "authoring" has no per-kind summary fetch to resolve it from (the
-   *  generic `SessionInteractivePanel` works entirely off the shell's own
-   *  `file-package` artifact), so the caller must carry it through
-   *  explicitly. */
-  onStarted?: (sessionId: string, project: string) => void;
 }) {
+  // Ruling 396/406 — the press MINTS and the page STAYS. The id is published
+  // here and the session is reached by the anchor below, never by a
+  // `router.push` the operator cannot see, bookmark or open in a new tab.
+  // `''` rather than `null`: the attribute is present from first paint, so
+  // "no session yet" and "the attribute is missing" are different DOM. The
+  // runner reads an empty value as not-yet (`answers()`, beats-page.mjs), so
+  // an observer waiting on it is not answered by a value naming no session.
+  const [mintedSessionId, setMintedSessionId] = useState('');
   const [project, setProject] = useState('');
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -83,14 +83,14 @@ export function AuthoringLauncher({
       });
       if (!res.ok) { setError(res.error ?? 'failed to start'); return; }
       setPrompt('');
-      if (res.sessionId) onStarted?.(res.sessionId, trimmedProject);
+      if (res.sessionId) setMintedSessionId(res.sessionId);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div data-section="authoring-launcher" data-authoring-launcher-ready={canSubmit ? 'true' : 'false'} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 16, background: 'var(--bg-2)' }}>
+    <div data-section="authoring-launcher" data-authoring-launcher-ready={canSubmit ? 'true' : 'false'} data-minted-session-id={mintedSessionId} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 16, background: 'var(--bg-2)' }}>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
         Or describe it to the creation agent
       </div>
@@ -124,6 +124,31 @@ export function AuthoringLauncher({
       {error && (
         <div data-authoring-launcher-error style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>
           {error}
+        </div>
+      )}
+      {/* Ruling 396/409 — the mint's own destination, as a REAL anchor with a
+          BARE path. `data-action` sits on the `<a>` and the href carries NO
+          query string: the story runner selects a link by an EXACT
+          `[href="<target>"]` match (`beats.mjs:378-379`) while it reads the
+          observed URL query-BLIND (`beats-page.mjs:203`), so `?project=…`
+          would render a link that a human can click and no beat can find
+          (bead `forge-8vfn.7.5.3`; lane M6-A measured it on S9 run 2).
+          Nothing is lost by dropping it: the shell route resolves the project
+          itself via `findSessionProject` and echoes it on the payload, so a
+          bare `/sessions/<kind>/<sid>` is a working address for EVERY kind,
+          authoring included — see the session page's own note. This
+          component's old prop comment, which said the caller must carry
+          `project` in the URL because authoring has no summary fetch, was
+          outdated by that change. */}
+      {mintedSessionId !== '' && (
+        <div style={{ marginTop: 10 }}>
+          <Link
+            href={`/sessions/authoring/${encodeURIComponent(mintedSessionId)}`}
+            data-action="open-minted-session"
+            style={{ fontSize: 12.5, color: 'var(--ember)', textDecoration: 'none' }}
+          >
+            Open the creation-agent session →
+          </Link>
         </div>
       )}
       <button

@@ -189,9 +189,6 @@ export default function TemplateBuilderPage() {
           </p>
           <AuthoringLauncher
             knownProjects={knownProjects}
-            onStarted={(sessionId, project) =>
-              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
-            }
           />
         </div>
       </div>

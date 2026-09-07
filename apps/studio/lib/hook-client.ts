@@ -38,6 +38,41 @@ export const HOOK_LIFECYCLE_EVENTS = [
 ] as const;
 export type HookLifecycleEvent = (typeof HOOK_LIFECYCLE_EVENTS)[number];
 
+/**
+ * The events that carry a TOOL, and therefore the only ones a matcher can be
+ * honoured on. Mirrors `TOOL_SCOPED_HOOK_EVENTS` in
+ * `packages/library/studio/hook-library.ts` — the same hand-kept-mirror
+ * convention this file's header states for every other server shape.
+ *
+ * WHY THIS EXISTS. `POST /api/studio/hooks` refuses a matcher declared on an
+ * event that carries no tool: "a matcher can only be honoured on PreToolUse
+ * or PostToolUse. Dispatch would never fire this hook." That rule is right
+ * and is not what changed. What was wrong is that `/hooks/new` offered the
+ * matcher field whatever event was selected, so an operator could fill in a
+ * field the server would always reject and only find out on submit — which
+ * is how story S7 beat 7 spent four beats failing on a hook that could never
+ * be created (`no real-nav path to "/hooks/story-s7-hook"`, because the
+ * create 400ed and the page stayed put).
+ *
+ * DRIFT, stated rather than papered over. The SSOT is the server's copy, and
+ * this one cannot be pinned to it by a parity test the way
+ * `wi-status-parity.test.ts` pins `WI_STATUSES`: that SSOT lives in
+ * `@forge/contracts`, which `apps/studio` may import, while this one lives in
+ * `packages/library`, which it may not (`check-boundaries` rule 2, "apps/studio
+ * imports contracts only"). If the two ever diverge the server still refuses —
+ * enforcement never moved to the client — so a drift costs an affordance, not
+ * a correctness hole. The honest fix is to move the constant into
+ * `@forge/contracts` and delete this mirror; that package sits at its ratified
+ * cap with zero headroom and is not this lane's, so it is recorded rather than
+ * taken.
+ */
+export const TOOL_SCOPED_HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
+
+/** Can a matcher be honoured on this event at all? */
+export function eventCarriesTool(on: HookLifecycleEvent): boolean {
+  return (TOOL_SCOPED_HOOK_EVENTS as readonly string[]).includes(on);
+}
+
 export type HookScanVerdict = 'blocked' | 'findings' | 'clean';
 export type HookTrust = 'needs-review' | 'approved' | 'overridden';
 
