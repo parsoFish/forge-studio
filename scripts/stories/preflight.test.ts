@@ -21,7 +21,10 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict } from './preflight.mjs';
+import {
+  memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict,
+  remoteSwitchVerdict, REMOTE_BINDING_STORIES,
+} from './preflight.mjs';
 
 test('ample memory passes', () => {
   const v = memoryVerdict(8000);
@@ -122,4 +125,81 @@ test('6.11.50: a lane with no sessions at all passes, and says so', () => {
   const v = foreignSessionVerdict(root, 'story-s2');
   assert.equal(v.ok, true);
   assert.match(v.reason, /no sessions/i);
+});
+
+// ── 7.5.7: a story that binds a remote stands on an operator switch ─────────
+//
+// MEASURED (T1 ruling 456, §15.248). `projects.remote.create` is per-worktree
+// operator state in a GITIGNORED `forge.config.json` and it defaults OFF
+// (ruling 323 — `bridge-studio-project-onboard.ts:215` mints a remote only when
+// it is true). S2's beat 5 asserts the remote, so in any worktree nobody
+// remembered to switch on, that beat is red BY CONSTRUCTION — and A's S2 run 1
+// spent $1.76 discovering the lane's own config rather than anything about the
+// product.
+//
+// The refusal is worth more than the beat's failure for one reason: a red beat
+// says the product is wrong, and this was never the product.
+
+/** A worktree whose `forge.config.json` is `cfg` — or absent when null. */
+function tree(cfg: unknown | null): string {
+  const d = mkdtempSync(join(tmpdir(), 'remote-switch-'));
+  if (cfg !== null) writeFileSync(join(d, 'forge.config.json'), typeof cfg === 'string' ? cfg : JSON.stringify(cfg));
+  return d;
+}
+
+test('7.5.7: a selection with no remote-binding story is never blocked by the switch', () => {
+  // The check must not become a new way for an unrelated run to fail.
+  const v = remoteSwitchVerdict(tree(null), ['S1', 'S4', 'smoke']);
+  assert.equal(v.ok, true);
+  assert.match(v.reason, /no selected story binds a GitHub remote/);
+});
+
+test('7.5.7 (RED): S2 with the switch OFF is REFUSED, naming the switch and the file', () => {
+  const d = tree({ projectsDir: './projects' });
+  const v = remoteSwitchVerdict(d, ['S2']);
+  assert.equal(v.ok, false);
+  assert.match(v.reason, /S2/);
+  assert.match(v.reason, /projects\.remote\.create/, `the switch must be named: ${v.reason}`);
+  assert.match(v.reason, new RegExp(d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'and the file it read');
+  assert.match(v.reason, /restore it unconditionally/, 'and what to do after (rulings 323/354)');
+});
+
+test('7.5.7: S2 with the switch ON passes, and says so', () => {
+  const v = remoteSwitchVerdict(tree({ projects: { remote: { create: true } } }), ['S2']);
+  assert.equal(v.ok, true);
+  assert.match(v.reason, /projects\.remote\.create is on/);
+});
+
+test('7.5.7: a MISSING config and an OFF switch refuse DIFFERENTLY', () => {
+  // "no config here" and "the switch is off" send the operator to different
+  // places, so they must not print the same sentence.
+  const missing = remoteSwitchVerdict(tree(null), ['S2']);
+  const off = remoteSwitchVerdict(tree({ projectsDir: './projects' }), ['S2']);
+  assert.equal(missing.ok, false);
+  assert.equal(off.ok, false);
+  assert.match(missing.reason, /does not exist/);
+  assert.notEqual(missing.reason, off.reason);
+});
+
+test('7.5.7 POSITIVE CONTROL: an unparseable config REFUSES rather than assuming the switch', () => {
+  // The fail-open shape this campaign keeps meeting: "we could not tell" is
+  // not "it is on".
+  const v = remoteSwitchVerdict(tree('{ not json'), ['S2']);
+  assert.equal(v.ok, false);
+  assert.match(v.reason, /could not be parsed/);
+  assert.match(v.reason, /refusing rather than assuming/);
+});
+
+test('7.5.7: a truthy-but-not-true switch is still OFF', () => {
+  // `=== true`, exactly as the product reads it
+  // (`bridge-studio-project-onboard.ts:215`). A check looser than the code it
+  // guards would pass a run the product then refuses.
+  for (const value of ['true', 1, {}, 'yes']) {
+    const v = remoteSwitchVerdict(tree({ projects: { remote: { create: value } } }), ['S2']);
+    assert.equal(v.ok, false, `create: ${JSON.stringify(value)} must not read as on`);
+  }
+});
+
+test('7.5.7: the remote-binding set is explicit, so extending it is one line', () => {
+  assert.deepEqual([...REMOTE_BINDING_STORIES], ['S2']);
 });

@@ -150,3 +150,71 @@ export async function acquireHostLock() {
     );
   }
 }
+
+/**
+ * Stories whose beats BIND A GITHUB REMOTE, and therefore stand on the
+ * operator switch `projects.remote.create`.
+ *
+ * Bead `forge-8vfn.7.5.7`, T1 ruling 456 / §15.248. The switch is per-worktree
+ * operator state in a GITIGNORED `forge.config.json`, and it defaults OFF
+ * (ruling 323 — `bridge-studio-project-onboard.ts:215` mints a remote only when
+ * it is `true`). So a story whose beat asserts the remote is red BY
+ * CONSTRUCTION in any worktree nobody remembered to switch on: A's S2 run 1
+ * redded beat 5 and spent **$1.76** proving the lane's config, not the product.
+ *
+ * A NAMED SET, not an inference. The alternative was to guess from a beat's
+ * handles, and a guess that goes wrong here refuses a run that would have
+ * worked — worse than the defect. The cost is that this set must be extended
+ * when another story starts binding a remote; that is one line, and a run
+ * refused with the switch named is far cheaper than a beat red for a reason
+ * nobody can see. It cannot be a field on the story: `tests/stories/*` is
+ * pinned, and adding one would be an amendment to a file this check exists to
+ * protect.
+ */
+export const REMOTE_BINDING_STORIES = Object.freeze(['S2']);
+
+/**
+ * Is `projects.remote.create` on in the RUN worktree's own config?
+ *
+ * Reads the same file the product reads (`<root>/forge.config.json`,
+ * `loadConfig(defaultConfigPath(forgeRoot))`) so the check and the behaviour
+ * cannot disagree about which file they came from. A missing file, a malformed
+ * one and an absent key are all "OFF" — and each says which, because "no config
+ * here" and "the switch is off" send the operator to different places.
+ *
+ * @returns {{ok: boolean, reason: string}}
+ */
+export function remoteSwitchVerdict(root, storyIds) {
+  const need = storyIds.filter((id) => REMOTE_BINDING_STORIES.includes(id));
+  if (need.length === 0) return { ok: true, reason: 'no selected story binds a GitHub remote' };
+  const path = join(root, 'forge.config.json');
+  if (!existsSync(path)) {
+    return {
+      ok: false,
+      reason:
+        `${need.join(', ')} binds a GitHub remote, and ${path} does not exist — so ` +
+        '`projects.remote.create` is OFF and the beat that asserts the remote is red before it runs. ' +
+        'Create the config with `projects: { remote: { create: true } }` for the run, and restore it after.',
+    };
+  }
+  let cfg;
+  try {
+    cfg = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `${need.join(', ')} binds a GitHub remote and ${path} could not be parsed (${err?.message ?? err}) — refusing rather than assuming the switch`,
+    };
+  }
+  if (cfg?.projects?.remote?.create === true) {
+    return { ok: true, reason: `projects.remote.create is on in ${path} — ${need.join(', ')} can bind its remote` };
+  }
+  return {
+    ok: false,
+    reason:
+      `${need.join(', ')} binds a GitHub remote but \`projects.remote.create\` is not true in ${path} ` +
+      '(it defaults OFF, ruling 323). The beat that asserts the remote would be red by construction and the ' +
+      'run would spend proving this lane\'s config rather than the product. Set it true for the run and ' +
+      'restore it unconditionally afterwards (rulings 323/354).',
+  };
+}
