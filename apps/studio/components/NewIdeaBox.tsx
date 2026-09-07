@@ -51,13 +51,25 @@ export function NewIdeaBox({
   // that consumes it — the `data-onboard-session-id` convention, which was the
   // one place in Studio where a session id was observable in time.
   //
-  // forge-8vfn.6.11.5: it is published only ONCE IT EXISTS. The wrapper used
-  // to render `data-architect-session-id={startedSessionId ?? ''}` — present
-  // and empty from first paint — so a consumer waiting for the key to appear
-  // was answered instantly by a value naming no session, and S2 beat 10 read
-  // `expected a value to bind as <architectSessionId>, got ""` on a run whose
-  // architect really had started. `SessionMinted` below states the rule this
-  // now follows: no id, no claim.
+  // forge-8vfn.6.11.5, and why the shape moved back (rulings 437/438). The
+  // MEASURED failure is real and stays on the record: an S2 run whose architect
+  // really had started (a turn ran 02:03:02→02:03:09Z) still read
+  // `data-architect-session-id: expected a value to bind as
+  // <architectSessionId>, got ""`, because the key was present and empty from
+  // first paint and the runner's post-`do` read was answered instantly by a
+  // value naming no session. The fix taken then — publish only once the id
+  // exists — cured the symptom by making the key ABSENT, which the observer
+  // reads as "no key" rather than "not yet": the same race, one step earlier.
+  //
+  // What changed is the RUNNER, not the judgement. Ruling 438 (on main at
+  // `7fd63d74`): a beat whose expectation carries a `<name>` placeholder always
+  // enters the bounded wait, and an unfilled binding reports "minted nothing
+  // within N ms". An empty value can no longer answer a wait, so the
+  // always-present form is safe — and it is the one the DOM contract ratified
+  // for every minting surface (rulings 409/422/436: `""` before the mint, the
+  // id after, never absent). `SessionMinted` below keeps the OTHER half
+  // unchanged, because it is a different claim: no id, no LINK — an anchor that
+  // exists before the mint would point at a session that was never created.
   const [startedSessionId, setStartedSessionId] = useState<string | null>(null);
 
   // crosscut-21: honour a ?project= prefill ONLY when it names a real roster
@@ -116,7 +128,7 @@ export function NewIdeaBox({
       data-section="new-idea"
       data-new-idea-ready={canSubmit ? 'true' : 'false'}
       data-roster-state={rosterState}
-      {...(startedSessionId === null ? {} : { 'data-architect-session-id': startedSessionId })}
+      data-architect-session-id={startedSessionId ?? ''}
       style={{
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius)',
