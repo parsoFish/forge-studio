@@ -36,7 +36,7 @@ The directory name becomes the project id (lowercased). The repo **must be a git
 repository** — forge develops on branches and hands you a PR.
 
 Then make it satisfy the **forge↔project contract**
-([docs/forge-project-contract.md](./forge-project-contract.md)). Two ways:
+([docs/reference/project-contract.md](./forge-project-contract.md)). Two ways:
 
 - **Studio (UI):** Studio → Projects → New. The onboarding form scaffolds
   `.forge/project.json`, idempotent `roadmap.md` + `brain/profile.md` stubs, and

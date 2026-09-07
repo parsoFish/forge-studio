@@ -1,6 +1,6 @@
 # Studio copy — the facts extracted from `mockups/`
 
-Reference. This page is the surviving home of every fact that forge-ui and the
+Reference. This page is the surviving home of every fact that Studio and the
 scripts still took from the `mockups/` tree before it was deleted. It exists so
 that deleting a 94 MB directory of design prototypes does not lose a live
 reference: each entry names the constant or behaviour, its value, and the mockup
@@ -10,7 +10,7 @@ The mockups themselves were seven rounds of end-state design work (2026-08-03).
 Their conclusions landed in the roadmaps and in the code below; the prototypes
 were never shipped and are not a current-state description of Studio.
 
-## `forge-ui/lib/home-view.ts` — status is derived, never declared
+## `apps/studio/lib/home-view.ts` — status is derived, never declared
 
 The Home mockup (`studio-endstate-v2/views-home.jsx` + `data.jsx`) invented
 `flow.status`, `agent.status` and `kb.status` fields. **Those fields do not exist
@@ -27,7 +27,7 @@ the wave-4 and wave-8 campaigns. The cure that holds is structural: **derive the
 value from its source of truth and give the object no field to store a stale copy
 in.** The mockup is the illustration of the disease; this module is the cure.
 
-## `forge-ui/lib/home-view.ts` — the active-sessions strip budget
+## `apps/studio/lib/home-view.ts` — the active-sessions strip budget
 
 `HOME_SESSIONS_STRIP_LIMIT = 4`.
 
@@ -40,7 +40,7 @@ sessions-index route already returns rows needs-you-first-then-newest
 (`sortAndCapSessionIndexRows`), so the derivation takes a straight slice and never
 re-sorts.
 
-## `forge-ui/lib/roadmap-dag-layout.ts` — dependency-depth columns
+## `apps/studio/lib/roadmap-dag-layout.ts` — dependency-depth columns
 
 Two facts.
 
@@ -57,7 +57,7 @@ hanging.
 and round-7 layout notes. Every column is clamped to it, so neither a pathological
 deep chain nor a cycle can explode the column count.
 
-## `forge-ui/lib/roadmap-time-layout.ts` — the roadmap canvas visual
+## `apps/studio/lib/roadmap-time-layout.ts` — the roadmap canvas visual
 
 `roadmap-uplift/b-prime.html` was the operator-locked visual for the roadmap
 canvas — the "B-prime" variant chosen from the round-6 alternatives. The

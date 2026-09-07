@@ -481,7 +481,7 @@ export function scaffoldContractArtifacts(
         `> TODO (scaffold): replace this stub with the project's machine-readable\n` +
         `> architecture profile — the durable facts forge's planners query before\n` +
         `> designing (stack, module map, conventions, invariants). See\n` +
-        `> docs/forge-project-contract.md (clause C4) and the forge-onboard-project skill.\n\n` +
+        `> docs/reference/project-contract.md (clause C4) and the forge-onboard-project skill.\n\n` +
         `## Stack\n\nTODO\n\n## Module map\n\nTODO\n\n## Conventions & invariants\n\nTODO\n`,
       'utf8',
     );

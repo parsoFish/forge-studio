@@ -67,4 +67,4 @@ Run the project linter **inside** the dev-loop for live-acc WIs — append
 `golangci-lint run <scoped-pkg>` (or the language linter/formatter) to the composed
 per-WI gate, or add a changed-files lint/format sub-check at dev-loop close. Then a
 lint-red WI fails its own iteration (self-correct) rather than the whole cycle.
-Also logged in `docs/known-gaps.md` (2026-06-06).
+Also logged in the hardening backlog (2026-06-06), now tracked as beads.

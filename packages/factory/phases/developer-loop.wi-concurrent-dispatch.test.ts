@@ -102,7 +102,7 @@ function setup(initiativeId: string): Fixture {
   sh(repo, ['config', 'user.email', 't@forge']);
   sh(repo, ['config', 'user.name', 'forge-test']);
   writeFileSync(join(repo, 'README.md'), 'base\n');
-  // Per the forge-project-contract (docs/forge-project-contract.md:185), every
+  // Per the forge-project-contract (docs/reference/project-contract.md:185), every
   // onboarded project's `.gitignore` covers forge scratch: `.forge/`,
   // `AGENT.md`, `PROMPT.md`, `fix_plan.md`. Without the latter three, ralph's
   // autocommit safety net (`git add -A`) sweeps them into the WI branch's

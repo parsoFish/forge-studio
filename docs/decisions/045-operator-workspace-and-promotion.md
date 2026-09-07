@@ -8,7 +8,7 @@
   by giving every filesystem registry a second, operator-owned root and making an object's root its
   provenance. Amends nothing in [ADR 031](./031-studio-consolidation.md) — this ADR is written to
   *preserve* its sole-interaction-point rule, and it explicitly re-ratifies the no-auto-commit policy
-  of `docs/community-registry-writes.md`. Leaves [ADR 035](./035-forge-owned-central-artifacts.md)
+  of `docs/explanation/community-registry.md`. Leaves [ADR 035](./035-forge-owned-central-artifacts.md)
   (Brain 3 lives in the forge repo) intact and in force: `brain/` does **not** move.
 - **Related roadmap:** `docs/roadmaps/archive/R3-library-componentry.md` — R3-08 (the operator workspace root
   and provenance by root) and R3-09 (promotion into forge core);
@@ -43,7 +43,7 @@ but a crash mid-request leaves an untracked directory sitting next to exactly th
 ADR is about.
 
 Studio **never** runs `git add` or `git commit` against the forge repo, and that is deliberate. The
-policy is written down in `docs/community-registry-writes.md`:
+policy is written down in `docs/explanation/community-registry.md`:
 
 > Studio **writes the working tree only**. It never runs `git add`/`git commit` on the forge repo — an
 > unattended-adjacent surface silently committing to the operator's own checkout is exactly the class

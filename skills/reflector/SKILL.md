@@ -26,7 +26,7 @@ budgets: {maxTurns: 60, maxBudgetUsd: 1.5}
 
 ## Single responsibility
 
-Close the learning loop. After an initiative is merged, run the four-stage retro (per [`docs/phases/reflection.md`](../../docs/phases/reflection.md)) and write findings into the brain by **direct file writes** — theme markdown files under `brain/projects/<project>/themes/` plus a cycle archive under `brain/cycles/_raw/<cycle-id>.md`.
+Close the learning loop. After an initiative is merged, run the four-stage retro (per the [Reflect section of the example-factory explanation](../../docs/explanation/example-factory.md#reflect--closing-the-loop)) and write findings into the brain by **direct file writes** — theme markdown files under `brain/projects/<project>/themes/` plus a cycle archive under `brain/cycles/_raw/<cycle-id>.md`.
 
 ## Operator handoff (the reflection human moment)
 

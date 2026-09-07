@@ -5,7 +5,7 @@ correct, GitHub-compatible table of contents.
 
 This is **forge's out-of-the-box reference project** — a small, novel,
 creds-free, self-contained TypeScript project that exercises every part of the
-[forge↔project contract](../../docs/forge-project-contract.md) and is the
+[forge↔project contract](../../docs/reference/project-contract.md) and is the
 contract's worked example.
 
 ## Install

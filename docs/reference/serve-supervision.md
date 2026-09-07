@@ -22,7 +22,7 @@ So the supervision contract is split cleanly:
 | --- | --- |
 | Re-queue orphaned in-flight cycles | forge (ADR 012 sweeps) |
 | Restart the `forge serve` **process** when it exits/hangs | **OS supervisor** (systemd / pm2) |
-| **Surface** a stalled daemon to the operator | forge-ui (Feature #8) |
+| **Surface** a stalled daemon to the operator | Studio (Feature #8) |
 
 ## The liveness surface (Feature #8)
 
@@ -32,12 +32,13 @@ the **max heartbeat age across in-flight cycles** (read from the
 exceeds a **generous** multiple of `staleHeartbeatMs` (6× the 5-minute default =
 30 minutes), the Studio UI:
 
-- flips the page-level `data-conn-state` to `daemon-stalled` (the bridge is
-  still reachable — this is distinct from `reconnecting` / `no-bridge`), and
+- flips the connection-state indicator's `data-connection-state` to
+  `daemon-stalled` (the bridge is still reachable — this is distinct from
+  `reconnecting` / `no-bridge`), and
 - fires **one** edge-triggered toast (not repeated) telling the operator to
   check the supervisor.
 
-This is a *surface*, not a *fix*. forge-ui never tries to restart the daemon —
+This is a *surface*, not a *fix*. Studio never tries to restart the daemon —
 it tells the human (or whatever is watching the Studio UI) that the supervisor
 should.
 
@@ -59,7 +60,7 @@ Restart=always
 RestartSec=5
 # Optional hard liveness ceiling — systemd restarts the unit if it doesn't
 # ping the watchdog within the interval. forge does not currently sd_notify,
-# so prefer Restart=always + the forge-ui liveness surface for now.
+# so prefer Restart=always + the Studio liveness surface for now.
 
 [Install]
 WantedBy=multi-user.target
@@ -72,6 +73,6 @@ pm2 start "forge serve" --name forge-serve --max-restarts 50 --restart-delay 500
 pm2 save
 ```
 
-Either supervisor restarts the process on exit; the forge-ui liveness surface
+Either supervisor restarts the process on exit; the Studio liveness surface
 covers the "process is alive but wedged" gap until the operator (or a future
 `sd_notify`/healthcheck hook) intervenes.

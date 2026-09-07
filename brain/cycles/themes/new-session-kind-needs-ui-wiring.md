@@ -52,7 +52,7 @@ Wave-6 batches B3/B4/B6 built the generic interaction panel plus its `POST …/s
 ## Sources
 
 - `_wave5/ledger.md` (gitignored campaign state) — R4-21 backend-complete/unreachable, batch D region.
-- [`docs/forge-ui-dom-and-harness.md`](../../../docs/forge-ui-dom-and-harness.md) — the per-route `data-*` contract and the journeys-as-data gate.
+- [`docs/reference/studio-dom-contract.md`](../../../docs/reference/studio-dom-contract.md) — the per-route `data-*` contract and the journeys-as-data gate.
 
 ## See also
 

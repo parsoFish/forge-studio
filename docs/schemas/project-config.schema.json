@@ -14,14 +14,14 @@
       "properties": {
         "local": {
           "type": "object",
-          "description": "The INNER tier of the two-tier gate model (contract C1) — the fast, deterministic, per-WI gate the developer-loop runs between iterations. Must exit 0 on a green tree, be fast (≤ 10s), and be genuinely discriminating (fail before the work exists, pass only when the acceptance criteria are met) — see the C1 failure modes (hollow/false-pass/poisoned) in docs/forge-project-contract.md. `local` (and its `cmd`) is required by the TestProcessLocal type, but the JSON MAY OMIT it: when project.json has no `testProcess.local.cmd`, loadProjectConfig single-sources it from the `.forge/quality_gate_cmd` sidecar (a single whitespace-separated command line) before validation runs — the JSON wins when both are present. A config with neither throws (fail-closed).",
+          "description": "The INNER tier of the two-tier gate model (contract C1) — the fast, deterministic, per-WI gate the developer-loop runs between iterations. Must exit 0 on a green tree, be fast (≤ 10s), and be genuinely discriminating (fail before the work exists, pass only when the acceptance criteria are met) — see the C1 failure modes (hollow/false-pass/poisoned) in docs/reference/project-contract.md. `local` (and its `cmd`) is required by the TestProcessLocal type, but the JSON MAY OMIT it: when project.json has no `testProcess.local.cmd`, loadProjectConfig single-sources it from the `.forge/quality_gate_cmd` sidecar (a single whitespace-separated command line) before validation runs — the JSON wins when both are present. A config with neither throws (fail-closed).",
           "required": ["cmd"],
           "additionalProperties": false,
           "properties": {
             "cmd": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Argv-style command. Must be a single command (no `&&`/`;`/`|` chaining) and not a known-slow umbrella (playwright/cypress/e2e/integration); see contract C1 and docs/gate-script-template.md for the committed-gate-script escape hatch when one command can't express the gate."
+              "description": "Argv-style command. Must be a single command (no `&&`/`;`/`|` chaining) and not a known-slow umbrella (playwright/cypress/e2e/integration); see contract C1 and docs/reference/project-contract.md#gate-scripts for the committed-gate-script escape hatch when one command can't express the gate."
             },
             "timeoutMs": {
               "type": "integer",

@@ -989,7 +989,7 @@ async function handleHttp(
   // progress; when it exceeds a GENEROUS multiple of staleHeartbeatMs the UI
   // surfaces a daemon-stalled state. forge does NOT hand-roll a watchdog — the
   // OS supervisor (systemd / pm2) restarts `forge serve`; this endpoint only
-  // SURFACES the stall to the operator (see docs/operations/serve-supervision.md).
+  // SURFACES the stall to the operator (see docs/reference/serve-supervision.md).
   if (method === 'GET' && url === '/api/liveness') {
     sendJson(res, 200, ctx.liveness(), origin);
     return;

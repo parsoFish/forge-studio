@@ -55,7 +55,7 @@ Three human interaction points: Architect (ideation), Review (closeout on `/revi
 ## Sources
 
 - [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — narrative architecture.
-- [`docs/phases/brain.md`](../../../docs/phases/brain.md) through [`docs/phases/reflection.md`](../../../docs/phases/reflection.md) — per-phase docs.
+- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) through [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — per-phase docs.
 
 ## See also
 

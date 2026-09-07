@@ -2,7 +2,7 @@
 
 Forge Studio orchestrates autonomous agents that can hold **live credentials**
 — GitHub (`gh`) and Azure DevOps (ADO) tokens, supplied per-project via a
-gitignored `secrets.env` (see [`docs/getting-started.md`](./docs/getting-started.md)).
+gitignored `secrets.env` (see [`docs/tutorials/getting-started.md`](./docs/tutorials/getting-started.md)).
 Treat any credential-handling, prompt-injection, or supply-chain finding as a
 security issue, not an ordinary bug.
 
@@ -39,7 +39,7 @@ private reporting is the only supported disclosure channel.
 - Prompt-injection or tool-use vectors that let a managed project's content
   (issue text, PR bodies, source) escalate into unattended agent actions
   outside the forge↔project contract
-  ([`docs/forge-project-contract.md`](./docs/forge-project-contract.md)).
+  ([`docs/reference/project-contract.md`](./docs/reference/project-contract.md)).
 - Anything that lets an agent-authored change bypass the three structural
   human gates (architect, review, reflect — see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
 - Supply-chain issues in forge's own dependencies.

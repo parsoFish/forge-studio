@@ -37,7 +37,7 @@ provable results at each step.
    a project by writing its `.forge/project.json` (the project is then
    auto-discovered from disk — there is no registry file) and must satisfy the
    same invariants the `forge-onboard-project` skill enforces
-   (`docs/forge-project-contract.md`). The validation is **reused, not forked** —
+   (`docs/reference/project-contract.md`). The validation is **reused, not forked** —
    advanced contract clauses (C7 live-tier, standing ACs, ci-gate) live behind
    "Advanced".
 

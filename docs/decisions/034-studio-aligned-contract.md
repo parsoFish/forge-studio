@@ -164,7 +164,7 @@ machine-readable signal for the e2e harness (`scripts/e2e-journey.mjs` checks it
   change. The field is optional; `"."` is the identity default.
 - The history convention creates a per-project, git-native record of forge's work
   that is inspectable without access to `_logs/` (which is gitignored).
-- The unified enforcement table in `docs/forge-project-contract.md` is now the
+- The unified enforcement table in `docs/reference/project-contract.md` is now the
   single reference; operators no longer need to reconcile two sources.
 
 **Negative / accepted trade-offs:**
@@ -209,7 +209,7 @@ project's conventions).
 
 ## References
 
-- [`docs/forge-project-contract.md`](../forge-project-contract.md) — the unified contract document (rewritten by this ADR).
+- [`docs/reference/project-contract.md`](../forge-project-contract.md) — the unified contract document (rewritten by this ADR).
 - [ADR-017](./017-forge-project-contract.md) — the original contract (C1–C6 derivation from trafficGame). This ADR extends it; ADR-017 is not superseded.
 - [ADR-027](./027-studio-object-model.md) — the Studio object model that introduced the five project fields.
 - [ADR-033](./033-studio-first-flow-ux.md) — first-flow UX; the `ContractReadiness` panel.

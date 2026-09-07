@@ -7,7 +7,7 @@ into the example package, so deleting it failed to resolve rather than degrading
 
 **Status:** Accepted (operator decision 2026-07-17 — [roadmap README §8, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)).
 **Date:** 2026-07-17
-**References:** [docs/repo-map.md](../repo-map.md) (the three-scope contributor map this
+**References:** [docs/explanation/architecture.md](../repo-map.md) (the three-scope contributor map this
 ADR's split rides on), [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md)
 (MVUS, re-scoped to Scope 2 by this ADR), [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md)
 initiative R5-07, feature F8 (the strike-list this ADR closes).
@@ -29,7 +29,7 @@ the brain-tuned ideas machine) as if it were the whole product.
 
 The roadmap set (`docs/roadmaps/README.md` §1) already separates three scopes for
 contribution purposes (framework/seams, OOTB content, managed projects — mirroring
-`docs/repo-map.md`). This ADR promotes that separation from a contributor map to the
+`docs/explanation/architecture.md`). This ADR promotes that separation from a contributor map to the
 **north star** — the thing every "is this in scope" and "is this the simplest thing that
 could work" judgment is measured against — and records the operator's approval of the
 two-level mission (roadmap README §8, decision 4, 2026-07-17).
@@ -80,7 +80,7 @@ the split. This ADR is the sole origin of the two-scope mission.
   qualifiers": the reframe is forge's *internal* engineering north star; *external*
   positioning is unchanged — the four qualifiers stay until non-SWE connectors actually
   exist to market. (The retired market memo carried these as its §2 amendment and §3.4.)
-- `docs/repo-map.md` — the Scope 1 line names its target as "any agentic flow," not just
+- `docs/explanation/architecture.md` — the Scope 1 line names its target as "any agentic flow," not just
   forge's own cycle.
 - `docs/roadmaps/README.md` — §1 and §8 updated to cite this ADR as where the reframe
   lands.
@@ -106,7 +106,7 @@ the split. This ADR is the sole origin of the two-scope mission.
 
 ## Rejected alternatives
 
-- **Leave the single-level framing and rely on `docs/repo-map.md`'s three-scope table
+- **Leave the single-level framing and rely on `docs/explanation/architecture.md`'s three-scope table
   alone.** Rejected — repo-map.md is a contributor's *where does this file go* map, not
   a north star; it doesn't reach CLAUDE.md's opening framing, which is what every session
   actually reads first and judges decisions against (the adversarial review's D1/D2/E9
@@ -123,7 +123,7 @@ the split. This ADR is the sole origin of the two-scope mission.
   — the operator approval this ADR records.
 - [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md) —
   initiative R5-07, feature F8 — the strike-list this ADR closes.
-- [docs/repo-map.md](../repo-map.md) — the three-scope contributor map this reframe
+- [docs/explanation/architecture.md](../repo-map.md) — the three-scope contributor map this reframe
   promotes to north-star status.
 - [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md) —
   MVUS, re-scoped to Scope 2 by this ADR.

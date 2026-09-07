@@ -18,7 +18,7 @@ import type { ClauseResult } from '@forge/kernel';
 
 /**
  * R1-04-F2 — the preflight side of the already-documented C10 clause
- * (docs/forge-project-contract.md). `releaseProcess` is typed + consumed by the
+ * (docs/reference/project-contract.md). `releaseProcess` is typed + consumed by the
  * release-finalizer, but NOTHING checked at preflight that the substrate each
  * declared step targets actually exists — so a project could declare a
  * `changelog` step whose `changelogPath` file is absent and only discover it

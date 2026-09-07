@@ -25,4 +25,4 @@ that doesn't exist and omitted the four directories above.)*
 | [`orchestrator/studio/`](../orchestrator/studio/) | 1 | The Studio **engine** code that loads / lints / runs them. |
 | [`forge-ui/`](../forge-ui/) | 1 | **Forge Studio** — the Next.js operator UI (`forge studio`). |
 
-See [docs/repo-map.md](../docs/repo-map.md) for the full three-scope map.
+See [docs/explanation/architecture.md](../docs/explanation/architecture.md) for the full three-scope map.

@@ -28,12 +28,12 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run `forge studio` and drive everything from the browser.
 
-For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.
+For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see docs/decisions/.
 ```
 
 ## Other verbs (daemon, scaffolding, phase entry points)
 
-Beyond the operator surface above, the CLI dispatcher (`orchestrator/cli.ts`) also
+Beyond the operator surface above, the CLI dispatcher (`apps/forge/cli.ts`) also
 resolves these. They are used by the scheduler, in CI/headless runs, and for manual
 phase invocation — not day-to-day operator commands.
 

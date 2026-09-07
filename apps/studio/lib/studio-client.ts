@@ -333,7 +333,7 @@ export type Agent = {
    */
   costCeilingEnforceable?: boolean;
   /** W7-B5 (agents-21): the agent's own declared `budgets.maxBudgetUsd`
-   *  (its default standalone-run ceiling — docs/agent-cost-ceilings.md).
+   *  (its default standalone-run ceiling — docs/reference/agent-cost-ceilings.md).
    *  Absent = the agent declares none; the run-level policy default
    *  applies. */
   declaredMaxBudgetUsd?: number;

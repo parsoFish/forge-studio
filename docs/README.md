@@ -1,15 +1,16 @@
 # Forge Studio documentation
 
-Forge Studio is a visual SWE pipeline that develops your projects autonomously
-between a few human moments. The docs split into **three scopes** — pick your
-entry point:
+Forge Studio is a construction platform for agentic software factories. This
+tree is organised by [Diátaxis](https://diataxis.fr/) — **tutorials**,
+**how-to guides**, **reference** and **explanation** — because those four
+answer four different questions, and mixing them is how docs rot. Work out
+which question you have, then go straight to that quadrant:
 
-- **Operate** — run forge on your own project (install, Studio, cycles,
-  projects, KBs). The operator manual.
-- **Develop** — understand or change how forge is built (architecture, seams,
-  conventions, testing/harnesses).
-- **Plan** — direction, decisions, and design (the roadmap set, the ADRs,
-  the product vision, the mockups).
+- Learning forge for the first time, with no goal yet of your own? **Tutorials.**
+- Already know forge, want to get one specific thing done? **How-to guides.**
+- Need the exact shape of something — a field, a contract clause, an
+  attribute? **Reference.**
+- Want to know *why* forge is built this way? **Explanation.**
 
 Every page here describes the **current state**. History is not narrated in
 these pages — it lives in git, in the ADRs (`decisions/`), and in the brain
@@ -17,76 +18,91 @@ these pages — it lives in git, in the ADRs (`decisions/`), and in the brain
 
 ---
 
-## Operate — run forge on your project
+## Tutorials — learning by doing
 
-Docs are labelled by [Diátaxis](https://diataxis.fr/) type — **Tutorial**,
-**How-to**, **Reference**, **Explanation**.
+A tutorial takes a newcomer through a flow end to end for the first time,
+beat by beat, so they finish with something that worked rather than just
+something they read.
 
-| Doc | Type | What it covers |
-|-----|------|----------------|
-| [Getting started](./getting-started.md) | Tutorial | Install → onboard a project → first merged PR. Projects are auto-discovered from disk — there is no registry file to edit. |
-| [Project contract](./forge-project-contract.md) | How-to · Reference | The forge↔project contract every managed repo must satisfy (acceptance tiers, demo shapes, the C10 release final-loop). The SSOT. |
-| [Operator journey](./operator-journey.md) | Explanation | The AUTHOR / RUN / SWAP narrative — what Studio does end to end. |
-| [CLI reference](./reference/cli.md) | Reference | `forge --help`: the launcher (`forge studio`), the scheduler daemon (`forge serve`), and the scaffolding verbs. |
-| [Serve supervision](./operations/serve-supervision.md) | How-to | Running `forge serve` under a process supervisor. |
-| [Gate-script template](./gate-script-template.md) | Reference | The errexit-exempt-safe template for a project's multi-step `quality_gate_cmd` script. |
-| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference | A project's config schema, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
-| [Licensing & dependencies](./licensing-and-dependencies.md) | Reference | What AGPL-3.0 means for you, plus the dependency audit. |
+| Page | What it covers |
+|---|---|
+| [Getting started](./tutorials/getting-started.md) | Install to first merged PR: bring a project under forge, preflight it, author or reuse a flow, kick off the architect, review and merge. The five-step path for someone who has never run forge before. |
 
-The three human moments: **architect interview** (shape the work), **review
-verdict** (approve / send back), and **release approve** (sign off the changelog
-before forge merges). Everything between runs unattended.
+The rest of `tutorials/` is **generated**, one page per operator story in
+[`tests/stories/`](../tests/stories) — see [`tutorials/README.md`](./tutorials/README.md)
+for the full, current list.
 
----
+## How-to guides — goal-directed recipes
 
-## Develop — how forge is built
+A how-to guide assumes you already know the ground and answers one question:
+how do I get *this* specific outcome. No teaching, no theory — just the steps.
 
-**Orientation**
-- [Repository map](./repo-map.md) — the three code scopes and which rule governs each path. Start here.
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — narrative as-built architecture (repo root).
-- [PRINCIPLES.md](../PRINCIPLES.md) — the five non-negotiable principles (repo root).
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — build/test gates and how to extend forge (repo root).
-- [Architecture overview](./architecture/overview.md) — the diagram convention + the structural source of truth.
+Every page in `how-to/` is **generated**, one page per operator story in
+[`tests/stories/`](../tests/stories) — see [`how-to/README.md`](./how-to/README.md)
+for the full, current list. There are no hand-written how-to pages: every
+recipe forge ships is proven by a story first.
 
-**Phases** (purpose + success signals)
-- [architect](./phases/architect.md) · [brain](./phases/brain.md) · [project-manager](./phases/project-manager.md) · [developer-loop](./phases/developer-loop.md) · [reflection](./phases/reflection.md)
+## Reference — information about the machinery
 
-**Seams & extension**
-- [Extending forge](./extending-forge.md) — add a runtime adapter, flow, or skill.
-- [Harness-overlay seam](./architecture/harness-overlay-seam.md) — the parked `PhaseAgentSpec` injection seam.
+Reference pages are consulted, not read start to finish: the exact shape of a
+contract, a schema, an attribute, an enumeration. They describe what *is*,
+not how to get there or why.
 
-**UI, testing & security**
-- [Forge-UI DOM contract & harness](./forge-ui-dom-and-harness.md) — the per-route `data-*` contract, status vocabularies, the journeys-as-data harness, and the real-capability (`verify-cycle`) harness. (Kept out of CLAUDE.md so the always-injected instructions stay lean.)
-- [Studio first-flow UX](./reference/studio-first-flow-ux.md) — the UX spec backing the shipped first-flow starters.
-- [Studio copy — the facts extracted from `mockups/`](./reference/studio-copy.md) — the surviving home of every fact forge-ui and the scripts took from the deleted `mockups/` prototypes: the invented-status antipattern behind Home's pure derivation, the active-sessions strip budget, and the roadmap DAG walk and column cap.
-- [How-to guides](./how-to/README.md) — the usage docs generated by the story runner (`npm run stories`), one page per operator story, never hand-edited.
-- [Tutorials](./tutorials/README.md) — the learning-oriented usage docs generated by the story runner (`npm run stories`), one page per operator story, never hand-edited.
-- [Agent cost ceilings](./agent-cost-ceilings.md) — which standalone spawn shapes can enforce a ceiling, the per-agent default `budgets.maxBudgetUsd` values and how they were derived, and the operator-ceiling precedence rule.
-- [The request-path security model](./explanation/security-model.md) — why request-derived filesystem paths are a closed, enumerated class: the escape-shape catalogue, what a guard must satisfy, the two completeness rules, the ratchet and the standing rules.
-- [Request-path sinks — the enumeration](./reference/request-path-sinks.md) — every fs read/write in `cli/` and `orchestrator/` whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe`. Add a row when a route turns request data into a path.
-- [Community registry writes](./community-registry-writes.md) — who writes `studio/community/registry.yaml` and how writes reach git: Studio (CRUD routes + refresh-approve) writes the file atomically; the operator commits via their normal git flow; the UI shows the uncommitted-changes state.
+| Page | What it covers |
+|---|---|
+| [CLI reference](./reference/cli.md) | The `forge --help` output plus the CLI verbs beyond Studio (`serve`, `preflight`, `brain lint`/`index`, phase entry points) — Studio is the sole operator surface; this documents the rest. |
+| [Project contract](./reference/project-contract.md) | The forge↔project contract every managed project must satisfy: the Studio object fields, the C1–C10 operational clauses, the gate-script template (with the errexit-exempt trap it closes), and the enforcement table. |
+| [Studio DOM contract](./reference/studio-dom-contract.md) | The per-route `data-*` attribute contract every Studio page mirrors its load-bearing state into, so automation (Playwright today) drives a page by reading structured DOM state rather than scraping rendered text. |
+| [Extension seams](./reference/extension-seams.md) | The pluggable points forge exposes for adding capability — RuntimeAdapter, KbBackend and Flow, each a registry with its own conformance-test admission gate, plus the skill/agent registration point. |
+| [Request-path sinks](./reference/request-path-sinks.md) | The enumeration behind the path-guard ratchet: every filesystem read/write reachable from a bridge route or CLI dispatch whose path derives from request data, classified `guarded` / `unguarded` / `accidentally-safe`. |
+| [Agent cost ceilings](./reference/agent-cost-ceilings.md) | How a standalone agent spawn enforces a cost ceiling, the per-agent default `budgets.maxBudgetUsd` values and how they were derived, and the operator-ceiling precedence rule. |
+| [Serve supervision](./reference/serve-supervision.md) | Running `forge serve` under an OS process supervisor (systemd, pm2, runit) — what forge's own recovery model does and does not cover, and where the split falls. |
+| [Studio copy](./reference/studio-copy.md) | The facts Studio and the scripts still take from the deleted `mockups/` tree — the named constant or behaviour, its value, and the mockup decision that justified it. |
 
----
+## Explanation — understanding the design
 
-## Plan — direction, decisions, design
+Explanation pages step back from the mechanics and discuss *why*: the
+alternatives, the trade-offs, the reasoning a reference page has no room for.
 
-- [Forge 1.0 plan](./roadmaps/1.0.md) — the single roadmap for all forge work until the 1.0 tag: milestones M0–M7, the operator stories as the gate, fresh-session mechanics. Companions: [kickoff prompts](./roadmaps/1.0-kickoffs.md), [skills and tools to install](./roadmaps/1.0-skills.md), the [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md).
-- [User stories](./product/user-stories.md) — the complete, tiered catalogue of operator journeys Forge Studio supports (45 rows; the 1.0 gate is its G tier).
-- [Roadmap archive](./roadmaps/README.md) — the R1–R8 forge-dev roadmaps, archived by M6 of the 1.0 plan: the record of what was built and why, with the coverage map routing every architecture pillar to its owning roadmap. Superseded for new work by the 1.0 plan (§7); several ADRs cite them as evidence.
-- [ADR index](./decisions/README.md) — every load-bearing decision plus the retirement ledger. The decision log — history is its job.
-- [Product vision (MVUS)](./product/minimum-viable-user-story.md) — the canonical vision for the shipped OOTB suite (Scope 2): idea → autonomous build → review → release → reflect.
-- [R2-03 fanout research spike](./investigations/R2-03-fanout-merge-resolution-spike.md) — the R2-D1 go/no-go evidence (**NO-GO**): a 76-source survey concluding forge's scheduler-ordering merge-gate suffices over a merge-resolution capability. (Investigation reports are otherwise scratch and gitignored; this one is a tracked roadmap-gate artifact.)
-- **Mockups** — the Studio end-state mockups live at the repo root under [`mockups/`](../mockups/) (a separate tree; work backwards from them to functionality).
+| Page | What it covers |
+|---|---|
+| [Architecture](./explanation/architecture.md) | Why the workspace is nine packages and two apps rather than the old flat `orchestrator/`/`cli/` split, and how the dependency-graph boundary lint enforces it. |
+| [The request-path security model](./explanation/security-model.md) | Why forge treats request-derived filesystem paths as a closed, enumerated class rather than a bug fixed opportunistically when found — the escape-shape catalogue and the ratchet that keeps the enumeration true. |
+| [The example factory](./explanation/example-factory.md) | What each station of the shipped develop factory does — brain, architect, plan, build, integrate, review, verdict, reflect — and how each is known to fail, in one page instead of five because the factory is data, not framework. |
+| [Licensing](./explanation/licensing.md) | What AGPL-3.0-or-later means in practice for an operator running forge as a service. |
+| [Community registry](./explanation/community-registry.md) | Who writes `studio/community/registry.yaml`, how writes reach git, and the commit policy that keeps the operator, not forge, holding the git identity. |
 
 ---
 
-## Standing logs (not ground-truth pages)
+## Outside the four quadrants
 
-- [Known gaps](./known-gaps.md) — the open hardening/defect backlog.
-- [CHANGELOG.md](../CHANGELOG.md) — the release log (repo root).
+Four areas sit outside Diátaxis on purpose — they are records, plans and
+machine-readable contracts, not usage docs:
+
+- **[Decisions](./decisions/README.md)** — one ADR per load-bearing choice,
+  plus the retirement ledger. If a change conflicts with an ADR, the ADR is
+  updated first, with rationale.
+- **[Roadmaps](./roadmaps/README.md)** — [`1.0.md`](./roadmaps/1.0.md) is the
+  single roadmap driving all current forge work; its companions
+  ([`1.0-kickoffs.md`](./roadmaps/1.0-kickoffs.md),
+  [`1.0-skills.md`](./roadmaps/1.0-skills.md)) and the
+  [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md)
+  sit alongside it. [`roadmaps/archive/`](./roadmaps/README.md) keeps the
+  R1–R8 roadmaps that drove forge before the 1.0 plan — superseded for new
+  work, kept as the record of what was built and why.
+- **[Schemas](./schemas/project-config.schema.json)** — the JSON Schema a
+  managed project's `forge.config.json` is validated against, with worked
+  [examples](./schemas/examples/project.mdtoc.json) for
+  [two real projects](./schemas/examples/project.betterado.json). The prose
+  contract these encode is
+  [`reference/project-contract.md`](./reference/project-contract.md).
+- **[Product](./product/user-stories.md)** — the tiered catalogue of operator
+  journeys forge supports, and its companion, the
+  [Minimum Viable User Story](./product/minimum-viable-user-story.md) vision
+  for the shipped out-of-the-box suite.
 
 ---
 
-*Historical campaign notes, superseded plans, and one-shot investigation reports
-are not kept here — they live in git history, the brain
-(`brain/forge-dev/themes/`, `brain/cycles/themes/`), and the ADRs.*
+*Historical campaign notes and one-shot investigation reports are not kept
+here — they live in git history and the brain
+(`brain/forge-dev/themes/`, `brain/cycles/themes/`).*

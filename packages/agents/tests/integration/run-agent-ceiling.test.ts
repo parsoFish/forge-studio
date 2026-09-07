@@ -491,7 +491,7 @@ test('dispatchAgentRun: ONE-SHOT POSITIVE CONTROL, paired deliberately alongside
   }
 });
 
-test('dispatchAgentRun: NEGATIVE TWIN, amended twice — no kickoffCeilingUsd against the SAME legacy agent still proceeds (no refusal), and ⚑ W7-B5 the agent\'s OWN declared default ceiling (project-scoped-review SKILL budgets.maxBudgetUsd: 5, docs/agent-cost-ceilings.md) now reaches the SDK call — an ordinary dispatch is no longer uncapped', async () => {
+test('dispatchAgentRun: NEGATIVE TWIN, amended twice — no kickoffCeilingUsd against the SAME legacy agent still proceeds (no refusal), and ⚑ W7-B5 the agent\'s OWN declared default ceiling (project-scoped-review SKILL budgets.maxBudgetUsd: 5, docs/reference/agent-cost-ceilings.md) now reaches the SDK call — an ordinary dispatch is no longer uncapped', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-negtwin-'));
   try {

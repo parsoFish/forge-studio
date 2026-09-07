@@ -15,7 +15,7 @@ the one source of truth but never states the derivation rule: `run-model.ts` dec
 `run-model-derive.ts` computes every one from events. `Run.trigger` states it verbatim — "derived
 and never stored/authored … NEVER a fabricated default" (`orchestrator/run-model.ts:129-133`) — and
 the run-detail timeline derives its rows from the **flow definition**, since events alone "would
-silently vanish" the nodes that never ran (`docs/forge-ui-dom-and-harness.md:517-519`).
+silently vanish" the nodes that never ran (`docs/reference/studio-dom-contract.md:517-519`).
 
 ## The corollary that bites: one derivation, reused
 
@@ -25,7 +25,7 @@ summed events unconditionally and **inflated dev-loop cost 2-3×** (an iteration
 its dollars on rollup `end` events — [[cost-event-phase-aware-aggregation-rule]]). Both fed
 user-visible badges; the DOM contract pins the survivor, `data-phase-cost-usd` **exactly**
 `run.phaseMeta[node].costUsd`, "never re-summed from events" — the single derivation is
-`sumAuthoritativeCostUsd` (`orchestrator/event-cost.ts:54`; `docs/forge-ui-dom-and-harness.md:524-528`).
+`sumAuthoritativeCostUsd` (`orchestrator/event-cost.ts:54`; `docs/reference/studio-dom-contract.md:524-528`).
 
 **R6-01 F1 — `lastEventAt` moved server-side** (batch C applied the rule twice more, both times
 *before* an implementer saw the pin). The pinned ATs attributed events client-side via

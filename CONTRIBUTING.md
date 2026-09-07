@@ -1,6 +1,6 @@
 # Contributing to Forge
 
-> **New here?** Read [`docs/repo-map.md`](./docs/repo-map.md) first — it maps every path
+> **New here?** Read [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) first — it maps every path
 > to one of forge's three scopes (framework · cycles/agents · projects) and states the
 > cross-scope rule. Which scope a file is in tells you the rule that governs changes there.
 
@@ -54,7 +54,7 @@ If your change conflicts with or supersedes a decision in `docs/decisions/`, **u
 
 ## Extension points
 
-The three seams that accept new implementations without touching core orchestration are documented in [`docs/extending-forge.md`](./docs/extending-forge.md):
+The three seams that accept new implementations without touching core orchestration are documented in [`docs/reference/extension-seams.md`](./docs/reference/extension-seams.md):
 
 1. **RuntimeAdapter** — plug in a new LLM SDK or agentic coder (`packages/agents/_adapters/`).
 2. **KbBackend** — the brain's storage seam (`packages/knowledge/kb-backend.ts`). Filesystem-only today (`FilesystemKbBackend`); the seam is present for a future second backend.
