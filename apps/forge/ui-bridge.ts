@@ -100,7 +100,6 @@ import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
 import * as rc from '@forge/flows/review-comments.ts';
-import type { ReviewCommentsSidecar } from '@forge/flows/review-comments.ts';
 
 
 
@@ -901,8 +900,8 @@ function isAcShape(v: unknown): boolean {
 async function withReviewCommentLock(
   logsRoot: string,
   cycleId: string,
-  mutate: (sidecar: ReviewCommentsSidecar) => ReviewCommentsSidecar,
-): Promise<ReviewCommentsSidecar> {
+  mutate: (sidecar: rc.ReviewCommentsSidecar) => rc.ReviewCommentsSidecar,
+): Promise<rc.ReviewCommentsSidecar> {
   // Ensure the sidecar exists so proper-lockfile has a target (rc.writeReviewComments
   // throws on a traversal cycleId — that propagates as a 500, never a write).
   if (!existsSync(rc.reviewCommentsPath(logsRoot, cycleId))) {
@@ -1615,8 +1614,7 @@ async function handleHttp(
   // read-modify-write is atomic per cycle). Verdict derivation is over the set:
   // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
   // The store is platform code (`@forge/flows/review-comments.ts`), so these
-  // routes answer with or without the example installed — ADR 048 clause 2 is
-  // about the example's surfaces, and this stopped being one.
+  // routes answer with or without the example — this stopped being its surface.
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
