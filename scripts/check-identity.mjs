@@ -41,11 +41,11 @@ const EXCLUDED_TREES = [
 const EXCLUDED_FILES = new Map([
   ['docs/roadmaps/1.0.md', 'the active plan — it names the retired tokens as tokens'],
   ['docs/roadmaps/1.0-kickoffs.md', 'the active plan’s kickoff prompts'],
-  ['docs/roadmaps/README.md', 'the R1–R8 record of what was built (1.0.md §7); archived in M6'],
-  ['docs/roadmaps/R1-contract-componentry.md', 'R1–R8 record; archived in M6'],
-  ['docs/roadmaps/R2-runnable-componentry.md', 'R1–R8 record; archived in M6'],
-  ['docs/roadmaps/R4-ootb-suite.md', 'R1–R8 record; archived in M6'],
-  ['docs/roadmaps/R5-hardening-operability.md', 'R1–R8 record; archived in M6'],
+  ['docs/roadmaps/archive/README.md', 'the R1–R8 register and driving order, archived by M6 (1.0.md §7)'],
+  ['docs/roadmaps/archive/R1-contract-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
+  ['docs/roadmaps/archive/R2-runnable-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
+  ['docs/roadmaps/archive/R4-ootb-suite.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
+  ['docs/roadmaps/archive/R5-hardening-operability.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
 ]);
 
 /** The scanned roots: a git pathspec, and which of its tracked files count. */

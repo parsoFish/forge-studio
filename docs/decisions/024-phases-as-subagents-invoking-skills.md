@@ -195,13 +195,13 @@ phase is migrated.
 > incrementally") continues as the **artifact migration** — phases as OOTB
 > artifacts on the generic R2-01 runnable primitive, replacing the
 > `orchestrator/*-invocation.ts` files with registry-driven dispatch — tracked
-> as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not as an open item of this
+> as **R4-01** (`docs/roadmaps/archive/R4-ootb-suite.md`), not as an open item of this
 > ADR. `CLAUDE.md`'s north-star section now states this same definition.
 
 > **Amended 2026-07-24 (R4-01-F1 — [ADR 039](./039-ships-as-artifact.md)).**
 > R4-01 now has its ADR. As the roadmap's Context puts it: "PhaseAgentSpec
 > migration was step one; phases as OOTB artifacts on the generic primitive is
-> the rest" (`docs/roadmaps/R4-ootb-suite.md`, R4-01 Context). ADR 039 owns
+> the rest" (`docs/roadmaps/archive/R4-ootb-suite.md`, R4-01 Context). ADR 039 owns
 > the artifact-migration's design — the dispatch seam (`runtime.loopStrategy`,
 > extended `budgets`, `composition.guards` band keys — renamed from
 > `composition.hooks` by ADR 027's R3-03 amendment) that replaces the

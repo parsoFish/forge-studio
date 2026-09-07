@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-08-10, operator) — amended 2026-08-11 (migration commitment re-homed to R4-23), 2026-08-14 (R4-23 close: architect never migrates, mirror deleted, net-decrease corrected), 2026-08-15 (wave-6: interaction panel un-deferred, `panel.phases`, kickoff model tier), 2026-08-19 (wave-7 A2: derived lifecycle, universal `cancelled`, reachable write-root fence), 2026-09-03 (M4 ruling 60: the bespoke runners port as registered step-handler variants, not as data)
 - **Date:** 2026-08-10
 - **Supersedes / amends:** Amends [ADR 042](./042-surface-cap-scope-and-testability.md) (the orchestrator surface cap) by ratifying a single sanctioned extension seam. Builds on [ADR 024](./024-phases-as-subagents-invoking-skills.md) (agent composes skills; `SKILL.md` as runtime prompt) and [ADR 039](./039-ships-as-artifact.md) (the flow-runner executor registry — which this ADR deliberately does **not** extend).
-- **Related roadmap:** `docs/roadmaps/R4-ootb-suite.md` — R4-21 (OOTB authoring agent) is consumer #1.
+- **Related roadmap:** `docs/roadmaps/archive/R4-ootb-suite.md` — R4-21 (OOTB authoring agent) is consumer #1.
 
 ## Context
 
@@ -127,7 +127,7 @@ Each finalizer **keeps its own realpath/containment guard intact** (`isAllowedSk
 The batch-E migration pass **measured** (probes driving `runInteractiveTurn` against each runner's WI-0 golden-capture scenario — `_wave5/parks/R4-22-F4-runner-migrations.md`) that **none of the four runners is expressible on the primitive as written**: the spine generalises the plumbing, but the majority of each runner is per-kind prompt/state composition for which `turnSpec` has, by this ADR's own discipline, no seam. Consequences, as ruled by the operator:
 
 - A `STEP_HANDLERS`/prompt-builder registry (the shape §Consequences contemplated for architect) was proposed and **refused** — no new orchestrator surface.
-- The "batch-E migration steps" this ADR committed are **re-homed to R4-23** (`docs/roadmaps/R4-ootb-suite.md`): re-author each runner's composed prompt into its agent's `SKILL.md` (ADR-024's thesis) and accept **live** per kind — a golden byte-match cannot gate a prompt that changes by design.
+- The "batch-E migration steps" this ADR committed are **re-homed to R4-23** (`docs/roadmaps/archive/R4-ootb-suite.md`): re-author each runner's composed prompt into its agent's `SKILL.md` (ADR-024's thesis) and accept **live** per kind — a golden byte-match cannot gate a prompt that changes by design.
 - The honest surface accounting: batch E's net production deletion from the migration path was **zero**. The transient growth this ADR disclosed stands; the promised net decrease is **owed via R4-23**, and it is smaller than the original text implied because the spine-owned plumbing is a minority of each runner's lines.
 - The dispatch fork and the four untouched runners remain the standing state — verified byte-identical behind the fork at batch-E close (`_wave5/batch-e-exit-disposition.md`).
 
