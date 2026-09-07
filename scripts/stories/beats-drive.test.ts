@@ -123,6 +123,10 @@ function fakeStudio(spec: {
     return {
       tagName: node.tag.toUpperCase(),
       textContent: node.text,
+      // playwright's own node API — the production callback reads hrefs with
+      // it (bead `forge-8vfn.7.5.3`), so the fake must answer it rather than
+      // let a test pass against a stand-in that never had attributes.
+      getAttribute: (name: string) => node.attrs[name] ?? null,
       type: self?.attrs.type ?? '',
       value: self?.attrs.value ?? '',
       querySelector: (q: string) =>
@@ -198,6 +202,10 @@ function fakeStudio(spec: {
       const node = findAll(sel)[index] ?? null;
       if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
       return fn(domish(node));
+    },
+    /** playwright's `evaluateAll` — every match, not the indexed one. */
+    async evaluateAll(fn: (ns: any[], arg: any) => unknown, arg: any) {
+      return fn(findAll(sel).map(domish), arg);
     },
     async fill(value: string) {
       const node = findAll(sel)[index] ?? null;
@@ -672,4 +680,103 @@ test('438 (iii) POSITIVE CONTROL: a placeholder-free do-less beat still reads ON
   );
   assert.equal(v.status, 'green');
   assert.ok(reads <= 2, `a beat with no placeholder and no do must not poll — it read ${reads} times`);
+});
+
+// ── 7.5.3: the runner read query-BLIND and selected query-STRICT ─────────────
+//
+// MEASURED (T1 ruling 451, D's evidence). `readObserved` compares
+// `new URL(page.url()).pathname`, so a beat declaring `/sessions/demo/x`
+// ACCEPTS arriving at `/sessions/demo/x?project=gitpulse`. Selection did the
+// opposite: an exact `[href="/sessions/demo/x"]`, which that anchor does not
+// match. The runner therefore refused to find a link to a URL it would have
+// been happy to arrive at, and said "no link points at it" with the anchor on
+// the page.
+//
+// It is not hypothetical: three LIVE sites mount `SessionMinted` with a
+// `project` — `DemoStageHandoff.tsx:60`, `DemoTimeline.tsx:215`,
+// `ContractResolutionPanel.tsx:295` — so the whole demo path carries
+// `?project=`, and A's S9 run 2 died on it.
+//
+// Site-by-site query dropping was refused: a link that legitimately needs a
+// parameter must stay reachable, and a beat should declare the route an
+// operator would say out loud rather than the product's parameter plumbing.
+
+const QUERIED_PAGES = {
+  '/projects/gitpulse': {
+    elements: [
+      READY_MAIN('projects'),
+      // The shape the three live sites emit.
+      el('a', { href: '/sessions/demo/sid-1?project=gitpulse' }, '/sessions/demo/sid-1'),
+    ],
+    data: { page: 'projects', 'page-ready': 'true' },
+  },
+  '/sessions/demo/sid-1': {
+    elements: [READY_MAIN('session')],
+    data: { page: 'session', 'page-ready': 'true' },
+  },
+};
+
+test('7.5.3 (RED): a link whose href carries a QUERY is found by the beat\'s bare route', async () => {
+  const page = fakeStudio({ start: '/projects/gitpulse', commitMs: 50, pages: QUERIED_PAGES });
+  const v = await driveBeat(
+    page,
+    {
+      act: 'open the demo session the hand-off points at',
+      expect: { route: '/sessions/demo/sid-1', data: { page: 'session', 'page-ready': 'true' } },
+      say: 'the anchor carries ?project=, the beat does not',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green', `failures: ${JSON.stringify(v.failures)}`);
+});
+
+test('7.5.3 POSITIVE CONTROL: two links differing ONLY in query are NAMED, never picked', async () => {
+  // Two destinations, one pathname. Choosing by DOM order is how a beat
+  // silently starts asserting the wrong page — the same shape as
+  // `resolveExpectations`' best-match tie-break. The runner refuses and says so.
+  const page = fakeStudio({
+    start: '/projects/gitpulse',
+    commitMs: 50,
+    pages: {
+      ...QUERIED_PAGES,
+      '/projects/gitpulse': {
+        elements: [
+          READY_MAIN('projects'),
+          el('a', { href: '/sessions/demo/sid-1?project=gitpulse' }, '/sessions/demo/sid-1'),
+          el('a', { href: '/sessions/demo/sid-1?project=gitweave' }, '/sessions/demo/sid-1'),
+        ],
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    {
+      act: 'open the demo session',
+      expect: { route: '/sessions/demo/sid-1', data: { page: 'session' } },
+      say: 'two hand-offs, one pathname',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'red');
+  const said = (v.failures ?? []).join(' | ');
+  assert.match(said, /ambiguous real-nav path/, said);
+  assert.match(said, /project=gitpulse/, `it names the candidates: ${said}`);
+  assert.match(said, /project=gitweave/, `both of them: ${said}`);
+});
+
+test('7.5.3 POSITIVE CONTROL: a route NOTHING links to is still unreachable', async () => {
+  // Query-blindness widens what counts as a link, and must not turn "no link"
+  // into "some link". The refusal is the guard real-nav-only exists for.
+  const page = fakeStudio({ start: '/projects/gitpulse', commitMs: 50, pages: QUERIED_PAGES });
+  const v = await driveBeat(
+    page,
+    { act: 'go somewhere nothing points at', expect: { route: '/monitor', data: { page: 'monitor' } }, say: 'x' },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'red');
+  assert.match((v.failures ?? []).join(' | '), /no real-nav path to "\/monitor"/);
 });

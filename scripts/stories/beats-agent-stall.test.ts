@@ -72,6 +72,9 @@ function fakeStudio(spec: {
   const locator = (sel: string): any => ({
     first: () => locator(sel),
     count: async () => (route === MONITOR && sel.includes('open-session') ? 1 : 0),
+    // This page models no anchors: `driveBeat` asks every page for its links
+    // (bead `forge-8vfn.7.5.3`), and "none" is the honest answer here.
+    evaluateAll: async (fn: any, arg: any) => fn([], arg),
     async click() {
       setTimeout(() => {
         route = SESSION;
@@ -394,6 +397,12 @@ test('AT-6.11.19-1 (RED) a declared agent wait that NO waiter consumed reds the 
       count: async () => (sel.includes(`href="${SESSION}"`) ? 1 : 0),
       click: async () => { route = SESSION; },
       waitFor: async () => {},
+      // The ONE anchor this page models. `driveBeat` selects a nav link by its
+      // href's PATHNAME (bead `forge-8vfn.7.5.3`), so a fake that models a link
+      // has to be able to hand back its href — `count()` alone can no longer
+      // answer the question the runner asks.
+      evaluateAll: async (fn: any, arg: any) =>
+        fn(sel.includes('href') ? [{ getAttribute: () => SESSION }] : [], arg),
     }),
     waitForURL: async () => {},
     waitForSelector: async () => {},
@@ -589,6 +598,7 @@ function fakeStudioWithN(n: number) {
   const locator = (sel: string): any => ({
     first: () => locator(sel),
     count: async () => (sel.includes('question-freetext') ? n : sel.includes('submit-answers') ? 1 : 0),
+    evaluateAll: async (fn: any, arg: any) => fn([], arg),
     nth: (i: number) => ({
       async fill(v: string) { filled[i] = v; },
       async evaluate(fn: (x: any) => unknown) {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { AuthoringLauncher } from '@/components/AuthoringLauncher';
-import { createHook, HOOK_LIFECYCLE_EVENTS, type HookLifecycleEvent } from '@/lib/hook-client';
+import { createHook, HOOK_LIFECYCLE_EVENTS, TOOL_SCOPED_HOOK_EVENTS, eventCarriesTool, type HookLifecycleEvent } from '@/lib/hook-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -48,7 +48,14 @@ export default function HookBuilderPage() {
       name: name.trim(),
       description: description.trim(),
       on,
-      ...(matcher.trim() ? { matcher: matcher.trim() } : {}),
+      // Gated on the EVENT, not merely on the field being rendered. Hiding a
+      // control does not clear its state: type a matcher on PreToolUse, switch
+      // to SessionEnd, and the input disappears while `matcher` still holds
+      // the text — so without this the request carries a matcher the operator
+      // can no longer see and the server rejects it, which is the same dead
+      // end as before with the cause now invisible. The submit boundary is
+      // where this has to be true.
+      ...(eventCarriesTool(on) && matcher.trim() ? { matcher: matcher.trim() } : {}),
       scriptBody,
       permissions: {
         env: permEnv.split(',').map((s) => s.trim()).filter(Boolean),
@@ -103,11 +110,26 @@ export default function HookBuilderPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label style={labelStyle} htmlFor="hk-matcher">Matcher (optional)</label>
-            <input id="hk-matcher" data-field="hook-matcher" style={inputStyle} value={matcher}
-              placeholder="e.g. Bash(gh pr create)" onChange={(e) => setMatcher(e.target.value)} />
-          </div>
+          {/* The matcher is offered only where it can be honoured. The server
+              refuses a matcher on an event that carries no tool ("Dispatch
+              would never fire this hook"), and that rule is right; offering
+              the field anyway let an operator fill in something that could
+              only ever 400 on submit. Story S7 beat 7 is the measurement:
+              four beats failed behind a hook that could not be created.
+              The field is REMOVED rather than disabled, and the section says
+              why in its place — a disabled input with no explanation is the
+              same dead end one step later. */}
+          {eventCarriesTool(on) ? (
+            <div>
+              <label style={labelStyle} htmlFor="hk-matcher">Matcher (optional)</label>
+              <input id="hk-matcher" data-field="hook-matcher" style={inputStyle} value={matcher}
+                placeholder="e.g. Bash(gh pr create)" onChange={(e) => setMatcher(e.target.value)} />
+            </div>
+          ) : (
+            <div data-section="hook-matcher-unavailable" data-matcher-unavailable-event={on} style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+              A matcher only applies to {TOOL_SCOPED_HOOK_EVENTS.join(' and ')} — {on} carries no tool to match against.
+            </div>
+          )}
           <div>
             <label style={labelStyle} htmlFor="hk-script">Script</label>
             <textarea id="hk-script" data-field="hook-script-body" rows={8} style={{ ...inputStyle, fontFamily: 'var(--font-mono, monospace)' }} value={scriptBody}
@@ -143,9 +165,6 @@ export default function HookBuilderPage() {
           </div>
           <AuthoringLauncher
             knownProjects={knownProjects}
-            onStarted={(sessionId, project) =>
-              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
-            }
           />
         </div>
     </StudioPage>
