@@ -64,15 +64,21 @@ export type ArchitectPhase =
   | 'rejected';
 
 /**
- * Result of the architect-completeness-critic FINALIZE gate (ADR ref:
+ * Result of the architect-completeness-critic (ADR ref:
  * brain/forge-dev/themes/2026-07-01-architect-coverage-scope-fidelity.md).
- * Presence on `ArchitectStatus` means the critic has ALREADY run for this
- * session — one-shot-per-session: a subsequent finalize turn skips the critic
- * and promotes straight through. The operator's re-approve after findings IS
- * the acknowledgement; there is no separate UI action.
+ * Ruling 380: the critic runs at the END of the DRAFTING turn, before the
+ * operator is ever asked — findings send the architect another draft round,
+ * and only a clean pass (or the round ceiling) promotes the session to
+ * `awaiting-verdict`. So presence here means "the plan the operator is being
+ * asked about was checked", and `round` says which round produced it.
  */
 export type CompletenessCriticStatus = {
   ranAt: string;
+  /** The DRAFT ROUND this record checked (ruling 380) — the field carries the
+   *  move's meaning: the flag used to say "this session was critiqued once",
+   *  and a re-drafted plan rode the earlier pass; it now says "this round was
+   *  checked". */
+  round: number;
   findings: CompletenessCriticFinding[];
   /** True when the critic turn crashed (advisory infra; treated as zero
    *  findings — finalize still proceeds to promote). */

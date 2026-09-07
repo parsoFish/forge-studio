@@ -81,8 +81,16 @@ test('it FAILS on a NEW file over the cap (the defect it exists for)', () => {
 
 test('it FAILS when a baselined file GREW — the ratchet only turns one way', () => {
   const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
-  const [path, lines] = Object.entries(real)[0]!;
-  withBaseline({ ...real, [path]: lines - 1 }, (b) => {
+  const [path] = Object.entries(real)[0]!;
+  // The planted ceiling is derived from the file's ACTUAL length, not from its
+  // baseline row. Deriving it from the row meant this test only measured
+  // anything while that one file sat exactly at its ceiling: the moment a PR
+  // shrank it (M6-A: 1,464 → 1,410) the planted `baseline - 1` was still above
+  // the real size, nothing "grew", and the ratchet's own pin passed green
+  // without exercising the branch it exists for. §15.192's shape — an
+  // expectation that moves with what it measures measures nothing.
+  const actual = readFileSync(join(ROOT, path), 'utf8').split('\n').length - 1;
+  withBaseline({ ...real, [path]: actual - 1 }, (b) => {
     const { code, out } = run(['--baseline', b]);
     assert.equal(code, 1, `a file above its baseline must fail — got exit 0:\n${out}`);
     assert.match(out, /grew/);

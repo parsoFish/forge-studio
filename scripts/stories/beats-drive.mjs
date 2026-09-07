@@ -203,9 +203,62 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // reaching a DIFFERENT route; a form-driven flow dwells on one route across
   // several operator actions, and the shipped runner called that unreachable.
   if (new URL(page.url()).pathname !== target) {
-    const nav = page.locator(`[data-nav][href="${target}"]`).first();
-    const link = page.locator(`a[href="${target}"]`).first();
-    const clickable = (await nav.count()) > 0 ? nav : (await link.count()) > 0 ? link : null;
+    // QUERY-BLIND BY PATHNAME (bead `forge-8vfn.7.5.3`, T1 ruling 451).
+    //
+    // The runner READ a URL query-blind — `readObserved` compares
+    // `new URL(page.url()).pathname` — and SELECTED a link query-strict, with an
+    // exact `[href="<route>"]`. So it accepted arriving at a URL it refused to
+    // find the link to, and the failure read "no link points at it" while the
+    // anchor was on the page. Three LIVE product sites mount `SessionMinted`
+    // with a `project`, so their hrefs carry `?project=…`:
+    // `DemoStageHandoff.tsx:60`, `DemoTimeline.tsx:215`,
+    // `ContractResolutionPanel.tsx:295` — the whole demo path.
+    //
+    // Site-by-site query dropping was REFUSED: a link that legitimately needs a
+    // parameter must stay reachable, and a story declares the route an operator
+    // would say out loud, not the product's parameter plumbing.
+    //
+    // The href is resolved against a base so a relative one normalises the same
+    // way the browser resolves it; an href that will not parse is skipped rather
+    // than guessed at.
+    const hrefs = await page
+      .locator('[data-nav][href], a[href]')
+      .evaluateAll(
+        (els, want) =>
+          els
+            .map((e) => e.getAttribute('href'))
+            .filter((h) => {
+              if (h === null || h === '') return false;
+              try {
+                return new URL(h, 'http://forge.invalid').pathname === want;
+              } catch {
+                return false;
+              }
+            }),
+        target,
+      );
+    const distinct = [...new Set(hrefs)];
+
+    if (distinct.length > 1) {
+      // NAMED, never picked. Two links whose pathnames match and whose queries
+      // differ are two different destinations, and choosing one by DOM order is
+      // how a beat silently starts asserting the wrong page (the same shape as
+      // `resolveExpectations`' best-match tie-break).
+      const observed = await readObserved(page, beat);
+      return stuckVerdict(
+        beat,
+        observed,
+        `ambiguous real-nav path to "${target}" from "${observed.route}": ${distinct.length} links share ` +
+          `that pathname and differ only in their query — ${distinct.join(' , ')}. The runner will not pick ` +
+          'one; name the destination the beat means, or give the page one link for it.',
+      );
+    }
+
+    const href = distinct[0] ?? null;
+    const nav = href === null ? null : page.locator(`[data-nav][href="${href}"]`).first();
+    const link = href === null ? null : page.locator(`a[href="${href}"]`).first();
+    const clickable =
+      nav !== null && (await nav.count()) > 0 ? nav : link !== null && (await link.count()) > 0 ? link : null;
 
     if (clickable === null) {
       const observed = await readObserved(page, beat);
@@ -213,8 +266,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
         beat,
         observed,
         `no real-nav path to "${target}" from "${observed.route}": no [data-nav] pillar and no ` +
-          'link points at it. The runner does not fall back to page.goto — an unreachable route ' +
-          'must not pass as a beat.',
+          'link whose PATHNAME is that route (a query string does not disqualify one). The runner ' +
+          'does not fall back to page.goto — an unreachable route must not pass as a beat.',
       );
     }
     // Wait for the NEW route, not merely for "a ready page". The page we

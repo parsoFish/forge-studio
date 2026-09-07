@@ -76,7 +76,7 @@ export function PlanGate({
   idea: string;
   /** Dedicated plan screen — render the PLAN.html iframe tall (its own page). */
   fullPage?: boolean;
-  /** Findings from the architect-completeness-critic FINALIZE gate (ADR
+  /** Outstanding findings from the architect-completeness-critic (ADR
    *  REFINEMENT-PLAN §6.3), present once the critic has run for this
    *  session. A re-approve with findings still present skips the critic and
    *  proceeds — this block is advisory only. */
