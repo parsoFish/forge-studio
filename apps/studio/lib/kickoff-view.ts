@@ -57,6 +57,13 @@ export function sessionDirPreview(kind: string, selector: 'project' | 'kb' | 'no
  * conditionally spread — an attribute that appears only on success cannot be
  * distinguished from a page that never rendered it.
  */
-export function kickoffMainData(kind: string, mintedSessionId: string): Record<string, string> {
-  return { 'data-kickoff-kind': kind, 'data-minted-session-id': mintedSessionId };
+export function kickoffMainData(kind: string, mintedSessionId: string, sdk: string): Record<string, string> {
+  // `data-sdk` (M6-A row 1, ruling 418): the SDK this session will run under,
+  // stated rather than chosen — there is exactly one per agent today, so a
+  // picker would be a control nobody can move, but an operator paying for a
+  // turn should still be able to read what it runs on. Always present, empty
+  // while the capability read is in flight, for the same reason
+  // `data-minted-session-id` is: absence and "not known yet" must not be the
+  // same DOM.
+  return { 'data-kickoff-kind': kind, 'data-minted-session-id': mintedSessionId, 'data-sdk': sdk };
 }

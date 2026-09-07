@@ -123,6 +123,8 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
 import { readSessionCostUsd } from './session-readability.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPathRelative } from '@forge/library/skill-path.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
@@ -583,21 +585,19 @@ export async function handleStudioSessionsRoutes(
         // SKILL.md. Scoped to `strategy:fixed` on purpose: such an agent has
         // exactly one legal tier, so a session of that kind provably ran on
         // it; a `strategy:range` agent's untiered session ran on whatever the
-        // default was at the time, which today's default may no longer be, so
-        // "not recorded" stays the honest answer there. Never stored — a
-        // skill re-pointed at a different model cannot leave a stale copy.
-        // W8-F6: a legacy session recorded no status.json at all, so it falls
-        // straight to the kind's FIXED tier (derived live off the agent's
-        // SKILL.md) or `null` — never a fabricated tier.
+        // default was at the time, so "not recorded" stays honest there. Never
+        // stored — a skill re-pointed at another model leaves no stale copy.
+        // W8-F6: a legacy session has no status.json at all and falls straight
+        // to the kind's FIXED tier, or `null` — never a fabricated tier.
         modelTier: typeof statusParsed?.modelTier === 'string'
           ? statusParsed.modelTier
           : fixedTierForSessionKind(ctx.forgeRoot, descriptor),
-        // S9 beat 8 — "cost recorded". The session's own spend, derived from
-        // its `events.jsonl` through the ONE kernel rule (never summed here,
-        // never a second formula). ALWAYS present, like `modelTier` and
-        // `affordances`; `null` is honest-absent — no priced row in the log —
-        // and is what the page renders as "not recorded" rather than $0.00.
+        // S9 beat 8 — "cost recorded": this session's own spend through the ONE
+        // kernel rule, never summed here. ALWAYS present like `modelTier`;
+        // `null` is honest-absent (no priced row) and renders "not recorded".
         costUsd: readSessionCostUsd({ logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId }),
+        // Stated, not chosen (418): read live off the agent's SKILL.md, never stored.
+        sdk: deriveAgentSpec(skillPathRelative(descriptor.agent)).sdk,
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
         // used internally to gate `ensureSessionTail` (this file's header),
         // now also threaded onto the wire (ALWAYS present, never omitted —
