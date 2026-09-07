@@ -69,7 +69,7 @@ export default function HomePage() {
   const nowMs = useNowTicker();
 
   // ---- the merged everything-ledger, LIFTED and shared with /monitor ----
-  const ledger = useEverythingLedger({ agents, runs, ready });
+  const ledger = useEverythingLedger({ agents, runs, sessions, ready });
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   // W7-B1 (home-sessions-14): the in-flight `sessions` index feeds hex
