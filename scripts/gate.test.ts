@@ -214,3 +214,51 @@ jobs:
     }
   });
 });
+
+// ── bead 6.9: an argument the gate does not understand must REFUSE ──────────
+//
+// MEASURED, and the measurement corrects this lane's own first-turn report.
+// M6-C opened by reporting "`gate.sh --list` HANGS — killed at 20 s and at
+// 120 s, printing nothing", and built a parallel gate wrapper on the strength
+// of it. `--list` does not hang. The invocation was
+//
+//     gate.sh <worktree> <campaign-dir> --list
+//
+// with the flag LAST, and line 28 reads it only as `$1`. So `--list` landed in
+// `$3`, was ignored in silence, and the FULL gate ran — a build, `npm test` and
+// `test:ui`, which is what "hung" for 20 s and for 120 s. T1 reproduced the
+// same shape from the main checkout ("exit 124 after 20 s, three header lines
+// printed"): three header lines is the full gate STARTING.
+//
+// The defect is therefore real but it is not a hang. A tool that silently
+// ignores an argument it does not understand, and answers with a ten-minute
+// suite instead of an error, cannot be told apart from a tool that is broken —
+// and the operator's next move is to work around a fault that was never there.
+// Refusing costs one line; the misdiagnosis cost this lane a parallel gate.
+
+describe('gate.sh — an argument it does not understand is refused, never ignored', () => {
+  test('6.9: a trailing --list is REFUSED rather than silently running the whole gate', () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const r = gate(d, join(d, 'camp'), '--list');
+    assert.notEqual(r.status, 0, `it must not proceed. out: ${r.out}${r.err}`);
+    assert.match(`${r.out}${r.err}`, /unexpected argument/i, `and it must say which one: ${r.out}${r.err}`);
+    assert.doesNotMatch(`${r.out}${r.err}`, /npm run build/, 'it must not have started running steps');
+  });
+
+  test('6.9: any surplus argument is refused, not only a misplaced flag', () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const r = gate(d, join(d, 'camp'), 'whatever');
+    assert.notEqual(r.status, 0);
+    assert.match(`${r.out}${r.err}`, /unexpected argument/i);
+  });
+
+  test('6.9 POSITIVE CONTROL: the two documented forms still work', () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const listed = gate('--list', d);
+    assert.equal(listed.status, 0, `--list first is the documented form: ${listed.err}`);
+    assert.match(listed.out, /^RUN /m);
+  });
+});
