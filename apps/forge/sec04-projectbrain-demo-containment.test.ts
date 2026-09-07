@@ -81,7 +81,7 @@ import { startBridge } from './ui-bridge.ts';
 import { projectBrainSessionDir } from '../../packages/sessions/kinds/project-brain.ts';
 import type { ProjectBrainStatus } from '../../packages/sessions/kinds/project-brain.ts';
 import { demoSessionDir } from '@forge/sessions/kinds/demo-builder.ts';
-import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
+import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;
 

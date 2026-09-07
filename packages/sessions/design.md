@@ -248,3 +248,35 @@ the generic spine. ADR 043 already records architect as the deliberate
 branching-control-flow case that migrates last. If it ever does migrate, this
 section and its test are what must be changed on purpose rather than
 discovered.
+
+## The demo kind is three modules
+
+Bead 6.11.49's write-then-run fix took `kinds/demo-builder.ts` to 802 lines
+against the 800-line cap, and 1.0.md §0 says split, never baseline.
+
+**The seam was measured, not guessed.** `runGenerateStep` and `runLockStep` use
+disjoint helper sets — counted by reference over each body — so generate is the
+one place the file cuts. But the two halves are not independent: the generate
+half referenced ELEVEN names the parent declared, and carving it out while
+importing those back would make the parent import the step and the step import
+the parent. That is ruling 96's shape, a cut that severs a cycle rather than a
+dependency.
+
+**A leaf both halves stand on already existed.** Ten of the eleven are path
+facts and status types, so they move DOWN into `kinds/demo-session-store.ts`,
+beside the generation layout it already held. The eleventh,
+`demoBuilderAgentSpec`, is an ADR-024 derivation from
+`skills/demo-builder/SKILL.md` — the kind's IDENTITY, not a path fact — so it
+stays in the parent and arrives at the step as `args.agentSpec`. Deriving it a
+second time inside the step would have been a duplicate derivation; importing
+it back would have been the cycle. One parameter buys a one-way seam.
+
+The three modules form a DAG with zero back-edges, proved by a comment-stripped
+probe on the real tree rather than asserted:
+`demo-session-store.ts` ← `demo-generate.ts` ← `demo-builder.ts`.
+
+`check-raw-fs-guarded.mjs` reaches these sinks only through a module NAMED in
+its explicit list, so `kinds/demo-generate.ts` was ADDED beside its parent
+there, never swapped in — see `docs/reference/request-path-sinks.md`
+§"Relocated in M6-A row 5" for the conserved per-kind sink census.
+

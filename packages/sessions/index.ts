@@ -32,8 +32,10 @@ export { ARCHITECT_MODEL, architectAgentSpec, buildManifest, listArchitectSessio
 // duplicate identifier, and a door should not have two names for one type.
 export type { ArchitectStatus, DraftInitiative } from './kinds/architect.ts';
 export { runBrainFixTurn } from './kinds/brain-fix.ts';
-export { DEMO_HTML_REL_PATH, demoSessionDir, demoTaskLines } from './kinds/demo-builder.ts';
-export type { DemoBuilderStatus } from './kinds/demo-builder.ts';
+export { demoSessionDir } from './kinds/demo-builder.ts';
+export { demoTaskLines } from './kinds/demo-generate.ts';
+export { DEMO_HTML_REL_PATH } from './kinds/demo-session-store.ts';
+export type { DemoBuilderStatus } from './kinds/demo-session-store.ts';
 export { instructionsSessionDir, runInstructionsTurn } from './kinds/instructions.ts';
 export type { InstructionsStatus } from './kinds/instructions.ts';
 export { SESSION_KIND_RUNNERS } from './kinds/registry.ts';

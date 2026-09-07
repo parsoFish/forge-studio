@@ -356,7 +356,7 @@ export const EXPLICIT_MODULES = [
   'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts',
   'packages/sessions/kinds/instructions.ts',
-  'packages/sessions/kinds/demo-builder.ts',
+  'packages/sessions/kinds/demo-builder.ts', 'packages/sessions/kinds/demo-generate.ts', // heir ADDED beside its parent, never swapped in (6.11.49; rationale in docs/reference/request-path-sinks.md)
   'packages/agents/band-agent-run.ts', // shared seed; two safe sites allowlisted
   // M4 §4 step 2: carving this module's routes out took its HTTP-plumbing
   // signal with them, dropping it to tier 2 where `runId` is excluded; ten
