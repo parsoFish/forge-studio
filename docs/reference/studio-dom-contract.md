@@ -42,11 +42,18 @@ root (`data-onboard-session-id`, `data-architect-session-id`,
 `data-demo-session-id`, `data-session-id`) and offers the way in as a separate act
 (`[data-action="view-onboarding-session"|"view-architect-session"|
 "view-demo-session"]` — the shared `components/studio/session/SessionMinted.tsx`).
-**No id, no key** (`forge-8vfn.6.11.5`): the root publishes the attribute only
-once the id exists. A key rendered present-and-empty is indistinguishable from
-one that is about to be filled, so any consumer waiting for it to appear — the
-story runner's post-`do` wait among them — is answered by a value that names
-nothing.
+**No id, no LINK — but the KEY is always there** (`forge-8vfn.6.11.5`, then
+rulings 437/438). The anchor exists only once the id does, because a link that
+navigates must never point at a session that was never created. The ATTRIBUTE is
+the opposite: it is the binding handle, and it is published from first paint as
+`""`, filled on the mint, never absent. The two were briefly the same rule.
+`6.11.5` made the key absent because a present-and-empty value answered the story
+runner's post-`do` read instantly, naming no session — but absent is the same
+race one step earlier, since an observer that collects nested `data-*` in one
+read cannot tell "no key" from "not yet". **Ruling 438 fixed the reader instead**:
+a beat whose expectation carries a `<name>` placeholder always enters the bounded
+wait, and an unfilled binding reports "minted nothing within N ms", so an empty
+value can no longer answer a wait at all.
 `router.push`ing from inside the click that mints the id leaves it observable to
 nothing, so no automation can bind `/sessions/<kind>/<id>`.
 **The key must be DISTINCTLY NAMED, not the generic `data-session-id`**
@@ -3450,10 +3457,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   `/sessions/architect/new` (the two entries converge — no more bounce link).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
   [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
-  `data-architect-session-id` is ABSENT until Start mints one and then carries it
-  beside `[data-action="view-architect-session"]` (M1-G, `forge-8vfn.5.5`;
-  `forge-8vfn.6.11.5` — it used to render empty from first paint, so a consumer
-  waiting for the key to appear was answered by a value naming no session); the project field
+  `data-architect-session-id` is PRESENT FROM FIRST PAINT as `""` and carries the
+  id once Start mints one, beside `[data-action="view-architect-session"]` — the
+  anchor, which appears only with the id (M1-G, `forge-8vfn.5.5`;
+  `forge-8vfn.6.11.5` made the key absent instead, and rulings 437/438 restored
+  the empty-string form once an empty value could no longer answer a bounded
+  wait — `forge-8vfn.7.3.2`); the project field
   (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
   `name (id)`) — an unknown `?project=` prefill surfaces
   `[data-unknown-project="<id>"]` and is never submitted
