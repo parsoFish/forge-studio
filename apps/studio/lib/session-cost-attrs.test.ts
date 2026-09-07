@@ -35,7 +35,7 @@ const PAYLOAD: SessionShellPayload = {
   affordances: [],
   finalized: null,
   transcriptError: null,
-  modelTier: 'opus', costUsd: null,
+  modelTier: 'opus', costUsd: null, sdk: 'claude',
   terminal: false,
   transcriptSources: [],
   lifecycle: { state: 'working' as const, needsYou: false, error: null, idleMs: null, cancellable: true },

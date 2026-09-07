@@ -114,6 +114,8 @@ export type SessionShellReadyState = {
   /** S9 beat 8 — the session's own spend, as the route derived it. `null` =
    *  not recorded (no priced row in its log), never "cost nothing". */
   costUsd: number | null;
+  /** M6-A row 1 — the SDK the session runs under. */
+  sdk: string;
   /** W6-B8 — the payload's own `terminal` (server-derived, see session-
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
@@ -299,6 +301,7 @@ function readyDataAttrs(input: {
   panes: SessionPaneSet;
   legacy: boolean;
   costUsd: number | null;
+  sdk: string;
 }): SessionShellDataAttrs {
   return {
     'data-session-status': 'ready',
@@ -320,6 +323,8 @@ function readyDataAttrs(input: {
     // wherever it is asked. OMITTED when the route has no figure: absence
     // means "not recorded", never "cost nothing" (HistoryLedger's own rule).
     ...(input.costUsd !== null ? { 'data-ledger-cost-usd': input.costUsd.toFixed(2) } : {}),
+    // M6-A row 1 / 418 — stated, not chosen; always present, like the tier.
+    'data-sdk': input.sdk,
     // W8-B3 (ON-5) — the derived pane set, in the DOM so a journey asserts
     // WHICH panes a kind renders instead of scraping the copy inside them.
     'data-session-panes': input.panes.ids.join(','),
@@ -360,6 +365,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     affordances: payload.affordances,
     modelTier: payload.modelTier,
     costUsd: payload.costUsd,
+    sdk: payload.sdk,
     terminal: payload.terminal,
     legacy: payload.legacy,
     transcriptSources: [...payload.transcriptSources],
@@ -377,6 +383,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
       panes,
       legacy: payload.legacy,
       costUsd: payload.costUsd,
+      sdk: payload.sdk,
     }),
   };
 }
@@ -430,6 +437,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
         // Session-level too: what the session has spent does not depend on
         // which stage of its transcript the operator is reading.
         costUsd: state.costUsd,
+        sdk: state.sdk,
       }),
     },
   };

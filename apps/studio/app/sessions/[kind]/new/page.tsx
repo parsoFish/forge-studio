@@ -328,7 +328,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         // {project} (onboarding-agent is strategy:fixed — no tier on the
         // wire; the picker renders its read-only chip).
         case 'onboarding': {
-          const r = await startOnboardingSession(project.trim());
+          const r = await startOnboardingSession(project.trim(), tier);
           result = r.ok ? { ok: true, sessionId: r.sessionId, project: r.project } : { ok: false, error: r.error };
           break;
         }
@@ -407,7 +407,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       dataPage="session-kickoff"
       ready={ready}
       title={sessionKindTitle(kind)}
-      mainData={kickoffMainData(kind, mintedSessionId)}
+      mainData={kickoffMainData(kind, mintedSessionId, capability?.runtimeSdks?.[0] ?? '')}
     >
       {/* W7-B1 (sessions-kinds-05): plain-English orientation first, the
           on-disk provenance demoted to one line, and a way back out —
