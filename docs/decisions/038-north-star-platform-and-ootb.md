@@ -7,7 +7,7 @@ into the example package, so deleting it failed to resolve rather than degrading
 
 **Status:** Accepted (operator decision 2026-07-17 — [roadmap README §8, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)).
 **Date:** 2026-07-17
-**References:** [docs/explanation/architecture.md](../repo-map.md) (the three-scope contributor map this
+**References:** [docs/explanation/architecture.md](../explanation/architecture.md) (the three-scope contributor map this
 ADR's split rides on), [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md)
 (MVUS, re-scoped to Scope 2 by this ADR), [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md)
 initiative R5-07, feature F8 (the strike-list this ADR closes).
@@ -107,7 +107,7 @@ the split. This ADR is the sole origin of the two-scope mission.
 ## Rejected alternatives
 
 - **Leave the single-level framing and rely on `docs/explanation/architecture.md`'s three-scope table
-  alone.** Rejected — repo-map.md is a contributor's *where does this file go* map, not
+  alone.** Rejected — `docs/explanation/architecture.md` is a contributor's *where does this file go* map, not
   a north star; it doesn't reach CLAUDE.md's opening framing, which is what every session
   actually reads first and judges decisions against (the adversarial review's D1/D2/E9
   findings were specifically about the instruction layer, not the contributor map).
@@ -123,7 +123,7 @@ the split. This ADR is the sole origin of the two-scope mission.
   — the operator approval this ADR records.
 - [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md) —
   initiative R5-07, feature F8 — the strike-list this ADR closes.
-- [docs/explanation/architecture.md](../repo-map.md) — the three-scope contributor map this reframe
+- [docs/explanation/architecture.md](../explanation/architecture.md) — the three-scope contributor map this reframe
   promotes to north-star status.
 - [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md) —
   MVUS, re-scoped to Scope 2 by this ADR.

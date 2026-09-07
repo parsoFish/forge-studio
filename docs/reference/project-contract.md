@@ -59,7 +59,7 @@ point.
 
 ### The process vocabulary (how the clauses group)
 
-The clauses read as fifteen preflight ids (plus C9, documented but not yet
+The clauses read as seventeen preflight ids (plus C9, documented but not yet
 machine-checked), but they enforce **six processes** — the way the operator
 diagram frames a project. Clause ids stay the stable anchors; each process is
 the lens (R1-04):
@@ -133,8 +133,9 @@ only to explicitly leave unbound when Brain 3 doesn't exist yet).
 
 These clauses are checked by `forge preflight <project>`. Hard clauses
 (C1/C2/C4) fail the preflight (non-zero exit); C1b and C7 are conditionally
-hard — C1b once `testProcess.ci` is declared, C7 once
-`testProcess.acceptance.required` is `true`; advisory clauses
+hard — C1b once `testProcess.ci` is declared. C7 is never hard in `forge
+preflight` itself: its `required: true` enforcement lives in the PM phase and the
+dev-loop `requiresEnv` guard (see the Enforcement table); advisory clauses
 (C5/C6/C8/DEMO/DEMO-SKILL/DEMO-ALIGN/ARTIFACTS/BRAIN) surface as warnings that
 never flip the verdict.
 
@@ -157,8 +158,9 @@ brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel
 demo machinery, preflight-fix edits) is committed to a single persistent
 `forge-studio` branch (`packages/projects/project-repo-tx.ts`) rather than left
 uncommitted in the working tree. Changes accumulate there across many actions; a
-single **Save** (`POST /api/studio/projects/:id/save-repo`, the project-builder
-`SaveProjectRepoBar`) merges that one branch into the default branch — **no CI**,
+single save (`POST /api/studio/projects/:id/save-repo`, called by the project
+onboarding and preflight-write flows rather than a named UI control) merges that
+one branch into the default branch — **no CI**,
 since these are forge-controlled, non-structural files — and pushes to origin so
 cycles branching from `origin/main` (and GitHub) see the configuration. Forge's
 own central artifacts (Brain 3 `brain/projects/<name>/`, ADR 035) are NOT project
@@ -630,7 +632,7 @@ The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
 
 Project-action skills are **not** `artifactRoot`-scoped, despite an earlier
 version of this line saying so: the resolver (`SkillsBind`/
-`resolveSkillBinding`, `apps/forge/bridge-studio.ts`'s `deriveProjectLocalSkills`)
+`resolveSkillBinding`, `packages/projects/project-roster.ts`'s `deriveProjectLocalSkills`)
 scans the fixed, literal path **`.forge/skills/<id>/SKILL.md`** — one level
 deep — and `artifactRoot` never enters that function or its caller. A project
 onboarded before this was fixed (skills physically under
@@ -678,15 +680,14 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 > the [ADR-036 amendment](../decisions/036-orchestrator-owned-gate-execution.md)
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
 > (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
-> flow's merge boundary — inside the demo band (`execDemo`, in
+> flow's merge boundary — inside the integrate band (`execDemo`, in
 > `packages/factory/phases/executor-table.ts` since M2-B),
-> BEFORE the demo, on the integrated branch tip. A red baseline compiles a
+> BEFORE integrate runs, on the integrated branch tip. A red baseline compiles a
 > `gate-fix` work item (`packages/flows/gate-fix-loop.ts`) + stamps the send-back,
 > and the DAG walk terminates to `ready-for-review` with NO PR opened — the
 > fix-loop drain re-enters `resume_from:'develop'` and only a green baseline ever
-> reaches `openPrInline`. `composedUnifierGate` still runs for the retained
-> forge-cycle-shaped fixtures (retired at R4-01-F4); it is off
-> the live develop flow.
+> reaches `openPrInline`. The pre-M3 composed gate this replaced no longer
+> exists in the codebase; only comments referencing it survive.
 
 **Preserved invariant.** The regression criterion this relocation must hold,
 verbatim: **no path to merge exists with a red full-suite baseline.** The
@@ -694,8 +695,7 @@ merge-boundary gate catches a red full-suite baseline the scoped per-WI gates
 can't see, and nothing ships red as a result. This section relocates *where*
 that guarantee executes; it does not redesign the guarantee itself.
 
-**What relocates.** `composedUnifierGate`'s `initiative_gate` sub-check
-(part of its five-sub-check contract in `packages/factory/phases/developer-loop.ts`)
+**What relocates.** The retired composed gate's initiative-wide sub-check
 — today's project `quality_gate_cmd` run
 against the post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
 orchestrator-executed band at the develop flow's merge boundary (not an agent
@@ -709,7 +709,7 @@ introduced in this same PR; `.forge/project.json`, loader in
   `quality_gate_cmd`, C1).
 - `testProcess.ci` — the delivery net, run hermetic via the project's declared
   env-strip (today's `ci_gate`/`ci_fix_cmd` + `ci_gate_unset_env`, C1b) — the
-  same env-stripping `composedUnifierGate` already applies at its call site and
+  same env-stripping the retired composed gate applied at its call site and
   the same boundary the final CI delivery gate (`decideFinalCiGate`, in
   `packages/flows/ci-gate.ts`) enforces today.
 
@@ -720,7 +720,7 @@ The relocation re-homes *where* these two runs execute; `testProcess.local`/
 reaches the demo/review agents through the same seam dev-loop already
 uses: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
 `packages/factory/phases/developer-loop.ts`; write/clear behaviour in
-`writeGateFeedback` and `writeUnifierGateFeedback`, same file). The
+`writeGateFeedback`, same file). The
 file is deleted on every passing gate run and at session start, so its
 **present ⇒ fresh** rule holds unchanged: if an agent reads it, the failure is
 live, not a fossil.
@@ -772,7 +772,7 @@ gates structurally cannot see.
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
-| MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/archive/R4-ootb-suite.md` R4-10-F2) |
+| MB-GATE | **ENFORCED** — orchestrator-executed at the develop flow's merge boundary (R4-10-F2) | execution home: `runMergeBoundaryGate`, `packages/flows/cycle-helpers.ts`, wired at `packages/factory/phases/executor-table.ts` |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&

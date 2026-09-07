@@ -1613,7 +1613,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `<a href="/community/new">` in the header slot) plus per-row controls on
   the detail page (below). Trust decisions still never live here; the
   registry file is repo-tracked, Studio writes it and the operator commits
-  via their normal git flow (see `docs/community-registry-writes.md`).
+  via their normal git flow (see `docs/explanation/community-registry.md`).
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
   [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
   [data-hub-filter="all"|<hubId>]
@@ -2093,7 +2093,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`[data-run-ceiling=<usd|"">]`, text "Run agent ($N cap)" / "(no cost
   cap)"), seeded from the agent's own declared `budgets.maxBudgetUsd`
   (`Agent.declaredMaxBudgetUsd`) ahead of the run-level policy default —
-  see `docs/agent-cost-ceilings.md`; a ralph-loop agent renders
+  see `docs/reference/agent-cost-ceilings.md`; a ralph-loop agent renders
   `[data-component="standalone-blocked"]` with the honest refusal (the
   bridge 400s the dispatch — no run is minted just to fail); the run
   control stays DISABLED while the dispatched run is itself still running
@@ -3527,7 +3527,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `heading` parameterisation — and since W7-C2 the generic
   `SessionInteractivePanel` is its second real consumer (the per-question
   interview form, `sectionName="session-interview"`), exactly the reuse the
-  parameterisation was kept for. **architect is now the ONLY kind left on its own
+  parameterisation was kept for. **architect and project-brain are the only kinds left on their own bespoke
   panel**, permanently (ADR-043 amendment §4).
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
   (W6-B9)** render the generic `SessionInteractivePanel` in this same ladder
@@ -3715,7 +3715,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
-  (W6-B9)** — architect is the ONLY kind left on its own bespoke panel
+  (W6-B9)** — architect and project-brain are the only kinds left on their own bespoke panels
   (`SessionArchitectPanel`, documented above), permanently (ADR-043
   amendment §4 — its branching council/interview control flow has no linear
   phase-table seam). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8)

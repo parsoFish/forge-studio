@@ -69,7 +69,7 @@ time-ordered layout in this module implements it.
 in `studio-endstate-v2/journeys-data.jsx`, and `scripts/story-parity.mjs` derived a
 parity report by parsing that mockup at test time.
 
-That guard is retired. The nine operator stories plus the smoke story
+That guard is retired. The ten operator stories plus the smoke story
 ([`docs/roadmaps/1.0.md`](../roadmaps/1.0.md) §3) replace it: a story is the
 operator flow the mockup was a picture of, and unlike the mockup it executes —
 serving as end-to-end test, demo clip and usage documentation from one script.

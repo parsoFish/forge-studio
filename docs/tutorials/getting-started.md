@@ -36,7 +36,7 @@ The directory name becomes the project id (lowercased). The repo **must be a git
 repository** — forge develops on branches and hands you a PR.
 
 Then make it satisfy the **forge↔project contract**
-([docs/reference/project-contract.md](./forge-project-contract.md)). Two ways:
+([docs/reference/project-contract.md](../reference/project-contract.md)). Two ways:
 
 - **Studio (UI):** Studio → Projects → New. The onboarding form scaffolds
   `.forge/project.json`, idempotent `roadmap.md` + `brain/profile.md` stubs, and
@@ -44,7 +44,7 @@ Then make it satisfy the **forge↔project contract**
 - **By hand / for a roadmap-scale onboarding:** run the **`forge-onboard-project`**
   skill, which maps each contract invariant onto your project's shape (UI app,
   HTTP API, library, CLI, monorepo, infra provider) and files a roadmap-scale
-  initiative. Copy [`studio/starters/project.json.example`](../studio/starters/project.json.example)
+  initiative. Copy [`studio/starters/project.json.example`](../../studio/starters/project.json.example)
   to `projects/<id>/.forge/project.json` and fill in every field — it is
   language-agnostic and annotates each contract field.
 
@@ -64,7 +64,7 @@ forge preflight <id>
 ```
 
 Hard clauses (C1 quality gate, C2 scratch hygiene, C4 machine-readable context)
-must pass before forge will run a flow. Advisory clauses (C3/C5/C6/C8, DEMO,
+must pass before forge will run a flow. Advisory clauses (C5/C6/C8, DEMO,
 ARTIFACTS) only warn. Iterate until every hard clause is green. The same verdict
 renders live in the Studio project builder (the `ContractReadiness` panel).
 
@@ -130,7 +130,7 @@ Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
 across parallel work items.
 
-The **UI is the sole operator surface** ([ADR 031](./decisions/031-studio-consolidation.md))
+The **UI is the sole operator surface** ([ADR 031](../decisions/031-studio-consolidation.md))
 — author + run a cycle, review/approve, and recover stuck initiatives all from
 `forge studio`; the Recovery screen replaces the old `review`/`requeue` verbs, and new
 runs go through the architect flow or `POST /api/initiatives`. The only operator CLI
@@ -155,7 +155,7 @@ cycle archive, so the next cycle is smarter.
 
 ## Where to go next
 
-- [The forge↔project contract](./forge-project-contract.md) — every invariant, in full.
+- [The forge↔project contract](../reference/project-contract.md) — every invariant, in full.
 - The `forge-onboard-project` skill — maps the contract onto any project form and files a roadmap-scale initiative.
-- [`studio/starters/project.json.example`](../studio/starters/project.json.example) — the annotated contract template.
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — the four merge gates and per-seam extension recipes.
+- [`studio/starters/project.json.example`](../../studio/starters/project.json.example) — the annotated contract template.
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) — the four merge gates and per-seam extension recipes.

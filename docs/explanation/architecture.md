@@ -75,12 +75,12 @@ The package ranks in the diagram are read directly from
 object the ratchet's `classify()` function checks every edge against — so
 this picture cannot silently drift from what the ratchet actually enforces.
 Regenerating it is one `import()` of that module plus a loop over the ranks;
-there is no hand-maintained copy to fall out of sync. On this tree,
-`node scripts/check-boundaries.mjs` reports:
-
-```
-check-boundaries: PASS — 7768 edges, 75 baselined allow-graph violation(s)
-```
+there is no hand-maintained copy to fall out of sync. `node
+scripts/check-boundaries.mjs` reports `PASS` against a baseline of **75**
+allow-graph violations, a number the ratchet only ever lets shrink. Its edge
+count is deliberately not quoted here: it moves with every file added, so a
+figure written into prose is wrong by the next commit — run the check for the
+current one.
 
 ```mermaid
 graph RL

@@ -221,7 +221,7 @@ passes to the SDK at spawn time.
 
 **`brainAccess: mandatory`** is enforced by convention (and by the
 brain-read policy in `CLAUDE.md`): planners and the reflector must read the
-brain before acting; the dev-loop must not.
+brain before acting; the dev-loop must not read Brain 1/2, though it may read the project's Brain 3 as supplemental context (ADR 018 as amended).
 
 `deriveAgentSpec('skills/my-agent/SKILL.md')` turns a SKILL.md into the
 runtime spec: `{ phase, skill, tier, allowedTools, disallowedTools }`. The

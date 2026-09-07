@@ -10,7 +10,7 @@
 > (`data-flow-ready`). ADR-017 remains the authority for the C1–C6 derivation.
 
 > **Amended 2026-05-31.** Two changes recorded after the betterado run, both in
-> [`docs/reference/project-contract.md`](../forge-project-contract.md): (a) a
+> [`docs/reference/project-contract.md`](../reference/project-contract.md): (a) a
 > conditional **C7 — external-resource model** clause (two-layer verification:
 > a creds-free in-loop gate + an operator-gated live-confirmation layer) for
 > projects that can only be verified against a live external system; and (b) a

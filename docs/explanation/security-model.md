@@ -10,7 +10,7 @@ write in `packages/` and `apps/` whose path derives from request data,
 classified `guarded` / `unguarded` / `accidentally-safe`. **When the ratchet
 tells you to add a row, that is the page it means.**
 
-**Why this document exists.** Between 2026-07 and 2026-08 the same defect was found ten separate times across six initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
+**Why this document exists.** Between 2026-07 and 2026-08 the same defect was found twelve times across seven initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
 
 The guard those fixes converge on is [`packages/kernel/path-guard.ts`](../../packages/kernel/path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
 
@@ -203,7 +203,7 @@ the diff before it is committed.
 *shape* appears anywhere reachable from a bridge HTTP route in `packages/`/`apps/`
 — a new file entering the reachable set, or a new/growing sink call inside a file
 already in it. That is precisely the discovery gap this document's own introduction
-names: "the same defect was found ten separate times across six initiatives, always
+names: "the same defect was found twelve times across seven initiatives, always
 opportunistically... discovery was luck-driven."
 
 **What it provably cannot do — stated here in substance because an audit or lint that

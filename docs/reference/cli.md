@@ -46,7 +46,7 @@ phase invocation — not day-to-day operator commands.
 | `forge architect` | Architect-phase entry point (the interactive ideation runner). |
 | `forge instructions` | Run the `instructions-creator` skill to author a project's `AGENTS.md`. |
 | `forge demo-builder` | Run the `demo-builder` skill to author a project's demo-generation machinery. |
-| `forge demo` | Demo-phase entry point (author/inspect a cycle's demo bundle). |
+| `forge demo` | Integrate-phase entry point (author/inspect a cycle's demo bundle). |
 | `forge project-brain` | Run the `project-brain-builder` skill to author a managed project's initial brain. |
 
 Retired verbs (`cycle`, `enqueue`, `metrics`, `review`, `report`, `log`, `requeue`,

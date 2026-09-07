@@ -4,7 +4,7 @@
 
 **Relates to:** ADR-027 (studio object model), ADR-028 (flow engine), ADR-031
 (Studio is the product). Realises the install-to-first-flow north star;
-campaign plan in [`../reference/studio-first-flow-ux.md`](../reference/studio-first-flow-ux.md).
+campaign plan recorded in this ADR.
 
 ## Context
 

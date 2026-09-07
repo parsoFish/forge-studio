@@ -209,7 +209,7 @@ project's conventions).
 
 ## References
 
-- [`docs/reference/project-contract.md`](../forge-project-contract.md) — the unified contract document (rewritten by this ADR).
+- [`docs/reference/project-contract.md`](../reference/project-contract.md) — the unified contract document (rewritten by this ADR).
 - [ADR-017](./017-forge-project-contract.md) — the original contract (C1–C6 derivation from trafficGame). This ADR extends it; ADR-017 is not superseded.
 - [ADR-027](./027-studio-object-model.md) — the Studio object model that introduced the five project fields.
 - [ADR-033](./033-studio-first-flow-ux.md) — first-flow UX; the `ContractReadiness` panel.
