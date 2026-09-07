@@ -38,6 +38,7 @@ import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
 import { fenceBreaches, describeFence, siblingWorktreeEscapes, snapshotSiblingWorktrees, unownedEscapes } from './sweep.mjs';
+import { sessionScratchRoots } from './fence-attribution.mjs';
 
 // --- 308: the ground's Brain 3 is an expected artifact, held for the verdict --
 
@@ -367,4 +368,170 @@ test('6.11.32: a ground that was ALREADY there is not charged to this run', () =
 
   const escapes = siblingWorktreeEscapes(sibling, baseline, { liveRoots: () => new Map() });
   assert.deepEqual(escapes, [], 'the baseline covers it, exactly as it does for tracked dirt');
+});
+
+// --- 7.5.1: a worktree that APPEARED mid-run is attributed by who owns its path
+//
+// MEASURED, M6-A S1 run 12 (2026-09-07 12:37:23Z, `_1.0/reports/m6-a-S1-1.log`
+// lines 86-95 and 100):
+//
+//   fence: ESCAPED _queue/done — written into /tmp/claude-1000/
+//   -home-parso-forge-m6-b/d7ba5f92-.../scratchpad/base, a worktree this run
+//   does not own
+//   S1: CONTAINMENT FAILURE — 10 path(s) written into 1 worktree(s) this run
+//   does not own. The run is RED regardless of its beats.
+//
+// and a funded run ($2.89) died on them. What actually happened: lane M6-B cut
+// a disposable `git worktree` of main under its own scratchpad, mid-run, for a
+// read-only measurement. The ten "written" paths were that checkout's OWN
+// tracked skeleton — `_logs/.gitkeep`, `_queue/*`, `projects/*` — put there by
+// `git worktree add` itself. Lane m6-a never touched any of it.
+//
+// The enumeration was RIGHT to see the tree. The escalation is the defect, and
+// the same sweep printed both halves of it: nine paths in
+// `/home/parso/forge-m6-b` were correctly UNATTRIBUTABLE because pid 2362033
+// was live with its cwd there (lines 76-85), while the tree that lane had just
+// created escalated to ESCAPED for one reason — `git worktree add`'s process is
+// rooted OUTSIDE the tree it creates, so #507's live-cwd rule could not reach it.
+//
+// THE RULE THIS ADDS, and its exact boundary. A worktree PRESENT at run start
+// keeps today's rule unchanged: growth in it with nobody rooted there is an
+// escape and reds the run. A worktree that APPEARED during the run is judged by
+// whether a live session owns its PATH — its cwd, or the scratch root that cwd
+// implies. Nothing owns it, nothing is excused.
+//
+// Deliberate limit, stated rather than discovered: if the owning session EXITS
+// before the sweep, its tree has no live owner and the run reds. That is the
+// honest reading — there is nobody left to attribute it to — and it keeps the
+// guard from being satisfied by a path pattern alone.
+
+/** A repo carrying the ignored-root skeleton every forge checkout has. */
+function makeRepoWithSkeleton() {
+  const dir = makeRepo();
+  const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'pipe' });
+  for (const [rel, body] of [['_logs/.gitkeep', ''], ['_queue/README.md', 'queue\n'], ['projects/.gitkeep', '']]) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), body, 'utf8');
+  }
+  git('add', '-A');
+  git('commit', '-qm', 'skeleton');
+  return dir;
+}
+
+/** `git worktree add` at `at` — the act that created the tree in the incident. */
+function addWorktreeAt(main, at, branch) {
+  mkdirSync(join(at, '..'), { recursive: true });
+  execFileSync('git', ['worktree', 'add', '-q', '-b', branch, at], { cwd: main, stdio: 'pipe' });
+  return at;
+}
+
+test('7.5.1: a worktree that APPEARED mid-run under a live session\'s scratch root is UNATTRIBUTABLE — the incident, reproduced', () => {
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+
+  // The baseline is taken BEFORE the sibling exists — exactly as a run does.
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  const sleeper = sleeperIn(laneDir);
+  try {
+    // The owner's cwd is its own worktree, never inside the tree it creates.
+    const scratchTree = addWorktreeAt(
+      main,
+      join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-4581-4280-8fb7-e5486ac9ba61', 'scratchpad', 'base'),
+      'scratch-b',
+    );
+    const escapes = siblingWorktreeEscapes(runRoot, baseline);
+    const mine = escapes.filter((e) => e.root === scratchTree);
+
+    assert.equal(mine.length, 1, 'the tree is still SEEN — this rule changes attribution, never visibility');
+    assert.ok(mine[0].paths.some((p) => p.startsWith('_queue/')), `the skeleton is still named in full: ${mine[0].paths.join(', ')}`);
+    assert.notEqual(mine[0].live, null, 'the session whose scratch root this is was live the whole time');
+    assert.equal(mine[0].live.pid, sleeper.pid, 'and the report names WHICH session, so it can be chased');
+    assert.equal(mine[0].live.via, 'appeared', 'classified by the rule that actually applies, not by a cwd inside the tree');
+
+    assert.deepEqual(unownedEscapes(escapes), [], 'so it cannot red a funded run on its own');
+    const said = describeFence({ removed: [], restored: [], failed: [], defer: [], escapes }, []).join('\n');
+    assert.match(said, /UNATTRIBUTABLE/);
+    assert.match(said, new RegExp(`pid ${sleeper.pid}`), 'with the pid');
+    assert.match(said, /appeared DURING this run/, 'and says WHICH rule classified it — a cwd claim would be false here');
+    assert.doesNotMatch(said, /ESCAPED/);
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('7.5.1: a worktree that appeared mid-run under a live session\'s OWN CWD is attributed the same way', () => {
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  const sleeper = sleeperIn(laneDir);
+  try {
+    const under = addWorktreeAt(main, join(laneDir, 'scratch', 'base'), 'under-lane');
+    const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === under);
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].live.pid, sleeper.pid, 'the lane that owns the directory owns what it creates inside it');
+    assert.equal(mine[0].live.via, 'appeared');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('7.5.1: POSITIVE CONTROL — a worktree that appeared mid-run that NOBODY owns still ESCAPES', () => {
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  // No sleeper anywhere near it: appearing mid-run is not on its own an excuse.
+  const orphan = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-orphan-')), 'base'), 'orphan');
+  const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === orphan);
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].live, null, 'a path no live session owns excuses nothing');
+  assert.equal(unownedEscapes(mine).length, 1, 'and it still reds the run');
+  const said = describeFence({ removed: [], restored: [], failed: [], defer: [], escapes: mine }, []).join('\n');
+  assert.match(said, /ESCAPED/);
+});
+
+test('7.5.1: POSITIVE CONTROL — a real escape into a worktree that EXISTED at run start still fails', () => {
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  assert.ok(baseline.has(main), 'the premise: this tree WAS there when the run started');
+  const sleeper = sleeperIn(laneDir);
+  try {
+    plantGrowth(main);
+    const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === main);
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].live, null, 'a live session in an unrelated directory owns nothing here');
+    assert.equal(unownedEscapes(mine).length, 1, 'the guard ruling 309(b) bought is not weakened');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('7.5.1: the scratch root is ENCODED from a live cwd, never decoded back out of a path', () => {
+  assert.ok(
+    sessionScratchRoots('/home/parso/forge-m6-b').includes(`${tmpdir()}/claude-${process.getuid()}/-home-parso-forge-m6-b`),
+    'the incident\'s own path shape is derived from the cwd, not guessed',
+  );
+  // THE ENCODING IS MANY-TO-ONE, asserted rather than assumed away: `/` and `-`
+  // both map to `-`, so `/home/parso/forge/m6/b` produces the SAME root as
+  // `/home/parso/forge-m6-b`. That is why the fence encodes from a cwd it
+  // actually observed in `/proc` and never decodes a lane identity back out of
+  // a scratch path — a decode would have to pick one of these and would be
+  // guessing, and a guess is how a fence excuses the escape it exists to catch.
+  assert.deepEqual(
+    sessionScratchRoots('/home/parso/forge/m6/b'),
+    sessionScratchRoots('/home/parso/forge-m6-b'),
+    'the collision is real; the residual is that a LIVE process sitting at the colliding cwd would own the same root',
+  );
+});
+
+test('7.5.1: a cwd that cannot own a scratch root yields none — nothing is excused by default', () => {
+  assert.deepEqual(sessionScratchRoots(''), []);
+  assert.deepEqual(sessionScratchRoots('relative/path'), []);
 });

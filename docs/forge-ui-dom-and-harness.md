@@ -1989,19 +1989,33 @@ is what this contract reads — but it cannot be the only distinguisher.
   vocabularies apart is the whole reason R3-03 renamed `composition.hooks` to
   `composition.guards` before reintroducing `composition.hooks` for library
   lifecycle hooks — a
-  `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel (6
-  checks — purpose/skill/guard/process/interactivity content-completeness plus
-  a `runtime` check sourced from the server-computed F1 capability descriptor,
-  never re-derived client-side — **plus a 7th, conditional `connections`
-  check** (R3-04-F3): appended ONLY for an agent that binds at least one
-  tool/MCP (an agent binding none has nothing to be ready about, and a 7th
-  check that always passes would silently redefine the six-check contract
-  every other agent surface relies on) once the independently-fetched
-  connections library resolves. `[data-check="connections"]` reads NOT ready
-  whenever any bound tool/MCP's REAL probe state isn't `available`, its
-  `title` naming the component and state (e.g. `mcp "memory"
-  (not-installed)`) rather than a generic "not ready";
-  `[data-ready-count]` excludes it while unready. The
+  `[data-sdk]` runtime pick, and a readiness panel of **7 checks, always** —
+  purpose/skill/guard/process/interactivity content-completeness, a `runtime`
+  check sourced from the server-computed F1 capability descriptor (never
+  re-derived client-side), and a `connections` check (R3-04-F3). **Rulings
+  400/410 (M6):** the `connections` check used to be APPENDED only for an
+  agent that binds at least one tool/MCP, so the LENGTH of the list moved with
+  the agent's bindings and no observer could assert it — measured on story S5
+  beat 9 (`data-ready-count: expected "6", got "7"`). Every check the panel
+  can name is now always named; what varies is its state. Three attributes
+  carry that, and they answer different questions:
+  `[data-ready-total]` — how many checks EXIST. **Stable** (7 today); this is
+  the one a story or harness asserts.
+  `[data-ready-count]` — how many checks PASS. Unchanged meaning, so it still
+  moves with the agent's state (`scripts/journeys/connections.mjs` CONN-3
+  asserts `readyCount < totalChecks` against it).
+  `[data-check-state]` — per row, one of `ready` / `not-ready` / `pending`.
+  `pending` is the connections check before its independently-fetched library
+  resolves: neither ready nor not-ready, and never fabricated as either. Its
+  `aria-label`/`title` say "still checking", not "not met". `[data-ok]` stays
+  boolean and is `true` only for `ready`.
+  `[data-check="connections"]` reads NOT ready whenever any bound tool/MCP's
+  REAL probe state isn't `available`, its `title` naming the component and
+  state (e.g. `mcp "memory" (not-installed)`) rather than a generic "not
+  ready". The **"Ready to use in flows" badge waits for every row to RESOLVE**,
+  not merely for the passing ones to add up — before 400/410 it could light on
+  six passing checks while nothing yet knew whether the agent's bound tools
+  were real. The
   descriptor's `interactive` fact also surfaces as its own informational
   (non-gating) chip,
   `[data-capability-interactive]`. **W8-B1 (ON-8): the Run panel is pinned
