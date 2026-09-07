@@ -306,7 +306,7 @@ export type ArtifactTemplate = {
  * language/runtime), `domain` (a problem space, e.g. terraform-provider),
  * `practice` (a cross-cutting discipline, e.g. TDD), `project-shape` (a whole
  * project archetype mirroring the contract clauses in
- * docs/forge-project-contract.md).
+ * docs/reference/project-contract.md).
  */
 export const INSTRUCTION_SEED_KINDS = ['language', 'domain', 'practice', 'project-shape'] as const;
 export type InstructionSeedKind = (typeof INSTRUCTION_SEED_KINDS)[number];

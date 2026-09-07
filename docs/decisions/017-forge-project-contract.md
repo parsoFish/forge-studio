@@ -10,7 +10,7 @@
 > (`data-flow-ready`). ADR-017 remains the authority for the C1–C6 derivation.
 
 > **Amended 2026-05-31.** Two changes recorded after the betterado run, both in
-> [`docs/forge-project-contract.md`](../forge-project-contract.md): (a) a
+> [`docs/reference/project-contract.md`](../reference/project-contract.md): (a) a
 > conditional **C7 — external-resource model** clause (two-layer verification:
 > a creds-free in-loop gate + an operator-gated live-confirmation layer) for
 > projects that can only be verified against a live external system; and (b) a
@@ -78,7 +78,7 @@ unattended caller can gate on it.
 | **C4** | Machine-readable architecture context | **HARD** | A `roadmap.md` in the project root **and** a brain sub-wiki at `brain/profile.md` (Brain 3 lives inside the project repo — three-brain restructure 2026-05-26). |
 | **C5** | Locked-core mandates the harness honours | advisory | A constraints doc exists (`CLAUDE.md` / `AGENTS.md` / `.forge/constraints.md` / `CONSTRAINTS.md`). Advisory because file presence cannot *prove* the harness honours the constraints — it only proves the operator declared them. |
 | **C6** | A satisfiable merge model | advisory | **Forge-side-satisfied** post-Phase-6: the review phase produces a demo-embedded PR and STOPS; the operator merges in GitHub; there is no auto-merge ([ADR 011 path](./011-unattended-scheduler.md), Phase-6 review redesign). The only project-side requirement is a GitHub remote so a PR surface exists; the preflight states the clause is forge-side-satisfied and checks the remote. |
-| **C8** | Agent-instruction file | advisory | An `AGENTS.md` or `CLAUDE.md` exists at the project root with build/test/lint commands near the top. Advisory: research shows ~4pp task-completion uplift from human-authored agent-instruction files; auto-generated ones hurt. The clause requires *presence* (a human-authored file), never auto-generation. See `docs/forge-project-contract.md` §C8 for the full rationale. |
+| **C8** | Agent-instruction file | advisory | An `AGENTS.md` or `CLAUDE.md` exists at the project root with build/test/lint commands near the top. Advisory: research shows ~4pp task-completion uplift from human-authored agent-instruction files; auto-generated ones hurt. The clause requires *presence* (a human-authored file), never auto-generation. See `docs/reference/project-contract.md` §C8 for the full rationale. |
 | **BRAIN** | Brain freshness (themes cite live source paths) | advisory | Added 2026-05-18. Scans `brain/themes/*.md` in the project repo for `src/`/`tests/` paths that no longer exist in the project tree. A theme that contradicts the code (left stale by a by-hand change that skipped the reflection phase) silently poisons the PM/architect — this surfaces it *before* a cycle. WARN-only: themes legitimately reference history, and the operator/reflection judges. |
 
 Hard clauses (C1/C2/C4) fail the preflight and exit non-zero — forge

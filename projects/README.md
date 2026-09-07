@@ -1,6 +1,6 @@
 # `projects/` — Managed Projects
 
-> **Scope 3 — projects forge develops** ([repo map](../docs/repo-map.md)). Gitignored. Each subdirectory is a managed project; forge auto-discovers them
+> **Scope 3 — projects forge develops** ([repo map](../docs/explanation/architecture.md)). Gitignored. Each subdirectory is a managed project; forge auto-discovers them
 > from disk — any sub-directory carrying a `.forge/project.json` contract file
 > is a managed project (no registry file to edit). The projects root is
 > configurable via `FORGE_PROJECTS_DIR` or `projectsDir` in `forge.config.json`
@@ -8,7 +8,7 @@
 
 ## Onboarding a project
 
-See [`docs/getting-started.md`](../docs/getting-started.md) for the full
+See [`docs/tutorials/getting-started.md`](../docs/tutorials/getting-started.md) for the full
 walkthrough; in short:
 
 1. Clone (or symlink) the project repo here:
@@ -18,7 +18,7 @@ walkthrough; in short:
    ln -s ~/path/to/repo projects/<name>
    ```
 2. Bring it up to the forge↔project contract (the `forge-onboard-project`
-   skill + [`docs/forge-project-contract.md`](../docs/forge-project-contract.md)),
+   skill + [`docs/reference/project-contract.md`](../docs/reference/project-contract.md)),
    then run `forge preflight <name>` until every hard clause is green. The UI
    onboarding form (Studio → Projects → New) scaffolds the same contract files.
 3. The first cycle on this project will:

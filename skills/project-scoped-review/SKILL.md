@@ -21,7 +21,7 @@ disallowed-tools: [Edit, MultiEdit, NotebookEdit, Bash, WebFetch, WebSearch, Tas
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet
   # review pass over one project). Operator-overridable per kickoff. See
-  # docs/agent-cost-ceilings.md.
+  # docs/reference/agent-cost-ceilings.md.
   maxBudgetUsd: 5
 ---
 

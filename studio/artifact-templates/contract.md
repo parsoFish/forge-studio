@@ -10,7 +10,7 @@ schema: {}
 # Contract artifact
 
 The signal that the onboarding agent has finished converging a project
-against the forge↔project contract (`docs/forge-project-contract.md`) and the
+against the forge↔project contract (`docs/reference/project-contract.md`) and the
 project directory is ready for the REAL, structural preflight check
 (`runPreflight`, `packages/projects/preflight.ts`) that `execOnboardPreflight` runs next.
 

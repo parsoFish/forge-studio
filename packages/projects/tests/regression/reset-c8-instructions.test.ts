@@ -1,6 +1,6 @@
 /**
  * Ruling 4 (T1/operator, binding) — `applyContractReset` NEVER generates an
- * agent-instruction file. C8 (`docs/forge-project-contract.md`) requires a
+ * agent-instruction file. C8 (`docs/reference/project-contract.md`) requires a
  * HUMAN-authored `AGENTS.md`/`CLAUDE.md` to be present and nothing more; the
  * precedent is the `hasAgentFile` guard at
  * `apps/forge/bridge-studio-writes.ts:2105-2112`. Two grounds, both regression-pinned

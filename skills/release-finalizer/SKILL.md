@@ -21,7 +21,7 @@ disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet,
   # bounded finalize work). Operator-overridable per kickoff. See
-  # docs/agent-cost-ceilings.md.
+  # docs/reference/agent-cost-ceilings.md.
   maxBudgetUsd: 3
 ---
 
