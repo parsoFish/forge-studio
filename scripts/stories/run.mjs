@@ -56,6 +56,7 @@ import { driveBeat, resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import { quiesceWriters, describeQuiesce, reappeared } from './quiesce.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -367,6 +368,20 @@ async function runStory(story, uiUrl, startedMs) {
   });
   for (const line of describeRedEvidence(redEvidence, ROOT)) console.log(line);
 
+  // Bead `forge-8vfn.7.5.2` — THE TREE STOPS MOVING BEFORE THE FENCE JUDGES IT.
+  // S6's re-measure removed `brain/story-s6/` at 13:49:02.890Z, said so, and
+  // the bridge this run booted — still shutting down — put `kb.yaml` back at
+  // .935Z, 33 ms before the verdict printed. The fence's line was true when
+  // written and false at process exit, and that line is what a lane pastes
+  // into a ledger. The reap above has just signalled every agent this story
+  // dispatched; a `kill` returning is not the process ending, so this waits
+  // for them to be GONE (whole-parentage, §15.206) and then for the tree
+  // itself to read the same twice. The bridge deliberately is NOT waited on:
+  // `run.mjs` boots one and drives every story through it, so it must outlive
+  // this sweep — which is exactly why the re-read after the fence exists.
+  const quiesce = await quiesceWriters({ root: ROOT, pids: reap.reaped.map((r) => r.pid) });
+  for (const line of describeQuiesce(quiesce)) console.log(line);
+
   const sweep = sweepProductFixtures(story.id, ROOT);
   for (const p of sweep.removed) console.log(`[stories] trailing sweep removed ${p}`);
   // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
@@ -390,6 +405,22 @@ async function runStory(story, uiUrl, startedMs) {
   // still removing them; anything else is still an escape.
   for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
   for (const line of describeGroundEscapes(story.ground?.project ?? null, fence.groundEscapes)) console.log(line);
+
+  // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be
+  // outlasted, so the report RE-READS rather than trusting itself: anything the
+  // sweep or the fence removed that is back is named here. Without this, the
+  // only way to learn that a removal did not stick is to look at the worktree
+  // afterwards — which is how the incident was found in the first place.
+  fence.reappeared = reappeared(
+    [...sweep.removed, ...fence.removed],
+    readGitPorcelain(ROOT).map((r) => `${r.xy} ${r.path}`),
+  );
+  for (const p of fence.reappeared) {
+    console.warn(
+      `[stories] fence: RE-APPEARED ${p} — removed by this run and present again when the report was re-read; ` +
+      'a writer this run started outlived the sweep, so the REMOVED line above is a snapshot, not a final state',
+    );
+  }
 
   const result = { story, beats, reap, sweep, fence };
   writeStoryJson(result, ROOT);

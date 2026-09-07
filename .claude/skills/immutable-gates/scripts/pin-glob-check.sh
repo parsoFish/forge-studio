@@ -28,6 +28,8 @@
 #   1  DRIFT — at least one matching file is unlisted (each named)
 #   2  usage error, or no manifest matched the glob
 #   3  at least one matched manifest declares no globs (nothing to check for it)
+#   4  the listed-check could not be RUN (grep neither matched nor failed to match) — a
+#      failure of the tool, never a finding about the repo (bead `forge-m86d`)
 #
 # Every path is an argument. A tool that resolves its inputs from its own location answers a
 # different question in each checkout (§15.148).
@@ -63,7 +65,29 @@ for f in "$G"/$GLOB.sha256; do
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
       count=$((count + 1))
-      printf '%s\n' "$listed" | grep -Fxq -- "$hit" || unlisted="$unlisted$hit"$'\n'
+      # A HERESTRING, never `printf … | grep -q` (bead `forge-m86d`). Under the
+      # `set -o pipefail` above, `grep -q` exits the instant it matches, and if
+      # `printf` is still writing it takes SIGPIPE and exits 141 — which pipefail
+      # then makes the PIPELINE's status, so a MATCH read as a MISS and a listed
+      # file was reported as drift. Measured twice in one session on files that
+      # were listed, and reproduced deterministically in `pin-glob-check.test.ts`.
+      # A small manifest fits the pipe buffer and never runs the race, which is
+      # why it looked like a load flake and why it moved between files.
+      #
+      # grep's OWN status, read directly: 0 listed · 1 unlisted · anything else
+      # means the check could not be RUN, which is not a finding about the repo
+      # and must never be reported as one (the exit-code argument in this file's
+      # own header, one line lower down).
+      grep -Fxq -- "$hit" <<<"$listed"
+      # Captured BEFORE the case: `$?` inside a branch is the case's own status,
+      # so reading it there would report a number grep never returned.
+      rc=$?
+      case "$rc" in
+        0) ;;
+        1) unlisted="$unlisted$hit"$'\n' ;;
+        *) echo "pin-glob-check.sh: ABORTING — the listed-check could not be run for $hit (grep exit $rc)" >&2
+           exit 4 ;;
+      esac
     done <<EOF
 $(cd "$R" && eval "ls -1 -d -- $pattern" 2>/dev/null || true)
 EOF
