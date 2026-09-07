@@ -598,6 +598,15 @@ async function performSteps(page, steps, timeoutMs, sessionScope = null, probe =
           };
         }
         for (let k = 0; k < n; k += 1) {
+          // RE-READ THE COUNT BEFORE ADDRESSING THE INDEX — bead
+          // `forge-8vfn.6.11.52`, ruling 372. The comment above says the count
+          // is MODEL-DETERMINED, and so is its CHANGE: S2 run 11 answered a
+          // three-box round in full, the product began the next round 12 ms
+          // later, and this loop asked for `nth(2)` of a round that renders a
+          // different number. `n` bounds the work from above so the loop can
+          // only ever SHRINK — a form that grows mid-act is the next round's,
+          // and belongs to the next pass of the repeat, not to this one.
+          if (k >= (await page.locator(handle).count())) break;
           // The watcher must describe THE BOX THIS ACT IS ON. `controlState`
           // reads `.first()`, so while the act was stuck on box k the log
           // truthfully said box 0 was "present and enabled" — the two-notions-
