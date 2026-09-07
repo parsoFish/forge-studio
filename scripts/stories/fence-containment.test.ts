@@ -590,3 +590,34 @@ test('7.5.1 (RED): the same holds for the scratch root of a process in a generic
     'a sibling whose name merely EXTENDS a scratch root must never read as inside it',
   );
 });
+
+test('7.5.6: when two live lanes\' roots OVERLAP, the MOST SPECIFIC root wins — not whichever pid /proc listed first', () => {
+  // T1 ruling 442's second half. Roots genuinely overlap: a worktree cut inside
+  // another lane's worktree is beneath both, and first-match-wins made the
+  // answer depend on pid enumeration order — so the same tree could be
+  // attributed to either session on two consecutive runs. A report that names a
+  // session is a report someone will act on, so a confident wrong owner is
+  // worse than an honest ambiguous one.
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+  const outer = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-outer-')), 'outer'), 'outer');
+  const inner = addWorktreeAt(main, join(outer, 'nested', 'inner'), 'inner');
+
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  const outerSleeper = sleeperIn(outer);
+  const innerSleeper = sleeperIn(inner);
+  try {
+    const appeared = addWorktreeAt(main, join(inner, 'scratch', 'base'), 'appeared');
+    const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === appeared);
+
+    assert.equal(mine.length, 1);
+    assert.equal(
+      mine[0].live.pid, innerSleeper.pid,
+      `the tree is inside BOTH lanes; the nearer one owns it (outer=${outerSleeper.pid} inner=${innerSleeper.pid}, ` +
+      `named ${mine[0].live.pid} via root ${mine[0].live.ownerRoot})`,
+    );
+    assert.equal(mine[0].live.ownerRoot, realpathSync(inner), 'and the report names WHICH root won, so the choice is checkable');
+  } finally {
+    for (const s of [outerSleeper, innerSleeper]) { try { process.kill(s.pid); } catch { /* gone */ } }
+  }
+});

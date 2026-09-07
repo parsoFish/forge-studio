@@ -189,8 +189,26 @@ export function liveSessionOwners(dirs) {
     const roots = existsSync(join(cwd, '.git')) ? [cwd, ...sessionScratchRoots(cwd)] : sessionScratchRoots(cwd);
     for (const root of roots) {
       for (const { dir, resolved } of targets) {
-        if (owned.has(dir)) continue;
-        if (under(resolved, root)) owned.set(dir, { pid, cwd, via: 'appeared', ownerRoot: root });
+        if (!under(resolved, root)) continue;
+        // THE MOST SPECIFIC ROOT WINS, never the first one `/proc` happened to
+        // enumerate (T1 ruling 442's second half). Roots genuinely overlap — a
+        // worktree cut inside another lane's worktree is owned by both — and
+        // first-match-wins made the answer depend on pid ordering, so the same
+        // tree could be attributed to either session on two consecutive runs.
+        // A confident wrong owner reads worse than an honest one, and a report
+        // that names a session is a report someone will go and interrupt.
+        //
+        // Ties broken by the LOWER pid, so the result is a function of the host
+        // state and nothing else. `ownerRoot` is in the record, so the report
+        // always shows WHICH root won.
+        const held = owned.get(dir);
+        if (
+          held === undefined ||
+          root.length > held.ownerRoot.length ||
+          (root.length === held.ownerRoot.length && pid < held.pid)
+        ) {
+          owned.set(dir, { pid, cwd, via: 'appeared', ownerRoot: root });
+        }
       }
     }
   }

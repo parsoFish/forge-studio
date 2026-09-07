@@ -166,11 +166,17 @@ test('m86d: the DEFECT ITSELF — `printf | grep -q` under pipefail returns 141 
   assert.equal(r.stdout.trim(), '141',
     'if this ever prints 0, this shell no longer reproduces the defect and the test below stops meaning anything');
 
-  const late = spawnSync('bash', ['-uo', 'pipefail', '-c',
-    'big=$(seq 1 200000); printf "%s\\n" "$big" | grep -Fxq -- "199999"; echo $?'],
-    { encoding: 'utf8' });
-  assert.equal(late.stdout.trim(), '0',
-    'and a LATE match returns 0 — which is why the failure moved between files and looked like a flake');
+  // THE LATE-MATCH CONTRAST IS NOT ASSERTED, and that correction is itself
+  // measured. This test first claimed `grep -Fxq -- "199999"` returns 0 —
+  // printf finishing before grep exits — as the reason the false drift moved
+  // between files. Under gate pr6's full suite that assertion FAILED with
+  // `'141' !== '0'`: under load a LATE match SIGPIPEs too. So the contrast is a
+  // common case, not a law, and asserting it made this file flaky in exactly
+  // the way it exists to explain. The defect is worse than the original
+  // reading: the pipeline's status is timing-dependent for ANY entry, not only
+  // an early one. Only the reliable half is pinned above — an early match on an
+  // input far larger than the 64 KB pipe buffer, where printf MUST still be
+  // writing when grep exits.
 });
 
 test('m86d (RED): a LISTED file matched early in a large manifest is NOT reported as drift', () => {
