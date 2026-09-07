@@ -4,6 +4,7 @@ description: A second full dev-loop pass ran after PR #59 was opened; re-execute
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+enforced_by: packages/flows/tests/unit/run-model-derive.test.ts
 ---
 
 ## What happened

@@ -11,6 +11,7 @@ keywords:
 related_themes: [2026-08-22-verifier-without-a-repro-produces-agreement, 2026-08-28-scope-filters-reship-the-class-a-sound-audit-catches]
 created_at: "2026-08-28"
 updated_at: "2026-08-28"
+status: historical
 ---
 
 ## What happened

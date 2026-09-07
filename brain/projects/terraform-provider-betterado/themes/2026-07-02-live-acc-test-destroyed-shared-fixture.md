@@ -6,6 +6,7 @@ keywords: [shared-fixture-project, soft-delete, evidence-fabrication, checkdestr
 related_themes: [fixture-discipline-index, live-evidence-demo-index]
 created_at: 2026-07-05T04:00:00.000Z
 updated_at: 2026-07-05T04:00:00.000Z
+status: historical
 ---
 
 ## What happened

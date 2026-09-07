@@ -6,6 +6,7 @@ keywords: [resume-pm, redecompose, over-granular-wi, scope-consolidation, linear
 related_themes: [pm-decomposition-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
+status: historical
 ---
 
 # Resume PM re-decomposes correctly — collapsing over-granular WIs without losing scope
