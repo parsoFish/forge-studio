@@ -32,12 +32,13 @@
  */
 
 import * as React from 'react';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 
 import type { RoadmapWorkItem, RecoveryInspect } from '@/lib/bridge-client';
 import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
+import { disabledAttrs } from '@/lib/disabled-reason';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
 import { RepointGate } from '@/components/studio/RepointGate';
@@ -72,6 +73,17 @@ export type InitiativeDetailProps = {
   recoveryNote: string;
   onInspectRecovery: () => void | Promise<void>;
   onRecoveryAction: (kind: 'requeue' | 'abandon') => void | Promise<void>;
+  /**
+   * Which destructive recovery act is ARMED and waiting for a second press.
+   * Defaults to none, so every caller is unchanged.
+   *
+   * It is a prop rather than pure local state for the same reason
+   * `RunControls`' own confirm panel is asserted only by absence: a server
+   * render runs no click handler, so the armed branch would otherwise be
+   * unreachable to the test that has to prove it renders (bead
+   * `forge-8vfn.7.5.5`).
+   */
+  initialPendingRecovery?: 'abandon' | null;
   /** W6-RV-2: when present, each dependency id in the "Depends on" line
    *  becomes a `[data-dep-jump]` click target instead of plain text. */
   onDepJump?: (initiativeId: string) => void;
@@ -101,10 +113,30 @@ export function InitiativeDetail({
   onInspectRecovery,
   onRecoveryAction,
   onDepJump,
+  initialPendingRecovery = null,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
   const handleRequeue = useCallback(() => void onRecoveryAction('requeue'), [onRecoveryAction]);
-  const handleAbandon = useCallback(() => void onRecoveryAction('abandon'), [onRecoveryAction]);
+  /**
+   * ABANDON IS ARM-THEN-CONFIRM, matching `RunControls` (bead
+   * `forge-8vfn.7.5.5`). The same destructive act had two contracts: the
+   * run-detail surface required a second press behind a visible panel, and this
+   * drawer POSTed on the FIRST click, gated only by `recoveryBusy`. Abandon
+   * deletes the initiative's worktree and branch, and `RunControls`' own header
+   * records what a one-press abandon cost: a double-click re-entered with the
+   * guard already false and abandoned a run without the operator ever seeing a
+   * confirmation. One act, one contract, and the stricter one is the right one.
+   *
+   * Requeue is deliberately NOT gated: it is recoverable, and a confirm on a
+   * safe act teaches the operator to click through the one that is not.
+   */
+  const [pendingAbandon, setPendingAbandon] = useState<boolean>(initialPendingRecovery === 'abandon');
+  const armAbandon = useCallback(() => setPendingAbandon(true), []);
+  const cancelAbandon = useCallback(() => setPendingAbandon(false), []);
+  const confirmAbandon = useCallback(() => {
+    setPendingAbandon(false);
+    void onRecoveryAction('abandon');
+  }, [onRecoveryAction]);
   // Reviewer finding (MEDIUM): a dep-jump chip is a real interactive
   // control (it selects + pans the canvas), not decorative text, so it
   // needs the same activation contract a native <button> gets for free —
@@ -310,9 +342,39 @@ export function InitiativeDetail({
             <span style={{ display: 'flex', gap: 6 }}>
               <button data-action="recovery-inspect" onClick={handleInspect} style={recoveryBtn('var(--line)')}>Inspect</button>
               <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={handleRequeue} style={recoveryBtn('#1f6feb')}>Requeue</button>
-              <button data-action="recovery-abandon" disabled={recoveryBusy} onClick={handleAbandon} style={recoveryBtn('#a33')}>Abandon</button>
+              <button
+                data-action="recovery-abandon"
+                {...disabledAttrs(recoveryBusy ? 'a recovery action is already running' : null)}
+                onClick={armAbandon}
+                style={recoveryBtn('#a33')}
+              >
+                Abandon
+              </button>
             </span>
           </div>
+
+          {pendingAbandon && (
+            <div
+              data-component="recovery-abandon-confirm"
+              data-recovery-initiative={initiativeId}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 8px', border: '1px solid #a33', borderRadius: 4 }}
+            >
+              <span style={{ fontSize: 11 }}>
+                Abandon <strong>{initiativeId}</strong>? Its worktree and branch are deleted. This cannot be undone.
+              </span>
+              <button
+                data-action="confirm-recovery-abandon"
+                {...disabledAttrs(recoveryBusy ? 'Abandoning…' : null)}
+                onClick={confirmAbandon}
+                style={recoveryBtn('#a33')}
+              >
+                Abandon it
+              </button>
+              <button data-action="cancel-recovery-abandon" onClick={cancelAbandon} style={recoveryBtn('var(--line)')}>
+                Cancel
+              </button>
+            </div>
+          )}
 
           <div data-section="recovery-detail" data-recovery-detail-initiative={initiativeId} style={{ fontSize: 11, color: 'var(--dim)' }}>
             {recoveryDetail ? (
