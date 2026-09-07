@@ -39,11 +39,7 @@ export type { InstructionsStatus } from './kinds/instructions.ts';
 export { SESSION_KIND_RUNNERS } from './kinds/registry.ts';
 export { sessionsRoutes } from './routes.ts';
 export type { SessionsRouteDeps } from './routes.ts';
-export {
-  deriveSessionCostUsd,
-  parseGuardedEventsJsonl,
-  readSessionCostUsd,
-} from './session-readability.ts';
+export { parseGuardedEventsJsonl, readSessionCostUsd } from './session-readability.ts';
 export { invalidProjectReason, sessionIsReadable } from './session-resolution.ts';
 export { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 export { validateSessionKinds } from './studio/session-kinds-validate.ts';

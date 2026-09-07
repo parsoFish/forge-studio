@@ -36,6 +36,8 @@ import { guardedReadDir, guardedWriteFile } from '@forge/kernel/path-guard.ts';
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge/kb-job-state.ts';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPathRelative } from '@forge/library/skill-path.ts';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 
@@ -70,15 +72,12 @@ export async function handleKickoffRoutes(
   // POST /api/studio/onboarding/start {project, inputs?} — R4-17, the
   // onboarding session's kickoff route.
   //
-  // D5 (BINDING — the headline finding this route's whole shape answers):
-  // the campaign's recurring defect family is a route that accepts a
-  // caller-supplied repo-path field and never re-validates it before using it
-  // as a write/spawn target (SEC-02, SEC-03, the `/start`-family
-  // `projectRepoPath` enumeration above `architectSessionDir`). This route's
-  // answer is to have NO such field to guard at all — the body type below
-  // pulls only `project`/`inputs`; an extra `projectRepoPath` (or anything
-  // else) in the raw body is simply never read, so it is provably inert, not
-  // merely undocumented (AT-3, apps/forge/ui-bridge-onboarding-start.test.ts).
+  // D5 (BINDING): the campaign's recurring defect family is a route that takes
+  // a caller-supplied repo path and never re-validates it before writing or
+  // spawning there (SEC-02, SEC-03). This route's answer is to have no such
+  // field at all — the body type below names every field it reads, so an extra
+  // `projectRepoPath` is provably inert rather than merely undocumented (AT-3,
+  // `apps/forge/ui-bridge-onboarding-start.test.ts`).
   //
   // `project` is validated (PROJECT_ID_RE + length cap, via the same
   // `invalidGenerationProjectReason` the demo-generation routes already use)
@@ -102,7 +101,7 @@ export async function handleKickoffRoutes(
   // status.json when the run ends.
   if (method === 'POST' && url === '/api/studio/onboarding/start') {
     try {
-      const body = (await ctx.readBody()) as { project?: unknown; inputs?: unknown };
+      const body = (await ctx.readBody()) as { project?: unknown; inputs?: unknown; modelTier?: unknown; sdk?: unknown };
       if (typeof body.project !== 'string') {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
@@ -113,6 +112,23 @@ export async function handleKickoffRoutes(
         return true;
       }
       const project = body.project;
+
+      // M6-A row 1 (417-419): the tier through the SAME helper every other
+      // /start route uses, so the allowed set is the agent's own SKILL.md
+      // envelope and never a client-supplied list.
+      const tier = resolveKickoffModelTier('onboarding-agent', body.modelTier);
+      if (!tier.ok) {
+        sendJson(res, 400, { error: tier.error }, origin);
+        return true;
+      }
+      const modelTier = tier.tier;
+      // One SDK per agent today: a stated fact, not a choice — validated anyway,
+      // because silently correcting one runs the session on something unasked.
+      const declaredSdk = deriveAgentSpec(skillPathRelative('onboarding-agent')).sdk;
+      if (body.sdk !== undefined && body.sdk !== declaredSdk) {
+        sendJson(res, 400, { error: `unknown sdk ${JSON.stringify(body.sdk)} for agent "onboarding-agent" — the only declared sdk is "${declaredSdk}"` }, origin);
+        return true;
+      }
 
       const inputs: Record<string, string> = {};
       if (body.inputs !== undefined) {
@@ -176,7 +192,7 @@ export async function handleKickoffRoutes(
       // sessionId entropy). A guessable, colliding sessionId directory could
       // otherwise be pre-planted with symlinked leaves that both writes
       // below would silently follow.
-      const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs);
+      const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier);
 
       // W7-B5 (agents-20/31 + projects-31): the SAME t0 `agent-run.dispatched`
       // marker the generic `POST /api/agents/:slug/run` host emits. This route
@@ -398,15 +414,11 @@ export async function handleKickoffRoutes(
   // `runInteractiveTurn` spine via the `kb-cleanup` SPAWN_AGENT_SPECS row
   // above.
   //
-  // Session-dir anchor: mirrors the KB-create hand-off's own anchor rule
-  // EXACTLY (packages/knowledge/bridge-studio-kbs.ts ~:1189) — a project-bound KB anchors
-  // its cleanup session under its OWN real, discovered project
-  // (`binding.ref`); every OTHER binding kind (flow/band/unique) has no
-  // natural project home, so it anchors under the dot-prefixed KB-seeding
-  // anchor (`KB_SEEDING_ANCHOR_PREFIX + id`) instead — the SAME carve-out
-  // that keeps `discoverProjects` from surfacing a phantom `projects/<id>/`
-  // for a non-project KB (the MAJOR-2 defect that hand-off's own R1-06 WI-2
-  // fix guards against).
+  // Session-dir anchor: the KB-create hand-off's own rule, by reuse rather
+  // than restatement (`packages/knowledge/bridge-studio-kbs.ts` ~:1189) — a
+  // project-bound KB anchors under its own discovered project; every other
+  // binding kind anchors under `KB_SEEDING_ANCHOR_PREFIX + id`, the carve-out
+  // that keeps `discoverProjects` from surfacing a phantom project for it.
   //
   // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
   // here (unlike authoring/start): `guardedWriteSessionStatus`
@@ -571,17 +583,11 @@ function renderOnboardingPrompt(inputs: Record<string, string>): string {
 
 /**
  * R4-17 round-3 BLOCKER pin 5, item 1 — create the onboarding session's own
- * directory and write its two files (`status.json`, `prompt.md`), extracted
- * out of the `POST /api/studio/onboarding/start` route body into its own
- * EXPORTED function taking an EXPLICIT `sessionId`. Exists so the exclusive-
- * create defences below (closes 1 and 2) can be exercised directly against a
- * KNOWN id — once `newArchitectSessionId()` carries real entropy (close 3,
- * that function's own docstring), an external caller can no longer reliably
- * pre-plant a colliding directory to exercise closes 1/2 THROUGH the route
- * at all. The round-3 test file discloses exactly this: AT-13/14/15's
- * assertions stay true post-fix, but only vacuously, once the id is
- * unguessable — this export is the seam a follow-up unit test (owned by
- * whoever picks that up) would call directly with a fixed id instead.
+ * directory and write its two files (`status.json`, `prompt.md`). Exported so
+ * the exclusive-create defences below can be driven against a KNOWN id, which
+ * the route can no longer offer now that `newArchitectSessionId()` carries
+ * real entropy; `tests/unit/onboarding-session-writer-seam.test.ts` is that
+ * caller.
  *
  * THREE independent closes (T2 ruling — a defence that only works because
  * another one also works is one defence, not two):
@@ -612,6 +618,7 @@ export function writeOnboardingSession(
   project: string,
   runId: string,
   inputs: Record<string, string>,
+  /** The operator's chosen tier, when they chose one (M6-A row 1). */ modelTier?: string,
 ): { sessionDir: string } {
   if (!SAFE_ID_RE.test(sessionId)) {
     throw new Error(`invalid onboarding sessionId: ${JSON.stringify(sessionId)}`);
@@ -622,7 +629,11 @@ export function writeOnboardingSession(
   mkdirSync(sessionDir);
   writeFileSync(
     join(sessionDir, 'status.json'),
-    JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      // `modelTier` only when chosen — absent means the skill's own default.
+      { phase: 'running', project, runId, ...(modelTier !== undefined ? { modelTier } : {}), startedAt: new Date().toISOString() },
+      null, 2,
+    ),
     { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
   );
   // D8 — no fabricated interview: prompt.md renders the operator's own
