@@ -71,7 +71,27 @@ function fixture(files: Record<string, string>, storyIds: string[], index?: stri
       .join('\n')}\n`;
   mkdirSync(join(root, 'docs'), { recursive: true });
   writeFileSync(join(root, 'docs/README.md'), readme, 'utf8');
+  // Every fixture is a git repo: rule 4b enumerates `git ls-files docs/`, the
+  // retired guard's own enumeration, chosen because it correctly ignores
+  // gitignored local notes (docs/investigations/) that a plain walk would flag.
+  trackAll(root);
   return root;
+}
+
+/**
+ * Make the fixture a real git repo and track everything in it. The superset
+ * half of rule 4 enumerates `git ls-files docs/` — the retired
+ * check-docs-claims.mjs's own enumeration — so an untracked fixture would
+ * measure nothing and pass for the wrong reason.
+ */
+function trackAll(root: string): void {
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' });
+  };
+  git('init', '-q');
+  git('config', 'user.email', 'fixture@example.invalid');
+  git('config', 'user.name', 'fixture');
+  git('add', '-A');
 }
 
 test('rule 1: a page outside the four quadrants and the three planning dirs FAILS, naming the file and the allowed set', () => {
@@ -113,7 +133,13 @@ test('rule 2: generated pages and the planning directories do NOT count toward t
   files['docs/roadmaps/1.0.md'] = page('Roadmap');
   files['docs/superpowers/specs/spec.md'] = page('Spec');
   files['docs/product/user-stories.md'] = page('Catalogue');
-  const root = fixture(files, ['S1', 'S3']);
+  // The index must reach the planning directories too — rule 4b, the retired
+  // guard's own two-tier rule. The real docs/README.md does exactly this.
+  const index = `# Docs index\n\n${Object.keys(files)
+    .filter((f) => f.startsWith('docs/reference/'))
+    .map((f) => `- [${f}](./${f.replace(/^docs\//, '')})`)
+    .join('\n')}\n- [Decisions](./decisions/)\n- [Roadmaps](./roadmaps/)\n- [Spec](./superpowers/)\n- [Product](./product/)\n`;
+  const root = fixture(files, ['S1', 'S3'], index);
   const { code, out } = run(root);
   rmSync(root, { recursive: true, force: true });
   assert.equal(code, 0, `25 hand-written + 2 generated + 4 planning pages must pass:\n${out}`);
@@ -179,4 +205,66 @@ test('every generated page in the real repo carries its own story header (rule 3
   // this the doesNotMatch below passes on a missing module.
   assert.match(out, /hand-written \d+/, `the checker did not run:\n${out}`);
   assert.doesNotMatch(out, /generated_from/, `a real generated page has a broken header:\n${out}`);
+});
+// APPEND to scripts/check-docs-shape.test.ts in the ci: PR — red first.
+// Proves the superset BEFORE check-docs-claims.mjs is deleted (§15.236: a fold
+// is a fold only when the surviving guard fails on everything the retired one
+// failed on). The retired guard enumerated `git ls-files docs/` — 92 files,
+// four of them not .md — while rule 4 walked hand-written .md pages only.
+
+test('rule 4: a tracked NON-markdown file under docs/ must be covered by the index', () => {
+  // The exact regression the retired check-docs-claims.mjs caught for real:
+  // a docs/ index rewrite dropped the mention covering docs/schemas/*.json,
+  // and the shape check was blind to it.
+  const root = fixture({ 'docs/reference/cli.md': page('CLI') }, [], '# Docs index\n\n- [CLI](./reference/cli.md)\n');
+  mkdirSync(join(root, 'docs/schemas'), { recursive: true });
+  writeFileSync(join(root, 'docs/schemas/project-config.schema.json'), '{}\n', 'utf8');
+  trackAll(root);
+  const { code, out } = run(root);
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(code, 1, `an uncovered non-markdown docs file must fail, got:\n${out}`);
+  assert.match(out, /schemas\/project-config\.schema\.json/, 'the violation names the uncovered file');
+});
+
+test('rule 4: a DIRECTORY-level mention covers the files beneath it', () => {
+  // check-docs-claims' two-tier rule, preserved: the index cannot be made to
+  // enumerate every ADR, and a link to the directory is the honest unit for
+  // a subtree. Hand-written PAGES still need their own direct link (above).
+  const root = fixture({ 'docs/reference/cli.md': page('CLI') }, [],
+    '# Docs index\n\n- [CLI](./reference/cli.md)\n- [Schemas](./schemas/)\n');
+  mkdirSync(join(root, 'docs/schemas/examples'), { recursive: true });
+  writeFileSync(join(root, 'docs/schemas/project-config.schema.json'), '{}\n', 'utf8');
+  writeFileSync(join(root, 'docs/schemas/examples/project.mdtoc.json'), '{}\n', 'utf8');
+  trackAll(root);
+  const { code, out } = run(root);
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(code, 0, `a directory-level mention must cover its subtree, got:\n${out}`);
+  // Without this the test passes when the rule is ABSENT: no rule, no violation.
+  // 2, not 3: cli.md is hand-written and answered by rule 4a's direct-link tier.
+  assert.match(out, /2 tracked docs files covered/, `the coverage rule did not run:\n${out}`);
+});
+
+test('rule 4: a link to ONE file does not cover its siblings', () => {
+  // The precise trap check-docs-claims documented: linking
+  // ./operations/serve-supervision.md must NOT be read as covering all of
+  // operations/, or the second file added there is silently unreachable.
+  const root = fixture({ 'docs/reference/cli.md': page('CLI') }, [],
+    '# Docs index\n\n- [CLI](./reference/cli.md)\n- [one schema](./schemas/project-config.schema.json)\n');
+  mkdirSync(join(root, 'docs/schemas'), { recursive: true });
+  writeFileSync(join(root, 'docs/schemas/project-config.schema.json'), '{}\n', 'utf8');
+  writeFileSync(join(root, 'docs/schemas/other.json'), '{}\n', 'utf8');
+  trackAll(root);
+  const { code, out } = run(root);
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(code, 1, `a sibling of a linked file must still need cover, got:\n${out}`);
+  assert.match(out, /schemas\/other\.json/, 'the violation names the uncovered sibling');
+});
+
+test('the real repo: every tracked docs file is covered — the retired guard’s whole job', () => {
+  // Runs the surviving guard over the live tree, which is what makes the
+  // deletion of check-docs-claims.mjs safe rather than merely tidy.
+  const { out } = run(ROOT);
+  // Proof the rule ran at all — otherwise the doesNotMatch below is vacuous.
+  assert.match(out, /\d+ tracked docs files covered/, `the coverage rule did not run:\n${out}`);
+  assert.doesNotMatch(out, /is not covered by docs\/README\.md/, `a tracked docs file is unreachable from the index:\n${out}`);
 });

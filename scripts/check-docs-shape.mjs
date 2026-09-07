@@ -22,15 +22,24 @@
  *      tests/stories/*.story.mjs MUST carry `generated_from:
  *      tests/stories/<id>.story.mjs` — stripping the header is how a
  *      generated file would slip into the hand-written count;
- *   4. every hand-written page is linked from docs/README.md. This is the
- *      whole job of the retired check-docs-claims.mjs, restated against the
- *      smaller tree: with ~17 pages the two-tier directory-mention fallback it
- *      needed for 45 ADRs is gone, so the rule is a plain link check.
+ *   4. the index reaches everything, in two tiers:
+ *      (a) every HAND-WRITTEN page is linked from docs/README.md DIRECTLY —
+ *          with ~17 pages there is no excuse for a directory fallback;
+ *      (b) every OTHER tracked file under docs/ (`git ls-files docs/`, which
+ *          includes non-markdown: schemas, the archived overview.html) is
+ *          covered directly OR by a directory-level mention.
+ *      (b) is check-docs-claims.mjs's own rule, preserved verbatim in effect,
+ *      because this check REPLACES that guard. Retiring it on (a) alone would
+ *      have silently un-enforced four files — proved by deleting the index's
+ *      schemas entry and watching this check stay green while the retired one
+ *      went red. A fold is a fold only when the survivor fails on everything
+ *      the retired guard failed on.
  *
  * Usage: node scripts/check-docs-shape.mjs [root]   (root defaults to the repo)
  */
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -94,6 +103,35 @@ function indexLinkTargets() {
   return targets;
 }
 
+/** Every tracked file under docs/, as the retired guard enumerated them. */
+function trackedDocsFiles(root_) {
+  try {
+    return execFileSync('git', ['ls-files', 'docs/'], { cwd: root_, encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return null; // not a git tree — rule 4b cannot run; reported by the caller
+  }
+}
+
+/**
+ * Directory-level cover, narrower than "the substring D/ appears somewhere":
+ * a link to D/README.md, to the bare D/, or D/ as free-standing text. A link
+ * to ONE file inside D must NOT be read as covering D — otherwise the second
+ * file added there is silently unreachable, which is exactly the trap the
+ * retired guard's own header documented.
+ */
+function directoriesMentioned(text) {
+  const dirs = new Set();
+  for (const m of text.matchAll(/\]\(([^)]+)\)/g)) {
+    const t = m[1].trim().split('#')[0].replace(/^\.\//, '').replace(/^docs\//, '');
+    if (t.endsWith('/')) dirs.add(t.slice(0, -1));
+    else if (t.endsWith('/README.md')) dirs.add(t.slice(0, -'/README.md'.length));
+  }
+  for (const m of text.matchAll(/(?:^|[\s`(])([A-Za-z0-9._-]+)\/(?=[\s`),.]|$)/gm)) dirs.add(m[1]);
+  return dirs;
+}
+
 function main() {
   const violations = [];
 
@@ -109,6 +147,7 @@ function main() {
 
   const ids = new Set(storyIds());
   const handwritten = [];
+  const generatedRels = [];
 
   for (const file of files) {
     const parts = file.rel.split('/'); // docs/<a>/<b>...
@@ -149,7 +188,7 @@ function main() {
 
     // Rule 2 — the hand-written set.
     if (top !== null && UNCOUNTED.includes(top)) continue;
-    if (generatedFrom) continue;
+    if (generatedFrom) { generatedRels.push(file.rel); continue; }
     handwritten.push(file.rel);
   }
 
@@ -164,6 +203,28 @@ function main() {
       if (!targets.has(fromDocs)) {
         violations.push(`${rel} is not linked from docs/README.md — every hand-written page is reachable from the index`);
       }
+    }
+  }
+
+  // Rule 4b — everything else tracked under docs/, directly or by its directory.
+  let coveredCount = 0;
+  const tracked = trackedDocsFiles(root);
+  if (tracked === null) {
+    violations.push('cannot enumerate tracked docs files (`git ls-files docs/` failed) — rule 4 cannot be proven');
+  } else if (targets !== null) {
+    const handwrittenSet = new Set(handwritten);
+    const dirs = directoriesMentioned(readFileSync(README_PATH, 'utf8'));
+    const generatedSet = new Set(generatedRels);
+    for (const rel of tracked) {
+      if (handwrittenSet.has(rel)) continue;            // 4a already required a direct link
+      if (generatedSet.has(rel)) continue;              // the story runner's, listed by its quadrant README
+      if (rel === 'docs/README.md') continue;
+      coveredCount++;
+      const fromDocs = rel.replace(/^docs\//, '');
+      if (targets.has(fromDocs)) continue;
+      const top = fromDocs.includes('/') ? fromDocs.split('/')[0] : null;
+      if (top && dirs.has(top)) continue;
+      violations.push(`${rel} is not covered by docs/README.md — link it, or mention its directory`);
     }
   }
 
@@ -186,7 +247,7 @@ function main() {
   }
 
   console.log(
-    `check-docs-shape: PASS — ${files.length} docs pages, ${summary}, ${ids.size} story ids generated, index links every hand-written page`,
+    `check-docs-shape: PASS — ${files.length} docs pages, ${summary}, ${ids.size} story ids generated, index links every hand-written page, ${coveredCount} tracked docs files covered`,
   );
 }
 
