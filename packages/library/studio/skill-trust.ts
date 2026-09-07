@@ -50,13 +50,8 @@ import { basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import matter from 'gray-matter';
 
-// Every matter() parse call below passes a (possibly empty) options object.
-// gray-matter caches parse results keyed by raw string content ONLY when
-// called with no options at all — and it seeds that cache before parsing, so
-// a caller who swallows a YAML error (registry.ts's isStudioAgent does,
-// deliberately) poisons the cache for every later no-options call on the
-// same content, silently turning a genuinely malformed SKILL.md into an
-// empty-data success. Passing {} opts out of the cache entirely.
+// Every matter() call below passes a (possibly empty) options object — the
+// gray-matter cache-poisoning hazard is explained once in `skill-package.ts`.
 
 import { guardedSkillMdPath, listSkillDirs } from '../skill-path.ts';
 import type { AgentFacts } from './agent-facts.ts';
