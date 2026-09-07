@@ -48,7 +48,7 @@ make the sample a genuine before/after of a real change.
 
 ## Update mode
 
-When the `Mode:` line in the data block below reads `update` — UPDATE MODE — a
+When the `Mode:` line in the data block below reads `update` — UPDATE MODE: a
 locked demo already exists — `.forge/skills/demo-design/SKILL.md` (the composer) and
 `.forge/demo/DEMO.html` (the sample). READ them and REVISE per the operator's
 change-notes; do NOT rebuild from scratch.
@@ -149,7 +149,7 @@ not rebuild them.**
 
 Use Bash to actually check out / build / run the relevant states and capture real
 output into the sample, replacing the placeholders the previous pass marked.
-Ground the sample in a representative recent change: use Bash + git to find one
+Ground the sample in a representative recent change. Use Bash + git to find one
 (`git log --oneline -20`; pick the most recent substantive feature commit or
 commit range) and render an actual before/after of it — real output on both
 sides, not a mock. Never fabricate results, fake metrics, or invent a passing
