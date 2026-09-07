@@ -1,12 +1,9 @@
 /**
  * Per-project configuration — the `ProjectConfig` type family (pure type
- * declarations, no runtime code). Split out of `project-config.ts` (the
- * barrel) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`. A pure
- * leaf: no dependency on any sibling file, so it can never be part of an
- * import cycle. Siblings: `project-config-validate.ts` (`validateProjectConfig`'s
- * field parsers), `project-config-sidecar.ts` (the `.forge/quality_gate_cmd`
- * sidecar read + injection).
+ * declarations, no runtime code). A leaf of `project-config.ts`, whose header
+ * carries the split's reasoning and the sibling map. A PURE leaf: no
+ * dependency on any sibling file, so it can never be part of an import
+ * cycle.
  */
 
 import type { DemoStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';

@@ -1,11 +1,8 @@
 /**
  * Per-project configuration — the `.forge/quality_gate_cmd` sidecar concern:
  * reading it, and injecting it into a parsed `testProcess.local.cmd` when the
- * JSON omits `cmd`. Split out of `project-config.ts` (the barrel) when that
- * file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- * Siblings: `project-config-types.ts` (the `ProjectConfig` type family),
- * `project-config-validate.ts` (`validateProjectConfig`'s field parsers).
+ * JSON omits `cmd`. A leaf of `project-config.ts`, whose header carries the
+ * split's reasoning and the sibling map.
  */
 
 import { guardedReadFile } from '@forge/kernel';

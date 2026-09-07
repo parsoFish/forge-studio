@@ -2,12 +2,8 @@
  * forge↔project contract preflight — BUILD + ARTIFACTS (US-4.1 / ADR-017).
  * ARTIFACTS: build outputs must be gitignored (advisory, betterado #4a).
  * BUILD: the project's build process is declared, distinct from the test
- * gate (advisory, R1-04-F3). Split out of `preflight.ts` (the barrel) when
- * that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- * Siblings: `preflight-gate.ts` (C1/C1b/C7), `preflight-instructions.ts`
- * (C5/C8), `preflight-demo.ts` (DEMO family), `preflight-release.ts` (C10),
- * `preflight-repo.ts` (C2/C6).
+ * gate (advisory, R1-04-F3). A clause-family leaf of `preflight.ts`, whose
+ * header carries the split's reasoning and the sibling map.
  */
 
 import { existsSync, readFileSync } from 'node:fs';

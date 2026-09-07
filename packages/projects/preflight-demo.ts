@@ -2,12 +2,9 @@
  * forge↔project contract preflight — the DEMO clause family (US-4.1 /
  * ADR-017). DEMO (demoProcess declared), DEMO-SKILL (the generated
  * demo-design machinery exists, DEC-4), DEMO-ALIGN (demo builds off the
- * declared test process). All advisory. Split out of `preflight.ts` (the
- * barrel) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- * Siblings: `preflight-gate.ts` (C1/C1b/C7), `preflight-instructions.ts`
- * (C5/C8), `preflight-release.ts` (C10), `preflight-build.ts`
- * (BUILD/ARTIFACTS), `preflight-repo.ts` (C2/C6).
+ * declared test process). All advisory. A clause-family leaf of
+ * `preflight.ts`, whose header carries the split's reasoning and the
+ * sibling map.
  */
 
 import { existsSync } from 'node:fs';
