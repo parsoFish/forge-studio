@@ -43,7 +43,7 @@
         }
       },
       {
-        "act": "Name it, say what it is for, pick the \"typescript-cli\" starter, and press \"Create project\"",
+        "act": "Name it, say what it is for, pick the \"cli\" starter, and press \"Create project\"",
         "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
         "do": [
           {
@@ -56,7 +56,7 @@
           },
           {
             "fill": "create-app-type",
-            "with": "typescript-cli"
+            "with": "cli"
           },
           {
             "press": "create-project"
@@ -222,13 +222,24 @@
             "press": "open-session"
           },
           {
-            "fill": "session-answer",
-            "with": "The gate command is `npm test`. The timings come from the build tool's own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive."
-          },
-          {
-            "press": "submit-answers"
+            "repeat": [
+              {
+                "fillAll": "question-freetext",
+                "with": "The gate command is `npm test`. The timings come from the build tool's own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive."
+              },
+              {
+                "press": "submit-answers"
+              }
+            ],
+            "until": {
+              "session-phase": "awaiting-verdict"
+            }
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 600000
+        },
         "expect": {
           "route": "/sessions/architect/<architectSessionId>",
           "data": {
@@ -290,7 +301,7 @@
       "frame": "frames/02-press-start-a-greenfield-project.png"
     },
     {
-      "act": "Name it, say what it is for, pick the \"typescript-cli\" starter, and press \"Create project\"",
+      "act": "Name it, say what it is for, pick the \"cli\" starter, and press \"Create project\"",
       "say": "Forge writes the repo from the starter, makes the first commit in it, and lands the operator on the project page. Nothing linked here a moment ago — the route exists because the button was pressed.",
       "status": "green",
       "failures": [],
@@ -300,7 +311,7 @@
         "project-id": "story-s2",
         "page-ready": "true"
       },
-      "frame": "frames/03-name-it-say-what-it-is-for-pick-the-type.png"
+      "frame": "frames/03-name-it-say-what-it-is-for-pick-the-cli-.png"
     },
     {
       "act": "Check the project is ready for a Flow, and what it still owes",
@@ -319,18 +330,15 @@
     {
       "act": "Look at what forge says is still unresolved, and who owes it",
       "say": "The panel that catches a half-onboarded repo is where the difference shows. Nothing here is waiting on the operator: the two open clauses are the demo skill and its alignment, and the contract says outright that an agent generates them. Creation does not promise a demo it has not run. Every clause a template can answer, the starter answered — and the two it cannot are named, owned and counted rather than quietly ticked.",
-      "status": "red",
-      "failures": [
-        "data-resolution-failing-count: expected \"2\", got \"3\"",
-        "data-resolution-user-count: expected \"0\", got \"1\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "story-s2",
         "section": "contract-resolution",
-        "resolution-failing-count": "3",
-        "resolution-user-count": "1",
+        "resolution-failing-count": "2",
+        "resolution-user-count": "0",
         "resolution-agent-count": "2"
       },
       "frame": "frames/05-look-at-what-forge-says-is-still-unresol.png"
@@ -397,12 +405,12 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-05T05-49-56-a6e56570"
+        "architectSessionId": "2026-09-07T07-45-34-5aaa1d86"
       },
       "data": {
         "page": "architect-new",
         "section": "new-idea",
-        "architect-session-id": "2026-09-05T05-49-56-a6e56570"
+        "architect-session-id": "2026-09-07T07-45-34-5aaa1d86"
       },
       "frame": "frames/10-describe-the-first-piece-of-work-cap-wha.png"
     },
@@ -423,47 +431,53 @@
     {
       "act": "Open the session again and answer the Architect's questions about the project",
       "say": "The Architect interviews before it plans. The operator supplies the context only they have — what \"done\" means, what must not break — and the session moves to awaiting a verdict once the plan is drafted.",
-      "status": "red",
-      "failures": [
-        "could not fill [data-field=\"session-answer\"] with \"The gate command is `npm test`. The timings come from the build tool's own output — never re-implement a build. Breaking the existing human-readable output is not acceptable; --json is additive.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-answer\"]').first()\u001b[22m\n. no element carries that handle."
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "architect",
-        "session-phase": "interviewing"
+        "session-phase": "awaiting-verdict"
       },
       "frame": "frames/12-open-the-session-again-and-answer-the-ar.png"
     },
     {
       "act": "Open the plan and stand at the gate",
       "say": "This is the plan gate — the first Gate a human stands at, and where S2 ends. A starter became a repo, the repo became a contract-ready project, and the first Flow run on it reached the gate with a plan waiting on a decision. Nothing is approved yet: that decision is the operator's, and S10 is the story that makes it.",
-      "status": "red",
-      "failures": [
-        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
-      "data": {},
+      "data": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
       "frame": "frames/13-open-the-plan-and-stand-at-the-gate.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 2062685,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-49-56-a6e56570",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 2062608,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-49-56-a6e56570",
+        "pid": 1537284,
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-07T07-45-34-5aaa1d86",
         "signal": "SIGTERM",
         "via": "cwd"
       }
     ],
-    "skipped": []
+    "skipped": [],
+    "cancelled": [
+      {
+        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-07T07-45-34-5aaa1d86",
+        "kind": "architect",
+        "sessionId": "2026-09-07T07-45-34-5aaa1d86",
+        "project": "story-s2",
+        "cancelledFrom": "awaiting-verdict",
+        "written": true,
+        "reason": null
+      }
+    ]
   },
   "sweep": {
     "removed": [
@@ -475,6 +489,9 @@
   "fence": {
     "restored": [],
     "removed": [],
-    "failed": []
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": []
   }
 }
