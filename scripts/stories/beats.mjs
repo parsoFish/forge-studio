@@ -280,7 +280,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // A read that could not happen is simply "not satisfied yet": the next poll
     // reads the settled page, and the beat's own bound still governs.
     try {
-      const seen = resolveExpectations(spec, await readObserved(page, beat));
+      // The matcher DECLARES the keys it needs (`6.11.45`). `spec` is the
+      // repeat's `until`, whose keys the beat need not mention at all.
+      const seen = resolveExpectations(spec, await readObserved(page, beat, Object.keys(spec)));
       return Object.entries(spec).every(
         ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
       );

@@ -152,10 +152,21 @@ const SAFE_KEY = /^[A-Za-z][A-Za-z0-9-]*$/;
  * unit-testable — a reader that knew the answer is how a gate starts agreeing
  * with itself.
  */
-export async function readObserved(page, beat) {
+export async function readObserved(page, beat, alsoWanted = []) {
   // Always read the error sentinels alongside the beat's own keys — the
   // verdict cannot judge what was never collected.
-  const keys = [...new Set([...Object.keys(beat.expect.data), ...ERROR_SENTINELS.map(([a]) => a)])];
+  //
+  // `alsoWanted` is how a CALLER declares the keys IT needs, and it exists
+  // because a repeat's `until` is the repeat's own condition (T1 ruling 320),
+  // not the beat's. Bead `forge-8vfn.6.11.45`: without it this read collected
+  // `expect.data` alone, so `matchesData` asked `Object.hasOwn(seen, …)` for a
+  // key nobody had collected and answered `false` HOWEVER THE PAGE READ. S1
+  // run 9 measured the cost — the architect reached `awaiting-verdict` and
+  // wrote its plan at 23:46:57, the page carried `data-session-phase=
+  // "awaiting-verdict"`, and beat 11 spent 2 m 24 s more before reporting that
+  // same condition unmet. The union, not the beat's keys: a key asked for
+  // twice is collected once, and nothing that used to be read stops being read.
+  const keys = [...new Set([...Object.keys(beat.expect.data), ...alsoWanted, ...ERROR_SENTINELS.map(([a]) => a)])];
   const { data, nested, lifecycle, sessionPhase } = await page.evaluate(
     ({ wanted, safe }) => {
       const root = document.querySelector('main[data-page]') ?? document.body;
