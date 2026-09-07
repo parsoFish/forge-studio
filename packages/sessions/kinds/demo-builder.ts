@@ -23,7 +23,7 @@
  *
  * Ported from `packages/sessions/demo-builder-runner.ts`. Byte-identical spawn
  * behaviour is pinned by `interactive-runners-golden.test.ts` against
- * `orchestrator/test-fixtures/spawn-capture/interactive-demo-builder.json`.
+ * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-demo-builder.json`.
  */
 
 import type { ServerResponse } from 'node:http';

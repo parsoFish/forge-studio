@@ -21,7 +21,7 @@
  * mutates trust for anything — every branch below either materialises a
  * quarantined draft (the owning pipeline's own contract) or 400/404s. No
  * function in this file can turn an installed-but-unreviewed object into a
- * trusted one (`packages/library/community-no-trust-decisions.test.ts` scans this file's
+ * trusted one (`packages/library/tests/contract/community-no-trust-decisions.test.ts` scans this file's
  * source text for the five functions that could).
  *
  * WIRE PROJECTION — WI-1's `CommunityItem` (orchestrator/studio/

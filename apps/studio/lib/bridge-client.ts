@@ -1289,7 +1289,7 @@ export async function startAuthoring(input: {
 // W8-B4/WI-3) BECAUSE it had no caller exercising it; keeping a zero-caller
 // wrapper around is exactly how that kind of drift recurs invisibly. The
 // dedicated server route + its own acceptance suite
-// (packages/library/bridge-studio-authoring-finalize.test.ts) are UNCHANGED and remain a
+// (packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts) are UNCHANGED and remain a
 // legitimate, independently-tested API surface — only this orphaned client
 // wrapper is gone, per the task brief's "do not leave a third half-wired
 // path": a function with no caller is not a caller that should exist.

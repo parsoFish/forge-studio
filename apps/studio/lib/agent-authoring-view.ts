@@ -209,7 +209,7 @@ export const EMPTY_STATE: AgentBuilderState = {
  * The fix seeds `disallowedTools` from `TOOL_FENCE_REQUIRED_NAMES`
  * (forge-ui/lib/tool-fence-required-names.ts) — the SAME array
  * `packages/library/studio-lint-tool-fence.ts` exports and checks against
- * (`packages/library/tool-fence-required-names-parity.test.ts` proves the two arrays
+ * (`packages/library/tests/contract/tool-fence-required-names-parity.test.ts` proves the two arrays
  * cannot drift apart), rather than a bare `['Task', 'Agent']` literal here.
  * `allowedTools` is deliberately left `[]`: the ruling this fixes ("seed
  * BOTH keys' worth of correctness — the enumeration point") means reasoning

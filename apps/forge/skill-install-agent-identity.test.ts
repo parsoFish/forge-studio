@@ -2,7 +2,7 @@
  * What a library ACTION does to AGENT identity — install, approve, and the
  * roster the loader returns afterwards.
  *
- * MOVED HERE from `packages/library/studio/skill-library.test.ts` by M4-library
+ * MOVED HERE from `packages/library/tests/integration/skill-library.test.ts` by M4-library
  * s3 (rulings 13/73/127 + ruling 89's shape). Every case below drives a
  * library operation and then asserts on `isStudioAgent` / `listAgentDefinitions`
  * — the Agent kind's loader, owned by `@forge/agents`. Library is rank 2 and

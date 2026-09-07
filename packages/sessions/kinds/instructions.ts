@@ -18,7 +18,7 @@
  *
  * Ported from `packages/sessions/instructions-runner.ts`. Byte-identical spawn
  * behaviour is pinned by `interactive-runners-golden.test.ts` against
- * `orchestrator/test-fixtures/spawn-capture/interactive-instructions.json`.
+ * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-instructions.json`.
  */
 
 import type { ServerResponse } from 'node:http';

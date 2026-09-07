@@ -81,7 +81,7 @@
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/dispatch-decision-capture.test.ts
  * (or delete the fixture) rewrites
- * orchestrator/test-fixtures/spawn-capture/dispatch-decisions.json from current code.
+ * packages/kernel/tests/test-fixtures/spawn-capture/dispatch-decisions.json from current code.
  */
 
 import { test } from 'node:test';
@@ -96,12 +96,12 @@ import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId
 import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
 import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { assertMatchesJsonSnapshot } from '../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { assertMatchesJsonSnapshot } from '../../packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 // §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one
 // level short. Taken from kernel, which owns the constant.
 import { FORGE_ROOT } from '@forge/kernel';
-const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'dispatch-decisions.json');
+const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'dispatch-decisions.json');
 
 /**
  * The branch `execAgent` (flow-runner.ts) takes for a resolved 'agent'-kind

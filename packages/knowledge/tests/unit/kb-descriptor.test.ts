@@ -179,7 +179,7 @@ describe('deriveKbUsageDefaults — band vocabulary mapping (R1-06 WI-1, T1 ruli
 // these two functions, and the only reason a `cli/` file imported
 // `@forge/knowledge` at all. It never booted the bridge. Its subject is this
 // module, so it lives beside this module. The provenance MAPPING's own cases
-// went the other way, to `packages/kernel/provenance.test.ts`.
+// went the other way, to `packages/kernel/tests/unit/provenance.test.ts`.
 // ---------------------------------------------------------------------------
 
 describe('origin round-trip', () => {

@@ -16,7 +16,7 @@
  * fetch, no window, no jsdom (this repo's forge-ui vitest config is
  * `environment: 'node'`, a standing decision; the transport, `bridgeFetch`,
  * requires `window`). The over-the-wire behaviour is pinned by
- * packages/library/bridge-studio-community.test.ts instead.
+ * packages/library/tests/integration/bridge-studio-community.test.ts instead.
  *
  * W8-B5b adds `postCommunityRefresh` — the client side of the deterministic,
  * LLM-free `POST /api/studio/community/refresh` (see that section below for
@@ -392,7 +392,7 @@ export function parseCommunityItemDetail(raw: unknown): CommunityItemDetail {
 
 // ---------------------------------------------------------------------------
 // Fetch helpers — over-the-wire behaviour pinned by
-// packages/library/bridge-studio-community.test.ts, not by this file's own test (see
+// packages/library/tests/integration/bridge-studio-community.test.ts, not by this file's own test (see
 // module header: no window/fetch under this repo's node-environment vitest).
 // ---------------------------------------------------------------------------
 

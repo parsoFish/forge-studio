@@ -7,7 +7,7 @@
  * influence the latter, installing a community hook called `wi-contract`
  * would silently re-route an agent's pipeline.
  *
- * MOVED HERE from `packages/library/studio/hook-library.test.ts` in
+ * MOVED HERE from `packages/library/tests/unit/hook-library.test.ts` in
  * M4-library PR 2. It always asserted about `resolveBandGuard`, which is
  * agents' function, from a library test file — that is a `library → agents`
  * import and library (rank 2) may not reach agents (rank 3). The subject was

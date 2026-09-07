@@ -137,11 +137,11 @@ test('kills "skip the session log whenever an architect event exists": a ZERO-co
 // if these ever disagree, the harness and the product disagree about what a run
 // cost, which is the state this bead found.
 //
-// The fixture lives under `packages/kernel/test-fixtures/` rather than being
+// The fixture lives under `packages/kernel/tests/test-fixtures/` rather than being
 // copied here: it is one run's evidence, and two copies of it could drift.
 // ---------------------------------------------------------------------------
 
-const G2_FIXTURES = join(import.meta.dirname, '..', 'packages', 'kernel', 'test-fixtures', 'g2-restatement');
+const G2_FIXTURES = join(import.meta.dirname, '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'g2-restatement');
 const G2_CYCLE_ID = '2026-09-05T13-37-42_INIT-2026-09-05-init-gap-registry-consolidation';
 const G2_SESSION_ID = '2026-09-05T13-24-51-bf610d7f';
 

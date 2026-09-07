@@ -1,7 +1,7 @@
 /**
  * `forge gate docs` — the VERB's shell: argv in, exit code out.
  *
- * The rules are tested in `packages/factory/gates/docs-gate.test.ts`. What can
+ * The rules are tested in `packages/factory/tests/unit/docs-gate.test.ts`. What can
  * only be tested here is the exit-code contract a merge boundary depends on,
  * and one case matters more than the others: **a mis-invoked gate must fail
  * loud**. A gate that exits 0 because it was handed no paths, or an unknown

@@ -1,7 +1,7 @@
 /**
  * The AGENT loader's handling of `composition.hooks` (R3-03 F1b).
  *
- * MOVED HERE from `packages/library/studio/hook-library.test.ts` by M4-library
+ * MOVED HERE from `packages/library/tests/unit/hook-library.test.ts` by M4-library
  * s3. Its subject is `loadAgentDefinition` — the Agent kind's loader, owned by
  * `@forge/agents` — not anything in library, and library (rank 2) may not
  * import agents (rank 3), so the file it lived in carried a boundary row for a

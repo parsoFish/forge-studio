@@ -69,7 +69,7 @@ export const COMMUNITY_REGISTRY_LOCK_RETRIES = Object.freeze({ retries: 5, minTi
  * `stale / 2` ms; a holder that crashed refreshes nothing, so its lock
  * self-clears after this long instead of wedging the registry forever. Stated
  * explicitly (rather than inherited from the library default) because
- * `packages/library/community-registry-lock.test.ts` pins the behaviour on it.
+ * `packages/library/tests/regression/community-registry-lock.test.ts` pins the behaviour on it.
  */
 export const COMMUNITY_REGISTRY_LOCK_STALE_MS = 10_000;
 
@@ -90,7 +90,7 @@ export class CommunityRegistryLockError extends Error {
  *  directory before locking so a fresh forge root's two writers still
  *  serialise against each other.
  *
- *  Exported so `packages/library/community-registry-lock.test.ts` can plant a stale lock at
+ *  Exported so `packages/library/tests/regression/community-registry-lock.test.ts` can plant a stale lock at
  *  the REAL path rather than at a hand-typed guess of it: a test that builds
  *  the lock path itself goes silently green the day this target changes,
  *  which is precisely how a staleness test rots into an assertion about

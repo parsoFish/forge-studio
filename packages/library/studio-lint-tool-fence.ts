@@ -58,7 +58,7 @@ import type { Finding } from '@forge/kernel';
 
 // forge-6gv.19 (W8-B4) — exported so `apps/studio/lib/tool-fence-required-
 // names.ts` (the Agent Builder's from-blank compose, `BLANK_STATE`) and
-// `packages/library/tool-fence-required-names-parity.test.ts` (the cross-boundary
+// `packages/library/tests/contract/tool-fence-required-names-parity.test.ts` (the cross-boundary
 // cross-check) both consume the REAL value, never a hand-copied literal.
 // forge-ui never imports cli/ at runtime (see apps/studio/lib/session-client.ts
 // / session-lifecycle-client.ts's own headers), so the export exists for

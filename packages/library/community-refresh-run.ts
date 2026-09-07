@@ -4,7 +4,7 @@
  * `POST /api/studio/community/refresh` (packages/library/bridge-studio-community.ts) must
  * be the SAME code path, not two hand-rolled copies that drift. Both call
  * `runCommunityRefresh`; neither knows how the registry is loaded, serialized,
- * or written, and `packages/library/bridge-studio-community-refresh.test.ts`'s P1 pins the
+ * or written, and `packages/library/tests/integration/bridge-studio-community-refresh.test.ts`'s P1 pins the
  * two surfaces byte-for-byte against each other so a future divergence is red
  * rather than silent.
  *

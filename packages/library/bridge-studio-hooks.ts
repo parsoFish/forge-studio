@@ -35,7 +35,7 @@
  * host-supplied reader `RouteContext` carries) instead.
  *
  * ---------------------------------------------------------------------------
- * CONTRACT DECISIONS (mirrored from packages/library/bridge-studio-hooks.test.ts's own
+ * CONTRACT DECISIONS (mirrored from packages/library/tests/integration/bridge-studio-hooks.test.ts's own
  * header — that file is this module's spec):
  *
  *  D-1. Response envelope: `{ hooks: [...] }` (list) / a flat detail object

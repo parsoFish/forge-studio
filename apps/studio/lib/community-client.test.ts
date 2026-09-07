@@ -29,7 +29,7 @@
  * in DISPATCH (which body to send, which response key to check first), not
  * in a pure parse function, so only a real, mocked-transport round trip
  * proves it. The over-the-wire behaviour itself is pinned by
- * packages/library/bridge-studio-community.test.ts.
+ * packages/library/tests/integration/bridge-studio-community.test.ts.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 

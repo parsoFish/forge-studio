@@ -2,7 +2,7 @@
  * forge-6gv.19 (W8-B4) — REAL end-to-end pins for the from-blank Agent
  * Builder compose, driven through the ACTUAL bridge PUT route (not a
  * hand-rolled call to `serializeAgentDefinition`/`toolFenceFinding` in
- * isolation — see `packages/library/studio-lint-tool-fence.test.ts`'s own header for why
+ * isolation — see `packages/library/tests/integration/studio-lint-tool-fence.test.ts`'s own header for why
  * this repo insists on the real entry point).
  *
  * The full chain exercised:

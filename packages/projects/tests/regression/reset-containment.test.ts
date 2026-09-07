@@ -13,7 +13,7 @@
  *
  * Every case below names the ESCAPE SHAPE it attacks, and asserts the
  * FILESYSTEM STATE after the call — not merely that nothing threw/returned
- * oddly — mirroring `packages/kernel/path-guard-rename.test.ts`'s own
+ * oddly — mirroring `packages/kernel/tests/unit/path-guard-rename.test.ts`'s own
  * standard for `guardedRename` (the primitive every relocation in this
  * module goes through; ruling 3, no second move path is written here).
  *

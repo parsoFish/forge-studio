@@ -5,7 +5,7 @@
  * runners (M4 exit row 3, ruling 60/62). Unlike the four `AGENT_RUNNERS` kinds
  * ported in s3, **neither has a spawn-capture golden**: they are
  * `apps/forge/cli.ts` subcommands, they were never in the R4-22 WI-0 baseline,
- * and `orchestrator/test-fixtures/spawn-capture/` is an IMMUTABLE pinned set
+ * and `packages/kernel/tests/test-fixtures/spawn-capture/` is an IMMUTABLE pinned set
  * this lane may not extend. So the byte-identical proof the first four ports
  * enjoyed does not exist for these two, and this file is what stands in for it.
  *
