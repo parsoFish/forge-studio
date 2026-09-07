@@ -52,7 +52,8 @@ import {
 import { snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
-import { driveBeat, resolveBeatRoute } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
+import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
