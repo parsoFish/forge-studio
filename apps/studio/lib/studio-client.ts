@@ -2069,11 +2069,11 @@ export async function fetchActiveOnboarding(
  * the operator can follow at `/sessions/onboarding/<sessionId>`.
  */
 export async function startOnboardingSession(
-  project: string,
+  project: string, modelTier?: string,
   inputs?: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string; sessionId?: string; runId?: string; project?: string }> {
   const r = await studioPost('/api/studio/onboarding/start', {
-    project,
+    project, ...(modelTier ? { modelTier } : {}),
     ...(inputs ? { inputs } : {}),
   });
   const data = r.data;
