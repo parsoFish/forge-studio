@@ -30,6 +30,7 @@ import {
 function row(overrides: Partial<SessionIndexRow>): SessionIndexRow {
   return {
     kind: 'instructions',
+    agent: 'instructions-creator', costUsd: null, runId: null,
     sessionId: 'fixture',
     project: 'p',
     phase: 'drafting',

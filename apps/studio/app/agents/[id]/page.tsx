@@ -179,6 +179,7 @@ export default function AgentBuilderPage() {
   // three of fetchAgentHistory's own resolution kinds (found/not-found/
   // unresolved) so a still-in-flight fetch never renders as any of them.
   const [historyResolution, setHistoryResolution] = useState<AgentHistoryResolution | null>(null);
+  const [historyNonce, setHistoryNonce] = useState(0);
   // For a new agent: the user first picks a starter (or "blank"); only then is
   // the builder revealed. Existing agents skip the picker (chosen = true).
   const [starterChosen, setStarterChosen] = useState(false);
@@ -389,14 +390,12 @@ export default function AgentBuilderPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // R6-06 WI-3: independent per-agent history fetch, keyed on the route's own
-  // `slugParam` (the same dependency the primary load() effect above uses) so
-  // switching agents — via the selector or a direct route change — re-fetches
-  // THIS agent's own history, never leaves the previous agent's rows showing.
-  // A brand-new, not-yet-saved agent (`isNew`) has no persisted slug to have
-  // history for, so this effect deliberately does not fire for it —
-  // `historyResolution` stays `null` and the section is omitted entirely
-  // (never a fabricated "not-found" against a slug that isn't real yet).
+  // R6-06 WI-3: per-agent history fetch keyed on `slugParam`, so switching
+  // agents never leaves the previous agent's rows showing; `isNew` suppresses
+  // it rather than fabricating a "not-found" against a slug that is not real
+  // yet. `historyNonce` (a counter, not the run id — a re-dispatch of a seen
+  // id must still re-read) is the third key and the reason a DISPATCH shows at
+  // all. S5 beat 12 and the whole trace: run-lands-in-history.test.ts.
   useEffect(() => {
     let cancelled = false;
     setHistoryResolution(null);
@@ -408,7 +407,7 @@ export default function AgentBuilderPage() {
     }
     void loadHistory();
     return () => { cancelled = true; };
-  }, [slugParam, isNew]);
+  }, [slugParam, isNew, historyNonce]);
 
   // ---- agent selector change (with dirty guard) ----
   function handleSelectAgent(newSlug: string) {
@@ -859,6 +858,7 @@ export default function AgentBuilderPage() {
             unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
+            onRunDispatched={() => setHistoryNonce((n) => n + 1)}
           />
 
           <YamlPreview
