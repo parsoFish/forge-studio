@@ -1,22 +1,9 @@
 /**
  * forge↔project contract preflight — the repo-hygiene clauses C2 (scratch
- * hygiene, HARD) and C6 (a satisfiable merge model, ADVISORY). Split out of
- * `preflight.ts` (the barrel) when that file grew past the 800-line baseline
- * cap; see `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- *
- * C4 (machine-consumable architecture context) and BRAIN (brain freshness)
- * are the plan's other two "repo" clauses and stay in the barrel. At the
- * split they were held there by a boundary row: both resolved brain paths
- * through `@forge/knowledge/brain-paths.ts`, the one baselined cross-package
- * edge `preflight.ts` carried, and moving them would have swapped that row
- * for a same-count rename. M4's layout PR removed the constraint entirely —
- * `projectBrainDir`/`projectThemesDir` are `@forge/kernel` exports now
- * (ruling 18) and the row is deleted from `scripts/baselines/boundaries.json`
- * — so the division here is by clause family alone.
- *
- * Siblings: `preflight-gate.ts` (C1/C1b/C7), `preflight-instructions.ts`
- * (C5/C8), `preflight-demo.ts` (DEMO family), `preflight-release.ts` (C10),
- * `preflight-build.ts` (BUILD/ARTIFACTS).
+ * hygiene, HARD) and C6 (a satisfiable merge model, ADVISORY). A clause-family
+ * leaf of `preflight.ts`, whose header carries the split's reasoning, the
+ * sibling map, and why C4 and BRAIN — the plan's other two "repo" clauses —
+ * stay in the barrel rather than joining this file.
  */
 
 import { existsSync, lstatSync, readFileSync } from 'node:fs';

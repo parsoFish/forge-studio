@@ -3,12 +3,8 @@
  *
  * C1 (fast, trustworthy quality gate, HARD), C1b (CI merge-boundary net,
  * advisory-when-absent), and C7 (live-acceptance tier, advisory visibility).
- * Split out of `preflight.ts` (which stays the barrel — `runPreflight` plus
- * the re-exports) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`. Siblings:
- * `preflight-instructions.ts` (C5/C8), `preflight-demo.ts` (DEMO family),
- * `preflight-release.ts` (C10), `preflight-build.ts` (BUILD/ARTIFACTS),
- * `preflight-repo.ts` (C2/C6).
+ * A clause-family leaf of `preflight.ts`, whose header carries the split's
+ * reasoning and the sibling map.
  */
 
 import { existsSync, readFileSync } from 'node:fs';

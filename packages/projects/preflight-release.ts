@@ -1,11 +1,8 @@
 /**
  * forge↔project contract preflight — C10, documentation parity & release
- * substrate (ADVISORY; opt-in), US-4.1 / ADR-017. Split out of `preflight.ts`
- * (the barrel) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- * Siblings: `preflight-gate.ts` (C1/C1b/C7), `preflight-instructions.ts`
- * (C5/C8), `preflight-demo.ts` (DEMO family), `preflight-build.ts`
- * (BUILD/ARTIFACTS), `preflight-repo.ts` (C2/C6).
+ * substrate (ADVISORY; opt-in), US-4.1 / ADR-017. A clause-family leaf of
+ * `preflight.ts`, whose header carries the split's reasoning and the
+ * sibling map.
  */
 
 import { existsSync } from 'node:fs';

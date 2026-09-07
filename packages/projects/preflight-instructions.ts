@@ -2,11 +2,8 @@
  * forge↔project contract preflight — the "instructions" clause family
  * (US-4.1 / ADR-017). C5 (locked-core constraints declared, advisory) and C8
  * (agent-instruction file present + covers the declared gate, advisory).
- * Split out of `preflight.ts` (the barrel) when that file grew past the
- * 800-line baseline cap; see `scripts/baselines/file-size.json` /
- * `scripts/check-file-size.mjs`. Siblings: `preflight-gate.ts` (C1/C1b/C7,
- * source of the shared `readQualityGateCmd`), `preflight-demo.ts`,
- * `preflight-release.ts`, `preflight-build.ts`, `preflight-repo.ts`.
+ * A clause-family leaf of `preflight.ts`, whose header carries the split's
+ * reasoning and the sibling map.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
