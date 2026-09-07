@@ -28,6 +28,7 @@ import {
 } from './architect-plan.ts';
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { guardedFile, guardedReadFile, guardedWriteFile, type EventLogger } from '@forge/kernel';
+import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
@@ -121,7 +122,7 @@ export async function runExploreThenDraft(args: ArchitectStepArgs): Promise<RunA
   });
 
   writeStatus({ ...status, phase: 'drafting' });
-  return await runDraftStep({ ...args, resolvedDecisions: null });
+  return await runDraftRounds({ ...args, resolvedDecisions: null });
 }
 
 // ---------------------------------------------------------------------------
@@ -437,9 +438,9 @@ function renderExploreBlock(findings: ExploreFindings | null): string[] {
 }
 
 export async function runDraftStep(
-  args: ArchitectStepArgs & { resolvedDecisions: string | null },
+  args: ArchitectStepArgs & { resolvedDecisions: string | null; criticFindings?: CompletenessCriticFinding[] | null },
 ): Promise<RunArchitectTurnResult> {
-  const { input, status, plumbing, writeStatus, resolvedDecisions, paths } = args;
+  const { input, status, plumbing, resolvedDecisions, criticFindings, paths } = args;
   const { queryFn, logger, onToolUse, onHeartbeat, onText, onThinking } = plumbing;
   const brainIndex = architectBrainIndex(input, status);
   // W8-B6 — the same initiative id every event in this session already uses.
@@ -468,26 +469,27 @@ export async function runDraftStep(
     status.idea,
     '',
     'Interview answers:',
-    interview.length
-      ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
-      : '_(operator drafted directly)_',
+    renderInterviewSummary(interview, '_(operator drafted directly)_'),
     ...(resolvedDecisions
       ? ['', 'Resolved design decisions (bake these into the manifests):', resolvedDecisions]
+      : []),
+    // Ruling 380: a re-draft that does not know what the critic faulted is a
+    // coin flip, not a round.
+    ...(criticFindings?.length
+      ? ['', 'A completeness critic reviewed your previous draft and found these gaps. Close every one of them in this draft:',
+         ...criticFindings.map((f) => `- (${f.severity}${f.initiativeId ? `, ${f.initiativeId}` : ''}) ${f.gap}`)]
       : []),
     ...renderExploreBlock(readExploreFindings(input.projectRoot, input.sessionId)),
   ].join('\n');
 
-  let { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId, cwd: status.project_repo_path,
-    queryFn,
-    prompt,
-    schema: DRAFT_SCHEMA,
-    modelTier: status.modelTier,
-    onToolUse,
-    onHeartbeat,
-    onText,
-    onThinking,
+  // One binding for BOTH draft turns — the forced-emit retry below had a
+  // second copy of these ten arguments, which is where the two turns start to
+  // disagree about the model, the ground or the hooks.
+  const draftOnce = (text: string) => runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+    logger, initiativeId, cwd: status.project_repo_path, queryFn, prompt: text,
+    schema: DRAFT_SCHEMA, modelTier: status.modelTier, onToolUse, onHeartbeat, onText, onThinking,
   });
+  let { output: draft, brainReads } = await draftOnce(prompt);
   let draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
   // Convergence backstop: if the model still returns zero initiatives (e.g. it did not
   // honour the schema's minItems), re-issue ONE focused, research-light turn that forbids
@@ -507,17 +509,7 @@ export async function runDraftStep(
       metadata: { session_id: input.sessionId },
     });
     const forceEmitSection = loadForceEmitTurnSection(input.skillPromptPath);
-    const retry = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId, cwd: status.project_repo_path,
-      queryFn,
-      prompt: `${prompt}\n\n${forceEmitSection}`,
-      schema: DRAFT_SCHEMA,
-      modelTier: status.modelTier,
-      onToolUse,
-      onHeartbeat,
-      onText,
-      onThinking,
-    });
+    const retry = await draftOnce(`${prompt}\n\n${forceEmitSection}`);
     if (Array.isArray(retry.output?.initiatives) && retry.output!.initiatives!.length > 0) {
       draft = retry.output;
       brainReads.push(...retry.brainReads);
@@ -597,8 +589,9 @@ export async function runDraftStep(
     initiatives: proposed,
   };
 
+  // The phase is NOT written here: `runDraftRounds` owns the promotion to
+  // `awaiting-verdict` and writes it once, after the critic has passed.
   const planPath = writePlanDoc(session, input.projectRoot);
-  writeStatus({ ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: `architect-session-${input.sessionId}`,
@@ -615,8 +608,51 @@ export async function runDraftStep(
     },
   });
 
-  return { phase: 'awaiting-verdict', wrote: [planPath], planPath };
+  return { phase: 'drafting', wrote: [planPath], planPath };
 }
+/**
+ * Ceiling on draft rounds in ONE drafting turn (6.10.28's class: every
+ * comparable loop in the product caps). Two = exactly the one re-draft ruling
+ * 380 describes, and a draft is the session's most expensive turn. AT the
+ * ceiling the operator is asked WITH the outstanding findings: asking a human
+ * about a plan a critic still faults is honest; spending forever, or stranding
+ * a session with no operator control, is not.
+ */
+export const MAX_CRITIC_DRAFT_ROUNDS = 2;
+
+/**
+ * Ruling 380 — the critic runs BEFORE the operator is asked. Draft, critique,
+ * and promote to `awaiting-verdict` only on a clean pass (or at the ceiling); a
+ * faulted plan gets another round carrying the findings, so the operator never
+ * reads a plan the critic already faulted and never approves one twice. It used
+ * to run in the FINALIZE turn, re-arming the gate behind the approval itself.
+ *
+ * `awaiting-verdict` is written EXACTLY ONCE, at the end: the bridge polls
+ * `status.json`, so a transient `awaiting-verdict` between rounds would arm the
+ * gate on the very draft this loop exists to withhold.
+ */
+export async function runDraftRounds(
+  args: ArchitectStepArgs & { resolvedDecisions: string | null },
+): Promise<RunArchitectTurnResult> {
+  const { input, status, plumbing, writeStatus, paths } = args;
+  let criticFindings: CompletenessCriticFinding[] | null = null;
+  for (let round = 1; ; round++) {
+    const drafted = await runDraftStep({ ...args, criticFindings });
+    const record = await runCompletenessCriticStep({
+      input, paths, status, logger: plumbing.logger, queryFn: plumbing.queryFn, round,
+    });
+    // Durable BEFORE the next round: the flag records that THIS round was
+    // checked (never "the session was checked once"), so a re-drafted plan can
+    // never reach the operator on an earlier round's pass.
+    if (record.findings.length === 0 || round >= MAX_CRITIC_DRAFT_ROUNDS) {
+      writeStatus({ ...status, completenessCritic: record, phase: 'awaiting-verdict' });
+      return { ...drafted, phase: 'awaiting-verdict' };
+    }
+    writeStatus({ ...status, completenessCritic: record, phase: 'drafting' });
+    criticFindings = record.findings;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structured-output query (mirrors council's parse path)
 // ---------------------------------------------------------------------------

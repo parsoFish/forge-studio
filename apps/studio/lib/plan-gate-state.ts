@@ -2,17 +2,21 @@
  * ArchitectPlanGate approval-reset logic, extracted pure so the critic-block
  * state transition is unit-testable (vitest) without mounting the component.
  *
- * The completeness critic (architect FINALIZE gate) can bounce a session
- * straight from `finalizing` back to `awaiting-verdict` — same round, findings
- * persisted on `status.completenessCritic`. The gate component's optimistic
- * `approved` flag must be cleared on that round-trip even when the poll never
- * observes the short-lived `finalizing` phase, otherwise a false
- * "Approved — building it now" payoff renders next to a re-armed gate.
+ * Ruling 380 moved the completeness critic BEFORE the ask: it runs at the end
+ * of the drafting turn, so it can no longer bounce a session from `finalizing`
+ * back to `awaiting-verdict` behind an approval the operator already gave. What
+ * survives here is the other half — findings can still be OUTSTANDING when the
+ * operator is asked, at the critic's round ceiling — so the gate must render
+ * them and stay approvable, and its React key must change when a re-drafted
+ * plan lands a new critic result. The `approved` reset is kept for the same
+ * reason it was written: a false "Approved — building it now" payoff must never
+ * render next to an armed gate.
  */
 import type { CompletenessCriticStatus } from './bridge-client';
 
-/** True when the session sits at the PLAN gate because the completeness critic
- *  blocked promotion with findings the operator has not yet re-approved. */
+/** True when the operator is being asked with critic findings OUTSTANDING —
+ *  since ruling 380 that means the critic hit its round ceiling and the plan is
+ *  put to the operator with the gaps shown, not that promotion was blocked. */
 export function isCriticBlocked(
   phase: string,
   critic: CompletenessCriticStatus | null | undefined,
@@ -26,7 +30,7 @@ export function isCriticBlocked(
  *     (send-back → redraft, rejected) — pre-existing behavior; `finalizing`
  *     and `committed` are the post-approve states and keep the payoff
  *     visible (W7-A3);
- *   - a critic block round-trip: back at `awaiting-verdict` WITH findings.
+ *   - `awaiting-verdict` WITH outstanding findings (the ceiling case).
  */
 export function shouldResetApproval(
   phase: string,
@@ -34,8 +38,7 @@ export function shouldResetApproval(
 ): boolean {
   // W7-A3 (artifact-plan-10): `finalizing` is the POST-approve phase (approve
   // → finalizing → committed). Resetting on it blanked the payoff ~2s after a
-  // successful 200 and re-armed a dead gate bar. The critic-block round-trip
-  // (finalizing → awaiting-verdict WITH findings) is still caught below.
+  // successful 200 and re-armed a dead gate bar.
   if (phase !== 'awaiting-verdict' && phase !== 'finalizing' && phase !== 'committed') return true;
   return isCriticBlocked(phase, critic);
 }
