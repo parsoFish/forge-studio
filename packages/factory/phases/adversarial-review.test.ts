@@ -6,7 +6,7 @@
  *
  * How the review is CUT and BOUGHT — the per-work-item chunking, the per-file
  * split and the per-chunk store — is `adversarial-review-chunking.test.ts`. The
- * fixture both drive is `adversarial-review-fixture.test.ts`.
+ * fixture both drive is `../test-fixtures/adversarial-review-fixture.ts`.
  */
 
 import assert from 'node:assert/strict';
@@ -20,7 +20,7 @@ import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import {
   CODE_LENSES, CYCLE_ID, EXPECTED, collectLogger, makeFixture, run, stubQueryFn,
   validFindingsJson, withoutSpawnSuppressionEnv,
-} from './adversarial-review-fixture.test.ts';
+} from '../test-fixtures/adversarial-review-fixture.ts';
 import { assertAdversarialReviewDeclaration } from './adversarial-review.ts';
 
 test('happy path: findings harvested + persisted, worktree scrubbed, briefing carries the diff, the ACs and the class lenses', async () => {
