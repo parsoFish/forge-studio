@@ -22,12 +22,9 @@ export { MAX_ANSWER_FIELD_BYTES };
 // UnhandledAffordanceBody — mirrors forge-ui's `UnhandledArtifactBody`
 // (`apps/studio/components/studio/session/SessionArtifactPane.tsx`): an
 // explicit, VISIBLE failure state for a value this route recognises as
-// STRUCTURALLY valid (a real, currently-available affordance) but has no
-// renderer/handler wired for — never a silent 200, never routed into a
-// wrong-kind handler as a best guess. `UnhandledArtifactBody` is a React
-// component taking `{kind, error}`; this is that same two-field shape as a
-// JSON wire body (this route has no forge-ui surface to render into — B6
-// consumes it; NO forge-ui changes ship in this batch).
+// STRUCTURALLY valid (a real, available affordance) but has no handler wired
+// for — never a silent 200, never routed into a wrong-kind handler as a best
+// guess — the same `{kind, error}` shape that component takes, as a wire body.
 // ---------------------------------------------------------------------------
 
 export interface UnhandledAffordanceBody {
@@ -48,10 +45,13 @@ export function unhandledAffordanceBody(kind: SessionAffordanceKind, error: stri
  *  spawns a turn for — never `architect` (no writable affordance) or
  *  `project-brain` (no verdict/question-form row in its panel). W7-C2: the
  *  generic-spine kinds (`authoring`/`kb-cleanup`) joined for the REVISE
- *  verdict — a revise sends the session back to its agent phase and spawns
- *  the next turn through the SAME detached `spawnAgentTurn` their own start
- *  routes already use (authoring's APPROVE still runs its turn INSIDE
- *  `runFinalize`, unchanged). */
+ *  verdict, which sends the session back to its agent phase through the SAME
+ *  detached `spawnAgentTurn` their own start routes use (authoring's APPROVE
+ *  still runs its turn INSIDE `runFinalize`, unchanged). The architect's
+ *  absence is RATIFIED, not a gap (ruling 382) — see `design.md` §"Why the
+ *  architect has no generic writable affordance" and
+ *  `tests/contract/architect-affordance-exclusion.test.ts`, which reds either
+ *  way it is undone. */
 export type LegacySpawnableAgentId = 'instructions' | 'demo-builder' | 'authoring' | 'kb-cleanup';
 
 /**
