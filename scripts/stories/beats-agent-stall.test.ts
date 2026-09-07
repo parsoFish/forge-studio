@@ -30,7 +30,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveBeat } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
 
 const MONITOR = '/monitor';
 const SESSION = '/sessions/architect/s1';

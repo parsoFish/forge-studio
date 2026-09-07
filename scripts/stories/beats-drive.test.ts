@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveBeat } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
 
 // ── M1-H: the post-press wait, and the state it is leaving (bead `forge-8vfn.2.28`)
 //
@@ -584,4 +584,92 @@ test('6.11.45: a beat that DOES declare the `until` key stays green — the posi
   const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
 
   assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+// ── ruling 438: a beat that MINTS a value always waits, even with no `do` ─────
+//
+// MEASURED, S2 beat 10 in M5: the beat has no `do` block that navigates and no
+// declared `wait`, so `driveBeat`'s condition — `steps.length > 0 ||
+// bound.label !== null` — was false and the page was read ONCE. A binding
+// attribute that is always PRESENT reads `""` on that single read, before the
+// mint returns, and the beat reds with `got ""`. Bead `forge-8vfn.6.11.5`
+// answered it in the PRODUCT, by making the attribute ABSENT until it has a
+// value — fixing in `apps/studio` a defect that lives in the runner, and
+// leaving every future always-present binding attribute to fail the same way.
+//
+// A mint is asynchronous by definition. `answers()` already treats `""` as
+// not-yet (`beats-page.mjs:29`), so the wait is bounded and terminating: it
+// ends when the value arrives, or at the beat's own bound with the key named.
+// This is the wiring that was missing, not a new rule.
+//
+// A: ruling 437's always-present `data-architect-session-id` is sequenced
+// behind this change, and its funded S2 proof run behind that.
+
+/** A page whose binding attribute is empty for `emptyReads` reads, then minted. */
+function mintingStudio(emptyReads: number, id = 'sid-9') {
+  let reads = 0;
+  return fakeStudio({
+    start: '/architect/new',
+    commitMs: 0,
+    pages: {
+      '/architect/new': {
+        elements: [el('main', { page: 'architect-new' })],
+        get data() {
+          reads += 1;
+          return {
+            page: 'architect-new',
+            'architect-session-id': reads > emptyReads ? id : '',
+          };
+        },
+      },
+    },
+  });
+}
+
+const mintBeat = {
+  act: 'press start and watch the id appear',
+  expect: {
+    route: '/architect/new',
+    data: { page: 'architect-new', 'architect-session-id': '<architectSessionId>' },
+  },
+  say: 'the id is minted asynchronously',
+};
+
+test('438 (i): a binding attribute that is "" for two reads then minted goes GREEN', async () => {
+  const page = mintingStudio(2);
+  const v = await driveBeat(page, mintBeat, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', `failures: ${JSON.stringify(v.failures)}`);
+  assert.equal(v.bindings?.architectSessionId, 'sid-9', 'and the minted value is bound for a later beat\'s route');
+});
+
+test('438 (ii) POSITIVE CONTROL: a value that never arrives reds, NAMING the key and the bound', async () => {
+  const page = mintingStudio(Number.MAX_SAFE_INTEGER);
+  const v = await driveBeat(page, mintBeat, 1, 'http://localhost:4124', {}, 400);
+  assert.equal(v.status, 'red');
+  const said = (v.failures ?? []).join(' | ');
+  assert.match(said, /architect-session-id/, `the key must be named: ${said}`);
+  assert.match(said, /minted nothing within/, `and the bound must be named: ${said}`);
+});
+
+test('438 (iii) POSITIVE CONTROL: a placeholder-free do-less beat still reads ONCE', async () => {
+  // The change must not turn every observing beat into a poll — a beat with
+  // nothing to wait for waits for nothing, exactly as before.
+  let reads = 0;
+  const page = fakeStudio({
+    start: '/agents',
+    commitMs: 0,
+    pages: {
+      '/agents': {
+        elements: [el('main', { page: 'agents-index' })],
+        get data() { reads += 1; return { page: 'agents-index', 'page-ready': 'true' }; },
+      },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    { act: 'look', expect: { route: '/agents', data: { page: 'agents-index', 'page-ready': 'true' } }, say: 'x' },
+    1, 'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green');
+  assert.ok(reads <= 2, `a beat with no placeholder and no do must not poll — it read ${reads} times`);
 });
