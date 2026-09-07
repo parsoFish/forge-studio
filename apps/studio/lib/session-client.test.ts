@@ -193,9 +193,7 @@ const WELL_FORMED_PAYLOAD = {
   // a genuine [], and this fixture's session predates the kickoff
   // model-tier seam, so modelTier is honestly null.
   affordances: [] as { id: string; kind: string; phase: string }[],
-  modelTier: null as string | null,
-  // S9 beat 8 — REQUIRED on the wire like modelTier; null = not recorded.
-  costUsd: null as number | null,
+  modelTier: null as string | null, costUsd: null as number | null,
   // W6-B8 — REQUIRED on every wire payload (never omitted): architect's
   // fixture session sits at 'awaiting-verdict', a non-terminal phase.
   terminal: false,
@@ -483,8 +481,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     turns: [{ index: 0, role: 'operator', stage: 'instructions', text: 'Write AGENTS.md', source: 'prompt.md' }],
     artifact: WELL_FORMED_MARKDOWN_ARTIFACT,
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
-    modelTier: 'sonnet',
-    costUsd: null,
+    modelTier: 'sonnet', costUsd: null,
     terminal: false,
     transcriptSources: ['idea.md'],
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
@@ -506,8 +503,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     turns: [{ index: 0, role: 'operator', stage: 'brain', text: 'Seed the brain', source: 'prompt.md' }],
     artifact: WELL_FORMED_BRAIN_ARTIFACT,
     affordances: [],
-    modelTier: null,
-    costUsd: null,
+    modelTier: null, costUsd: null,
     terminal: false,
     transcriptSources: ['idea.md'],
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
