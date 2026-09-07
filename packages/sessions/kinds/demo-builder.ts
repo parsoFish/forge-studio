@@ -54,7 +54,7 @@ export function demoSessionDir(projectRoot: string, sessionId: string): string {
 }
 import {
   affordanceDryBridgeMarker,
-  answersCapReason,
+  readAnswersBody,
   type AffordanceRouteContext,
 } from '../bridge-studio-sessions-affordance-shell.ts';
 import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
@@ -689,22 +689,12 @@ export async function handleDemoBrief(
   sessionId: string,
   body: Record<string, unknown>,
 ): Promise<void> {
-  const answersRaw = body.answers;
-  if (
-    !Array.isArray(answersRaw) ||
-    answersRaw.length === 0 ||
-    !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
-  ) {
-    sendJson(res, 400, { error: 'body.answers must be a non-empty array of {question: string, answer: string}' }, origin);
+  const parsed = readAnswersBody(body, true);
+  if ('error' in parsed) {
+    sendJson(res, 400, { error: parsed.error }, origin);
     return;
   }
-  const answers = answersRaw as { question: string; answer: string }[];
-  const capReason = answersCapReason(answers);
-  if (capReason !== null) {
-    sendJson(res, 400, { error: capReason }, origin);
-    return;
-  }
-  const brief = answers[0].answer;
+  const brief = parsed.answers[0].answer;
 
   // SYNC INVARIANT: no await between the caller's status read and either
   // write below — see this file's header note.

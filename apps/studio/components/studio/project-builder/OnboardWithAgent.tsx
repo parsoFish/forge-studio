@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { startOnboardingSession, fetchActiveOnboarding, getAgentRunStatus, type AgentRunStatus } from '@/lib/studio-client';
+import { postSessionAffordance } from '@/lib/session-client';
+import { ONBOARDING_BRIEF_QUESTION } from '@/lib/onboarding-brief';
 import { cancelStudioSession } from '@/lib/session-lifecycle-client';
 import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 
@@ -115,14 +117,31 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
       if (northStar.trim()) inputs.northStar = northStar.trim();
       if (gateCommand.trim()) inputs.gateCommand = gateCommand.trim();
       if (constraints.trim()) inputs.constraints = constraints.trim();
+      // Ruling 441 — TWO calls, one press. `start` mints the session at
+      // `briefing` and dispatches nothing; the brief goes through the SAME
+      // generic question-form affordance a spine-started session shows on its
+      // own page, and THAT dispatches. This form is a client of the generic
+      // surface now, not a second way to start an onboarding agent — and
+      // because both calls are awaited inside this handler, the press still
+      // ends with a running agent (S1 beat 4 reads `onboard-run-status:
+      // running` immediately after it).
       const r = await startOnboardingSession(projectId, undefined, Object.keys(inputs).length > 0 ? inputs : undefined);
-      if (r.ok && r.runId) {
-        setRunId(r.runId);
-        setSessionId(r.sessionId ?? null);
-        setLastRun(null);
-      } else {
+      if (!r.ok || !r.runId || !r.sessionId) {
         setError(r.error ?? 'dispatch failed');
+        return;
       }
+      const brief = [northStar.trim(), gateCommand.trim(), constraints.trim()].filter(Boolean).join('\n\n');
+      const a = await postSessionAffordance('onboarding', r.sessionId, 'briefing-question-form', {
+        project: projectId,
+        answers: [{ question: ONBOARDING_BRIEF_QUESTION, answer: brief }],
+      });
+      if (!a.ok) {
+        setError(a.error ?? 'the brief was not accepted');
+        return;
+      }
+      setRunId(r.runId);
+      setSessionId(r.sessionId);
+      setLastRun(null);
     } finally {
       setBusy(false);
     }

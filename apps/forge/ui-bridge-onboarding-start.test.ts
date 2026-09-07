@@ -52,11 +52,13 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { startBridge } from './ui-bridge.ts';
 import { cmdAgentDispatch } from '@forge/agents/agent-dispatch-cmd.ts';
 import { SAFE_ID_RE } from './bridge-studio.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
+const REPO_ROOT_FOR_YAML = fileURLToPath(new URL('../..', import.meta.url));
 
 let forgeRoot: string;
 let url: string;
@@ -69,6 +71,17 @@ before(async () => {
   }
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
+  // Ruling 441 — AT-6 now reaches the dispatch through the generic
+  // question-form affordance, and that route resolves the kind from the REAL,
+  // checked-in descriptor. Copied byte-for-byte (the shape
+  // `bridge-studio-affordances.test.ts` uses) so this file measures the
+  // descriptor that ships rather than a fixture of one.
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), readFileSync(join(REPO_ROOT_FOR_YAML, 'studio', 'session-kinds.yaml'), 'utf8'));
+  writeFileSync(
+    join(forgeRoot, 'studio', 'catalog.yaml'),
+    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
+  );
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
@@ -149,7 +162,11 @@ test('R4-17 AT-4: POST /api/studio/onboarding/start — valid project + inputs �
   const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as {
     phase: string; project: string; runId: string; startedAt: string;
   };
-  assert.equal(status.phase, 'running', 'the start route writes phase:"running" — the terminal phase is the DISPATCH process\'s job (D7), not this route\'s');
+  // Ruling 441: `briefing`, not `running`. The start route mints and writes;
+  // the brief (through the generic question-form affordance) is what dispatches
+  // and moves the phase. The terminal phase is still the DISPATCH process's job
+  // (D7). Pinned end-to-end in ui-bridge-onboarding-briefing.test.ts.
+  assert.equal(status.phase, 'briefing', 'start mints at "briefing" and dispatches nothing (441)');
   assert.equal(status.project, 'demoproj');
   assert.equal(status.runId, body.runId);
   assert.ok(typeof status.startedAt === 'string' && status.startedAt.length > 0);
@@ -251,7 +268,19 @@ Fixture body for ${equivSlug}.
   const onboardingRes = await fetch(`${url}/api/studio/onboarding/start`, {
     method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'demoproj' }),
   });
-  const { runId: onboardingRunId } = (await onboardingRes.json()) as { runId: string };
+  const { runId: onboardingRunId, sessionId: onboardingSessionId } = (await onboardingRes.json()) as { runId: string; sessionId: string };
+  // AMENDED for ruling 441. The claim is unchanged — an onboarding runId is a
+  // real run identity on the shared poll surface — but a run now BEGINS when
+  // the brief lands, not when the session is minted, so the equivalence is
+  // taken at the same point in each route's life: after the dispatch. Polling
+  // an unbriefed session's runId would compare a run that has started against
+  // one that has not, which is a difference in the fixtures rather than in the
+  // surface. That an unbriefed runId is NOT yet pollable is itself pinned, in
+  // ui-bridge-onboarding-briefing.test.ts.
+  await fetch(`${url}/api/studio/sessions/onboarding/${onboardingSessionId}/briefing-question-form`, {
+    method: 'POST', headers: CSRF,
+    body: JSON.stringify({ project: 'demoproj', answers: [{ question: 'brief', answer: 'a markdown toc tool; gate is npm test' }] }),
+  });
 
   const genericRes = await fetch(`${url}/api/agents/${equivSlug}/run`, {
     method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'demoproj' }),
@@ -731,7 +760,7 @@ test('W6-B14: GET .../onboarding/active rediscovers the sessionId/runId/phase of
     assert.equal(activeBody.ok, true);
     assert.equal(activeBody.sessionId, startBody.sessionId);
     assert.equal(activeBody.runId, startBody.runId, 'active discovery must rediscover the SAME runId POST /start returned');
-    assert.equal(activeBody.phase, 'running', 'a freshly-started session has not reached a terminal phase yet');
+    assert.equal(activeBody.phase, 'briefing', 'a freshly-started session has not reached a terminal phase yet — since 441 it has not reached a RUNNING one either, because nobody has briefed it');
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }

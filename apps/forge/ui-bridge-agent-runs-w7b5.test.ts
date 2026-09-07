@@ -171,6 +171,16 @@ before(async () => {
   // A real project dir for the onboarding-start t0 pin below — that route
   // refuses a project it cannot resolve under the contained projects root.
   mkdirSync(join(forgeRoot, 'projects', 'w7b5proj'), { recursive: true });
+  // Ruling 441 — an onboarding run now BEGINS at the generic question-form
+  // write, and that route resolves the kind from the REAL, checked-in
+  // descriptor. Copied byte-for-byte (the `bridge-studio-affordances.test.ts`
+  // shape) so this file measures the descriptor that ships.
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), readFileSync(new URL('../../studio/session-kinds.yaml', import.meta.url), 'utf8'));
+  writeFileSync(
+    join(forgeRoot, 'studio', 'catalog.yaml'),
+    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
+  );
   mkdirSync(join(forgeRoot, 'skills', 'w7b5-oneshot'), { recursive: true });
   writeFileSync(join(forgeRoot, 'skills', 'w7b5-oneshot', 'SKILL.md'), studioAgent('w7b5-oneshot', { loopStrategy: 'one-shot' }));
   const flowDir = join(forgeRoot, 'studio', 'flows', 'forge-architect');
@@ -587,8 +597,20 @@ test('dispatch: the ONBOARDING start route mints a runId on the same shared iden
   const runId = body.runId as string;
   assert.ok(runId, 'onboarding start returns a runId');
 
+  // AMENDED for ruling 441, and the amendment SHARPENS the claim. `t0` for a
+  // RUN is now the moment the brief lands, not the moment the session is
+  // minted — onboarding no longer dispatches from `start`. So the marker must
+  // NOT exist yet, which is a fact worth asserting rather than skipping:
   const eventsPath = join(forgeRoot, '_logs', runId, 'events.jsonl');
-  assert.ok(existsSync(eventsPath), 'events.jsonl must exist the moment the onboarding start response returns');
+  assert.ok(!existsSync(eventsPath), 'a session nobody briefed has started no run, so it writes no run marker (441)');
+
+  const briefed = await postJson(`/api/studio/sessions/onboarding/${body.sessionId as string}/briefing-question-form`, {
+    project: 'w7b5proj',
+    answers: [{ question: 'brief', answer: 'a markdown toc tool; the gate is npm test' }],
+  });
+  assert.equal(briefed.status, 200, `the brief must be accepted (got ${briefed.status}: ${JSON.stringify(briefed.body)})`);
+
+  assert.ok(existsSync(eventsPath), 'events.jsonl must exist the moment the run actually starts');
   const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
   const dispatched = lines.find((l) => l.message === 'agent-run.dispatched');
   assert.ok(dispatched, 'an agent-run.dispatched event is written at t0 for the onboarding run too');

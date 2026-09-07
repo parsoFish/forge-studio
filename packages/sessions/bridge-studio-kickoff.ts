@@ -33,6 +33,7 @@ import { join, resolve, sep } from 'node:path';
 import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
 import { isSafeRunId } from '@forge/kernel/log-cycles.ts';
 import { guardedReadDir, guardedWriteFile } from '@forge/kernel/path-guard.ts';
+import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge/kb-job-state.ts';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
 import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
@@ -206,18 +207,8 @@ export async function handleKickoffRoutes(
       // Guard symmetry with the generic host: the server-minted id is checked
       // before this, its FIRST write.
       if (!isSafeRunId(runId)) {
-        throw new Error('refused to dispatch — unsafe server-minted run id');
+        throw new Error('refused to mint — unsafe server-minted run id');
       }
-      createLogger(runId, ctx.logsRoot).emit({
-        initiative_id: runId,
-        phase: 'orchestrator',
-        skill: 'onboarding-agent',
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'agent-run.dispatched',
-        metadata: { agent_slug: 'onboarding-agent', project },
-      });
       // Bead forge-c6h: THIS is the route that actually produces a --session-dir,
       // so it is the one the projects-root snapshot has to reach. The session dir
       // was created under ctx.projectsRoot (resolved once at startBridge); handing
@@ -612,6 +603,11 @@ function renderOnboardingPrompt(inputs: Record<string, string>): string {
  * here the id is generated/validated rather than request-derived, so the
  * escape vector this closes is TOCTOU/guessing, not path injection).
  */
+/** The single question onboarding asks before it spends anything (441). It is
+ *  the one thing only the operator knows, and the agent's whole brief. */
+export const ONBOARDING_BRIEF_QUESTION =
+  'What is this project for, and what command decides whether a change is good?';
+
 export function writeOnboardingSession(
   onboardingParent: string,
   sessionId: string,
@@ -631,7 +627,9 @@ export function writeOnboardingSession(
     join(sessionDir, 'status.json'),
     JSON.stringify(
       // `modelTier` only when chosen — absent means the skill's own default.
-      { phase: 'running', project, runId, ...(modelTier !== undefined ? { modelTier } : {}), startedAt: new Date().toISOString() },
+      // Ruling 441: `briefing`, not `running`. This route dispatches nothing;
+      // the generic question-form write does, and it moves the phase then.
+      { phase: 'briefing', project, runId, ...(modelTier !== undefined ? { modelTier } : {}), startedAt: new Date().toISOString() },
       null, 2,
     ),
     { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
@@ -640,6 +638,14 @@ export function writeOnboardingSession(
   // inputs verbatim, exactly as project-brain's honestly-one-turn prompt
   // does; form field labels are never re-cast as agent questions.
   writeFileSync(join(sessionDir, 'prompt.md'), renderOnboardingPrompt(inputs), { encoding: 'utf8', flag: 'wx' });
+  // Ruling 441 — the ONE question the generic question-form renders at
+  // `briefing`. Written here so a session minted from the spine, which nobody
+  // briefed, has something real to ask instead of an empty form.
+  writeFileSync(
+    join(sessionDir, 'questions.json'),
+    JSON.stringify([{ question: ONBOARDING_BRIEF_QUESTION, header: 'Brief', options: [] }], null, 2),
+    { encoding: 'utf8', flag: 'wx' },
+  );
   return { sessionDir };
 }
 
@@ -710,4 +716,65 @@ export function writeAuthoringSession(
  *  named for its own route rather than reusing an unrelated cap. */
 const MAX_AUTHORING_PROMPT_LENGTH = 4000;
 
+// ---------------------------------------------------------------------------
+// question-form — onboarding's PRE-DISPATCH brief (ruling 441, option A2)
+// ---------------------------------------------------------------------------
 
+/**
+ * The brief that starts an onboarding session. `POST /api/studio/onboarding/
+ * start` mints at `briefing` and spawns nothing; this write is the ONE place
+ * an onboarding agent is dispatched, on the same generic question-form
+ * affordance `instructions` and `demo` already use.
+ *
+ * Two callers, one path: the project page collects the north star and follows
+ * its start call with this one (so its press still ends `running`, which is
+ * what S1 beat 4 reads), and a session minted from the spine with no brief
+ * waits here until the operator answers the form on the session page.
+ */
+export async function handleOnboardingBrief(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const parsed = readAnswersBody(body, true);
+  if ('error' in parsed) {
+    sendJson(res, 400, { error: parsed.error }, origin);
+    return;
+  }
+  const brief = parsed.answers[0].answer;
+  const runId = typeof status.runId === 'string' ? status.runId : '';
+  if (!isSafeRunId(runId)) {
+    sendJson(res, 400, { error: 'session carries no usable runId', sessionId }, origin);
+    return;
+  }
+  const inputs = { northStar: brief };
+
+  // SYNC INVARIANT: no await between the caller's status read and the writes.
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], renderOnboardingPrompt(inputs)) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'running' }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+  // The same t0 marker the generic run host emits — moved here WITH the
+  // dispatch, so `GET /api/agents/runs/<runId>` starts answering at the moment
+  // the run actually begins rather than at the moment the session was minted.
+  createLogger(runId, ctx.logsRoot).emit({
+    initiative_id: runId, phase: 'orchestrator', skill: 'onboarding-agent',
+    event_type: 'log', input_refs: [], output_refs: [],
+    message: 'agent-run.dispatched', metadata: { agent_slug: 'onboarding-agent', project },
+  });
+  ctx.spawnAgentDispatch(
+    ctx.forgeRoot, 'onboarding-agent', runId, project, inputs,
+    join(projectsRoot, ...dirSegs), undefined, ctx.projectsRoot,
+  );
+  ctx.broadcastKindChanged('onboarding');
+  sendJson(res, 200, { ok: true, phase: 'running', ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/sessions/onboarding/question-form', sessionId) }, origin);
+}

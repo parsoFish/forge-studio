@@ -58,6 +58,7 @@ import {
   handleInstructionsVerdict,
 } from './kinds/instructions.ts';
 import { handleDemoBrief, handleDemoVerdict } from './kinds/demo-builder.ts';
+import { handleOnboardingBrief } from './bridge-studio-kickoff.ts';
 import { handleKbCleanupVerdict } from './kinds/kb-cleanup.ts';
 import { handleAuthoringVerdict } from './kinds/authoring.ts';
 
@@ -282,6 +283,12 @@ export async function handleStudioAffordanceRoutes(
       // W6-B10: demo's own `briefing` row (studio/session-kinds.yaml).
       if (descriptor.id === 'demo') {
         await handleDemoBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        return true;
+      }
+      // Ruling 441 — onboarding's pre-dispatch brief. The only question-form
+      // write that starts an agent RUN rather than a session turn.
+      if (descriptor.id === 'onboarding') {
+        await handleOnboardingBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
         return true;
       }
       // Structurally unreachable today (instructions/demo are the only

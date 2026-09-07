@@ -95,7 +95,7 @@ test('R4-17 AT-15 (BLOCKER, pin 5 item 1 / pin 6 re-point, REJECT — seam-level
   }
 });
 
-test('R4-17 AT-18 (pin 6 — seam-level ACCEPT control, the counterpart to AT-13/14/15\'s REJECT pins): writeOnboardingSession called DIRECTLY with a fresh, never-before-planted session id under a real "_onboarding" parent succeeds, and writes BOTH status.json and prompt.md at the correct location with the correct shape — proving the three closes are real containment/exclusivity, not a blanket refusal that would break every legitimate onboarding start', async () => {
+test('R4-17 AT-18 (pin 6 — seam-level ACCEPT control, the counterpart to AT-13/14/15\'s REJECT pins): writeOnboardingSession called DIRECTLY with a fresh, never-before-planted session id under a real "_onboarding" parent succeeds, and writes status.json, prompt.md AND questions.json at the correct location with the correct shape — proving the three closes are real containment/exclusivity, not a blanket refusal that would break every legitimate onboarding start', async () => {
   const onboardingDir = mkdtempSync(join(tmpdir(), 'onboarding-seam-accept-parent-'));
   const sessionId = 'r4-17-seam-accept-fixed-2026-08-06T00-00-00';
   const runId = '_agent-onboarding-seam-accept-test';
@@ -105,7 +105,7 @@ test('R4-17 AT-18 (pin 6 — seam-level ACCEPT control, the counterpart to AT-13
     const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as {
       phase: string; project: string; runId: string; startedAt: string;
     };
-    assert.equal(status.phase, 'running');
+    assert.equal(status.phase, 'briefing');
     assert.equal(status.project, 'acceptcontrolproj-seam');
     assert.equal(status.runId, runId);
     assert.ok(typeof status.startedAt === 'string' && status.startedAt.length > 0);
@@ -114,6 +114,12 @@ test('R4-17 AT-18 (pin 6 — seam-level ACCEPT control, the counterpart to AT-13
       prompt.includes('seam accept control probe 6f2a'),
       `prompt.md must render the operator inputs verbatim, got: ${JSON.stringify(prompt)}`,
     );
+    // Ruling 441 — the third leaf, written under the same exclusive-create
+    // close as the other two: the one question the generic question-form
+    // renders while the session waits at `briefing`.
+    const questions = JSON.parse(readFileSync(join(sessionDir, 'questions.json'), 'utf8')) as { question: string }[];
+    assert.equal(questions.length, 1, 'onboarding asks exactly one thing before it spends anything');
+    assert.ok(questions[0].question.length > 0, 'and it is a real question, not an empty form');
   } finally {
     rmSync(onboardingDir, { recursive: true, force: true });
   }

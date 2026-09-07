@@ -230,16 +230,25 @@
   artifact:
     kind: contract-buildout
     label: Contract build-out
-  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
-  # twin of onboarding's real phase vocabulary. Unlike the other three panel
-  # kinds, onboarding is NOT a turn-loop (ADR-043 §Consequences: "onboarding
-  # is explicitly out of scope... it runs through `forge agent dispatch` + a
-  # different path") — it is a fire-and-forget dispatch with exactly three
-  # phase values, so this table is genuinely thin, not truncated.
+  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the affordance twin of
+  # onboarding's real phase vocabulary. Onboarding is still not a turn-loop
+  # (ADR-043 §Consequences: it runs through `forge agent dispatch`), but since
+  # ruling 441 it is no longer fire-and-forget: it has a WRITABLE row, the
+  # pre-dispatch brief, so the sentence that used to sit here — "a
+  # fire-and-forget dispatch with exactly three phase values" — is no longer
+  # true and is replaced rather than left.
   panel:
     phases:
-      # written by POST /api/studio/onboarding/start when the dispatch begins
-      # (cli/ui-bridge.ts:3504, `{ phase: 'running', ... }`); the
+      # Ruling 441 (option A2) — the pre-dispatch brief, on the SAME
+      # `awaits: questions` row instructions and demo already use. `start` mints
+      # HERE and dispatches nothing; the brief arrives through the generic
+      # question-form affordance, and that write is what advances the session
+      # and spawns the agent. So a session opened from the spine
+      # (/sessions/onboarding/new) with nobody to brief it shows the question
+      # form instead of claiming to run. No `next:` — the write advances the
+      # phase, like every other awaits-row in this registry.
+      - { phase: briefing, step: noop, awaits: questions }
+      # written by the question-form write when the brief lands; the
       # onboarding-agent turn itself is the "agent" step
       # (skills/onboarding-agent/SKILL.md). Branches to complete or failed, so
       # no single `next` here.
