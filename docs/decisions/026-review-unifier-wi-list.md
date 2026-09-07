@@ -1,5 +1,7 @@
 # ADR 026 — Review feedback as unifier work-items (one cycle, no send-back to dev)
 
+**Superseded-by:** [ADR 040](./040-review-send-back-develop-loop.md) (2026-07-24) — review feedback no longer appends unifier work-items; the send-back loop compiles fix work-items onto the initiative's own queue and re-dispatches the develop agent.
+
 > **Retired in R4-01-F4 (2026-08-03).** The typed-UWI machinery this ADR
 > introduced — `orchestrator/unifier-items.ts`, the `WorkItem.kind` dispatch
 > selector, the composed unifier gate, and the whole `developer-unifier`
