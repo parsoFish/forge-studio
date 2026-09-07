@@ -6,7 +6,7 @@
  *
  * Drives the REAL bridge (`startBridge`) against real on-disk session
  * fixtures seeded directly (never through a route) — mirrors
- * `packages/sessions/bridge-studio-sessions.test.ts` / `packages/library/bridge-studio-authoring.test.ts`
+ * `packages/sessions/bridge-studio-sessions.test.ts` / `packages/library/tests/integration/bridge-studio-authoring.test.ts`
  * / `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own idioms, reusing their fixture
  * shapes exactly (real, checked-in `studio/session-kinds.yaml`; real
  * `brain/<kb>/kb.yaml` for kb-cleanup's drain).
@@ -67,7 +67,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'studio', 'hooks'), { recursive: true });
   // W8-B4 FIX-1 — TBL-authoring-7/8's template control needs these two
   // single-file template categories to exist as real finalize targets
-  // (mirrors packages/library/bridge-studio-authoring-finalize.test.ts's own before()).
+  // (mirrors packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts's own before()).
   mkdirSync(join(forgeRoot, 'studio', 'artifact-templates'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'demo-elements'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });

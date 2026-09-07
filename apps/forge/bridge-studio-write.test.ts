@@ -533,7 +533,7 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
   assert.equal(cfg.kb, body.id, 'expected project.json.kb bound to the seeded KB (R4-02-F3)');
 });
 
-// POST /api/studio/skills test coverage MOVED to packages/library/bridge-studio-skills.test.ts
+// POST /api/studio/skills test coverage MOVED to packages/library/tests/integration/bridge-studio-skills.test.ts
 // (R3-01-F3/F4, AT-55) — the route itself relocates there in WI-2.
 
 test('PUT /api/studio/agents/write-agent with invalid runtime (fixed, no model) → 400, file UNCHANGED', async () => {
