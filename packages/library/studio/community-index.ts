@@ -361,7 +361,15 @@ export function communityInstallState(forgeRoot: string, kind: CommunityKind, id
   }
   if (kind === 'hook') {
     if (!existsSync(hookYamlPath(id, forgeRoot))) return 'not-installed';
-    return hookRunState(forgeRoot, id).runnable ? 'installed' : 'draft-pending-approval';
+    // S8 beat 14 measured this as `expected "needs-review", got
+    // "draft-pending-approval"`. The branch consulted `.runnable` alone and
+    // discarded `.needsReview` — which is already true for a freshly
+    // installed hook with no ledger entry — so a hook waiting on the
+    // operator's trust decision was reported in a word only this layer uses.
+    // The skill branch above already makes the same three-way distinction.
+    const run = hookRunState(forgeRoot, id);
+    if (run.runnable) return 'installed';
+    return run.needsReview ? 'needs-review' : 'draft-pending-approval';
   }
   // kind === 'mcp' | 'tool' — D3: probed from that connection's OWN execution.
   const connection = listCatalogConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);

@@ -461,10 +461,10 @@ describe('communityInstallState — hook (D3)', () => {
     assert.equal(communityInstallState(root, 'hook', 'ghost-hook'), 'not-installed');
   });
 
-  it('materialised but not approved (runnable: false, no ledger entry) → draft-pending-approval', () => {
+  it('materialised but not approved (runnable: false, no ledger entry) → needs-review (ruling 402; the why + the door test are in ../bridge-studio-community-install-state.test.ts)', () => {
     const root = makeForgeRoot();
     installHookPackage(root, 'unapproved-hook');
-    assert.equal(communityInstallState(root, 'hook', 'unapproved-hook'), 'draft-pending-approval');
+    assert.equal(communityInstallState(root, 'hook', 'unapproved-hook'), 'needs-review');
   });
 
   it('materialised AND approved (runnable: true) → installed', () => {
