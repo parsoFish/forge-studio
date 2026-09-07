@@ -51,7 +51,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
-import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-builder.ts';
+import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 

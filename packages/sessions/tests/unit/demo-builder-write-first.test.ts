@@ -30,12 +30,9 @@ import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
-import {
-  runDemoBuilderTurn,
-  DEMO_HTML_REL_PATH,
-  DEMO_SKILL_REL_PATH,
-  DEMO_WRITE_PASS_MAX_TURNS,
-} from '../../kinds/demo-builder.ts';
+import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
+import { DEMO_WRITE_PASS_MAX_TURNS } from '../../kinds/demo-generate.ts';
+import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 
 type Pass = { allowedTools: string[]; maxTurns: number | undefined; prompt: string };

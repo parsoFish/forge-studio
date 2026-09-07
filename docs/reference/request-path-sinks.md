@@ -1940,6 +1940,45 @@ The site itself is unchanged and still guard-terminal:
 only then `mkdirSync`s the parent of a path the guard has already accepted. The
 `mkdirSync` never sees a request-derived string the guard did not resolve.
 
+### Relocated in M6-A row 5 — the demo GENERATE step (three sink kinds, no new surface)
+
+Bead 6.11.49's write-then-run fix took `packages/sessions/kinds/demo-builder.ts`
+to 802 lines against the 800-line cap, and 1.0.md §0 says split, never baseline.
+`runGenerateStep` and its six private prompt helpers move to
+`packages/sessions/kinds/demo-generate.ts`; the path constants and the status
+contract move DOWN to `demo-session-store.ts`, which both step modules already
+stand on.
+
+**Three sink kinds move, and every one is conserved**, which is the reading that
+matters here (§15.73) — measured per kind, never as a total:
+
+| sink | `kinds/demo-builder.ts` | `kinds/demo-generate.ts` | sum |
+|---|---|---|---|
+| `existsSync` | 6 → 4 | 0 → 2 | 6 = 6 |
+| `readFileSync` | 6 → 3 | 0 → 3 | 6 = 6 |
+| `writeFileSync` | 8 → 5 | 0 → 3 | 8 = 8 |
+
+Host-minus-package on this PR is **zero** — no sink was added, removed, or
+re-shaped, and no guard changed. The three `writeFileSync` calls that moved are
+the generation snapshot writes, still guard-terminal through
+`guardedGenerationWritePath` exactly as the M4-sessions s5 section above
+describes; the `existsSync`/`readFileSync` pairs are the two-deliverable check
+and the byte copies that feed those snapshots.
+
+**The scanner was kept from being blinded, which is the real risk in a carve of
+this shape.** `check-raw-fs-guarded.mjs`'s full-model list reaches these sinks
+only because a module is NAMED in it: moving them into an unnamed module drops
+them to the swept tier, where the count can fall while the check still says
+PASS — the exact failure recorded twice in that file's own comments (the
+`bridge-studio-kb-drain.ts` and `bridge-studio-kbs.ts` carves). So
+`kinds/demo-generate.ts` was **ADDED beside** `kinds/demo-builder.ts` in
+`EXPLICIT_MODULES` and in `check-raw-fs-guarded.test.ts`'s `CHARTER_MODULES`,
+never swapped in — a heir that replaces its origin leaves any sink left behind
+unscanned. Measured either side of the split: modules scanned in full model
+**82 → 83**, allowlisted residuals **90 → 90**, unguarded **0 → 0**. A residual
+count that held while a module was added is the evidence that nothing silently
+stopped being suppressed.
+
 ### M4-flows PR 4 — ten rows made VISIBLE by giving the two lints one entry seed (beads 5.34 / 5.48)
 
 No sink moved, changed shape or was added. Ten `(file, sink)` rows appear

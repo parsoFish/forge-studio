@@ -102,13 +102,12 @@ import { join, resolve } from 'node:path';
 
 import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
+import { runDemoBuilderTurn, demoSessionDir } from '../../kinds/demo-builder.ts';
 import {
-  runDemoBuilderTurn,
-  demoSessionDir,
   DEMO_SKILL_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
-} from '../../kinds/demo-builder.ts';
+} from '../../kinds/demo-session-store.ts';
 import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../kinds/project-brain.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';

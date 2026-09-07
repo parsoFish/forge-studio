@@ -56,6 +56,7 @@ const CHARTER_MODULES = [
   'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
   'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts',
+  'packages/sessions/kinds/demo-generate.ts',
   'packages/projects/project-config.ts', // SEC-04 blind-spot #b: the delegated config loader
   'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
   'packages/library/studio/community-install.ts', 'packages/library/studio/community-index.ts',

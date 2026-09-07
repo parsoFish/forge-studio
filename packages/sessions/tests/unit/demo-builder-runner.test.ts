@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runDemoBuilderTurn, DEMO_BUILDER_MODEL, DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus } from '../../kinds/demo-builder.ts';
+import { runDemoBuilderTurn, DEMO_BUILDER_MODEL } from '../../kinds/demo-builder.ts';
+import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../interactive-session.ts';
 

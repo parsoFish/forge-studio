@@ -19,8 +19,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   runDemoBuilderTurn, demoSessionDir, demoBuilderAgentSpec, DEMO_BUILDER_MODEL,
-  DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus,
 } from '../../../kinds/demo-builder.ts';
+import {
+  DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus,
+} from '../../../kinds/demo-session-store.ts';
 import { REDACTED_THINKING_MARKER, type QueryFn } from '../../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';

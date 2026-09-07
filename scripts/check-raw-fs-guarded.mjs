@@ -357,6 +357,12 @@ export const EXPLICIT_MODULES = [
   'packages/sessions/kinds/architect.ts',
   'packages/sessions/kinds/instructions.ts',
   'packages/sessions/kinds/demo-builder.ts',
+  // Bead 6.11.49: the write-then-run split moved `runGenerateStep`'s three
+  // sink kinds out of `demo-builder.ts`. ADDED beside its parent, never swapped
+  // in — a heir that replaces its origin leaves any sink left behind unscanned,
+  // and a carve that drops a module from this list is the blinding this list
+  // exists to catch (the same repair the agent-run.ts three-way split made).
+  'packages/sessions/kinds/demo-generate.ts',
   'packages/agents/band-agent-run.ts', // shared seed; two safe sites allowlisted
   // M4 §4 step 2: carving this module's routes out took its HTTP-plumbing
   // signal with them, dropping it to tier 2 where `runId` is excluded; ten
