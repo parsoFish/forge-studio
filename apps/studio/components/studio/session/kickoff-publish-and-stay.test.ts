@@ -142,8 +142,9 @@ test('396: the press publishes the minted id, offers a real anchor to it, and do
   const link = container.querySelector<HTMLAnchorElement>('a[data-action="open-minted-session"]');
   expect(link, 'a REAL anchor must point at the minted session — a button satisfies no nav resolution').not.toBeNull();
   expect(
-    link!.getAttribute('href')?.split('?')[0],
-    'the href IS the session route; a query string is invisible to a route match, a different path is not',
+    link!.getAttribute('href'),
+    'the href is the session route EXACTLY — a nav resolution matches `a[href="<route>"]`, so a query '
+      + 'string leaves the anchor visible to a human and invisible to everything else (S9 run 2)',
   ).toBe(`/sessions/authoring/${MINTED}`);
 
   expect(push, 'ruling 396: the press must NOT navigate — the operator stays on the page that minted').not.toHaveBeenCalled();
