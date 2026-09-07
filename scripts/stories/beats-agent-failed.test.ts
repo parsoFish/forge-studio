@@ -83,6 +83,12 @@ function fakeStudioThatDies(spec: { commitMs: number; failedAfterMs: number | nu
 
   const locator = (sel: string): any => ({
     first: () => locator(sel),
+    // `driveBeat` asks every page for its links (bead `forge-8vfn.7.5.3`).
+    // This page models none, and "none" is an answer a fake must be able to
+    // give — a fake that simply lacks the method fails as a TypeError inside
+    // the runner, which is how this landed: five hand-rolled stand-ins, and
+    // only the one with a nav beat showed it.
+    evaluateAll: async (fn: any, arg: any) => fn([], arg),
     count: async () => (route === MONITOR && sel.includes('open-session') ? 1 : 0),
     async click() { setTimeout(() => { route = SESSION; }, spec.commitMs); },
     async evaluate(fn: (n: any) => unknown) {
