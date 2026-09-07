@@ -123,7 +123,13 @@ test('the root suite runs the packages\' tests — a package tsc sees but node -
   const root = json(join(ROOT, 'package.json')) as { scripts?: Record<string, string> };
   const script = root.scripts?.test ?? '';
   assert.ok(script.includes('packages/*/*.test.ts'), 'root `npm test` must glob packages/*/*.test.ts');
-  assert.ok(script.includes('apps/forge/*.test.ts'), 'root `npm test` must glob apps/forge/*.test.ts');
+  // M6-C row 2 re-bucketed this tree, so the glob it must carry changed with it:
+  // `apps/forge/*.test.ts` reaches nothing now, and the 129 tests live two levels
+  // down. The assertion is deliberately on the NEW shape rather than on a prefix
+  // both spellings share — the hole this test was written for is a glob that has
+  // stopped matching, and a prefix check cannot see that.
+  assert.ok(script.includes('apps/forge/tests/*/*.test.ts'), 'root `npm test` must glob apps/forge/tests/*/*.test.ts');
+  assert.ok(!script.includes('orchestrator/'), 'the emptied legacy tree must not be globbed — a dead glob hides a real one');
 });
 
 test('apps/studio is the moved forge-ui — present, a workspace, and still named forge-ui', () => {

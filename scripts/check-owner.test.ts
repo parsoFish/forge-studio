@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -143,7 +143,12 @@ test('it FAILS when QUARRY.md is absent — ownership has no other source', () =
 });
 
 test('an UNTRACKED production file is still unowned — a file cannot dodge the gate by not being committed', () => {
+  // The tree is PLANTED, not assumed. `orchestrator/` is empty as of M6-C, but
+  // it stays in check-owner's QUARRIED_TREES so a file reappearing there is
+  // still accounted for — and that is exactly the claim this probe makes, so
+  // the probe has to be able to make it whether or not the tree exists today.
   const victim = join(ROOT, 'orchestrator/__untracked_owner_probe__.ts');
+  mkdirSync(dirname(victim), { recursive: true });
   writeFileSync(victim, 'export const probe = 1;\n');
   try {
     const { code, out } = run();
@@ -151,5 +156,6 @@ test('an UNTRACKED production file is still unowned — a file cannot dodge the 
     assert.match(out, /unowned: orchestrator\/__untracked_owner_probe__\.ts/);
   } finally {
     rmSync(victim, { force: true });
+    rmSync(dirname(victim), { recursive: true, force: true });
   }
 });

@@ -76,7 +76,14 @@ const WRAPPER_RELATIVE_PATH = 'packages/agents/pinned-sdk-query.ts';
 // existsSync so that `anchor-depth.test.ts`'s anti-typo assertion (every name
 // in this list exists at the real root) stays exact; a resurrected `cli/` file
 // is caught immediately by check-boundaries, whose LEGACY regex still names it.
-const SCANNED_DIRS = ['orchestrator', 'packages', 'apps/forge'];
+// `orchestrator/` left this list when M6-C emptied the tree (the exit row:
+// orchestrator, cli, loops and forge-ui hold zero tracked files). It is not
+// tolerated-if-missing on purpose — these scanners `readdirSync` each name and
+// a missing one THROWS, which is the loud failure
+// `packages/agents/tests/regression/anchor-depth.test.ts` exists to keep. A dead
+// name in this list is therefore a break, not a no-op, and the fix is to remove
+// the name rather than to soften the read.
+const SCANNED_DIRS = ['packages', 'apps/forge'];
 
 /**
  * The SDK module specifier, assembled so this file's own source never
