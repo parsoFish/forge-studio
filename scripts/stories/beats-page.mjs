@@ -211,7 +211,23 @@ export async function readObserved(page, beat, alsoWanted = []) {
  * cannot check one and forget the other (which is exactly how `6.11.39`
  * survived alongside the stall check it sits beside).
  */
-export function stopReasonFor(observed) {
+export function stopReasonFor(observed, sessionScope = null) {
+  // Bead `forge-8vfn.6.11.47` (T1 ruling 366). A STOP REASON BELONGS TO A
+  // SESSION, and may only end a beat that is ABOUT that session.
+  //
+  // S1 run 10 beat 9 stands on the project page and died `0s into the agent
+  // wait` on a `failed` that belonged to the DEMO session beat 8 had just left
+  // behind — read during the commit window a client-side navigation leaves
+  // open, when `page.url()` and the DOM still answer for the page being left
+  // (§2.28's class). The captured DOM for that beat is `data-page="projects"`
+  // with no `data-session-phase` at all. Beat 9 was green one run earlier;
+  // nothing about it changed, a NEIGHBOUR's session failing ended it.
+  //
+  // `sessionScope` is the beat's own resolved route when that route IS a
+  // session page, and `null` otherwise — so a beat that names no session
+  // cannot be stopped by any session's phase, and a beat that names one is
+  // stopped only while standing on it.
+  if (sessionScope === null || observed.route !== sessionScope) return null;
   if (observed.sessionPhase === TERMINAL_FAILURE_PHASE) {
     return `the session's own phase reached the terminal "${TERMINAL_FAILURE_PHASE}"`;
   }
@@ -222,11 +238,11 @@ export function stopReasonFor(observed) {
 }
 
 /** The same question, against a live read. */
-async function stopNow(page) {
+async function stopNow(page, sessionScope) {
   // Reuses `readObserved` rather than minting a second notion of "the page's
   // state" — an empty `expect.data` collects only the error sentinels, and the
   // bar and the phase ride along beside them. §15.161's rule, one layer down.
-  return stopReasonFor(await readObserved(page, { expect: { data: {} } }));
+  return stopReasonFor(await readObserved(page, { expect: { data: {} } }), sessionScope);
 }
 
 /**
@@ -247,8 +263,12 @@ async function stopNow(page) {
  * Returns a stall record, or null (found, or the bound expired — the act below
  * then throws its own honest failure, exactly as before).
  */
-export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecycle, probe = null) {
-  if (!watchLifecycle) {
+export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope, probe = null) {
+  // `sessionScope` replaces the old `watchLifecycle` boolean rather than
+  // joining it (`6.11.47`): the flag always stood for "this beat waits on a
+  // session", and saying WHICH session is the whole fix. One value, and the
+  // predicate cannot be armed without naming what it is armed about.
+  if (sessionScope === null) {
     await page.locator(handle).first().waitFor({ timeout: timeoutMs }).catch(() => {});
     return null;
   }
@@ -260,7 +280,7 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecyc
     // Diagnosis must never fail a beat that would otherwise pass, so it throws
     // nothing and the beat's outcome does not depend on it.
     if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
-    const why = await stopNow(page);
+    const why = await stopNow(page, sessionScope);
     if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
@@ -298,7 +318,7 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, watchLifecyc
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle, probe = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -313,7 +333,7 @@ export async function waitForConsequence(page, beat, timeoutMs, watchLifecycle, 
     // second-guessed — `stalled` is server-derived, and re-deriving it here
     // from phases or timestamps is the mistake the bar's own header forbids.
     if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
-    const why = watchLifecycle ? stopReasonFor(observed) : null;
+    const why = stopReasonFor(observed, sessionScope);
     if (why !== null) {
       return Object.freeze({ afterMs: Date.now() - startedAt, why });
     }

@@ -290,7 +290,13 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       return false;
     }
   };
-  const steps_ = await performSteps(page, steps, bound.ms, bound.label !== null, agentProcProbe, matchesData);
+  // Bead `forge-8vfn.6.11.47` (ruling 366) — WHICH session this beat's waits
+  // may be stopped by, and `null` when the beat names none. A beat standing on
+  // a project page cannot be ended by a session's terminal phase, however
+  // recently it left one: S1 run 10 beat 9 died `0s in` on the demo session
+  // beat 8 had just failed, read during the commit window.
+  const sessionScope = bound.label !== null && target.startsWith('/sessions/') ? target : null;
+  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
@@ -358,7 +364,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (new URL(page.url()).pathname === target) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
-        stalled = await waitForConsequence(page, beat, left, bound.label !== null, agentProcProbe);
+        stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe);
         agentWaitConsumed = true;
       }
     }
@@ -485,7 +491,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-async function performSteps(page, steps, timeoutMs, watchLifecycle = false, probe = null, matches = null, actBoundMs = null) {
+async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -513,8 +519,8 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
     // back would be a cycle.
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
-        page, step, left, matches, timeoutMs, watchLifecycle, probe,
-        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, watchLifecycle, probe, matches, actMs),
+        page, step, left, matches, timeoutMs, sessionScope, probe,
+        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };
@@ -543,7 +549,7 @@ async function performSteps(page, steps, timeoutMs, watchLifecycle = false, prob
       }
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
-      const stall = await waitForHandleOrStall(page, handle, actLeft(), watchLifecycle, probe);
+      const stall = await waitForHandleOrStall(page, handle, actLeft(), sessionScope, probe);
       waitedForHandle = true;
       if (stall !== null) {
         return {

@@ -186,7 +186,21 @@ function fakeStudio(spec: {
     waitForURL: (pred: (u: string) => boolean, o: { timeout: number }) =>
       until(() => pred(`http://localhost:4124${route}`), o.timeout, 'the URL'),
     waitForSelector: (sel: string, o: { timeout: number }) => until(() => find(sel) !== null, o.timeout, sel),
-    evaluate: async () => ({ data: { ...here().data, ...patched }, nested: [] }),
+    // The ROOT's own `data-session-phase` and the lifecycle bar ride beside
+    // `data`/`nested`, because `readObserved` reads them by their own
+    // selectors and the stop predicate is built on them. Bead
+    // `forge-8vfn.6.11.47`: this fake returned neither, so no test in this
+    // file could exercise a stop at all — a fake quieter than the thing it
+    // stands for hides exactly the failures the predicate exists to cause.
+    evaluate: async () => {
+      const d = { ...here().data, ...patched };
+      return {
+        data: d,
+        nested: [],
+        sessionPhase: d['session-phase'] ?? null,
+        lifecycle: d['lifecycle-state'] ?? null,
+      };
+    },
   };
 }
 
@@ -531,4 +545,105 @@ test('6.11.10 (second half): an UNDECLARED beat still gives up at the DOM bound 
   const v = await driveBeat(page, beat, 1, 'http://localhost:4124', {}, 200);
   assert.equal(v.status, 'red');
   assert.ok(Date.now() - started < 500, 'an undeclared fill must not inherit the agent bound');
+});
+
+// ── 6.11.47: A STOP REASON BELONGING TO ONE SESSION MUST NOT END A BEAT ABOUT ANOTHER
+//
+// THE INCIDENT, S1 run 10 beat 9 (funded). Beat 8 left the DEMO session at the
+// terminal `failed`. Beat 9 stands on the PROJECT page — its first step is
+// `back-to-project` — and it died instantly:
+//
+//   the session's own phase reached the terminal "failed" 0s into the agent
+//   wait, while this step waited for [data-field="clause-decision-C1b"]
+//
+// #516's captured DOM for that beat is `data-page="projects"` with NO
+// `data-session-phase` at all. So the predicate did not read the page the beat
+// was ON — it read the page the beat was LEAVING, during the commit window a
+// client-side navigation leaves open. §2.28's class: a signal that cannot tell
+// the page it is leaving from the page it is going to.
+//
+// Beat 9 was GREEN one run earlier, when beat 8 happened to leave its session
+// at a harmless `briefing`. Nothing about beat 9 changed; a NEIGHBOUR's session
+// failing is what ended it.
+//
+// THE RULE (T1 ruling 366): the terminal-phase stop applies only when the page
+// observed IS the session the wait is about. A beat whose own route is not a
+// session page names no session, so no session's phase can stop it.
+
+test('6.11.47 (RED): a neighbouring session\'s terminal `failed` does not end a beat about a PROJECT page', async () => {
+  // Beat 9's exact shape. The commit window is what makes it bite: while the
+  // navigation is in flight the runner still reads the demo session page, and
+  // that page says `failed`. The field it is waiting for arrives on the
+  // project page a moment later, and the beat must live long enough to see it.
+  const page = fakeStudio({
+    start: '/sessions/demo/demo-1',
+    commitMs: 120,
+    defaultTimeoutMs: 400,
+    pages: {
+      '/sessions/demo/demo-1': {
+        elements: [READY_MAIN('session-detail'), el('a', { 'data-action': 'back-to-project' }, '/projects/gitweave')],
+        // The neighbour that failed — exactly what beat 8 leaves behind.
+        data: { page: 'session-detail', 'session-phase': 'failed' },
+      },
+      '/projects/gitweave': {
+        elements: [
+          READY_MAIN('projects'),
+          el('input', { 'data-field': 'clause-decision-C1b' }, null, null, 0, 250),
+        ],
+        // A project page carries no session phase at all — the captured DOM's
+        // own shape.
+        data: { page: 'projects', 'clause-decision': 'applied' },
+      },
+    },
+  });
+  const beat = {
+    act: 'Return to the project and record a decision on the clause that needs the operator\'s judgement',
+    do: [{ press: 'back-to-project' }, { fill: 'clause-decision-C1b', with: 'accepted' }],
+    wait: { for: 'agent', upTo: 3000 },
+    expect: { route: '/projects/gitweave', data: { 'clause-decision': 'applied' } },
+    say: 'The operator decides the clause forge cannot decide for them.',
+  };
+
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124', {}, 400);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('6.11.47: a beat that IS about the failed session still stops on it — the positive control', async () => {
+  // The capability #514 exists for, held from the other side. S1 run 10 beat 8
+  // is this shape and it was RIGHT to stop at 111 s rather than sit out a
+  // declared 1 800 000 ms. Narrowing the predicate must not cost that.
+  const page = fakeStudio({
+    start: '/sessions/demo/demo-1',
+    commitMs: 0,
+    defaultTimeoutMs: 400,
+    pages: {
+      '/sessions/demo/demo-1': {
+        elements: [
+          READY_MAIN('session-detail'),
+          // The stall wait only guards a step that is not the FIRST
+          // (`beats.mjs`: `if (i > 0)`), so the beat needs a step before the
+          // one that waits — which is beat 8's own shape: the way in, then the
+          // control that never comes.
+          el('button', { 'data-action': 'open-session' }),
+        ],
+        data: { page: 'session-detail', 'session-phase': 'failed' },
+      },
+    },
+  });
+  const beat = {
+    act: 'Come back to the demo builder, brief it, and lock the demo it makes',
+    do: [{ press: 'open-session' }, { press: 'verdict-approve' }],
+    wait: { for: 'agent', upTo: 3000 },
+    expect: { route: '/sessions/demo/demo-1', data: { page: 'session-detail', 'session-phase': 'locked' } },
+    say: 'The operator approves the generated demo.',
+  };
+
+  const started = Date.now();
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124', {}, 400);
+  assert.equal(v.status, 'red');
+  assert.ok(
+    v.failures.some((f: string) => f.includes('terminal "failed"')),
+    `the stop must still name the product's own terminal phase: ${v.failures.join(' | ')}`,
+  );
+  assert.ok(Date.now() - started < 2500, 'it must stop on the product, not sit out the declared bound');
 });

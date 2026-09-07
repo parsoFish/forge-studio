@@ -146,3 +146,44 @@ test('6.11.42: the capture is keyed off the SWEEP\'s own target list, not a sepa
     'and a ground the sweep never touches must not be copied — it was never at risk',
   );
 });
+
+// ── 6.11.48 (harness half): THE URL AT THE RED, because a mode lives in it
+//
+// S1 run 10 beat 11 failed on ONE key — `data-plan-mode: expected "gate", got
+// "view"` — after opening AND approving the plan (the architect committed at
+// 03:46:22). `plan-mode` is the artifact page's URL-resolved mode, and
+// `open-plan`'s href is chosen from the session's phase at press time
+// (`architectPlanArtifactHref(id, phase === 'awaiting-verdict' ? 'gate' :
+// 'view')`). `PLAN.md` was written at 03:46:13 and the press landed at
+// 03:46:15 — two seconds, against two independent 3000 ms polls.
+//
+// So the question is whether the story arrived at `?mode=view`, and NOTHING
+// recorded the URL: the DOM alone cannot answer it, because the mode is not in
+// the markup, it is in the address. T1 ruling 366 asks for the datum rather
+// than another round of inference.
+
+test('6.11.48: the capture records the URL the page was on, because a mode lives in the address and not in the markup', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-url-'));
+  const page = {
+    url: () => 'http://localhost:4124/artifact?session=arch-1&kind=architect&mode=view',
+    content: async () => '<main data-page="artifact" data-plan-mode="view"></main>',
+  };
+  const p = await captureBeatDom(page as never, root, 'S1', 10, 'Open the session, read the plan and press Approve');
+
+  assert.notEqual(p, null);
+  const html = readFileSync(p!, 'utf8');
+  assert.match(html, /mode=view/, 'the mode the beat disagreed about is in the URL, so the URL must be recorded');
+  assert.match(html, /red beat 11/);
+});
+
+test('6.11.48: a page that cannot say where it is still yields a capture — the URL is evidence, never a requirement', async () => {
+  // `captureBeatDom` runs inside a red that has already happened. A fake, a
+  // closed context or an older page object with no `url()` must not turn
+  // recorded evidence into no evidence at all.
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-nourl-'));
+  const page = { content: async () => '<main data-page="session"></main>' };
+  const p = await captureBeatDom(page as never, root, 'S1', 10, 'a beat');
+
+  assert.notEqual(p, null, 'the DOM is still captured when the URL cannot be read');
+  assert.match(readFileSync(p!, 'utf8'), /data-page="session"/);
+});
