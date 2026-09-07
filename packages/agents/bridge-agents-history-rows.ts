@@ -29,7 +29,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
 
 import {
   deriveStandaloneStateFromEvents,
@@ -340,14 +340,14 @@ export function collectRecentAgentRuns(
 function readSessionLogFacts(deps: AgentHistoryDeps, logsRoot: string, kind: string, sessionId: string): { costUsd: number | null; when: string } {
   const parsed = deps.parseGuardedEventsJsonl(logsRoot, `_${kind}-${sessionId}`);
   if (parsed === null || parsed.length === 0) return { costUsd: null, when: '' };
-  let total = 0;
-  let any = false;
-  for (const e of parsed) {
-    const cost = e['cost_usd'];
-    if (typeof cost === 'number') { total += cost; any = true; }
-  }
+  // bead forge-8vfn.7.6.1: this summed EVERY `cost_usd`, so a phase that
+  // restates its dollars on rollup rows double-counted — 2.35x, measured on
+  // M5-A. One rule, shared with the session read route, honest-`null` kept.
   const firstStartedAt = parsed[0]['started_at'];
-  return { costUsd: any ? total : null, when: typeof firstStartedAt === 'string' ? firstStartedAt : '' };
+  return {
+    costUsd: deriveSessionCostUsd(parsed),
+    when: typeof firstStartedAt === 'string' ? firstStartedAt : '',
+  };
 }
 
 /**
