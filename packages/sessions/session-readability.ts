@@ -47,7 +47,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template `spawnAgentTurn`
  *  (apps/forge/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
@@ -204,4 +204,18 @@ export function resolveLegacySession(args: {
     phase: deriveLegacySessionPhase(events),
     projectFromLog: deriveLegacySessionProject(events),
   };
+}
+
+/**
+ * The same figure for a session named by kind + id, read through the guarded
+ * events reader. `null` when the log dir is unreadable, absent, or unpriced.
+ */
+export function readSessionCostUsd(args: {
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+}): number | null {
+  const events = parseGuardedEventsJsonl(args.logsRoot, sessionLogDirName(args.kind, args.sessionId));
+  if (events === null) return null;
+  return deriveSessionCostUsd(events);
 }

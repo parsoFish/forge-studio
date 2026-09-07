@@ -6,6 +6,7 @@ keywords: [failure_classification, stale-event-ids, ci-gate-failure, gofumpt, mi
 related_themes: [cycle-recovery-index]
 created_at: 2026-07-10
 updated_at: 2026-07-10
+status: historical
 ---
 
 ## Pattern

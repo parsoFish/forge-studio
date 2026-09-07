@@ -90,17 +90,27 @@ function requireInteger(r: Record<string, unknown>, field: string): number {
  *  check as any other wrong type). Used for generation-gallery's
  *  `feedback`/`targetElement`, which are legitimately null (no feedback yet
  *  drove generation 1) but never silently coerced from a missing key. */
-function requireNullableString(r: Record<string, unknown>, field: string): string | null {
+function requireNullable<T extends 'string' | 'number'>(
+  r: Record<string, unknown>, field: string, type: T,
+): (T extends 'string' ? string : number) | null {
   const v = r[field];
   if (v === null) return null;
-  if (typeof v !== 'string') {
-    throw new Error(`missing or invalid "${field}": expected a string or null, got ${JSON.stringify(v)}`);
+  if (typeof v !== type) {
+    throw new Error(`missing or invalid "${field}": expected a ${type} or null, got ${JSON.stringify(v)}`);
   }
-  return v;
+  return v as (T extends 'string' ? string : number);
 }
 
 /** A required array of strings — never coerced from a non-array (the same
  *  refusal template-client.ts's `parseUsedBy` applies to `usedBy`). */
+function requireBoolean(r: Record<string, unknown>, field: string): boolean {
+  const v = r[field];
+  if (typeof v !== 'boolean') {
+    throw new Error(`missing or invalid "${field}": expected a boolean, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
 function requireStringArray(raw: unknown, field: string): string[] {
   if (!Array.isArray(raw)) {
     throw new Error(`missing or invalid "${field}": expected an array, got ${JSON.stringify(raw)}`);
@@ -441,8 +451,8 @@ function parseGenerationGalleryEntry(raw: unknown, index: number): GenerationGal
   return {
     number: requireInteger(raw, 'number'),
     createdAt: requireString(raw, 'createdAt'),
-    feedback: requireNullableString(raw, 'feedback'),
-    targetElement: requireNullableString(raw, 'targetElement'),
+    feedback: requireNullable(raw, 'feedback', 'string'),
+    targetElement: requireNullable(raw, 'targetElement', 'string'),
     items: itemsRaw.map((it, i) => parseGenerationGalleryItem(it, i)),
   };
 }
@@ -797,6 +807,10 @@ export type SessionShellPayload = {
    * value here, not an absence to model as `undefined`.
    */
   modelTier: string | null;
+  /** S9 beat 8 — this session's spend via the kernel's ONE event-cost rule.
+   *  REQUIRED like `modelTier`; `null` is honest and the page omits it. */
+  costUsd: number | null;
+  /** M6-A row 1 / 418 — the SDK this session runs under, stated not chosen. */ sdk: string;
   /**
    * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
    * (`packages/sessions/bridge-studio-sessions.ts`), threaded onto the wire so the generic
@@ -918,33 +932,21 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // this same function.
   const affordances = parseSessionAffordances(raw['affordances']);
 
-  // modelTier's honest value space is `string | null` — `null` IS the real
-  // answer for "no recorded tier", so this is REQUIRED (throws if the key
-  // is missing or neither a string nor null), never absence-tolerant.
-  const modelTierRaw = raw['modelTier'];
-  if (modelTierRaw !== null && typeof modelTierRaw !== 'string') {
-    throw new Error(`missing or invalid "modelTier": expected a string or null, got ${JSON.stringify(modelTierRaw)}`);
-  }
-  const modelTier = modelTierRaw;
+  // Both honest-`null` fields: `null` IS the real answer, so both are REQUIRED
+  // — a silently-absent cost and a cost of zero are different answers.
+  const modelTier = requireNullable(raw, 'modelTier', 'string');
+  const costUsd = requireNullable(raw, 'costUsd', 'number');
 
   // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
   // non-boolean "terminal" throws, never defaulted to false.
-  const terminalRaw = raw['terminal'];
-  if (typeof terminalRaw !== 'boolean') {
-    throw new Error(`missing or invalid "terminal": expected a boolean, got ${JSON.stringify(terminalRaw)}`);
-  }
-  const terminal = terminalRaw;
+  const terminal = requireBoolean(raw, 'terminal');
 
   // W8-F6 (bead forge-6gv.27) — REQUIRED, hard-parsed exactly like "terminal"
   // immediately above: a missing or non-boolean "legacy" throws by name and is
   // NEVER defaulted to false. Defaulting would be the worst possible failure
   // mode for this particular field — a bridge that forgot to send it would
   // silently render a session whose working files are gone as a live one.
-  const legacyRaw = raw['legacy'];
-  if (typeof legacyRaw !== 'boolean') {
-    throw new Error(`missing or invalid "legacy": expected a boolean, got ${JSON.stringify(legacyRaw)}`);
-  }
-  const legacy = legacyRaw;
+  const legacy = requireBoolean(raw, 'legacy');
 
   // W8-B3 (ON-5) — REQUIRED like "terminal": a missing or non-array
   // "transcriptSources" throws, and every element must be a string. Never
@@ -986,16 +988,14 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   if (!('transcriptError' in raw)) {
     throw new Error('missing "transcriptError" — expected a string or null, never an omitted key');
   }
-  const transcriptErrorRaw = raw['transcriptError'];
-  if (transcriptErrorRaw !== null && typeof transcriptErrorRaw !== 'string') {
-    throw new Error(`missing or invalid "transcriptError": expected a string or null, got ${JSON.stringify(transcriptErrorRaw)}`);
-  }
-  const transcriptError = transcriptErrorRaw;
+  const transcriptError = requireNullable(raw, 'transcriptError', 'string');
 
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     affordances,
     modelTier,
+    costUsd,
+    sdk: requireString(raw, 'sdk'),
     terminal,
     legacy,
     transcriptSources,

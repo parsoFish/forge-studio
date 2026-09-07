@@ -18,6 +18,7 @@ related_themes:
   - markdown-artifact-flow
   - ralph-loop-pattern
   - dependency-ordered-work
+enforced_by: packages/factory/pm-turn-economy.test.ts
 ---
 
 # Spec-driven work items

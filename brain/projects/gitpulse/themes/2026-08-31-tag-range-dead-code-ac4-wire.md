@@ -20,6 +20,7 @@ keywords:
 related_themes: [2026-08-31-tag-range-filter-delivery, 2026-08-31-author-filter-compare-coverage-gap, 2026-06-21-acceptance-gate-covers-only-headline-output]
 created_at: 2026-08-31T22:30:00.000Z
 updated_at: 2026-08-31T22:30:00.000Z
+status: historical
 ---
 
 # `resolveEffectiveBounds` dead code — AC4 wire absent

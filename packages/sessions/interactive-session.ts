@@ -452,7 +452,7 @@ export async function runAgentTurn(args: {
   label?: string;
   /** W8-B6 — the agent's bound library hooks (see `runStructuredTurn`'s field). */
   hooks?: SdkHooksOption;
-}): Promise<{ costUsd: number }> {
+}): Promise<{ costUsd: number | null }> {
   const abortController = new AbortController();
   const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
   // W7-A2 (sessions-kinds-V01, beads forge-w08/forge-eip) — a fence the SDK
@@ -503,7 +503,11 @@ export async function runAgentTurn(args: {
       : {}),
   };
 
-  let costUsd = 0;
+  // `null`, not 0: a turn the SDK never priced and a turn that genuinely cost
+  // nothing are different facts, and every cost surface downstream keeps the
+  // omitted-never-zeroed discipline (`HistoryLedger`'s own rule). Collapsing
+  // them here is what made a reaped turn report `$0.00` instead of UNMEASURED.
+  let costUsd: number | null = null;
   let toolSeq = 0;
   let lastHeartbeatMs = 0;
 

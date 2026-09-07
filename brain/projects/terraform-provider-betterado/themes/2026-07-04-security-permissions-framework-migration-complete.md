@@ -6,6 +6,7 @@ keywords: [security-permissions, securityrole, security-namespace, framework-mig
 related_themes: [framework-migration-index]
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern

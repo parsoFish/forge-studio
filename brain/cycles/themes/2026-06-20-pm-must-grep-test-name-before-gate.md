@@ -4,6 +4,7 @@ description: PM invented a plausible but nonexistent test name in quality_gate_c
 category: antipattern
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
+status: historical
 ---
 
 ## Pattern

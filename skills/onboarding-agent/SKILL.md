@@ -16,8 +16,18 @@ composition:
     - event-log
 runtime:
   sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
+  # M6-A / ruling 417: onboarding is a real spend and the operator had no say
+  # over what it ran on — its kickoff rendered a read-only chip while the
+  # authoring kickoff next to it offered a choice, so 1.0.md §3's "SDK / model
+  # / effort are set per session" was true for some kinds and false for others
+  # (S9 beat 11). Widening the envelope is a SKILL.md edit rather than a UI
+  # decision (ADR 043's own rationale), so it is made here. Sonnet stays FIRST
+  # and is therefore still what an unchosen run uses — no behaviour changes for
+  # anyone who picks nothing.
+  strategy: range
+  range:
+    - claude-sonnet-4-6
+    - claude-opus-4-8
 budgets:
   maxTurns: 60
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet; a

@@ -4,6 +4,7 @@ description: forge requeue spawns a new cycle even when the initiative's PR is a
 category: antipattern
 created_at: 2026-06-07
 updated_at: 2026-06-07
+status: historical
 ---
 
 # forge requeue has no PR-state guard

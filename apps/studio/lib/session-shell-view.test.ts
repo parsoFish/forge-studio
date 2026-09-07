@@ -131,7 +131,7 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   // value — nothing finalized, and the transcript derivation succeeded.
   finalized: null,
   transcriptError: null,
-  modelTier: null,
+  modelTier: null, costUsd: null, sdk: 'claude',
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
   // W8-B3 (ON-5) — the candidate sources actually on disk for this session.
@@ -173,7 +173,7 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   // value — nothing finalized, and the transcript derivation succeeded.
   finalized: null,
   transcriptError: null,
-  modelTier: null,
+  modelTier: null, costUsd: null, sdk: 'claude',
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
   // W8-B3 (ON-5) — a synthetic session with real sources on disk.

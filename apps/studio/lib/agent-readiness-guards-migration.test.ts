@@ -68,11 +68,16 @@ test('F1: computeReadinessChecks has a "guard" check key/label, not "hook" (RED 
   expect(guardCheck, `expected a "guard"-keyed check — got keys: ${JSON.stringify(checks.map((c) => c.key))}`).toBeDefined();
 });
 
-test('F1: the guard check reflects composition.guards content (ok when non-empty, not ok when empty) (RED until migrated)', () => {
+test('F1: the guard check reflects composition.guards content (ready when non-empty, not-ready when empty) (RED until migrated)', () => {
+  // Rulings 400/410 replaced `ReadinessCheck.ok: boolean` with
+  // `state: 'ready' | 'not-ready' | 'pending'` — a check has three answers,
+  // not two (see agent-readiness.ts's header). This test's CLAIM is
+  // unchanged: the guard check follows `composition.guards`. Only the word
+  // for its outcome moved.
   const withGuards = computeReadinessChecks(makeGuardsInput(['event-log']));
   const withoutGuards = computeReadinessChecks(makeGuardsInput([]));
-  expect(withGuards.find((c) => c.key === 'guard')?.ok, 'expected ok:true when guards is non-empty').toBe(true);
-  expect(withoutGuards.find((c) => c.key === 'guard')?.ok, 'expected ok:false when guards is empty').toBe(false);
+  expect(withGuards.find((c) => c.key === 'guard')?.state, 'expected ready when guards is non-empty').toBe('ready');
+  expect(withoutGuards.find((c) => c.key === 'guard')?.state, 'expected not-ready when guards is empty').toBe('not-ready');
 });
 
 test('F1: no stale "hook"-keyed check remains once migrated (RED — today it still exists)', () => {

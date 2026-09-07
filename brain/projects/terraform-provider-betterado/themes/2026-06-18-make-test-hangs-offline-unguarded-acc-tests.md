@@ -6,6 +6,7 @@ keywords: [make-test, tf_acc-guard, offline-ci, acceptance-tests, gnumakefile, h
 related_themes: [build-tooling-index]
 created_at: 2026-07-10T10:39:32.000Z
 updated_at: 2026-07-10T10:39:32.000Z
+status: historical
 ---
 
 ## Problem

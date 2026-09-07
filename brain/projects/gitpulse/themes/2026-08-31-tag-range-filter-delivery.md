@@ -21,6 +21,7 @@ keywords:
 related_themes: [2026-08-31-author-filter-flag-delivery, 2026-07-11-tags-command-delivery, git-truth-and-pure-aggregation, 2026-08-31-tag-range-dead-code-ac4-wire, 2026-08-31-gitignored-scratch-eighth-cycle]
 created_at: 2026-08-31T22:30:00.000Z
 updated_at: 2026-08-31T22:30:00.000Z
+status: historical
 ---
 
 # `--since-tag` / `--until-tag` delivery pattern

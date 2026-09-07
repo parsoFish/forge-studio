@@ -4,6 +4,7 @@ description: Two PM invocations ran at 04:10:33 and 04:12:09 (90s apart) — bot
 category: antipattern
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # PM double instantiation — parallel PM runs at cycle start

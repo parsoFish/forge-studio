@@ -22,7 +22,7 @@ The test that holds this file honest is `contract.test.ts` beside it: it reads t
 | `kinds/instructions.ts` | `instructionsSessionDir` · `runInstructionsTurn` |
 | `kinds/registry.ts` | `SESSION_KIND_RUNNERS` |
 | `routes.ts` | `sessionsRoutes` |
-| `session-readability.ts` | `parseGuardedEventsJsonl` |
+| `session-readability.ts` | `parseGuardedEventsJsonl`, `readSessionCostUsd` |
 | `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` |
 | `session-status-io.ts` | `guardedReadSessionStatus` · `guardedWriteSessionStatus` |
 | `studio/session-kinds-validate.ts` | `validateSessionKinds` |

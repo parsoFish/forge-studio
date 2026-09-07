@@ -6,6 +6,7 @@ keywords: [live-acceptance-test, cost-distribution, org-project-cap, infra-disco
 related_themes: [live-evidence-demo-index, fixture-discipline-index]
 created_at: 2026-06-20
 updated_at: 2026-07-10
+status: historical
 ---
 
 # Live acceptance test WI — infra-discovery cost distribution

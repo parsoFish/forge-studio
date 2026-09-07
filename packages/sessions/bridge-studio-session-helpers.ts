@@ -433,31 +433,20 @@ function crossProjectRepoPath(
   return `${candidate} is not inside project "${project}" (expected ${own} or a path beneath it)`;
 }
 /**
- * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15) — the
- * COMPLETE set of `/start`-family routes that accept an optional
- * caller-supplied `modelTier`: `/api/architect/start`,
- * `/api/instructions/start`, `/api/project-brain/start`,
- * `/api/demo-builder/start`, `/api/studio/authoring/start`,
- * `POST /api/studio/kbs/:id/cleanup/start`. Each MUST validate it through
- * this helper BEFORE any mkdir/status write, and persist the returned
- * `tier` (when present) verbatim into the session's initial `status.json`
- * as `modelTier` — every turn runner (the four legacy runners +
- * `runInteractiveTurn`) reads it back from there and resolves it through
- * `resolveSessionModel` on EVERY turn (ADR 024's SKILL.md-is-the-envelope
- * contract, not just at kickoff).
+ * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15). EVERY
+ * `/start`-family route that accepts a caller-supplied `modelTier` validates
+ * it here BEFORE any mkdir/status write and persists the returned `tier`
+ * verbatim as `status.json`'s `modelTier` — every turn runner reads it back
+ * and re-resolves it through `resolveSessionModel` on EVERY turn (ADR 024's
+ * SKILL.md-is-the-envelope contract, not just at kickoff). The enumeration
+ * that used to live here went stale twice; the rule is the invariant.
  *
- * The allowed set is derived from the agent's OWN `SKILL.md` (via
- * `deriveAgentSpec` + `resolveSessionModel`) — NEVER a client-supplied list
- * — so a request naming a tier outside the skill's declared envelope
- * (`strategy:range`'s `range:`, or the single tier a `strategy:fixed` skill
- * pins) is rejected naming both the offending value and the real allowed
- * set, exactly per `resolveSessionModel`'s own error contract. Never trust a
- * wider set than the skill itself declares.
- *
- * `candidate` is `unknown`, not `string | undefined` — same untrusted-JSON
- * discipline as `invalidProjectRepoPath` above (request bodies are `JSON.parse`
- * output, so a non-string `modelTier` — `0`, `null`, `{}` — is a real shape
- * that must fail closed with a 400 naming it, not a raw `TypeError`).
+ * The allowed set comes from the agent's OWN `SKILL.md` — never a
+ * client-supplied list — so a tier outside the declared envelope is rejected
+ * naming both the offending value and the real allowed set, per
+ * `resolveSessionModel`'s own error contract. `candidate` is `unknown`
+ * because request bodies are `JSON.parse` output: `0`, `null`, `{}` must fail
+ * closed with a 400 naming the value, not a raw `TypeError`.
  */
 /**
  * W7-B6 (sessions-kinds-02 / projects-15 / crosscut-21): a kickoff `project`

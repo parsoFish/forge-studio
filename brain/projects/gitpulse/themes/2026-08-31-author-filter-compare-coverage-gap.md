@@ -18,6 +18,7 @@ keywords:
 related_themes: [2026-08-31-author-filter-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output, 2026-08-31-tag-range-dead-code-ac4-wire]
 created_at: 2026-08-31T02:15:00.000Z
 updated_at: 2026-08-31T02:15:00.000Z
+status: historical
 ---
 
 # `--author` silent discard under `--compare`

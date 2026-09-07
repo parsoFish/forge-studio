@@ -191,6 +191,9 @@ export async function runAgentStyleStep(args: {
   onHeartbeat: () => void;
   onText: (text: string) => void;
   onThinking: (text: string) => void;
+  /** S9 beat 8 — called with the turn's own spend once it completes. The
+   *  emission belongs to the runner, which owns the log's identity. */
+  onTurnCost?: (costUsd: number) => void;
 }): Promise<RunInteractiveTurnResult> {
   const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
   // The pinned SDK default lives with the code that SPAWNS, not with the
@@ -258,7 +261,7 @@ export async function runAgentStyleStep(args: {
       onText,
       onThinking,
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
-    });
+    }).then(({ costUsd }) => { if (costUsd !== null) args.onTurnCost?.(costUsd); });
     // W7-C2 T1 review (P0-2, finding A5) — CONSUME-ONCE. `readOperatorFeedback`
     // runs on EVERY `step: agent` turn, not only the one a revise triggered,
     // and nothing used to clear feedback.md — so round 1's corrections kept

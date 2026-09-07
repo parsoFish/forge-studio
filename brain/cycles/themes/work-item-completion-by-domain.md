@@ -18,6 +18,7 @@ related_themes:
   - design-is-the-bottleneck
   - spec-driven-work-items
   - dependency-ordered-work
+enforced_by: [packages/factory/project-manager-contract.test.ts, packages/flows/tests/integration/cycle-pm-hallucination.test.ts]
 ---
 
 # Work-item completion by domain complexity

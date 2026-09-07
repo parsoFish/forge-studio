@@ -21,12 +21,14 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
 import type { InterviewRound } from './architect-plan.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import type { EventLogger } from '@forge/kernel';
 import type { ArchitectManifestPorts } from './architect-ports.ts';
+import { parseGuardedEventsJsonl, sessionLogDirName } from '../session-readability.ts';
+import { deriveSessionCostUsd } from '@forge/kernel';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import type { ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -344,45 +346,30 @@ function safeReaddir(dir: string): string[] {
 type ArchitectSessionStats = { cost_usd: number; duration_ms: number };
 
 /**
- * P4: Read the architect session's own event log (`_logs/_architect-<sid>/events.jsonl`)
- * and compute:
- *   - `cost_usd`:    sum of all numeric `cost_usd` fields across events.
- *   - `duration_ms`: last `started_at` minus first `started_at`, in ms.
+ * P4: the architect session's own spend and wall-clock span, read from
+ * `_logs/_architect-<sid>/events.jsonl`.
  *
- * Returns `null` if the log is absent, empty, or unparseable — best-effort so
- * a missing log never blocks manifest promotion.
+ *   - `cost_usd`    — the ONE kernel rule (`deriveSessionCostUsd`), never a
+ *     local sum: this figure BOUNDS a funded session (`architect.ts:123`), and
+ *     a naive sum over a stream that restates its dollars measured 2.35x the
+ *     truth on M5-A, which would stop a session that had not spent its ceiling.
+ *     `0` when nothing is priced — a ceiling compares against a number.
+ *   - `duration_ms` — last `started_at` minus first.
+ *
+ * `null` when the log is absent, unreadable or empty — best-effort, so a
+ * missing log never blocks manifest promotion.
  */
 export function readArchitectSessionStats(
   logsRoot: string,
   sessionId: string,
 ): ArchitectSessionStats | null {
-  const logPath = join(resolve(logsRoot), `_architect-${sessionId}`, 'events.jsonl');
-  if (!existsSync(logPath)) return null;
-  try {
-    const lines = readFileSync(logPath, 'utf8')
-      .split('\n')
-      .filter(Boolean);
-    if (lines.length === 0) return null;
-
-    let totalCost = 0;
-    let firstTs: number | null = null;
-    let lastTs: number | null = null;
-
-    for (const line of lines) {
-      const ev = JSON.parse(line) as Record<string, unknown>;
-      if (typeof ev.cost_usd === 'number') totalCost += ev.cost_usd;
-      if (typeof ev.started_at === 'string') {
-        const t = new Date(ev.started_at).getTime();
-        if (!Number.isNaN(t)) {
-          if (firstTs === null || t < firstTs) firstTs = t;
-          if (lastTs === null || t > lastTs) lastTs = t;
-        }
-      }
-    }
-
-    const duration_ms = firstTs !== null && lastTs !== null ? lastTs - firstTs : 0;
-    return { cost_usd: totalCost, duration_ms };
-  } catch {
-    return null;
-  }
+  const events = parseGuardedEventsJsonl(logsRoot, sessionLogDirName('architect', sessionId));
+  if (events === null || events.length === 0) return null;
+  const stamps = events
+    .map((e) => (typeof e['started_at'] === 'string' ? new Date(e['started_at']).getTime() : Number.NaN))
+    .filter((t) => !Number.isNaN(t));
+  return {
+    cost_usd: deriveSessionCostUsd(events) ?? 0,
+    duration_ms: stamps.length > 0 ? Math.max(...stamps) - Math.min(...stamps) : 0,
+  };
 }

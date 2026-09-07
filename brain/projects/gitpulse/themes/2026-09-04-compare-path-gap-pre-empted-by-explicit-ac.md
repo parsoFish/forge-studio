@@ -19,6 +19,7 @@ keywords:
 related_themes: [2026-08-31-author-filter-compare-coverage-gap, 2026-09-04-include-path-filter-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output, 2026-08-31-author-filter-flag-delivery]
 created_at: 2026-09-04T16:06:03.000Z
 updated_at: 2026-09-04T16:06:03.000Z
+status: historical
 ---
 
 # Compare-path gap pre-empted by explicit AC

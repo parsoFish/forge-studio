@@ -4,6 +4,7 @@ description: When an initiative's scope is purely documentation/analysis (no sch
 category: antipattern
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-06-08T00:00:00.000Z
+status: historical
 ---
 
 ## What happened
