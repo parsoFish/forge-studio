@@ -6,6 +6,7 @@ keywords: [brainreads, ralph-sessions, zero-brain-reads, re-derived, profile-md,
 related_themes: [ralph-brain-reads-index]
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
+status: historical
 ---
 
 ## Observation

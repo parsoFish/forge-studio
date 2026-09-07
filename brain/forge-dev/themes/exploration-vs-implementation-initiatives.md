@@ -21,6 +21,7 @@ related_themes:
   - holistic-metrics-onboarding
   - parametric-design-search
   - human-directed-work-as-initiatives
+enforced_by: [apps/studio/lib/session-artifact-view.test.ts, apps/studio/lib/session-client.test.ts]
 ---
 
 # Exploration vs implementation initiatives

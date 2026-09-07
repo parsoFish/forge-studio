@@ -6,6 +6,7 @@ keywords: [decomposition-completeness, manifest-annotation, scope-coverage, oper
 related_themes: [pm-decomposition-index]
 created_at: 2026-07-03T22:00:00.000Z
 updated_at: 2026-07-03T22:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

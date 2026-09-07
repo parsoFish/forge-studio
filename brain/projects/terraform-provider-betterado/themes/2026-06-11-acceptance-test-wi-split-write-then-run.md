@@ -6,6 +6,7 @@ keywords: [tf_acc, write-then-run, acceptance-test-split, live-acceptance, offli
 related_themes: [gate-mechanics-index]
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
+status: historical
 ---
 
 # Acceptance test WI split — write-then-run pattern

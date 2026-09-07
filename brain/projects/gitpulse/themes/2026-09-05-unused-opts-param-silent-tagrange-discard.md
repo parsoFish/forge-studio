@@ -20,6 +20,7 @@ keywords:
 related_themes: [2026-09-05-markdown-output-flag-delivery, 2026-08-31-author-filter-compare-coverage-gap, 2026-09-04-compare-path-gap-pre-empted-by-explicit-ac]
 created_at: 2026-09-05T02:00:00.000Z
 updated_at: 2026-09-05T02:00:00.000Z
+status: historical
 ---
 
 # `_opts`-unused parameter: silent tagRange discard (RF-1 major)

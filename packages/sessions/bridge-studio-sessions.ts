@@ -122,6 +122,7 @@ import { computeAgentCleanupFindings } from '@forge/knowledge/bridge-studio-kbs.
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
+import { readSessionCostUsd } from './session-readability.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
@@ -591,6 +592,12 @@ export async function handleStudioSessionsRoutes(
         modelTier: typeof statusParsed?.modelTier === 'string'
           ? statusParsed.modelTier
           : fixedTierForSessionKind(ctx.forgeRoot, descriptor),
+        // S9 beat 8 — "cost recorded". The session's own spend, derived from
+        // its `events.jsonl` through the ONE kernel rule (never summed here,
+        // never a second formula). ALWAYS present, like `modelTier` and
+        // `affordances`; `null` is honest-absent — no priced row in the log —
+        // and is what the page renders as "not recorded" rather than $0.00.
+        costUsd: readSessionCostUsd({ logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId }),
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
         // used internally to gate `ensureSessionTail` (this file's header),
         // now also threaded onto the wire (ALWAYS present, never omitted —

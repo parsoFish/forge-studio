@@ -4,6 +4,7 @@ description: All 7 ralph sessions in the pipelinesapproval initiative had brainR
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 ## Observation

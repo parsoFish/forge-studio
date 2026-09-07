@@ -4,6 +4,7 @@ description: The release-finalizer skill guesses the next version from the chang
 category: antipattern
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## What happens

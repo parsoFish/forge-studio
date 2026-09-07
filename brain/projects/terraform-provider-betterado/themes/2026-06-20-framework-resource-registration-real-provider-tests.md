@@ -6,6 +6,7 @@ keywords: [provider-registration, testprovider_haschildresources, gate-design, r
 related_themes: [framework-migration-index, provider-registration-dedup-index]
 created_at: 2026-06-20T00:00:00.000Z
 updated_at: 2026-06-20T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern

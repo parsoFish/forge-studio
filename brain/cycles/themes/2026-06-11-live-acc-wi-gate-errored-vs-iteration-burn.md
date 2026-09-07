@@ -4,6 +4,7 @@ description: When the `requires_env` guard fails to intercept a live-acc WI gate
 category: antipattern
 created_at: 2026-06-11T00:00:00.000Z
 updated_at: 2026-07-10T10:08:05.000Z
+status: historical
 ---
 
 # live-acc WI requires_env guard miss — full iteration budget burned

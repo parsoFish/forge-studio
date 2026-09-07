@@ -18,6 +18,7 @@ related_themes:
   - declared-data-fails-open
   - forge-ui-data-attribute-contract-discipline
   - background-work-server-owned-client-observes
+enforced_by: apps/studio/lib/session-client.test.ts
 ---
 
 # A new interactive session kind needs its UI wiring and a runner
