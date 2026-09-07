@@ -22,6 +22,7 @@ import matter from 'gray-matter';
 // deliberately) poisons the cache for every later no-options call on the
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
+// (skill-install.ts and skill-trust.ts point here rather than repeat it.)
 
 import { skillsDir } from '../skill-path.ts';
 import { guardedFile } from '@forge/kernel';
