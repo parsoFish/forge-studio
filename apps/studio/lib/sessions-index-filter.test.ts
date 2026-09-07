@@ -27,7 +27,7 @@ function makeRow(overrides: Partial<SessionIndexRow> & { kind: string; sessionId
     state: 'working',
     error: null,
     idleMs: null,
-    modelTier: null,
+    modelTier: null, agent: 'onboarding-agent', costUsd: null, runId: null,
     updatedAt: '2026-08-15T10:00:00.000Z',
     href: `/sessions/${overrides.kind}/${overrides.sessionId}?project=${project}`,
     ...overrides,
