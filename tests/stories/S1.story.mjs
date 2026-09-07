@@ -365,33 +365,74 @@ export default {
       say: 'Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.',
     },
     {
-      // NOT expressible today, and left standing red on purpose (the
-      // 2026-08-29 ruling: author the true flow). `view-demo-session`
-      // (`SessionMinted.tsx:26`) is a real handle and the four keys below are
-      // the demo session shell's own root — the same shared surface the
-      // onboarding session uses, which is the point: one surface, four kinds,
-      // no bespoke runner per kind.
+      // `view-demo-session` (`SessionMinted.tsx:26`) is a real handle and the
+      // segment is bound: beat 7 publishes `data-demo-session-id` on
+      // `DemoTimeline`'s own root (PR #490). That half has worked since.
       //
-      // What is missing is the SEGMENT. `<demoSessionId>` cannot be bound by
-      // any earlier beat, because the only page that renders it is the
-      // onboarding session, whose own root carries `data-session-id` and
-      // therefore answers that key before `resolveExpectations` ever reaches
-      // the nested anchor (see beat 7). PRODUCT owner: publish the minted id
-      // under a distinctly-named key, exactly as `OnboardWithAgent` already
-      // does with `data-onboard-session-id` — bead raised 2026-09-05. Until
-      // then this beat reds on an unbound segment and says so.
-      act: 'Come back to the demo builder when it has finished',
-      do: [{ press: 'view-demo-session' }],
+      // AMENDED 2026-09-07 (T1 ruling 364, the OPERATOR'S choice between two
+      // honest repairs: "press brief and wait for a real `locked`"). This beat
+      // asked for `session-phase: 'complete'` and pressed nothing but the way
+      // in, and S1 run 9 finally proved — from #516's captured DOM,
+      // `data-session-kind="demo"`, `data-session-phase="briefing"` — that it
+      // could not have passed on any product, for TWO independent reasons.
+      //
+      // ONE: THE PHASE DOES NOT EXIST. `studio/session-kinds.yaml`'s `demo`
+      // kind declares six rows and no others —
+      //
+      //   briefing (noop, awaits questions) · generating (agent, writes demo)
+      //   · awaiting-review (noop, awaits verdict) · locking (finalize,
+      //   recordLockedDemo) · locked (terminal) · abandoned (terminal)
+      //
+      // — so `complete` is not among them and never was. The demo kind's real
+      // terminal for work that finished is `locked`; `abandoned` is the other
+      // one, and it is not success.
+      //
+      // TWO: NOTHING BRIEFED THE BUILDER. Beat 7's `launch-demo-builder` posts
+      // `/api/demo-builder/start` (`packages/sessions/bridge-studio-demo.ts`),
+      // which validates, writes `phase: 'briefing'`, broadcasts and RETURNS —
+      // it spawns nothing. The spawn is one route later at
+      // `/api/demo-builder/brief`, which the `briefing` row's
+      // `awaits: questions` renders the door for: an optional free-text box
+      // (`data-field="session-answer"`) and `data-action="submit-answers"`,
+      // labelled "Start →". So `briefing` was the CORRECT state at this beat,
+      // twice over, and the old beat described an interaction the product does
+      // not have.
+      //
+      // WHAT THE BEAT NOW WALKS is the flow the operator actually has: open
+      // the session, give the builder its brief, and — when the generation
+      // lands at `awaiting-review` — approve it, which finalises through
+      // `locking` to `locked`. `data-action="verdict-approve"` renders from
+      // the row's own `verdicts: [approve, revise, reject]` and that row
+      // declares no `requires:`, so nothing gates the press.
+      //
+      // THE BOUND IS THE LARGEST THE RUNNER PERMITS, and that is a statement
+      // rather than a guess: the demo builder bounds its generation in TURNS
+      // (`maxTurns: 24`, `packages/sessions/kinds/demo-builder.ts`), not in
+      // milliseconds, so no ms figure can be DERIVED from the product. No run
+      // has ever completed a demo generation, so there is no measurement to
+      // use either. `MAX_DECLARED_WAIT_MS` it is, said out loud — and the
+      // first green run replaces this with a measured number.
+      act: 'Come back to the demo builder, brief it, and lock the demo it makes',
+      do: [
+        { press: 'view-demo-session' },
+        {
+          fill: 'session-answer',
+          with: 'Show the scan running end to end on this repo and print the human-readable summary — the same output the quality gate checks.',
+        },
+        { press: 'submit-answers' },
+        { press: 'verdict-approve' },
+      ],
+      wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
         route: '/sessions/demo/<demoSessionId>',
         data: {
           page: 'session',
           'page-ready': 'true',
           'session-kind': 'demo',
-          'session-phase': 'complete',
+          'session-phase': 'locked',
         },
       },
-      say: 'The operator can leave a heavy session and come back — the session is the record, not the terminal it was started from. This is the beat that proves it: the demo builder was started from one surface, left alone, and read from another, and the work is there and finished.',
+      say: 'Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.',
     },
     {
       // Fully expressible, but only because the exit is itself a
