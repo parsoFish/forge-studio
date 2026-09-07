@@ -20,9 +20,13 @@
  *     does exactly that and passes the real ones; it already carries the flows
  *     row for that reason, deliberately.
  *
- * The stubs are loud rather than plausible: `parseManifest` throws. A test that
- * unexpectedly reads a manifest back fails saying so, instead of quietly
- * agreeing with a fabricated format.
+ * `parseManifest` USED to throw, so a test reading a manifest back said so
+ * loudly — ruling 380 retired that premise: the completeness critic now runs at
+ * the end of every DRAFTING turn and reads each drafted manifest back, so a
+ * throwing parse fails every architect-turn test for a reason unrelated to what
+ * it measures. It round-trips exactly what `serializeManifest` wrote — the id
+ * and the body, NOTHING else — so a test asserting real manifest fields still
+ * fails (on `undefined`) rather than agreeing with a fabricated format.
  */
 import type { ArchitectManifestPorts } from '../kinds/architect-ports.ts';
 
@@ -31,12 +35,9 @@ import type { ArchitectManifestPorts } from '../kinds/architect-ports.ts';
 export function stubArchitectManifestPorts(): ArchitectManifestPorts {
   return {
     serializeManifest: (m) => `---\ninitiative_id: ${m.initiative_id}\n---\n${m.body}`,
-    parseManifest: () => {
-      throw new Error(
-        'stubArchitectManifestPorts: parseManifest is deliberately unimplemented — a test that reads a ' +
-          'manifest back needs the REAL flows functions, not this stub, or it will assert a format the ' +
-          'product does not produce.',
-      );
+    parseManifest: (text) => {
+      const [, initiative_id = '', body = ''] = /^---\ninitiative_id: (.*)\n---\n([\s\S]*)$/.exec(text) ?? [];
+      return { initiative_id, body } as ReturnType<ArchitectManifestPorts['parseManifest']>;
     },
     mintAndPersistManifestCycleId: (manifestPath) => manifestPath,
     promoteManifests: () => ({ writtenManifestPaths: [], writtenInitiativeIds: [] }),

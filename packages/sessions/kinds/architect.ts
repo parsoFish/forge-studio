@@ -27,9 +27,10 @@
  *        ▼
  *     exploring ──(R4-04-F4: edge cases + brain constraints, fail-open)──▶ drafting
  *                                                                             │
- *     drafting ──▶ awaiting-verdict ──(bridge: approve)──▶ finalizing ──▶ committed
- *                        │ (bridge: revise) ──▶ interviewing
- *                        └ (bridge: reject)  ──▶ rejected
+ *     drafting ──(critic clean, or the round ceiling — ruling 380)──▶
+ *                  awaiting-verdict ──(bridge: approve)──▶ finalizing ──▶ committed
+ *        ▲ (critic findings)  │ (bridge: revise) ──▶ interviewing
+ *        └────────────────────┴ (bridge: reject)  ──▶ rejected
  *
  * `awaiting-answers` / `awaiting-verdict` are bridge-owned waiting states — the
  * runner is only spawned in an *actionable* phase. The bridge transitions out of
@@ -37,17 +38,14 @@
  */
 
 import { readResolvedDecisions, writeQuestions } from './architect-session.ts';
-import { runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
+import { runDraftRounds, runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
 import type { ArchitectStepArgs } from './architect-steps.ts';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
-import { archiveSessionDir, sessionPaths } from './architect-plan.ts';
-import type { InterviewRound } from './architect-plan.ts';
 import type { EventLogger } from '@forge/kernel';
+import { archiveSessionDir } from './architect-plan.ts';
 import { requirePorts } from './architect-ports.ts';
-import type { ArchitectManifestPorts } from './architect-ports.ts';
-import { runCompletenessCritic, truncateWithMarker, CRITIC_MAX_MANIFEST_BODY_CHARS } from './architect-critic.ts';
 import { runKindTurn } from './kind-turn.ts';
 import type { SessionKindVariant } from './kind-turn.ts';
 import { guardedReadStatus, readArchitectSessionStats, readInterview } from './architect-session.ts';
@@ -67,6 +65,7 @@ import type { ArchitectStatus, RunArchitectTurnInput, RunArchitectTurnResult } f
 export { ARCHITECT_MODEL, architectAgentSpec, guardedReadStatus, guardedWriteStatus, listArchitectSessions, readArchitectSessionStats } from './architect-session.ts';
 export type { ArchitectQuestion, ArchitectStatus, DraftInitiative } from './architect-session.ts';
 export { buildManifest } from './architect-manifest.ts';
+export { MAX_CRITIC_DRAFT_ROUNDS } from './architect-steps.ts';
 export type { QueryFn };
 
 
@@ -188,7 +187,7 @@ export const architectKind: SessionKindVariant<
 
     exploring: withPaths(runExploreThenDraft),
 
-    drafting: withPaths(async (a) => await runDraftStep({ ...a, resolvedDecisions: null })),
+    drafting: withPaths(async (a) => await runDraftRounds({ ...a, resolvedDecisions: null })),
 
     finalizing: withPaths(runFinalizeStep),
 
@@ -222,140 +221,6 @@ export async function runArchitectTurn(
   return await runKindTurn(architectKind, input);
 }
 
-
-// ---------------------------------------------------------------------------
-// Completeness critic (FINALIZE gate)
-// ---------------------------------------------------------------------------
-
-/** Render the flattened interview Q/A into a numbered markdown block for the
- *  critic prompt. Returns a placeholder when the session had no interview. */
-function renderInterviewSummary(rounds: InterviewRound[]): string {
-  if (rounds.length === 0) return '(no interview — the operator drafted directly)';
-  return rounds
-    .map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`)
-    .join('\n');
-}
-
-/** Render every manifest about to be promoted (id, dependencies, full body)
- *  into one block per initiative for the critic prompt. Reads fresh from disk
- *  so the critic reviews EXACTLY what `promoteManifests` is about to move. */
-function buildManifestsSummary(manifestsDir: string, parseManifest: ArchitectManifestPorts['parseManifest']): string {
-  if (!existsSync(manifestsDir)) return '(no manifests found)';
-  const files = readdirSync(manifestsDir).filter((f) => f.endsWith('.md'));
-  if (files.length === 0) return '(no manifests found)';
-  return files
-    .map((f) => {
-      const m = parseManifest(readFileSync(join(manifestsDir, f), 'utf8'));
-      const deps = m.depends_on_initiatives?.length ? m.depends_on_initiatives.join(', ') : '(none)';
-      // Roadmap-scale sessions promote 20+ manifests — bound each body so the
-      // assembled critic prompt cannot blow the context window.
-      const body = truncateWithMarker(m.body, CRITIC_MAX_MANIFEST_BODY_CHARS);
-      return `### ${m.initiative_id}\ndepends_on: ${deps}\n\n${body}`;
-    })
-    .join('\n\n---\n\n');
-}
-
-/**
- * Run the completeness critic once and fold the result onto the session
- * status. Never throws — a crash is advisory infra (treated as zero findings,
- * loudly logged) so `runFinalizeStep` always proceeds to promotion in that
- * case. Returns `blockPromotion: true` only when the critic surfaced at least
- * one finding on a session that had not yet run it.
- */
-async function runFinalizeCompletenessCritic(args: {
-  input: RunArchitectTurnInput;
-  paths: ReturnType<typeof sessionPaths>;
-  status: ArchitectStatus;
-  logger: EventLogger;
-  queryFn: QueryFn;
-}): Promise<{ status: ArchitectStatus; blockPromotion: boolean }> {
-  const { input, paths, status, logger, queryFn } = args;
-  const initiativeId = `architect-session-${input.sessionId}`;
-
-  const critStart = logger.emit({
-    initiative_id: initiativeId,
-    phase: 'architect',
-    skill: 'architect-completeness-critic',
-    event_type: 'start',
-    input_refs: [paths.planPath],
-    output_refs: [],
-    message: 'architect.completeness-critic.start',
-    metadata: { session_id: input.sessionId },
-  });
-
-  const interviewSummary = renderInterviewSummary(readInterview(input.projectRoot, input.sessionId));
-  const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;
-  const manifestsSummary = buildManifestsSummary(paths.manifestsDir, requirePorts(input).parseManifest);
-
-  const critic = await runCompletenessCritic({
-    idea: status.idea,
-    interviewSummary,
-    planMarkdown,
-    manifestsSummary,
-    queryFn,
-    logger,
-    initiativeId,
-  });
-
-  if (critic.crashed) {
-    // Advisory infra — never brick finalize, but log loudly.
-    logger.emit({
-      initiative_id: initiativeId,
-      parent_event_id: critStart.event_id,
-      phase: 'architect',
-      skill: 'architect-completeness-critic',
-      event_type: 'error',
-      input_refs: [paths.planPath],
-      output_refs: [],
-      message: 'architect.completeness-critic.crashed — proceeding to promote (advisory infra, zero findings)',
-      metadata: { session_id: input.sessionId, error: critic.error ?? null },
-    });
-  } else {
-    logger.emit({
-      initiative_id: initiativeId,
-      parent_event_id: critStart.event_id,
-      phase: 'architect',
-      skill: 'architect-completeness-critic',
-      event_type: 'end',
-      input_refs: [paths.planPath],
-      output_refs: [],
-      message: `architect.completeness-critic.end (findings=${critic.findings.length})`,
-      metadata: { session_id: input.sessionId, findings_count: critic.findings.length },
-    });
-    for (const f of critic.findings) {
-      logger.emit({
-        initiative_id: f.initiativeId ?? initiativeId,
-        parent_event_id: critStart.event_id,
-        phase: 'architect',
-        skill: 'architect-completeness-critic',
-        event_type: 'log',
-        input_refs: [paths.planPath],
-        output_refs: [],
-        message: `architect.completeness-critic.finding (${f.severity}): ${f.gap}`,
-        metadata: {
-          session_id: input.sessionId,
-          severity: f.severity,
-          initiativeId: f.initiativeId,
-          gap: f.gap,
-        },
-      });
-    }
-  }
-
-  const nextStatus: ArchitectStatus = {
-    ...status,
-    completenessCritic: {
-      ranAt: new Date().toISOString(),
-      findings: critic.findings,
-      ...(critic.crashed ? { crashed: true } : {}),
-    },
-  };
-
-  if (critic.findings.length > 0) {
-    return { status: { ...nextStatus, phase: 'awaiting-verdict' }, blockPromotion: true };
-  }
-  return { status: nextStatus, blockPromotion: false };
-}
 
 // ---------------------------------------------------------------------------
 // Finalize step (approve → bake resolved decisions → promote to queue)
@@ -416,32 +281,9 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
     }
   }
 
-  // Completeness critic (architect-completeness-critic, ADR ref:
-  // brain/forge-dev/themes/2026-07-01-architect-coverage-scope-fidelity.md).
-  // One-shot-per-session: runs ONCE, right before the operator-approved
-  // manifests promote. Findings send the session back to `awaiting-verdict`
-  // instead of promoting; the operator's re-approve IS the acknowledgement —
-  // `status.completenessCritic` being already set on the next finalize turn
-  // skips the critic entirely and promotes straight through.
-  let workingStatus: ArchitectStatus = status;
-  if (!status.completenessCritic) {
-    const criticResult = await runFinalizeCompletenessCritic({
-      input,
-      paths,
-      status,
-      logger,
-      queryFn: plumbing.queryFn,
-    });
-    workingStatus = criticResult.status;
-    // Persist the one-shot flag durably BEFORE promotion (all three outcomes:
-    // findings, clean, crashed) — a crash inside promoteManifests below must
-    // not re-arm the critic on the operator's retry turn.
-    writeStatus(workingStatus);
-    if (criticResult.blockPromotion) {
-      return { phase: 'awaiting-verdict', wrote: [] };
-    }
-  }
-
+  // Ruling 380: NO critic here. It ran at the end of the drafting turn, before
+  // the operator was ever asked, so approve → promote → committed is one press
+  // and the gate never re-arms behind an approval (`runDraftRounds`).
   const { writtenManifestPaths, writtenInitiativeIds } = ports.promoteManifests(paths.manifestsDir, {
     queueRoot,
   });
@@ -455,7 +297,7 @@ async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTur
     if (initId) ports.mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
   }
 
-  writeStatus({ ...workingStatus, phase: 'committed' });
+  writeStatus({ ...status, phase: 'committed' });
 
   logger.emit({
     initiative_id: writtenInitiativeIds[0] ?? `architect-session-${input.sessionId}`,

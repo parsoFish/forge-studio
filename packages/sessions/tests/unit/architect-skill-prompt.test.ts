@@ -474,8 +474,10 @@ test('AT-6 (HAZARD PIN — fail-open exploring): an explore step whose structure
     logger: logger(logsRoot, sessionId),
   });
 
-  assert.equal(calls, 2, 'the explore call crashed but the draft step still ran — the phase advanced past exploring');
-  assert.equal(draftPrompts.length, 1, 'exactly one draft call after the fail-open explore crash');
+  // Three calls since ruling 380: the crashed explore, the draft, and the
+  // completeness critic that now runs at the END of the drafting turn.
+  assert.equal(calls, 3, 'the explore call crashed but the draft step still ran — the phase advanced past exploring');
+  assert.equal(draftPrompts.length, 2, 'exactly one draft call after the fail-open explore crash, then its critic');
   assert.equal(result.phase, 'awaiting-verdict', 'the turn completed via the draft step despite the explore crash');
   assert.ok(!existsSync(join(sessionDir, 'edge-cases.json')), 'no findings file — the crashed explore step wrote nothing');
 });
@@ -499,7 +501,10 @@ test('AT-7 (HAZARD PIN — forced-emit retry): empty first draft triggers exactl
       logger: logger(logsRoot, sessionId),
     });
 
-    assert.equal(prompts.length, 2, 'exactly one forced-emit retry (two structured calls total)');
+    // Three since ruling 380: the empty draft, its forced-emit retry, and the
+    // completeness critic that runs once the draft lands. The retry is still
+    // exactly one — prompts[2] is the critic's, not a third draft.
+    assert.equal(prompts.length, 3, 'exactly one forced-emit retry, then the critic (three structured calls total)');
     assert.ok(
       prompts[1].startsWith(prompts[0]),
       'the retry prompt must be the first prompt with the forced-emit instruction appended, not a rebuilt prompt',
