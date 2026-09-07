@@ -4,6 +4,7 @@ description: When a WI's sole purpose is CI verification (no new code, gate alre
 category: antipattern
 created_at: 2026-07-10T10:39:32.000Z
 updated_at: 2026-07-10T10:39:32.000Z
+status: historical
 ---
 
 ## Pattern

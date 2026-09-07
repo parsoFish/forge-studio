@@ -4,6 +4,7 @@ description: PM names a specific test function (e.g. `go test -run TestResolveFr
 category: antipattern
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## What happens

@@ -252,7 +252,7 @@ with zero stubs, because their payload shapes could not be corpus-grounded.
       That is a substantial hot-path refactor best folded into **R4-06** (which
       refines the develop agent). The generic dispatcher seam IS provider-agnostic
       (proven); the residual is the SWE dev-loop pipeline's hardcoded agent identity.
-- **F1 spike result (2026-07-25):** [`docs/investigations/R2-03-fanout-merge-resolution-spike.md`](../investigations/R2-03-fanout-merge-resolution-spike.md)
+- **F1 spike result (2026-07-25):** [`docs/investigations/R2-03-fanout-merge-resolution-spike.md`](../../investigations/R2-03-fanout-merge-resolution-spike.md)
   — **NO-GO on R2-D1.** 76 external sources across 6 angles (merge queues,
   agent-swarm frameworks, worktree-fanout, decomposition-vs-resolution,
   LLM-merge-resolution maturity, alt-VCS). Every surveyed system converges on

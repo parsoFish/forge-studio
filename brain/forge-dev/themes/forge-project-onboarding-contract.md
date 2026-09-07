@@ -74,7 +74,7 @@ C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/kn
 **Clause-id collision (noted 2026-07-17, R5-07-F6):** this C7 (external-resource
 model, landed in `docs/forge-project-contract.md`) is a **different** clause from
 [[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic metrics";
-[R1-D1](../../../docs/roadmaps/R1-contract-componentry.md) resolves the numbering
+[R1-D1](../../../docs/roadmaps/archive/R1-contract-componentry.md) resolves the numbering
 on pick-up — that clause takes the next free id (e.g. C11), never C7.
 
 ## Sources

@@ -22,6 +22,7 @@ keywords:
 created_at: 2026-05-17T14:30:00.000Z
 updated_at: 2026-05-17T14:30:00.000Z
 related_themes: []
+status: historical
 ---
 
 # trafficGame — stale brain themes that contradict the codebase cause PM-phase failure

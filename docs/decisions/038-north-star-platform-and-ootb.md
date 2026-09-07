@@ -9,7 +9,7 @@ into the example package, so deleting it failed to resolve rather than degrading
 **Date:** 2026-07-17
 **References:** [docs/repo-map.md](../repo-map.md) (the three-scope contributor map this
 ADR's split rides on), [docs/product/minimum-viable-user-story.md](../product/minimum-viable-user-story.md)
-(MVUS, re-scoped to Scope 2 by this ADR), [docs/roadmaps/R5-hardening-operability.md](../roadmaps/R5-hardening-operability.md)
+(MVUS, re-scoped to Scope 2 by this ADR), [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md)
 initiative R5-07, feature F8 (the strike-list this ADR closes).
 
 ## Context
@@ -121,7 +121,7 @@ the split. This ADR is the sole origin of the two-scope mission.
 
 - [Roadmap README §8 — Adversarial-review decisions, decision 4](../roadmaps/README.md#adversarial-review-decisions-2026-07-17-same-day--second-session)
   — the operator approval this ADR records.
-- [docs/roadmaps/R5-hardening-operability.md](../roadmaps/R5-hardening-operability.md) —
+- [docs/roadmaps/archive/R5-hardening-operability.md](../roadmaps/archive/R5-hardening-operability.md) —
   initiative R5-07, feature F8 — the strike-list this ADR closes.
 - [docs/repo-map.md](../repo-map.md) — the three-scope contributor map this reframe
   promotes to north-star status.

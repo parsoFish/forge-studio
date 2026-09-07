@@ -6,6 +6,7 @@ keywords: [az-cli, token-probe, get-access-token, tenant, auth-fallback, tskip]
 related_themes: [configure-auth-index]
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## Pattern

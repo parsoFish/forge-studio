@@ -4,6 +4,7 @@ description: A round-2 PR rework satisfied the live-evidence acceptance gate by 
 category: antipattern
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

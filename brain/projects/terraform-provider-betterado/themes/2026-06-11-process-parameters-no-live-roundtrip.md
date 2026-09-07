@@ -6,6 +6,7 @@ keywords: [process-parameters, task-group-template, release-definition, round-tr
 related_themes: [ado-api-shapes-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
+status: historical
 ---
 
 # ADO ProcessParameters does not round-trip on basic release definitions

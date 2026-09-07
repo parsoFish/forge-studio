@@ -6,6 +6,7 @@ keywords: [linear-dependency-chain, crash-cascade, prerequisite-failed, over-gra
 related_themes: [cycle-recovery-index, pm-decomposition-index]
 created_at: 2026-06-11T13:42:00Z
 updated_at: 2026-06-11T13:42:00Z
+status: historical
 ---
 
 # Fully-linear WI dependency chain amplifies single crash to total failure

@@ -6,6 +6,7 @@ keywords: [docs-only-wi, quality-gate-cmd, gate-mismatch, hollow-gate, doc-verif
 related_themes: [gate-mechanics-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
+status: historical
 ---
 
 ## Antipattern

@@ -6,6 +6,7 @@ keywords: [spike-wi, scope-bleed, wi-boundary, gate-superset, already-complete, 
 related_themes: [pm-decomposition-index]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
+status: historical
 ---
 
 ## Antipattern
