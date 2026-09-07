@@ -31,6 +31,27 @@ import { fileURLToPath } from 'node:url';
 const TOKENS = ['unifier', 'ideas machine', 'forge v2', 'zep'];
 const TOKEN_RE = new RegExp(`\\b(${TOKENS.join('|')})\\b`, 'gi');
 
+/**
+ * The identifier arm. A retired term hides in two places, and word boundaries
+ * only cover one of them:
+ *
+ *   prose        "the unifier"            → TOKEN_RE
+ *   identifier   `composedUnifierGate`    → IDENT_RE
+ *
+ * M6-B found three docs asserting `composedUnifierGate` — a symbol deleted at
+ * R4-01-F4 — while this gate reported 0 hits, because `\bunifier\b` cannot
+ * match inside a camelCase word.
+ *
+ * The match REQUIRES a lowercase letter immediately before the capitalised
+ * token, which is what makes it a camelCase seam rather than a substring
+ * search. That is the whole reason `Zephyr` and `zeppelin` stay clean: they
+ * have no lowercase letter before a capital `Zep`. Losing that would make the
+ * gate cry wolf on ordinary words, and a gate people learn to ignore protects
+ * nothing.
+ */
+const IDENT_TOKENS = TOKENS.filter((t) => !t.includes(' ')).map((t) => t[0].toUpperCase() + t.slice(1));
+const IDENT_RE = new RegExp(`[A-Za-z]*[a-z](?:${IDENT_TOKENS.join('|')})[A-Za-z]*`, 'g');
+
 /** Trees that are records of decisions taken, not statements of current state. */
 const EXCLUDED_TREES = [
   'docs/decisions', // ADRs — append-only; they record the retirements themselves
@@ -127,6 +148,10 @@ function scan() {
       let m;
       while ((m = TOKEN_RE.exec(text)) !== null) {
         hits.push({ file: rel(abs), line: i + 1, token: m[1].toLowerCase(), text: raw.trim() });
+      }
+      IDENT_RE.lastIndex = 0;
+      while ((m = IDENT_RE.exec(text)) !== null) {
+        hits.push({ file: rel(abs), line: i + 1, token: m[0], text: raw.trim() });
       }
     });
   }

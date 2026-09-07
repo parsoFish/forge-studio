@@ -115,6 +115,25 @@ test('word boundaries: zeppelin, Zephyr and zeplin are NOT hits', () => {
   });
 });
 
+test('a retired term surviving inside a camelCase identifier is caught', () => {
+  // How three false claims passed a green gate in M6-B: `\bunifier\b` does not
+  // match inside `composedUnifierGate`, so docs asserted a deleted symbol while
+  // check-identity reported 0 hits. Word-boundary matching is right for prose
+  // and blind to identifiers; both must be caught.
+  withFixture({ 'docs/reference/x.md': 'the gate is `composedUnifierGate`\n' }, (r) => {
+    assert.equal(r.code, 1, `a camelCase retired term must be reported:\n${r.out}`);
+    assert.match(r.out, /composedUnifierGate/, `the hit must name the identifier:\n${r.out}`);
+  });
+});
+
+test('an ordinary word merely CONTAINING a token is still not a hit', () => {
+  // The bar the word-boundary rule protects: "zeppelin" must stay clean, or the
+  // gate trains authors to ignore it. camelCase awareness must not cost this.
+  withFixture({ 'docs/reference/y.md': 'A zeppelin over Zephyr; see zeplin\n' }, (r) => {
+    assert.equal(r.code, 0, r.out);
+  });
+});
+
 test('record-type files are excluded — but a NEW roadmap doc is still policed', () => {
   withFixture(
     {

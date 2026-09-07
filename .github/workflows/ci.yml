@@ -61,8 +61,11 @@ jobs:
       - name: ADR index check
         run: node scripts/check-adr-index.mjs
 
-      - name: Docs claims check
-        run: node scripts/check-docs-claims.mjs
+      - name: ADR two-way supersedes/amends links
+        run: node scripts/check-adr-links.mjs
+
+      - name: Docs shape check (Diataxis tree + the hand-written budget)
+        run: node scripts/check-docs-shape.mjs
 
       - name: Identity check (retired vocabulary)
         run: node scripts/check-identity.mjs
