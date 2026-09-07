@@ -215,3 +215,36 @@ shape `approveKbCleanup` was built to match.
 entry, and `tests/contract/routes-table.test.ts` proves that with a mutation —
 it rebuilds the table with the affordance entry moved above cancel and asserts
 the claim flips. A comment beside the row is not a control.
+
+## Why the architect has no generic writable affordance (operator ruling 382)
+
+`LegacySpawnableAgentId` in `bridge-studio-sessions-affordance-shell.ts` names
+the kinds the generic affordance route may spawn a turn for, and `architect` is
+absent. That is **ratified**, not an omission waiting to be filled.
+
+**It is structural, not a special case.** Nothing in the dispatch says "unless
+architect". Architect carries neither a `panel` nor a `turnSpec`, so no phase of
+it derives a writable affordance for the route to dispatch — the union and the
+missing table are two halves of one fact, and
+`tests/contract/architect-affordance-exclusion.test.ts` reds if either is
+undone (proven both ways: adding `'architect'` to the union reds one test,
+giving the architect a writable panel row reds the other two).
+
+**Why the architect should keep its own handles.** Its operator moments are not
+free-text answers. The interview renders `ArchitectQuestionForm` — structured
+options plus `data-question-freetext`, with its own `submit-answers` — and the
+verdict is the PLAN GATE, a separate surface carrying approve / revise / reject.
+Publishing the generic `data-field="session-answer"` panel alongside those would
+give one decision two writable surfaces.
+
+**What the ambiguity already cost, which is why the ruling is worth its comment.**
+Bead `forge-8vfn.6.11.21`: S2 beat 12 and S1 beat 6 were both authored against
+`session-answer` on the architect — a handle it has never published — and both
+were red for as long as the assumption stood. The stories address the
+architect's own handles; the exclusion is the reason they must.
+
+**What this does NOT say.** It is not a claim that the architect can never join
+the generic spine. ADR 043 already records architect as the deliberate
+branching-control-flow case that migrates last. If it ever does migrate, this
+section and its test are what must be changed on purpose rather than
+discovered.
