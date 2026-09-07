@@ -1,5 +1,9 @@
 # ADR 027 — Forge Studio object model: definitions as data, filesystem registries
 
+**Amended-by:** [ADR 041](./041-trigger-kind-registry.md) (2026-07-27) — the flow `triggers:` schema changes from `{on, flow}` to `{on, target: {kind, ref}, …per-kind config}`.
+
+**Amended-by:** [ADR 045](./045-operator-workspace-and-promotion.md) (2026-08-10) — the operator workspace (`_local/`, provenance by root) extends the object model with promotion into forge core.
+
 **Status:** Accepted — 2026-06-13. Implementation staged across the Studio
 milestones (M0 schemas, M2 builders). Amends ADR 003/024 (agent definition),
 ADR 018 (KB descriptor), ADR 010 (brain access becomes a per-agent field),
