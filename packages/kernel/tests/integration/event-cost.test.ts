@@ -10,8 +10,8 @@ import {
   phasesWithIterationEvents,
   isAuthoritativeCostEvent,
   sumAuthoritativeCostUsd,
-} from './event-cost.ts';
-import type { EventLogEntry, Phase } from './logging.ts';
+} from '../../event-cost.ts';
+import type { EventLogEntry, Phase } from '../../logging.ts';
 
 let seq = 0;
 function ev(

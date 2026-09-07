@@ -29,10 +29,10 @@ import {
   isAuthoritativeCostEvent,
   restatedSyntheticEventIds,
   sumAuthoritativeCostUsd,
-} from './event-cost.ts';
-import type { EventLogEntry } from './logging.ts';
+} from '../../event-cost.ts';
+import type { EventLogEntry } from '../../logging.ts';
 
-const FIXTURES = join(import.meta.dirname, 'test-fixtures', 'g2-restatement');
+const FIXTURES = join(import.meta.dirname, '..', 'test-fixtures', 'g2-restatement');
 const read = (name: string): EventLogEntry[] =>
   readFileSync(join(FIXTURES, name), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as EventLogEntry);
 

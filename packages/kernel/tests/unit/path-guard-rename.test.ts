@@ -34,7 +34,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { guardedRename, PathGuardContainmentError } from './path-guard.ts';
+import { guardedRename, PathGuardContainmentError } from '../../path-guard.ts';
 
 function withRoot(fn: (root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), 'guard-rename-'));

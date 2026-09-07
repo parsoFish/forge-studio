@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE } from './provenance.ts';
+import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE } from '../../provenance.ts';
 
 test('provenanceOfOrigin maps seed/ootb-library -> ootb, studio -> operator, and everything else -> unknown (kills: a mapping that guesses a badge from an origin it has never seen)', () => {
   const cases: Array<[string | undefined | null, string]> = [

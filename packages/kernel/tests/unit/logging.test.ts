@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLogger } from './logging.ts';
+import { createLogger } from '../../logging.ts';
 
 test('logger: round-trips cache_read_tokens + cache_creation_tokens through JSONL (S8 / C23)', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-log-cache-'));

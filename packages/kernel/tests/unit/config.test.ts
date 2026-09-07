@@ -30,7 +30,7 @@ import {
   listProjectStarters,
   describeProjectStarters,
   PROJECT_STARTERS_MANIFEST,
-} from './config.ts';
+} from '../../config.ts';
 
 test('loadConfig: missing file returns empty config (no throw)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-cfg-'));

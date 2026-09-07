@@ -17,7 +17,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { createLogger, emitDryBridgeSkip, dryBridgeAgentTurnMarker, DRY_BRIDGE_LOG_BUCKET } from './index.ts';
+import { createLogger, emitDryBridgeSkip, dryBridgeAgentTurnMarker, DRY_BRIDGE_LOG_BUCKET } from '../../index.ts';
 
 async function withTmp(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'kernel-dry-bridge-'));

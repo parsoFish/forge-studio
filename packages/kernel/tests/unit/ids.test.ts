@@ -34,7 +34,7 @@ import {
   isReservedId,
   assertSkillSlug,
   FORGE_ROOT,
-} from './ids.ts';
+} from '../../ids.ts';
 
 describe('kernel/ids — the slug guard, moved without changing WHICH shapes it rejects', () => {
   // Kills: a move that re-declared a laxer regex, or dropped the join-collapse

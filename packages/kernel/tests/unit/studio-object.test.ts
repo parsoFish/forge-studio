@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadStudioObject, readFrontmatter, type FrontmatterDoc } from './studio-object.ts';
+import { loadStudioObject, readFrontmatter, type FrontmatterDoc } from '../../studio-object.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -124,7 +124,7 @@ test('THE INVARIANT: kernel names NO field of any single kind — the loader is 
   // learns one kind's vocabulary stops being generic, and the commit that does
   // it looks harmless line by line. `runtime`/`composition`/`brainAccess` are
   // the Agent kind's; `bands`/`stations` are the Flow kind's.
-  const source = readFileSync(join(HERE, 'studio-object.ts'), 'utf8');
+  const source = readFileSync(join(HERE, '..', '..', 'studio-object.ts'), 'utf8');
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   const kindVocabulary = [
     'runtime',

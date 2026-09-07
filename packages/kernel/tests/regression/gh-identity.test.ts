@@ -21,7 +21,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ghTokenFor, assertGhOwner, ghRunnerFor } from './gh-identity.ts';
+import { ghTokenFor, assertGhOwner, ghRunnerFor } from '../../gh-identity.ts';
 
 const SECRET = 'gho_the_token_that_must_never_be_logged';
 

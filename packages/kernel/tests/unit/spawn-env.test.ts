@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { delimiter } from 'node:path';
-import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv, forgeBinOnPath } from './spawn-env.ts';
+import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv, forgeBinOnPath } from '../../spawn-env.ts';
 
 test('AGENT_ENV_ALLOWLIST: does not include ANTHROPIC_BASE_URL or any HEADROOM_* var (the recurring G8 leak)', () => {
   assert.ok(!AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_BASE_URL'), 'ANTHROPIC_BASE_URL must never be inheritable');

@@ -9,7 +9,7 @@ import { mkdtempSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { layoutDirs, defaultConfigJson, runInit, QUEUE_SUBDIRS } from './init.ts';
+import { layoutDirs, defaultConfigJson, runInit, QUEUE_SUBDIRS } from '../../init.ts';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'forge-init-'));

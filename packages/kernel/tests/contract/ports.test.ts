@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createBandRegistry, type PhaseExecutor } from './ports.ts';
+import { createBandRegistry, type PhaseExecutor } from '../../ports.ts';
 
 const ALLOWED = ['demo-band', 'review-band'] as const;
 
