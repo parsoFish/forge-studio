@@ -10,13 +10,13 @@ labels: enhancement
 <!-- Forge's capability diagram is: a visual SWE pipeline + code-enforced
      human gates + a compounding engineering brain (see README.md's "moat"
      section). Which pillar, or which of the three scopes
-     (docs/repo-map.md), does this land in? -->
+     (docs/explanation/architecture.md), does this land in? -->
 
 - [ ] Visual SWE pipeline (flow engine, phase/WI hexes, Studio UI)
 - [ ] Code-enforced gates (architect / review / reflect human moments)
 - [ ] Compounding engineering brain (`brain/`, brain-query, reflection)
 - [ ] A seam / extension point (RuntimeAdapter, KbBackend, Flow, Skill —
-      see `docs/extending-forge.md`)
+      see `docs/reference/extension-seams.md`)
 - [ ] Something else (describe below)
 
 ## Problem

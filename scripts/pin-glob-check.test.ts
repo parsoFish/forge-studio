@@ -130,3 +130,91 @@ test('AT-6.9.1-5 no manifest matched is an error, not a pass (§15.92)', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// --- forge-m86d: the listed-check was a PIPELINE under `set -o pipefail` -----
+//
+// MEASURED TWICE by lane M6-C in one session, on manifests whose files WERE
+// listed: `tests/stories/S1.story.mjs` reported unlisted once, then
+// `scripts/stories/spend.test.ts` on a later run; three immediate re-runs after
+// each were clean. Neither is the manifest's first entry, which refutes this
+// bead's original "drops the FIRST listed entry" reading.
+//
+// THE MECHANISM, and it is exact. The check was
+//
+//     printf '%s\n' "$listed" | grep -Fxq -- "$hit" || unlisted=…
+//
+// under `set -uo pipefail`. `grep -q` exits the instant it matches. If `printf`
+// is still writing when it does, `printf` takes SIGPIPE and exits 141 — and
+// pipefail makes the PIPELINE's status 141, so a MATCH is read as a MISS. The
+// first test below demonstrates that on this very shell, deterministically.
+//
+// Why it looked like a load flake: a small `listed` fits the 64 KB pipe buffer,
+// so `printf` finishes before `grep` can exit and the race is not run at all.
+// Under scheduling pressure — a full suite, a concurrent story run — `printf`
+// gets preempted after `grep` exits, and one arbitrary entry reports unlisted.
+//
+// The fix removes the pipeline (a herestring, no second process to signal) and
+// reads grep's OWN status: 0 listed, 1 unlisted, anything else ABORTS. The
+// script's header already argues that "nothing was checked" and "everything
+// checked out" must never share an exit code; this is the same argument one
+// line lower.
+
+test('m86d: the DEFECT ITSELF — `printf | grep -q` under pipefail returns 141 on an early match', () => {
+  const r = spawnSync('bash', ['-uo', 'pipefail', '-c',
+    'big=$(seq 1 200000); printf "%s\\n" "$big" | grep -Fxq -- "1"; echo $?'],
+    { encoding: 'utf8' });
+  assert.equal(r.stdout.trim(), '141',
+    'if this ever prints 0, this shell no longer reproduces the defect and the test below stops meaning anything');
+
+  const late = spawnSync('bash', ['-uo', 'pipefail', '-c',
+    'big=$(seq 1 200000); printf "%s\\n" "$big" | grep -Fxq -- "199999"; echo $?'],
+    { encoding: 'utf8' });
+  assert.equal(late.stdout.trim(), '0',
+    'and a LATE match returns 0 — which is why the failure moved between files and looked like a flake');
+});
+
+test('m86d (RED): a LISTED file matched early in a large manifest is NOT reported as drift', () => {
+  // `listed` is `sort -u`'d by the script, so the filler is named to sort AFTER
+  // the real file: `grep -q` then exits on line 1 while `printf` still has
+  // ~700 KB to write — the exact shape above. Named `zfiller` on purpose; with
+  // `filler` the target sorts LAST, the match is late, and this test passes
+  // against the defect it exists to catch.
+  const filler = Array.from({ length: 20_000 }, (_, i) => `scripts/zfiller/f${i}.mjs`);
+  const { root, repo, camp } = plant({
+    files: ['scripts/stories/beats.mjs'],
+    listed: ['scripts/stories/beats.mjs', ...filler],
+    globs: ['scripts/stories/*.mjs'],
+  });
+  try {
+    const { code, out } = run(repo, camp);
+    assert.equal(code, 0, `a listed file must never read as drift. Output: ${out}`);
+    assert.doesNotMatch(out, /DRIFT/, `Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('m86d POSITIVE CONTROL: a listed-check that cannot RUN aborts with its own code, never as drift', () => {
+  const { root, repo, camp } = plant({
+    files: ['scripts/stories/beats.mjs'],
+    listed: ['scripts/stories/beats.mjs'],
+    globs: ['scripts/stories/*.mjs'],
+  });
+  try {
+    // A `grep` that exits 2 — the errno a real fork/exec failure produces — put
+    // in front of the real one on PATH.
+    const bin = join(root, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'grep'), '#!/bin/sh\nexit 2\n', { mode: 0o755 });
+    const r = spawnSync('bash', [CHECK, repo, camp, 'M5-B'], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
+    });
+    const out = `${r.stdout}${r.stderr}`;
+    assert.equal(r.status, 4, `a check that could not run must have its OWN exit code, not 1. Output: ${out}`);
+    assert.doesNotMatch(out, /DRIFT/, `it must not invent a drift finding out of its own failure. Output: ${out}`);
+    assert.match(out, /could not be run/i, `and it must say so. Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

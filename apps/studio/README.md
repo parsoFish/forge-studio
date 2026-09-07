@@ -18,4 +18,4 @@ is documented in [CLAUDE.md](../CLAUDE.md).
 | [`orchestrator/studio/`](../orchestrator/studio/) | 1 | The Studio **engine** code. |
 | **`forge-ui/`** (here) | 1 | **Forge Studio** — the operator UI. |
 
-See [docs/repo-map.md](../docs/repo-map.md).
+See [docs/explanation/architecture.md](../docs/explanation/architecture.md).

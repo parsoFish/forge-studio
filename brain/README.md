@@ -16,4 +16,4 @@ cycle's Brain 3 for supplemental project context). See
 [ADR 010](../docs/decisions/010-brain-first.md) +
 [ADR 018](../docs/decisions/018-three-brain-model.md).
 
-See [docs/repo-map.md](../docs/repo-map.md).
+See [docs/explanation/architecture.md](../docs/explanation/architecture.md).

@@ -173,7 +173,7 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run \`forge studio\` and drive everything from the browser.
 
-For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.`,
+For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see docs/decisions/.`,
   );
 }
 

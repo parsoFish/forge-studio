@@ -43,4 +43,4 @@ Six real-money `verify:cycle` runs. The dev agent is **non-deterministic**: M3 +
 
 ## Endpoint
 
-Forge is now a modular agent-flow platform: every load-bearing object (agent, flow, project, KB, runtime) is data + a thin layer over a proven mechanism. The one hardcoded cycle became seed data. Remaining ask-first drop-in: a real second SDK adapter (the framework + conformance suite are ready). Known latent gaps documented in [`docs/known-gaps.md`](../../../docs/known-gaps.md).
+Forge is now a modular agent-flow platform: every load-bearing object (agent, flow, project, KB, runtime) is data + a thin layer over a proven mechanism. The one hardcoded cycle became seed data. Remaining ask-first drop-in: a real second SDK adapter (the framework + conformance suite are ready). Known latent gaps are tracked as beads rather than in a docs backlog.

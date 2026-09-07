@@ -119,8 +119,6 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // which is why the attribute is always rendered rather than conditionally
   // added — an absent key and an unstarted session must not be one DOM.
   const [mintedSessionId, setMintedSessionId] = useState<string>('');
-  /** The project the minted session belongs to — the anchor's own `?project=`. */
-  const [mintedProject, setMintedProject] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
@@ -328,7 +326,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         // {project} (onboarding-agent is strategy:fixed — no tier on the
         // wire; the picker renders its read-only chip).
         case 'onboarding': {
-          const r = await startOnboardingSession(project.trim());
+          const r = await startOnboardingSession(project.trim(), tier);
           result = r.ok ? { ok: true, sessionId: r.sessionId, project: r.project } : { ok: false, error: r.error };
           break;
         }
@@ -346,7 +344,6 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       // died on exactly that ("no real-nav path ... no link points at it").
       // No `flushSync` is needed now that nothing navigates on the next line.
       setMintedSessionId(result.sessionId);
-      setMintedProject(sessionProject);
     } finally {
       setSubmitting(false);
     }
@@ -407,7 +404,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       dataPage="session-kickoff"
       ready={ready}
       title={sessionKindTitle(kind)}
-      mainData={kickoffMainData(kind, mintedSessionId)}
+      mainData={kickoffMainData(kind, mintedSessionId, capability?.runtimeSdks?.[0] ?? '')}
     >
       {/* W7-B1 (sessions-kinds-05): plain-English orientation first, the
           on-disk provenance demoted to one line, and a way back out —
@@ -559,14 +556,23 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         </span>
       )}
       {/* Ruling 396 — the mint's own destination, as a REAL anchor. `href` IS
-          the session route and `data-action` sits on the `<a>`: those are the
-          only shapes a nav resolution can follow (a story runner reads
-          `[data-nav][href]` or `a[href]`; so does a keyboard, and so does
+          the session route, EXACTLY, and `data-action` sits on the `<a>`:
+          those are the only shapes a nav resolution can follow (a story runner
+          matches `[data-nav][href="<route>"]` or `a[href="<route>"]` —
+          `scripts/stories/beats.mjs` — and so does a keyboard, and so does
           "open in a new tab"). A button that pushed would leave every one of
-          them with nowhere to go, which is what pressing Start used to do. */}
+          them with nowhere to go, which is what pressing Start used to do.
+
+          NO QUERY STRING, and S9 run 2 is why: the href carried
+          `?project=<p>`, which made the match fail against the bare route and
+          left the anchor visible to a human and invisible to everything else.
+          It was redundant besides — the session page prefers the read route's
+          own project and falls back to the query only until that lands
+          (`summary?.data.project ?? queryProject ?? shellProject`), so the URL
+          never needed to carry what the route already resolves. */}
       {mintedSessionId !== '' && (
         <Link
-          href={`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(mintedSessionId)}?project=${encodeURIComponent(mintedProject)}`}
+          href={`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(mintedSessionId)}`}
           data-action="open-minted-session"
           style={{ marginLeft: 10, fontSize: 12.5, color: 'var(--ember)', textDecoration: 'none' }}
         >

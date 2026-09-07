@@ -514,7 +514,7 @@ seams (Zep, graphify) and stale framing (forge-v2).
 - **`projects/mdtoc`** — a neutral, creds-free reference project (the default
   `verify:cycle` ground; betterado remains the live tier).
 - **Getting-started guide + onboarding scaffolding** —
-  [`docs/getting-started.md`](docs/getting-started.md),
+  [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md),
   [`studio/starters/project.json.example`](studio/starters/project.json.example),
   and the per-project `secrets.env` convention.
 - **Runtime-adapter `runtime.sdk` threading** — the resolved SDK id flows through
@@ -600,7 +600,7 @@ real data-table dispatch and a second, gated implementation behind it).
 ### Licensing
 
 - Forge is distributed under **AGPL-3.0-or-later**. See
-  [docs/licensing-and-dependencies.md](docs/licensing-and-dependencies.md) for what
+  [docs/explanation/licensing.md](docs/explanation/licensing.md) for what
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 

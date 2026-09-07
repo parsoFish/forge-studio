@@ -181,7 +181,7 @@ test('W8-C3 WI-1: configHealth is DERIVED, never stored — it agrees with the c
 //
 // RED at branch base: the roster carries no notion of a skill living inside
 // the project. The forge↔project contract puts one there by name
-// (`.forge/skills/demo-design/SKILL.md`, docs/forge-project-contract.md:445),
+// (`.forge/skills/demo-design/SKILL.md`, docs/reference/project-contract.md:445),
 // but `GET /api/studio/catalog` only ever lists forge-wide skills, so
 // `SkillsBind`'s picker is forge-wide only: a project-local skill that is
 // unbound can NEVER be re-bound (projects-06), and a bound id the picker

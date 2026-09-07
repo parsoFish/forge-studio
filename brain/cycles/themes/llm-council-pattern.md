@@ -35,7 +35,7 @@ The dependency-graph critic specifically watches for hidden dependencies that wo
 
 ## Sources
 
-- [`docs/phases/architect.md`](../../../docs/phases/architect.md) — phase doc references the pattern.
+- [`docs/explanation/example-factory.md`](../../../docs/explanation/example-factory.md) — phase doc references the pattern.
 - [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) — narrative mention.
 
 ## See also

@@ -6,11 +6,11 @@ rules a guard must satisfy, and the ratchet that keeps the enumeration true.
 
 The per-sink enumeration itself is the companion reference page,
 [`request-path-sinks.md`](../reference/request-path-sinks.md): every read and
-write in `cli/` and `orchestrator/` whose path derives from request data,
+write in `packages/` and `apps/` whose path derives from request data,
 classified `guarded` / `unguarded` / `accidentally-safe`. **When the ratchet
 tells you to add a row, that is the page it means.**
 
-**Why this document exists.** Between 2026-07 and 2026-08 the same defect was found ten separate times across six initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
+**Why this document exists.** Between 2026-07 and 2026-08 the same defect was found twelve times across seven initiatives, always opportunistically: a lexical `resolve(base, id).startsWith(base + sep)` containment check on an *unresolved* path. That shape is worthless — `resolve()`/`join()` normalise `..` before the comparison ever runs, and a symlink's own on-disk location is lexically inside the allowed root even when it points somewhere else entirely. Ten instances found by luck means discovery was luck-driven and the class was open-ended. This table closes it: the set of request-derived path sites is now enumerated, so the question "have we found them all?" has an answer that is checked rather than hoped.
 
 The guard those fixes converge on is [`packages/kernel/path-guard.ts`](../../packages/kernel/path-guard.ts). Read its module docstring before using this table — in particular the **CONTRACT** section, which defines the *root-folding* bypass, and the escape-shape catalogue this document classifies against.
 
@@ -59,11 +59,11 @@ half-created project on disk while the API said 400.
 **A row's marker certifies the CLAIM THAT EARNED IT, not every sentence in the row.** Rows here are long, and a `[read]`/`[exec]` tag sits at row granularity while the prose makes several independent claims. SEC-03 round 4 found a failure-behaviour claim that survived the first retroactive sweep for exactly this reason: it sat inside a row whose `[exec]` tag had been earned by a *different* claim, so a per-row-tag sweep never looked at it. **Failure-behaviour claims are therefore verified PER CLAIM**, and a sweep that filters on row tags is not a sweep.
 
 Applied retroactively: the `[read]` rows below that make a failure-behaviour
-claim are **`orchestrator/studio/hook-library.ts:164-198`** (rejects literal and
+claim are **`packages/library/studio/hook-library.ts:271-300`** (rejects literal and
 percent-decoded traversal), the **`INIT_ID_RE`/`SAFE_CYCLE_ID_RE` charset rows**
 (`enqueue-flow-run`/`enqueue-plan-run`/`bridge-studio-runs`,
-`review-comments.ts`), **`apps/forge/bridge-studio-writes.ts:199-201`** (404 before any
-fs call), and **`packages/knowledge/bridge-studio-kbs.ts:788-794`** (`resolve(file) !== file`
+`review-comments.ts`), **`packages/library/bridge-studio-community-crud.ts:307-323`** (404 before any
+write), and **`packages/knowledge/bridge-studio-kb-routes-maintenance.ts:383-388`** (`resolve(file) !== file`
 rejects). Each states a *rejecting input exists*, which is the classification
 bar, but **none has had its caller's handling of that rejection executed** — so
 the rejection is `[read]`-verified and the FAILURE HANDLING around it is
@@ -102,7 +102,7 @@ not:
    these do not derive the value from request data at all, so there is nothing to
    validate against `forgeRoot`. The complete set, as of SEC-03's entry-point sweep
    (previously this list named only the first two):
-   - `orchestrator/scheduler.ts:749`'s
+   - `packages/flows/scheduler.ts:748`'s
      `annotateManifest(manifestPath, { worktree_path: wtHandle.path })`, a raw
      frontmatter regex edit that bypasses `writeManifest` entirely. Safe because
      `wtHandle.path` is `resolve(worktreesRoot, initiativeId)` — computed by forge
@@ -200,10 +200,10 @@ regression; `--write` regenerates the baseline and still requires a human to loo
 the diff before it is committed.
 
 **What it covers.** It forces a stop-and-look the moment a NEW request-derived-path
-*shape* appears anywhere reachable from a bridge HTTP route in `cli/`/`orchestrator/`
+*shape* appears anywhere reachable from a bridge HTTP route in `packages/`/`apps/`
 — a new file entering the reachable set, or a new/growing sink call inside a file
 already in it. That is precisely the discovery gap this document's own introduction
-names: "the same defect was found ten separate times across six initiatives, always
+names: "the same defect was found twelve times across seven initiatives, always
 opportunistically... discovery was luck-driven."
 
 **What it provably cannot do — stated here in substance because an audit or lint that
@@ -227,14 +227,14 @@ explicitly, and states it first):**
 - **Only UNQUALIFIED calls are counted** (`(?<![.\w$])NAME\(`) — a receiver-qualified
   call (`fs.writeFileSync(...)`, any namespace import) is invisible. This is a
   deliberate, measured trade documented in the script's own header (every sink call in
-  `cli/`+`orchestrator/` today is a named import called bare; counting `.`-qualified
+  `packages/`+`apps/` today is a named import called bare; counting `.`-qualified
   calls too would flag ordinary `regex.exec()` calls and train an author to blind
   `--write` past the noise — the failure mode that destroys a ratchet's value).
 - **The comment filter is line-based, not a real parser**, and string literals are
   never parsed at all — a sink name appearing inside a string can be over-counted, but
   reachability itself (which files get walked) is exact for the import forms followed.
 - **Reachability only follows relative static/dynamic imports with string-literal
-  specifiers**, restricted to files under `cli/`/`orchestrator/`. Bare-specifier (npm
+  specifiers**, restricted to files under `packages/`/`apps/`. Bare-specifier (npm
   package) imports are never followed.
 
 **Tying this to the Standing rule below.** Until SEC-03, the obligation to guard a new

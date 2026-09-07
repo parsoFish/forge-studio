@@ -63,9 +63,10 @@ test('selector:kb previews the kb-project placeholder', () => {
 // ---------------------------------------------------------------------------
 
 test('kickoffMainData carries the kind and the minted session id', () => {
-  expect(kickoffMainData('authoring', 's-123')).toEqual({
+  expect(kickoffMainData('authoring', 's-123', 'claude')).toEqual({
     'data-kickoff-kind': 'authoring',
     'data-minted-session-id': 's-123',
+    'data-sdk': 'claude',
   });
 });
 
@@ -73,7 +74,7 @@ test('the minted-id key is ALWAYS present — empty means "started nothing", not
   // Kills a conditional spread. An attribute that appears only on success is
   // indistinguishable from a page that never published one, so an observer
   // cannot tell "no session yet" from "this build lacks the fix".
-  const before = kickoffMainData('authoring', '');
+  const before = kickoffMainData('authoring', '', 'claude');
   expect(Object.hasOwn(before, 'data-minted-session-id')).toBe(true);
   expect(before['data-minted-session-id']).toBe('');
 });
@@ -81,6 +82,6 @@ test('the minted-id key is ALWAYS present — empty means "started nothing", not
 test('the kind is unchanged by the addition', () => {
   // The page shipped `{'data-kickoff-kind': kind}`; that contract is untouched.
   for (const k of ['authoring', 'onboarding', 'demo', 'kb-cleanup']) {
-    expect(kickoffMainData(k, '')['data-kickoff-kind']).toBe(k);
+    expect(kickoffMainData(k, '', 'claude')['data-kickoff-kind']).toBe(k);
   }
 });

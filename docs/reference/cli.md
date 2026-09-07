@@ -28,12 +28,12 @@ recovery (cycle / enqueue / metrics / review / report / log / requeue) now live 
 UI + the bridge API (POST /api/runs, /api/verdict, /api/recovery/:id, /api/initiatives).
 Run `forge studio` and drive everything from the browser.
 
-For phase-implementation guidance see docs/phases/. For decisions see docs/decisions/.
+For how the develop factory's stations work see docs/explanation/example-factory.md. For decisions see docs/decisions/.
 ```
 
 ## Other verbs (daemon, scaffolding, phase entry points)
 
-Beyond the operator surface above, the CLI dispatcher (`orchestrator/cli.ts`) also
+Beyond the operator surface above, the CLI dispatcher (`apps/forge/cli.ts`) also
 resolves these. They are used by the scheduler, in CI/headless runs, and for manual
 phase invocation — not day-to-day operator commands.
 
@@ -46,7 +46,7 @@ phase invocation — not day-to-day operator commands.
 | `forge architect` | Architect-phase entry point (the interactive ideation runner). |
 | `forge instructions` | Run the `instructions-creator` skill to author a project's `AGENTS.md`. |
 | `forge demo-builder` | Run the `demo-builder` skill to author a project's demo-generation machinery. |
-| `forge demo` | Demo-phase entry point (author/inspect a cycle's demo bundle). |
+| `forge demo` | Integrate-phase entry point (author/inspect a cycle's demo bundle). |
 | `forge project-brain` | Run the `project-brain-builder` skill to author a managed project's initial brain. |
 
 Retired verbs (`cycle`, `enqueue`, `metrics`, `review`, `report`, `log`, `requeue`,

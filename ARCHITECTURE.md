@@ -1,8 +1,8 @@
 # Architecture
 
 > This document is the **narrative / intended** architecture. The
-> **canonical current architecture** is captured in [`docs/phases/`](./docs/phases/),
-> [`docs/decisions/`](./docs/decisions/), and [`docs/forge-project-contract.md`](./docs/forge-project-contract.md).
+> **canonical current architecture** is captured in [`docs/explanation/architecture.md`](./docs/explanation/architecture.md),
+> [`docs/decisions/`](./docs/decisions/), and [`docs/reference/project-contract.md`](./docs/reference/project-contract.md).
 > The 2026-05-17 as-built snapshot and the pre-simplification refocus-architecture design docs
 > were archived prior art (removed 2026-06-07 — see git history). ADRs in [`docs/decisions/`](./docs/decisions/) record load-bearing decisions.
 >
@@ -48,7 +48,7 @@ work items.
 
 > **High-level view (refreshed 2026-06-14 — M7/M8).** The diagram below reflects
 > the as-built Studio-as-one-product and three-seam architecture. The structural
-> reference is [`docs/phases/`](./docs/phases/) and [`docs/decisions/`](./docs/decisions/).
+> reference is [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) and [`docs/decisions/`](./docs/decisions/).
 
 ```mermaid
 flowchart TB

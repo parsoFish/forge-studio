@@ -110,7 +110,7 @@ export type ProjectWithMeta = {
   configHealth: ProjectConfigHealth;
   /** W8-C3 (projects-06 / projects-43): the ids of skills that live INSIDE this
    *  project (`.forge/skills/<id>/SKILL.md` — the shape the forge<->project
-   *  contract already names, docs/forge-project-contract.md:445). Derived from
+   *  contract already names, docs/reference/project-contract.md:445). Derived from
    *  disk on every read, never stored. `[]` means "we looked and found none",
    *  which is a different fact from an absent field. */
   localSkills: string[];

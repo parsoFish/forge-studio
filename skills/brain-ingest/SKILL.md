@@ -21,7 +21,7 @@ disallowed-tools: [Task, Agent]
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (haiku-tier
   # ingest turns are cheap; $2 is generous headroom). Operator-overridable
-  # per kickoff. See docs/agent-cost-ceilings.md.
+  # per kickoff. See docs/reference/agent-cost-ceilings.md.
   maxBudgetUsd: 2
 ---
 

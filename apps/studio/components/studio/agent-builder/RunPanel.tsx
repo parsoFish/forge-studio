@@ -193,6 +193,24 @@ type Props = {
    *  it — an absent prop here would silently understate an agent's wiring,
    *  so it must not become a normal way to mount this panel. */
   standingTriggers?: StandingTrigger[];
+  /** Ruling 401 (M6) — called with the minted run id the moment a standalone
+   *  dispatch RESOLVES, so the parent page can re-read the agent's own run
+   *  history. Measured on story S5 beat 12 (`data-ledger-count: expected "1",
+   *  got "0"`): the dispatch fired, the panel said `running`, and the agent's
+   *  history stayed empty until a route change, because `app/agents/[id]/
+   *  page.tsx`'s history effect is keyed on the SLUG and a dispatch does not
+   *  change the slug.
+   *
+   *  The row is already on disk when this fires — `packages/agents/
+   *  bridge-agents-slug.ts:466-479` emits `agent-run.dispatched` through the
+   *  synchronous `appendFileSync` in `packages/kernel/logging.ts:164` BEFORE
+   *  the response at `:543` hands back the runId — so the parent re-reads a
+   *  row that exists rather than rendering an optimistic one. This panel
+   *  never fabricates a row; it reports a fact and lets the page re-read.
+   *
+   *  Optional so the pinned `lib/run-panel-render.test.ts` can keep mounting
+   *  this component without it. */
+  onRunDispatched?: (runId: string) => void;
 };
 
 export function RunPanel({
@@ -208,6 +226,7 @@ export function RunPanel({
   standaloneBlockedReason = null,
   unreadyConnectionIds = [],
   standingTriggers = [],
+  onRunDispatched,
 }: Props) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
@@ -452,8 +471,10 @@ export function RunPanel({
       if (ceilingForDispatch !== undefined) opts.costCeilingUsd = ceilingForDispatch;
       if (materials.length > 0) opts.materials = materials;
       const r = await dispatchAgentRun(slug, Object.keys(opts).length ? opts : undefined);
-      if (r.ok && r.runId) setRunId(r.runId);
-      else setError(r.error ?? 'dispatch failed');
+      if (r.ok && r.runId) {
+        setRunId(r.runId);
+        onRunDispatched?.(r.runId);
+      } else setError(r.error ?? 'dispatch failed');
     } finally {
       setDispatching(false);
     }

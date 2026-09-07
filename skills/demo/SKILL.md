@@ -298,7 +298,7 @@ attempted best-effort.
 
 The typed `demoProcess` descriptor (`.forge/project.json`) is the single shared
 declaration of what a demo must capture/verify/present — but it has two married
-faces, not two competing contracts (`docs/forge-project-contract.md` §DEMO).
+faces, not two competing contracts (`docs/reference/project-contract.md` §DEMO).
 **Face A** is the executed demo this skill defines: `demo.json`, composed at
 cycle time by the demo agent (`skills/demo-agent`, R4-07). **Face B** is the demo-builder's per-initiative
 HTML skill (`skills/demo-builder`, R1-03-F2): save-time authoring/preview of

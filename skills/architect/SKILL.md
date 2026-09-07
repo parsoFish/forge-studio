@@ -21,7 +21,7 @@ budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling — the most
   # expensive planner (sonnet; real flow-node runs have reached ~$4.79).
   # Enforced on the generic dispatch path (orchestrator/run-agent.ts);
-  # operator-overridable per kickoff. See docs/agent-cost-ceilings.md.
+  # operator-overridable per kickoff. See docs/reference/agent-cost-ceilings.md.
   maxBudgetUsd: 10
 ---
 

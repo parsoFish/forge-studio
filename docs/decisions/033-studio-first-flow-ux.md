@@ -4,7 +4,7 @@
 
 **Relates to:** ADR-027 (studio object model), ADR-028 (flow engine), ADR-031
 (Studio is the product). Realises the install-to-first-flow north star;
-campaign plan in [`../reference/studio-first-flow-ux.md`](../reference/studio-first-flow-ux.md).
+campaign plan recorded in this ADR.
 
 ## Context
 
@@ -37,7 +37,7 @@ provable results at each step.
    a project by writing its `.forge/project.json` (the project is then
    auto-discovered from disk — there is no registry file) and must satisfy the
    same invariants the `forge-onboard-project` skill enforces
-   (`docs/forge-project-contract.md`). The validation is **reused, not forked** —
+   (`docs/reference/project-contract.md`). The validation is **reused, not forked** —
    advanced contract clauses (C7 live-tier, standing ACs, ci-gate) live behind
    "Advanced".
 

@@ -46,7 +46,7 @@ $ forge brain lint
 
 ## Scope
 
-<!-- Which of the three scopes does this touch? See docs/repo-map.md -->
+<!-- Which of the three scopes does this touch? See docs/explanation/architecture.md -->
 
 - [ ] Scope 1 — framework/orchestration (`orchestrator/`, `cli/`, `loops/`, `forge-ui/`)
 - [ ] Scope 2 — cycles/agents/flows (`skills/`, `studio/`, `brain/forge-dev/`, `brain/cycles/`)

@@ -115,7 +115,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
       if (northStar.trim()) inputs.northStar = northStar.trim();
       if (gateCommand.trim()) inputs.gateCommand = gateCommand.trim();
       if (constraints.trim()) inputs.constraints = constraints.trim();
-      const r = await startOnboardingSession(projectId, Object.keys(inputs).length > 0 ? inputs : undefined);
+      const r = await startOnboardingSession(projectId, undefined, Object.keys(inputs).length > 0 ? inputs : undefined);
       if (r.ok && r.runId) {
         setRunId(r.runId);
         setSessionId(r.sessionId ?? null);

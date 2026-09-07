@@ -5,7 +5,7 @@
 > **example develop factory** — forge's shipped, out-of-the-box agents and flows — as **one user
 > journey**. It is the timeless grounding every **Scope-2 (OOTB)** component is judged
 > against. It does not describe Scope 1 (the modular platform/engine/seams that runs
-> this journey, or any other agentic flow) — see [docs/repo-map.md](../repo-map.md).
+> this journey, or any other agentic flow) — see [docs/explanation/architecture.md](../explanation/architecture.md).
 
 Every **Scope-2 (OOTB)** component is judged against this journey:
 
