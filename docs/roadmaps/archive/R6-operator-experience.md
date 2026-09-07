@@ -192,7 +192,7 @@ from that run's own `events.jsonl` through the SAME extracted deriver
 `GET /api/agents/runs/:runId` uses, so the two cannot drift), and sessions
 (that session's own `status.json` phase, cost from its own execution log or
 honestly absent). Per-row `data-*` contract in
-[`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md).
+[`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md).
 
 **Why a new route at all, since R6-B7 needed none:** measured — `listRuns`
 walks `_queue/` only, so standalone dispatches are invisible to `/api/runs`
@@ -248,7 +248,7 @@ The `/flows/[id]` monitor tab carries a per-flow **history ledger** in the
 shared vocabulary `when · what · outcome-narrative · status · cost`
 (`forge-ui/components/studio/HistoryLedger.tsx`,
 `[data-section="history-ledger"]`; per-row contract in
-[`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md)). Rows are
+[`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md)). Rows are
 **derived, never stored** (ADR-008) and need **no new fetch** — the page
 already holds every run for the flow, and `listRuns` walks all six
 `_queue/` states uncapped, so archived runs are already in hand. Each row is a
@@ -668,7 +668,7 @@ through the live `aggregateRun` rather than invented.
   fewer round-trips).
 - **Out of scope:** the `derived-never-stored-run-model` posture itself —
   memoizing the single derivation keyed on input mtimes is NOT a second
-  derivation ([ADR 044](../decisions/044-read-path-memoization.md) is the
+  derivation ([ADR 044](../../decisions/044-read-path-memoization.md) is the
   amendment that rules on this).
 
 ### R6-10 Pending platform changes — one derivation over every Studio-written tracked root
@@ -679,7 +679,7 @@ through the live `aggregateRun` rather than invented.
   show, once operator authoring stops dirtying the repo)*, *R3-09 (soft — gives
   its rows somewhere to go)*. Neither blocks it; this is landable first.
 - **Depended on by:** —
-- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C.
+- **Context:** [ADR 045](../../decisions/045-operator-workspace-and-promotion.md) §C.
   There is exactly **one** pending-change signal in all of Studio and it is
   hard-coded to a single file: `communityIndexMeta`
   (`packages/library/bridge-studio-community.ts`) runs a literal `git status --porcelain --
@@ -719,7 +719,7 @@ through the live `aggregateRun` rather than invented.
   - **R6-10-F3 — Surfaced where Studio objects live, not only on `/community`.**
     The pending state appears on the library surfaces the affected objects belong
     to, with the usual `data-*` contract so the journeys can drive it (see
-    [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md)). The
+    [`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md)). The
     per-root detail is inspectable — the operator can see *which* files changed
     before deciding anything. Acceptance: a dirty hook shows pending on `/hooks`
     and on that hook's detail page; the affected paths are listed, not merely
@@ -735,7 +735,7 @@ through the live `aggregateRun` rather than invented.
 - **Out of scope:** committing, staging or reverting anything (R3-09 owns the only
   write path, and it ends at a PR). Changing where Studio writes (R3-08). Moving
   `brain/` out of the forge repo —
-  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) stands, which is
+  [ADR 035](../../decisions/035-forge-owned-central-artifacts.md) stands, which is
   exactly why `brain/` writes need this surface. Managed-project pending state,
   which already exists via `hasPendingStudioChanges`.
 
@@ -859,7 +859,7 @@ R4-11-F4 attention strip during real multi-project operation.
   deferred)** — perf was unowned before wave 6; the plan's coverage pass
   flagged it and R6 is its natural home.
 - 2026-08-23 — **R6-10 minted** (planned) from
-  [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C, the wave-8
+  [ADR 045](../../decisions/045-operator-workspace-and-promotion.md) §C, the wave-8
   ON-2 platform-round-trip design spike. Generalizes the one hard-coded
   single-path dirty check in Studio (`communityIndexMeta` →
   `meta.registryDirty`, `packages/library/bridge-studio-community.ts`) into one derivation

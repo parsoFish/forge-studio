@@ -10,9 +10,9 @@
   *preserve* its sole-interaction-point rule, and it explicitly re-ratifies the no-auto-commit policy
   of `docs/community-registry-writes.md`. Leaves [ADR 035](./035-forge-owned-central-artifacts.md)
   (Brain 3 lives in the forge repo) intact and in force: `brain/` does **not** move.
-- **Related roadmap:** `docs/roadmaps/R3-library-componentry.md` — R3-08 (the operator workspace root
+- **Related roadmap:** `docs/roadmaps/archive/R3-library-componentry.md` — R3-08 (the operator workspace root
   and provenance by root) and R3-09 (promotion into forge core);
-  `docs/roadmaps/R6-operator-experience.md` — R6-10 (the pending-platform-changes surface).
+  `docs/roadmaps/archive/R6-operator-experience.md` — R6-10 (the pending-platform-changes surface).
 
 ## Context
 
@@ -335,7 +335,7 @@ re-scoped to that, and re-pointed at R3-09.
 source tree, so `git pull` on a forge checkout with a week of Studio authoring in it is a merge
 conflict against the operator's own work. After §A the operator's authoring lives in a gitignored
 root and a forge upgrade is an ordinary fast-forward. That is a precondition for anything
-`docs/roadmaps/R8-distribution-release.md` R8-01 wants to call packaging, and it is the strongest
+`docs/roadmaps/archive/R8-distribution-release.md` R8-01 wants to call packaging, and it is the strongest
 argument for doing the workspace half first.
 
 **The honest cost: two roots is two places to look.** Every "where does this object live?" question

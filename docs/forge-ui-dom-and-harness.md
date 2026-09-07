@@ -4461,8 +4461,8 @@ is what this contract reads — but it cannot be the only distinguisher.
       stand-in there, grounded in
       forge's own real, already-committed review findings, never presented
       as a real agent run. Docs/roadmap pointer:
-      `docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
-      `docs/roadmaps/R4-ootb-suite.md` R4-19. `kb-maintain`'s SEPARATE
+      `docs/roadmaps/archive/R1-contract-componentry.md` R1-06-F2,
+      `docs/roadmaps/archive/R4-ootb-suite.md` R4-19. `kb-maintain`'s SEPARATE
       multi-turn "maintenance agent" narration has since shipped for real, as
       its own session kind — `kb-cleanup` (see "KB maintenance panel" below
       and "Cleanup plan" above) — never folded into Consolidate itself, which

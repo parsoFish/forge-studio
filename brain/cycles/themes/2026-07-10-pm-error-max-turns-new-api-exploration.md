@@ -4,6 +4,7 @@ description: PM first run for INIT-2026-07-01-new-api-test hit error_max_turns b
 category: antipattern
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
+enforced_by: packages/factory/pm-turn-economy.test.ts
 ---
 
 ## Pattern

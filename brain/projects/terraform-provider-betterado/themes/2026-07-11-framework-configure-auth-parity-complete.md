@@ -6,6 +6,7 @@ keywords: [configure, auth-parity, pat, cli, msi, oidc, client-secret, cert, env
 related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## What changed (INIT-2026-07-10-framework-auth-parity, PR #69)

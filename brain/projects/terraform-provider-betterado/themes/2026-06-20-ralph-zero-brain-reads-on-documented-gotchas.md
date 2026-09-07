@@ -6,6 +6,7 @@ keywords: [brainreads, profile.md, gotchas, re-derivation, artifact-filtering, s
 related_themes: [ralph-brain-reads-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # Ralph zero brain reads — documented gotchas re-derived from scratch

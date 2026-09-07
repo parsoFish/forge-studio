@@ -9,9 +9,13 @@
  * the split that made this file necessary was a size cap, not a difference of
  * intent (ruling 150 — split by concern, never baseline).
  *
- * Named `*.test.ts` deliberately: `check-owner`'s `NOT_PRODUCTION` rule keys on
- * that suffix, so the harness is test code by the repo's own definition rather
- * than by a comment. It declares no tests, and a test file with none passes.
+ * It lives under `test-fixtures/` — the other half of `check-owner`'s
+ * `NOT_PRODUCTION` rule — so the harness is test code by the repo's own
+ * definition rather than by a comment, WITHOUT being named `*.test.ts`. It was
+ * named `*.test.ts` until M6-C: it declares no tests, and `node --test` counts
+ * a test file with none as one passing test, so it inflated the suite's count
+ * with a result nothing produced (bead forge-8vfn.7.1; check-test-discovery
+ * now reds that shape).
  */
 
 import assert from 'node:assert/strict';
@@ -20,7 +24,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runAdversarialReview, type AdversarialReviewResult } from './adversarial-review.ts';
+import { runAdversarialReview, type AdversarialReviewResult } from '../phases/adversarial-review.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';

@@ -5,7 +5,7 @@
 > roster (onboarding, creation, architect, plan, develop, demo, adversarial
 > review, reflect), assemble the develop-cycle OOTB flow, and give the roadmap
 > screen the states and attention surface the suite needs. Scope boundary: this
-> is the **shipping of Scope-2 content** ([docs/repo-map.md](../repo-map.md)) —
+> is the **shipping of Scope-2 content** ([docs/repo-map.md](../../repo-map.md)) —
 > agents/flows as *data* forge ships OOTB, built on Scope-1 componentry (R2),
 > never assuming a particular managed project. What operators author inside
 > Studio at runtime is out of scope (index §7).
@@ -254,7 +254,7 @@ added is the roadmap draft's **dependency edges** and a **shared** DAG renderer:
   start-a-session path (`NewIdeaBox` → `POST /api/architect/start` →
   `/sessions/architect/<sid>`).
 - **Contract + journeys:** `data-*` rows in
-  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beats
+  [`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md); beats
   `flows-run/flows-run-roadmap-dag` (real manifests, real route, real DOM,
   including an out-of-draft edge) and the `roadmap/roadmap-tab` entry
   assertions.
@@ -301,7 +301,7 @@ choosable:
   naming a missing snapshot fails the lock loudly rather than silently locking
   the latest.
 - **Contract + journey:** `data-*` rows in
-  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beats
+  [`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md); beats
   `demo-builder/demo-builder-generate` + `demo-builder/demo-builder-lock`.
 
 ### R4-B16 Onboarding as a staged session with a contract build-out (implemented)
@@ -340,7 +340,7 @@ contract produced which artifact.
 - **Presence, never a verdict.** A row says an artifact exists and names where it
   came from; it never says a clause passes. `forge preflight`'s exit code remains
   the only authoritative contract-green signal (the rule comes from
-  [`brain/forge-dev/themes/forge-project-onboarding-contract.md`](../../brain/forge-dev/themes/forge-project-onboarding-contract.md)).
+  [`brain/forge-dev/themes/forge-project-onboarding-contract.md`](../../../brain/forge-dev/themes/forge-project-onboarding-contract.md)).
   The roadmap row therefore also reports whether `brain/projects/<id>/profile.md`
   exists — C4 requires it alongside `roadmap.md` — as a **fact in the row**,
   rather than folding a hard-clause verdict into a presence signal or hiding the
@@ -366,7 +366,7 @@ contract produced which artifact.
   initiative's "the panel is a VIEW of the artifacts, so it cannot drift"
   requirement is satisfiable without duplicating any parsing.
 - **Contract + journey:** `data-*` rows in
-  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beat
+  [`docs/forge-ui-dom-and-harness.md`](../../forge-ui-dom-and-harness.md); beat
   `stand-up-onboard/su-onboard-session`.
 
 ### R4-B17 The onboard-project flow and its orchestrator-owned preflight gate (implemented)
@@ -1945,7 +1945,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 
 ### R4-22 Generic interactive-surface primitive
 
-- **Status:** implemented (bridge complete; F4 re-homed to [R4-23](#r4-23-runner-prompt-re-authoring-onto-skillmd)) — **F1 + F2 implemented** (2026-08-10, PR #117: `turnSpec` + `orchestrator/interactive-runner.ts` + the `cmdAgentRun` fork, 4 legacy runners byte-for-byte green behind it); **F3 implemented** (2026-08-11, with R4-21 — the `authoring` descriptor carries ADR-043 §1's `turnSpec` table verbatim and creation-agent drafted a real skill AND a real hook package live on the spine; see [R4-B18](#r4-b18-the-authoring-session-creation-agent-on-the-generic-interactive-spine-implemented)); **F4 resolved by operator ruling** (2026-08-11 — a measurement pass established that none of the four runners is expressible on the primitive as it stands; no runner migrated; the operator refused a `STEP_HANDLERS` registry, so the migrations are re-homed as R4-23's SKILL.md re-authoring — see the F4 bullet below) · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
+- **Status:** implemented (bridge complete; F4 re-homed to [R4-23](#r4-23-runner-prompt-re-authoring-onto-skillmd)) — **F1 + F2 implemented** (2026-08-10, PR #117: `turnSpec` + `orchestrator/interactive-runner.ts` + the `cmdAgentRun` fork, 4 legacy runners byte-for-byte green behind it); **F3 implemented** (2026-08-11, with R4-21 — the `authoring` descriptor carries ADR-043 §1's `turnSpec` table verbatim and creation-agent drafted a real skill AND a real hook package live on the spine; see [R4-B18](#r4-b18-the-authoring-session-creation-agent-on-the-generic-interactive-spine-implemented)); **F4 resolved by operator ruling** (2026-08-11 — a measurement pass established that none of the four runners is expressible on the primitive as it stands; no runner migrated; the operator refused a `STEP_HANDLERS` registry, so the migrations are re-homed as R4-23's SKILL.md re-authoring — see the F4 bullet below) · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
 - **Depends on:** R2-10 (session shell — the read half is already generic), R4-21 (its infra is consumer #1, built + green on `feat/r4-21-authoring-agent`).
 - **Depended on by:** R4-21 (live drafting), R4-18 (onboard-flow — a consumer once generalised), R4-19-F2 (brain-maintenance — a consumer, deferred-large).
 - **Context:** The interactive-session **read** half is already generic over data (the `SessionKindDescriptor` yaml row drives route + transcript + artifact pane with no per-kind code). The **producer/state-machine** half is still four hand-written `orchestrator/*-runner.ts` behind `AGENT_RUNNERS` — and a fifth (creation-agent) parking against the ADR-042 surface cap is the third time the same shape parked in batch D (R4-18, R4-19-F2 [mislabelled], R4-21). Same shape three times ⇒ a missing generalisation, not three exceptions. Operator directive (2026-08-10): make the interactive surface a **generic, operator-authorable, artifact-like, multi-instance** primitive.
@@ -1965,7 +1965,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 - **Features (sketch, sized per park files):** instructions first (needs a two-schema answer for `turnSpec.schema`); demo-builder (needs a `cwd`/writes model decision — its agent writes into the project repo by design); project-brain (closest fit); architect **decision, not migration** — the park recommends keeping its `AGENT_RUNNERS` entry permanently and amending ADR-043 §3 to say so.
 - **Acceptance references:** per-runner live acceptance runs (the R4-21 live-proof pattern); `AGENT_RUNNERS` shrink per migration; net orchestrator line-delta reported per PR.
 - **As built (2026-08-14).** Each runner's task prose moved into its agent's `SKILL.md` as `<!-- turn: <id> -->` sections behind one shared loader (`loadSkillTurnPrompt` / `splitSkillTurnSections`, `orchestrator/skill-path.ts`), fail-LOUD where the four runner-private `loadSkillPrompt` helpers failed open. Turn ids: instructions `interview` / `interview-edit` / `draft` / `draft-edit`; demo-builder `generate-element` / `generate-composed` / `generate-legacy`; project-brain `analyze-project-repo` / `analyze-cycle-archives`; architect `interview` / `explore` / `draft` / `draft-force-emit`. **LIVE acceptance, one real spawn per kind** (`_wave5/gate-logs/R4-23-live-*.log`): a grounded `AGENTS.draft.md` for mdtoc; 6 real theme pages honouring the operator's focus; a real before/after `DEMO.html` of gitpulse's most recent feature initiative with captured CLI output; and an architect PLAN with 5 cited brain themes, 7 `source:`-attributed constraints, 12 edge cases and 10 GWT ACs.
-- **Three rulings this initiative closed, all recorded in the [ADR-043](../decisions/043-generic-interactive-surface.md) 2026-08-14 amendment.** (1) **Architect is NEVER migrated onto the primitive** and `AGENT_RUNNERS` is NOT deleted — the park's recommendation, adopted; architect's prompts were re-authored anyway (the ADR-024 axis is orthogonal) with no measured degradation. (2) `resolveInteractiveAgent` **DELETED** (bead `forge-4y7`) — zero production callers, and its wiring preconditions are not dischargeable (architect declares no `surface:`, project-brain declares `surface: unattended`, and `AGENT_RUNNERS` keys are session-kind ids not agent slugs); the real roster contains zero interactive defs, so the mirror accepted nothing for its entire life. (3) **The owed net orchestrator decrease is not collectable and is reported honestly as an INCREASE of +110 lines** (runners −86, dead mirror −12, shared loader +208). The F4 park's ~403 was the plumbing-dedup ceiling on the *migration* axis, which no runner took; on the *re-authoring* axis the prose leaves TypeScript for markdown rather than disappearing. Exported-symbol delta is +2/−1 = +1, with four private duplicate helpers deleted. What was actually bought: each agent's intent now lives in ONE place instead of two.
+- **Three rulings this initiative closed, all recorded in the [ADR-043](../../decisions/043-generic-interactive-surface.md) 2026-08-14 amendment.** (1) **Architect is NEVER migrated onto the primitive** and `AGENT_RUNNERS` is NOT deleted — the park's recommendation, adopted; architect's prompts were re-authored anyway (the ADR-024 axis is orthogonal) with no measured degradation. (2) `resolveInteractiveAgent` **DELETED** (bead `forge-4y7`) — zero production callers, and its wiring preconditions are not dischargeable (architect declares no `surface:`, project-brain declares `surface: unattended`, and `AGENT_RUNNERS` keys are session-kind ids not agent slugs); the real roster contains zero interactive defs, so the mirror accepted nothing for its entire life. (3) **The owed net orchestrator decrease is not collectable and is reported honestly as an INCREASE of +110 lines** (runners −86, dead mirror −12, shared loader +208). The F4 park's ~403 was the plumbing-dedup ceiling on the *migration* axis, which no runner took; on the *re-authoring* axis the prose leaves TypeScript for markdown rather than disappearing. Exported-symbol delta is +2/−1 = +1, with four private duplicate helpers deleted. What was actually bought: each agent's intent now lives in ONE place instead of two.
 
 ## Deferred
 

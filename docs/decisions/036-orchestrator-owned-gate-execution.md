@@ -132,7 +132,7 @@ security-permissions UWI-6).
 ## Amendment (2026-07-24) — merge-boundary relocation of the dual-boundary full-suite gate (R1-03-F4)
 
 Q3-B retires the unifier (`developer-unifier`/`execUnifier`) in favor of a demo
-agent + adversarial review agent (`docs/roadmaps/R4-ootb-suite.md` R4-07/R4-08).
+agent + adversarial review agent (`docs/roadmaps/archive/R4-ootb-suite.md` R4-07/R4-08).
 The unifier's `composedUnifierGate` full-suite `initiative_gate` sub-check — the
 "dual-boundary gate" `docs/known-gaps.md` names a strength worth preserving —
 does not retire with it: this ADR's Decision §1 (orchestrator executes; agents
@@ -154,10 +154,10 @@ in its "The merge-boundary full-suite gate (relocation spec)" section,
 not restated here. This amendment exists solely to record the operator's
 verdict on that spec, per the locked Q3-B decision that flagged this
 relocation for operator review
-(`docs/roadmaps/R1-contract-componentry.md` R1-03-F4).
+(`docs/roadmaps/archive/R1-contract-componentry.md` R1-03-F4).
 
 Nothing changes in this ADR's Decision or Consequences until that verdict is
-recorded. `docs/roadmaps/R4-ootb-suite.md` R4-10-F2 is the sole
+recorded. `docs/roadmaps/archive/R4-ootb-suite.md` R4-10-F2 is the sole
 build-and-prove owner of the runnable replacement and, by its own stated
 precondition, may not start before this line resolves.
 

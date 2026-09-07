@@ -358,7 +358,8 @@ async function runGenerateStep(args: {
   writeStatus({ ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath], cost_usd: costUsd,
+    event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath],
+    ...(costUsd !== null ? { cost_usd: costUsd } : {}),
     message: `demo-generated (iteration ${status.iteration}${target ? `, element=${target}` : composed ? ', composed' : ''}, awaiting review)`,
     metadata: { session_id: input.sessionId, iteration: status.iteration, target_element: target ?? null, composed },
   });

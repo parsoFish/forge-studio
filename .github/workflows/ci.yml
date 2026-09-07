@@ -25,6 +25,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test discovery ratchet (every test file runs somewhere)
+        run: node scripts/check-test-discovery.mjs
+
       - name: Test
         run: npm test
         env:

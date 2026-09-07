@@ -60,7 +60,7 @@ within a declared tolerance or document + deliberately update it. Concretely:
 already has a **different**, landed **C7 — External-resource model** clause
 (creds-free in-loop gate + isolated self-cleaning live confirmation) — see
 [[forge-project-onboarding-contract]]. This theme's C7 was never landed, so the
-numbering collides; [R1-D1](../../../docs/roadmaps/R1-contract-componentry.md)
+numbering collides; [R1-D1](../../../docs/roadmaps/archive/R1-contract-componentry.md)
 resolves it on pick-up — this clause takes the next free id (e.g. C11), never C7.
 
 ## Why tests aren't enough

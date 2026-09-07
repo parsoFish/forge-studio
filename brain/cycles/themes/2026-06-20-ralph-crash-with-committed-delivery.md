@@ -4,6 +4,7 @@ description: WI-6 ralph crashed (exit code 1) mid-iteration but its git commits 
 category: pattern
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # Ralph agent crash with committed delivery — status vs diff truth

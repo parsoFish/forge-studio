@@ -1,5 +1,7 @@
 # ADR 018 — Three-brain structural model
 
+**Superseded-by:** [ADR 035](./035-forge-owned-central-artifacts.md) (2026-06-20) — **Brain 3's location only**; the three-brain structure below stands.
+
 **Status:** Accepted
 **Date:** 2026-05-26
 

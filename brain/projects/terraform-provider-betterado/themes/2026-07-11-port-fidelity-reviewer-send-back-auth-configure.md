@@ -6,6 +6,7 @@ keywords: [configure, port-fidelity, nil-handling, use_cli, use_msi, use_oidc, r
 related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-10-framework-configure-pat-only-aad-gap, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback]
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## Context

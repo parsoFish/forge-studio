@@ -16,6 +16,7 @@ keywords:
   - untracked
 created_at: 2026-07-11T00:00:00.000Z
 updated_at: 2026-07-11T00:00:00.000Z
+status: historical
 ---
 
 # `.forge/last-gate-failure.md` untracked file blocks dev-loop fan-in merge
