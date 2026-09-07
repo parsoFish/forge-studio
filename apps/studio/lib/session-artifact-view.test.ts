@@ -475,6 +475,7 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
     finalized: null,
     transcriptError: null,
     modelTier: null,
+    costUsd: null,
     terminal: false,
     transcriptSources: ['prompt.md'],
     // W7-A2 — the shell payload's derived lifecycle (required at runtime by

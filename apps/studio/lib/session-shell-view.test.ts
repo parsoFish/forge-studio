@@ -132,6 +132,9 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   finalized: null,
   transcriptError: null,
   modelTier: null,
+  // S9 beat 8 — REQUIRED on the wire like modelTier; this fixture's session
+  // has no priced row in its log, so `null` is its honest cost.
+  costUsd: null,
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
   // W8-B3 (ON-5) — the candidate sources actually on disk for this session.
@@ -174,6 +177,9 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   finalized: null,
   transcriptError: null,
   modelTier: null,
+  // S9 beat 8 — REQUIRED on the wire like modelTier; this fixture's session
+  // has no priced row in its log, so `null` is its honest cost.
+  costUsd: null,
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
   // W8-B3 (ON-5) — a synthetic session with real sources on disk.
@@ -809,4 +815,34 @@ test('W8-B3: a RENDERED but empty pane names the sources that exist — deriveSe
   } as unknown as Partial<SessionShellPayload>);
   expect(askingWithout.emptyStageMessage).toContain('nothing has been written to this session yet');
   expect(askingWithout.emptyStageMessage).not.toContain('on disk');
+});
+
+// ---------------------------------------------------------------------------
+// S9 beat 8 — "cost recorded" on the session page (M6-A exit row 2)
+//
+// The session read route now derives the session's own spend from its
+// `events.jsonl` through the kernel's ONE event-cost rule and carries it as
+// `costUsd`. The shell publishes it under `data-ledger-cost-usd` — the one key
+// forge publishes a cost under anywhere in its DOM contract — in the same bare
+// `.toFixed(2)` format `HistoryLedger` uses, so an operator reading a session
+// page and an operator reading the Monitor read the same shaped number.
+//
+// `null` is honest-absent and the attribute is OMITTED, never zeroed: that is
+// `HistoryLedger`'s own ratified discipline, and it is what let S9 run 4 report
+// `spend: UNMEASURED` instead of a fabricated `$0.00`.
+// ---------------------------------------------------------------------------
+
+test('a session with a recorded cost publishes it as data-ledger-cost-usd', () => {
+  const state = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, costUsd: 1.5 } as SessionShellPayload);
+  expect(state.dataAttrs['data-ledger-cost-usd']).toBe('1.50');
+});
+
+test('a session with no recorded cost omits the attribute rather than showing 0.00', () => {
+  const state = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, costUsd: null } as SessionShellPayload);
+  expect(state.dataAttrs['data-ledger-cost-usd']).toBeUndefined();
+});
+
+test('a session that genuinely cost nothing publishes 0.00 — a fact, not an absence', () => {
+  const state = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, costUsd: 0 } as SessionShellPayload);
+  expect(state.dataAttrs['data-ledger-cost-usd']).toBe('0.00');
 });

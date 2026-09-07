@@ -798,6 +798,14 @@ export type SessionShellPayload = {
    */
   modelTier: string | null;
   /**
+   * S9 beat 8 (M6-A exit row 2) — what this session has spent, derived by the
+   * route from its own `events.jsonl` through the kernel's ONE event-cost rule
+   * (`deriveSessionCostUsd`). REQUIRED on the wire like `modelTier`; `null` is
+   * the honest value for a session whose log carries no priced row, and the
+   * page OMITS its cost attribute rather than rendering a fabricated 0.00.
+   */
+  costUsd: number | null;
+  /**
    * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
    * (`packages/sessions/bridge-studio-sessions.ts`), threaded onto the wire so the generic
    * `SessionInteractivePanel` can gate its ActivityLog drawer without a
@@ -927,6 +935,15 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const modelTier = modelTierRaw;
 
+  // costUsd — same honest-null shape as modelTier, hard-parsed for the same
+  // reason: a silently-absent cost is indistinguishable from a cost of zero,
+  // and those are different answers to the operator's question.
+  const costUsdRaw = raw['costUsd'];
+  if (costUsdRaw !== null && typeof costUsdRaw !== 'number') {
+    throw new Error(`missing or invalid "costUsd": expected a number or null, got ${JSON.stringify(costUsdRaw)}`);
+  }
+  const costUsd = costUsdRaw;
+
   // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
   // non-boolean "terminal" throws, never defaulted to false.
   const terminalRaw = raw['terminal'];
@@ -996,6 +1013,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     affordances,
     modelTier,
+    costUsd,
     terminal,
     legacy,
     transcriptSources,
