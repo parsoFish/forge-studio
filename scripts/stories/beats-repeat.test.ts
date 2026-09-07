@@ -51,6 +51,12 @@ function interviewPage({ roundsBeforeDraft }) {
         // `waitForHandleOrStall` waits on the located handle before the act.
         waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
         first: () => ({
+    // `driveBeat` asks every page for its links (bead `forge-8vfn.7.5.3`).
+    // This page models none, and "none" is an answer a fake must be able to
+    // give — a fake that simply lacks the method fails as a TypeError inside
+    // the runner, which is how this landed: five hand-rolled stand-ins, and
+    // only the one with a nav beat showed it.
+    evaluateAll: async (fn: any, arg: any) => fn([], arg),
           waitFor: async () => { if (!present(handle)) throw new Error('not present'); },
           click: async () => {
             if (!present(handle)) throw new Error('no element carries that handle');
