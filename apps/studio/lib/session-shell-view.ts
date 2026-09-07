@@ -111,6 +111,9 @@ export type SessionShellReadyState = {
   /** W6-B6 — the session's own kickoff-selected model tier, or `null` when
    *  none was recorded. Carried through verbatim, never guessed. */
   modelTier: string | null;
+  /** S9 beat 8 — the session's own spend, as the route derived it. `null` =
+   *  not recorded (no priced row in its log), never "cost nothing". */
+  costUsd: number | null;
   /** W6-B8 — the payload's own `terminal` (server-derived, see session-
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
@@ -295,6 +298,7 @@ function readyDataAttrs(input: {
   artifactKind: string;
   panes: SessionPaneSet;
   legacy: boolean;
+  costUsd: number | null;
 }): SessionShellDataAttrs {
   return {
     'data-session-status': 'ready',
@@ -311,6 +315,11 @@ function readyDataAttrs(input: {
     // never omitted when false, so an absent attribute can never be mistaken
     // for "not legacy".
     'data-session-legacy': input.legacy ? 'true' : 'false',
+    // S9 beat 8 — "cost recorded". The bare `.toFixed(2)` shape
+    // `HistoryLedger` publishes, so one operator question has one answer shape
+    // wherever it is asked. OMITTED when the route has no figure: absence
+    // means "not recorded", never "cost nothing" (HistoryLedger's own rule).
+    ...(input.costUsd !== null ? { 'data-ledger-cost-usd': input.costUsd.toFixed(2) } : {}),
     // W8-B3 (ON-5) — the derived pane set, in the DOM so a journey asserts
     // WHICH panes a kind renders instead of scraping the copy inside them.
     'data-session-panes': input.panes.ids.join(','),
@@ -350,6 +359,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     artifact: payload.artifact,
     affordances: payload.affordances,
     modelTier: payload.modelTier,
+    costUsd: payload.costUsd,
     terminal: payload.terminal,
     legacy: payload.legacy,
     transcriptSources: [...payload.transcriptSources],
@@ -366,6 +376,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
       artifactKind,
       panes,
       legacy: payload.legacy,
+      costUsd: payload.costUsd,
     }),
   };
 }
@@ -416,6 +427,9 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
         // W8-F6 — likewise session-level: a stage switch cannot resurrect a
         // session's deleted working dir.
         legacy: state.legacy,
+        // Session-level too: what the session has spent does not depend on
+        // which stage of its transcript the operator is reading.
+        costUsd: state.costUsd,
       }),
     },
   };
