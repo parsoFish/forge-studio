@@ -21,7 +21,7 @@
  * process owned by another user all mean "cannot attribute this one", not "no
  * live process" — so each is skipped and the walk continues.
  */
-import { readdirSync, readlinkSync, realpathSync } from 'node:fs';
+import { existsSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -155,6 +155,20 @@ function liveProcessCwds() {
  * the live-cwd rule can never see it — which is exactly how a concurrent lane's
  * disposable read-only checkout reddened a funded S1 run.
  *
+ * A LANE IS A WORKTREE, NOT A DIRECTORY — round 2, and this one is a hole the
+ * first version shipped with (#532). It checked each live pid's own `cwd` as an
+ * ownership root, so a process sitting in `/tmp` owned EVERY worktree that
+ * appeared anywhere beneath it. Measured by probe:
+ *
+ *   sleeper pid 93550 (cwd /tmp) => {pid:93550, via:'appeared', ownerRoot:'/tmp'}
+ *
+ * Under a full suite something is always sitting in a generic directory, which
+ * is why it passed alone and failed under load — and on a host where a shell
+ * sits in `$HOME`, a real escape into `~/forge-victim` would have been EXCUSED.
+ * So the cwd arm now requires the cwd to be a git worktree root. The scratch-root
+ * arm needs no such test: a scratch root already encodes one full cwd and cannot
+ * be generic.
+ *
  * The limit is deliberate: a session that has EXITED owns nothing, so a tree it
  * left behind has no owner and still reds. There is nobody to attribute it to,
  * and a path pattern on its own must never satisfy this guard.
@@ -169,7 +183,11 @@ export function liveSessionOwners(dirs) {
   const targets = dirs.map((d) => ({ dir: d, resolved: real(d) }));
   const under = (child, root) => child === root || child.startsWith(`${root}${sep}`);
   for (const { pid, cwd } of liveProcessCwds()) {
-    for (const root of [cwd, ...sessionScratchRoots(cwd)]) {
+    // `.git` is present as a directory in a checkout and as a FILE in a linked
+    // worktree, so `existsSync` is the test that covers both — and `/tmp`,
+    // `$HOME` and `/` fail it, which is the whole point.
+    const roots = existsSync(join(cwd, '.git')) ? [cwd, ...sessionScratchRoots(cwd)] : sessionScratchRoots(cwd);
+    for (const root of roots) {
       for (const { dir, resolved } of targets) {
         if (owned.has(dir)) continue;
         if (under(resolved, root)) owned.set(dir, { pid, cwd, via: 'appeared', ownerRoot: root });

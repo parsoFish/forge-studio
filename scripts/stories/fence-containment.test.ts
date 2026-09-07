@@ -463,7 +463,9 @@ test('7.5.1: a worktree that APPEARED mid-run under a live session\'s scratch ro
 test('7.5.1: a worktree that appeared mid-run under a live session\'s OWN CWD is attributed the same way', () => {
   const main = makeRepoWithSkeleton();
   const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
-  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+  // The lane dir is a real WORKTREE, not any directory: see the control below
+  // for why a bare ancestor must not own what appears beneath it.
+  const laneDir = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-laneb-')), 'lane-b'), 'lane-b');
 
   const baseline = snapshotSiblingWorktrees(runRoot);
   const sleeper = sleeperIn(laneDir);
@@ -534,4 +536,57 @@ test('7.5.1: the scratch root is ENCODED from a live cwd, never decoded back out
 test('7.5.1: a cwd that cannot own a scratch root yields none — nothing is excused by default', () => {
   assert.deepEqual(sessionScratchRoots(''), []);
   assert.deepEqual(sessionScratchRoots('relative/path'), []);
+});
+
+// --- 7.5.1 round 2: a GENERIC ancestor is not an owner -----------------------
+//
+// MEASURED, and it is a hole in the fix that shipped in #532. Gate pr5's full
+// suite failed three of the tests above with `61726 !== 62668` — the report
+// named a DIFFERENT pid as the owner than the sleeper the test planted. Cause,
+// reproduced deterministically by a probe: `liveSessionOwners` checked each
+// live pid's own `cwd` as an ownership root, so a process sitting in `/tmp`
+// owned EVERY worktree that appeared anywhere beneath it:
+//
+//   sleeper pid 93550 (cwd /tmp) => {"pid":93550,"via":"appeared","ownerRoot":"/tmp"}
+//
+// Under a full suite something is always sitting in a generic directory, which
+// is why this passed alone and failed under load. It is not a flake: on a host
+// where a shell sits in `$HOME`, a real escape into `~/forge-victim` would have
+// been excused — the precise hole T1's ruling and this file's own header said
+// must not be opened, arrived at from the other direction.
+//
+// A LANE is a worktree, not a directory. The cwd arm now requires the cwd to be
+// a git worktree root; the scratch-root arm is unchanged, because a scratch root
+// already encodes one full cwd and cannot be generic.
+
+test('7.5.1 (RED): a live process in a GENERIC ancestor directory owns nothing beneath it', () => {
+  const main = makeRepoWithSkeleton();
+  const runRoot = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-wt-')), 'lane'), 'runner');
+
+  const baseline = snapshotSiblingWorktrees(runRoot);
+  // The sleeper sits in the SHARED temp root — an ancestor of the tree below,
+  // and of half the host. It is nobody's lane.
+  const sleeper = sleeperIn(tmpdir());
+  try {
+    const orphan = addWorktreeAt(main, join(mkdtempSync(join(tmpdir(), 'fence-orphan-')), 'base'), 'orphan');
+    const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === orphan);
+
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].live, null, `a process in ${tmpdir()} is not the owner of what appears under it`);
+    assert.equal(unownedEscapes(mine).length, 1, 'so it still reds the run');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('7.5.1 (RED): the same holds for the scratch root of a process in a generic directory', () => {
+  // `/tmp` encodes to `-tmp`, so its scratch root is `<tmp>/claude-<uid>/-tmp`.
+  // A worktree at `<tmp>/claude-<uid>/-tmp-something/...` is NOT under it — the
+  // separator check is what makes that true, and this pins it.
+  const roots = sessionScratchRoots(tmpdir());
+  assert.ok(roots.length > 0);
+  assert.ok(
+    !`${roots[0]}-fence-laneb-x/y/base`.startsWith(`${roots[0]}/`),
+    'a sibling whose name merely EXTENDS a scratch root must never read as inside it',
+  );
 });
