@@ -4,6 +4,8 @@ description: A pre-existing golangci-lint instance on the host killed the CI del
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
+enforced_by: packages/agents/tests/unit/failure-classifier.test.ts
 ---
 
 # Parallel golangci-lint process causes CI gate failure and forces full dev-loop re-run

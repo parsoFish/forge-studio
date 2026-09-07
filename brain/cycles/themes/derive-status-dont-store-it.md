@@ -15,6 +15,7 @@ updated_at: 2026-08-14
 related_themes:
   - declared-data-fails-open
   - per-kb-health-honesty-na-invariant
+enforced_by: packages/knowledge/tests/integration/kb-lint-summary.test.ts
 ---
 
 # Derive status, don't store it

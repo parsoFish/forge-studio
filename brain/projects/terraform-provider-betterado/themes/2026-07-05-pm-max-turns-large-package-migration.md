@@ -10,6 +10,7 @@ keywords: [pm-max-turns, decomposition-completeness, workitemtrackingprocess, sc
 related_themes: [pm-decomposition-index, 2026-07-03-pm-max-turns-graph-identity-13type-scope, 2026-07-03-pm-max-turns-on-wiki-migration-initiative, 2026-07-05-pm-turn-budget-exhausted-multi-resource-migration]
 created_at: 2026-07-05T00:00:00.000Z
 updated_at: 2026-07-05T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

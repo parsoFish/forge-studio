@@ -15,6 +15,7 @@ keywords:
 related_themes: [2026-08-28-pm-pure-modification-wi-missing-verification-artifact]
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
+status: historical
 ---
 
 # PM ADR-037 set-error causes full cycle restart

@@ -4,6 +4,8 @@ description: The dev-loop.delivered event (and branch-pushed) is emitted even wh
 category: antipattern
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
+enforced_by: [packages/flows/tests/integration/run-model.test.ts, packages/flows/tests/unit/run-model-derive.test.ts]
 ---
 
 ## What happens

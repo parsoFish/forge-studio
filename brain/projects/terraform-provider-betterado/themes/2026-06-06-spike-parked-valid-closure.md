@@ -5,6 +5,7 @@ category: pattern
 keywords: [spike, park, stop-condition, manifest, clean-closure, pm-decomposition, environment-templates]
 created_at: 2026-06-06T00:00:00.000Z
 updated_at: 2026-06-06T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern

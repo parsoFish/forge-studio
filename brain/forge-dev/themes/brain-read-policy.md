@@ -26,6 +26,7 @@ updated_at: 2026-05-26T00:00:00.000Z
 related_themes:
   - reactive-constraint-stripback-arc
   - karpathy-three-layer-wiki
+enforced_by: [apps/studio/lib/session-artifact-view.test.ts, apps/studio/lib/session-client.test.ts, packages/knowledge/tests/unit/kb-drain-structural.test.ts]
 ---
 
 # Brain-read policy

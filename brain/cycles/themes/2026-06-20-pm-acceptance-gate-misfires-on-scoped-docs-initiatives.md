@@ -4,6 +4,7 @@ description: "Blanket 'must include TF_ACC acceptance WI' rule causes 4+ PM retr
 category: antipattern
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 ## What happened

@@ -6,6 +6,7 @@ keywords: [pat-auth, aad, oidc, msi, configure, mux-free-cutover, auth-gap]
 related_themes: [configure-auth-index, 2026-06-20-framework-configure-stub-mux-timebomb, 2026-06-20-framework-provider-configure-not-stub, 2026-07-11-framework-configure-auth-parity-complete, 2026-07-11-az-cli-auth-wrong-tenant-fallback, 2026-07-11-port-fidelity-reviewer-send-back-auth-configure]
 created_at: 2026-07-10T00:00:00.000Z
 updated_at: 2026-07-10T00:00:00.000Z
+status: historical
 ---
 
 ## Context

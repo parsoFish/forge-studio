@@ -11,6 +11,7 @@ keywords:
 related_themes: [2026-08-22-progressive-disclosure-breaks-link-crawlers]
 created_at: "2026-08-22"
 updated_at: "2026-08-22"
+status: historical
 ---
 
 ## What happened
