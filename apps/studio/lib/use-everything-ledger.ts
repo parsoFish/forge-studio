@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchRecentAgentRunsWithMeta } from './agents-index';
 import { deriveFlowLedgerRows } from './flow-ledger';
+import { deriveSessionLedgerRows } from './session-ledger';
 import { buildHomeLedgerRows } from './home-view';
 import type { LedgerRow } from './history-ledger';
-import type { Agent, Run } from './studio-client';
+import type { Agent, Run, SessionIndexRow } from './studio-client';
 
 /**
  * The merged everything-ledger — flow runs + standalone agent runs in one
@@ -51,10 +52,14 @@ export type EverythingLedger = {
 export function useEverythingLedger(args: {
   agents: Agent[];
   runs: Run[];
+  /** M6-A row 3 — the sessions index the caller already fetched
+   *  (`useStudioHomeData`), so the third source costs no new read and trips no
+   *  new-polling guard. Only spine sessions join; see `session-ledger.ts`. */
+  sessions: SessionIndexRow[];
   /** The caller's own first-load gate (`useStudioHomeData().ready`). */
   ready: boolean;
 }): EverythingLedger {
-  const { agents, runs, ready } = args;
+  const { agents, runs, sessions, ready } = args;
 
   const [agentRows, setAgentRows] = useState<LedgerRow[]>([]);
   const [agentRowsReady, setAgentRowsReady] = useState(false);
@@ -88,7 +93,7 @@ export function useEverythingLedger(args: {
     // of freezing at the outage result. `retryKey`: the notice's own Retry.
   }, [ready, agents, retryKey]);
 
-  const flowRows = deriveFlowLedgerRows(runs);
+  const flowRows = [...deriveFlowLedgerRows(runs), ...deriveSessionLedgerRows(sessions)];
   const rows = agentRowsReady
     ? buildHomeLedgerRows(flowRows, agentRows, Number.MAX_SAFE_INTEGER)
     : flowRows;
