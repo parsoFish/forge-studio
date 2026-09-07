@@ -71,11 +71,23 @@ const POLL_MS = 500;
 export const ACT_BOUND_MS = 1000;
 
 /**
- * Playwright's word for "the element you were acting on left the DOM". Matched
- * on the message rather than an error class because `run` hands back a string
- * the step executor already formatted (`could not fill <handle>: …`).
+ * THE PAGE MOVED UNDER THE LOOP — every wording the runner can produce for it.
+ *
+ * Matched on the message rather than an error class because `run` hands back a
+ * string the step executor already formatted (`could not fill <handle>: …`).
+ *
+ * Two wordings, ONE event, and bead `forge-8vfn.6.11.52` (ruling 372) is the
+ * cost of having recognised only the first. Playwright says *detached* for an
+ * element it had resolved and then lost; for an element it never resolved, the
+ * act's own `describeControl` reports **"no element carries that handle"**. S2
+ * run 11 met the second: the interview form was torn down 12 ms after round 1
+ * was accepted, `count()` was 0 at the failure, the word "detached" never
+ * appeared, and a beat whose product was working perfectly died on it.
+ *
+ * This is the same two-notions-of-one-thing class `handleFor` exists to
+ * prevent, one layer up.
  */
-const DETACHED_RE = /detach/i;
+const PAGE_MOVED_RE = /detach|no element carries that handle/i;
 
 /**
  * Run one `repeat` step to its conclusion.
@@ -141,7 +153,7 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
       // re-rendering: give it a poll and re-read rather than reporting the
       // symptom. Bounded by the beat's own declared wait, which the positive
       // control below still reds on.
-      if (!DETACHED_RE.test(inner.error)) {
+      if (!PAGE_MOVED_RE.test(inner.error)) {
         return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
       }
       await new Promise((r) => setTimeout(r, Math.min(POLL_MS, left())));

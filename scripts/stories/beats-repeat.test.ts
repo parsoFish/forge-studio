@@ -481,3 +481,166 @@ test('6.11.41 (RED): the control-state watcher inspects the BOX THE ACT IS ON, n
   assert.ok(pinned.length > 0, 'the watcher never pinned an index — it is still describing box 0');
   assert.ok(pinned.some((s) => s.endsWith('>> nth=1')), `no watch on the second box: ${JSON.stringify(pinned)}`);
 });
+
+/**
+ * `forge-8vfn.6.11.52` — THE QUESTION COUNT IS MODEL-DETERMINED, AND SO IS ITS
+ * CHANGE. S2 run 11 (funded, `$0.3882`, ruling 371): round 1 rendered THREE
+ * boxes and was answered in full — `answers.json` 05:21:51.865 carries all
+ * three — and `status.json` shows the product at `round: 2, phase:
+ * "interviewing"` TWELVE MILLISECONDS later. The loop's next act counted the
+ * three dying boxes, asked for `nth(2)` of a round that renders a different
+ * number, and the beat died:
+ *
+ *     repeat, round 2: could not fill [data-field="question-freetext"] with "…":
+ *     locator.fill: Timeout 1000ms exceeded.
+ *       - waiting for locator('[data-field="question-freetext"]').nth(2)
+ *     . no element carries that handle.
+ *
+ * The comment above the act in `beats.mjs` says the count is MODEL-DETERMINED.
+ * That is exactly why it cannot be read once and then indexed against.
+ *
+ * `ACT_BOUND_MS` IS NOT THE SUBJECT of either test below and is unchanged: a
+ * longer bound only waits longer for a box that was never going to exist.
+ */
+
+/**
+ * A form whose box count SHRINKS while the act is filling it. `attempted`
+ * records every index the runner asked for, which is the assertion that does
+ * not depend on how the resulting error happens to be worded.
+ */
+function shrinkingFormPage({ from, to }) {
+  const state = { phase: 'awaiting-answers', boxes: from, filled: [], submits: 0, attempted: [] };
+  const live = (handle) =>
+    handle.includes('question-freetext') || handle.includes('submit-answers')
+      ? state.phase === 'awaiting-answers'
+      : true;
+  const count = (handle) => (!live(handle) ? 0 : handle.includes('question-freetext') ? state.boxes : 1);
+  return {
+    state,
+    locator(handle) {
+      const box = (k) => ({
+        fill: async (v) => {
+          state.attempted.push(k);
+          // The product replaces the form between one box and the next.
+          state.boxes = to;
+          if (k >= count(handle)) throw new Error('locator.fill: Timeout 1000ms exceeded');
+          state.filled.push(v);
+        },
+      });
+      return {
+        count: async () => count(handle),
+        nth: box,
+        waitFor: async () => { if (count(handle) === 0) throw new Error('not present'); },
+        first: () => ({
+          ...box(0),
+          waitFor: async () => { if (count(handle) === 0) throw new Error('not present'); },
+          click: async () => {
+            if (count(handle) === 0) throw new Error('gone');
+            if (handle.includes('submit-answers')) { state.submits += 1; state.phase = 'awaiting-verdict'; }
+          },
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+}
+
+test('6.11.52(A): fillAll never addresses an index the CURRENT count does not have', async () => {
+  const page = shrinkingFormPage({ from: 3, to: 2 });
+  await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 5000, matcher(page));
+
+  // The defect, asserted directly rather than through whatever error the dead
+  // index produced: run 11 asked for box 2 of a two-box round.
+  assert.ok(
+    !page.state.attempted.includes(2),
+    `the runner asked for nth(2) of a ${page.state.boxes}-box round: attempted ${JSON.stringify(page.state.attempted)}`,
+  );
+  assert.equal(page.state.filled.length, 2, 'the boxes that exist are answered, and no more');
+});
+
+test('6.11.52(A): a count that does NOT change is still filled in full — the control', async () => {
+  // Without this, "ask for fewer boxes" would pass the test above for the
+  // wrong reason. Every box is filled exactly as before when nothing moves.
+  const page = shrinkingFormPage({ from: 3, to: 3 });
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 5000, matcher(page));
+
+  assert.equal(r.error, null);
+  assert.deepEqual(page.state.attempted, [0, 1, 2], 'all three indices asked for, in order');
+  assert.equal(page.state.filled.length, 3);
+});
+
+/**
+ * A form that VANISHES mid-round and comes back for the next one — the state
+ * `status.json` recorded at `round: 2, phase: "interviewing"`. While it is
+ * gone, `count()` is 0, so the runner's own `describeControl` reports "no
+ * element carries that handle." and the word "detached" never appears.
+ */
+function turnoverPage({ roundsBeforeDraft }) {
+  const state = { phase: 'awaiting-answers', filled: [], submits: 0, settling: 0 };
+  const showing = () => state.phase === 'awaiting-answers' && state.settling === 0;
+  const count = (handle) => {
+    const live = handle.includes('question-freetext') || handle.includes('submit-answers');
+    if (!live) return 1;
+    if (state.settling > 0) { state.settling -= 1; return 0; }
+    return showing() ? 1 : 0;
+  };
+  return {
+    state,
+    locator(handle) {
+      const box = () => ({
+        fill: async (v) => {
+          if (!showing()) throw new Error('locator.fill: Timeout 1000ms exceeded');
+          state.filled.push(v);
+          // The product tears the form down between rounds, exactly as it did
+          // 12 ms after run 11's round 1 was accepted.
+          if (state.filled.length === 1 && state.submits === 0) state.settling = 3;
+        },
+      });
+      return {
+        count: async () => count(handle),
+        nth: box,
+        waitFor: async () => { if (!showing()) throw new Error('not present'); },
+        first: () => ({
+          ...box(),
+          waitFor: async () => { if (!showing()) throw new Error('not present'); },
+          click: async () => {
+            if (!showing()) throw new Error('gone');
+            if (handle.includes('submit-answers')) {
+              state.submits += 1;
+              if (state.submits >= roundsBeforeDraft) state.phase = 'awaiting-verdict';
+            }
+          },
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+}
+
+test('6.11.52(B): "no element carries that handle" inside a round is the page moving, not a dead beat', async () => {
+  // RED BEFORE THE FIX. `#517` taught the loop that a control vanishing
+  // mid-round is the page moving under it — but only when Playwright happens to
+  // use the word "detached". For an element it never resolved, the runner's own
+  // `describeControl` says "no element carries that handle", and the identical
+  // event killed the beat. Two notions of one thing, one layer below the class
+  // `handleFor` exists to prevent.
+  const page = turnoverPage({ roundsBeforeDraft: 2 });
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 20000, matcher(page));
+
+  assert.equal(r.error, null, 'the loop polls, re-reads `until` and answers the next round');
+  assert.equal(page.state.phase, 'awaiting-verdict');
+  assert.ok(page.state.submits >= 2, `the interview was carried to its end: ${page.state.submits} submit(s)`);
+});
+
+test('6.11.52(B): a form that never comes back still reds at the declared bound', async () => {
+  // The positive control on the retry: treating "gone" as the page moving must
+  // not become "loop until the bound and call it green". A form that stays away
+  // reds, and the message still names the rounds it managed.
+  const page = turnoverPage({ roundsBeforeDraft: 99 });
+  page.state.phase = 'awaiting-answers';
+  page.state.settling = Number.POSITIVE_INFINITY;
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1200, matcher(page));
+
+  assert.ok(r.error, 'it must red');
+  assert.match(r.error, /repeat/);
+});
