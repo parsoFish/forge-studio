@@ -74,9 +74,10 @@ test('review-comments edit + delete round-trip: append → edit body/blocking �
  * bead forge-8vfn.6.10.20 — ONE `isSafeCycleId`, and it is the flows one.
  *
  * The predicate was defined TWICE for one question: `packages/flows/manifest-path-guard.ts`
- * (type-checked, capped at 200 characters, regex) and `packages/factory/review-comments.ts`
- * (regex alone). The factory copy was the one guarding these routes, and it is
- * strictly weaker on two counts that are demonstrable rather than theoretical:
+ * (type-checked, capped at 200 characters, regex) and the review-comment store's own
+ * copy (regex alone; the store sat in `packages/factory` then and is
+ * `packages/flows/review-comments.ts` now). That copy was the one guarding
+ * these routes, and it is strictly weaker on two counts that are demonstrable rather than theoretical:
  * `SAFE_CYCLE_ID_RE.test(7)` is `true` (RegExp coerces its argument, and "7"
  * matches), and a 300-character id passes a pattern with no length bound.
  *
@@ -107,8 +108,8 @@ test('a cycle id past the 200-character cap is refused by the review-comment rou
   } finally { rmSync(forgeRoot, { recursive: true, force: true }); }
 });
 
-test('the factory declares no cycle-id predicate of its own (kills: two definitions that agree today and drift tomorrow)', () => {
-  const source = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'factory', 'review-comments.ts'), 'utf8');
+test('the review-comment store declares no cycle-id predicate of its own (kills: two definitions that agree today and drift tomorrow)', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', '..', 'packages', 'flows', 'review-comments.ts'), 'utf8');
   assert.equal(/export function isSafeCycleId/.test(source), false, 'the copy is deleted, not merely unused');
   assert.equal(/SAFE_CYCLE_ID_RE/.test(source), false, 'and so is its private regex');
   assert.match(source, /manifest-path-guard\.ts/, 'it imports the one predicate instead');

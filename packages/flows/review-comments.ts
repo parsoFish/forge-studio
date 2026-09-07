@@ -16,7 +16,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
-import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
+import { isSafeCycleId } from './manifest-path-guard.ts';
 
 /** A reviewer comment anchored to a demo region (W3C-annotation-ish). */
 export type ReviewComment = {

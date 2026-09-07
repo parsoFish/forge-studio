@@ -97,8 +97,10 @@ import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
 import {
-  NO_EXAMPLE_INSTALLED, installedExample as example, peekInstalledFactory,
-  resolveInstalledFactory, reviewCommentsBinding as rc, type InstalledFactory } from './factory-wiring.ts';
+  installedExample as example, peekInstalledFactory,
+  resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
+import * as rc from '@forge/flows/review-comments.ts';
+import type { ReviewCommentsSidecar } from '@forge/flows/review-comments.ts';
 
 
 
@@ -899,17 +901,17 @@ function isAcShape(v: unknown): boolean {
 async function withReviewCommentLock(
   logsRoot: string,
   cycleId: string,
-  mutate: (sidecar: ReturnType<typeof rc.read>) => ReturnType<typeof rc.read>,
-): Promise<ReturnType<typeof rc.read>> {
-  // Ensure the sidecar exists so proper-lockfile has a target (rc.write
+  mutate: (sidecar: ReviewCommentsSidecar) => ReviewCommentsSidecar,
+): Promise<ReviewCommentsSidecar> {
+  // Ensure the sidecar exists so proper-lockfile has a target (rc.writeReviewComments
   // throws on a traversal cycleId — that propagates as a 500, never a write).
-  if (!existsSync(rc.path(logsRoot, cycleId))) {
-    rc.write(logsRoot, cycleId, { cycleId, comments: [] });
+  if (!existsSync(rc.reviewCommentsPath(logsRoot, cycleId))) {
+    rc.writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
   }
-  const release = await lockfile.lock(rc.path(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  const release = await lockfile.lock(rc.reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
   try {
-    const next = mutate(rc.read(logsRoot, cycleId));
-    rc.write(logsRoot, cycleId, next);
+    const next = mutate(rc.readReviewComments(logsRoot, cycleId));
+    rc.writeReviewComments(logsRoot, cycleId, next);
     return next;
   } finally {
     try { await release(); } catch { /* ignore */ }
@@ -1612,14 +1614,14 @@ async function handleHttp(
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
   // read-modify-write is atomic per cycle). Verdict derivation is over the set:
   // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
-  // ADR 048 clause 2: the sidecar is the EXAMPLE's surface — 501 once, ahead of
-  // the whole group, rather than each handler discovering it separately.
-  if (url.startsWith('/api/review-comments/') && peekInstalledFactory() === null) { sendJson(res, 501, { error: NO_EXAMPLE_INSTALLED }, origin); return; }
+  // The store is platform code (`@forge/flows/review-comments.ts`), so these
+  // routes answer with or without the example installed — ADR 048 clause 2 is
+  // about the example's surfaces, and this stopped being one.
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
-    const sidecar = rc.read(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.verdict(sidecar.comments) }, origin);
+    const sidecar = rc.readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.deriveVerdictFromComments(sidecar.comments) }, origin);
     return;
   }
   // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
@@ -1637,9 +1639,9 @@ async function handleHttp(
       if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
       if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.edit(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+        rc.editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
       );
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1651,8 +1653,8 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.remove(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1664,8 +1666,8 @@ async function handleHttp(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolve(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.verdict(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1678,18 +1680,18 @@ async function handleHttp(
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
       const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
-      if (rc.read(ctx.logsRoot, cycleId).comments.length >= rc.max) {
-        sendJson(res, 409, { error: `review-comment cap reached (${rc.max}) for this cycle` }, origin);
+      if (rc.readReviewComments(ctx.logsRoot, cycleId).comments.length >= rc.REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${rc.REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
         return;
       }
       const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.append(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+        rc.appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
       );
       sendJson(res, 200, {
         ...result,
         comment: result.comments[result.comments.length - 1],
-        derivedVerdict: rc.verdict(result.comments),
+        derivedVerdict: rc.deriveVerdictFromComments(result.comments),
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

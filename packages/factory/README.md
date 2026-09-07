@@ -21,7 +21,7 @@ package really has is the set of specifiers those two seams import**, and
 `contract.test.ts` measures it from the seam files rather than from a list, so
 this table cannot drift from what the product actually reaches for.
 
-### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (9)
+### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (8)
 
 | specifier | what the bridge resolves it for |
 |---|---|
@@ -31,7 +31,6 @@ this table cannot drift from what the product actually reaches for.
 | `@forge/factory/phases/adversarial-review.ts` | the one read-only review agent |
 | `@forge/factory/phases/release-finalize.ts` | the release-finalize phase |
 | `@forge/factory/class-profiles.ts` | the `class → gate-profile` table |
-| `@forge/factory/review-comments.ts` | the review-comments route's reader |
 | `@forge/factory/reflect-reconcile.ts` | reconciling operator feedback into the reflection |
 | `@forge/factory/reflector-rerun.ts` | re-running the reflector from the UI |
 
