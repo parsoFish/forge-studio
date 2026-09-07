@@ -28,7 +28,7 @@ import { watchControlState } from './beats-control-state.mjs';
  * @param {{route: string, data: Record<string,string>, nested?: readonly Record<string,string>[]}} observed
  * @returns {Readonly<{act: string, say: string, status: 'green'|'red', failures: readonly string[], bindings: Readonly<Record<string,string>>}>}
  */
-export function beatVerdict(beat, observed) {
+export function beatVerdict(beat, observed, { boundMs = null } = {}) {
   const failures = [];
   const bindings = {};
 
@@ -51,7 +51,18 @@ export function beatVerdict(beat, observed) {
       // A value the product mints at runtime. Any value binds; the empty
       // string is a product that minted nothing, and binding it would put an
       // empty segment in a later beat's route.
-      if (got === '') failures.push(`data-${attr}: expected a value to bind as ${want}, got ""`);
+      // T1 ruling 438. `""` on a binding attribute is not "the wrong value" —
+      // it is a mint that has not returned, and the runner has now WAITED for
+      // it (see `driveBeat`). So the failure names what actually happened and
+      // the bound it happened within, rather than a bare `got ""` that reads
+      // like a product returning the empty string on purpose.
+      if (got === '') {
+        failures.push(
+          boundMs === null
+            ? `data-${attr}: expected a value to bind as ${want}, got ""`
+            : `data-${attr}: expected a value to bind as ${want}, but the product minted nothing within ${boundMs} ms`,
+        );
+      }
       else bindings[placeholder[1]] = got;
       continue;
     }
@@ -341,7 +352,22 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // its own words, on the first beat that exercised the case: the guard was
   // right and this wiring was the gap. A declared agent wait is a statement
   // about the BEAT (bead `forge-8vfn.6.11.25`, ruling 285).
-  if (steps.length > 0 || bound.label !== null) {
+  // T1 ruling 438 — A BEAT THAT MINTS A VALUE ALWAYS WAITS.
+  //
+  // MEASURED, S2 beat 10 in M5: no `do` that navigates and no declared `wait`,
+  // so this condition was false and the page was read ONCE. A binding attribute
+  // that is always PRESENT reads `""` on that read — before the mint returns —
+  // and the beat reds with `got ""`. Bead `forge-8vfn.6.11.5` answered that in
+  // the PRODUCT, by making the attribute absent until it has a value: a defect
+  // that lives HERE, fixed in `apps/studio`, leaving every future always-present
+  // binding attribute to fail the same way.
+  //
+  // A mint is asynchronous by definition, so a beat that expects one is a beat
+  // that is waiting whether or not it declared a bound. The wait terminates:
+  // `answers()` already treats `""` as not-yet (`beats-page.mjs:29`), so it ends
+  // when the value arrives or at the beat's own bound, with the key named.
+  const mints = Object.values(beat.expect.data).some((want) => PLACEHOLDER.test(want));
+  if (steps.length > 0 || bound.label !== null || mints) {
     const waitedFrom = Date.now();
     if (steps.length > 0 && new URL(page.url()).pathname !== target) {
       await page
@@ -433,7 +459,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       /* not ready — the verdict below reports that honestly rather than throwing */
     });
 
-  let verdict = named(beatVerdict(beat, await readObserved(page, beat)));
+  let verdict = named(beatVerdict(beat, await readObserved(page, beat), { boundMs: bound.ms }));
   verdict = withAgentProc(verdict, agentProcProbe);
   // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
   // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
