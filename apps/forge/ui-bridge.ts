@@ -81,12 +81,13 @@ import {
   type ReleaseFinalizeHookInput,
 } from '@forge/flows/bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
+import { bindReleaseFinalize, fireReflectorRerun } from './example-hooks.ts';
 import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
-import { createLogger, type EventLogEntry } from '@forge/kernel';
+import type { EventLogEntry } from '@forge/kernel';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
@@ -230,29 +231,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // WS-A (release): the default release-finalize hook constructs a per-cycle
   // logger and delegates to the real phase. Opt-in + log-and-continue live
   // inside `runReleaseFinalize` itself; this wrapper only wires the logger.
-  //
-  // ADR 048 / ruling 485: release-finalize is the EXAMPLE's phase, and with no
-  // example installed the hook is NOT BOUND AT ALL. `bridge-studio-runs-review.ts`
-  // already treats it as optional (`if (ctx.runReleaseFinalize)`) and skips
-  // cleanly, so absence becomes a deliberate skip on a declared seam.
-  //
-  // What it replaces: the default binding called `example()`, which throws with
-  // no example, straight into that call site's `catch { }` — a comment there says
-  // a hook-level throw must never block the merge, and it does not, so the verdict
-  // route silently skipped release-finalize and reported success. A swallow that
-  // hides "no example installed" is the declared-data-fails-open shape, and it is
-  // indistinguishable from a project that simply declares no `releaseProcess`.
-  //
-  // `resolveInstalledFactory()` is awaited at the top of `startBridge` (line ~194),
-  // so this peek is decided, not racing.
-  const runReleaseFinalizeFn =
-    opts.runReleaseFinalize ??
-    (peekInstalledFactory() === null
-      ? undefined
-      : async (input: ReleaseFinalizeHookInput): Promise<{ release_status: string }> => {
-          const logger = createLogger(input.cycleId, logsRoot);
-          return example().runReleaseFinalize(input, logger);
-        });
+  // Bound only when an example is installed — `example-hooks.ts` owns that
+  // decision and its header carries the reasoning (ADR 048, rulings 485/488).
+  const runReleaseFinalizeFn = bindReleaseFinalize(opts.runReleaseFinalize, logsRoot);
   // D — auto-rerun the reflector on operator feedback. Default delegates to the
   // real helper; the POST handler + startup reconcile both call this.
   const rerunReflectorFn: RerunReflectorFn =
@@ -800,13 +781,9 @@ type HttpContext = {
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**
    * WS-A — finalise the release on the PR branch before merge (opt-in;
-   * log-and-continue).
-   *
-   * OPTIONAL, and the `?` is the ADR 048 statement (ruling 485): this is the
-   * example's phase, so with no example installed the assembly binds NOTHING
-   * and `bridge-studio-runs-review.ts`'s `if (ctx.runReleaseFinalize)` skips it
-   * deliberately. A required field could only be satisfied by a function that
-   * throws, and that throw was being swallowed.
+   * log-and-continue). OPTIONAL, and the `?` is the ADR 048 statement (ruling
+   * 485): a required field could only be satisfied by a function that throws
+   * when the example is absent, and that throw was being swallowed.
    */
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
@@ -2206,67 +2183,19 @@ async function handleReflect(
       if (!isDryBridge()) {
         // D — auto-rerun the reflector so the feedback is distilled into retro.md +
         // brain themes. Detached (don't block the HTTP response on a full reflector
-        // pass), but observable: success AND failure emit an event into the cycle's
+        // pass), but observable: fired, skipped or failed, it emits into the cycle's
         // events.jsonl (not console), so a lost rerun is visible and the startup
         // reconcile can recover it. The UI owns reflection without the CLI.
-        const reflectLogger = createLogger(cycleId, ctx.logsRoot);
-        // ADR 048 / ruling 485: re-running the reflector is the EXAMPLE's work, and
-        // the RERUN is what gets gated — never the route. Capture is the platform's
-        // and the 200 above has already promised it, so a 501 here would refuse
-        // bookkeeping that has nothing to do with the example.
         //
-        // MEASURED, in a real factoryless worktree: without this the default
-        // binding calls `example()`, which throws SYNCHRONOUSLY, past an already
-        // sent 200, into the outer catch that tries to send a 500 — and the
-        // process dies with ERR_HTTP_HEADERS_SENT. One POST took the bridge down.
-        // Same shape as the startup reconcile above, same answer.
-        if (peekInstalledFactory() === null) {
-          void reflectLogger.emit({
-            initiative_id: cycleId,
-            phase: 'reflection',
-            skill: 'bridge',
-            event_type: 'log',
-            input_refs: [join(dir, 'user-feedback.md')],
-            output_refs: [],
-            message: 'bridge.reflect-rerun-skipped-no-example',
-            metadata: { trigger: 'feedback-submit' },
-          });
-          return true;
-        }
-        // `Promise.resolve().then(...)` rather than a bare call: the rerun is
-        // detached AFTER the 200 has gone out, so a SYNCHRONOUS throw from it
-        // unwinds into this handler's outer catch, which then tries to send a
-        // 500 on an answered response and ends the process with
-        // ERR_HTTP_HEADERS_SENT. Measured; `tests/regression/
-        // reflect-rerun-sync-throw.test.ts` reproduces it. Wrapping turns a sync
-        // throw into a rejection, which the `.catch` below already handles and
-        // already reports into the cycle's events.jsonl.
-        void Promise.resolve()
-          .then(() => ctx.rerunReflector({ cycleId, logsRoot: ctx.logsRoot, queueRoot: ctx.queueRoot }))
-          .then(() =>
-            reflectLogger.emit({
-              initiative_id: cycleId,
-              phase: 'reflection',
-              skill: 'bridge',
-              event_type: 'log',
-              input_refs: [join(dir, 'user-feedback.md')],
-              output_refs: [],
-              message: 'bridge.reflect-rerun-fired',
-              metadata: { trigger: 'feedback-submit' },
-            }),
-          )
-          .catch((err) =>
-            reflectLogger.emit({
-              initiative_id: cycleId,
-              phase: 'reflection',
-              skill: 'bridge',
-              event_type: 'log',
-              input_refs: [],
-              output_refs: [],
-              message: 'bridge.reflect-rerun-failed',
-              metadata: { error: String(err) },
-            }),
-          );
+        // Absence of the example, and a synchronous throw from the rerun, are both
+        // `example-hooks.ts`'s to handle — its header carries the measured incident.
+        fireReflectorRerun({
+          rerunReflector: ctx.rerunReflector,
+          cycleId,
+          logsRoot: ctx.logsRoot,
+          queueRoot: ctx.queueRoot,
+          feedbackPath: join(dir, 'user-feedback.md'),
+        });
       }
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
