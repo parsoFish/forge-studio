@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for packages/library/bridge-studio-community.ts (R3-07-F1/F2/F3,
  * `_wave5/specs/R3-07.md`) — DOES NOT EXIST YET. This file is RED at branch
- * base: `Cannot find module '../../bridge-studio-community.ts'` on import. Do
+ * base: `Cannot find module './bridge-studio-community.ts'` on import. Do
  * not stub the module into existence; red is the deliverable of this round.
  *
  * Owns EVERY `/api/studio/community*` route (module surface, T3 task brief):

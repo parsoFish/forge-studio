@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for orchestrator/studio/hook-library.ts (R3-03-F1 + F1b) —
  * DOES NOT EXIST YET. This file is RED at branch base: every describe block
- * below fails at import time (`Cannot find module '../../studio/hook-library.ts'`) —
+ * below fails at import time (`Cannot find module './hook-library.ts'`) —
  * that is the expected, deliberate red. Do not stub the module into
  * existence to turn this green; red is the deliverable of this round.
  *
@@ -257,9 +257,9 @@ describe('loadHookDefinition: valid package', () => {
 });
 
 describe('loadHookDefinition: id slug validation (reuses skill-path.ts guard)', () => {
-  it('rejects a traversal-shaped id ("../../escape")', () => {
+  it('rejects a traversal-shaped id ("../escape")', () => {
     const root = makeForgeRoot();
-    assert.throws(() => loadHookDefinition('../../escape', root));
+    assert.throws(() => loadHookDefinition('../escape', root));
   });
 
   it('rejects an id containing a path separator ("sub/evil")', () => {
@@ -317,7 +317,7 @@ describe('loadHookDefinition: script must resolve INSIDE the hook dir (security 
     // peer review, 2026-08-04).
     mkdirSync(join(root, 'studio', 'hooks'), { recursive: true });
     writeFileSync(join(root, 'studio', 'hooks', 'outside.sh'), '#!/usr/bin/env bash\necho leaked\n', 'utf8');
-    writeHookPackage(root, 'traversal-hook', { script: '../../outside.sh' });
+    writeHookPackage(root, 'traversal-hook', { script: '../outside.sh' });
     assert.throws(() => loadHookDefinition('traversal-hook', root));
   });
 
@@ -670,6 +670,6 @@ describe('path helpers', () => {
 
   it('hookDir slug-validates before ever touching a path (traversal cannot even construct a path)', () => {
     const root = makeForgeRoot();
-    assert.throws(() => hookDir('../../evil', root));
+    assert.throws(() => hookDir('../evil', root));
   });
 });

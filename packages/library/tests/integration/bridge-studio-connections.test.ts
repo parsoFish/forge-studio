@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for packages/library/bridge-studio-connections.ts (R3-04-F2/F3, D6/D7
  * of `_wave5/specs/R3-04.md`) — DOES NOT EXIST YET. This file is RED at
- * branch base (`Cannot find module '../../bridge-studio-connections.ts'`) — the
+ * branch base (`Cannot find module './bridge-studio-connections.ts'`) — the
  * expected, deliberate red. Do not stub the module into existence.
  *
  * Owns EVERY `/api/studio/connections*` route, mirroring

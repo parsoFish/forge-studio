@@ -175,7 +175,7 @@ function makeFlaggedLintStub(): (opts: { cwd: string; cycleId: string }) => RunB
 
 function makeMissingLintStub(): (opts: { cwd: string; cycleId: string }) => RunBrainLintResult {
   return () => {
-    const e = new Error("Cannot find module '../../phases/brain-lint.ts'");
+    const e = new Error("Cannot find module './brain-lint.ts'");
     // Tag the error so the reflector's regex matches.
     (e as { code?: string }).code = 'MODULE_NOT_FOUND';
     throw e;

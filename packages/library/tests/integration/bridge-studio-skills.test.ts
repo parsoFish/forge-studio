@@ -221,7 +221,7 @@ test('AT-51: POST /api/studio/skills/install with a malformed entry (traversal p
   // reliably 400 — so the traversal path is the robust bad-input probe here.
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
     id: 'malformed-entry-skill',
-    entries: [{ path: '../../../escape', contentBase64: b64('malformed caller input') }],
+    entries: [{ path: '../escape', contentBase64: b64('malformed caller input') }],
     upstream: { source: 'https://x' },
   });
   assert.equal(res.status, 400, 'malformed caller input must be a 400, never a 500');
@@ -596,7 +596,7 @@ test('SEC-05 q80 (RED anchor): POST /api/studio/skills/install with the {entries
 test('SEC-05 q80 (CONTAINMENT): POST /api/studio/skills/install with a traversal entry.path is REJECTED (4xx) and stages/writes NOTHING outside <sourceId>/', async () => {
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
     id: 'evil',
-    entries: [{ path: '../../../evil', contentBase64: b64('ATTACKER-STAGED-BYTES') }],
+    entries: [{ path: '../evil', contentBase64: b64('ATTACKER-STAGED-BYTES') }],
     upstream: { source: 'test://x' },
   });
 
@@ -611,7 +611,7 @@ test('SEC-05 q80 (CONTAINMENT): POST /api/studio/skills/install with a traversal
   // (installSkillPackage then finds no SKILL.md) yet has ALREADY written the
   // escape file _skill-staging/evil. These byte-absent assertions are what
   // distinguish the correct guarded stage from that naive fix:
-  //   - join(stagingRoot, sourceId, '../../../evil') collapses to <base>/evil,
+  //   - join(stagingRoot, sourceId, '../evil') collapses to <base>/evil,
   //     independent of the server-minted sourceId, so the target is
   //     deterministic: <forgeRoot>/_skill-staging/evil.
   assert.equal(

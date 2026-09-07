@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for orchestrator/studio/hook-scan.ts (R3-03-F2) — DOES NOT
  * EXIST YET. This file is RED at branch base:
- * `Cannot find module '../../studio/hook-scan.ts'` on import. Do not stub the module
+ * `Cannot find module './hook-scan.ts'` on import. Do not stub the module
  * into existence; red is the deliverable of this round.
  *
  * Contract this file pins (docs/roadmaps/R3-library-componentry.md

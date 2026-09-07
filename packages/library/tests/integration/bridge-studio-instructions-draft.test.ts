@@ -201,7 +201,7 @@ test('encoded traversal slug "..%2F..%2Fetc%2Fpasswd" → 4xx, no leak', async (
   assert.ok(res.status >= 400 && res.status < 500, `expected 4xx, got ${res.status}`);
 });
 
-test('a ~30-deep repeated "../../.." slug chain does not escape the forge root', async () => {
+test('a ~30-deep repeated "../" slug chain does not escape the forge root', async () => {
   const evilSlug = '..%2F'.repeat(30) + 'etc%2Fpasswd';
   const res = await postJson(`${bridgeUrl}/api/studio/agents/${evilSlug}/instructions-draft`, draftBody());
   assert.ok(res.status >= 400 && res.status < 500, `expected 4xx, got ${res.status}`);

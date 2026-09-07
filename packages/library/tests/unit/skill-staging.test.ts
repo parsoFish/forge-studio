@@ -115,10 +115,10 @@ test('POSITIVE CONTROL (VALID): stageSkillPackage writes every entry under <stag
 // join(stagingRoot, sourceId, entry.path) without a per-entry resolveGuardedPath.
 // =============================================================================
 
-test('TRAVERSAL: an entry.path escaping <sourceId>/ ("../../../evil", "/etc/x", "a/../../../../tmp/OUT/x") is REFUSED with SkillStagingError — the whole stage throws and NOTHING is written (kills a naive per-entry join)', async () => {
+test('TRAVERSAL: an entry.path escaping <sourceId>/ ("../evil", "/etc/x", "a/../../../../tmp/OUT/x") is REFUSED with SkillStagingError — the whole stage throws and NOTHING is written (kills a naive per-entry join)', async () => {
   const { stageSkillPackage, SkillStagingError } = await loadStaging();
 
-  for (const evilPath of ['../../../evil', '/etc/x', 'a/../../../../tmp/OUT/x']) {
+  for (const evilPath of ['../evil', '/etc/x', 'a/../../../../tmp/OUT/x']) {
     const stagingRoot = freshStagingRoot('traversal');
     try {
       assert.throws(
@@ -137,7 +137,7 @@ test('TRAVERSAL: an entry.path escaping <sourceId>/ ("../../../evil", "/etc/x", 
         `no <sourceId>/ dir may be created for a refused "${evilPath}" stage`,
       );
       // The specific out-of-<sourceId> target a naive join lands at for
-      // "../../../evil" (== <stagingRoot>/evil, independent of sourceId) must be
+      // "../evil" (== <stagingRoot>/evil, independent of sourceId) must be
       // byte-ABSENT.
       assert.equal(
         existsSync(join(stagingRoot, 'evil')),
@@ -208,7 +208,7 @@ test('PER-ELEMENT ISOLATION: one valid entry + one traversal entry in the SAME s
     assert.throws(
       () => stageSkillPackage(stagingRoot, SOURCE_ID, [
         { path: 'SKILL.md', contentBase64: b64('name: X\ndescription: y\n---\n\nbody\n') },
-        { path: '../../../evil', contentBase64: b64('ATTACK') },
+        { path: '../evil', contentBase64: b64('ATTACK') },
       ]),
       SkillStagingError,
     );

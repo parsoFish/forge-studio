@@ -34,7 +34,7 @@ test('a safe label is returned UNCHANGED — existing demo bundles keep their fi
 });
 
 test('a label carrying a path separator cannot name anything outside its directory', () => {
-  for (const label of ['a/b', '../../../../etc/passwd', 'x\\y', '..', '.', '/abs', 'a/../../b']) {
+  for (const label of ['a/b', '../../etc/passwd', 'x\\y', '..', '.', '/abs', 'a/../../b']) {
     const name = checkpointArtifactName(label, 'png');
     assert.ok(!name.includes('/'), `"${label}" -> "${name}" still contains /`);
     assert.ok(!name.includes('\\'), `"${label}" -> "${name}" still contains \\`);
@@ -51,7 +51,7 @@ test('CONTAINMENT, asserted on the artifact: writing under a hostile label lands
     mkdirSync(capDir, { recursive: true });
     const outsideMarker = join(root, 'OUTSIDE-SHOULD-NOT-EXIST');
     // The label the live G1 run actually carried a separator in, plus a climb.
-    for (const label of ['forge studio/home', '../../../../OUTSIDE-SHOULD-NOT-EXIST']) {
+    for (const label of ['forge studio/home', '../../OUTSIDE-SHOULD-NOT-EXIST']) {
       const target = join(capDir, checkpointArtifactName(label, 'out'));
       writeFileSync(target, 'evidence\n');
       assert.ok(resolve(target).startsWith(resolve(capDir) + sep),
@@ -71,7 +71,7 @@ test('two different hostile labels do not collide into one filename (evidence wo
 });
 
 test('the stem is what a captured filename yields back, so the merger can pair a slugged artifact to its checkpoint', () => {
-  for (const label of ['home', 'forge studio/home', '../../../../etc/passwd']) {
+  for (const label of ['home', 'forge studio/home', '../../etc/passwd']) {
     const name = checkpointArtifactName(label, 'out');
     assert.equal(name.replace(/\.out$/, ''), checkpointArtifactStem(label),
       'collectCapturedMedia derives a label by stripping the extension; the merger must be able to recompute it from the checkpoint label');

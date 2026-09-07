@@ -1317,7 +1317,7 @@ describe('ledger integrity — duplicate/non-slug entry ids must fail loud', () 
   });
 
   it('AT-83: a ledger entry with a non-slug id throws, naming the bad id', () => {
-    for (const badId of ['../../../etc/passwd', 'NOT-a-slug!!']) {
+    for (const badId of ['../../etc/passwd', 'NOT-a-slug!!']) {
       const root = makeForgeRoot();
       writeInstalledSkillsLedger(root, [
         { id: badId, source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },

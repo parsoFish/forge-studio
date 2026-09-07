@@ -2,7 +2,7 @@
  * Acceptance tests for orchestrator/studio/connection-library.ts (R3-04-F1 +
  * F4) — DOES NOT EXIST YET. This file is RED at branch base: every describe
  * block below fails at import time (`Cannot find module
- * '../../studio/connection-library.ts'`) — that is the expected, deliberate red. Do not
+ * './connection-library.ts'`) — that is the expected, deliberate red. Do not
  * stub the module into existence to turn this green; red is the deliverable
  * of this round.
  *

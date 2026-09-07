@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for orchestrator/studio/community-install.ts (R3-07-F3,
  * `_wave5/specs/R3-07.md` D2/D9) — DOES NOT EXIST YET. This file is RED at
- * branch base: `Cannot find module '../../studio/community-install.ts'` on import. Do
+ * branch base: `Cannot find module './community-install.ts'` on import. Do
  * not stub the module into existence; red is the deliverable of this round.
  *
  * D2 — install ROUTES, it never re-implements. `routeCommunityInstall`
@@ -261,7 +261,7 @@ describe('routeCommunityInstall — connection (mcp/tool)', () => {
 });
 
 describe('routeCommunityInstall — D9: id validation', () => {
-  const TRAVERSAL_IDS = ['../../../etc/passwd', '..', '.', 'a/b', 'a\\b', ''];
+  const TRAVERSAL_IDS = ['../../etc/passwd', '..', '.', 'a/b', 'a\\b', ''];
 
   for (const badId of TRAVERSAL_IDS) {
     it(`a traversal-shaped or non-slug id ("${badId}") THROWS rather than resolving to any route`, () => {

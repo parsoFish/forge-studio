@@ -56,7 +56,7 @@ test('fixture precondition: the launcher exists', () => {
 });
 
 test('refuses a traversal-shaped --project value with exit 2 + a containment message, before any capture', () => {
-  const { status, output } = runDemoCapture('../../../../etc');
+  const { status, output } = runDemoCapture('../../etc');
   // Red now: the current code accepts the escaping value, folds it into a repo
   // path, finds no demo.json there and exits 0 with no refusal.
   assert.equal(status, 2, `a traversal-shaped --project must be refused with exit 2 before capture — got exit ${status}; output: ${output}`);

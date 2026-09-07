@@ -137,12 +137,12 @@ function readEvents(logger: ReturnType<typeof createLogger>): EventLogEntry[] {
 }
 
 const BASE_CONFIG = {
-  testProcess: { local: { cmd: ['go', 'test', '../../...'] } },
+  testProcess: { local: { cmd: ['go', 'test', './...'] } },
 };
 
 const ACC_GATE = [
   'go', 'test', '-tags', 'all', '-run', 'TestAccFoo',
-  '-timeout', '30m', '../../azuredevops/internal/acceptancetests/...',
+  '-timeout', '30m', './azuredevops/internal/acceptancetests/...',
 ];
 
 test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async () => {

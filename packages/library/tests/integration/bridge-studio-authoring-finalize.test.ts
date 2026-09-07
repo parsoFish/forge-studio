@@ -779,8 +779,8 @@ test('WI2-4-wire (hook): a body carrying poisoned name/description/on/matcher/sc
 test('WI2-5-containment: traversal-shaped sessionId is refused — nothing is written outside the session root, even where a naive unguarded join would land on a REAL valid session', async () => {
   const validSkillMd = matter.stringify('\n# escaped\n', { name: 'escaped', description: 'd' });
 
-  // Variant 1: sessionId "../../../evil-sibling" — a naive join(authoringRoot,
-  // '../../../evil-sibling', 'status.json') cancels the _authoring segment and
+  // Variant 1: sessionId "../evil-sibling" — a naive join(authoringRoot,
+  // '../evil-sibling', 'status.json') cancels the _authoring segment and
   // lands at <projectRoot>/evil-sibling/status.json. Plant a REAL, valid,
   // awaiting-review session there.
   const projectRoot = join(forgeRoot, 'projects', PROJECT);
@@ -797,7 +797,7 @@ test('WI2-5-containment: traversal-shaped sessionId is refused — nothing is wr
 
   const beforeEntries = readdirSync(forgeRoot, { recursive: true } as { recursive: true }).sort();
 
-  const genuineVariants = ['../../../evil-sibling', '..'];
+  const genuineVariants = ['../evil-sibling', '..'];
   for (const poisoned of genuineVariants) {
     const id = `traversal-genuine-${genuineVariants.indexOf(poisoned)}`;
     const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: poisoned, kind: 'skill', id });
@@ -1072,7 +1072,7 @@ test('P6-2 (hook id collision — the EXISTING 409 must also leave the session r
 // ===========================================================================
 
 const ID_TRAVERSAL_VARIANTS: { label: string; id: string; raw?: boolean }[] = [
-  { label: 'relative traversal', id: '../../../../../../../tmp/forge-authoring-p7-attack' },
+  { label: 'relative traversal', id: '../../../../../../../../tmp/forge-authoring-p7-attack' },
   { label: 'absolute path', id: '/tmp/forge-authoring-p7-attack-abs' },
   { label: 'bare dot-dot', id: '..' },
   { label: 'RAW percent-encoded (rule 38 — never decoded by this route)', id: '%2e%2e%2f', raw: true },
