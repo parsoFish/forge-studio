@@ -230,12 +230,71 @@ test('agents-13: each readiness row carries data-ok and an aria-label naming the
       capability: { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false },
     },
   });
-  expect(html).toContain('data-check="purpose" data-ok="true"');
-  expect(html).toContain('data-check="guard" data-ok="false"');
+  expect(html).toContain('data-check="purpose" data-check-state="ready" data-ok="true"');
+  expect(html).toContain('data-check="guard" data-check-state="not-ready" data-ok="false"');
   expect(html).toContain('aria-label="Purpose defined: passed"');
   expect(html).toContain('aria-label="Observability guard attached: not met"');
   // The title always states the outcome, not only for the connections check.
   expect(html).toContain('Observability guard attached — not met');
+});
+
+// ---------------------------------------------------------------------------
+// ReadinessPanel — the two counts, the per-row state, and the badge that
+// waits (rulings 400/410, T1 M6; measured on S5 beat 9).
+//
+// `[data-ready-count]` KEEPS its meaning (how many pass) so
+// scripts/journeys/connections.mjs CONN-3 stays true; `[data-ready-total]` is
+// the stable one a story can assert. The whole point is that the total does
+// not move, so it is asserted across all three connection states in one test
+// rather than pinned once at a single input — a stability claim checked at
+// one point is not checked at all.
+// ---------------------------------------------------------------------------
+
+const READY_CONTENT = {
+  purpose: 'exists',
+  skills: ['brain-query'],
+  guards: ['event-log'],
+  process: 'described',
+  interactivity: 'described',
+  capability: { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false },
+};
+
+test('400/410: [data-ready-total] is the same number whether the connections fetch is unresolved, empty, or holding an unready ref', () => {
+  const unresolved = render(ReadinessPanel, { state: READY_CONTENT });
+  const resolvedReady = render(ReadinessPanel, { state: { ...READY_CONTENT, connectionsUnready: [] } });
+  const resolvedUnready = render(ReadinessPanel, {
+    state: { ...READY_CONTENT, connectionsUnready: [{ id: 'memory', kind: 'mcp', state: 'not-installed' }] },
+  });
+
+  for (const html of [unresolved, resolvedReady, resolvedUnready]) {
+    expect(html).toContain('data-ready-total="7"');
+    expect((html.match(/data-check="/g) ?? []).length).toBe(7);
+  }
+});
+
+test('400/410: [data-ready-count] still counts only what PASSES, so it moves while the total does not', () => {
+  const resolvedReady = render(ReadinessPanel, { state: { ...READY_CONTENT, connectionsUnready: [] } });
+  const resolvedUnready = render(ReadinessPanel, {
+    state: { ...READY_CONTENT, connectionsUnready: [{ id: 'memory', kind: 'mcp', state: 'not-installed' }] },
+  });
+  expect(resolvedReady).toContain('data-ready-count="7"');
+  expect(resolvedUnready).toContain('data-ready-count="6"');
+  expect(resolvedUnready).toContain('data-ready-total="7"');
+});
+
+test('400/410: an unresolved connections fetch renders the row as pending — announced in its own words, never as a failure', () => {
+  const html = render(ReadinessPanel, { state: READY_CONTENT });
+  expect(html).toContain('data-check="connections" data-check-state="pending" data-ok="false"');
+  expect(html).toContain('aria-label="Bound tools/MCPs ready: still checking"');
+  expect(html).not.toContain('Bound tools/MCPs ready: not met');
+});
+
+test('400/410: the ready badge waits for every row to RESOLVE — a pending connections check is not a passing one', () => {
+  const pending = render(ReadinessPanel, { state: READY_CONTENT });
+  const resolved = render(ReadinessPanel, { state: { ...READY_CONTENT, connectionsUnready: [] } });
+  // `ready-badge visible` is the class the panel adds only when it claims ready.
+  expect(pending).not.toContain('ready-badge visible');
+  expect(resolved).toContain('ready-badge visible');
 });
 
 // ---------------------------------------------------------------------------

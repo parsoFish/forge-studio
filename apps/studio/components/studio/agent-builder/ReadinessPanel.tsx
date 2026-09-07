@@ -1,14 +1,43 @@
 'use client';
 
-import { computeReadinessChecks, capabilityInteractive, type ReadinessInput } from '@/lib/agent-readiness';
+import { computeReadinessChecks, capabilityInteractive, type ReadinessInput, type ReadinessState } from '@/lib/agent-readiness';
 
 // ---------------------------------------------------------------------------
-// ReadinessPanel — 6-check list (R2-02-F4: the `runtime` check is sourced
+// ReadinessPanel — the 7-check list (R2-02-F4: the `runtime` check is sourced
 // from the server-computed F1 capability descriptor, not a client
 // heuristic) + a ready badge when all pass, plus an informational
 // `[data-capability-interactive]` chip that visibly reflects the descriptor's
 // `interactive` fact (not a pass/fail gate — see agent-readiness.ts).
+//
+// THE TWO COUNTS ARE DIFFERENT QUESTIONS (rulings 400/410, T1 M6):
+//   [data-ready-count]  how many checks PASS. Unchanged meaning — the
+//                       connections journey (scripts/journeys/connections.mjs
+//                       CONN-3) asserts `readyCount < totalChecks` against it.
+//   [data-ready-total]  how many checks EXIST. Stable at every input, because
+//                       `computeReadinessChecks` now always names all seven.
+// S5 beat 9 measured why the second one had to exist: it asserted
+// `data-ready-count: "6"`, and the panel answered 7 once the story fenced a
+// tool — the count moved with the agent's bindings, so no observer could
+// assert it. The passing count is still worth publishing; it was just never
+// the stable thing.
+//
+// THE BADGE WAITS FOR EVERY ROW TO RESOLVE, not merely for the passing ones
+// to add up. While the connections fetch is unresolved its row reads
+// `pending`, and a panel that lit "Ready to use in flows" on the other six
+// would be claiming an agent is ready before anything knows whether its bound
+// tools are real. That was live behaviour before this change.
 // ---------------------------------------------------------------------------
+
+/**
+ * One phrase per state, for the aria-label and the title. `pending` needs its
+ * own words: "not met" would report an unanswered check as a failed one, and
+ * a screen-reader user would hear a defect that may not exist.
+ */
+const OUTCOME_TEXT: Record<ReadinessState, string> = {
+  ready: 'passed',
+  'not-ready': 'not met',
+  pending: 'still checking',
+};
 
 type Props = { state: ReadinessInput };
 
@@ -16,8 +45,8 @@ export function ReadinessPanel({ state }: Props) {
   const checks = computeReadinessChecks(state);
   const interactive = capabilityInteractive(state.capability);
 
-  const readyCount = checks.filter((c) => c.ok).length;
-  const allReady = readyCount === checks.length;
+  const readyCount = checks.filter((c) => c.state === 'ready').length;
+  const allReady = checks.every((c) => c.state === 'ready');
 
   return (
     <div className="readiness-panel panel" style={{ padding: '12px 12px 14px' }} data-component="readiness-panel">
@@ -27,15 +56,16 @@ export function ReadinessPanel({ state }: Props) {
           that always says passed/not-met (with the check's own detail when
           it has one) so screen readers and the journey harness can tell the
           two states apart. */}
-      <ul className="readiness-list" id="readiness-list" data-ready-count={readyCount}>
+      <ul className="readiness-list" id="readiness-list" data-ready-count={readyCount} data-ready-total={checks.length}>
         {checks.map((c) => (
           <li
             key={c.key}
-            className={`readiness-item${c.ok ? ' ok' : ''}`}
+            className={`readiness-item${c.state === 'ready' ? ' ok' : ''}`}
             data-check={c.key}
-            data-ok={c.ok ? 'true' : 'false'}
-            aria-label={`${c.label}: ${c.ok ? 'passed' : 'not met'}`}
-            title={c.detail ?? (c.ok ? `${c.label} — passed` : `${c.label} — not met`)}
+            data-check-state={c.state}
+            data-ok={c.state === 'ready' ? 'true' : 'false'}
+            aria-label={`${c.label}: ${OUTCOME_TEXT[c.state]}`}
+            title={c.detail ?? `${c.label} — ${OUTCOME_TEXT[c.state]}`}
           >
             <span className="ri-dot" />
             {c.label}
