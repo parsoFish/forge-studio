@@ -34,7 +34,7 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
-import { memoryVerdict, readAvailableMb, acquireHostLock } from './preflight.mjs';
+import { memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict } from './preflight.mjs';
 import {
   applyFence,
   describeFence,
@@ -138,6 +138,23 @@ async function main() {
     }
   }
 
+  // 1b. Foreign sessions — bead `forge-8vfn.6.11.50`. A COSTED run must not
+  //     start beside another project's sessions: Studio lists them all, a beat
+  //     that presses `open-session` takes the FIRST card, and S2 run 10 spent
+  //     its whole bound on S1 run 10's failed demo session on `gitweave`.
+  //     Checked here, beside the spend gate, because the point is to refuse
+  //     BEFORE the money — and only for a run that spends, so a costless story
+  //     never gains a new way to be blocked.
+  for (const s of stories) {
+    if (!(s.ground.realSpawn || s.ground.budget_usd > 0)) continue;
+    const v = foreignSessionVerdict(ROOT, s.ground.project);
+    if (!v.ok) {
+      console.error(`[stories] REFUSING ${s.id}: ${v.reason}`);
+      return 1;
+    }
+    console.log(`[stories] sessions ok — ${v.reason}`);
+  }
+
   // 2. Memory — a starved host OOM-kills the browser and the crash reads as a
   //    code defect.
   const mem = memoryVerdict(readAvailableMb());
@@ -217,6 +234,11 @@ async function main() {
 }
 
 async function runStory(story, uiUrl, startedMs) {
+  // This run's own stamp for its red evidence (`6.11.50`) — one value for the
+  // whole run, so the DOM captured at a beat and the ground read before the
+  // sweep land in the SAME directory and no previous run's files sit beside
+  // them.
+  const runStamp = new Date(startedMs).toISOString().replace(/[:.]/g, '-');
   // The fence's baseline, taken before this story touches anything and after
   // the leading sweep, so a previous run's residue is never charged to this one
   // and an operator's work-in-progress is never charged to it either.
@@ -274,7 +296,7 @@ async function runStory(story, uiUrl, startedMs) {
       // captured while the page still exists. The session dir below says what
       // the product HAD; this says what was on the screen, and S2 run 8's open
       // question is exactly the difference between the two.
-      if (verdict.status !== 'green') await captureBeatDom(page, ROOT, story.id, i, beat.act);
+      if (verdict.status !== 'green') await captureBeatDom(page, ROOT, story.id, i, beat.act, runStamp);
       const mark = verdict.status === 'green' ? '✓' : '✗';
       console.log(`  ${mark} ${i + 1}. ${beat.act}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
@@ -341,6 +363,7 @@ async function runStory(story, uiUrl, startedMs) {
     root: ROOT,
     storyId: story.id,
     red: beats.some((b) => b.status !== 'green'),
+    runStamp,
   });
   for (const line of describeRedEvidence(redEvidence, ROOT)) console.log(line);
 
