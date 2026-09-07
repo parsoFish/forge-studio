@@ -405,6 +405,26 @@ export default {
       // the row's own `verdicts: [approve, revise, reject]` and that row
       // declares no `requires:`, so nothing gates the press.
       //
+      // THE BRIEF IS FOCUS-ONLY, AND RUN 10 IS WHY (T1 ruling 367). The first
+      // version of this brief said "Show the scan running end to end on this
+      // repo and print the human-readable summary" — which reads as an
+      // instruction to RUN things, and the agent did: S1 run 10's
+      // `events.jsonl` holds 25 events, 24 of them `tool.Bash`, and no `end`,
+      // against `maxTurns: 24`. It burned its whole turn ceiling running
+      // commands and wrote neither required artifact, and the session reached
+      // the terminal `failed` in 111 s with the product's own error naming what
+      // was missing and saying "refine the guidance". §15.213 — the brief is
+      // part of this amendment, so the amendment is the first suspect.
+      //
+      // So the brief now describes WHAT THE DEMO SHOULD SHOW AND WHY, and says
+      // not to run the project. It is guidance, which is what the `briefing`
+      // checkpoint is for; the deliverable belongs to the demo-design skill.
+      //
+      // THE PREDICTION, on the record before the next run spends: if a
+      // focus-only brief ALSO exhausts 24 Bash turns, the brief was never the
+      // cause and bead `forge-8vfn.6.11.49` — the demo builder's Bash ceiling —
+      // is a P1 product defect rather than a P2 observation.
+      //
       // THE BOUND IS THE LARGEST THE RUNNER PERMITS, and that is a statement
       // rather than a guess: the demo builder bounds its generation in TURNS
       // (`maxTurns: 24`, `packages/sessions/kinds/demo-builder.ts`), not in
@@ -417,7 +437,10 @@ export default {
         { press: 'view-demo-session' },
         {
           fill: 'session-answer',
-          with: 'Show the scan running end to end on this repo and print the human-readable summary — the same output the quality gate checks.',
+          with:
+            'The demo should show the end-to-end scan and the human-readable summary the quality gate checks — '
+            + 'that is this project\'s one capability worth seeing, and what a newcomer needs in order to believe it works. '
+            + 'Design and write the demo; do not run the project to find out.',
         },
         { press: 'submit-answers' },
         { press: 'verdict-approve' },
