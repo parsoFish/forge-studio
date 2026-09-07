@@ -23,6 +23,7 @@ import { RecentRuns } from '@/components/RecentRuns';
 import { toKbRunLedgerRows } from '@/lib/kb-runs';
 import type { LedgerRow } from '@/lib/history-ledger';
 import type { KbDrainDisplayState } from '@/lib/kb-drain-view';
+import { initialKbId, readLastViewedKb, useRememberLastViewedKb } from '@/lib/kb-last-viewed';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
@@ -329,19 +330,18 @@ function KnowledgePageInner() {
     }
     setIdConfirmed(true);
     setNotFound(null); // bare /knowledge (the NotFound's own back link) clears any prior miss
+    // 5.14(3) last-viewed not roster-head (S6 b12); W6-IA-4 C4#1 empty roster.
     if (allKbs.length > 0 && !currentId) {
-      setCurrentId(allKbs[0].id);
-      return;
+      const chosen = initialKbId(allKbs.map((k) => k.id), readLastViewedKb());
+      if (chosen !== null) { setCurrentId(chosen); return; }
     }
-    // W6-IA-4 sweep finding C4#1: a genuinely empty roster has no id to
-    // select, ever — the "load KB detail" effect below (the only OTHER
-    // place `ready` is set) never runs without one. Without this, the page
-    // hung on `data-page-ready="false"` forever whenever zero KBs existed.
     if (kbListReady && allKbs.length === 0 && !currentId) {
       setReady(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idParam, nodeParam, themeParam, allKbs, kbListReady]);
+
+  useRememberLastViewedKb(idConfirmed, currentId); // 5.14(3) write half
 
   // ── W6-P4: prime the kb-detail fetch the INSTANT currentId is set ────────
   // Starts the network request right away, even for an unconfirmed
