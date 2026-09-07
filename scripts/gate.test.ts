@@ -14,9 +14,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 
 const GATE = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'gate.sh');
 
@@ -31,6 +31,15 @@ function tree(ci: string) {
   writeFileSync(join(d, '.github', 'workflows', 'ci.yml'), ci);
   return d;
 }
+/** The gate voids any verdict on a tree whose `@forge/kernel` resolves
+ *  outside it (§15.13), so a fixture that wants to reach the STEP loop must
+ *  own its install. */
+function installedInPlace(d: string) {
+  mkdirSync(join(d, 'packages', 'kernel'), { recursive: true });
+  mkdirSync(join(d, 'node_modules', '@forge'), { recursive: true });
+  symlinkSync(join(d, 'packages', 'kernel'), join(d, 'node_modules', '@forge', 'kernel'));
+}
+
 const CI = `name: CI
 on: [push]
 jobs:
@@ -122,6 +131,86 @@ describe('gate.sh — a verdict about a tree is void unless it measured that tre
     } finally {
       rmSync(d, { recursive: true, force: true });
       rmSync(other, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('gate.sh — a step log belongs to the tree that produced it (bead 6.9)', () => {
+  test('two trees gated into ONE campaign dir keep BOTH step logs — neither overwrites the other', () => {
+    // The incident this pins, in one sentence: `$LOGS` is the campaign dir,
+    // shared by every lane, and the step name derives from the COMMAND, so
+    // four lanes gating at once all wrote `gate-npm-test.log`. On 2026-09-08
+    // a lane read `# fail 10` out of that file seconds after its own gate
+    // passed; the failures belonged to a sibling, and PR bodies across the
+    // milestone had already quoted counts from this path as evidence.
+    const campaign = mkdtempSync(join(tmpdir(), 'gate-camp-'));
+    // A ci.yml whose only step is a command that always succeeds and writes
+    // something identifiable, so each tree's log has provable provenance.
+    const ciFor = (marker: string) => `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Marker
+        run: echo ${marker}
+`;
+    const a = tree(ciFor('TREE-A-RAN-HERE'));
+    const b = tree(ciFor('TREE-B-RAN-HERE'));
+    try {
+      // Each tree needs an install that points at ITSELF, or the
+      // borrowed-node_modules guard voids the verdict before any step runs
+      // and no reports/ dir is ever created (that guard has its own test
+      // above; here it would mask the thing under test).
+      for (const d of [a, b]) installedInPlace(d);
+
+      gate(a, campaign);
+      gate(b, campaign);
+
+      const logs = readdirSync(join(campaign, 'reports'));
+      const forA = logs.filter((f) => f.includes(basename(a)));
+      const forB = logs.filter((f) => f.includes(basename(b)));
+
+      assert.ok(forA.length > 0, `no step log names tree A; got: ${logs.join(', ')}`);
+      assert.ok(forB.length > 0, `no step log names tree B; got: ${logs.join(', ')}`);
+
+      // The claim is not merely "two files exist" — it is that each one holds
+      // ITS OWN tree's output. A shared name would leave one file holding the
+      // last writer's bytes, which is exactly how the incident read as green.
+      const bodyA = readFileSync(join(campaign, 'reports', forA[0]), 'utf8');
+      const bodyB = readFileSync(join(campaign, 'reports', forB[0]), 'utf8');
+      assert.match(bodyA, /TREE-A-RAN-HERE/, 'tree A\'s step log must hold tree A\'s output');
+      assert.match(bodyB, /TREE-B-RAN-HERE/, 'tree B\'s step log must hold tree B\'s output');
+      assert.doesNotMatch(bodyA, /TREE-B-RAN-HERE/, 'a sibling gate must not be able to write into this tree\'s log');
+    } finally {
+      rmSync(a, { recursive: true, force: true });
+      rmSync(b, { recursive: true, force: true });
+      rmSync(campaign, { recursive: true, force: true });
+    }
+  });
+
+  test('no `.part` file survives a completed gate — the atomic rename always lands', () => {
+    const campaign = mkdtempSync(join(tmpdir(), 'gate-camp-'));
+    const d = tree(`name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fails
+        run: exit 3
+`);
+    try {
+      installedInPlace(d);
+      gate(d, campaign);
+      const logs = readdirSync(join(campaign, 'reports'));
+      // A FAILING step is the case that used to skip the rename in the first
+      // draft of this fix: the log it points the reader at must exist.
+      assert.deepEqual(logs.filter((f) => f.endsWith('.part')), [], `a .part file outlived the gate: ${logs.join(', ')}`);
+      assert.ok(logs.some((f) => f.includes(basename(d))), 'the failing step log is still named for its tree');
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(campaign, { recursive: true, force: true });
     }
   });
 });
