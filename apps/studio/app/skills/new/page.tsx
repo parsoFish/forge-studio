@@ -95,9 +95,6 @@ export default function SkillBuilderPage() {
           </div>
           <AuthoringLauncher
             knownProjects={knownProjects}
-            onStarted={(sessionId, project) =>
-              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
-            }
           />
         </div>
     </StudioPage>
