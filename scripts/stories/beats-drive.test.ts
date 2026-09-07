@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveBeat } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
 
 // ── M1-H: the post-press wait, and the state it is leaving (bead `forge-8vfn.2.28`)
 //

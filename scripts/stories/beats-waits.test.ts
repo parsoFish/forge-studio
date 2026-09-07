@@ -14,7 +14,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveBeat } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
 
 /**
  * One element: a tag, its attrs, the route a click navigates to, a delayed
