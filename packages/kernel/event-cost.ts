@@ -125,3 +125,19 @@ export function sumAuthoritativeCostUsd(
   }
   return sum;
 }
+
+/**
+ * What one session spent, from its own event rows — the rule above plus the
+ * honest-`null` convention every cost surface keeps: a log with no priced row
+ * has NO figure, which is a different fact from a run that cost nothing (and
+ * is why a reaped turn reports UNMEASURED rather than $0.00).
+ *
+ * Lives here, beside the rule, because BOTH readers need it and they sit in
+ * packages that may not import each other: the session read route
+ * (`@forge/sessions`) and the per-agent history rows (`@forge/agents`). Two
+ * copies of a two-line wrapper is how a second formula starts.
+ */
+export function deriveSessionCostUsd(events: readonly Record<string, unknown>[]): number | null {
+  if (!events.some((e) => typeof e['cost_usd'] === 'number')) return null;
+  return sumAuthoritativeCostUsd(events as unknown as readonly EventLogEntry[]);
+}
