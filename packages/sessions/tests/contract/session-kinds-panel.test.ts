@@ -562,8 +562,19 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
     const onboarding = byId(descs, 'onboarding');
     assert.deepEqual(
       onboarding.panel,
-      { phases: [{ phase: 'running', step: 'agent' }, { phase: 'complete', step: 'terminal' }, { phase: 'failed', step: 'terminal' }] },
-      `onboarding's panel must deep-equal the thin running->complete/failed table mirroring writeSessionTerminalPhase (packages/agents/agent-run.ts:198), got: ${JSON.stringify(onboarding.panel)}`,
+      // Ruling 441 — the table gained its FIRST writable row. `start` mints at
+      // `briefing` and dispatches nothing; the brief arrives through the same
+      // generic question-form affordance instructions and demo already use, and
+      // that write is what advances to `running` and spawns the agent. The tail
+      // is unchanged and still mirrors writeSessionTerminalPhase
+      // (packages/agents/agent-run.ts:198).
+      { phases: [
+        { phase: 'briefing', step: 'noop', awaits: 'questions' },
+        { phase: 'running', step: 'agent' },
+        { phase: 'complete', step: 'terminal' },
+        { phase: 'failed', step: 'terminal' },
+      ] },
+      `onboarding's panel must deep-equal the briefing->running->complete/failed table, got: ${JSON.stringify(onboarding.panel)}`,
     );
 
     for (const id of ['architect', 'project-brain', 'authoring', 'kb-cleanup']) {

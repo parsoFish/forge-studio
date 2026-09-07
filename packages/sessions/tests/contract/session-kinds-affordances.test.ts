@@ -123,18 +123,18 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
     assert.deepEqual(deriveSessionAffordances(authoring, 'committed'), []);
   });
 
-  it('the real repo — every panel-bearing kind EXCEPT onboarding derives at least one non-empty affordance set somewhere in its table, and every terminal phase in every REAL turnSpec/panel table derives []', () => {
+  it('the real repo — EVERY panel-bearing kind derives at least one non-empty affordance set somewhere in its table, and every terminal phase in every REAL turnSpec/panel table derives []', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    // onboarding is deliberately excluded from the non-empty assertion: its
-    // real table is running(agent, no writes/next, branches to complete OR
-    // failed) -> complete(terminal) -> failed(terminal) — EVERY row derives
-    // [] (running has neither writes nor next; both others are terminal).
-    // This is the HONEST correct answer for a fire-and-forget dispatch with
-    // no operator-facing decision point (ADR-043 §Consequences: "onboarding
-    // is explicitly out of scope... a different path") — not a gap this
-    // table's design failed to fill. See the dedicated onboarding assertion
-    // below instead.
-    for (const id of ['demo', 'instructions', 'authoring', 'kb-cleanup']) {
+    // Ruling 441 REMOVED the exception this test used to carry. Onboarding's
+    // table was running(agent) -> complete(terminal) -> failed(terminal), every
+    // row deriving [] — the honest answer for a fire-and-forget dispatch with
+    // no operator-facing decision point. It now opens at `briefing`
+    // (`awaits: questions`), which is a real decision point: nothing is spent
+    // until the operator answers. So onboarding joins the list rather than
+    // sitting beside it, and the dedicated "must derive [] everywhere"
+    // assertion below is replaced by one that pins WHICH phase carries the
+    // affordance — a stronger claim than the exception it replaces.
+    for (const id of ['demo', 'instructions', 'authoring', 'kb-cleanup', 'onboarding']) {
       const d = byId(descs, id);
       const table = d.turnSpec?.phases ?? d.panel?.phases;
       assert.ok(table, `expected "${id}" to carry a turnSpec or panel table`);
@@ -145,9 +145,18 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
       }
     }
 
+    // Ruling 441 — exactly ONE writable row, and it is the pre-dispatch brief.
+    // `running` still derives [] (an agent working is not a decision point) and
+    // both terminals do too, so this pins the shape rather than merely
+    // "something is non-empty".
     const onboarding = byId(descs, 'onboarding');
-    for (const p of onboarding.panel!.phases) {
-      assert.deepEqual(deriveSessionAffordances(onboarding, p.phase), [], `onboarding phase "${p.phase}" must derive [] — the fire-and-forget table has no operator-facing decision point anywhere`);
+    assert.deepEqual(
+      deriveSessionAffordances(onboarding, 'briefing').map((a) => a.kind),
+      ['question-form'],
+      'onboarding asks for its brief through the SAME generic question-form every other briefed kind uses',
+    );
+    for (const phase of ['running', 'complete', 'failed']) {
+      assert.deepEqual(deriveSessionAffordances(onboarding, phase), [], `onboarding phase "${phase}" must still derive [] — only the brief is operator-facing`);
     }
 
     const architect = byId(descs, 'architect');

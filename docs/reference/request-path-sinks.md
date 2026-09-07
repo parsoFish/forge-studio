@@ -2269,3 +2269,33 @@ parsoFish/main...HEAD` on it shows no `existsSync`/`readFileSync` line), and
 `parsoFish/main`'s own copy has one of each — the baseline carried stale slack.
 It is tightened rather than left, on §15.65's rule: a ratchet that permits two
 calls in a file containing one will pass a regression that adds one back.
+
+### Added in M6-A (ruling 441) — onboarding's pre-dispatch brief writes one more leaf
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/sessions/bridge-studio-kickoff.ts` | `writeFileSync` | 4 | 5 |
+
+**One new sink, and it is a genuinely new write rather than a widened rule.**
+`POST /api/studio/onboarding/start` now mints the session at `briefing` and
+writes the one question the generic question-form renders (`questions.json`),
+so a session started from the spine — which nobody briefed — has something real
+to ask instead of an empty form. Ruling 441 (option A2).
+
+**Guarded identically to the two leaves it sits between**, and the class is
+unchanged: `writeOnboardingSession` creates the session directory with
+`mkdirSync(sessionDir)` and **no `recursive` flag**, so a pre-existing entry
+(including a symlink) is a hard `EEXIST` rather than something reused; each of
+the three leaves — `status.json`, `prompt.md` and now `questions.json` — is
+written with **`flag: 'wx'`**, an exclusive create that never follows an
+existing symlinked leaf. `sessionId` is `SAFE_ID_RE`-gated a few lines above,
+and the parent was realpath-verified inside the project dir by the caller
+before any of this runs. The allowlist row for the new leaf states exactly
+that, beside its two neighbours (`check-raw-fs-guarded.allowlist.mjs`).
+
+**The dispatch moved and did NOT bring a sink with it.** The
+`agent-run.dispatched` emit and `spawnAgentDispatch` call left this route for
+the question-form arm (`handleOnboardingBrief`), which writes `prompt.md` and
+the status through `guardedWriteFile`/`guardedWriteSessionStatus` — the
+per-segment guarded form — so the arm adds no raw sink at all. That is why this
+table shows one addition rather than a relocation.

@@ -575,7 +575,7 @@ packages/sessions/bridge-studio-demo.ts readFileSync 1
 packages/sessions/bridge-studio-instructions.ts readFileSync 1
 packages/sessions/bridge-studio-kickoff.ts mkdirSync 4
 packages/sessions/bridge-studio-kickoff.ts realpathSync 2
-packages/sessions/bridge-studio-kickoff.ts writeFileSync 4
+packages/sessions/bridge-studio-kickoff.ts writeFileSync 5
 packages/sessions/bridge-studio-lifecycle.ts openSync 1
 packages/sessions/bridge-studio-lifecycle.ts readFileSync 1
 packages/sessions/bridge-studio-lifecycle.ts statSync 2
