@@ -17,7 +17,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath } from './preflight.mjs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict } from './preflight.mjs';
 
 test('ample memory passes', () => {
   const v = memoryVerdict(8000);
@@ -64,4 +68,58 @@ test('the host lock lives OUTSIDE the worktree, so two worktrees contend for one
   const b = hostLockPath();
   assert.equal(a, b, 'every tree on this host must resolve the SAME lock path');
   assert.ok(!a.startsWith('/home/parso/forge'), 'the lock must not live inside any worktree');
+});
+
+// ── 6.11.50: A COSTED RUN MUST NOT START BESIDE ANOTHER STORY'S SESSIONS
+//
+// THE INCIDENT, S2 run 10 (funded, $0.3942, VOID as a test). It was launched
+// minutes after S1 run 10 in the same lane. Its beat 12 pressed
+// `open-session` — a handle `HomeSessionsStrip` renders ONCE PER CARD, so the
+// runner's `.first()` takes whichever card sorts first — and landed on
+// `2026-09-07T03-38-22-20436835`, S1 run 10's FAILED demo session on
+// `gitweave`: a different story, a different project, a different kind. It
+// then spent ten minutes waiting for an architect's question box on a demo
+// session's page and reported `answered 0 round(s)`.
+//
+// The product was fine throughout: run 10's own session wrote its questions
+// 62 s in and sat at `awaiting-answers` for the rest of the bound.
+//
+// The trailing sweep removes `story-*` fixtures and has no reason to touch a
+// real project's sessions, so nothing was wrong with the sweep either. What
+// was missing is a preflight question: IS THIS LANE CLEAN OF OTHER PEOPLE'S
+// SESSIONS? A costed run that cannot tell its own session from a neighbour's
+// is a run that can spend its bound on the wrong page.
+
+test('6.11.50 (RED): a costed run REFUSES when a session from another project is on disk', () => {
+  const root = mkdtempSync(join(tmpdir(), 'preflight-foreign-'));
+  // The exact residue S1 run 10 left behind.
+  mkdirSync(join(root, 'projects', 'gitweave', '_demo', '2026-09-07T03-38-22-20436835'), { recursive: true });
+  writeFileSync(
+    join(root, 'projects', 'gitweave', '_demo', '2026-09-07T03-38-22-20436835', 'status.json'),
+    JSON.stringify({ phase: 'failed', project: 'gitweave' }),
+  );
+
+  const v = foreignSessionVerdict(root, 'story-s2');
+  assert.equal(v.ok, false);
+  assert.match(v.reason, /gitweave/, 'the refusal names the project whose session is in the way');
+  assert.match(v.reason, /2026-09-07T03-38-22-20436835/, 'and the session, so the operator can go and look at it');
+});
+
+test('6.11.50: the run\'s OWN project\'s sessions do not refuse it — the positive control', () => {
+  // S1 restores its ground and then fills it with its own sessions. A rule
+  // that refused those would refuse every S1 run after its first beat.
+  const root = mkdtempSync(join(tmpdir(), 'preflight-own-'));
+  mkdirSync(join(root, 'projects', 'gitweave', '_architect', 'a-1'), { recursive: true });
+  writeFileSync(join(root, 'projects', 'gitweave', '_architect', 'a-1', 'status.json'), '{}');
+
+  const v = foreignSessionVerdict(root, 'gitweave');
+  assert.equal(v.ok, true, v.reason);
+});
+
+test('6.11.50: a lane with no sessions at all passes, and says so', () => {
+  const root = mkdtempSync(join(tmpdir(), 'preflight-none-'));
+  mkdirSync(join(root, 'projects'), { recursive: true });
+  const v = foreignSessionVerdict(root, 'story-s2');
+  assert.equal(v.ok, true);
+  assert.match(v.reason, /no sessions/i);
 });

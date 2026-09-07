@@ -27,6 +27,9 @@ import { join } from 'node:path';
 
 import { captureBeatDom, captureRedEvidence, redEvidenceDir } from './red-evidence.mjs';
 
+/** One run's stamp — `6.11.50`: every capture of a run shares exactly one. */
+const STAMP = '2026-09-07T04-00-11-553Z';
+
 /** A ground mid-interview: two session kinds, the architect one carrying questions. */
 function ground(): { root: string; project: string; sessionDir: string } {
   const root = mkdtempSync(join(tmpdir(), 'red-evidence-'));
@@ -49,19 +52,19 @@ function ground(): { root: string; project: string; sessionDir: string } {
 
 test('6.11.42: a RED run captures the session dir BEFORE anything sweeps it', () => {
   const { root, project } = ground();
-  const out = captureRedEvidence({ root, storyId: 'S2', red: true });
+  const out = captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP });
 
   assert.notEqual(out, null, 'a red run must capture');
-  const captured = join(redEvidenceDir(root, 'S2'), 'story-S2', '_architect', '2026-09-06T21-10-48-ec4ede4c', 'questions.json');
+  const captured = join(redEvidenceDir(root, 'S2', STAMP), 'story-S2', '_architect', '2026-09-06T21-10-48-ec4ede4c', 'questions.json');
   assert.ok(existsSync(captured), `questions.json must survive the sweep at ${captured}`);
   assert.deepEqual(JSON.parse(readFileSync(captured, 'utf8')), [{ id: 'q1', text: 'which gate?' }]);
 });
 
 test('6.11.42: the MTIMES are recorded explicitly — "written late" and "rendered late" hold identical JSON', () => {
   const { root, project } = ground();
-  captureRedEvidence({ root, storyId: 'S2', red: true });
+  captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP });
 
-  const manifest = readFileSync(join(redEvidenceDir(root, 'S2'), 'MTIMES.txt'), 'utf8');
+  const manifest = readFileSync(join(redEvidenceDir(root, 'S2', STAMP), 'MTIMES.txt'), 'utf8');
   assert.match(manifest, /_architect\/2026-09-06T21-10-48-ec4ede4c\/questions\.json/);
   assert.match(
     manifest,
@@ -72,31 +75,31 @@ test('6.11.42: the MTIMES are recorded explicitly — "written late" and "render
 
 test('6.11.42: EVERY session kind under the ground is captured, not just the architect', () => {
   const { root, project } = ground();
-  captureRedEvidence({ root, storyId: 'S2', red: true });
+  captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP });
   assert.ok(
-    existsSync(join(redEvidenceDir(root, 'S2'), 'story-S2', '_demo', 'sid2', 'status.json')),
+    existsSync(join(redEvidenceDir(root, 'S2', STAMP), 'story-S2', '_demo', 'sid2', 'status.json')),
     'the demo session is evidence too — a red beat is not always the architect\'s',
   );
 });
 
 test('6.11.42 POSITIVE CONTROL: a GREEN run captures nothing, so the sweep is not quietly turned off', () => {
   const { root, project } = ground();
-  const out = captureRedEvidence({ root, storyId: 'S2', red: false });
+  const out = captureRedEvidence({ root, storyId: 'S2', red: false, runStamp: STAMP });
 
   assert.equal(out, null, 'a green run must capture nothing');
-  assert.ok(!existsSync(redEvidenceDir(root, 'S2')), 'and leave no directory behind');
+  assert.ok(!existsSync(redEvidenceDir(root, 'S2', STAMP)), 'and leave no directory behind');
 });
 
 test('6.11.42: a story with no ground, or a ground already gone, is not an error — a red run still reports', () => {
   const root = mkdtempSync(join(tmpdir(), 'red-evidence-none-'));
-  assert.equal(captureRedEvidence({ root, storyId: 'smoke', red: true }), null, 'a story that leaves no ground captures nothing');
-  assert.doesNotThrow(() => captureRedEvidence({ root, storyId: 'S2', red: true }));
+  assert.equal(captureRedEvidence({ root, storyId: 'smoke', red: true, runStamp: STAMP }), null, 'a story that leaves no ground captures nothing');
+  assert.doesNotThrow(() => captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP }));
 });
 
 test('6.11.42: the capture lands OUTSIDE the ground the sweep removes', () => {
   const { root, project } = ground();
-  captureRedEvidence({ root, storyId: 'S2', red: true });
-  const dir = redEvidenceDir(root, 'S2');
+  captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP });
+  const dir = redEvidenceDir(root, 'S2', STAMP);
   assert.ok(
     !dir.startsWith(join(root, 'projects')),
     `capturing INTO the directory about to be removed would preserve nothing — got ${dir}`,
@@ -107,7 +110,7 @@ test('6.11.42: the capture lands OUTSIDE the ground the sweep removes', () => {
 test('6.11.42: the DOM at the red is captured beside the session files — the ground says what the PRODUCT had, the DOM says what the OPERATOR could see', async () => {
   const root = mkdtempSync(join(tmpdir(), 'red-evidence-dom-'));
   const page = { content: async () => '<main data-page="session" data-session-phase="awaiting-answers"></main>' };
-  const p = await captureBeatDom(page as never, root, 'S2', 11, 'Open the session again and answer');
+  const p = await captureBeatDom(page as never, root, 'S2', 11, 'Open the session again and answer', STAMP);
 
   assert.notEqual(p, null);
   const html = readFileSync(p!, 'utf8');
@@ -118,7 +121,7 @@ test('6.11.42: the DOM at the red is captured beside the session files — the g
 test('6.11.42: a page that has already gone does not turn a recorded red into a crash', async () => {
   const root = mkdtempSync(join(tmpdir(), 'red-evidence-gone-'));
   const dead = { content: async () => { throw new Error('Target page, context or browser has been closed'); } };
-  assert.equal(await captureBeatDom(dead as never, root, 'S2', 0, 'a beat'), null);
+  assert.equal(await captureBeatDom(dead as never, root, 'S2', 0, 'a beat', STAMP), null);
 });
 
 test('6.11.42: the capture is keyed off the SWEEP\'s own target list, not a separately-derived ground name', () => {
@@ -134,9 +137,9 @@ test('6.11.42: the capture is keyed off the SWEEP\'s own target list, not a sepa
   writeFileSync(join(declaredButSafe, 'status.json'), '{"phase":"never-at-risk"}');
   writeFileSync(join(actuallySwept, 'status.json'), '{"phase":"about-to-be-removed"}');
 
-  captureRedEvidence({ root, storyId: 'proof', red: true });
+  captureRedEvidence({ root, storyId: 'proof', red: true, runStamp: STAMP });
 
-  const dir = redEvidenceDir(root, 'proof');
+  const dir = redEvidenceDir(root, 'proof', STAMP);
   assert.ok(
     existsSync(join(dir, 'story-proof', '_architect', 'sid', 'status.json')),
     'the ground the sweep removes must be the one that is read',
@@ -168,7 +171,7 @@ test('6.11.48: the capture records the URL the page was on, because a mode lives
     url: () => 'http://localhost:4124/artifact?session=arch-1&kind=architect&mode=view',
     content: async () => '<main data-page="artifact" data-plan-mode="view"></main>',
   };
-  const p = await captureBeatDom(page as never, root, 'S1', 10, 'Open the session, read the plan and press Approve');
+  const p = await captureBeatDom(page as never, root, 'S1', 10, 'Open the session, read the plan and press Approve', STAMP);
 
   assert.notEqual(p, null);
   const html = readFileSync(p!, 'utf8');
@@ -182,8 +185,21 @@ test('6.11.48: a page that cannot say where it is still yields a capture — the
   // recorded evidence into no evidence at all.
   const root = mkdtempSync(join(tmpdir(), 'red-evidence-nourl-'));
   const page = { content: async () => '<main data-page="session"></main>' };
-  const p = await captureBeatDom(page as never, root, 'S1', 10, 'a beat');
+  const p = await captureBeatDom(page as never, root, 'S1', 10, 'a beat', STAMP);
 
   assert.notEqual(p, null, 'the DOM is still captured when the URL cannot be read');
   assert.match(readFileSync(p!, 'utf8'), /data-page="session"/);
+});
+
+test('6.11.50: two runs of one story do not write into the same directory', () => {
+  // S2 run 10's capture sat beside run 9's, with only MTIMES.txt rewritten, so
+  // a reader could take the previous run's ground for this one's — the two were
+  // distinguishable only by reading a session id out of the JSON. Evidence that
+  // quietly mixes two runs is worse than no evidence: it reads as one run.
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-perrun-'));
+  const nine = redEvidenceDir(root, 'S2', '2026-09-06T22-58-43-000Z');
+  const ten = redEvidenceDir(root, 'S2', '2026-09-07T03-59-58-000Z');
+
+  assert.notEqual(nine, ten, 'each run owns its own directory');
+  assert.ok(ten.includes('S2'), 'still filed under the story');
 });

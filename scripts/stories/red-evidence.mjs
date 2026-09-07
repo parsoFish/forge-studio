@@ -28,9 +28,23 @@ import { basename, join, relative } from 'node:path';
 
 import { productFixturePathsFor } from './sweep.mjs';
 
-/** Where a red run's ground is read to — under `_logs/`, never under the ground. */
-export function redEvidenceDir(root, storyId) {
-  return join(root, '_logs', '_story-red-evidence', storyId);
+/**
+ * Where a red run's ground is read to — under `_logs/`, never under the ground,
+ * and under THIS RUN's own stamp.
+ *
+ * Bead `forge-8vfn.6.11.50` (T1 ruling 368). Without the stamp every run of a
+ * story wrote into one directory, so run 9's captured session dir sat beside
+ * run 10's with only `MTIMES.txt` rewritten — and the two were distinguishable
+ * only by reading a session id out of the JSON. Evidence that quietly mixes two
+ * runs is worse than no evidence, because it reads as one run.
+ *
+ * `runStamp` is required rather than defaulted: a default would be computed at
+ * call time, and the ground capture and the DOM capture happen at different
+ * moments, so they would land in different directories and split one run's
+ * evidence in half.
+ */
+export function redEvidenceDir(root, storyId, runStamp) {
+  return join(root, '_logs', '_story-red-evidence', storyId, runStamp);
 }
 
 /**
@@ -80,7 +94,7 @@ function mtimeRows(dir, root, out = []) {
  *
  * @param {{root: string, storyId: string, project: string|null, red: boolean}} input
  */
-export function captureRedEvidence({ root, storyId, red }) {
+export function captureRedEvidence({ root, storyId, red, runStamp }) {
   if (!red) return null;
   const grounds = groundsAboutToBeSwept(storyId, root);
   const rows = [];
@@ -94,7 +108,7 @@ export function captureRedEvidence({ root, storyId, red }) {
   }
   if (copies.length === 0) return null;
 
-  const dest = redEvidenceDir(root, storyId);
+  const dest = redEvidenceDir(root, storyId, runStamp);
   mkdirSync(dest, { recursive: true });
   for (const [from, rel] of copies) {
     cpSync(from, join(dest, rel), { recursive: true, preserveTimestamps: true });
@@ -130,9 +144,9 @@ export function captureRedEvidence({ root, storyId, red }) {
  * that cannot say where it is, so the URL is read defensively and its absence
  * costs the DOM nothing.
  */
-export async function captureBeatDom(page, root, storyId, index, act) {
+export async function captureBeatDom(page, root, storyId, index, act, runStamp) {
   try {
-    const dest = redEvidenceDir(root, storyId);
+    const dest = redEvidenceDir(root, storyId, runStamp);
     mkdirSync(dest, { recursive: true });
     const html = await page.content();
     let where = '(url unavailable)';
