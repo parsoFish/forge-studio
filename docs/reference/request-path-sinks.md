@@ -2229,3 +2229,43 @@ the operator's own argv and a worktree root does not exist. Pushing containment
 into the gate would mean inventing a root for the CLI case; resolving at the one
 bridge-reachable caller keeps the gate a pure checker and puts the guard where
 the untrusted root actually is.
+
+### Relocated in M6-A (ruling 380) — the completeness critic's turn-side wrapper moves to `architect-critic.ts` (three sink pairs, no new surface)
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/sessions/kinds/architect.ts` | `existsSync` | 4 | 2 |
+| `packages/sessions/kinds/architect.ts` | `readdirSync` | 3 | 2 |
+| `packages/sessions/kinds/architect.ts` | `readFileSync` | 4 | 2 |
+| `packages/sessions/kinds/architect-critic.ts` | `existsSync` | 1 | 3 |
+| `packages/sessions/kinds/architect-critic.ts` | `readdirSync` | 0 | 1 |
+| `packages/sessions/kinds/architect-critic.ts` | `readFileSync` | 2 | 4 |
+
+**No new surface — every pair is CONSERVED across the move**, asserted per sink
+rather than eyeballed: `existsSync` 4 = 2 + 2, `readdirSync` 3 = 2 + 1,
+`readFileSync` 4 = 2 + 2. The three moved sites are
+`buildManifestsSummary`'s `existsSync`/`readdirSync`/`readFileSync` over
+`paths.manifestsDir` and `runCompletenessCriticStep`'s `existsSync`/`readFileSync`
+over `paths.planPath` — the same lines, byte for byte, reading the same two
+already-derived paths. Both come from ONE `sessionPaths(projectRoot, sessionId)`
+call made by `withPaths` at the top of the turn (the kind's single
+request-derived path-construction site, which is why `withPaths` exists), and
+the session directory that call names was resolved through the SEC-04 guard by
+`guardedReadStatus` before any step ran. Nothing about that changed in the move,
+which is worth stating rather than assuming: **a relocation is exactly when a
+guard silently stops applying**, and the walker proved it still reaches the new
+module — it reported the arriving pairs rather than a bare disappearance from
+the parent.
+
+**Why the move at all:** ruling 380 puts the critic at the END of the drafting
+turn instead of inside finalize, so its wrapper belongs beside the draft rounds.
+`architect-steps.ts` would have stood at 900 against the 800-line file cap, and
+the critic's own file is where the wrapper's only caller-facing concern lives.
+
+**Two baseline rows TIGHTEN in the same `--write`, and neither is this PR's
+doing:** `packages/sessions/kinds/architect-session.ts existsSync 2 → 1` and
+`readFileSync 2 → 1`. That file's code is untouched here (`git diff
+parsoFish/main...HEAD` on it shows no `existsSync`/`readFileSync` line), and
+`parsoFish/main`'s own copy has one of each — the baseline carried stale slack.
+It is tightened rather than left, on §15.65's rule: a ratchet that permits two
+calls in a file containing one will pass a regression that adds one back.

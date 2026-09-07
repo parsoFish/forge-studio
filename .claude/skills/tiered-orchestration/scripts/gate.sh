@@ -84,11 +84,29 @@ fail=0
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
+  # NAMESPACED BY THE TREE BEING GATED. `$LOGS` is the CAMPAIGN dir, shared by
+  # every lane, and `$name` derives from the command alone — so before this,
+  # four lanes gating concurrently all wrote `gate-npm-test.log` and the last
+  # writer won. Bead 6.9 named it on 2026-09-04 and it sat unfixed until M6-D
+  # read `# fail 10` out of that file seconds after its own gate passed: the
+  # failures were lane A's, proved by `grep -oE "/home/parso/forge-m6-[a-d]"`
+  # on the log and A's wrapper stamped seven seconds later. A lane came within
+  # one message of reporting a sibling's failures as its own, and PR bodies
+  # across the milestone had quoted counts from this path as evidence.
+  # The wrapper's own PASS/FAIL line was always per-lane and always correct;
+  # it is the STEP log that lied, which is the harder kind to notice.
+  log="$LOGS/gate-$(basename "$R")-$name.log"
   t0=$(date +%s)
-  if ( eval "$cmd" ) > "$LOGS/gate-$name.log" 2>&1; then
+  # Written to a temp file and renamed: `rename(2)` is atomic within a
+  # filesystem, so a reader either sees the previous complete log or this one,
+  # never a half-written file — and a gate already executing this script keeps
+  # its own inode rather than following a path that changed underneath it.
+  if ( eval "$cmd" ) > "$log.part" 2>&1; then
+    mv -f "$log.part" "$log"
     echo "PASS  $cmd  ($(secs "$t0"))"
   else
-    echo "FAIL  $cmd  ($(secs "$t0"))  → $LOGS/gate-$name.log"
+    mv -f "$log.part" "$log"
+    echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
     fail=1
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')

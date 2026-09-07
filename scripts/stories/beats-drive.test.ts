@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driveBeat } from './beats.mjs';
+import { driveBeat } from './beats-drive.mjs';
 
 // ── M1-H: the post-press wait, and the state it is leaving (bead `forge-8vfn.2.28`)
 //
@@ -123,6 +123,10 @@ function fakeStudio(spec: {
     return {
       tagName: node.tag.toUpperCase(),
       textContent: node.text,
+      // playwright's own node API — the production callback reads hrefs with
+      // it (bead `forge-8vfn.7.5.3`), so the fake must answer it rather than
+      // let a test pass against a stand-in that never had attributes.
+      getAttribute: (name: string) => node.attrs[name] ?? null,
       type: self?.attrs.type ?? '',
       value: self?.attrs.value ?? '',
       querySelector: (q: string) =>
@@ -198,6 +202,10 @@ function fakeStudio(spec: {
       const node = findAll(sel)[index] ?? null;
       if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
       return fn(domish(node));
+    },
+    /** playwright's `evaluateAll` — every match, not the indexed one. */
+    async evaluateAll(fn: (ns: any[], arg: any) => unknown, arg: any) {
+      return fn(findAll(sel).map(domish), arg);
     },
     async fill(value: string) {
       const node = findAll(sel)[index] ?? null;
@@ -584,4 +592,191 @@ test('6.11.45: a beat that DOES declare the `until` key stays green — the posi
   const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
 
   assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+// ── ruling 438: a beat that MINTS a value always waits, even with no `do` ─────
+//
+// MEASURED, S2 beat 10 in M5: the beat has no `do` block that navigates and no
+// declared `wait`, so `driveBeat`'s condition — `steps.length > 0 ||
+// bound.label !== null` — was false and the page was read ONCE. A binding
+// attribute that is always PRESENT reads `""` on that single read, before the
+// mint returns, and the beat reds with `got ""`. Bead `forge-8vfn.6.11.5`
+// answered it in the PRODUCT, by making the attribute ABSENT until it has a
+// value — fixing in `apps/studio` a defect that lives in the runner, and
+// leaving every future always-present binding attribute to fail the same way.
+//
+// A mint is asynchronous by definition. `answers()` already treats `""` as
+// not-yet (`beats-page.mjs:29`), so the wait is bounded and terminating: it
+// ends when the value arrives, or at the beat's own bound with the key named.
+// This is the wiring that was missing, not a new rule.
+//
+// A: ruling 437's always-present `data-architect-session-id` is sequenced
+// behind this change, and its funded S2 proof run behind that.
+
+/** A page whose binding attribute is empty for `emptyReads` reads, then minted. */
+function mintingStudio(emptyReads: number, id = 'sid-9') {
+  let reads = 0;
+  return fakeStudio({
+    start: '/architect/new',
+    commitMs: 0,
+    pages: {
+      '/architect/new': {
+        elements: [el('main', { page: 'architect-new' })],
+        get data() {
+          reads += 1;
+          return {
+            page: 'architect-new',
+            'architect-session-id': reads > emptyReads ? id : '',
+          };
+        },
+      },
+    },
+  });
+}
+
+const mintBeat = {
+  act: 'press start and watch the id appear',
+  expect: {
+    route: '/architect/new',
+    data: { page: 'architect-new', 'architect-session-id': '<architectSessionId>' },
+  },
+  say: 'the id is minted asynchronously',
+};
+
+test('438 (i): a binding attribute that is "" for two reads then minted goes GREEN', async () => {
+  const page = mintingStudio(2);
+  const v = await driveBeat(page, mintBeat, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', `failures: ${JSON.stringify(v.failures)}`);
+  assert.equal(v.bindings?.architectSessionId, 'sid-9', 'and the minted value is bound for a later beat\'s route');
+});
+
+test('438 (ii) POSITIVE CONTROL: a value that never arrives reds, NAMING the key and the bound', async () => {
+  const page = mintingStudio(Number.MAX_SAFE_INTEGER);
+  const v = await driveBeat(page, mintBeat, 1, 'http://localhost:4124', {}, 400);
+  assert.equal(v.status, 'red');
+  const said = (v.failures ?? []).join(' | ');
+  assert.match(said, /architect-session-id/, `the key must be named: ${said}`);
+  assert.match(said, /minted nothing within/, `and the bound must be named: ${said}`);
+});
+
+test('438 (iii) POSITIVE CONTROL: a placeholder-free do-less beat still reads ONCE', async () => {
+  // The change must not turn every observing beat into a poll — a beat with
+  // nothing to wait for waits for nothing, exactly as before.
+  let reads = 0;
+  const page = fakeStudio({
+    start: '/agents',
+    commitMs: 0,
+    pages: {
+      '/agents': {
+        elements: [el('main', { page: 'agents-index' })],
+        get data() { reads += 1; return { page: 'agents-index', 'page-ready': 'true' }; },
+      },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    { act: 'look', expect: { route: '/agents', data: { page: 'agents-index', 'page-ready': 'true' } }, say: 'x' },
+    1, 'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green');
+  assert.ok(reads <= 2, `a beat with no placeholder and no do must not poll — it read ${reads} times`);
+});
+
+// ── 7.5.3: the runner read query-BLIND and selected query-STRICT ─────────────
+//
+// MEASURED (T1 ruling 451, D's evidence). `readObserved` compares
+// `new URL(page.url()).pathname`, so a beat declaring `/sessions/demo/x`
+// ACCEPTS arriving at `/sessions/demo/x?project=gitpulse`. Selection did the
+// opposite: an exact `[href="/sessions/demo/x"]`, which that anchor does not
+// match. The runner therefore refused to find a link to a URL it would have
+// been happy to arrive at, and said "no link points at it" with the anchor on
+// the page.
+//
+// It is not hypothetical: three LIVE sites mount `SessionMinted` with a
+// `project` — `DemoStageHandoff.tsx:60`, `DemoTimeline.tsx:215`,
+// `ContractResolutionPanel.tsx:295` — so the whole demo path carries
+// `?project=`, and A's S9 run 2 died on it.
+//
+// Site-by-site query dropping was refused: a link that legitimately needs a
+// parameter must stay reachable, and a beat should declare the route an
+// operator would say out loud rather than the product's parameter plumbing.
+
+const QUERIED_PAGES = {
+  '/projects/gitpulse': {
+    elements: [
+      READY_MAIN('projects'),
+      // The shape the three live sites emit.
+      el('a', { href: '/sessions/demo/sid-1?project=gitpulse' }, '/sessions/demo/sid-1'),
+    ],
+    data: { page: 'projects', 'page-ready': 'true' },
+  },
+  '/sessions/demo/sid-1': {
+    elements: [READY_MAIN('session')],
+    data: { page: 'session', 'page-ready': 'true' },
+  },
+};
+
+test('7.5.3 (RED): a link whose href carries a QUERY is found by the beat\'s bare route', async () => {
+  const page = fakeStudio({ start: '/projects/gitpulse', commitMs: 50, pages: QUERIED_PAGES });
+  const v = await driveBeat(
+    page,
+    {
+      act: 'open the demo session the hand-off points at',
+      expect: { route: '/sessions/demo/sid-1', data: { page: 'session', 'page-ready': 'true' } },
+      say: 'the anchor carries ?project=, the beat does not',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green', `failures: ${JSON.stringify(v.failures)}`);
+});
+
+test('7.5.3 POSITIVE CONTROL: two links differing ONLY in query are NAMED, never picked', async () => {
+  // Two destinations, one pathname. Choosing by DOM order is how a beat
+  // silently starts asserting the wrong page — the same shape as
+  // `resolveExpectations`' best-match tie-break. The runner refuses and says so.
+  const page = fakeStudio({
+    start: '/projects/gitpulse',
+    commitMs: 50,
+    pages: {
+      ...QUERIED_PAGES,
+      '/projects/gitpulse': {
+        elements: [
+          READY_MAIN('projects'),
+          el('a', { href: '/sessions/demo/sid-1?project=gitpulse' }, '/sessions/demo/sid-1'),
+          el('a', { href: '/sessions/demo/sid-1?project=gitweave' }, '/sessions/demo/sid-1'),
+        ],
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    {
+      act: 'open the demo session',
+      expect: { route: '/sessions/demo/sid-1', data: { page: 'session' } },
+      say: 'two hand-offs, one pathname',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'red');
+  const said = (v.failures ?? []).join(' | ');
+  assert.match(said, /ambiguous real-nav path/, said);
+  assert.match(said, /project=gitpulse/, `it names the candidates: ${said}`);
+  assert.match(said, /project=gitweave/, `both of them: ${said}`);
+});
+
+test('7.5.3 POSITIVE CONTROL: a route NOTHING links to is still unreachable', async () => {
+  // Query-blindness widens what counts as a link, and must not turn "no link"
+  // into "some link". The refusal is the guard real-nav-only exists for.
+  const page = fakeStudio({ start: '/projects/gitpulse', commitMs: 50, pages: QUERIED_PAGES });
+  const v = await driveBeat(
+    page,
+    { act: 'go somewhere nothing points at', expect: { route: '/monitor', data: { page: 'monitor' } }, say: 'x' },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'red');
+  assert.match((v.failures ?? []).join(' | '), /no real-nav path to "\/monitor"/);
 });
