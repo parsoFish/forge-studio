@@ -4,6 +4,7 @@ description: PM emitted WIs for resources already migrated in a dependency initi
 category: antipattern
 created_at: 2026-07-04
 updated_at: 2026-07-04
+status: historical
 ---
 
 # PM decomposes already-complete scope from prior initiative

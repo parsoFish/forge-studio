@@ -56,7 +56,7 @@ the north-star reframe annotation landing via R5-07-F8.
   with the safety seams on by default; *R3-08* — an installable forge must
   survive an upgrade without clobbering the operator's own Studio-authored
   objects, which operating forge currently writes straight into its tracked
-  source tree, see [ADR 045](../decisions/045-operator-workspace-and-promotion.md))
+  source tree, see [ADR 045](../../decisions/045-operator-workspace-and-promotion.md))
 - **Context:** The refinement roadmap's S10 ("packaging operator-deferred",
   memory `project_forge_refinement_roadmap`) — the one item of that campaign
   never closed. Everything today assumes a source checkout + nvm Node.
@@ -136,9 +136,9 @@ posture stands as-is.
   the market doc's own perishability rules, ADR-031's CLI collapse.
   Deliberately thin; every ambition decision is marked operator-pending.
 - 2026-08-23 — **Cross-reference added, no scope change.** R8-01 gains a soft
-  `Depends on` edge to R3-08 (`docs/roadmaps/R3-library-componentry.md`),
+  `Depends on` edge to R3-08 (`docs/roadmaps/./3-library-componentry.md`),
   minted the same day from
-  [ADR 045](../decisions/045-operator-workspace-and-promotion.md): operating
+  [ADR 045](../../decisions/045-operator-workspace-and-promotion.md): operating
   forge today writes operator-authored Studio objects into forge's own tracked
   source tree, so a forge checkout carrying a week of authoring cannot be
   upgraded by a fast-forward. R3-08's gitignored `_local/` root is the

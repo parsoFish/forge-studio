@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-24
-**References:** [docs/roadmaps/R4-ootb-suite.md](../roadmaps/R4-ootb-suite.md)
+**References:** [docs/roadmaps/archive/R4-ootb-suite.md](../roadmaps/archive/R4-ootb-suite.md)
 (R4-01-F1 — the initiative this ADR is; the operator doctrine quoted below is
 its header), [ADR 038](./038-north-star-platform-and-ootb.md) (the Scope
 1/Scope 2 split this ADR inherits and does not originate), [ADR 024](./024-phases-as-subagents-invoking-skills.md)
@@ -187,7 +187,7 @@ anything yet:
 
 ## References
 
-- [docs/roadmaps/R4-ootb-suite.md](../roadmaps/R4-ootb-suite.md) — R4-01
+- [docs/roadmaps/archive/R4-ootb-suite.md](../roadmaps/archive/R4-ootb-suite.md) — R4-01
   ("Platform→artifact migration", the initiative this ADR is F1 of) and the
   R4-11 scope-ownership note (finding D6) this ADR's item 4 records.
 - [ADR 038](./038-north-star-platform-and-ootb.md) — origin of the Scope

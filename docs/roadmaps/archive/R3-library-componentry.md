@@ -5,7 +5,7 @@
 > **templates** — a first-class **managed library**: viewable,
 > installable, editable (where safe), generatable (where sensible), with
 > provenance and a security posture proportional to what the component can do.
-> Scope boundary ([docs/repo-map.md](../repo-map.md)): the library *machinery*
+> Scope boundary ([docs/repo-map.md](../../repo-map.md)): the library *machinery*
 > (registries, resolvers, surfaces, protections) is Scope 1; the *shipped OOTB
 > library content* (curated skills/hooks/MCP entries, instruction seeds) is
 > Scope 2 shipping. What operators author into these libraries at runtime is
@@ -29,7 +29,7 @@ the M4-library cull rather than left for a reader to discover.
 
 24 skills live as flat direct children `skills/<name>/SKILL.md` (ADR-003
 skills-not-self-baked-agents; inventory + role grouping in
-[`skills/README.md`](../../skills/README.md)). Resolution is **decentralised**:
+[`skills/README.md`](../../../skills/README.md)). Resolution is **decentralised**:
 ~35 `.ts`/`.mjs` files hardcode literal skill paths
 (`deriveAgentSpec('skills/<name>/SKILL.md')`,
 `resolve(FORGE_ROOT,'skills',<name>,'SKILL.md')`) with no shared resolver, and
@@ -37,12 +37,12 @@ skills-not-self-baked-agents; inventory + role grouping in
 flat children (`readdirSync(skillsDir)` + `join(skillsDir, entry, 'SKILL.md')`).
 The `library` frontmatter flag (Studio-roster divider) is set on only 7 of 24
 skills — 1 `true` (`skills/project-scoped-review/SKILL.md`), 6 `false`, 17
-unset. All facts per [known-gaps §6](../known-gaps.md) (the deferred physical
+unset. All facts per [known-gaps §6](../../known-gaps.md) (the deferred physical
 role-subfolder move).
 
 ### R3-B2 Studio catalog — curated, reference-only component metadata
 
-[`studio/catalog.yaml`](../../studio/catalog.yaml) ships: **9
+[`studio/catalog.yaml`](../../../studio/catalog.yaml) ships: **9
 community-skills** with provenance + stars (`handoff`, `pre-impl-interview`,
 `superpowers-tdd`, `systematic-debugging`, `webapp-testing`,
 `security-review`, `skill-creator`, `agent-browser`, `output-compress`), **9
@@ -57,27 +57,27 @@ metadata, and readiness is a REAL per-entry probe result, not a declared
 label — an MCP chip in the builder is a working, verifiable binding, not
 just reference metadata. Catalog entries surface as draggable chips in the
 agent builder's
-palette ([`forge-ui/components/studio/agent-builder/CatalogPalette.tsx`](../../forge-ui/components/studio/agent-builder/CatalogPalette.tsx),
+palette ([`forge-ui/components/studio/agent-builder/CatalogPalette.tsx`](../../../forge-ui/components/studio/agent-builder/CatalogPalette.tsx),
 routes `/agents/new` + `/agents/[id]`, drop zones
 `[data-accepts="skill"|"tool"|"mcp"|"hook"]`).
 
 ### R3-B3 Skill authoring surface (disconnected from the catalog)
 
 `/skills/new` is the brand-new-skill builder
-([`forge-ui/app/skills/[id]/page.tsx`](../../forge-ui/app/skills/%5Bid%5D/page.tsx),
+([`forge-ui/app/skills/[id]/page.tsx`](../../../forge-ui/app/skills/%5Bid%5D/page.tsx),
 `[data-page="skill-builder"]`), backed by `POST /api/studio/skills` in
-[`apps/forge/bridge-studio-writes.ts`](../../apps/forge/bridge-studio-writes.ts) (~line 790).
+[`apps/forge/bridge-studio-writes.ts`](../../../apps/forge/bridge-studio-writes.ts) (~line 790).
 It writes a real `skills/<name>/SKILL.md` but **never registers the skill into
 `catalog.yaml`**, so `CatalogPalette` — which sources skill chips exclusively
 from the static `community-skills` list — cannot see it
-([known-gaps §4.11](../known-gaps.md)). The `skills` UI journey
+([known-gaps §4.11](../../known-gaps.md)). The `skills` UI journey
 (`scripts/journeys/`) works around this by substituting the catalog-listed
 `handoff` skill and narrating the limitation. There is **no skill-editing
 surface** at all (known-gaps §4b.8) and no library/list view (§4b.1).
 
 ### R3-B4 Instructions-creator agent (the consumer R3-05 seeds)
 
-[`skills/instructions-creator/SKILL.md`](../../skills/instructions-creator/SKILL.md)
+[`skills/instructions-creator/SKILL.md`](../../../skills/instructions-creator/SKILL.md)
 (`library: false`) + the `/instructions/[sid]` interview UI
 (`[data-page="instructions-interview"]`, bridge surface
 `apps/forge/ui-bridge.ts` / `apps/forge/ui-bridge-instructions.test.ts`) — merged Stage A of
@@ -100,7 +100,7 @@ catalog hooks" carried in `composition.hooks`. Both words changed: the
 catalog section is now `guards:` with **9** entries (the 4 band ids joined the
 5 toggles), and the agent field is `composition.guards` — `composition.hooks`
 is deleted and reserved for the *library* lifecycle hooks R3-03's remaining
-features introduce. See [ADR 027](../decisions/027-studio-object-model.md)'s
+features introduce. See [ADR 027](../../decisions/027-studio-object-model.md)'s
 R3-03 amendment.
 
 **Superseded 2026-08-04 (R3-03 library PR) — this baseline entry no longer
@@ -132,13 +132,13 @@ the single source for every skill lookup + enumeration — the ~40 hardcoded
 `skills/<name>/SKILL.md` sites across `orchestrator/` + `cli/` route through it
 (grep-clean of literal `skills/` path construction). `deriveAgentSpec` sites use the
 root-relative form (`PhaseAgentSpec.skill` / event-log `agent_skill` attribution
-fidelity); content-reads use the absolute form. This satisfies the [known-gaps §6](../known-gaps.md)
+fidelity); content-reads use the absolute form. This satisfies the [known-gaps §6](../../known-gaps.md)
 precondition — the physical `skills/` role-subfolder move is now a one-place change
 (still a separate, untaken decision). **F2:** `listPlainSkills` (runtime-less,
 non-`library:false` `SKILL.md`) unions with `studio/catalog.yaml` community-skills in
 the `/api/studio/catalog` GET (`apps/forge/bridge-studio.ts`), so a `/skills/new`-authored
 skill (`POST /api/studio/skills`, stamped `library: true`) is palette-visible with no
-bridge restart — closing [known-gaps §4.11](../known-gaps.md). The `library`
+bridge restart — closing [known-gaps §4.11](../../known-gaps.md). The `library`
 frontmatter is explicit on all 24 skills (6 `false` / 18 `true`), lint-enforced by
 `validateLibraryFlag` (`orchestrator/studio/validate.ts` + `apps/forge/studio-lint.ts`,
 errors on unset, reaching every skill dir); `isStudioAgent`'s agent-roster semantics
@@ -446,7 +446,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   pipeline receive its authored packages), R5-05 (skills-palette residue
   cross-references here, not duplicated), R3-08 (the shared resolver is what
   gains a second, operator-owned root).
-- **Context:** Three converging findings: [known-gaps §4.11](../known-gaps.md)
+- **Context:** Three converging findings: [known-gaps §4.11](../../known-gaps.md)
   (UI-created skills invisible to the agent builder's palette — the S5b demo
   rebuild broke its create-skill→compose-into-agent throughline on this),
   §4b.1 (skills need first-class management: no library view, no consistent
@@ -1095,12 +1095,12 @@ third connection kind above); `npm run parity:stories` exits 0.
   authoring stops dirtying the repo; it is landable first regardless)*, R8-01
   *(soft — an installable forge must survive an upgrade without clobbering
   operator edits)*.
-- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §A.
+- **Context:** [ADR 045](../../decisions/045-operator-workspace-and-promotion.md) §A.
   Every object an operator authors in Studio lands in a **git-tracked path inside
   the forge repo**: `skills/<slug>/SKILL.md`, `studio/flows/<id>/flow.yaml`,
   `studio/hooks/<id>/`, `brain/<id>/`, `studio/community/registry.yaml`. Studio
   never commits any of it — deliberately, per
-  [`docs/community-registry-writes.md`](../community-registry-writes.md) and the
+  [`docs/community-registry-writes.md`](../../community-registry-writes.md) and the
   2026-07-16 bridge-self-merge incident that `cli/dry-bridge.ts` exists to prevent.
   The consequences are live and named:
   the wave-7 walkthrough findings record (retired M1-A) `library-07` (*"Studio writes
@@ -1146,7 +1146,7 @@ third connection kind above); `npm run parity:stories` exits 0.
     tracked root ⇒ `ootb`. `AGENT_PROVENANCE` and `PROJECT_PROVENANCE`
     (`cli/studio-provenance.ts`) stop being constants and become derivations over
     the resolved root — the `derive-status-don't-store-it` posture
-    ([ADR 044](../decisions/044-read-path-memoization.md)) applied to provenance:
+    ([ADR 044](../../decisions/044-read-path-memoization.md)) applied to provenance:
     no field is added in which a stale copy could drift. The n/a-invariant
     survives — `'unknown'` remains the answer for anything neither root attests.
     Acceptance: `ProvenanceBadge` shows `operator` for a `_local/` agent and
@@ -1170,7 +1170,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   and the machine-local move; (3) F4+F6 provenance derivation, the shadow check,
   and library-surface coverage.
 - **Out of scope:** moving `brain/` out of the forge repo —
-  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) decided it lives
+  [ADR 035](../../decisions/035-forge-owned-central-artifacts.md) decided it lives
   there and stands, so `brain/` writes stay tracked and stay visible via R6-10.
   Promotion of anything out of `_local/` (R3-09). Any change to what `forge studio
   lint` validates beyond the new shadow check. Multi-operator or shared workspaces
@@ -1184,7 +1184,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   route classification this must register in)*.
 - **Depended on by:** R6-10 *(soft — a pending row is only actionable if there is
   somewhere for it to go)*.
-- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §B.
+- **Context:** [ADR 045](../../decisions/045-operator-workspace-and-promotion.md) §B.
   The operator's ask is *"a way to roll changes I make to the platform back into
   forge core seamlessly."* Forge already runs exactly this transaction — against
   **managed project repos**. `orchestrator/project-repo-tx.ts` carries
@@ -1254,12 +1254,12 @@ third connection kind above); `npm run parity:stories` exits 0.
   the surface that once self-merged a forge PR); (3) F4+F5 the preview affordance,
   the origin stamp, and journey coverage.
 - **Out of scope:** merging a forge PR from Studio, ever
-  ([ADR 045](../decisions/045-operator-workspace-and-promotion.md) §D). Bulk or
+  ([ADR 045](../../decisions/045-operator-workspace-and-promotion.md) §D). Bulk or
   automatic promotion — one object, one PR, one operator confirm. A bot identity
   for forge. Publishing or distributing operator-authored objects to anyone else
   (R3-07 owns the community browser; R8-01 owns packaging). Promotion of
   `brain/` content, which is produced by cycles under
-  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) and is surfaced,
+  [ADR 035](../../decisions/035-forge-owned-central-artifacts.md) and is surfaced,
   not promoted, by R6-10.
 
 ## Deferred
@@ -1269,7 +1269,7 @@ none). Two adjacent items are deliberately parked *outside* this roadmap
 rather than deferred within it:
 
 - **Physical `skills/` role-subfolder move** — stays tracked in
-  [known-gaps §6](../known-gaps.md); its recorded revisit condition (a single
+  [known-gaps §6](../../known-gaps.md); its recorded revisit condition (a single
   shared `skillPath(name)` resolver) is delivered by R3-01-F1, after which the
   move is a separate one-place-change decision, not an R3 commitment.
 - **Hook generation via the skill-generator flow** — noted in R3-03's
@@ -1400,7 +1400,7 @@ rather than deferred within it:
 - **2026-08-04 (R3-03, migration PR).** The re-scope's **migration clause**
   landed: `composition.hooks` is renamed to **`composition.guards`** and
   `composition.hooks` is deleted outright — no back-compat, no shim. Recorded
-  as an amendment to [ADR 027](../decisions/027-studio-object-model.md)
+  as an amendment to [ADR 027](../../decisions/027-studio-object-model.md)
   (approved before the sweep, per the ADR-first rule), with ADR 039's
   references corrected as a bounded factual cross-reference update. Landed in
   one no-back-compat sweep: a `guards:` catalog section replacing `hooks:`
@@ -1458,7 +1458,7 @@ rather than deferred within it:
   half-enforced fifth would be worse than a clearly-absent one), and
   `read`/`network` are declared and scanned but **not OS-enforced** — only `env`
   gets real prevention. Real enforcement means a process isolator, which
-  [PRINCIPLES](../../PRINCIPLES.md)/CLAUDE.md forbid re-inventing. The scanner's
+  [PRINCIPLES](../../../PRINCIPLES.md)/CLAUDE.md forbid re-inventing. The scanner's
   string-concatenation obfuscation gap is documented by a test rather than
   hidden. Marketplace install remains **R3-07's** entry point, routed through
   this feature's scan + approval unchanged.
@@ -1536,7 +1536,7 @@ rather than deferred within it:
   new source of truth, sorts + freshness honesty, the community-refresh
   agent) — the initiative's own F1-F3 acceptance criteria are unaffected.
 - 2026-08-23 — **R3-08 and R3-09 minted** (planned) from
-  [ADR 045](../decisions/045-operator-workspace-and-promotion.md), the wave-8
+  [ADR 045](../../decisions/045-operator-workspace-and-promotion.md), the wave-8
   ON-2 platform-round-trip design spike. R3-08 gives the library registries a
   second, gitignored `_local/` root and makes an object's root its provenance;
   R3-09 turns an operator edit into a branch and a PR against forge — never a

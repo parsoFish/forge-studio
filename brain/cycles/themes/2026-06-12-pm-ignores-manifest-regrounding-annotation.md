@@ -4,6 +4,7 @@ description: PM decomposed WIs using already-passing test names as gates despite
 category: antipattern
 created_at: 2026-06-12T12:47:08Z
 updated_at: 2026-06-12T12:47:08Z
+status: historical
 ---
 
 # PM ignores manifest re-grounding annotation → gate-too-loose cascade

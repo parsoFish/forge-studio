@@ -177,8 +177,7 @@ export async function runInteractiveTurn(
   // after this change the panel DOES render real accumulated events on page load.
   // Live incremental push still never fires for `authoring`, because no
   // `ensureAuthoringTail` call site exists anywhere (only the four legacy kinds
-  // have one) — tracked separately, deliberately not fixed here. `costUsd` also
-  // stays `null`: this spine emits no `cost_usd` on any event, tracked separately.
+  // have one) — tracked separately, deliberately not fixed here.
   // Pinned by AT-a/AT-b
   // (`packages/agents/agent-run.test.ts`) and by the co-location ratchet
   // (`packages/agents/agent-run-log-dir-colocation.test.ts`), which fails if this template
@@ -249,6 +248,25 @@ export async function runInteractiveTurn(
         onHeartbeat,
         onText,
         onThinking,
+        // S9 beat 8 — the turn's own spend, emitted HERE because this is where
+        // the log identity lives (`initiativeId`, `RUNNER_PHASE`,
+        // `RUNNER_SKILL`, `cycleId`); the step must not re-derive any of them.
+        // Authoritative under `kernel/event-cost.ts`: this phase emits no
+        // `iteration` events, so one plain row per turn counts exactly once —
+        // pinned by `tests/unit/interactive-runner-turn-cost.test.ts`, which
+        // reads the figure back through the session route's own reader.
+        // Best-effort, like the architect's: a logging failure must not fail a
+        // turn that already ran and already cost money.
+        onTurnCost: (costUsd) => {
+          try {
+            logger.emit({
+              initiative_id: initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
+              event_type: 'end', input_refs: [], output_refs: [],
+              cost_usd: costUsd, message: 'interactive.turn-cost',
+              metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
+            });
+          } catch { /* never fail a completed turn on a logging failure */ }
+        },
       });
       break;
 

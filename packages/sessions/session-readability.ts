@@ -47,7 +47,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import { resolveGuardedPath, sumAuthoritativeCostUsd, type EventLogEntry } from '@forge/kernel';
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template `spawnAgentTurn`
  *  (apps/forge/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
@@ -204,4 +204,33 @@ export function resolveLegacySession(args: {
     phase: deriveLegacySessionPhase(events),
     projectFromLog: deriveLegacySessionProject(events),
   };
+}
+
+/**
+ * What this session has spent, derived from its own event log through the ONE
+ * kernel rule (`sumAuthoritativeCostUsd`) — S9 beat 8, "cost recorded".
+ *
+ * `null` is honest-absent: no row in the log carries `cost_usd`, so there is no
+ * figure to state. A log whose priced rows genuinely total zero returns `0`,
+ * which is a different fact and says so. Never sum `cost_usd` at a call site:
+ * a phase that emits `iteration` events restates the same dollars on its
+ * rollup rows, and a naive sum measured 2.35x the truth on M5-A.
+ */
+export function deriveSessionCostUsd(events: readonly Record<string, unknown>[]): number | null {
+  if (!events.some((e) => typeof e['cost_usd'] === 'number')) return null;
+  return sumAuthoritativeCostUsd(events as unknown as readonly EventLogEntry[]);
+}
+
+/**
+ * The same figure for a session named by kind + id, read through the guarded
+ * events reader. `null` when the log dir is unreadable, absent, or unpriced.
+ */
+export function readSessionCostUsd(args: {
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+}): number | null {
+  const events = parseGuardedEventsJsonl(args.logsRoot, sessionLogDirName(args.kind, args.sessionId));
+  if (events === null) return null;
+  return deriveSessionCostUsd(events);
 }

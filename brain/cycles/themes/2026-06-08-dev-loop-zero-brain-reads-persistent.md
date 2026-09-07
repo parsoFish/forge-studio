@@ -8,6 +8,7 @@ updated_at: 2026-06-08T12:00:00Z
 related_themes:
   - brain-read-policy
   - brain-gap-feedback-loop
+status: historical
 ---
 
 # Dev-loop zero brain reads — persistent pattern

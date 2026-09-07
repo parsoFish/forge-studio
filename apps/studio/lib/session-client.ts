@@ -90,13 +90,15 @@ function requireInteger(r: Record<string, unknown>, field: string): number {
  *  check as any other wrong type). Used for generation-gallery's
  *  `feedback`/`targetElement`, which are legitimately null (no feedback yet
  *  drove generation 1) but never silently coerced from a missing key. */
-function requireNullableString(r: Record<string, unknown>, field: string): string | null {
+function requireNullable<T extends 'string' | 'number'>(
+  r: Record<string, unknown>, field: string, type: T,
+): (T extends 'string' ? string : number) | null {
   const v = r[field];
   if (v === null) return null;
-  if (typeof v !== 'string') {
-    throw new Error(`missing or invalid "${field}": expected a string or null, got ${JSON.stringify(v)}`);
+  if (typeof v !== type) {
+    throw new Error(`missing or invalid "${field}": expected a ${type} or null, got ${JSON.stringify(v)}`);
   }
-  return v;
+  return v as (T extends 'string' ? string : number);
 }
 
 /** A required array of strings — never coerced from a non-array (the same
@@ -441,8 +443,8 @@ function parseGenerationGalleryEntry(raw: unknown, index: number): GenerationGal
   return {
     number: requireInteger(raw, 'number'),
     createdAt: requireString(raw, 'createdAt'),
-    feedback: requireNullableString(raw, 'feedback'),
-    targetElement: requireNullableString(raw, 'targetElement'),
+    feedback: requireNullable(raw, 'feedback', 'string'),
+    targetElement: requireNullable(raw, 'targetElement', 'string'),
     items: itemsRaw.map((it, i) => parseGenerationGalleryItem(it, i)),
   };
 }
@@ -797,6 +799,10 @@ export type SessionShellPayload = {
    * value here, not an absence to model as `undefined`.
    */
   modelTier: string | null;
+  /** S9 beat 8 — this session's spend, derived by the route through the
+   *  kernel's ONE event-cost rule. REQUIRED like `modelTier`; `null` is honest
+   *  (no priced row) and the page omits its attribute rather than showing 0. */
+  costUsd: number | null;
   /**
    * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
    * (`packages/sessions/bridge-studio-sessions.ts`), threaded onto the wire so the generic
@@ -918,14 +924,11 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // this same function.
   const affordances = parseSessionAffordances(raw['affordances']);
 
-  // modelTier's honest value space is `string | null` — `null` IS the real
-  // answer for "no recorded tier", so this is REQUIRED (throws if the key
-  // is missing or neither a string nor null), never absence-tolerant.
-  const modelTierRaw = raw['modelTier'];
-  if (modelTierRaw !== null && typeof modelTierRaw !== 'string') {
-    throw new Error(`missing or invalid "modelTier": expected a string or null, got ${JSON.stringify(modelTierRaw)}`);
-  }
-  const modelTier = modelTierRaw;
+  // Both honest-`null` fields: `null` IS the real answer ("no recorded tier",
+  // "no priced row"), so both are REQUIRED and never absence-tolerant — a
+  // silently-absent cost and a cost of zero are different answers.
+  const modelTier = requireNullable(raw, 'modelTier', 'string');
+  const costUsd = requireNullable(raw, 'costUsd', 'number');
 
   // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
   // non-boolean "terminal" throws, never defaulted to false.
@@ -986,16 +989,13 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   if (!('transcriptError' in raw)) {
     throw new Error('missing "transcriptError" — expected a string or null, never an omitted key');
   }
-  const transcriptErrorRaw = raw['transcriptError'];
-  if (transcriptErrorRaw !== null && typeof transcriptErrorRaw !== 'string') {
-    throw new Error(`missing or invalid "transcriptError": expected a string or null, got ${JSON.stringify(transcriptErrorRaw)}`);
-  }
-  const transcriptError = transcriptErrorRaw;
+  const transcriptError = requireNullable(raw, 'transcriptError', 'string');
 
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     affordances,
     modelTier,
+    costUsd,
     terminal,
     legacy,
     transcriptSources,

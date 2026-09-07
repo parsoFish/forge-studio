@@ -4,6 +4,7 @@ description: Operator re-grounding annotations in manifests are read by the PM p
 category: antipattern
 created_at: 2026-06-12T00:00:00Z
 updated_at: 2026-06-12T00:00:00Z
+status: historical
 ---
 
 # PM has no structural guarantee to read re-grounding annotations

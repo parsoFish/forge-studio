@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { flushSync } from 'react-dom';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NotFound } from '@/components/NotFound';
@@ -26,8 +25,8 @@ import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/ki
 // takes one) + a model-tier picker (`KickoffModelTierPicker`) rendered from
 // the agent's OWN `SKILL.md`-declared envelope
 // (`agentCapabilityDescriptor.allowedTiers`, ADR-043 2026-08-15 amendment
-// §3) → Start → the kind's existing `/start` route → `router.push` onto the
-// shared session shell.
+// §3) → Start → the kind's existing `/start` route → the minted id and a
+// real anchor onto the shared session shell (ruling 396: this page stays).
 //
 // W6-B6 fix (wave-6 final gate, journey demo-builder DB-4): the capability is
 // fetched via `fetchAgentCapability(spec.agentSlug)` — the UNFILTERED
@@ -68,7 +67,6 @@ import { defaultKickoffTier, sessionDirPreview, kickoffMainData } from '@/lib/ki
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);
-  const router = useRouter();
   const searchParams = useSearchParams();
   // W6-B10: the roadmap's "demo builder →" entrypoint (and any other
   // deep-link into this kickoff screen) can hand over a known project up
@@ -113,13 +111,16 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [unknownKbPrefill, setUnknownKbPrefill] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
-  // forge-8vfn.5.10 (sessions-owned site) — the id this page mints, published
-  // on the page that minted it BEFORE it navigates away. Until this existed the
-  // POST's result went straight into `router.push` and the id appeared nowhere
-  // an observer could read: not to a story, not to a journey, not to an operator
-  // whose navigation failed. Empty means "started nothing", which is why the
-  // attribute is always rendered rather than conditionally added.
+  // forge-8vfn.5.10 (sessions-owned site), completed by operator ruling 396 —
+  // the id this page mints, published on the page that minted it, which now
+  // STAYS. The POST's result used to go straight into `router.push` and the id
+  // appeared nowhere an observer could read: not to a story, not to a journey,
+  // not to an operator whose navigation failed. Empty means "started nothing",
+  // which is why the attribute is always rendered rather than conditionally
+  // added — an absent key and an unstarted session must not be one DOM.
   const [mintedSessionId, setMintedSessionId] = useState<string>('');
+  /** The project the minted session belongs to — the anchor's own `?project=`. */
+  const [mintedProject, setMintedProject] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
@@ -339,15 +340,13 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         return;
       }
       const sessionProject = result.project ?? project.trim();
-      // `flushSync`, not a bare setState: `router.push` on the next line begins
-      // navigating immediately, and React would not have committed the update
-      // before it did — the attribute reached the DOM of the page being left as
-      // the EMPTY STRING. S9 run 3 caught exactly that (`expected a value to
-      // bind as <authoringSessionId>, got ""`) on a run that dispatched a real
-      // agent. Committing synchronously is what makes the id observable on the
-      // page that minted it, which is the whole point of publishing it.
-      flushSync(() => setMintedSessionId(result.sessionId as string));
-      router.push(`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(result.sessionId)}?project=${encodeURIComponent(sessionProject)}`);
+      // Ruling 396: publish and STAY. The press used to `router.push` into the
+      // session, which left nobody a page to read the mint off and left the
+      // session reachable only by having already gone there — S9 run 4's beat 6
+      // died on exactly that ("no real-nav path ... no link points at it").
+      // No `flushSync` is needed now that nothing navigates on the next line.
+      setMintedSessionId(result.sessionId);
+      setMintedProject(sessionProject);
     } finally {
       setSubmitting(false);
     }
@@ -558,6 +557,21 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         <span data-section="start-session-hint" style={{ marginLeft: 10, fontSize: 11.5, color: 'var(--faint)' }}>
           {kickoffDisabledReason}
         </span>
+      )}
+      {/* Ruling 396 — the mint's own destination, as a REAL anchor. `href` IS
+          the session route and `data-action` sits on the `<a>`: those are the
+          only shapes a nav resolution can follow (a story runner reads
+          `[data-nav][href]` or `a[href]`; so does a keyboard, and so does
+          "open in a new tab"). A button that pushed would leave every one of
+          them with nowhere to go, which is what pressing Start used to do. */}
+      {mintedSessionId !== '' && (
+        <Link
+          href={`/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(mintedSessionId)}?project=${encodeURIComponent(mintedProject)}`}
+          data-action="open-minted-session"
+          style={{ marginLeft: 10, fontSize: 12.5, color: 'var(--ember)', textDecoration: 'none' }}
+        >
+          Open the session →
+        </Link>
       )}
       {hasExisting && confirmingAnother && !submitting && (
         <button

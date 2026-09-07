@@ -6,6 +6,7 @@ keywords: [7-wi-decomposition, gap-matrix, client-wiring, new-package, single-re
 related_themes: [pm-decomposition-index]
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 ## Pattern

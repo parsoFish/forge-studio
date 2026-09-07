@@ -6,6 +6,7 @@ keywords: [golangci-lint, ci-gate, quality_gate_cmd, errcheck, lint-blind, termi
 related_themes: [gate-mechanics-index]
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-06-08T00:00:00.000Z
+status: historical
 ---
 
 # golangci-lint only in ci_gate_cmd — antipattern

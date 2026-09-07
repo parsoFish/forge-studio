@@ -4,6 +4,7 @@ description: An operator-written "Re-grounding — READ FIRST" prose block in th
 category: pattern
 created_at: 2026-06-12T12:47:08Z
 updated_at: 2026-06-12T12:47:08Z
+status: historical
 ---
 
 # Manifest re-grounding annotation as operator override surface
