@@ -4,7 +4,7 @@
 > the dry-bridge seam, the env-pin at the spawn seam, cost integrity, the
 > edit-lock fix, the known-gaps residue, the demo/harness backlog, and SSOT
 > reconciliation. Scope boundary: pure Scope-1 work
-> ([docs/repo-map.md](../repo-map.md)) plus doc hygiene; no new product
+> ([docs/repo-map.md](../../repo-map.md)) plus doc hygiene; no new product
 > capability lives here — items that grew into capabilities are owned by
 > R1–R4 and only *cross-referenced* from R5-05.
 
@@ -587,7 +587,7 @@ maintenance contract; nothing currently carries a deferral condition.
 - 2026-08-23 — **Cross-reference added, no scope change.** R5-01's
   `Depended on by` gains R3-09 *(soft)*: the promote-into-forge-core route
   minted the same day from
-  [ADR 045](../decisions/045-operator-workspace-and-promotion.md) is a
+  [ADR 045](../../decisions/045-operator-workspace-and-promotion.md) is a
   real-acting `git-remote` route and must register in
   `BRIDGE_ROUTE_CLASSIFICATION` (`cli/dry-bridge.ts`), refused under
   `FORGE_DRY_BRIDGE=1`, so a harness run can never open a forge PR. Recorded

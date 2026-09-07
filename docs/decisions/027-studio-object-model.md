@@ -504,7 +504,7 @@ seeding Brain 3; mapping it onto `contract` would have been a fabricated mapping
 
 **Mechanical/factual; decision unchanged.** Both halves of this amendment track
 as-built fact against decisions this ADR already took: the field below is the one
-`docs/roadmaps/R2-runnable-componentry.md` R2-09-F1 specifies, and the serializer
+`docs/roadmaps/archive/R2-runnable-componentry.md` R2-09-F1 specifies, and the serializer
 section records bringing the code back to this ADR's existing
 one-canonical-serializer mandate. No decision is taken, reversed or re-opened
 here. (T1 pre-ratified on that basis, 2026-08-05.)

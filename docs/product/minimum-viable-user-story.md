@@ -73,7 +73,7 @@ published artifact — the operator confirms the human-readable release notes be
 > single combined review/assembly phase, which is retired per Q3-B
 > ([roadmap README §8](../roadmaps/README.md#8-session-decisions-record-2026-07-17)).
 > Changelog drafting has **no decided successor yet** — it is reassigned as part of the
-> R4 successor-suite design ([docs/roadmaps/R4-ootb-suite.md](../roadmaps/R4-ootb-suite.md)).
+> R4 successor-suite design ([docs/roadmaps/archive/R4-ootb-suite.md](../roadmaps/archive/R4-ootb-suite.md)).
 > The release final-loop's human moment and the C10 mechanics above are unchanged.
 
 ## 5. Reflect phase
@@ -126,7 +126,7 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Live, drill-down, cross-project observability**: per-phase task/approach, cost, **per-worker token usage**,
   live hex UI, and **"interaction needed" signalling**. Cross-project is a
   deliberately thin attention strip, not a full portfolio pane — see
-  [Q4/**R4-11-F4**](../roadmaps/R4-ootb-suite.md) (noted 2026-07-17, R5-07-F7).
+  [Q4/**R4-11-F4**](../roadmaps/archive/R4-ootb-suite.md) (noted 2026-07-17, R5-07-F7).
 
 Capabilities the journey **does not name** → cull unless they demonstrably forward the above:
 

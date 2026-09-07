@@ -601,7 +601,7 @@ against the post-fan-in branch tip — becomes a **flow-engine merge-boundary ga
 orchestrator-executed band at the develop flow's merge boundary (not an agent
 node), per [ADR-036](./decisions/036-orchestrator-owned-gate-execution.md)'s rule
 that agents judge and the orchestrator executes. It is keyed off the **new
-`testProcess` contract object** ([R1-03-F1](./roadmaps/R1-contract-componentry.md),
+`testProcess` contract object** ([R1-03-F1](./roadmaps/archive/R1-contract-componentry.md),
 introduced in this same PR; `.forge/project.json`, loader in
 `orchestrator/project-config.ts`) — mapping the old field names once:
 
@@ -629,7 +629,7 @@ live, not a fossil.
 develop agent with scoped fix work items compiled from
 `.forge/last-gate-failure.md` — the same capability ADR-026 already
 provided, successor-specified as `R4-10-F2`
-(`docs/roadmaps/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
+(`docs/roadmaps/archive/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
 remediation cap (R4-10-F1's shared round/total-fix cap, config home per
 R4-08-F2(b), which R4-10-F2 inherits); cap exhaustion parks the initiative
 `needs-operator` rather than looping forever. In every case — remediated or
@@ -647,7 +647,7 @@ relocated gate must keep working: the boundary that catches what the per-WI
 gates structurally cannot see.
 
 **Sequencing (hard).** This section is **spec-only**. `R4-10-F2`
-(`docs/roadmaps/R4-ootb-suite.md`) is the sole build-and-prove owner of the
+(`docs/roadmaps/archive/R4-ootb-suite.md`) is the sole build-and-prove owner of the
 runnable replacement, and per its own stated precondition, **must not start**
 before the operator verdict is recorded in the
 [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md).
@@ -681,7 +681,7 @@ part of this spec.
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
-| MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/R4-ootb-suite.md` R4-10-F2) |
+| MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/archive/R4-ootb-suite.md` R4-10-F2) |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&

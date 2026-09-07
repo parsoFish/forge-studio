@@ -72,7 +72,7 @@ before forge merges). Everything between runs unattended.
 
 - [Forge 1.0 plan](./roadmaps/1.0.md) — the single roadmap for all forge work until the 1.0 tag: milestones M0–M7, the operator stories as the gate, fresh-session mechanics. Companions: [kickoff prompts](./roadmaps/1.0-kickoffs.md), [skills and tools to install](./roadmaps/1.0-skills.md), the [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md).
 - [User stories](./product/user-stories.md) — the complete, tiered catalogue of operator journeys Forge Studio supports (45 rows; the 1.0 gate is its G tier).
-- [Roadmap set](./roadmaps/README.md) — the forge-dev roadmaps R1–R8 (record of what was built; archived in M6 of the 1.0 plan) with the coverage map routing every architecture pillar to its owning roadmap.
+- [Roadmap archive](./roadmaps/README.md) — the R1–R8 forge-dev roadmaps, archived by M6 of the 1.0 plan: the record of what was built and why, with the coverage map routing every architecture pillar to its owning roadmap. Superseded for new work by the 1.0 plan (§7); several ADRs cite them as evidence.
 - [ADR index](./decisions/README.md) — every load-bearing decision plus the retirement ledger. The decision log — history is its job.
 - [Product vision (MVUS)](./product/minimum-viable-user-story.md) — the canonical vision for the shipped OOTB suite (Scope 2): idea → autonomous build → review → release → reflect.
 - [R2-03 fanout research spike](./investigations/R2-03-fanout-merge-resolution-spike.md) — the R2-D1 go/no-go evidence (**NO-GO**): a 76-source survey concluding forge's scheduler-ordering merge-gate suffices over a merge-resolution capability. (Investigation reports are otherwise scratch and gitignored; this one is a tracked roadmap-gate artifact.)

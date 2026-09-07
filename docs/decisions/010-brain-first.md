@@ -123,4 +123,4 @@ Full rationale: `brain/cycles/themes/brain-read-policy.md`.
 - [Karpathy LLM-wiki gist](https://gist.github.com/karpathy/) — the philosophy
 - ADR 027 §4 (as amended 2026-08-09) — the `band?:` qualifier shape on `{kind: flow}` bindings
 - ADR 018 / ADR 035 — the prior scoping-only amendment chain this entry is the first to deliberately break
-- `docs/roadmaps/R1-contract-componentry.md` R1-06 — the initiative carrying this amendment; operator decision 3 (2026-08-03) — ingest stays reflection-only
+- `docs/roadmaps/archive/R1-contract-componentry.md` R1-06 — the initiative carrying this amendment; operator decision 3 (2026-08-03) — ingest stays reflection-only

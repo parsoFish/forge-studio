@@ -1,7 +1,7 @@
 # ADR 019 — Cycle resume-from-unifier
 
 > **Amended 2026-08-03 (R4-10-F6 — resume target re-homed to the demo node).**
-> The successor develop flow ([R4-10-F1](../roadmaps/R4-ootb-suite.md)) retired
+> The successor develop flow ([R4-10-F1](../roadmaps/archive/R4-ootb-suite.md)) retired
 > the `unifier` node: the live flow is now `dev → demo → adversarial-review →
 > verdict`, with the `demo` node declared `resumable`. The crash / env-failure
 > resume described below is unchanged in mechanism — skip architect/PM/per-WI
