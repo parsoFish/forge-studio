@@ -218,7 +218,7 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 // two would compare the index with itself. The drift that still matters is
 // between this index and the assembly's `compositions` binding, which serves
 // the two lint paths the index cannot; that guard lives where both sides are
-// importable: `apps/forge/library-agent-facts.test.ts`.
+// importable: `apps/forge/tests/contract/library-agent-facts.test.ts`.
 
 test('PARITY: the index is not vacuously equal — the real roster composes something', () => {
   // Two empty maps compare equal. If the roster ever stops carrying hooks or

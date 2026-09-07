@@ -24,7 +24,7 @@
  *
  * `dryClassification` IS NOT DECORATION. `cli/dry-bridge.ts` classifies every
  * route so `FORGE_DRY_BRIDGE=1` can refuse or stub the ones that spawn, and
- * `apps/forge/dry-bridge-coverage.test.ts` counts them. An entry that loses its
+ * `apps/forge/tests/contract/dry-bridge-coverage.test.ts` counts them. An entry that loses its
  * classification in the carve is a route that SPAWNS under a dry bridge. The
  * field is non-optional for exactly that reason: the type will not let a lane
  * forget it.

@@ -117,7 +117,7 @@ function writeSuLintKbFixture() {
 // so mdtoc's ledger is genuinely empty at this beat) — so seeding it never
 // mutates canonical state (state-ownership rule). It mirrors the EXACT on-disk
 // shape a real archived, merged cycle carries — the positive-control shape in
-// apps/forge/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
+// apps/forge/tests/contract/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
 // (project: mdtoc, flow_id: forge-develop, cycle_id) + a `_logs/<cycleId>/
 // events.jsonl` (cycle.start → cycle.end complete) — so the REAL scanCycles →
 // deriveProjectCycleLedgerRows → HistoryLedger path renders a REAL, clickable row

@@ -309,7 +309,7 @@ test('neighbouring studio URLs outside this package are still claimed by nobody'
 
 // ---------------------------------------------------------------------------
 // The deps are per-table, not per-module (T1 ruling 59 §3). The assembly-level
-// twin of this — two bridges in one process — is `apps/forge/routes-assembly.test.ts`.
+// twin of this — two bridges in one process — is `apps/forge/tests/unit/routes-assembly.test.ts`.
 // ---------------------------------------------------------------------------
 
 test('two tables built from different deps call their OWN closures', () => {

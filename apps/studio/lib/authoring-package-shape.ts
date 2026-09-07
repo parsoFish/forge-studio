@@ -24,7 +24,7 @@
  * arrays directly — a plain, framework-free TS module under forge-ui/lib/
  * (no JSX, no 'use client', no Next-only API) IS importable by a
  * `node --experimental-strip-types --test` file, exactly as
- * `apps/forge/id-rule.test.ts` already does with `forge-ui/lib/
+ * `apps/forge/tests/contract/id-rule.test.ts` already does with `forge-ui/lib/
  * project-save-payload.ts` — and fails the moment the two arrays disagree,
  * so a shape added on one side and forgotten on the other is a RED test,
  * not a silent gap.

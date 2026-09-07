@@ -22,7 +22,7 @@
  * kind with a distinct `writes: [staging]` InteractiveRunnerError and no
  * live-KB requirement — not a copy of a real operator session.)
  *
- * Test shape mirrors apps/forge/ui-bridge-sessions-index.test.ts: a real bridge
+ * Test shape mirrors apps/forge/tests/integration/ui-bridge-sessions-index.test.ts: a real bridge
  * (startBridge) + fetch for the acceptance level, plus direct import of the
  * pure derivation for the unit matrix. The REAL studio/session-kinds.yaml is
  * copied into the fixture root so the real kinds/tables are exercised (the

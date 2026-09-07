@@ -1,5 +1,5 @@
 /**
- * AT-12 (bead forge-3oq review, T3 companion to apps/forge/studio-provenance.test.ts's
+ * AT-12 (bead forge-3oq review, T3 companion to apps/forge/tests/regression/studio-provenance.test.ts's
  * AT-8/AT-9/AT-10/AT-11) — the CLIENT side of the KB/flow detail-route gap.
  *
  * `forge-ui/lib/studio-client.ts` declares `Kb.provenance` REQUIRED with a

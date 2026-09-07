@@ -163,7 +163,7 @@ describe('validateCatalog — unique-ids', () => {
 // validateCatalog — community-skills tests REMOVED (W6-CR-1 reviewer fix):
 // catalog.yaml's `community-skills:` section and `Catalog.communitySkills`
 // are both gone (moved to studio/community/registry.yaml — see
-// validateCommunityRegistry's own tests, apps/forge/studio-lint-community-registry.test.ts
+// validateCommunityRegistry's own tests, apps/forge/tests/integration/studio-lint-community-registry.test.ts
 // + this file's registry.ts coverage). These tests exercised a shape
 // `loadCatalog` can no longer produce.
 

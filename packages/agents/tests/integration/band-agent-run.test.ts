@@ -11,7 +11,7 @@
  * What it deliberately does NOT prove is parity with the real flow band: that
  * needs `runDemoAgentPipeline` itself, which lives in `@forge/factory` (rank 7)
  * and may never be imported from this package (rank 3). That test moved to
- * `apps/forge/band-agent-standalone-parity.test.ts`, the layer that legally
+ * `apps/forge/tests/contract/band-agent-standalone-parity.test.ts`, the layer that legally
  * holds both sides, and it is the one that proves the injected runner is the
  * real pipeline. Neither test is sufficient alone; both ship.
  */

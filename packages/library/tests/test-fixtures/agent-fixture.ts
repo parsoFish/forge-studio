@@ -6,7 +6,7 @@
  * import `@forge/agents` — a test edge is still an edge in the import graph
  * `check-boundaries` reads. So these tests supply the port themselves. What
  * that costs is the proof that the REAL provider agrees with this one; that
- * proof lives at the assembly, in `apps/forge/library-agent-facts.test.ts`,
+ * proof lives at the assembly, in `apps/forge/tests/contract/library-agent-facts.test.ts`,
  * which drives the same fixture through the real binding and asserts the same
  * facts. Neither half is sufficient alone, which is why both exist.
  *

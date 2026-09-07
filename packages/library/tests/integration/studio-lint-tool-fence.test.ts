@@ -2,7 +2,7 @@
  * REAL-ENTRY-POINT acceptance tests for the tool-fence sweep — driven
  * through the ACTUAL `forge studio lint` entry point (`runStudioLint`,
  * `apps/forge/studio-lint.ts`), not a hand-rolled/direct call to
- * `lintSkillToolFence`. Mirrors `apps/forge/studio-lint-hooks.test.ts`'s own
+ * `lintSkillToolFence`. Mirrors `apps/forge/tests/regression/studio-lint-hooks.test.ts`'s own
  * stated reason: a direct-call unit test on `lintSkillToolFence` in
  * isolation would prove the function is correct but NOT that
  * `runStudioLint` ever calls it — an unwired lint function is exactly the
@@ -10,7 +10,7 @@
  *
  * Fixture conventions (`tmpRoot`, `buildBaseRoot`, `writeAgent`,
  * `validGuardsCatalogYaml`, `seedValidProject`) are copied from
- * `apps/forge/studio-lint-hooks.test.ts` rather than reinvented.
+ * `apps/forge/tests/regression/studio-lint-hooks.test.ts` rather than reinvented.
  */
 
 import { test } from 'node:test';
@@ -300,7 +300,7 @@ test('forge studio lint: a synthetic root with no studio/starters/agents/ direct
 // every known starter slug against the fence directly, so a future starter
 // added to studio/starters/agents/ without Task/Agent trips THIS test, not
 // just the general "runStudioLint on the real repo produces 0 errors" smoke
-// test in apps/forge/studio-lint.test.ts (which would also catch it, but wouldn't
+// test in apps/forge/tests/unit/studio-lint.test.ts (which would also catch it, but wouldn't
 // name the starter or the mechanism).
 // ---------------------------------------------------------------------------
 

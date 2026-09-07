@@ -219,7 +219,7 @@ describe('agentAcceptsMaterial — fail-closed on a malformed (non-array) def.ma
 // Route-level ACCEPTANCE tests (the shape/gate/cap/base64/duplicate/success
 // contract, the client-supplied-`kind`-must-not-be-trusted proof, and every
 // containment escape shape) live in
-// apps/forge/ui-bridge-agent-run-materials.test.ts — THIS file only pins the pure
+// apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts — THIS file only pins the pure
 // vocabulary: the extension→kind derivation function and the three named cap
 // constants, at the unit level.
 // ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ describe('materials caps — named constants exported from materials.ts (R6-04-F
   // headroom under MAX_BODY_BYTES for that inflation, or a legitimate
   // at-cap request would be rejected by the bridge's own outer body-size
   // guard (a 500, per readJson's reject path) before materials validation
-  // ever runs — see apps/forge/ui-bridge-agent-run-materials.test.ts's boundary
+  // ever runs — see apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts's boundary
   // tests, which exercise this live over HTTP.
   it('MAX_MATERIALS_TOTAL_BYTES is strictly less than the bridge\'s MAX_BODY_BYTES (1 MiB, cli/ui-bridge.ts:3207) — fails loudly if a future edit inverts this', () => {
     const MAX_BODY_BYTES_MIRROR = 1 * 1024 * 1024; // cli/ui-bridge.ts:3207 — literal, not imported (module-private, out of this WI's file scope)

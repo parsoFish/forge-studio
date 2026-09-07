@@ -179,7 +179,7 @@ export function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
 // false green on the wrong repo, the exact defect this campaign closes. The
 // onboarding form's own default gate is `npm test`, so tightening C1 alone
 // left every from-scratch JS project born hard-failing (bd forge-7pa,
-// `apps/forge/onboard-born-green.test.ts`).
+// `apps/forge/tests/regression/onboard-born-green.test.ts`).
 //
 // `isPackageManagerShaped`/`resolveScriptName` used to be byte-for-byte COPIES
 // here. The stated reason — "preflight.ts does not export either — it is

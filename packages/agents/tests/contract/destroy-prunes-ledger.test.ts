@@ -1,6 +1,6 @@
 /**
  * W8-B4 (library-34 / library-35) — the ENUMERATION pin the task brief
- * demanded, mirroring apps/forge/bridge-community-registry-crud.test.ts's CRUD-12b
+ * demanded, mirroring apps/forge/tests/integration/bridge-community-registry-crud.test.ts's CRUD-12b
  * idiom ("a pin that fails if the [...] list is ever narrowed/widened
  * again") applied to a DIFFERENT invariant: every fs call that destroys a
  * hook or skill package BY ID must be paired with the matching ledger-prune
@@ -39,7 +39,7 @@
  *   (a) PRODUCTION FIX — apps/forge/bridge-studio-writes.ts's agent-DELETE route
  *       now calls `removeInstallLedgerEntry` before its `rmSync`, mirroring
  *       packages/library/bridge-studio-skills.ts's DELETE route. See
- *       apps/forge/bridge-studio-writes-ledger-prune.test.ts for the live-bridge
+ *       apps/forge/tests/regression/bridge-studio-writes-ledger-prune.test.ts for the live-bridge
  *       reproduction pins (pin 2: the reviewer's repro, asserting the
  *       ARTIFACT — the ledger file's content and the recreated skill's
  *       trust — not a status code; pin 3: a no-ledger-row delete control).

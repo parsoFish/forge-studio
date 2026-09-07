@@ -1,8 +1,8 @@
 /**
  * ACCEPTANCE TESTS (must be RED until fixed) — bd `forge-wze` (P0): KB
  * containment defects, driven through the REAL carved route handlers,
- * mirroring the fixture idiom of apps/forge/bridge-studio-write.test.ts and
- * apps/forge/bridge-studio-flows.test.ts.
+ * mirroring the fixture idiom of apps/forge/tests/integration/bridge-studio-write.test.ts and
+ * apps/forge/tests/integration/bridge-studio-flows.test.ts.
  *
  * Root cause: `orchestrator/brain-paths.ts::resolveKbBrainDir` resolves
  * `brain/<kbId>` (and its `brain/projects/<kbId>` fallback) with `resolve()`

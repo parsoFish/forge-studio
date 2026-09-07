@@ -158,7 +158,7 @@ export type ProjectConfigHealth = {
  * exported helper the loader uses (`injectSidecarIntoTestProcess`, whose own
  * docstring calls itself "the ONE sidecar-injection rule ... shared by the
  * loader and the bridge's PUT-validation copy") — never a re-implementation.
- * `apps/forge/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
+ * `apps/forge/tests/regression/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
  * third fixture: for every shape, `state === 'ok'` iff `loadProjectConfig`
  * accepts it, because a disagreement in EITHER direction is the defect.
  *

@@ -18,8 +18,8 @@ import { type FixtureDescriptor, REPO_ROOT, baseDescriptor, byId, makeForgeRoot,
 // "cleanup-plan" row yet. This block pins the DESCRIPTOR/REGISTRY half of the
 // feature only — the renderer lives in session-transcript.test.ts, the turn
 // spine in interactive-runner.test.ts, the routes in
-// apps/forge/ui-bridge-kb-cleanup.test.ts, and dry-bridge coverage in
-// apps/forge/dry-bridge-coverage.test.ts.
+// apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts, and dry-bridge coverage in
+// apps/forge/tests/contract/dry-bridge-coverage.test.ts.
 // ===========================================================================
 
 describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup-plan)', () => {

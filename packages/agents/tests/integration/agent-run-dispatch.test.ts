@@ -292,7 +292,7 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown s
 // under the OLD hardcoded literal while this guard now checks containment
 // against the CONFIGURED root, and the two disagree.
 //
-// `apps/forge/ui-bridge-onboarding-start.test.ts`'s AT-10 kills the PRODUCER half
+// `apps/forge/tests/integration/ui-bridge-onboarding-start.test.ts`'s AT-10 kills the PRODUCER half
 // directly (RED now: the route can't even find a project that only exists
 // under a configured root, so it 404s instead of placing the session there).
 // The tests below pin the CONSUMER half this function owns: fed a
