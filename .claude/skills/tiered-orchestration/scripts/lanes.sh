@@ -13,8 +13,19 @@
 #
 # Usage (help = run with no args):
 #   lanes.sh render <kickoffs.md> <heading-regex> <out-file> [PARAM=VALUE ...]
+#                   [--outcome FILE] [--ledger FILE] [--section REGEX ...] [--max-bytes N]
 #       Extract the first ```text block under the heading matching <heading-regex> into
 #       <out-file>; fill each PARAM ("PARAMETER — set before pasting" line + every "$PARAM").
+#       --outcome FILE     append a predecessor lane's OUTCOME file to the rendered prompt.
+#       --ledger FILE      the ledger --section reads from; required by --section.
+#       --section REGEX    append the ledger section whose heading matches REGEX; repeatable.
+#       --max-bytes N      cap the rendered prompt (default $RENDER_MAX_BYTES_DEFAULT, or
+#                          $LANES_RENDER_MAX_BYTES); a prompt over the cap is an error, not
+#                          a truncation.
+#       Bead `forge-8vfn.6.9`: these four have been accepted since they were written and named
+#       in no usage text, so the only way to learn them was to read the parser. A flag a caller
+#       cannot discover is a flag nobody uses — and `--section` without `--ledger` dies with a
+#       message about an option the header never mentioned.
 #   lanes.sh launch <campaign-dir> <lane> <prompt-file> [--model M] [--permission-mode P]
 #                   [--cwd DIR | --branch NAME] [--skill NAME ...] [--mcp FILE]
 #                   [--t1 NAME] [--attended] [--open]

@@ -28,6 +28,17 @@ LIST=0
 if [ "${1:-}" = "--list" ]; then LIST=1; shift; fi
 R="${1:?usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree>}"
 CAMP="${2:-}"
+# REFUSE what it does not understand (bead `forge-8vfn.6.9`). `--list` is read
+# only as `$1`, so `gate.sh <worktree> <camp> --list` put the flag in `$3`,
+# where it was ignored IN SILENCE and the full gate ran instead — a build,
+# `npm test` and `test:ui`. That is indistinguishable from a hang, and it is
+# exactly how it was reported: lane M6-C opened by filing "`--list` HANGS,
+# killed at 20 s and at 120 s", and built a parallel gate on the strength of it.
+# T1 reproduced the same shape from the main checkout. Nothing was broken; a
+# tool that answers an unrecognised argument with a ten-minute suite cannot be
+# told apart from one that is, and the operator's next move is to work around a
+# fault that was never there.
+[ $# -le 2 ] || die "unexpected argument: '$3'. Usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree> (the flag comes FIRST)"
 [ -d "$R" ] || die "no such worktree: $R"
 CI="$R/.github/workflows/ci.yml"
 [ -f "$CI" ] || die "no .github/workflows/ci.yml under $R — nothing to derive a gate list from"
