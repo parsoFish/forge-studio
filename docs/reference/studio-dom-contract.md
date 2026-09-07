@@ -1,14 +1,16 @@
-# Forge-UI DOM contract & harness reference
+# Studio DOM contract
 
 > Moved out of `CLAUDE.md` (2026-07-19) to keep the always-injected project
 > instructions lean — the per-route `data-*` inventory grew with every UI PR and
 > is reference material most agents (and every non-UI subagent) never need.
 > `CLAUDE.md` carries a short pointer here; sync this doc + the affected journey
-> on any UI change via the `journey-sync` skill.
+> on any UI change via the `journey-sync` skill. (This page originally also
+> carried the UI test-harness reference; that half moved with the harness
+> retirement this milestone — this page keeps only the `data-*` contract.)
 
-## forge-ui DOM-as-metrics convention
+## Studio DOM-as-metrics convention
 
-Every load-bearing UI state in `forge-ui/` is mirrored to `data-*`
+Every load-bearing UI state in `apps/studio/` is mirrored to `data-*`
 attributes so any automation (playwright today, LLM-driven UI tests
 tomorrow) can drive the page by reading structured DOM state rather
 than scraping rendered text. Pattern from
@@ -20,7 +22,7 @@ every route below owns its own `data-page="<name>"` root (+
 inventory rather than one shared page-level contract:
 
 **`data-page-ready` is DERIVED, never declared (M1-G, `forge-8vfn.5.7`).** One
-deriver, `routeReady(...states)` in `forge-ui/lib/route-readiness.ts`: true once
+deriver, `routeReady(...states)` in `apps/studio/lib/route-readiness.ts`: true once
 every fetch the route waits on has SETTLED — success *or* honest failure, the
 same rule `/library` already read correctly. A route that writes a literal
 `true` beside a fetch state that disagrees with it is the
@@ -53,6 +55,21 @@ another session's page, whose own root also carries `data-session-id`, and the
 story runner's `resolveExpectations` binds the best-covering candidate — so the
 root wins and the key answers with the WRONG session's id. Shadowing is silent:
 the beat reds on an unbound segment, never on a wrong value.
+
+**Publish, never navigate (rulings 396/406/409/422/436).** A press that mints a
+session publishes `data-minted-session-id` on an always-present element of the
+page it is on (`""` before the mint, the id after) and renders a real anchor
+`data-action="open-minted-session"` (href = the session route); it never
+navigates by itself. The empty string matters: an observer collects nested
+`data-*` in one read, so an element that mounts only after the mint is a render
+race the reader sees as "no key" rather than "not yet" — empty string, never
+absent. The architect launcher's pre-existing
+`data-architect-session-id` / `view-architect-session` pair follows the same
+rule (ruling 436): a named legacy exception on the attribute NAME only — the
+stories bind those handles — never on the two properties above. This is the
+same invariant as above, stated as the contract-wide rule rather than per-kind: it now holds at four sites — the
+generic kickoff, the authoring launcher, the instructions kickoff, and the
+architect launcher.
 
 **BOTH demo surfaces publish it, and which one a beat reads depends on the PAGE
 it stands on** — `components/studio/project-builder/DemoTimeline.tsx` on the
@@ -199,7 +216,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   type of one id agrees) or
   `artifact type` (an unrecognised `?type=`, naming the valid set) → `/flows`;
   and `app/not-found.tsx` → `page` (the pathname) → `/` for any unmatched
-  path. Pinned: `forge-ui/lib/not-found-render.test.ts` (render contract) +
+  path. Pinned: `apps/studio/lib/not-found-render.test.ts` (render contract) +
   `scripts/not-found-consolidation.test.ts` (every route family wired; the
   legacy hand-rolled bodies gone). Journey: `templates-not-found`
   (`scripts/journeys/templates.mjs`) probes `/templates/nope`,
@@ -208,7 +225,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   The id rule the routes resolve against (W7-A4, bead forge-9bd): a project
   id IS its directory name and a KB id IS its kb.yaml `id` (== directory
   name), case-preserving, matched exactly end to end (`PROJECT_ID_RE` /
-  `KB_ID_RE`, `orchestrator/studio/validate.ts`) — so `trafficGame` is
+  `KB_ID_RE`, `packages/flows/studio/validate-flow.ts`) — so `trafficGame` is
   reachable everywhere the roster lists it, and `trafficgame` is a genuine
   not-found. The literal id `new` (any case) is reserved on every create
   route because `/x/new` is each builder's static segment
@@ -229,7 +246,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   leaves the derivation live.
 
   Initiative titles (W7-A4 / W7-FIX-A4): every surface reads
-  `initiativeTitle()` (`orchestrator/manifest.ts`) — the frontmatter
+  `initiativeTitle()` (`packages/flows/manifest.ts`) — the frontmatter
   `title:` every manifest producer writes (`buildManifest` from the
   architect draft's title; `mintTriggeredInitiative` from flow + trigger);
   only a manifest with no frontmatter title falls back to its body's first
@@ -999,7 +1016,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-component="run-status-line"][data-stop-on-budget="true"]` (mirrored on
   `RunRail`'s budget-stop note). `stopOnBudget` is DERIVED per read from the
   run's own `flow.cost-ceiling-stop` event plus its already-derived work items
-  (`deriveStopOnBudget`, `orchestrator/run-model-derive.ts`) — there is no
+  (`deriveStopOnBudget`, `packages/flows/run-model-derive.ts`) — there is no
   stored `stoppedOnBudget` field for a writer to forget. The preference matters
   because `failNote` is a STORED classification: on the real 2026-08-18 cycle it
   still reads "failure could not be classified" and always will, while the
@@ -1209,7 +1226,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Triggers (R2-04-F4, extended forge-zyc 2026-08-09, `FlowHeader.tsx`, under
   Advanced): a kind selector `[data-field="trigger-kind"]` offers all seven
   SHIPPED kinds (`flow-complete | agent-complete | merged | pr-merged |
-  issue-raised | cron | webhook` — a client mirror of orchestrator/flow-trigger.ts's
+  issue-raised | cron | webhook` — a client mirror of packages/flows/flow-trigger.ts's
   `SHIPPED_TRIGGER_KIND_IDS`, the SSOT, now guarded by a both-directions parity
   test so the mirror cannot silently drift; registry-reserved kinds `manual`/`feed`
   are never offered) and a target-flow select `[data-field="trigger-target"]`
@@ -1223,7 +1240,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   real `webhook.id` the hook receiver can route to (previously these were selectable
   but produced a bare, permanently-dead declaration). `cron`
   additionally renders `[data-field="trigger-schedule"][data-schedule-invalid]`
-  (client-side croner syntax check — UX only, `orchestrator/studio/validate.ts`'s
+  (client-side croner syntax check — UX only, `packages/flows/studio/validate-flow.ts`'s
   `trigger-cron` check is authoritative on save) and
   `[data-field="trigger-concurrency"]` (`allow|forbid`). `webhook` additionally
   renders `[data-field="webhook-id"|"webhook-provider"|"webhook-secret-env"|"webhook-sources"]`
@@ -1480,7 +1497,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   approval ledger's `packageHash` pin, and completely invisible to the
   approving operator: they were approving bytes they were never shown. The
   route now returns `readHookPackage`'s real, whole-package file list
-  (`orchestrator/studio/hook-package.ts`) — the SAME primitive the ledger's
+  (`packages/library/studio/hook-package.ts`) — the SAME primitive the ledger's
   `packageHash` is computed from — each file carrying a `sha256:<hex>`
   content hash, plus a top-level `packageHash` covering the whole set. The
   page renders this as `[data-section="package-files"][data-package-file-count]`
@@ -1517,7 +1534,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   /api/studio/hooks/:id/revoke-approval` (409 when nothing is approved; the
   revocation is RECORDED in the ledger's `revoked` list — an audit trail,
   never a silent erase; `revokeHookApproval`,
-  `orchestrator/studio/hook-scan.ts`).
+  `packages/library/studio/hook-scan.ts`).
 - **`/connections`, `/connections/[id]`** (R3-04-F2/F3) — the connections
   pillar: curated tools/MCP servers read from `studio/catalog.yaml`'s
   `tools:`/`mcps:` sections (D2: kind is structural — `tool`|`mcp` — never a
@@ -1599,7 +1616,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `<a href="/community/new">` in the header slot) plus per-row controls on
   the detail page (below). Trust decisions still never live here; the
   registry file is repo-tracked, Studio writes it and the operator commits
-  via their normal git flow (see `docs/community-registry-writes.md`).
+  via their normal git flow (see `docs/explanation/community-registry.md`).
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
   [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
   [data-hub-filter="all"|<hubId>]
@@ -1623,7 +1640,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   **Browse state is URL state (W8-B5, community-35).** The five browse
   facts live in the query string, NOT in component state: `?kind=` ·
   `?hub=` · `?q=` · `?sort=` · `?dir=`
-  (`forge-ui/lib/community-url-state.ts` — `parseCommunityViewState` is
+  (`apps/studio/lib/community-url-state.ts` — `parseCommunityViewState` is
   TOTAL and degrades an unrecognised value to the documented default, since
   a URL is operator-editable input; `communityViewStateToSearch` OMITS every
   value equal to its default, so the default view's canonical URL stays the
@@ -1642,7 +1659,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   **The empty state is DERIVED (W8-B5, community-36).**
   `[data-component="community-empty"][data-empty-state="empty-index"|
   "no-match"|"hub-declared-only"]` (`communityEmptyState`,
-  `forge-ui/lib/community-view.ts`). Selecting a hub whose own
+  `apps/studio/lib/community-view.ts`). Selecting a hub whose own
   `itemCount` is 0 renders the specific "declared source — nothing from it
   is indexed yet" message naming that hub, never the generic "Nothing
   matches this filter."; the state is read from the SELECTED HUB'S own
@@ -1710,7 +1727,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   checks it. Errors surface as `[data-component="registry-form-error"]`.
 
   **W8-B5 (community-29): the required set is stated ONCE.**
-  `REGISTRY_REQUIRED_FIELDS` (`forge-ui/lib/community-form.ts`) — id, name,
+  `REGISTRY_REQUIRED_FIELDS` (`apps/studio/lib/community-form.ts`) — id, name,
   category, source URL, provenance — drives the `*` each field renders, the
   submit gate, AND the wording of `[data-disabled-reason]`. Those three used
   to be three hand-written statements and disagreed: the reason named
@@ -1736,7 +1753,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `button[type="button"][data-action="refresh-community-registry"]`
   ("Refresh registry", rendered via `StudioPage`'s `actions` header slot)
   POSTs the deterministic, LLM-free `POST /api/studio/community/refresh`
-  (`packages/library/bridge-studio-community.ts` → `orchestrator/studio/community-refresh-api.ts`
+  (`packages/library/bridge-studio-community.ts` → `packages/library/studio/community-refresh-api.ts`
   → `runCommunityRefresh`) — real outbound GitHub/npm calls, no agent turn,
   no operator verdict step. The button disables while a refresh is already in
   flight (`disabledAttrs`), and is otherwise the ONLY thing on this browser
@@ -1746,7 +1763,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Its outcome renders in `section[data-section="refresh-result"]
   [data-refresh-state]` (absent until the operator has clicked at least
   once — no empty shell), `data-refresh-state` set from
-  `refreshOutcomeView`'s own `state` (`forge-ui/lib/community-view.ts`) —
+  `refreshOutcomeView`'s own `state` (`apps/studio/lib/community-view.ts`) —
   real values include `'refreshed'`, `'partial'`, `'no-op'`, `'refused'`,
   `'refused-dry-bridge'`, `'server-error'`, `'transport-error'`, and a
   `-stale-view` suffix variant when a successful write's own post-write
@@ -1766,7 +1783,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   flips direction — both mirrored onto the root's own `data-sort-key`/
   `data-sort-dir` (the same "state lives on the root too" convention
   `data-kind-filter` already holds). Default is `name`/`asc`, deterministic
-  (`forge-ui/lib/community-view.ts`'s `sortCommunityItems`, pure, returns a
+  (`apps/studio/lib/community-view.ts`'s `sortCommunityItems`, pure, returns a
   NEW array). `stars` sorts on `signals.starsNumeric`; `updated` sorts on
   `fetchedAt` — the SAME fact the freshness badge below renders, deliberately
   never `upstreamUpdatedAt` (a different claim: upstream's own change date,
@@ -1783,7 +1800,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Each card additionally carries `[data-fetched-at]` — the item's real ISO
   `fetchedAt`, structurally ABSENT (never an empty string) when null — and a
   `[data-component="freshness-badge"][data-freshness="seed"|"stale"|"fresh"]`
-  span (`forge-ui/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
+  span (`apps/studio/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
   null` renders the spec-literal "seed — never verified" (every item sourced
   from `studio/community/registry.yaml` today reads this way — the
   deterministic `runCommunityRefresh` (the "Refresh registry" button's own
@@ -1989,19 +2006,33 @@ is what this contract reads — but it cannot be the only distinguisher.
   vocabularies apart is the whole reason R3-03 renamed `composition.hooks` to
   `composition.guards` before reintroducing `composition.hooks` for library
   lifecycle hooks — a
-  `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel (6
-  checks — purpose/skill/guard/process/interactivity content-completeness plus
-  a `runtime` check sourced from the server-computed F1 capability descriptor,
-  never re-derived client-side — **plus a 7th, conditional `connections`
-  check** (R3-04-F3): appended ONLY for an agent that binds at least one
-  tool/MCP (an agent binding none has nothing to be ready about, and a 7th
-  check that always passes would silently redefine the six-check contract
-  every other agent surface relies on) once the independently-fetched
-  connections library resolves. `[data-check="connections"]` reads NOT ready
-  whenever any bound tool/MCP's REAL probe state isn't `available`, its
-  `title` naming the component and state (e.g. `mcp "memory"
-  (not-installed)`) rather than a generic "not ready";
-  `[data-ready-count]` excludes it while unready. The
+  `[data-sdk]` runtime pick, and a readiness panel of **7 checks, always** —
+  purpose/skill/guard/process/interactivity content-completeness, a `runtime`
+  check sourced from the server-computed F1 capability descriptor (never
+  re-derived client-side), and a `connections` check (R3-04-F3). **Rulings
+  400/410 (M6):** the `connections` check used to be APPENDED only for an
+  agent that binds at least one tool/MCP, so the LENGTH of the list moved with
+  the agent's bindings and no observer could assert it — measured on story S5
+  beat 9 (`data-ready-count: expected "6", got "7"`). Every check the panel
+  can name is now always named; what varies is its state. Three attributes
+  carry that, and they answer different questions:
+  `[data-ready-total]` — how many checks EXIST. **Stable** (7 today); this is
+  the one a story or harness asserts.
+  `[data-ready-count]` — how many checks PASS. Unchanged meaning, so it still
+  moves with the agent's state (`scripts/journeys/connections.mjs` CONN-3
+  asserts `readyCount < totalChecks` against it).
+  `[data-check-state]` — per row, one of `ready` / `not-ready` / `pending`.
+  `pending` is the connections check before its independently-fetched library
+  resolves: neither ready nor not-ready, and never fabricated as either. Its
+  `aria-label`/`title` say "still checking", not "not met". `[data-ok]` stays
+  boolean and is `true` only for `ready`.
+  `[data-check="connections"]` reads NOT ready whenever any bound tool/MCP's
+  REAL probe state isn't `available`, its `title` naming the component and
+  state (e.g. `mcp "memory" (not-installed)`) rather than a generic "not
+  ready". The **"Ready to use in flows" badge waits for every row to RESOLVE**,
+  not merely for the passing ones to add up — before 400/410 it could light on
+  six passing checks while nothing yet knew whether the agent's bound tools
+  were real. The
   descriptor's `interactive` fact also surfaces as its own informational
   (non-gating) chip,
   `[data-capability-interactive]`. **W8-B1 (ON-8): the Run panel is pinned
@@ -2028,8 +2059,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   **interactive** branch (`data-run-dispatchable="false"`, below) carries the
   SAME two-child split, with `[data-action="go-to-session"]` in its actions
   row — gating one of two branches is how this class comes back.
-  Two gates enforce it, and each is mutation-proven (see
-  `_wave8/lanes/F4-ledger.md`): `forge-ui/lib/agent-run-reachable.test.ts`
+  Two gates enforce it, and each is mutation-proven:
+  `apps/studio/lib/agent-run-reachable.test.ts`
   renders the real component — BOTH branches — and walks each control's
   ancestor chain (no scrolling ancestor; no shrinkable container; a closed
   ALLOW-list of the CSS properties a chain element may declare at all, every
@@ -2065,7 +2096,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (`[data-run-ceiling=<usd|"">]`, text "Run agent ($N cap)" / "(no cost
   cap)"), seeded from the agent's own declared `budgets.maxBudgetUsd`
   (`Agent.declaredMaxBudgetUsd`) ahead of the run-level policy default —
-  see `docs/agent-cost-ceilings.md`; a ralph-loop agent renders
+  see `docs/reference/agent-cost-ceilings.md`; a ralph-loop agent renders
   `[data-component="standalone-blocked"]` with the honest refusal (the
   bridge 400s the dispatch — no run is minted just to fail); the run
   control stays DISABLED while the dispatched run is itself still running
@@ -2173,10 +2204,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   kebab; "data files" is a display label only). **The materials declaration is
   not enforced here**: the UI declares, the R6-04-F2 kickoff upload seam
   enforces, and `agentAcceptsMaterial` is the fail-closed gate that seam must
-  call. `[data-ready-count]` is unchanged at **6** — the mockup's "Named +
-  described" and "Reachable" rows were deliberately NOT added, because neither
-  can ever read false for a loaded agent and a readiness row that cannot fail is
-  decoration.
+  call. The check list was deliberately NOT extended with the mockup's "Named +
+  described" and "Reachable" rows, because neither can ever read false for a
+  loaded agent and a readiness row that cannot fail is decoration. (Since
+  rulings 400/410 the list is **seven checks, always** — assert
+  `[data-ready-total]`; `[data-ready-count]` counts the ones that PASS and so
+  varies with the agent's state.)
 - **`/agents/[id]` agent history ledger (R6-06, 2026-08-08).** The agent page's
   right-hand column gains a per-agent run-history ledger below `UsedInFlows`,
   rendered by the SAME shared `HistoryLedger.tsx` the flow monitor uses — so
@@ -2238,7 +2271,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `<input data-run-cost-ceiling>` — **disabled** whenever `false` — plus,
   only when disabled, `[data-component="ceiling-explanation"]` naming WHY
   (the agent's `loopStrategy` cannot enforce one). `costCeilingEnforceable`
-  is a server-computed fact (`orchestrator/studio/derive.ts`
+  is a server-computed fact (`packages/agents/studio/derive.ts`
   `agentCapabilityDescriptor().costCeilingEnforceable`, true iff
   `runtime.loopStrategy === 'one-shot'`) threaded through as-is, never
   re-derived client-side — **the cost ceiling is enforced ONLY for
@@ -2251,7 +2284,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   — offering exactly the agent's own declared `materials:` kinds, never the
   full vocabulary; an out-of-contract or oversized attachment is refused
   client-side (a convenience mirror of the server's own authoritative check,
-  `forge-ui/lib/run-panel-view.ts`) with an inline `<p>` naming both the
+  `apps/studio/lib/run-panel-view.ts`) with an inline `<p>` naming both the
   file's real kind and the agent's declared kinds (no dedicated `data-*` on
   that message itself — select it via
   `[data-section="materials-attach"] p`). Clicking
@@ -2297,7 +2330,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   log) — `[data-component="run-log"]` with one
   `[data-log-line="true"][data-log-kind="think"|"tool"|"out"]` per event
   (mapped from the real 11-member `EventType` union by
-  `forge-ui/lib/run-log-line.ts`; `[data-component="run-log-empty"]` when
+  `apps/studio/lib/run-log-line.ts`; `[data-component="run-log-empty"]` when
   none have landed yet); `[data-section="run-materials"][data-materials-count]`
   — `[data-component="run-materials-empty"]` when none, else one
   `<li data-material-ref="<path>" data-material-kind="<kind>">` per material,
@@ -2401,7 +2434,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   **W8-A3 (`flows-23`):** plus `a[data-action="open-architect-session"]`
   → `/sessions/architect/<architectSessionId>` when the run's manifest names
   one — the way back to the conversation that planned a stuck initiative,
-  carried on `Run.architectSessionId` (`orchestrator/run-model.ts`, through
+  carried on `Run.architectSessionId` (`packages/flows/run-model.ts`, through
   `parseRun` under the same declared-data-fails-open guard as `trigger`/
   `prUrl`) and absent, never fabricated, when the manifest names none. The
   header also carries `[data-component="run-status-chip"][data-run-status]`:
@@ -2458,7 +2491,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   attribute — never a second `data-node-id`, which would break row lookups)
   containing the **shared** `RunLog`: `[data-component="run-log"]` with one
   `[data-log-line="true"][data-log-kind="think"|"tool"|"out"]` per event,
-  mapped by `forge-ui/lib/run-log-line.ts` — the SAME component and mapper
+  mapped by `apps/studio/lib/run-log-line.ts` — the SAME component and mapper
   `/agents/[id]/run/[runId]` uses. One component, two surfaces.
 
   That reuse required a wire change: the classified phase-log endpoint
@@ -2706,7 +2739,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   canvas** —
   `[data-roadmap-canvas][data-initiative-count][data-roadmap-edge-count]
   [data-canvas-scale]` — the operator-locked "B-prime" design
-  (`mockups/roadmap-uplift/b-prime.html`). Layout math is pure and unit-tested
+  (`mockups/roadmap-uplift/b-prime.html`, since deleted). Layout math is pure and unit-tested
   (`lib/roadmap-time-layout.ts`'s `computeRoadmapTimeLayout` +
   `bucketByCompletionDay`/`layoutBlock`/`computeGapWidth`/`assignPendingBand`),
   producing REAL `{x,y,w,h}` positions for every card up front — unlike the
@@ -2772,7 +2805,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   button actually change real view state" pin (mirroring
   `data-initiative-collapsed`'s old role). Pan (drag) / zoom (wheel,
   zoom-to-cursor) is a hand-rolled CSS `translate()+scale()` transform, NOT
-  reactflow (already a forge-ui dep for `FlowBuilderCanvas`) — every
+  reactflow (already a Studio dep for `FlowBuilderCanvas`) — every
   coordinate here comes from the pure layout module, not a DOM measurement,
   so reactflow's actual value-add doesn't apply, and this repo's no-jsdom
   render-test convention has no precedent of a reactflow tree surviving it
@@ -2821,7 +2854,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   screen, tying demo upkeep to initiative state without a fake tab switch.
   Server-side, `RoadmapInitiative.completedAt` (`apps/forge/bridge-studio.ts`'s
   `buildProjectRoadmap`) is threaded from `Run.completedAt`
-  (`orchestrator/run-model.ts`) — the `started_at` of a cycle's
+  (`packages/flows/run-model.ts`) — the `started_at` of a cycle's
   `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event (falling
   back to the cycle log's last non-`'reflection'` event for a
   crash-then-requeue tail with no such event — the exclusion keeps a
@@ -2877,7 +2910,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="run-onboarding-agent"]` button. **Repointed R4-17
   (2026-08-06):** the button now dispatches through the staged onboarding
   session route, `POST /api/studio/onboarding/start` (`{project, inputs?}` →
-  `{ok, sessionId, runId, project}`, `forge-ui/lib/studio-client.ts`'s
+  `{ok, sessionId, runId, project}`, `apps/studio/lib/studio-client.ts`'s
   `startOnboardingSession`) rather than the generic
   `POST /api/agents/onboarding-agent/run` — D6 (R4-17) keeps the underlying
   spawn byte-identical, so `[data-onboard-run-id]` /
@@ -2992,7 +3025,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   SHARED `[data-section="history-ledger"]` (`HistoryLedger.tsx`, the THIRD
   caller after the flow + agent monitors), fed this project's own RAW
   `Cycle[]` (`fetchCycles()`, scoped to `c.project === id`) through
-  `deriveProjectCycleLedgerRows` (`forge-ui/lib/project-cycle-ledger.ts`) — no
+  `deriveProjectCycleLedgerRows` (`apps/studio/lib/project-cycle-ledger.ts`) — no
   status filter, every cycle is a row. Each row is a real
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]`
   whose `href` carries the FULL `cycleId` AS-IS to
@@ -3008,7 +3041,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-component="history-ledger-empty"]`, never a fabricated row.
 - **`/projects/[id]` — "Rebuild contract" + the drift report (S3, 1.0.md §3,
   M4-projects; `RebuildContractPanel.tsx`, mounted in the editor aside right
-  below `ContractResolutionPanel`).** `_1.0/stories/S3.md` recorded that "the
+  below `ContractResolutionPanel`).** Story S3 recorded that "the
   drift report has no surface at all" — a project can drift away from the
   contract every project onboarded since is built to (bound skills the
   resolver cannot find, `testProcess`/`demoProcess`/`releaseProcess` regen
@@ -3060,18 +3093,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   operator has to pick. Entry is gated on the project page itself:
   `/projects/[id]`'s cycle-ledger header carries
   `[data-action="open-showcase"]`, rendered only when
-  `showShowcaseEntry` (`forge-ui/lib/project-showcase.ts`) resolves a real
+  `showShowcaseEntry` (`apps/studio/lib/project-showcase.ts`) resolves a real
   eligible cycle for the project — the link is never offered for a project
   the showcase page would itself render empty for. Page shell:
   `main[data-page="project-showcase"][data-page-ready][data-project-id]`.
-  Load pipeline (`forge-ui/lib/showcase-load.ts`'s `loadShowcase`):
+  Load pipeline (`apps/studio/lib/showcase-load.ts`'s `loadShowcase`):
   `fetchCycles()` → `deriveShowcaseCycleId` (newest cycle with
   `status === 'merged' | 'done'` for this project, ranked by
   `endedAt ?? startedAt ?? <cycleId>`'s own leading timestamp) →
   `fetchDemoModel(cycleId)`. Two render branches, both derived from the SAME
   fetch (no separate showcase-only schema):
   `[data-section="showcase-stats"]` — a small stats strip
-  (`deriveShowcaseStats`, `forge-ui/lib/project-showcase.ts`) of real counts
+  (`deriveShowcaseStats`, `apps/studio/lib/project-showcase.ts`) of real counts
   read off the fetched `DemoModel` (test-evidence count, branch/commit/PR-link
   tiles when the model carries them) plus the AC met/partial/missed counts read
   off the SAME cycle's `review-findings.json` — the verdict is the reviewer's,
@@ -3121,7 +3154,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   replaced (`/architect/[sid]`, `/architect/[sid]/interview`,
   `/instructions/[sid]`, `/project-brain/[sid]`) are **deleted as
   implementations, with no page file at all left at the old paths** — they
-  survive only as permanent WIRE redirects declared in `forge-ui/next.config.mjs`
+  survive only as permanent WIRE redirects declared in `apps/studio/next.config.mjs`
   `redirects()` (converted from client/server-component shim pages to
   config-level redirects at W6-IA-8, since each destination is knowable from
   the URL alone) into this route — `/project-brain`'s redirect entry forwards
@@ -3218,7 +3251,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   rendered through the SAME generic `SessionInteractivePanel` as every other
   turnSpec kind. That kind is retired (W8-B5b WI-3) and removed from the set;
   parity with the registry is still pinned by
-  `forge-ui/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
+  `apps/studio/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
   except the two bespoke-panel kinds must be in the set, so a newly declared
   kind can never render a blank page again).
   **W7-A2 lifecycle bar (every kind — architect/project-brain included):**
@@ -3333,7 +3366,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   the kind's declared `stages` surfaces the server's message naming the
   offending value and the allowed set, never a defaulted render. **D10
   (R4-17, 2026-08-06):** `SessionArtifactPane`'s branch selection DELEGATES to
-  the `sessionArtifactView` dispatcher (`forge-ui/lib/session-artifact-view.ts`)
+  the `sessionArtifactView` dispatcher (`apps/studio/lib/session-artifact-view.ts`)
   instead of a bespoke ternary — the prior ternary's final `else`
   unconditionally rendered the generation gallery, so an artifact kind the
   pane didn't explicitly branch on silently misrendered as a gallery instead
@@ -3497,7 +3530,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `heading` parameterisation — and since W7-C2 the generic
   `SessionInteractivePanel` is its second real consumer (the per-question
   interview form, `sectionName="session-interview"`), exactly the reuse the
-  parameterisation was kept for. **architect is now the ONLY kind left on its own
+  parameterisation was kept for. **architect and project-brain are the only kinds left on their own bespoke
   panel**, permanently (ADR-043 amendment §4).
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
   (W6-B9)** render the generic `SessionInteractivePanel` in this same ladder
@@ -3517,7 +3550,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   consumer below adopted this — no dual paths). Operator round-3 decision:
   a **full-width collapsible BOTTOM DRAWER** (`position: fixed`, spans the
   page), not the `mockups/session-surface-v1/session-live.html` mock's
-  bottom-left inline placement — the mock's row-content design (thinking
+  (mockups/ since deleted) bottom-left inline placement — the mock's row-content design (thinking
   italic + ~200-char clamp with per-block expand, tool rows always full,
   the literal `[thinking redacted]` marker, phase chip + cost ticker in the
   header) carries over verbatim; only the placement changed. Root:
@@ -3685,7 +3718,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
-  (W6-B9)** — architect is the ONLY kind left on its own bespoke panel
+  (W6-B9)** — architect and project-brain are the only kinds left on their own bespoke panels
   (`SessionArchitectPanel`, documented above), permanently (ADR-043
   amendment §4 — its branching council/interview control flow has no linear
   phase-table seam). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8)
@@ -3815,7 +3848,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   drafting, an ADVISORY-only client check, never a duplicate of a
   server-enforced rule). **W6-B9 (reviewer finding on W6-B8):** which extra
   POST body fields a verdict needs beyond `verdict` itself is now WIRE DATA
-  — `affordance.meta.requires` (`orchestrator/studio/session-kinds.ts`'s
+  — `affordance.meta.requires` (`packages/sessions/studio/session-kinds.ts`'s
   `deriveSessionAffordances`, sourced from the row's authored `requires:`
   list, `studio/session-kinds.yaml` — authoring's `awaiting-review` row
   declares `requires: [id]`; omitted when a row needs nothing extra). Approve
@@ -3852,7 +3885,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   409 wrong-phase (naming the offending affordance id + the
   currently-available set), 422, 501 `UnhandledAffordanceBody` — surfaces
   verbatim via `[data-affordance-error]`, never swallowed.
-  `postSessionAffordance` (`forge-ui/lib/session-client.ts`) is the client
+  `postSessionAffordance` (`apps/studio/lib/session-client.ts`) is the client
   POST helper; `[data-page="session"]`'s `refreshSummary` gained a real
   `demo` branch (`listDemoSessions()` — the SAME per-kind list endpoint the
   now-retired `DemoBuilderPanel` used, and the reason W6-B10 could later
@@ -3945,11 +3978,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   unknown ref reads `[data-section="kickoff-initiative-ignored"]`, and a
   `?project=` prefill on a forge-wide kind states it is ignored
   (`[data-section="kickoff-project-ignored"]`) + a model-tier picker
-  (`KickoffModelTierPicker.tsx`, `forge-ui/components/studio/session/`),
+  (`KickoffModelTierPicker.tsx`, `apps/studio/components/studio/session/`),
   `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"][data-model-tier]`,
   rendered from `agentCapabilityDescriptor.allowedTiers` — fetched via
   `fetchAgentCapability(agentSlug)` (`GET
-  /api/studio/agents/:slug/capability`, `forge-ui/lib/studio-client.ts`'s
+  /api/studio/agents/:slug/capability`, `apps/studio/lib/studio-client.ts`'s
   `AgentCapability` type), the UNFILTERED per-slug route, **not**
   `fetchStudioAgents()`'s roster: every kickoff-only system agent
   (`instructions-creator`/`demo-builder`/`brain-maintenance`/
@@ -4023,8 +4056,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   view's job, not the deriver's). The artifact pane renders the DAG **plus**
   the initiative table, which is exactly the layout R4-13-F1 specifies for the
   project roadmap tab — hence one **shared** renderer, not a bespoke one:
-  `forge-ui/lib/dependency-dag.ts` (the pure, generic view model, levels
-  delegated to the existing `topoLevels`) + `forge-ui/components/studio/DependencyDag.tsx`
+  `apps/studio/lib/dependency-dag.ts` (the pure, generic view model, levels
+  delegated to the existing `topoLevels`) + `apps/studio/components/studio/DependencyDag.tsx`
   (the component, one data prop), the same lib-module-plus-component shape as
   R3-01's `FilePackage`. Contract:
   `[data-component="dependency-dag"][data-dag-node-count][data-dag-level-count][data-dag-edge-count][data-dag-cycle="true"|"false"][data-dag-unresolved-count]`,
@@ -4055,7 +4088,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-architect-resume-probe="pending"|"settled"]` reports whether the
   lookup for one has finished, so "still loading" is not read as "none".
   **There is deliberately no `failed` value** — `bridgeGet`
-  (`forge-ui/lib/bridge-client.ts`) resolves every transport error, non-2xx
+  (`apps/studio/lib/bridge-client.ts`) resolves every transport error, non-2xx
   and parse failure to its fallback and never rejects, so this component
   genuinely cannot distinguish a broken bridge from an empty result. Claiming
   a `failed` state it can never enter would be a DOM contract the code does
@@ -4180,7 +4213,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `deriveContractStages`; D11: presence only, "present"/"absent", never a
   clause verdict — `forge preflight`'s exit code stays the only authoritative
   contract-green signal). Stage-aware, mirroring
-  `mockups/studio-endstate-v2/views-session.jsx:77-158`: the `contract` stage
+  `mockups/studio-endstate-v2/views-session.jsx:77-158` (mockups/ since deleted): the `contract` stage
   renders the CHECKLIST of all five rows (reuses the SAME
   `.readiness-list`/`.readiness-item`/`.ri-dot` classes
   `ReadinessPanel.tsx` already ships); every other stage renders THAT stage's
@@ -4201,7 +4234,7 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **Cleanup plan — the kb-cleanup session's artifact (R4-19-F2).** The
   `kb-cleanup` session-kind descriptor (`studio/session-kinds.yaml`, `agent:
   brain-maintenance`, `stages: [brain]`) declares a **live-from-birth**
-  artifact kind `cleanup-plan` (`orchestrator/studio/session-kinds.ts`'s
+  artifact kind `cleanup-plan` (`packages/sessions/studio/session-kinds.ts`'s
   `id: 'cleanup-plan', status: 'live'` — never reserved, unlike
   generation-gallery/contract-buildout/file-package's reserved→live
   histories above). A brain-maintenance agent drafts `plan/cleanup-plan.md`
@@ -4319,7 +4352,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     `data-action` existed everything behind Health — the whole KB action group,
     the drain panel, KB health — had no door an automated beat could open.
     **The Ingest Activity tab deliberately has NO `data-action`.**
-    `scripts/check-kb-ingest-affordance.mjs` rule 1 forbids any forge-ui
+    `scripts/check-kb-ingest-affordance.mjs` rule 1 forbids any Studio
     `data-action` whose value names ingest, case-insensitively (operator
     decision 3, "ingest stays reflection-only"). That is a VOCABULARY ban, not
     a behaviour test, and it is right to be: this panel is read-only and starts
@@ -4378,10 +4411,10 @@ is what this contract reads — but it cannot be the only distinguisher.
     (R1-06 WI-2 group A)** renders ONLY when `kind === 'flow'` — `null`
     (field absent) for `project`/`unique`, since a band scope is meaningless
     there. Its options are the bound flow's REAL derived bands
-    (`deriveKbBandOptions`, `forge-ui/lib/studio-client.ts`, pure/DOM-free —
+    (`deriveKbBandOptions`, `apps/studio/lib/studio-client.ts`, pure/DOM-free —
     the flow roster's `bands: string[]` the `GET /api/studio/flows` payload
     now carries, itself `listFlowBandIds` reading each node agent's own
-    `guards:` through `orchestrator/agent-bands.ts`'s `resolveBandGuard` —
+    `guards:` through `packages/agents/agent-bands.ts`'s `resolveBandGuard` —
     never a hardcoded list, and `[]` for an unbound ref or a bandless flow,
     not a fabricated default). Submit is `[data-action="create-kb"]`
     (disabled until name + binding are filled); on success the server
@@ -4429,7 +4462,7 @@ is what this contract reads — but it cannot be the only distinguisher.
       session is reachable and drivable end to end — briefing (a real
       `POST /api/project-brain/brief` flips `phase → analyzing` on disk),
       and the commit step (`runCommitStep`,
-      `orchestrator/project-brain-builder-runner.ts`) is fully deterministic
+      `packages/sessions/interactive-finalizers.ts`) is fully deterministic
       — no SDK call — so it can be invoked directly once `phase ===
       'committing'`, landing a genuine write into `brain/<kbId>/`. WI-1
       additionally branches the analyze step's own plan
@@ -4493,7 +4526,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     from `kbId` instead would 404 for every such KB. A start failure
     surfaces verbatim on the kickoff form, never swallowed. Render-tested:
     `lib/kb-action-group-render.test.ts`. Consolidate is genuinely
-    asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
+    asynchronous — `apps/studio/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
     dispatches, reads the returned `runId`, and polls
     `getAgentFixStatus` (bounded, 40 × 250ms) to a real terminal before the
     group's own `[data-component="kb-action-result"]` label and
@@ -4781,7 +4814,7 @@ is what this contract reads — but it cannot be the only distinguisher.
     [data-fetch-status="loading"|"ok"|"error"]` (W7-FIX-A1 A1-07: a failed
     read renders the compact `[data-component="fetch-error"]` + Retry, never
     "No ingest activity recorded yet." with a count of 0), one row per
-    real `reflect.kb-ingest` event (`orchestrator/kb-health.ts`'s post-reflect
+    real `reflect.kb-ingest` event (`packages/knowledge/kb-health.ts`'s post-reflect
     `runPostReflectionKbHealth`) found in this KB's own
     `_logs/<cycleId>/events.jsonl` history
     (`GET /api/studio/kbs/:id/ingest-activity`, `packages/knowledge/bridge-studio-kbs.ts` — a
@@ -4802,7 +4835,7 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's card drawer (**W6-RV-2**; see `/projects/[id]`
-  above). The route is now a permanent WIRE redirect (`forge-ui/next.config.mjs`
+  above). The route is now a permanent WIRE redirect (`apps/studio/next.config.mjs`
   `redirects()`, converted from a client-side shim page at W6-IA-8) straight
   into `/library` — the future home of the cross-project stuck-initiative
   attention strip (R4-11-F4) — so bookmarks keep working with no page ever
@@ -4889,7 +4922,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   links to `/community/skill/<id>`). The
   `ready` state renders `[data-component="file-package"][data-file-count][data-active-file]`
   (SKILL.md plus every supporting file, tabbed; shared with R2-10-F3 —
-  `forge-ui/components/studio/FilePackage.tsx` is kind-agnostic) with per-tab
+  `apps/studio/components/studio/FilePackage.tsx` is kind-agnostic) with per-tab
   `[data-file-tab][data-file-path]`; `[data-section="used-by"][data-used-by-count]`
   with per-agent `[data-used-by-agent]` (an empty list renders an explicit
   "Unbound" message, never a blank panel); `[data-section="provenance"][data-content-hash][data-upstream-source]`
@@ -4937,7 +4970,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `api-verify`, `test-evidence`, `narrative`), and
   `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
   — `api`, `cli`, `webapp`); 17 entries total
-  (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
+  (`packages/library/studio/template-library.ts`). `usedBy` is DERIVED, never a
   declared field: planning usage scans the real flow graph
   (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's
   `.forge/project.json` `demoProcess[].element`; project-scaffold usage is
@@ -5058,11 +5091,11 @@ is what this contract reads — but it cannot be the only distinguisher.
 The shared status vocabularies:
 
 - **Pipeline/WI 5-state** — `pending | active | complete | retrying |
-  failed`. Was `forge-ui/lib/wi-status.ts` (now **deleted**); the type is
-  inlined in [`forge-ui/lib/status-colors.ts`](./forge-ui/lib/status-colors.ts)
-  (`WiStatus`) alongside its `PhaseStatus` twin (the `forge-ui/lib/phases.ts`
+  failed`. Was `apps/studio/lib/wi-status.ts` (now **deleted**); the type is
+  inlined in [`apps/studio/lib/status-colors.ts`](../../apps/studio/lib/status-colors.ts)
+  (`WiStatus`) alongside its `PhaseStatus` twin (the `apps/studio/lib/phases.ts`
   mirror that once held it is **deleted** — the spine's phase derivation lives
-  in [`orchestrator/run-model-derive.ts`](./orchestrator/run-model-derive.ts))
+  in [`packages/flows/run-model-derive.ts`](../../packages/flows/run-model-derive.ts))
   — same 5 values, one shared palette
   (`STATUS_COLOR` + `WI_STATUS_GLOW`) so a colour change happens in exactly
   one place. Yellow = retrying (transient error, still recovering); red =
@@ -5076,13 +5109,13 @@ The shared status vocabularies:
   `aria-label`, `NeedsYouChip` in `components/studio/SessionsIndex.tsx`) on
   `/sessions` rows and Home session cards; it is NOT part of the
   pipeline/WI vocabulary and never appears on a run/WI/phase element.
-- **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
+- **Run lifecycle** (`RunStatus`, [`apps/studio/lib/studio-client.ts`](../../apps/studio/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
 - **Roadmap initiative status** (`RoadmapCanvas.tsx`) — `pending |
   in-flight | ready-for-review | merged | done | failed` (R4-11-F1: `merged`
   = PR confirmed merged, reflect pending — a transient `_queue/merged/`
   pass-through promoted to `done` in the same finalize sweep).
-- **`HexKind`** ([`forge-ui/lib/monitor-layout.ts`](./forge-ui/lib/monitor-layout.ts)) —
+- **`HexKind`** ([`apps/studio/lib/monitor-layout.ts`](../../apps/studio/lib/monitor-layout.ts)) —
   `phase | wi`, the phase-vs-WI distinction every monitor hex carries.
 
 When changing component state, **add or update the corresponding
@@ -5091,125 +5124,3 @@ UI journey in the same PR** (beats/checks + narration/clips): invoke the
 `journey-sync` skill for the maintenance contract. The journeys are both the
 demo and the UI regression gate; a UI change without its journey update either
 breaks the gate or silently rots the demo.
-
-The harness surface is **journeys-as-data**:
-[`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 17 user-story journeys in
-[`scripts/journeys/`](./scripts/journeys/) — `home`, `sessions-index`,
-`skills`, `hooks`, `templates`, `connections`, `stand-up-onboard`,
-`stand-up-create`, `knowledge`, `agents`, `flows-author`, `flows-run`,
-`flows-onboard`, `roadmap`, `demo-showcase`, `demo-builder`, `community`
-(RUN_ORDER's own sequence, `index.mjs`; `sessions-index` added W6-B11) — one
-file per journey (plus
-`index.mjs`, the registry/run-order module — not itself a journey), each
-mapping to a capability-diagram user story rather than a step of one
-linear cycle. The standalone `swap-runtime` journey was retired
-2026-07-17 — its checks folded into `agents`' `agents-scratch-build` beat,
-which now drives the SDK/model picker as part of composing a brand-new
-agent from scratch. Each journey is
-`defineJourney({ id, title, story, beats })`
-([`scripts/lib/journey-runtime.mjs`](./scripts/lib/journey-runtime.mjs));
-a **beat** is a scripted story moment (`{ id, title, narration, drive(ctx) }`)
-that is simultaneously a demo scene (captured as a clip/frame) AND a named
-test case (auto-tagged into `demos/e2e/results.json` so every `check()`
-traces back to the beat that raised it). Shared machinery:
-[`scripts/lib/journey-assertions.mjs`](./scripts/lib/journey-assertions.mjs)
-(the soft `check()` + the `data-*` DOM-as-metrics helpers) and
-[`scripts/lib/journey-fixtures.mjs`](./scripts/lib/journey-fixtures.mjs)
-(seeds + grounding — values are corpus-grounded, with code comments citing
-real archived cycle artifacts under `_queue/done/` — e.g.
-`INIT-2026-07-11-cli-sort-flag.md` — as provenance for things like the
-architect's real cost/budget shape, not hand-waved numbers). The runner
-supports `--list` (enumerate journeys/beats without running), a daemon
-guard ([`scripts/lib/journey-daemon-guard.mjs`](./scripts/lib/journey-daemon-guard.mjs))
-that refuses to run against a real live `forge serve`, and
-finalize-neutralisation (strips `releaseProcess` from the grounding
-project's config for the run's duration, so the emulated approve+merge
-beat can't trigger a real release finalize). Output: a journey-sectioned
-gallery (`demos/e2e/index.html`, one section per journey with its story +
-a green/red check-count badge) plus 8 looping long-tail clips
-(`demos/e2e/clips/*.webm`) and the tracked `demos/e2e/results.json` — the
-video always finishes; a non-zero exit flags any DOM-as-metrics
-regression. Cleans up all seeded state (architect/instructions/demo
-sessions, cycle logs, queue manifests, the scratch flow it authored, any
-`_guidance/*.md`) afterwards.
-
-Plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
-(`npm run ui:deadpaths`), the dead-route/no-op sweep, sharing the same
-assertion module.
-
-**Which harness runs in CI, and why the split** (W7-C3 review, T1 ruling).
-`e2e-deadpaths` IS a CI job (`deadpaths` in
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) alongside
-`ui-walkthrough`: both boot `forge studio` through the shared
-[`scripts/lib/boot-studio.mjs`](./scripts/lib/boot-studio.mjs), so the second
-job costs one more runner. It was NOT in CI before, and that is precisely how
-three structural a11y assertions added to it shipped broken — **assertions
-added to a harness nothing runs are decoration.** `ui:journey` deliberately
-stays OUT: 17 journeys, host-global ports 4123/4124 and a full regeneration
-of `demos/e2e/` make it a wave/manual gate, run by the operator (or a wave
-gate agent) rather than per PR. A journey change is therefore verified by
-reading the beat plus a unit test over the harness's own pure assertion
-logic — see [`scripts/crosscut-chrome-beat.test.ts`](./scripts/crosscut-chrome-beat.test.ts),
-which cross-checks the `home-crosscut-chrome` beat's declared `data-page`
-values against the routes that actually render them.
-
-**Story-beat parity** — the studio end-state mockup's 27 scripted stories
-([`mockups/studio-endstate-v2/journeys-data.jsx`](./mockups/studio-endstate-v2/journeys-data.jsx))
-are the target inventory the real journey gallery converges on.
-[`scripts/journeys/story-registry.mjs`](./scripts/journeys/story-registry.mjs)
-holds one disposition per story (owning wave-5 batch, ported journey +
-per-beat map, or excluded with a decision reference). `npm run
-parity:stories` ([`scripts/story-parity.mjs`](./scripts/story-parity.mjs))
-derives the parity view from the mockup source plus the real
-`scripts/journeys/` ids and exits non-zero on a dangling ref or a missing
-disposition; porting a batch's stories is that batch's journey-sync duty.
-
-**Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
-(`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
-project (auto-approve + closure + reflection capture). This is the standing
-regression harness for forge's actual capabilities (ADR 022): it asserts
-real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
-gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
-**gitpulse** (`--project gitpulse` — the creds-free, independent reference
-project; see the verify-cycle idea corpus (retired M1-A) for the corpus of idea
-files) and the **betterado terraform provider**
-(`--project terraform-provider-betterado` — the live-ADO tier, higher
-ceiling, plus a 5th gate asserting the demo carries **live REST
-evidence**, not a test-name table). Tiered (frozen-SHA routine /
-greenfield release).
-
-**UI walkthrough harness** — [`scripts/ui-walkthrough/`](./scripts/ui-walkthrough/README.md)
-(`npm run ui:walkthrough` = the deterministic crawl; the explorer fan-out is
-a `Workflow` script run from a Claude Code session). Where `ui:journey`
-proves the *scripted* paths still work, the walkthrough drives Studio the way
-an operator does — every reachable route, every control, real sessions where
-a path can only be validated by running it — and files verified defects as
-JSONL. It produced the wave-7 backlog
-(the wave-7 walkthrough findings record, retired 2026-08-29 in M1-A)
-and is a standing wave gate from wave 7 on. **W7-A0 (2026-08-19) added the
-crawl's assertion mode**: `npm run ui:walkthrough:gate` (`crawl.mjs --assert
---baseline scripts/ui-walkthrough/baseline.json`) fails on any *new*
-`never-ready` page (a `[data-page]` root that never sets
-`data-page-ready="true"` — the same attribute the journeys wait on),
-`first-party-4xx` (any bridge/UI-host request ≥400; a 404-only allowlist
-`known-optional-404s.txt` covers artifacts that legitimately may not exist),
-`transport-failure` (a first-party request that never got a response),
-`page-error`, `console-error`, `eval-error` or `nav-error`, versus a committed
-baseline of wave-7 known defects that lanes **shrink and never grow**
-(`check-baseline-shrinks.mjs`, enforced in CI; the one accepted growth is a
-stamped `main@<sha>` regeneration). The `ui-walkthrough` CI job
-boots Studio (`--boot`: production build, dry-bridge + no-spawn seams; refuses
-to boot over a healthy bridge) and runs it on every PR; `--only <route-prefix>`
-narrows a local run, `--from <crawl.json>` re-asserts an existing crawl without
-a browser. **W7-FIX-A0 (2026-08-19)** tied the verdict to what the crawl
-actually observed: first-party is decided by *origin* (not loopback hostnames),
-`requestfailed` is captured and the bridge re-probed on a first-party transport
-failure, `baseline.json` records `expectedRoutes.{ci,host}` and a full crawl
-must visit ≥ 90% of it (an unvisited `--max` remainder is a harness error too),
-baseline removals are cross-checked against the crawled routes (`--crawled`,
-`UNPROVEN` when the route was never visited), and readiness is read strictly
-from the `[data-page]` root (a ready descendant never masks an unready root —
-the same rule the journeys' `data-page-ready` waits assume). Contract:
-`scripts/ui-walkthrough/crawl.test.ts` + `capture.test.ts` over
-`fixtures/crawl.sample.json` (a slice of the real wave-7 crawl).

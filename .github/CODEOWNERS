@@ -1,5 +1,5 @@
 # CODEOWNERS — declares the three-scope boundary in a machine-readable form.
-# Full map + the cross-scope rule: docs/repo-map.md
+# Full map + the cross-scope rule: docs/explanation/architecture.md
 #
 # Single maintainer today (@parsoFish); the GROUPING is the load-bearing signal —
 # it declares "core vs data vs managed content" without moving a file. CODEOWNERS is

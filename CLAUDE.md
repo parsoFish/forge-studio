@@ -8,7 +8,7 @@
 
 Forge runs **primarily unattended** between three human interaction points (architect, review, reflection). Judge every change against three questions: does it preserve unattended operation · does a battle-tested tool already do this · is it the simplest thing that could work. There is **one operating model**: the daemon (`forge serve`); operator-directed step-through falls out of isolated phase functions, not a forked runtime.
 
-Narrative architecture [`ARCHITECTURE.md`](./ARCHITECTURE.md) · principles [`PRINCIPLES.md`](./PRINCIPLES.md) · repo layout [`docs/repo-map.md`](./docs/repo-map.md) · commands and quickstart [`README.md`](./README.md) · per-phase docs [`docs/phases/`](./docs/phases/) · UI `data-*` contract + journey harness [`docs/forge-ui-dom-and-harness.md`](./docs/forge-ui-dom-and-harness.md) (a change to load-bearing forge-ui state updates the attribute, that doc and the affected journey in the **same PR** — invoke the `journey-sync` skill) · decisions [`docs/decisions/`](./docs/decisions/).
+Narrative architecture [`ARCHITECTURE.md`](./ARCHITECTURE.md) · principles [`PRINCIPLES.md`](./PRINCIPLES.md) · repo layout [`docs/explanation/architecture.md`](./docs/explanation/architecture.md) · commands and quickstart [`README.md`](./README.md) · the example factory's stations [`docs/explanation/example-factory.md`](./docs/explanation/example-factory.md) · UI `data-*` contract [`docs/reference/studio-dom-contract.md`](./docs/reference/studio-dom-contract.md) (a change to load-bearing forge-ui state updates the attribute, that doc and the affected journey in the **same PR** — invoke the `journey-sync` skill) · decisions [`docs/decisions/`](./docs/decisions/).
 
 ## The active plan — read this before anything else
 

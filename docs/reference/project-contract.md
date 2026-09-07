@@ -3,12 +3,12 @@
 > **What this is.** The complete set of properties a project must expose for
 > forge to develop it unattended — authored in Studio, enforced by preflight,
 > and checked in the UI before any flow run. This document is the single source
-> of truth; the *decision* is [ADR-034](./decisions/034-studio-aligned-contract.md)
-> (extends [ADR-017](./decisions/017-forge-project-contract.md)), the *preflight
-> enforcement* is [`packages/projects/preflight.ts`](../packages/projects/preflight.ts), and the *UI readiness
+> of truth; the *decision* is [ADR-034](../decisions/034-studio-aligned-contract.md)
+> (extends [ADR-017](../decisions/017-forge-project-contract.md)), the *preflight
+> enforcement* is [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts), and the *UI readiness
 > surface* is
-> [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx).
-> Last aligned to [ADR-035](./decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
+> [`apps/studio/components/studio/project-builder/ContractReadiness.tsx`](../../apps/studio/components/studio/project-builder/ContractReadiness.tsx).
+> Last aligned to [ADR-035](../decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
 >
 > **2026-07-24 (R1-03-F1):** the flat gate keys (`quality_gate_cmd`, `ci_gate`,
 > `ci_fix_cmd`, `ci_gate_unset_env`, `acceptance_gate`) became the typed
@@ -59,7 +59,7 @@ point.
 
 ### The process vocabulary (how the clauses group)
 
-The clauses read as fifteen preflight ids (plus C9, documented but not yet
+The clauses read as seventeen preflight ids (plus C9, documented but not yet
 machine-checked), but they enforce **six processes** — the way the operator
 diagram frames a project. Clause ids stay the stable anchors; each process is
 the lens (R1-04):
@@ -83,7 +83,7 @@ non-default fixtures (C9), and brain freshness (BRAIN).
 
 These five fields are displayed and edited in the project builder UI. They are
 stored in `.forge/project.json` and validated by `validateProjectConfig`
-(`orchestrator/project-config.ts`). The UI readiness panel (`ContractReadiness`)
+(`packages/projects/project-config.ts`). The UI readiness panel (`ContractReadiness`)
 checks all five; a project is not flow-ready until all five pass.
 
 ### northStar (required, ≤ 140 chars)
@@ -108,10 +108,9 @@ Typed sequence of demo steps, each `{ kind: "capture" | "verify" | "present",
 text: string }`. A valid `demoProcess` must include **at least one `capture`
 step** (how forge records the before/after evidence) **and at least one `verify`
 step** (the assertion that makes the evidence non-trivial). The `present` kind is
-optional. This field closes the long-standing `demo.skill` known-gap (tracked in
-`docs/known-gaps.md` since 2026-05-31): typed steps replace the open-ended
-`demo.shape` blob for projects that need richer live-external demos. A project
-with only `present` steps leaves the reviewer approving blind.
+optional. Typed steps replace an earlier open-ended `demo.shape` blob for
+projects that need richer live-external demos. A project with only `present`
+steps leaves the reviewer approving blind.
 
 ### skills (required: ≥ 1 bound skill slug)
 
@@ -123,7 +122,7 @@ to confirm the operator has thought about the project's tooling surface.
 ### kb (required: a bound knowledge-base id)
 
 The KB (Brain 3 descriptor) bound to this project. Planners and reflectors read
-through the `KbBackend` seam (`orchestrator/kb-backend.ts`), which resolves the
+through the `KbBackend` seam (`packages/knowledge/kb-backend.ts`), which resolves the
 backend from the `kb.yaml` descriptor. A project without a bound KB deprives the
 planner of queryable context; the UI requires an explicit binding (set `kb: null`
 only to explicitly leave unbound when Brain 3 doesn't exist yet).
@@ -134,8 +133,9 @@ only to explicitly leave unbound when Brain 3 doesn't exist yet).
 
 These clauses are checked by `forge preflight <project>`. Hard clauses
 (C1/C2/C4) fail the preflight (non-zero exit); C1b and C7 are conditionally
-hard — C1b once `testProcess.ci` is declared, C7 once
-`testProcess.acceptance.required` is `true`; advisory clauses
+hard — C1b once `testProcess.ci` is declared. C7 is never hard in `forge
+preflight` itself: its `required: true` enforcement lives in the PM phase and the
+dev-loop `requiresEnv` guard (see the Enforcement table); advisory clauses
 (C5/C6/C8/DEMO/DEMO-SKILL/DEMO-ALIGN/ARTIFACTS/BRAIN) surface as warnings that
 never flip the verdict.
 
@@ -150,16 +150,17 @@ brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel
   authors it in the matching builder (no auto-generation of an agent-instruction
   file — C8 stays human-confirmed).
 - **user** — `C1`/`C5`/`C6` need an operator decision; that decision drives
-  the `preflight-fix` agent (`orchestrator/preflight-fix-runner.ts`), which applies
+  the `preflight-fix` agent (`packages/sessions/kinds/preflight-fix.ts`), which applies
   it minimally and re-runs preflight as the verification gate.
 
 **Project-repo write transaction (R1-2).** Every forge-UI change that touches a
 *project* repo (`.forge/project.json`, `AGENTS.md`, `.gitignore`, `roadmap.md`,
 demo machinery, preflight-fix edits) is committed to a single persistent
-`forge-studio` branch (`orchestrator/project-repo-tx.ts`) rather than left
+`forge-studio` branch (`packages/projects/project-repo-tx.ts`) rather than left
 uncommitted in the working tree. Changes accumulate there across many actions; a
-single **Save** (`POST /api/studio/projects/:id/save-repo`, the project-builder
-`SaveProjectRepoBar`) merges that one branch into the default branch — **no CI**,
+single save (`POST /api/studio/projects/:id/save-repo`, called by the project
+onboarding and preflight-write flows rather than a named UI control) merges that
+one branch into the default branch — **no CI**,
 since these are forge-controlled, non-structural files — and pushes to origin so
 cycles branching from `origin/main` (and GitHub) see the configuration. Forge's
 own central artifacts (Brain 3 `brain/projects/<name>/`, ADR 035) are NOT project
@@ -188,7 +189,7 @@ real-work ⇒ pass. The preflight checks structure, not runtime: a single comman
 (no `&&`/`;`/`|` chaining) that is not a known-slow umbrella
 (`playwright`/`cypress`/`e2e`/`integration`). When one command cannot express
 the gate, the escape hatch is a committed gate **script** invoked as one argv —
-author it from [`docs/gate-script-template.md`](./gate-script-template.md)
+author it from the [Gate scripts](#gate-scripts) template below
 (`set -euo pipefail` + explicit per-step `fail()` asserts; bare `! cmd` asserts
 are errexit-exempt and forbidden — their failures silently don't fail the gate).
 
@@ -204,6 +205,109 @@ its shape is HARD once declared (C1b). Structural seams in
 - `ci.fixCmd` — auto-formatters run before `ci.cmd`.
 - `ci.unsetEnv` — strips live-test triggers from the env when running
   `ci.cmd`, so it mirrors GitHub CI's clean environment.
+
+---
+
+## Gate scripts
+
+A gate script is how a project satisfies the contract's gate clauses when a
+single argv command can't express the check. **Template, not lint** — there is
+deliberately no mechanism that inspects gate scripts, so the discipline below
+is what keeps the errexit-exempt failure class (next section) from recurring.
+
+C1 hard-rejects shell pipelines/chains in `testProcess.local.cmd` (`bash -c "…
+| …"`, `&&`, `;` — the same argv shape applies to a work item's own
+`quality_gate_cmd`). When a gate genuinely needs several checks, the escape
+hatch is a **committed script** invoked as one argv:
+
+```json
+"testProcess": { "local": { "cmd": ["bash", "scripts/gates/<name>.sh"] } }
+```
+
+That script is then the gate — and how it is written decides whether its
+intermediate failures actually fail the gate.
+
+### The trap this template kills (errexit-exempt asserts)
+
+Bash `set -e` (errexit) **exempts `!`-negated commands**: `! grep -q bad file`
+returning non-zero does NOT exit the script. So a script written as
+
+```bash
+set -e
+go build ./...            # fails the script if it fails
+! grep -q 'SDKv2' pkg.go  # NEVER fails the script — errexit-exempt
+! grep -q 'TODO' plan.md  # same
+grep -q 'PASS' out.log    # only THIS last command's status is the verdict
+```
+
+silently passes when the `! grep` asserts fail — production incidents have
+shown operator-installed gates of this shape exempting their intermediate
+asserts, with only the final command's exit code counting. The fix is not a
+linter; it is never writing a bare `! cmd` assert.
+
+### The template
+
+```bash
+#!/usr/bin/env bash
+# Gate: <one line — what a PASS proves, e.g. "release_definition migrated off SDKv2">.
+# Authored from this template — keep the fail()/step discipline.
+set -euo pipefail
+
+step="init"
+fail() { echo "GATE FAIL [${step}]: $*" >&2; exit 1; }
+trap 'fail "command failed at line ${LINENO} (exit $?)"' ERR
+
+# --- step: build ------------------------------------------------------------
+step="build"
+go build ./...
+
+# --- step: forbidden pattern must be ABSENT ----------------------------------
+# NEVER `! grep -q …` — errexit exempts `!`-negated commands, so its failure
+# would not fail the gate. Make the polarity explicit:
+step="sdkv2-absent"
+if grep -rq 'helper/schema' internal/resources/release_definition/; then
+  fail "SDKv2 helper/schema still referenced in release_definition"
+fi
+
+# --- step: required marker must be PRESENT -----------------------------------
+step="framework-registered"
+grep -q 'ReleaseDefinitionResource' internal/provider/provider.go \
+  || fail "resource not registered with the framework provider"
+
+# --- step: tests -------------------------------------------------------------
+step="tests"
+go test ./internal/resources/release_definition/...
+
+echo "GATE PASS: release_definition is framework-native and green"
+```
+
+### Rules (all of them, every time)
+
+1. **`set -euo pipefail`** on line one after the shebang — errexit + unset-var
+   + pipe-failure propagation.
+2. **Every assert is explicit** — either `if <bad-condition>; then fail …; fi`
+   or `<must-succeed> || fail …`. **Never a bare `! cmd`** and never a bare
+   trailing command as the implicit verdict.
+3. **`trap … ERR` + a named `step`** — an unexpected failure reports *which*
+   step died instead of silently exiting (or worse, not exiting).
+4. **End with an explicit `echo "GATE PASS: …"`** stating what was proven —
+   the pass line is evidence in the gate output, and it guarantees the last
+   command is not itself an accidental verdict.
+5. **Fail-first still applies** (C1 above): the script must exit non-zero on a
+   clean tree before the work exists, and pass only once it lands.
+6. **A gate observes, it never fixes** — no repo mutation inside a gate
+   script. (Live acceptance gates that talk to a real service remain
+   sanctioned via the project's `testProcess.acceptance` — the discipline here
+   is about exit codes, not about what the checks touch.)
+
+### Where this applies
+
+- **PM work-item gates** (`skills/project-manager/SKILL.md`) — when one sharp
+  command cannot express the gate, commit a script from this template instead
+  of chaining.
+- **Project quality gates / onboarding** (C1 above).
+- **Review send-back sharp gates** — the `qualityGateCmd` an operator attaches
+  to a send-back concern (`packages/flows/fix-work-items.ts`, `FixConcernSource`).
 
 ---
 
@@ -235,12 +339,12 @@ already-tracked files.
 
 A `roadmap.md` at the project root **and** the project's Brain 3 profile — the
 **central** `brain/projects/<name>/profile.md` in the forge repo, **not** inside
-the project repo (per [ADR-035](./decisions/035-forge-owned-central-artifacts.md)) —
+the project repo (per [ADR-035](../decisions/035-forge-owned-central-artifacts.md)) —
 must both exist. Without these the planner hallucinates plans for a project it
 doesn't understand.
 
 `artifactRoot` (default `"."`) no longer governs Brain 3 or history — per
-[ADR-035](./decisions/035-forge-owned-central-artifacts.md) both are forge-owned
+[ADR-035](../decisions/035-forge-owned-central-artifacts.md) both are forge-owned
 and central; it now scopes only the in-repo in-PR demo and project skills. See the
 Artifact Layout section below.
 
@@ -498,21 +602,21 @@ Everything a project exposes to forge lives in one of three zones:
 The project's canonical forge configuration. Lives in the project repo. Tracked
 in git via force-add (C2). Contains both Studio object fields (Face A) and
 operational-clause fields (Face B). The authoritative type is `ProjectConfig`
-in `orchestrator/project-config.ts`.
+in `packages/projects/project-config.ts`.
 
 **Optional `repo: "owner/name"`** (R2-08-F3) identifies the project's GitHub
 repository so provider webhook events (`pr-merged`, `issue-raised`) can resolve
 to a forge project. Fail-closed by design: a project that omits `repo` never
 matches a project-event trigger, and an `owner/name` claimed by two projects
 resolves to neither (ambiguity → no match). Validated against the single
-`REPO_RE` vocabulary shared with `orchestrator/trigger-payload.ts`; the
+`REPO_RE` vocabulary shared with `packages/flows/trigger-payload.ts`; the
 field-level source of truth is `docs/schemas/project-config.schema.json`.
 
 ### Forge-owned central artifacts + the in-repo `<artifactRoot>` scope
 
 Brain 3 and durable cycle history are **forge-owned and central** — they live in
 the forge repo, **not** the project repo (per
-[ADR-035](./decisions/035-forge-owned-central-artifacts.md)):
+[ADR-035](../decisions/035-forge-owned-central-artifacts.md)):
 
 - **`brain/projects/<name>/`** — Brain 3: the project's knowledge base
   (`profile.md`, `themes/`, the KB graph) in the central forge repo. Read by
@@ -528,7 +632,7 @@ The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
 
 Project-action skills are **not** `artifactRoot`-scoped, despite an earlier
 version of this line saying so: the resolver (`SkillsBind`/
-`resolveSkillBinding`, `apps/forge/bridge-studio.ts`'s `deriveProjectLocalSkills`)
+`resolveSkillBinding`, `packages/projects/project-roster.ts`'s `deriveProjectLocalSkills`)
 scans the fixed, literal path **`.forge/skills/<id>/SKILL.md`** — one level
 deep — and `artifactRoot` never enters that function or its caller. A project
 onboarded before this was fixed (skills physically under
@@ -552,7 +656,7 @@ These are excluded by the project's `.gitignore` (C2 enforces this).
 
 Every initiative leaves a **durable record** — plan, verdict, and an archived
 demo — that is **forge-owned**, written to `_logs/<cycleId>/artifacts/` in the
-forge repo (per [ADR-035](./decisions/035-forge-owned-central-artifacts.md)). The
+forge repo (per [ADR-035](../decisions/035-forge-owned-central-artifacts.md)). The
 only history artifact that commits to the *project* repo is the per-cycle in-PR
 demo the demo-agent writes at `<artifactRoot>/history/<id>/demo/`:
 
@@ -573,45 +677,41 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 ## The merge-boundary full-suite gate (relocation spec — ENFORCED, R4-10-F2)
 
 > **ENFORCED as of R4-10-F2 (2026-08-02).** The operator verdict is recorded in
-> the [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md)
+> the [ADR-036 amendment](../decisions/036-orchestrator-owned-gate-execution.md)
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
-> (`orchestrator/cycle-helpers.ts`) runs the full-suite gate at the develop
-> flow's merge boundary — inside the demo band (`execDemo`, in
-> `orchestrator/phases/executor-table.ts` since M2-B),
-> BEFORE the demo, on the integrated branch tip. A red baseline compiles a
-> `gate-fix` work item (`orchestrator/gate-fix-loop.ts`) + stamps the send-back,
+> (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
+> flow's merge boundary — inside the integrate band (`execDemo`, in
+> `packages/factory/phases/executor-table.ts` since M2-B),
+> BEFORE integrate runs, on the integrated branch tip. A red baseline compiles a
+> `gate-fix` work item (`packages/flows/gate-fix-loop.ts`) + stamps the send-back,
 > and the DAG walk terminates to `ready-for-review` with NO PR opened — the
 > fix-loop drain re-enters `resume_from:'develop'` and only a green baseline ever
-> reaches `openPrInline`. `composedUnifierGate` still runs for the retained
-> forge-cycle-shaped fixtures (retired at R4-01-F4); it is off
-> the live develop flow.
+> reaches `openPrInline`. The pre-M3 composed gate this replaced no longer
+> exists in the codebase; only comments referencing it survive.
 
 **Preserved invariant.** The regression criterion this relocation must hold,
-verbatim: **no path to merge exists with a red full-suite baseline.** This is
-the known-gaps "dual-boundary gate works as designed" strength
-(`docs/known-gaps.md`, "Strengths worth preserving") — the merge-boundary gate today
-catches a red full-suite baseline the scoped per-WI gates can't see, and
-nothing ships red as a result. This section relocates *where* that guarantee
-executes; it does not redesign the guarantee itself.
+verbatim: **no path to merge exists with a red full-suite baseline.** The
+merge-boundary gate catches a red full-suite baseline the scoped per-WI gates
+can't see, and nothing ships red as a result. This section relocates *where*
+that guarantee executes; it does not redesign the guarantee itself.
 
-**What relocates.** `composedUnifierGate`'s `initiative_gate` sub-check
-(part of its five-sub-check contract in `orchestrator/phases/developer-loop.ts`)
+**What relocates.** The retired composed gate's initiative-wide sub-check
 — today's project `quality_gate_cmd` run
 against the post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
 orchestrator-executed band at the develop flow's merge boundary (not an agent
-node), per [ADR-036](./decisions/036-orchestrator-owned-gate-execution.md)'s rule
+node), per [ADR-036](../decisions/036-orchestrator-owned-gate-execution.md)'s rule
 that agents judge and the orchestrator executes. It is keyed off the **new
-`testProcess` contract object** ([R1-03-F1](./roadmaps/archive/R1-contract-componentry.md),
+`testProcess` contract object** ([R1-03-F1](../roadmaps/archive/R1-contract-componentry.md),
 introduced in this same PR; `.forge/project.json`, loader in
-`orchestrator/project-config.ts`) — mapping the old field names once:
+`packages/projects/project-config.ts`) — mapping the old field names once:
 
 - `testProcess.local` — the full-suite gate at branch tip (today's
   `quality_gate_cmd`, C1).
 - `testProcess.ci` — the delivery net, run hermetic via the project's declared
   env-strip (today's `ci_gate`/`ci_fix_cmd` + `ci_gate_unset_env`, C1b) — the
-  same env-stripping `composedUnifierGate` already applies at its call site and
+  same env-stripping the retired composed gate applied at its call site and
   the same boundary the final CI delivery gate (`decideFinalCiGate`, in
-  `orchestrator/cycle.ts`) enforces today.
+  `packages/flows/ci-gate.ts`) enforces today.
 
 The relocation re-homes *where* these two runs execute; `testProcess.local`/
 `testProcess.ci` are the typed names for the fields the gate already reads.
@@ -619,8 +719,8 @@ The relocation re-homes *where* these two runs execute; `testProcess.local`/
 **Results flow TO agents, never from them.** The merge-boundary gate's verdict
 reaches the demo/review agents through the same seam dev-loop already
 uses: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
-`orchestrator/phases/developer-loop.ts`; write/clear behaviour in
-`writeGateFeedback` and `writeUnifierGateFeedback`, same file). The
+`packages/factory/phases/developer-loop.ts`; write/clear behaviour in
+`writeGateFeedback`, same file). The
 file is deleted on every passing gate run and at session start, so its
 **present ⇒ fresh** rule holds unchanged: if an agent reads it, the failure is
 live, not a fossil.
@@ -645,15 +745,6 @@ refused to open the PR — the same "per-WI gate ≠ project CI" class the
 dual-boundary design exists to close. This is the concrete instance the
 relocated gate must keep working: the boundary that catches what the per-WI
 gates structurally cannot see.
-
-**Sequencing (hard).** This section is **spec-only**. `R4-10-F2`
-(`docs/roadmaps/archive/R4-ootb-suite.md`) is the sole build-and-prove owner of the
-runnable replacement, and per its own stated precondition, **must not start**
-before the operator verdict is recorded in the
-[ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md).
-`R4-01-F4` (the legacy-phase retirement) depends in turn on `R4-10-F2` being live and
-green — retiring `composedUnifierGate`'s call site is downstream of both, not
-part of this spec.
 
 ---
 
@@ -681,7 +772,7 @@ part of this spec.
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
-| MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/archive/R4-ootb-suite.md` R4-10-F2) |
+| MB-GATE | **ENFORCED** — orchestrator-executed at the develop flow's merge boundary (R4-10-F2) | execution home: `runMergeBoundaryGate`, `packages/flows/cycle-helpers.ts`, wired at `packages/factory/phases/executor-table.ts` |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&
@@ -726,14 +817,14 @@ contract gap instead.
 
 ## See also
 
-- [ADR-034](./decisions/034-studio-aligned-contract.md) — the decision recording
+- [ADR-034](../decisions/034-studio-aligned-contract.md) — the decision recording
   the Studio-aligned unification (extends ADR-017).
-- [ADR-017](./decisions/017-forge-project-contract.md) — the original contract
+- [ADR-017](../decisions/017-forge-project-contract.md) — the original contract
   decision (trafficGame arc, C1–C6 derivation).
-- [`packages/projects/preflight.ts`](../packages/projects/preflight.ts) — the operational-clause enforcement.
-- [`orchestrator/project-config.ts`](../orchestrator/project-config.ts) — the
+- [`packages/projects/preflight.ts`](../../packages/projects/preflight.ts) — the operational-clause enforcement.
+- [`packages/projects/project-config.ts`](../../packages/projects/project-config.ts) — the
   authoritative `ProjectConfig` type + `validateProjectConfig`.
-- [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx) — the UI readiness surface.
-- [`docs/schemas/project-config.schema.json`](./schemas/project-config.schema.json) — operator-facing schema.
-- [`skills/demo/SKILL.md`](../skills/demo/SKILL.md) — the forge half of the demo contract.
+- [`apps/studio/components/studio/project-builder/ContractReadiness.tsx`](../../apps/studio/components/studio/project-builder/ContractReadiness.tsx) — the UI readiness surface.
+- [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json) — operator-facing schema.
+- [`skills/demo/SKILL.md`](../../skills/demo/SKILL.md) — the forge half of the demo contract.
 - `brain/forge-dev/themes/forge-project-onboarding-contract.md` — origin theme (trafficGame arc).

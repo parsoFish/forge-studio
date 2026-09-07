@@ -12,7 +12,7 @@ related_themes: [dom-as-metrics-for-headless-driven-uis, m7-studio-consolidation
 
 "Every load-bearing UI state in `forge-ui/` is mirrored to `data-*` attributes so
 any automation … can drive the page by reading structured DOM state rather than
-scraping rendered text" — `docs/forge-ui-dom-and-harness.md:11-14`, pointed at
+scraping rendered text" — `docs/reference/studio-dom-contract.md:11-14`, pointed at
 from `CLAUDE.md:149-156`. Each route owns its own `data-page` + `data-page-ready`
 (no shared page root), so the contract is a per-route inventory and the whole of
 the UI's automated verification surface. Batch C's gap note was imprecise: the
@@ -22,7 +22,7 @@ node is the **maintenance discipline** below.
 
 ## The same-PR contract
 
-`docs/forge-ui-dom-and-harness.md:1034-1039` — change component state ⇒ update
+`docs/reference/studio-dom-contract.md:1034-1039` — change component state ⇒ update
 the `data-*` attribute **and** sync the affected journey in the same PR
 (beats/checks + narration/clips), via the `journey-sync` skill. The journeys are
 simultaneously the demo and the UI regression gate: a UI change without its
@@ -48,7 +48,7 @@ journey beat selects `main[data-page="flow-run"][data-run-found="true"]`. **All
 (`toContain('data-page="flow-run"')`) and are element-agnostic by construction.
 The doc now states it contractually: "the element type is load-bearing — journey
 selectors key on `main`, and the render tests assert attributes only, so they
-cannot see it" (`docs/forge-ui-dom-and-harness.md:498-500`). The implementer was
+cannot see it" (`docs/reference/studio-dom-contract.md:498-500`). The implementer was
 not careless — it mirrored R6-04's `RunView`, itself a `<div>`, against 27
 Studio routes rendering `main[data-page=…]`: a "mirror the precedent" brief
 inherits the precedent's defects.

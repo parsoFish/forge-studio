@@ -13,4 +13,4 @@
 | **`orchestrator/studio/`** (here) | 1 | The Studio **engine** code. |
 | [`forge-ui/`](../../forge-ui/) | 1 | **Forge Studio** — the Next.js operator UI. |
 
-See [docs/repo-map.md](../../docs/repo-map.md).
+See [docs/explanation/architecture.md](../../docs/explanation/architecture.md).

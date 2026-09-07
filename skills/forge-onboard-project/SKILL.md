@@ -1,6 +1,6 @@
 ---
 name: forge-onboard-project
-description: Bring any code project up to the forge↔Studio project contract so forge can develop it unattended at roadmap scale. Use before pointing forge at a new or not-yet-primed managed project. Works for any form — UI app, HTTP API, library, CLI, monorepo, infra provider — by authoring the project as a Studio object, mapping each operational contract invariant onto that project's shape, then validating (forge preflight + UI readiness) and handing off a roadmap-scale initiative. The contract spec is docs/forge-project-contract.md (ADR-034).
+description: Bring any code project up to the forge↔Studio project contract so forge can develop it unattended at roadmap scale. Use before pointing forge at a new or not-yet-primed managed project. Works for any form — UI app, HTTP API, library, CLI, monorepo, infra provider — by authoring the project as a Studio object, mapping each operational contract invariant onto that project's shape, then validating (forge preflight + UI readiness) and handing off a roadmap-scale initiative. The contract spec is docs/reference/project-contract.md (ADR-034).
 library: true
 ---
 
@@ -9,7 +9,7 @@ library: true
 Forge develops a project as an **unattended loop** (plan → change → verify →
 package → review → merge) with no human in the inner loop. Onboarding makes the
 guarantees a human would otherwise provide **structurally true of the project**.
-Those guarantees are the contract in `docs/forge-project-contract.md` (ADR-034) —
+Those guarantees are the contract in `docs/reference/project-contract.md` (ADR-034) —
 read it first; this skill operationalises *getting a project there*.
 
 The contract now has **two faces that must both be green**:
@@ -18,7 +18,7 @@ The contract now has **two faces that must both be green**:
   `demoProcess`, `skills`, `kb`.
 - **Face B — the operational clauses** (`forge preflight`), grouped by the six
   processes (test / demo / instructions / release / build / kb) — see the
-  process table in `docs/forge-project-contract.md` for the clause map.
+  process table in `docs/reference/project-contract.md` for the clause map.
 
 A project is **flow-ready** only when both are satisfied (the UI's
 `data-flow-ready` requires all five Studio-field checks AND zero failing hard
@@ -74,7 +74,8 @@ repo-wide wildcard). Declare as ONE command in the `.forge/quality_gate_cmd`
 sidecar and/or `testProcess.local.cmd` in `.forge/project.json` (precedence rule:
 `docs/schemas/project-config.schema.json`). Verify fail-then-pass by hand. If one command cannot
 express the gate, commit a gate script authored from
-[`docs/gate-script-template.md`](../../docs/gate-script-template.md) — never
+the [Gate scripts](../../docs/reference/project-contract.md#gate-scripts)
+section of the project contract — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
 gate).
 

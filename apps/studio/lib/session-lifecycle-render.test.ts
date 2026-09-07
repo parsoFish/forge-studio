@@ -41,7 +41,7 @@ function makeRow(overrides: Partial<SessionIndexRow> & { kind: string; sessionId
     phase: 'drafting',
     terminal: false,
     needsYou: false,
-    modelTier: null,
+    modelTier: null, agent: 'onboarding-agent', costUsd: null, runId: null,
     updatedAt: '2026-08-15T10:00:00.000Z',
     href: `/sessions/${overrides.kind}/${overrides.sessionId}?project=${project}`,
     state: 'working',
@@ -83,7 +83,7 @@ const BASE_PAYLOAD = {
   ok: true, kind: 'demo', title: 'Demo capability session', sessionId: '2026-08-03T12-00-00', project: 'projb',
   phase: 'generating', stages: ['demo'], defaultStage: 'demo', turns: [],
   artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: [] },
-  affordances: [], modelTier: null, costUsd: null, terminal: false, transcriptSources: ['idea.md'],
+  affordances: [], modelTier: null, costUsd: null, sdk: 'claude', terminal: false, transcriptSources: ['idea.md'],
   // W7-C2 — REQUIRED on every wire payload (null = produced nothing).
   finalized: null,
   transcriptError: null,

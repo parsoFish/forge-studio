@@ -4,13 +4,13 @@ title: Forge-managed project contract
 kind: project-shape
 appliesTo: [forge-managed]
 scope: project
-provenance: "docs/forge-project-contract.md (ADR-034 — the forge↔project contract, two faces one verdict)"
+provenance: "docs/reference/project-contract.md (ADR-034 — the forge↔project contract, two faces one verdict)"
 ---
 
 ## Forge-managed project contract
 
 The shape any project must take to be driven autonomously by forge. Mirrors the
-contract clauses in `docs/forge-project-contract.md` (ADR-034) — reference these
+contract clauses in `docs/reference/project-contract.md` (ADR-034) — reference these
 clauses in AGENTS.md rather than restating them.
 
 ### Face A — Studio object fields (what the project declares)

@@ -256,7 +256,7 @@ describe('deriveContractStages — instructions stage (AT-6..8)', () => {
     writeFileSync(join(dir, 'CLAUDE.md'), body, 'utf8');
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'claudemdproj' }));
     const instructions = byStage(rows, 'instructions');
-    assert.equal(instructions.status, 'present', 'CLAUDE.md must count as present — the contract\'s named legacy alias, per docs/forge-project-contract.md');
+    assert.equal(instructions.status, 'present', 'CLAUDE.md must count as present — the contract\'s named legacy alias, per docs/reference/project-contract.md');
     assert.equal(instructions.source, 'CLAUDE.md', 'source must name WHICH file was actually found, never a fixed "AGENTS.md" regardless of which one is real');
     assert.equal(instructions.bytes, Buffer.byteLength(body, 'utf8'));
   });
@@ -599,7 +599,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot: mdtocRoot, projectId: 'mdtoc' }));
     assert.equal(byStage(rows, 'contract').status, 'present');
     // mdtoc has NO AGENTS.md, only the legacy CLAUDE.md alias (verified on
-    // disk, docs/forge-project-contract.md C8) — grounds AT-7's contract
+    // disk, docs/reference/project-contract.md C8) — grounds AT-7's contract
     // against the real repo, not just a synthetic fixture.
     const instructions = byStage(rows, 'instructions');
     assert.equal(instructions.status, 'present');

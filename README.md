@@ -70,11 +70,11 @@ Forge auto-discovers managed projects from disk — any directory under
 `projects/` (or `$FORGE_PROJECTS_DIR`) carrying a `.forge/project.json`
 contract file is a managed project. To get one ready:
 
-1. Read [**docs/getting-started.md**](./docs/getting-started.md) — the
+1. Read [**docs/tutorials/getting-started.md**](./docs/tutorials/getting-started.md) — the
    install-to-first-merge walkthrough (clone/symlink → `forge preflight <id>`
    until green → author or reuse a flow → `/architect/new` → approve → review →
    merge).
-2. Bring the project up to the [**forge↔project contract**](./docs/forge-project-contract.md)
+2. Bring the project up to the [**forge↔project contract**](./docs/reference/project-contract.md)
    with the `forge-onboard-project` skill. Copy
    [`studio/starters/project.json.example`](./studio/starters/project.json.example)
    to `<project>/.forge/project.json` and fill in each field.
@@ -93,13 +93,13 @@ Forge runs unattended **between** exactly three deliberate human interaction poi
 
 ## Repository layout
 
-Every path belongs to one of **three scopes** — framework (1), cycles/agents/flows (2), projects (3). See **[docs/repo-map.md](./docs/repo-map.md)** for the full map and the cross-scope rule.
+Every path belongs to one of **three scopes** — framework (1), cycles/agents/flows (2), projects (3). See **[docs/explanation/architecture.md](./docs/explanation/architecture.md)** for the full map and the cross-scope rule.
 
 | Path | Scope | What lives here |
 |---|---|---|
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
 | [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
-| [`docs/`](./docs/) | — | Docs — [repo map](./docs/repo-map.md), ADRs, phase docs, guides |
+| [`docs/`](./docs/) | — | Docs — [repo map](./docs/explanation/architecture.md), ADRs, phase docs, guides |
 | [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← factory` |
 | [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
 | [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |

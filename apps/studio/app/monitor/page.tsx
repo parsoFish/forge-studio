@@ -70,7 +70,7 @@ const RUN_RAIL_HEIGHT = 420;
 export default function MonitorPage() {
   const { agents, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
-  const ledger = useEverythingLedger({ agents, runs, ready });
+  const ledger = useEverythingLedger({ agents, runs, sessions, ready });
 
   // The same three attention builders Home renders, over the same
   // already-fetched data — Monitor lists them densely in one section rather

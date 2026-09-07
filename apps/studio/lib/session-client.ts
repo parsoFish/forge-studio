@@ -103,6 +103,14 @@ function requireNullable<T extends 'string' | 'number'>(
 
 /** A required array of strings — never coerced from a non-array (the same
  *  refusal template-client.ts's `parseUsedBy` applies to `usedBy`). */
+function requireBoolean(r: Record<string, unknown>, field: string): boolean {
+  const v = r[field];
+  if (typeof v !== 'boolean') {
+    throw new Error(`missing or invalid "${field}": expected a boolean, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
 function requireStringArray(raw: unknown, field: string): string[] {
   if (!Array.isArray(raw)) {
     throw new Error(`missing or invalid "${field}": expected an array, got ${JSON.stringify(raw)}`);
@@ -799,10 +807,10 @@ export type SessionShellPayload = {
    * value here, not an absence to model as `undefined`.
    */
   modelTier: string | null;
-  /** S9 beat 8 — this session's spend, derived by the route through the
-   *  kernel's ONE event-cost rule. REQUIRED like `modelTier`; `null` is honest
-   *  (no priced row) and the page omits its attribute rather than showing 0. */
+  /** S9 beat 8 — this session's spend via the kernel's ONE event-cost rule.
+   *  REQUIRED like `modelTier`; `null` is honest and the page omits it. */
   costUsd: number | null;
+  /** M6-A row 1 / 418 — the SDK this session runs under, stated not chosen. */ sdk: string;
   /**
    * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
    * (`packages/sessions/bridge-studio-sessions.ts`), threaded onto the wire so the generic
@@ -924,30 +932,21 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // this same function.
   const affordances = parseSessionAffordances(raw['affordances']);
 
-  // Both honest-`null` fields: `null` IS the real answer ("no recorded tier",
-  // "no priced row"), so both are REQUIRED and never absence-tolerant — a
-  // silently-absent cost and a cost of zero are different answers.
+  // Both honest-`null` fields: `null` IS the real answer, so both are REQUIRED
+  // — a silently-absent cost and a cost of zero are different answers.
   const modelTier = requireNullable(raw, 'modelTier', 'string');
   const costUsd = requireNullable(raw, 'costUsd', 'number');
 
   // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
   // non-boolean "terminal" throws, never defaulted to false.
-  const terminalRaw = raw['terminal'];
-  if (typeof terminalRaw !== 'boolean') {
-    throw new Error(`missing or invalid "terminal": expected a boolean, got ${JSON.stringify(terminalRaw)}`);
-  }
-  const terminal = terminalRaw;
+  const terminal = requireBoolean(raw, 'terminal');
 
   // W8-F6 (bead forge-6gv.27) — REQUIRED, hard-parsed exactly like "terminal"
   // immediately above: a missing or non-boolean "legacy" throws by name and is
   // NEVER defaulted to false. Defaulting would be the worst possible failure
   // mode for this particular field — a bridge that forgot to send it would
   // silently render a session whose working files are gone as a live one.
-  const legacyRaw = raw['legacy'];
-  if (typeof legacyRaw !== 'boolean') {
-    throw new Error(`missing or invalid "legacy": expected a boolean, got ${JSON.stringify(legacyRaw)}`);
-  }
-  const legacy = legacyRaw;
+  const legacy = requireBoolean(raw, 'legacy');
 
   // W8-B3 (ON-5) — REQUIRED like "terminal": a missing or non-array
   // "transcriptSources" throws, and every element must be a string. Never
@@ -996,6 +995,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     affordances,
     modelTier,
     costUsd,
+    sdk: requireString(raw, 'sdk'),
     terminal,
     legacy,
     transcriptSources,

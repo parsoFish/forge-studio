@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { allowedOrigin, parseQuery, pathOnly, sanitizeError, sendJson } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
+import { readSessionCostUsd } from './session-readability.ts';
 import { listArchitectSessions } from './kinds/architect.ts';
 import type { SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { sessionShellHref } from './session-resolution.ts';
@@ -85,6 +86,18 @@ export type SessionIndexRow = {
    *  session has no log dir (no liveness signal). */
   idleMs: number | null;
   modelTier: string | null;
+  /** The agent this kind dispatches (the descriptor's own `agent`), so a ledger
+   *  row can name WHO ran without a second kind->agent map. */
+  agent: string;
+  /** This session's spend through the kernel's ONE event-cost rule; `null` =
+   *  no priced row in its log, never "cost nothing" (M6-A row 2). */
+  costUsd: number | null;
+  /** The dispatch run this session belongs to, when it went through the run
+   *  host (`onboarding`); `null` for an ADR-043 spine session. The monitor
+   *  ledger joins ONLY the `null` ones — a session with a runId already has a
+   *  standalone-run row and joining it twice double-counts one piece of work
+   *  (measured: S9 run 2 read ledger-total 1, onboarding already present). */
+  runId: string | null;
   /** ISO timestamp of the session's last known write, or `''` — honest-absent,
    *  never fabricated — when the kind's status.json carries no timestamp
    *  field at all (kb-cleanup's shape today). */
@@ -107,7 +120,7 @@ function readGuardedSessionIndexSummary(
   project: string,
   kindDirName: string,
   sessionId: string,
-): { phase: string; modelTier: string | null; updatedAt: string } | null {
+): { phase: string; modelTier: string | null; updatedAt: string; runId: string | null } | null {
   const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
   if (!guarded.ok || !guarded.exists) return null;
   let parsed: unknown;
@@ -123,6 +136,7 @@ function readGuardedSessionIndexSummary(
     phase: obj.phase,
     modelTier: typeof obj.modelTier === 'string' ? obj.modelTier : null,
     updatedAt: typeof obj.updated_at === 'string' ? obj.updated_at : typeof obj.startedAt === 'string' ? obj.startedAt : '',
+    runId: typeof obj.runId === 'string' ? obj.runId : null,
   };
 }
 /** Discover every instructions session under `projects/<name>/_instructions/<sid>/`
@@ -242,6 +256,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     phase: string,
     modelTier: string | null,
     updatedAt: string,
+    runId: string | null = null,
   ): void => {
     // `SessionIndexRow.needsYou`'s own header: "a derivable operator
     // affordance exists at this phase" — a terminal session, by
@@ -265,6 +280,9 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       error: lifecycle.error,
       idleMs: lifecycle.idleMs,
       modelTier: resolvedTier,
+      agent: descriptor.agent,
+      costUsd: readSessionCostUsd({ logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId }),
+      runId,
       updatedAt,
       // W8-F6 (bead forge-6gv.27) — the ONE server-side builder of a session
       // address (packages/sessions/bridge-studio-sessions.ts), so the index and the route it
@@ -315,7 +333,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
           if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors collectSessionRows
           const summary = readGuardedSessionIndexSummary(ctx.projectsRoot, project, kindDirName, sessionId);
           if (summary === null) continue; // unreadable/missing/escaping/hardlinked -> not a real session row
-          pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt);
+          pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt, summary.runId);
         }
       }
     }

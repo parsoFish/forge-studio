@@ -47,7 +47,7 @@ function session(over: Partial<SessionIndexRow> & { sessionId: string }): Sessio
     state: 'working',
     error: null,
     idleMs: null,
-    modelTier: null,
+    modelTier: null, agent: 'onboarding-agent', costUsd: null, runId: null,
     updatedAt: '2026-08-24T00:00:00.000Z',
     href: '/sessions/architect/s1',
     ...over,

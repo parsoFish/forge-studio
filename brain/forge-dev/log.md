@@ -492,11 +492,11 @@ Closed out the brain phase to documented success signals across 14 iterations on
 
 **Architectural decisions taken during the iteration set:**
 
-- **Latency target moved from <5s → ≤15s p95.** The original 5s assumed non-agentic retrieval; the SKILL.md grep-and-read process structurally needs 4–6 tool turns × ~2s each on Haiku. Acknowledged in `docs/phases/brain.md`.
+- **Latency target moved from <5s → ≤15s p95.** The original 5s assumed non-agentic retrieval; the SKILL.md grep-and-read process structurally needs 4–6 tool turns × ~2s each on Haiku. Acknowledged in `docs/explanation/example-factory.md`.
 - **Kept the agentic SKILL.md design** (vs load-all-as-context) — brain is small now but expected to grow as cycles compound; agentic search scales, full-context-load doesn't.
 - **Cached navigation prefix via shared module** (`orchestrator/brain-index.ts`) — gives the agent the candidate index without per-call grep. Same pattern available to architect / PM / reflection benches.
 - **Parallel runner** (concurrency 4) — wall time 5–9 min → ~90s.
-- **Dual-axis scoring**: cheap deterministic metric every cycle, periodic Opus judge as the validator. Documented in [`docs/phases/brain.md`](../docs/phases/brain.md) success signals.
+- **Dual-axis scoring**: cheap deterministic metric every cycle, periodic Opus judge as the validator. Documented in [`docs/explanation/example-factory.md`](../docs/explanation/example-factory.md) success signals.
 
 **Outstanding work** (not blocking architect phase):
 
@@ -506,7 +506,7 @@ Closed out the brain phase to documented success signals across 14 iterations on
 
 **Total bench spend across iteration set:** ~$15 across 14 runs. The judge-validation runs (~$5 each) are the dominant cost — recommend running the judge every N cycles, not every cycle.
 
-This closes the brain phase. The next workstream is **architect** — see [`docs/phases/architect.md`](../docs/phases/architect.md).
+This closes the brain phase. The next workstream is **architect** — see [`docs/explanation/example-factory.md`](../docs/explanation/example-factory.md).
 
 ---
 
@@ -543,7 +543,7 @@ Closed out the architect phase. Bench passed **8/8 (100%)** on the first live ru
 
 **Total bench spend:** $1.75 first run, $0 in iteration (no cycles needed). Compare brain phase: $15 across 14 runs. The pre-built support code (`council.ts` + `manifest.ts` + `brain-index.ts`) made the difference — the architect skill had nothing to debug because the load-bearing pieces were already proven.
 
-**What's next:** the next workstream is **project-manager** — the first unattended phase. PM consumes initiative manifests from `_queue/pending/`, decomposes features into atomic work items, emits work-item specs. Unblocking PM also unblocks `cycle.ts` end-to-end wiring (PM → developer-loop → review-prep). See [`docs/phases/project-manager.md`](../docs/phases/project-manager.md).
+**What's next:** the next workstream is **project-manager** — the first unattended phase. PM consumes initiative manifests from `_queue/pending/`, decomposes features into atomic work items, emits work-item specs. Unblocking PM also unblocks `cycle.ts` end-to-end wiring (PM → developer-loop → review-prep). See [`docs/explanation/example-factory.md`](../docs/explanation/example-factory.md).
 
 ---
 
@@ -602,7 +602,7 @@ Closed out the project-manager phase — the **first unattended phase** in the p
 
 **Total bench spend across iteration set:** ~$6.30 across 3 runs. Compare brain (14 runs, $15) and architect (1 run, $1.75). PM was harder than architect because the output structure is richer (multi-file artifact + graph + cross-WI invariants), but the pre-built support code (`work-item.ts` + `pm-invocation.ts` + the architect bench pattern) made each iteration cheap once the fixture/scoring scaffolding was in place.
 
-**What's next:** the next workstream is **developer-loop** — the second unattended phase, the longest-running, and the highest-cost. The Ralph runner is already wired ([`loops/ralph/claude-agent.ts`](../loops/ralph/claude-agent.ts)); what's missing is the developer skill past `SKILL.md`, the bench fixtures, and the `cycle.ts:runDeveloperLoop()` real implementation. See [`docs/phases/developer-loop.md`](../docs/phases/developer-loop.md).
+**What's next:** the next workstream is **developer-loop** — the second unattended phase, the longest-running, and the highest-cost. The Ralph runner is already wired ([`loops/ralph/claude-agent.ts`](../loops/ralph/claude-agent.ts)); what's missing is the developer skill past `SKILL.md`, the bench fixtures, and the `cycle.ts:runDeveloperLoop()` real implementation. See [`docs/explanation/example-factory.md`](../docs/explanation/example-factory.md).
 
 ---
 

@@ -140,7 +140,7 @@ function deriveContractRow(projectDir: string, config: ProjectConfig | null): Co
 }
 
 /** Builds the `instructions` stage row — AGENTS.md preferred, CLAUDE.md
- *  (the contract's named legacy alias, docs/forge-project-contract.md C8)
+ *  (the contract's named legacy alias, docs/reference/project-contract.md C8)
  *  accepted. `bytes` is the real length of whichever file is actually
  *  found, read off disk (never estimated). */
 function deriveInstructionsRow(projectDir: string): ContractStageRow {

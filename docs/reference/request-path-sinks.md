@@ -1,8 +1,13 @@
 # Request-path sinks — the enumeration
 
-*Reference.* Every filesystem read/write in `cli/` and `orchestrator/` whose
-path derives, in whole or in part, from request data, each classified
-`guarded` / `unguarded` / `accidentally-safe`.
+*Reference.* Every filesystem read/write reachable from a bridge route or a
+CLI dispatch entry — today that surface is `apps/{forge,studio}` and
+`packages/*` — whose path derives, in whole or in part, from request data,
+each classified `guarded` / `unguarded` / `accidentally-safe`. (Older rows
+below predate the M3/M4 package move and still cite the retired `cli/` /
+`orchestrator/` tree layout at the time each was written; the "M4-flows PR 4"
+entry under Table 2 records that move. Table headers repointed to the live
+layout; individual historical rows are left as the audit trail they are.)
 
 **This is the page the ratchet means.** When `scripts/check-request-path-sinks.mjs`
 reports a new sink or a new caller, add its row here. The model behind the
@@ -64,7 +69,7 @@ had fixed it and the row still said otherwise.
 
 ---
 
-## Table 1 — `cli/`
+## Table 1 — `apps/forge/` (bridge + CLI dispatch; `cli/` pre-M3)
 
 ### Guarded (the R2-09 write routes + this sweep)
 
@@ -716,7 +721,7 @@ check only runs when the flag is given).
 
 ### Guarded in R4-21 — the authoring-session finalize route (SUPERSEDED — see "Guarded in R4-21 phase 2" below)
 
-**Superseded, 2026-08-11 (R4-21 phase 2, WI-2, D5, `_wave5/unit-specs/R4-21-phase2.md`).**
+**Superseded, 2026-08-11 (R4-21 phase 2, WI-2, D5 — the wave-5 unit spec of that date).**
 The rows immediately below described the PHASE-1 wire contract: a
 client-supplied `entries`/`upstream` (skill) or `name`/`description`/`on`/
 `scriptBody`/`matcher`/`permissions` (hook) body, staged through
@@ -901,7 +906,7 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 
 ---
 
-## Table 2 — `orchestrator/`
+## Table 2 — `packages/*` (`orchestrator/` pre-M3)
 
 `orchestrator/` has no HTTP surface of its own; every request-derived path reaches it across the `cli/` → `orchestrator/` boundary. Its sites are therefore listed in Table 1 alongside the route that feeds them, with the `orchestrator/` file named in the `file:line` column. The `orchestrator/`-owned sites are:
 
@@ -1434,8 +1439,8 @@ through the guard).
 
 ### W7-FIX-A2 — sticky cancel + the Bash fence (three new `[read]`-class sinks, all guarded)
 
-Post-land sweep fixes to W7-A2 (findings W7A2-01/03/08 in
-`_wave7/lanes/review-sweep-A2.json`). `check-request-path-sinks.mjs` delta
+Post-land sweep fixes to W7-A2 (findings W7A2-01/03/08 of the wave-7
+post-land review sweep, 2026-08-19). `check-request-path-sinks.mjs` delta
 (3 rows, all guarded):
 
 | file:line | op | request field | class | evidence |

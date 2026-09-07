@@ -63,16 +63,16 @@ load-bearing, a candidate ADR-017. trafficGame met C1–C5 at the time.
 ## Deepened 2026-05-31 (betterado onboarding run)
 
 Onboarding a Go infra provider showed the contract was directionally sound but
-under-specified. See [`docs/forge-project-contract.md`](../../../docs/forge-project-contract.md) for the project-type-agnostic articulation; key deltas:
+under-specified. See [`docs/reference/project-contract.md`](../../../docs/reference/project-contract.md) for the project-type-agnostic articulation; key deltas:
 
 - **C1 is about *discrimination*.** The gate must FAIL before work exists and PASS only on real work. Scope the gate to the unit of change.
 - **C2 generalises to *hermeticity*.** Ignore anything build/tools write into the tree; force-track config in ignored dirs.
 - **New C7 — external-resource model**: creds-free in-loop gate + isolated self-cleaning live confirmation; API responses are machine evidence.
 
-C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (see [`docs/known-gaps.md`](../../../docs/known-gaps.md) §2026-05-31). C6 is now satisfied post-Phase-6.
+C1/C2 and C7 are **not yet machine-checked** by `forge preflight` (recorded 2026-05-31; tracked as a bead). C6 is now satisfied post-Phase-6.
 
 **Clause-id collision (noted 2026-07-17, R5-07-F6):** this C7 (external-resource
-model, landed in `docs/forge-project-contract.md`) is a **different** clause from
+model, landed in `docs/reference/project-contract.md`) is a **different** clause from
 [[holistic-metrics-onboarding]]'s proposed-but-unlanded "C7 holistic metrics";
 [R1-D1](../../../docs/roadmaps/archive/R1-contract-componentry.md) resolves the numbering
 on pick-up — that clause takes the next free id (e.g. C11), never C7.

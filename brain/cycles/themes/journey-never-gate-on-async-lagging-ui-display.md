@@ -41,7 +41,7 @@ A journey is both the demo and the UI regression gate ([[forge-ui-data-attribute
 ## Sources
 
 - `_wave5/ledger.md` (gitignored campaign state) — R6-08 kb-maintain per-check status inversion, both check names, batch D region.
-- [`docs/forge-ui-dom-and-harness.md`](../../../docs/forge-ui-dom-and-harness.md) — the `data-*` contract and the journeys-as-data harness.
+- [`docs/reference/studio-dom-contract.md`](../../../docs/reference/studio-dom-contract.md) — the `data-*` contract and the journeys-as-data harness.
 
 ## See also
 

@@ -1,9 +1,8 @@
 # Community registry — who writes it, and how writes reach git
 
-**Status:** decided 2026-08-21 (W7-B3, wave-7 park-point "registry commit
-policy" — `_wave7/plan.md` B3 row). Ratifies the write model the wave-7
-goal pack locked: *Studio writes the file; the operator commits via their
-normal git flow; the browser shows the uncommitted state.*
+**Status:** decided 2026-08-21 (W7-B3, the "registry commit policy" park
+point). Ratifies the write model: *Studio writes the file; the operator
+commits via their normal git flow; the browser shows the uncommitted state.*
 
 ## The file
 
@@ -20,7 +19,7 @@ items share only five distinct `sourceUrl`s, so one repo's star count was
 written onto N rows and the copies drifted (a refresh pass left six rows at
 275713 and two at 170882). v2 moves them into a top-level `sources:` map keyed
 by a normalized source key (`github:<owner>/<repo>`, `npm:<pkg>`,
-`mcp:<server>` — derived by `orchestrator/studio/community-source-url.ts`) and
+`mcp:<server>` — derived by `packages/library/studio/community-source-url.ts`) and
 resolves them at read time. **The item is given no field to hold a mis-scoped
 copy**: writing `stars:` on an item is a load error naming `sources:`.
 
@@ -42,12 +41,14 @@ header block.
 
 | Writer | Path | Stamps |
 | --- | --- | --- |
-| `refreshCommunityRegistry` (orchestrator/studio/community-refresh-api.ts, W8-B5) | `forge community refresh` — deterministic, no LLM: three fixed API calls behind a three-origin allowlist | On a source it got a real 200 for: `fetchedAt: <now>` / `fetchedBy: api:github` (or `api:npm` / `api:mcp-registry`) plus the fetched facts; `meta.lastRefresh: <now>` only when at least one source verified. A missing/invalid `GH_TOKEN` or an exhausted rate limit aborts and writes **nothing**; a 404 / network error / timeout / malformed body leaves that source row **byte-identical** and reports it. It never writes: it returns a next registry and the caller owns the write. |
-| Studio CRUD routes (apps/forge/bridge-studio-writes.ts, W7-B3) | `POST/PUT/DELETE /api/studio/community/registry/items[/:id]` — `kind: skill` only (the index sources every other kind outside the registry) | Curation only. W7-B3 review F4/F5 had to FORCE `stars`/`starsDisplay`/`upstreamUpdatedAt` server-side; v2 removes the field, so there is nothing to force — a body carrying a real repo fact is **400**, naming `sources:` (an explicit `null` is accepted and dropped). The shared `sources` map and the curation header are carried forward untouched. |
+| `refreshCommunityRegistry` (packages/library/studio/community-refresh-api.ts, W8-B5) | `forge community refresh` — deterministic, no LLM: three fixed API calls behind a three-origin allowlist | On a source it got a real 200 for: `fetchedAt: <now>` / `fetchedBy: api:github` (or `api:npm` / `api:mcp-registry`) plus the fetched facts; `meta.lastRefresh: <now>` only when at least one source verified. A missing/invalid `GH_TOKEN` or an exhausted rate limit aborts and writes **nothing**; a 404 / network error / timeout / malformed body leaves that source row **byte-identical** and reports it. It never writes: it returns a next registry and the caller owns the write. |
+| Studio CRUD routes (packages/library/bridge-studio-community-crud.ts, W7-B3; carved out of `apps/forge/bridge-studio-writes.ts` in the M4 residue carve) | `POST/PUT/DELETE /api/studio/community/registry/items[/:id]` — `kind: skill` only (the index sources every other kind outside the registry) | Curation only. W7-B3 review F4/F5 had to FORCE `stars`/`starsDisplay`/`upstreamUpdatedAt` server-side; v2 removes the field, so there is nothing to force — a body carrying a real repo fact is **400**, naming `sources:` (an explicit `null` is accepted and dropped). The shared `sources` map and the curation header are carried forward untouched. |
 | A human editing the YAML in a PR | ordinary code review | whatever the diff says — lint is the gate |
 
 **Historical third writer, retired W8-B5b WI-3:** `commitRegistryDraft`
-(orchestrator/interactive-finalizers.ts) used to write `fetchedAt: <now>` /
+(formerly in the finalizers module, now `packages/sessions/interactive-finalizers.ts` —
+the function itself was removed when its session kind retired, not moved)
+used to write `fetchedAt: <now>` /
 `fetchedBy: community-refresh/<sid>` on source rows a community-refresh
 session's operator-approved verdict marked verified. That interactive session
 kind (W6-CR-3) is retired outright in favour of the deterministic

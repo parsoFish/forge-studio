@@ -40,4 +40,4 @@ Pair per-feature `quality_gate_cmd` with `verification_artifact` path. For each 
 
 - `file-isolation-constraint-enables-single-iteration` — one-file-per-WI pattern that correlates with single-iteration success.
 - The unifier's `pr-not-self-contained` gate is the load-bearing late-stage safety net.
-- **Open gap:** cycle reports can show the default gate even when a custom `quality_gate_cmd` is declared — same false-confidence failure, surfaced at report time. See `docs/known-gaps.md`.
+- **Open gap:** cycle reports can show the default gate even when a custom `quality_gate_cmd` is declared — same false-confidence failure, surfaced at report time. Tracked as a bead.

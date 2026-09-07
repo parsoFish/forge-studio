@@ -333,7 +333,7 @@ export type Agent = {
    */
   costCeilingEnforceable?: boolean;
   /** W7-B5 (agents-21): the agent's own declared `budgets.maxBudgetUsd`
-   *  (its default standalone-run ceiling — docs/agent-cost-ceilings.md).
+   *  (its default standalone-run ceiling — docs/reference/agent-cost-ceilings.md).
    *  Absent = the agent declares none; the run-level policy default
    *  applies. */
   declaredMaxBudgetUsd?: number;
@@ -1424,17 +1424,17 @@ export type SessionIndexRow = {
   project: string;
   phase: string;
   terminal: boolean;
-  /** W7-A2 — the bridge's TRUTHFUL lifecycle verdict (operator gate open,
-   *  or crashed/stalled) — never re-derived client-side. */
-  needsYou: boolean;
-  /** W7-A2 — `packages/sessions/bridge-studio-lifecycle.ts`'s derived state (mirrored in
-   *  `lib/session-lifecycle-client.ts`'s SESSION_LIFECYCLE_STATES). */
+  /** W7-A2 — the bridge's lifecycle verdict, never re-derived here. */ needsYou: boolean;
+  /** W7-A2 — `bridge-studio-lifecycle.ts`'s state (mirrored in
+   *  `session-lifecycle-client.ts`'s SESSION_LIFECYCLE_STATES). */
   state: 'working' | 'awaiting-operator' | 'crashed' | 'stalled' | 'terminal';
-  /** W7-A2 — the runner's crash message for a `crashed` row, else null. */
-  error: string | null;
-  /** W7-A2 — ms since the last on-disk sign of life, or null (no log dir). */
-  idleMs: number | null;
+  /** W7-A2 — the crash message for a `crashed` row, else null; and ms since
+   *  the last sign of life, or null when there is no log dir. */
+  error: string | null; idleMs: number | null;
   modelTier: string | null;
+  /** M6-A row 3 — dispatching agent; spend (kernel rule, `null` = no priced
+   *  row); `runId` null = spine session, the only kind the ledger joins. */
+  agent: string; costUsd: number | null; runId: string | null;
   updatedAt: string;
   href: string;
 };
@@ -2069,11 +2069,11 @@ export async function fetchActiveOnboarding(
  * the operator can follow at `/sessions/onboarding/<sessionId>`.
  */
 export async function startOnboardingSession(
-  project: string,
+  project: string, modelTier?: string,
   inputs?: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string; sessionId?: string; runId?: string; project?: string }> {
   const r = await studioPost('/api/studio/onboarding/start', {
-    project,
+    project, ...(modelTier ? { modelTier } : {}),
     ...(inputs ? { inputs } : {}),
   });
   const data = r.data;
