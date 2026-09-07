@@ -180,33 +180,28 @@ function flowEditableProjection(def: FlowDefinition): string {
 }
 
 /**
- * W7-B4 (flows-09) — materialise any STARTER agents a flow save references
- * into the real roster (skills/<slug>/), so the seeded plan→dev→review
- * canvas is saveable on a fresh install. The slug set is CLOSED — only slugs
- * `listStarterAgents` itself enumerates (server-controlled values; the
- * client's node.agent strings merely SELECT from that set by equality), and
- * only when skills/<slug> does not already exist (an operator's own agent of
- * the same name always wins — nothing is ever overwritten).
+ * The whole closed starter set, split into what would be written and what is
+ * already there — ruling 384's `seed starter agents` action.
+ *
+ * Keeps the rules its per-node predecessor had — the same containment guard,
+ * and the same "an existing skills/<slug> always wins", so an operator's own
+ * agent of that name is never overwritten, which is also what makes the
+ * action idempotent. Pressing it twice writes once and
+ * reports the other three as `existing`, rather than reporting a silent
+ * no-op the operator cannot tell from a failure.
  */
-function planStarterAgentMaterialisation(
+function planAllStarterAgents(
   forgeRoot: string,
-  nodes: unknown[],
-): { def: AgentDefinition; destPath: string }[] {
-  const wanted = new Set<string>();
-  for (const raw of nodes) {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) continue;
-    const agent = (raw as Record<string, unknown>)['agent'];
-    if (typeof agent === 'string' && agent) wanted.add(agent);
-  }
-  if (wanted.size === 0) return [];
+): { planned: { def: AgentDefinition; destPath: string }[]; existing: string[] } {
   const planned: { def: AgentDefinition; destPath: string }[] = [];
+  const existing: string[] = [];
   for (const starter of listStarterAgents(forgeRoot)) {
-    if (!wanted.has(starter.slug)) continue;
     const guard = resolveGuardedPath(toSkillsDir(forgeRoot), [starter.slug]);
-    if (!guard.ok || guard.exists) continue; // existing roster agent wins
+    if (!guard.ok) continue;
+    if (guard.exists) { existing.push(starter.slug); continue; }
     planned.push({ def: starter, destPath: guard.realPath });
   }
-  return planned;
+  return { planned, existing };
 }
 
 /**
@@ -237,8 +232,7 @@ function applyStarterAgentMaterialisation(
     // `phase: <slug>` — plus the explicit `library: true` every shipped
     // roster agent carries. Only ever applied to a FRESH copy: this path runs
     // exclusively when skills/<slug> did not already exist (see
-    // planStarterAgentMaterialisation), so it can never rewrite an operator's
-    // own agent.
+    // planAllStarterAgents), so it can never rewrite an operator's own agent.
     // The read/write both go back through the SAME containment guard the
     // destination came from (leaf included) rather than raw-joining onto
     // destPath — the SEC-04 leaf-append rule.
@@ -303,6 +297,28 @@ export async function handleStudioWriteRoutes(
   if (method === 'DELETE' && !agentDeleteMatch && !flowDeleteMatch) return false;
 
   // ---- PUT /api/studio/agents/:slug ----------------------------------------
+
+  // ---- POST /api/studio/starters/seed --------------------------------------
+  //
+  // Ruling 384: the roster forge OFFERS is not the roster you get. Starters
+  // land in skills/ because the operator asked, never because a canvas was
+  // saved. The response NAMES what it wrote — a materialisation the operator
+  // cannot see is the thing this ruling exists to stop.
+  //
+  // Two segments, not `/api/studio/flows/seed-starters`: that would be
+  // swallowed by the `^/api/studio/flows/([^/]+)$` matcher below, whose
+  // SLUG_RE accepts `seed-starters` as a flow id. The starter roster is also
+  // not a property of any one flow.
+  if (method === 'POST' && url === '/api/studio/starters/seed') {
+    try {
+      const { planned, existing } = planAllStarterAgents(ctx.forgeRoot);
+      const seeded = applyStarterAgentMaterialisation(ctx.forgeRoot, planned);
+      sendJson(res, 200, { ok: true, seeded, existing }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
 
   // ---- PUT /api/studio/flows/:id -------------------------------------------
   const flowMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
@@ -439,17 +455,23 @@ export async function handleStudioWriteRoutes(
         }
       }
 
-      // W7-B4 (flows-09): a save referencing STARTER agents materialises them
-      // into the roster, so the seeded plan→dev→review canvas actually
-      // validates (agent-ref) on a fresh install. Closed slug set; an existing
-      // skills/<slug> always wins. Only the PLAN is computed here (pure) — the
-      // copy itself runs after every gate below (review finding 10); the
-      // planned definitions are folded into the agents map so validation still
-      // sees the agents this save is about to create.
-      const plannedStarterAgents = planStarterAgentMaterialisation(
-        ctx.forgeRoot,
-        Array.isArray(b['nodes']) ? (b['nodes'] as unknown[]) : [],
-      );
+      // Operator ruling 384 (shape settled by T1 ruling 459): STARTER AGENTS
+      // ARE EXPLICIT OPT-IN. A save used to plan the closed starter set for
+      // any node referencing one, fold those definitions into the agents map
+      // so `agent-ref` would pass, and copy whole packages into skills/ once
+      // the save landed — so an operator who dragged a station onto the
+      // seeded canvas and pressed Save gained three agents they never
+      // authored, and a story run's save wrote outside its own artifacts.
+      // A save now writes NO roster agents. `POST /api/studio/starters/seed`
+      // does, and only when asked.
+      //
+      // The consequence is deliberate and was ruled on rather than absorbed:
+      // none of the starters exists in a checkout, so a save that references
+      // them before seeding has unresolvable `agent-ref`s and is REFUSED
+      // naming them (below). A flow whose stations point at agents that do
+      // not exist is not a flow yet. The alternative — tolerate a planned
+      // starter and report a finding — was refused because `can-start` would
+      // then have to learn a valid-but-incomplete state.
 
       // 5. Build the agents map. validateFlow reads it (step 8) and so does the
       // kickoff derivation, which needs the HEAD station's definition — so it
@@ -462,12 +484,6 @@ export async function handleStudioWriteRoutes(
         // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
       }
       const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
-      // Fold in the starters this save would materialise, so the agent-ref
-      // check passes on the strength of the PLAN rather than of a side effect
-      // that has already been committed to disk.
-      for (const { def } of plannedStarterAgents) {
-        if (!agentsMap.has(def.slug)) agentsMap.set(def.slug, def);
-      }
 
       // 6. Merge UI-editable fields over existing; preserve id/origin/disposable/path
       const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? id;
@@ -567,7 +583,27 @@ export async function handleStudioWriteRoutes(
       });
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
-        sendJson(res, 400, { error: 'validation failed', findings }, origin);
+        // Ruling 384/459: name the unresolvable STARTERS separately from the
+        // generic agent-ref findings. `agent-ref` already names each slug, but
+        // "references unknown agent \"dev\"" does not tell an operator that
+        // `dev` is a starter forge can seed for them on request — and a
+        // refusal the operator cannot act on is only half honest.
+        const unseededStarters = listStarterAgents(ctx.forgeRoot)
+          .map((a) => a.slug)
+          .filter((slug) => findings.some((f) => f.check === 'agent-ref' && f.message.includes(`"${slug}"`)));
+        sendJson(
+          res,
+          400,
+          unseededStarters.length > 0
+            ? {
+                error: 'validation failed',
+                findings,
+                unseededStarters,
+                hint: `these are starter agents and are not in your roster yet: ${unseededStarters.join(', ')} — seed them, then save`,
+              }
+            : { error: 'validation failed', findings },
+          origin,
+        );
         return true;
       }
 
@@ -607,9 +643,7 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // Every gate has passed and this save WILL land — only now is the roster
-      // mutated (review finding 10).
-      const materializedAgents = applyStarterAgentMaterialisation(ctx.forgeRoot, plannedStarterAgents);
+      const materializedAgents: string[] = []; // ruling 384: a save materialises nothing
 
       // 10. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);

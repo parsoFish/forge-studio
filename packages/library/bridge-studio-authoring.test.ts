@@ -743,27 +743,27 @@ test('a REJECTED flow save materialises nothing into skills/ (side effect must f
   assert.equal(existsSync(join(forgeRoot, 'studio', 'flows', 'never-lands')), false);
 });
 
-test('saving the STARTER canvas as a new flow materialises the starter agents and validates (flows-09)', async () => {
-  // The starter agents are NOT in skills/ yet — precondition of the defect.
-  assert.equal(existsSync(join(forgeRoot, 'skills', 'plan')), false);
-
-  const starter = await getJson('/api/studio/starters');
-  const flow = starter.body['flow'] as Record<string, unknown>;
+// Ruling 384/459 reversed flows-09's ANSWER, not its question: seed-then-save.
+test('384: saving the STARTER canvas is REFUSED until its agents are seeded, and succeeds after (was flows-09)', async () => {
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'plan')), false, 'the state a fresh install is in');
+  const flow = (await getJson('/api/studio/starters')).body['flow'] as Record<string, unknown>;
   assert.ok(flow, 'starter flow present');
-
-  const res = await send('PUT', '/api/studio/flows/my-first-flow', {
-    create: true,
-    name: 'My First Flow',
-    goal: flow['goal'],
-    nodes: flow['nodes'],
-    edges: flow['edges'],
-    triggers: [],
+  const save = () => send('PUT', '/api/studio/flows/my-first-flow', {
+    create: true, name: 'My First Flow', goal: flow['goal'], nodes: flow['nodes'], edges: flow['edges'], triggers: [],
   });
-  const body = (await res.json()) as Record<string, unknown>;
-  assert.equal(res.status, 200, JSON.stringify(body));
-  // The referenced starter agents got materialised into the real roster.
+
+  const refused = await save();
+  const refusedBody = JSON.stringify(await refused.json());
+  assert.notEqual(refused.status, 200, `an unseeded save must be refused: ${refusedBody}`);
   for (const slug of ['plan', 'dev', 'review']) {
-    assert.ok(existsSync(join(forgeRoot, 'skills', slug, 'SKILL.md')), `skills/${slug} materialised`);
+    assert.equal(existsSync(join(forgeRoot, 'skills', slug)), false, `a save must not materialise skills/${slug}`);
+    assert.ok(refusedBody.includes(slug), `the refusal must name "${slug}": ${refusedBody}`);
+  }
+  assert.equal((await send('POST', '/api/studio/starters/seed', {})).status, 200, 'the deliberate act that replaces the side effect');
+  const ok = await save();
+  assert.equal(ok.status, 200, JSON.stringify(await ok.json()));
+  for (const slug of ['plan', 'dev', 'review']) {
+    assert.ok(existsSync(join(forgeRoot, 'skills', slug, 'SKILL.md')), `skills/${slug} materialised by the SEED, not the save`);
   }
   assert.ok(existsSync(join(forgeRoot, 'studio', 'flows', 'my-first-flow', 'flow.yaml')));
 });
