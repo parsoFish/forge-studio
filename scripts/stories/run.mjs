@@ -34,7 +34,7 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
-import { memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict } from './preflight.mjs';
+import { memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict } from './preflight.mjs';
 import {
   applyFence,
   describeFence,
@@ -156,6 +156,22 @@ async function main() {
     }
     console.log(`[stories] sessions ok — ${v.reason}`);
   }
+
+  // 1c. The operator switch a remote-binding story stands on (bead
+  //     `forge-8vfn.7.5.7`, ruling 456). `projects.remote.create` is
+  //     per-worktree state in a GITIGNORED config and defaults OFF, so S2's
+  //     beat 5 is red BY CONSTRUCTION in a worktree nobody switched on — and
+  //     A's S2 run 1 spent $1.76 discovering this lane's config rather than
+  //     anything about the product. Checked here, beside the other refusals and
+  //     BEFORE the money, and it refuses for costless runs too: the beat fails
+  //     either way, and a red that says "the product is wrong" when the product
+  //     was never asked is the expensive kind.
+  const remote = remoteSwitchVerdict(ROOT, stories.map((s) => s.id));
+  if (!remote.ok) {
+    console.error(`[stories] REFUSING: ${remote.reason}`);
+    return 1;
+  }
+  console.log(`[stories] remote switch ok — ${remote.reason}`);
 
   // 2. Memory — a starved host OOM-kills the browser and the crash reads as a
   //    code defect.
