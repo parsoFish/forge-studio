@@ -1,4 +1,4 @@
-import { OPERATOR_GUIDANCE_SENTINEL, RUNNER_TS_PATH, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
+import { OPERATOR_GUIDANCE_SENTINEL, promptPathSource, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
@@ -56,14 +56,14 @@ const MOVED_SENTENCES: Array<{ label: string; text: string }> = [
 ];
 
 test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 branches + update-mode) moved from the runner .ts into skills/demo-builder/SKILL.md', () => {
-  const tsNorm = norm(readFileSync(RUNNER_TS_PATH, 'utf8'));
+  const tsNorm = norm(promptPathSource());
   const skillNorm = norm(readFileSync(SKILL_MD_PATH, 'utf8'));
 
   for (const { label, text } of MOVED_SENTENCES) {
     const needle = norm(text);
     assert.ok(
       !tsNorm.includes(needle),
-      `${label}: must be ABSENT from packages/sessions/kinds/demo-builder.ts (the prose must move to SKILL.md) — it is still there`,
+      `${label}: must be ABSENT from the kind's prompt path (kinds/demo-builder.ts + kinds/demo-generate.ts) — the prose must move to SKILL.md, and it is still there`,
     );
     assert.ok(
       skillNorm.includes(needle),
@@ -76,8 +76,8 @@ test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 bra
 // AT-2 — no fail-open remains
 // ---------------------------------------------------------------------------
 
-test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from kinds/demo-builder.ts', () => {
-  const tsText = readFileSync(RUNNER_TS_PATH, 'utf8');
+test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from the kind\'s prompt path (kinds/demo-builder.ts + kinds/demo-generate.ts)', () => {
+  const tsText = promptPathSource();
   assert.ok(
     !tsText.includes('You are the forge demo-builder agent.'),
     'the fail-open fallback prompt string must be removed — a fail-open here would ship an agent turn with NO task instructions and no signal',
