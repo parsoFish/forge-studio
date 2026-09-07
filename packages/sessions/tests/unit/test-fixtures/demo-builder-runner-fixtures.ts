@@ -140,10 +140,15 @@ test('generating with the sample but NOT the reusable demo skill → throws (ski
 test('generate prompt carries the demoProcess, look-and-feel, feedback, and the inlined base CSS', async () => {
   const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating' });
   writeFileSync(join(sessionDir, 'feedback.md'), 'Make the diff bigger and drop the footer.');
-  let captured = '';
+  // Bead 6.11.49: a generate turn now runs TWO agent passes, so a capture that
+  // keeps the last prompt would silently start asserting against the grounding
+  // pass. `captured` is the WRITE pass's prompt — the one these assertions have
+  // always been about.
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
+  const captured = prompts[0];
   assert.match(captured, /Output matches the golden file/, 'demoProcess steps injected');
   assert.match(captured, /dark and minimal/, 'look-and-feel guidance injected');
   assert.match(captured, /drop the footer/, 'feedback injected');
@@ -152,19 +157,28 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   // skill + a real sample, NOT a generic current-state showcase.
   assert.match(captured, /demo-design\/SKILL\.md/, 'directs authoring the reusable demo skill');
   assert.match(captured, /INITIATIVE'S CHANGES|before\/after/i, 'scopes the demo to an initiative\'s changes');
-  assert.match(captured, /git (log|diff)/i, 'directs sampling from a real recent change');
+  // Moved, not dropped: sampling a real recent change is what the GROUNDING
+  // pass is for, and it is the pass that has Bash to do it (6.11.49).
+  assert.match(prompts[1], /git (log|diff)/i, 'the grounding pass directs sampling from a real recent change');
+  assert.doesNotMatch(captured, /git (log|diff)/i, 'the write pass is not sent looking for a commit it cannot run');
 });
 
 test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
   const { projectRoot, logsRoot, sessionId } = setup();
   const READ_CALLS = 6;
+  // 6.11.49: a generate turn runs two agent passes. The stream under test is
+  // emitted by the WRITE pass only — this test is about how ONE pass's blocks
+  // are forwarded and coalesced, and a fake that replayed the same stream twice
+  // would assert the pass COUNT under the name of the sink's behaviour.
+  let pass = 0;
   const queryFn: QueryFn = ({ options }) => {
     const cwd = (options?.cwd as string) ?? '.';
+    const first = ++pass === 1;
     async function* gen(): AsyncGenerator<unknown> {
-      const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+      const reads = first ? Array.from({ length: READ_CALLS }, (_, i) => ({
         type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
-      }));
-      yield {
+      })) : [];
+      if (first) yield {
         type: 'assistant',
         message: {
           content: [
@@ -268,10 +282,13 @@ export function writeComposedProcess(repoPath: string): void {
 test('composed demo: the generate prompt lists the ordered elements + injects their generators', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId } = setup();
   writeComposedProcess(repoPath);
-  let captured = '';
+  // 6.11.49: two agent passes per generate turn — `captured` is the WRITE
+  // pass's prompt, which is what these assertions have always been about.
+  const prompts: string[] = [];
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
+  const captured = prompts[0];
   assert.equal(result.phase, 'awaiting-review');
   assert.match(captured, /COMPOSED of demo elements/, 'composition framing present');
   assert.match(captured, /\[present\] narrative/, 'ordered element list (narrative first)');
@@ -284,10 +301,13 @@ test('composed demo: the generate prompt lists the ordered elements + injects th
 test('per-element iteration: targetElement focuses the turn + requires the element skill', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' });
   writeComposedProcess(repoPath);
-  let captured = '';
+  // 6.11.49: two agent passes per generate turn — `captured` is the WRITE
+  // pass's prompt, which is what these assertions have always been about.
+  const prompts: string[] = [];
   const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture', (p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture', (p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
+  const captured = prompts[0];
   assert.equal(result.phase, 'awaiting-review');
   assert.match(captured, /Iterate ONE element: 'cli-capture'/, 'focused on the one element');
   // It required + accepted the per-element skill (NOT the demo-design composer).
@@ -312,10 +332,15 @@ test('briefing turn is a no-op (the operator provides notes before the agent run
 
 test('update mode: the generate prompt carries an UPDATE framing referencing the locked skill + sample', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', mode: 'update' });
-  let captured = '';
+  // Bead 6.11.49: a generate turn now runs TWO agent passes, so a capture that
+  // keeps the last prompt would silently start asserting against the grounding
+  // pass. `captured` is the WRITE pass's prompt — the one these assertions have
+  // always been about.
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { captured = p; }), logger: logger(logsRoot, sessionId), logsRoot,
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
+  const captured = prompts[0];
   assert.match(captured, /UPDATE MODE/, 'update framing present');
   assert.match(captured, /demo-design\/SKILL\.md/, 'references the existing generator');
   assert.match(captured, /change-notes/i, 'frames the brief as change-notes');

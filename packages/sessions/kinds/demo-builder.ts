@@ -80,6 +80,12 @@ export const DEMO_REL_DIR = '.forge/demo';
 /** The reusable per-initiative-change demo generator the agent authors. Same slug
  *  + path the existing demo-design machinery / preflight DEMO-SKILL clause use. */
 export const DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md';
+
+/** Bead 6.11.49 — the two passes of one generate turn. They sum to the 24 the
+ *  single pass had: the split costs no budget, it just makes "wrote nothing"
+ *  surface at pass 1's end instead of at turn 24. */
+export const DEMO_WRITE_PASS_MAX_TURNS = 8;
+export const DEMO_GROUND_PASS_MAX_TURNS = 16;
 /** The reviewable sample the generator renders from a representative real change. */
 export const DEMO_HTML_REL_PATH = '.forge/demo/DEMO.html';
 export const DEMO_LOCK_REL_PATH = '.forge/demo/demo.lock.json';
@@ -291,23 +297,36 @@ async function runGenerateStep(args: {
     '```',
   ].join('\n');
 
-  const { costUsd } = await runAgentTurn({
+  // Bead 6.11.49 — WRITE, then RUN. Pass 1 has Bash REMOVED and must produce
+  // both deliverables; pass 2 runs only once they exist and grounds the sample.
+  // Measured: the turn used to spend all 24 turns running the project and write
+  // neither file (run 10: 24 Bash; run 11, briefed NOT to run it: 22 Bash + 2
+  // Read, ran it six times) — the SKILL's own task talking, so guidance was
+  // never the lever (374); the tool set per pass is. Forbidding Bash outright
+  // was the other wrong fix: a demo that cannot run the project cannot show
+  // REAL output.
+  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number) => runAgentTurn({
     queryFn: plumbing.queryFn,
-    prompt,
+    prompt: turnPrompt,
     cwd: status.project_repo_path,
     model: resolveSessionModel(demoBuilderAgentSpec, status.modelTier),
-    allowedTools: demoBuilderAgentSpec.allowedTools,
+    allowedTools,
     disallowedTools: demoBuilderAgentSpec.disallowedTools,
     // W8-B6 — hook dispatch comes from the driver already bound to this turn's
     // logger and initiative id, so no kind can spawn hook-blind.
     ...plumbing.hooksForSkill(demoBuilderAgentSpec.skill),
-    maxTurns: 24,
+    maxTurns,
     onToolUse: plumbing.onToolUse,
     onHeartbeat: plumbing.onHeartbeat,
     onText: plumbing.onText,
     onThinking: plumbing.onThinking,
     label: `demo-builder-${input.sessionId}`,
   });
+  const writePass = await runPass(
+    prompt,
+    demoBuilderAgentSpec.allowedTools.filter((t) => t !== 'Bash'),
+    DEMO_WRITE_PASS_MAX_TURNS,
+  );
 
   // The required generator skill is the per-element skill when iterating one
   // element, else the composer/demo-design skill; the sample DEMO.html is always
@@ -324,6 +343,23 @@ async function runGenerateStep(args: {
       `demo-builder runner: the agent turn ended without producing ${missing.join(' + ')} — re-run to retry, or refine the guidance / feedback.`,
     );
   }
+
+  // Pass 2: the deliverables exist, so the remaining budget can only ground them.
+  const groundPass = await runPass(
+    [
+      loadSkillTurnPrompt({ name: 'demo-builder', turnId: 'ground-it', skillPromptPath: input.skillPromptPath, root: forgeRoot }),
+      '',
+      `Project repo (your working directory): ${status.project_repo_path}`,
+      '',
+      `The two deliverables already exist: ${requiredSkillRel} and ${DEMO_HTML_REL_PATH}.`,
+    ].join('\n'),
+    demoBuilderAgentSpec.allowedTools,
+    DEMO_GROUND_PASS_MAX_TURNS,
+  );
+  // `null` only when NEITHER pass was priced (the omitted-never-zeroed rule).
+  const costUsd = writePass.costUsd === null && groundPass.costUsd === null
+    ? null
+    : (writePass.costUsd ?? 0) + (groundPass.costUsd ?? 0);
 
   // R4-16: snapshot this turn's verified DEMO.html + generator skill into
   // <sessionDir>/generations/<iteration>/ (D4/D5) — byte copies (Buffer, not

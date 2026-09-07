@@ -46,15 +46,20 @@ concrete evidence of the difference* — for the slice of behaviour the initiati
 touched. Design the skill around a before/after pair (two states of the repo) and
 make the sample a genuine before/after of a real change.
 
-## Ground it in REAL output
+## Update mode
 
-Use Bash to actually check out / build / run the relevant states and capture real
-output into the sample. Ground the sample in a representative recent change. Use
-Bash + git to find one (`git log --oneline -20`; pick the most recent substantive
-feature commit or commit range) and render an actual before/after of it — real
-output on both sides, not a mock. Never fabricate results, fake metrics, or invent
-a passing run. If a before/after can't be produced for the chosen change, pick a
-different recent change or say so in the page — don't fake it.
+When the `Mode:` line in the data block below reads `update` — UPDATE MODE — a
+locked demo already exists — `.forge/skills/demo-design/SKILL.md` (the composer) and
+`.forge/demo/DEMO.html` (the sample). READ them and REVISE per the operator's
+change-notes; do NOT rebuild from scratch.
+
+## Two passes, and this one is the FIRST
+
+Every generate turn runs you twice. **This pass has no Bash**: author the
+deliverables its task section names, from what you can read. Put a clearly marked
+placeholder wherever real captured output belongs — the second pass fills those
+in with genuine before/after output and has the tools to do it. Do not describe
+output you have not seen; mark the slot and move on.
 
 ## The demo skill's quality bar
 
@@ -94,9 +99,9 @@ skill path:` in the data block below, using its generator (also in the data bloc
 below). Write this element's rendered HTML fragment to the path named `Target
 element fragment path:` in the data block below (so the operator can view this
 part's output independently), and render `.forge/demo/DEMO.html` as JUST this
-element's fragment (wrapped, with the base CSS) — a real before/after of a
-representative recent change (use git log/diff; REAL output, never fabricated) —
-so the operator can perfect this element before composing the whole demo. Do NOT
+element's fragment (wrapped, with the base CSS), structured as a before/after
+with the captured output left as marked placeholders for the grounding pass, so
+the operator can perfect this element before composing the whole demo. Do NOT
 build the other elements this turn.
 
 Stop when the target element's skill path and `.forge/demo/DEMO.html` both exist.
@@ -110,17 +115,12 @@ AND have it write its rendered HTML fragment to `.forge/demo/fragments/<id>.html
 (one file per element, so each part's output is viewable independently). Then
 author `.forge/skills/demo-design/SKILL.md` — the composer that reads those
 fragments IN THIS ORDER and assembles them into `.forge/demo/DEMO.html` (wrapped
-with <html>/<body> + the base CSS). Ground every fragment in a real before/after
-of a representative recent change (use git log/diff; REAL output, never
-fabricated).
+with <html>/<body> + the base CSS). Structure every fragment as a before/after,
+leaving the captured output as marked placeholders for the grounding pass.
 
 Scope to what a change introduced, not the whole project. Stop when
 `.forge/skills/demo-design/SKILL.md` and `.forge/demo/DEMO.html` exist.
 
-When the `Mode:` line in the data block below reads `update` — UPDATE MODE: a
-locked demo already exists — `.forge/skills/demo-design/SKILL.md` (the composer)
-and `.forge/demo/DEMO.html` (the sample). READ them and REVISE per the operator's
-change-notes in the data block below; do NOT rebuild from scratch.
 
 <!-- turn: generate-legacy -->
 ## Your task this turn: build the demo + render a sample
@@ -132,15 +132,29 @@ Deliver BOTH:
    configured demo process in the data block below, and inlines the Forge demo
    base stylesheet from the data block below so every generated demo reads as
    Forge.
-2. `.forge/demo/DEMO.html` — a real sample produced by running that generator
-   against a representative recent change (use git log/diff; real before/after,
-   never fabricated). This sample is what the operator reviews to judge the
-   skill.
+2. `.forge/demo/DEMO.html` — a sample produced by running that generator against
+   a representative recent change, structured as a before/after with the
+   captured output left as marked placeholders for the grounding pass. This
+   sample, once grounded, is what the operator reviews to judge the skill.
 
 Scope the demo to what a change introduced, not the whole project. Stop when both
 `.forge/skills/demo-design/SKILL.md` and `.forge/demo/DEMO.html` exist.
 
-When the `Mode:` line in the data block below reads `update` — UPDATE MODE: a
-locked demo already exists — `.forge/skills/demo-design/SKILL.md` (the composer)
-and `.forge/demo/DEMO.html` (the sample). READ them and REVISE per the operator's
-change-notes in the data block below; do NOT rebuild from scratch.
+
+<!-- turn: ground-it -->
+## Your task this turn: ground the sample in REAL output
+
+The deliverables already exist — the previous pass authored them. **Edit them; do
+not rebuild them.**
+
+Use Bash to actually check out / build / run the relevant states and capture real
+output into the sample, replacing the placeholders the previous pass marked.
+Ground the sample in a representative recent change: use Bash + git to find one
+(`git log --oneline -20`; pick the most recent substantive feature commit or
+commit range) and render an actual before/after of it — real output on both
+sides, not a mock. Never fabricate results, fake metrics, or invent a passing
+run. If a before/after can't be produced for the chosen change, pick a different
+recent change or say so in the page — don't fake it.
+
+Also fold what you learned into the demo SKILL the previous pass wrote, so the
+next agent to run it produces real output the same way.
