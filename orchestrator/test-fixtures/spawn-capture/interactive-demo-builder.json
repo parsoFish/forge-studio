@@ -1,29 +1,55 @@
 {
-  "spawn": {
-    "prompt": "You are the forge demo-builder (golden-capture fixture v2).\n\nFIXTURE demo-builder GENERATE-LEGACY turn.\n\nMode: create\nProject: testproj\nProject repo (your working directory): <TMP>/repo\n\nOperator look-and-feel guidance:\nShow the before/after of the headline command, dark and minimal.\n\nConfigured demo process (capture / verify / present steps to bake into the skill):\n1. [capture] Run the CLI on a fixture input.\n2. [verify] Output matches the golden fixture.\n\n## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit\n```css\n/* forge demo base stylesheet unavailable — use the dark forge palette: bg #0a0e14, fg #e6edf3 */\n```",
-    "options": {
-      "cwd": "<TMP>/repo",
-      "model": "claude-sonnet-4-6",
-      "permissionMode": "acceptEdits",
-      "allowedTools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Write",
-        "Edit"
-      ],
-      "disallowedTools": [
-        "NotebookEdit",
-        "WebFetch",
-        "WebSearch",
-        "Task",
-        "Agent"
-      ],
-      "maxTurns": 24,
-      "abortController": "<AbortController>"
+  "spawns": [
+    {
+      "prompt": "You are the forge demo-builder (golden-capture fixture v2).\n\nFIXTURE demo-builder GENERATE-LEGACY turn.\n\nMode: create\nProject: testproj\nProject repo (your working directory): <TMP>/repo\n\nOperator look-and-feel guidance:\nShow the before/after of the headline command, dark and minimal.\n\nConfigured demo process (capture / verify / present steps to bake into the skill):\n1. [capture] Run the CLI on a fixture input.\n2. [verify] Output matches the golden fixture.\n\n## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit\n```css\n/* forge demo base stylesheet unavailable — use the dark forge palette: bg #0a0e14, fg #e6edf3 */\n```",
+      "options": {
+        "cwd": "<TMP>/repo",
+        "model": "claude-sonnet-4-6",
+        "permissionMode": "acceptEdits",
+        "allowedTools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Write",
+          "Edit"
+        ],
+        "disallowedTools": [
+          "NotebookEdit",
+          "WebFetch",
+          "WebSearch",
+          "Task",
+          "Agent"
+        ],
+        "maxTurns": 8,
+        "abortController": "<AbortController>"
+      }
+    },
+    {
+      "prompt": "You are the forge demo-builder (golden-capture fixture v2).\n\nFIXTURE demo-builder GROUND-IT turn.\n\nProject repo (your working directory): <TMP>/repo\n\nThe two deliverables already exist: .forge/skills/demo-design/SKILL.md and .forge/demo/DEMO.html.",
+      "options": {
+        "cwd": "<TMP>/repo",
+        "model": "claude-sonnet-4-6",
+        "permissionMode": "acceptEdits",
+        "allowedTools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash",
+          "Write",
+          "Edit"
+        ],
+        "disallowedTools": [
+          "NotebookEdit",
+          "WebFetch",
+          "WebSearch",
+          "Task",
+          "Agent"
+        ],
+        "maxTurns": 16,
+        "abortController": "<AbortController>"
+      }
     }
-  },
+  ],
   "result": {
     "phase": "awaiting-review",
     "wrote": [

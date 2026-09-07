@@ -274,6 +274,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 775 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 142 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 86 |
+| packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 279 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's ADR-024 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 72 |
 | packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 286 |
