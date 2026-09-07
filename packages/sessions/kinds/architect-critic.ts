@@ -1,18 +1,15 @@
 /**
  * The architect kind's COMPLETENESS CRITIC — a composition detail, not a
- * session kind (M4 ruling 62).
+ * session kind (M4 ruling 62): no `run<X>Turn`, no registry row, no operator
+ * surface. One structured sub-turn the architect runs over a drafted plan.
  *
- * It has no `run<X>Turn`, no session kind, no registry row and no operator
- * surface: it is one structured sub-turn the architect's finalize step runs
- * to check a drafted plan for gaps before promoting it. Ruling 62 folded it
- * INTO architect rather than porting it as a seventh kind, and this file is
- * where the fold put it — beside the kind that composes it, named for that
- * kind, no longer named as a runner.
- *
-
- * Architect completeness critic — a one-shot, advisory structured-output SDK
- * turn run at architect FINALIZE (after the operator approves the PLAN,
- * before manifests promote to `_queue/pending/`).
+ * WHEN IT RUNS (ruling 380, 2026-09-07): at the END of the DRAFTING turn,
+ * before the operator is ever asked. Findings send the architect another draft
+ * round; only a clean pass (or the round ceiling) promotes the session to
+ * `awaiting-verdict`. It used to run at FINALIZE, after the approve press —
+ * which showed the operator a plan, took their approval, then told them the
+ * plan was incomplete and re-armed the gate. `runDraftRounds`
+ * (`architect-steps.ts`) is the caller and owns every phase decision.
  *
  * Grounding: `brain/forge-dev/themes/2026-07-01-architect-coverage-scope-fidelity.md`
  * — a betterado migration roadmap review caught coverage gaps (dropped scope,
@@ -21,26 +18,20 @@
  * found but no automated gate did. This module is that judge pass, wired into
  * the pipeline instead of run by hand after the fact.
  *
- * Unlike `brain-fix-runner.ts` / `preflight-fix-runner.ts` this module owns no
- * logger, log dir, or heartbeat file — it is a pure `context in → findings out`
- * call. `architect-runner.ts`'s `runFinalizeStep` already owns the session's
- * event logger and emits the `architect.completeness-critic` start/end/finding
- * events around this call, matching how the rest of that function's own
- * `logger.emit` calls work (no sub-module owns logging there either).
+ * Unlike `brain-fix-runner.ts` / `preflight-fix-runner.ts` it owns no logger,
+ * log dir or heartbeat file — a pure `context in → findings out` call. The
+ * caller owns the session's event logger and emits the
+ * `architect.completeness-critic` start/end/finding events around it.
  *
  * Advisory-only: ANY failure (a thrown queryFn, a stream error, a malformed or
  * missing structured_output) resolves to `{ findings: [], crashed: <bool> }`
- * rather than throwing — this pass must never brick finalize. The caller is
- * responsible for logging a crash loudly.
- *
- * Note: a crash still CONSUMES the session's one-shot gate — the caller
- * persists `status.completenessCritic` with `crashed: true` and finalize never
- * re-runs the critic for that session. Intentional: the pass is advisory
- * infrastructure and promotion proceeds on crash anyway, so re-arming it would
- * only add a second failure mode to the retry path.
+ * rather than throwing — this pass must never brick a session. The caller logs
+ * a crash loudly and proceeds to the ask: a critic that fell over must not
+ * strand a session waiting for a verdict nobody can give.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
@@ -50,6 +41,9 @@ import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
+import { requirePorts, type ArchitectManifestPorts } from './architect-ports.ts';
+import { readInterview, type ArchitectStatus, type CompletenessCriticStatus, type RunArchitectTurnInput } from './architect-session.ts';
+import type { InterviewRound, sessionPaths } from './architect-plan.ts';
 
 export type { QueryFn };
 
@@ -294,4 +288,125 @@ export async function runCompletenessCritic(
       error: message.slice(0, CRITIC_MAX_CRASH_ERROR_CHARS),
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// The architect's critic STEP — the turn-side wrapper (ruling 380)
+// ---------------------------------------------------------------------------
+
+/** The ONE renderer for a session's flattened interview Q/A — the draft prompt
+ *  and the critic prompt had a copy each, which is where two renderings of one
+ *  thing start to disagree. `empty` is each caller's own placeholder. */
+export function renderInterviewSummary(rounds: InterviewRound[], empty: string): string {
+  if (rounds.length === 0) return empty;
+  return rounds.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n');
+}
+
+/** Render every manifest about to be promoted (id, dependencies, full body)
+ *  into one block per initiative for the critic prompt. Reads fresh from disk
+ *  so the critic reviews EXACTLY what `promoteManifests` is about to move. */
+function buildManifestsSummary(manifestsDir: string, parseManifest: ArchitectManifestPorts['parseManifest']): string {
+  if (!existsSync(manifestsDir)) return '(no manifests found)';
+  const files = readdirSync(manifestsDir).filter((f) => f.endsWith('.md'));
+  if (files.length === 0) return '(no manifests found)';
+  return files
+    .map((f) => {
+      const m = parseManifest(readFileSync(join(manifestsDir, f), 'utf8'));
+      const deps = m.depends_on_initiatives?.length ? m.depends_on_initiatives.join(', ') : '(none)';
+      // Roadmap-scale sessions promote 20+ manifests — bound each body so the
+      // assembled critic prompt cannot blow the context window.
+      const body = truncateWithMarker(m.body, CRITIC_MAX_MANIFEST_BODY_CHARS);
+      return `### ${m.initiative_id}\ndepends_on: ${deps}\n\n${body}`;
+    })
+    .join('\n\n---\n\n');
+}
+
+/**
+ * Run the critic ONCE over the draft now on disk and return the record to fold
+ * onto the session status. Never throws — a crash is advisory infra (zero
+ * findings, loudly logged), so a critic that fell over cannot strand a session.
+ * It makes NO phase decision: `runDraftRounds` owns that (ruling 380).
+ */
+export async function runCompletenessCriticStep(args: {
+  input: RunArchitectTurnInput;
+  paths: ReturnType<typeof sessionPaths>;
+  status: ArchitectStatus;
+  logger: EventLogger;
+  queryFn: QueryFn;
+  /** The draft round this record checked — see `CompletenessCriticStatus`. */
+  round: number;
+}): Promise<CompletenessCriticStatus> {
+  const { input, paths, status, logger, queryFn, round } = args;
+  const initiativeId = `architect-session-${input.sessionId}`;
+
+  const critStart = logger.emit({
+    initiative_id: initiativeId,
+    phase: 'architect',
+    skill: 'architect-completeness-critic',
+    event_type: 'start',
+    input_refs: [paths.planPath],
+    output_refs: [],
+    message: 'architect.completeness-critic.start',
+    metadata: { session_id: input.sessionId },
+  });
+
+  const interviewSummary = renderInterviewSummary(
+    readInterview(input.projectRoot, input.sessionId),
+    '(no interview — the operator drafted directly)',
+  );
+  const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;
+  const manifestsSummary = buildManifestsSummary(paths.manifestsDir, requirePorts(input).parseManifest);
+
+  const critic = await runCompletenessCritic({
+    idea: status.idea,
+    interviewSummary,
+    planMarkdown,
+    manifestsSummary,
+    queryFn,
+    logger,
+    initiativeId,
+  });
+
+  // One emit shape for all three outcomes — the three call sites below differed
+  // only in type, message and metadata, and a copy each is where the parent id
+  // or the plan ref quietly stops being set on one of them.
+  const emit = (
+    event_type: 'end' | 'error' | 'log',
+    message: string,
+    metadata: Record<string, unknown>,
+    initiativeIdOverride?: string,
+  ): void => {
+    logger.emit({
+      initiative_id: initiativeIdOverride ?? initiativeId,
+      parent_event_id: critStart.event_id,
+      phase: 'architect',
+      skill: 'architect-completeness-critic',
+      event_type,
+      input_refs: [paths.planPath],
+      output_refs: [],
+      message,
+      metadata: { session_id: input.sessionId, ...metadata },
+    });
+  };
+
+  if (critic.crashed) {
+    // Advisory infra — never strand the session, but log loudly.
+    emit('error', 'architect.completeness-critic.crashed — proceeding to the ask (advisory infra, zero findings)',
+      { error: critic.error ?? null });
+  } else {
+    emit('end', `architect.completeness-critic.end (findings=${critic.findings.length})`,
+      { findings_count: critic.findings.length });
+    // The operator's record of what was faulted — one event per finding.
+    for (const f of critic.findings) {
+      emit('log', `architect.completeness-critic.finding (${f.severity}): ${f.gap}`,
+        { severity: f.severity, initiativeId: f.initiativeId, gap: f.gap }, f.initiativeId ?? undefined);
+    }
+  }
+
+  return {
+    ranAt: new Date().toISOString(),
+    round,
+    findings: critic.findings,
+    ...(critic.crashed ? { crashed: true } : {}),
+  };
 }
