@@ -50,7 +50,7 @@
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/adversarial-review-spawn-capture.test.ts
  * (or delete the fixture) rewrites
- * orchestrator/test-fixtures/spawn-capture/adversarial-review.json from current code.
+ * packages/kernel/tests/test-fixtures/spawn-capture/adversarial-review.json from current code.
  */
 
 import assert from 'node:assert/strict';
@@ -64,10 +64,10 @@ import { runAdversarialReview, REVIEW_ALLOWED_TOOLS, REVIEW_EXECUTION_TOOLS } fr
 import { createLogger } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
-const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');
+const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');
 
 const INIT_ID = 'INIT-2026-01-01-spawn-capture';
 const CYCLE_ID = 'SPAWN-CAPTURE-TEST-adversarial-review-fixture';

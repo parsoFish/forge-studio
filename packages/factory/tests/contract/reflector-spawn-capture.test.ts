@@ -41,7 +41,7 @@
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/reflector-spawn-capture.test.ts
  * (or delete the fixture) rewrites
- * orchestrator/test-fixtures/spawn-capture/reflector.json from current code.
+ * packages/kernel/tests/test-fixtures/spawn-capture/reflector.json from current code.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,10 +53,10 @@ import { runReflector } from '../../phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
-const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn-capture', 'reflector.json');
+const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'reflector.json');
 
 // Fixed (see file header) — distinct + greppable, never a real cycle id.
 const CYCLE_ID = 'SPAWN-CAPTURE-TEST-reflector-fixture';

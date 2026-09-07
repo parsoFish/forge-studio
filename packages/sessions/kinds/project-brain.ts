@@ -19,7 +19,7 @@
  * Ported from `orchestrator/project-brain-builder-runner.ts`, which this file
  * replaces. Byte-identical spawn behaviour is pinned by
  * `interactive-runners-golden.test.ts` against
- * `orchestrator/test-fixtures/spawn-capture/interactive-project-brain.json`.
+ * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-project-brain.json`.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

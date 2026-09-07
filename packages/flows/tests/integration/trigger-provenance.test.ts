@@ -94,7 +94,7 @@ import {
   buildCronFlowRunRequest,
   buildWebhookFlowRunRequest,
   buildAgentCompleteFlowRunRequest,
-} from '../../../../orchestrator/test-fixtures/flow-run-request.ts';
+} from '../test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from '../../flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------

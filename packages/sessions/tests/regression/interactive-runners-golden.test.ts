@@ -112,7 +112,7 @@ import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } 
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 // The architect's raw `readStatus`/`writeStatus` pair was deleted with the M4
 // exit door (ruling 129): it had no production caller and was the unguarded
@@ -128,7 +128,7 @@ function writeStatus(sessionDir: string, status: ArchitectStatus): string {
 }
 
 
-const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture');
+const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture');
 const FIXTURE_ARCHITECT = join(FIXTURES_DIR, 'interactive-architect.json');
 const FIXTURE_INSTRUCTIONS = join(FIXTURES_DIR, 'interactive-instructions.json');
 const FIXTURE_DEMO_BUILDER = join(FIXTURES_DIR, 'interactive-demo-builder.json');

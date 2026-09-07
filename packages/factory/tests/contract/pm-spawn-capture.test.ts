@@ -35,7 +35,7 @@
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/pm-spawn-capture.test.ts
  * (or delete the fixture) rewrites
- * orchestrator/test-fixtures/spawn-capture/pm.json from the current code.
+ * packages/kernel/tests/test-fixtures/spawn-capture/pm.json from the current code.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,9 +46,9 @@ import { join, resolve } from 'node:path';
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
-const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture', 'pm.json');
+const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'pm.json');
 
 const INITIATIVE_ID = 'INIT-2026-01-01-spawn-capture';
 

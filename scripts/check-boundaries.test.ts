@@ -18,7 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -193,26 +193,33 @@ test('it inspects a real dependency graph, not an empty one', () => {
 });
 
 /**
- * A legacy module to point a probe at, DERIVED rather than named.
+ * The legacy module a probe points at is PLANTED, not found.
  *
- * §15.93: this test used to hardcode `orchestrator/flow-runner.ts` and went red
- * the moment that file was carved into its package — the probe imported a path
- * that no longer existed. Failing loudly was the right outcome; the wrong one
- * is a probe that keeps passing while pointing at nothing. Taking a live
- * `orchestrator/*.ts` from git means no carve can strand it, and the assertion
- * still names whatever it picked.
+ * §15.93, chapter one: this test hardcoded `orchestrator/flow-runner.ts` and
+ * went red the moment that file was carved into its package. Failing loudly was
+ * the right outcome; the wrong one is a probe that keeps passing while pointing
+ * at nothing. So it took a live `orchestrator/*.ts` from git instead, on the
+ * reasoning that no carve could strand it.
+ *
+ * Chapter two, and the reason that reasoning expired: M6 is emptying the legacy
+ * tree ON PURPOSE. The shared spawn-capture and flow-run-request fixtures left
+ * for `packages/kernel/tests/` and `packages/flows/tests/`, and with them the
+ * last non-test module under `orchestrator/` — so the derivation asserted its
+ * way to red on a tree that was doing exactly what the milestone asked.
+ *
+ * A rule about a PATH CLASS should not depend on that class having a surviving
+ * inhabitant. Both ends are planted now, the same way the package-to-assembly
+ * probe below already plants its victim: the edge is real, dependency-cruiser
+ * cruises it, and the test proves the rule rather than the tree's contents.
  */
-function aLegacyModule(): string {
-  const files = execFileSync('git', ['ls-files', 'orchestrator/*.ts'], { cwd: ROOT, encoding: 'utf8' })
-    .split('\n')
-    .filter((f) => f && !f.endsWith('.test.ts'));
-  assert.ok(files.length > 0, 'the legacy tree must still hold a non-test module for the probe to import');
-  return files[0];
-}
+const LEGACY_PROBE = 'orchestrator/__legacy_probe__.ts';
 
 test('it FAILS on a NEW studio → legacy import (the defect it exists for)', () => {
   const victim = join(ROOT, 'apps/studio/lib/__boundary_probe__.ts');
-  writeFileSync(victim, `import '../../../${aLegacyModule()}';\nexport const probe = 1;\n`);
+  const target = join(ROOT, LEGACY_PROBE);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, 'export const legacy = 1;\n');
+  writeFileSync(victim, `import '../../../${LEGACY_PROBE}';\nexport const probe = 1;\n`);
   try {
     const { code, out } = run();
     assert.equal(code, 1, `a new apps/studio -> orchestrator import must fail — got exit 0:\n${out}`);
@@ -220,6 +227,7 @@ test('it FAILS on a NEW studio → legacy import (the defect it exists for)', ()
     assert.match(out, /__boundary_probe__\.ts/);
   } finally {
     rmSync(victim, { force: true });
+    rmSync(target, { force: true });
   }
 });
 
