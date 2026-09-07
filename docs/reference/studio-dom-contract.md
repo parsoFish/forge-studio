@@ -56,15 +56,18 @@ story runner's `resolveExpectations` binds the best-covering candidate — so th
 root wins and the key answers with the WRONG session's id. Shadowing is silent:
 the beat reds on an unbound segment, never on a wrong value.
 
-**Publish, never navigate (rulings 396/406/409/422).** A press that mints a
+**Publish, never navigate (rulings 396/406/409/422/436).** A press that mints a
 session publishes `data-minted-session-id` on an always-present element of the
 page it is on (`""` before the mint, the id after) and renders a real anchor
 `data-action="open-minted-session"` (href = the session route); it never
 navigates by itself. The empty string matters: an observer collects nested
 `data-*` in one read, so an element that mounts only after the mint is a render
 race the reader sees as "no key" rather than "not yet" — empty string, never
-absent. This is the same invariant as above, stated as the
-contract-wide rule rather than per-kind: it now holds at four sites — the
+absent. The architect launcher's pre-existing
+`data-architect-session-id` / `view-architect-session` pair follows the same
+rule (ruling 436): a named legacy exception on the attribute NAME only — the
+stories bind those handles — never on the two properties above. This is the
+same invariant as above, stated as the contract-wide rule rather than per-kind: it now holds at four sites — the
 generic kickoff, the authoring launcher, the instructions kickoff, and the
 architect launcher.
 
