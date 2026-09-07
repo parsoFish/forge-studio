@@ -118,15 +118,31 @@ export function captureRedEvidence({ root, storyId, red }) {
  * S2 run 8's whole open question is the difference between those two, and no
  * amount of re-reading the JSON afterwards can supply the second half.
  *
+ * THE URL IS RECORDED BESIDE IT (bead `forge-8vfn.6.11.48`, T1 ruling 366),
+ * because some of what a beat asserts is not in the markup at all. S1 run 10
+ * beat 11 failed on one key — `data-plan-mode: expected "gate", got "view"` —
+ * and `plan-mode` is the artifact page's URL-RESOLVED mode. The DOM could
+ * never answer whether the story arrived at `?mode=view`; only the address
+ * can, and nothing was writing it down.
+ *
  * Never load-bearing: a page that has already gone (a crashed browser, a closed
- * context) must not turn a recorded red into a crash.
+ * context) must not turn a recorded red into a crash — and neither must a page
+ * that cannot say where it is, so the URL is read defensively and its absence
+ * costs the DOM nothing.
  */
 export async function captureBeatDom(page, root, storyId, index, act) {
   try {
     const dest = redEvidenceDir(root, storyId);
     mkdirSync(dest, { recursive: true });
     const html = await page.content();
-    writeFileSync(join(dest, `beat-${index + 1}-dom.html`), `<!-- red beat ${index + 1}: ${act} -->\n${html}`);
+    let where = '(url unavailable)';
+    try {
+      if (typeof page.url === 'function') where = String(page.url());
+    } catch { /* the URL is evidence, never a requirement */ }
+    writeFileSync(
+      join(dest, `beat-${index + 1}-dom.html`),
+      `<!-- red beat ${index + 1}: ${act} -->\n<!-- url: ${where} -->\n${html}`,
+    );
     return join(dest, `beat-${index + 1}-dom.html`);
   } catch {
     return null; // evidence is never load-bearing
