@@ -142,7 +142,35 @@ export function routeMatches(url, declared) {
     return false;
   }
   if (got.pathname !== want.pathname) return false;
-  return want.search === '' ? true : got.search === want.search;
+  if (want.search === '') return true;
+  // T1 ruling 534. The query is compared as PARSED PARAMETERS, never as a raw
+  // string. Two reasons, both measured rather than imagined:
+  //
+  //   ENCODING. The product builds its artifact links with
+  //   `encodeURIComponent(cycleId)` (`PhaseDrawer.tsx:749`), so a run id
+  //   carrying a character that percent-encodes arrives as `%3A` in the href
+  //   while a story author writes the readable id in the beat. A raw string
+  //   compare calls those two different destinations. They are the same one.
+  //
+  //   ORDER. `?a=1&b=2` and `?b=2&a=1` are the same request to every server and
+  //   to `URLSearchParams`; only a string compare thinks otherwise. A beat
+  //   should not have to guess the order a component happens to build its href
+  //   in, and a component reordering its own parameters is not a story defect.
+  //
+  // Still EXACT on content: same key set, same decoded value for every key. A
+  // declared query is a beat naming WHICH destination it means (ruling 514), so
+  // an extra parameter on either side is still a mismatch.
+  const wantKeys = [...want.searchParams.keys()].sort();
+  const gotKeys = [...got.searchParams.keys()].sort();
+  if (wantKeys.length !== gotKeys.length) return false;
+  if (wantKeys.some((k, i) => k !== gotKeys[i])) return false;
+  // `getAll`, not `get`: a repeated key (`?tag=a&tag=b`) carries every value,
+  // and comparing only the first would call two different queries equal.
+  return wantKeys.every((k) => {
+    const w = want.searchParams.getAll(k);
+    const g = got.searchParams.getAll(k);
+    return w.length === g.length && w.every((v, i) => v === g[i]);
+  });
 }
 
 /** How often `waitForConsequence` re-reads the page while it waits. */
