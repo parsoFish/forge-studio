@@ -156,6 +156,7 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/integrate.ts | factory | rewritten | 286 |
 | packages/factory/phases/derive-demo-model.ts | factory | rewritten | 194 |
 | packages/factory/phases/derive-pr-body.ts | factory | rewritten | 72 |
+| packages/factory/phases/review-budget.ts | factory | rewritten | 103 |
 | packages/factory/phases/capture-nonce.ts | factory | rewritten | 58 |
 | packages/factory/phases/pm-decomposition-doc.ts | factory | rewritten | 68 |
 | packages/factory/phases/review-chunks.ts | factory | rewritten | 120 |
