@@ -436,6 +436,17 @@ export default {
       // ACCEPTED rather than borrowing this beat's own expectation — §3.1's
       // recorded trap, bought by two funded S1 runs (ruling 320).
       act: 'Tell the assistant what the project is for, and let it start',
+      // AMENDED (amend-3, T1 ruling 562 — mechanical, 513's class). S9 run 2
+      // measured the defect and it was MINE, not the product's: this beat was
+      // added at the sitting with NO declared `wait`, so the repeat inherited
+      // the 15 000 ms default and reported `answered 0 round(s) and this
+      // beat's declared bound (15000 ms) ran out`. An onboarding session
+      // minted at `briefing` has to mount its question form before anything
+      // can be filled. Beat 8 was given `wait: { for: 'agent', upTo: 600_000 }`
+      // at that same sitting and this beat was not — I asked the bound
+      // question of the beat I was amending and never of the beat I was
+      // adding. Same wait, same reason: it stands on a real agent.
+      wait: { for: 'agent', upTo: 600_000 },
       do: [
         { repeat: [
             { fillAll: 'session-answer', with: 'A markdown table-of-contents tool; the gate is `npm test`.' },
@@ -494,6 +505,23 @@ export default {
           'ledger-cost-usd': '<authoringCostUsd>',
         },
       },
+      // UNCHANGED by amend-3, deliberately (T1 ruling 562's else-branch), but
+      // its failure MESSAGE misnames the defect and the next reader should not
+      // be misled by it. S9 run 2 reported `data-ledger-agent: expected
+      // "creation-agent", got "onboarding-agent"`, which reads as "the wrong
+      // agent ran". What actually happens: `/monitor` carried BOTH rows (beat
+      // 14 passed with `ledger-count` 2), and `resolveExpectations` SCORES
+      // records rather than selecting one — its together-rule returns a row
+      // only when that row answers EVERY shared key. The creation-agent row
+      // publishes no `data-ledger-cost-usd` (which is precisely what this beat
+      // exists to prove), so no row answers both keys and the best-match
+      // tie-break returns the onboarding row instead. The rows DO carry a name
+      // — `data-ledger-agent` per row — but a beat cannot SELECT on it, so
+      // "name the row you mean" is not expressible here today.
+      // Bead `forge-8vfn.6.11.51` is the standing citation; the tie-break is
+      // the mechanism, and it turns a missing-cost finding into a
+      // wrong-agent one — the same class as a failure that names the wrong
+      // cause anywhere else in this campaign.
       say: 'This is where S9 ends, on the one claim that makes the other eight stories affordable to run through an assistant at all: that the operator can see, per session, what they were charged for handing the work over. Until they can, "ask the assistant to do it" is a bill with no itemisation.',
     },
   ],
