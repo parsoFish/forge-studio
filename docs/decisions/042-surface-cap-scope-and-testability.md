@@ -6,7 +6,7 @@
 
 - **Status:** superseded by [ADR 046](./046-package-layout-and-boundary-lint.md) — the `orchestrator/` surface cap is replaced by per-package LOC caps, the 800-line file cap and one-owner-per-file; rulings 2 and 3 below survive unchanged as standing rules for every package, ruling 1 does not (accepted 2026-08-08, batch-C ratification, operator-ruled)
 - **Amends:** [CLAUDE.md](../../CLAUDE.md) "Ask first" — the bullet *"Anything that increases the surface area of `orchestrator/`"* is scoped by the three boundaries below.
-- **Relates to:** [ADR 041](./041-trigger-kind-registry.md) (R2-08 shipped several of the ratified items); the wave-5 batch-C ratification dossier (`_wave5/ratification-dossier.md`) and record (`_wave5/ratification-record.md`) — the item-by-item evidence and disposition.
+- **Relates to:** [ADR 041](./041-trigger-kind-registry.md) (R2-08 shipped several of the ratified items); the wave-5 batch-C ratification dossier of 2026-08-08 and its record of 2026-08-08 — the item-by-item evidence and disposition.
 
 ## Context
 
@@ -51,7 +51,7 @@ was ratified item-by-item in the record, not by this ADR.
 
 ## Consequences
 
-- The ratification dossier's 13 items are dispositioned in `_wave5/ratification-record.md`; this ADR
+- The ratification dossier's 13 items are dispositioned in the wave-5 ratification record of 2026-08-08; this ADR
   is the durable home for the three general rules that came out of it, so they are operator-owned
   and not re-derived per batch.
 - A T2 that hits one of these three shapes discloses it in the PR body and proceeds; it does not park
