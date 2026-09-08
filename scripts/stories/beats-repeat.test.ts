@@ -28,7 +28,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { performStepsForTest } from './beats-drive.mjs';
+import { performStepsForTest } from './beats-steps.mjs';
 
 /**
  * A fake page that models the real interview: `question-freetext` exists only
