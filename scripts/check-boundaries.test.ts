@@ -18,7 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -208,26 +208,55 @@ test('it inspects a real dependency graph, not an empty one', () => {
  * way to red on a tree that was doing exactly what the milestone asked.
  *
  * A rule about a PATH CLASS should not depend on that class having a surviving
- * inhabitant. Both ends are planted now, the same way the package-to-assembly
- * probe below already plants its victim: the edge is real, dependency-cruiser
- * cruises it, and the test proves the rule rather than the tree's contents.
+ * inhabitant. So chapter three plants nothing under the legacy tree at all, and
+ * splits the claim in two.
+ *
+ * CHAPTER THREE — T1 ruling 512. Planting the far end meant `mkdirSync`ing
+ * `orchestrator/` in the live checkout and removing only the FILE, so every run
+ * of this suite left an empty legacy directory behind: the tree the milestone
+ * deleted, back, untracked, after `npm test`. Worse, `check-owner.test.ts`
+ * planted in the same directory and removed it recursively, while
+ * `check-raw-fs-guarded.mjs`'s reachability walk walked
+ * `['cli','orchestrator','packages','apps']` from a third file. `node --test`
+ * runs files concurrently, so that removal landed between the walk's
+ * `existsSync` and its `readdirSync` and the suite went red with an ENOENT on a
+ * directory that existed a millisecond earlier. `scripts/probe-hygiene.test.ts`
+ * is the door that keeps all three honest.
+ *
+ * WHERE THE TWO HALVES OF THE CLAIM LIVE NOW.
+ *
+ *   - The LEGACY branch (`check-boundaries.mjs:104`, `STUDIO → LEGACY`) is
+ *     proven by the `classify()` unit tests above, which assert exactly
+ *     `classify('apps/studio/lib/x.ts', 'orchestrator/config.ts') ===
+ *     'studio-beyond-contracts'`. They need no tree at all, which is the
+ *     strongest possible form of "does not depend on a surviving inhabitant".
+ *   - THIS test proves the rule is WIRED — that a real edge in a real cruise
+ *     reaches it — through the sibling branch (`:105`, `STUDIO → any package
+ *     that is not contracts`), which returns the SAME `studio-beyond-contracts`
+ *     verdict and needs only a package that already exists. One file is planted,
+ *     in a directory that was already there, exactly as the package-to-assembly
+ *     probe below does it.
+ *
+ * A cruise-driven legacy edge would need a legacy FILE, and a legacy file needs
+ * a legacy DIRECTORY: there is no version of this test that cruises `:104` and
+ * leaves the tree alone. Between "cruise the branch that can be cruised without
+ * moving the tree, and unit-test the other" and "keep resurrecting a deleted
+ * directory under three concurrent scanners", the split is the honest trade —
+ * and it is stated here rather than left for the next reader to discover that
+ * `:104` has no end-to-end probe.
  */
-const LEGACY_PROBE = 'orchestrator/__legacy_probe__.ts';
+const NON_CONTRACTS_PACKAGE = 'packages/kernel/config.ts';
 
-test('it FAILS on a NEW studio → legacy import (the defect it exists for)', () => {
+test('it FAILS on a NEW studio → beyond-contracts import (the defect it exists for)', () => {
   const victim = join(ROOT, 'apps/studio/lib/__boundary_probe__.ts');
-  const target = join(ROOT, LEGACY_PROBE);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, 'export const legacy = 1;\n');
-  writeFileSync(victim, `import '../../../${LEGACY_PROBE}';\nexport const probe = 1;\n`);
+  writeFileSync(victim, `import '../../../${NON_CONTRACTS_PACKAGE}';\nexport const probe = 1;\n`);
   try {
     const { code, out } = run();
-    assert.equal(code, 1, `a new apps/studio -> orchestrator import must fail — got exit 0:\n${out}`);
+    assert.equal(code, 1, `a new apps/studio -> non-contracts package import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__boundary_probe__\.ts/);
   } finally {
     rmSync(victim, { force: true });
-    rmSync(target, { force: true });
   }
 });
 
