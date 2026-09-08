@@ -111,6 +111,19 @@
  *     be measured by run 3, not a fix asserted in advance.
  * No assertion was relaxed: two routes got MORE specific and a constant changed.
  *
+ * AMEND-5 (M6, T1 ruling 557; `_1.0/gate-manifests/M1-C-S6.amend-5.md`). ONE
+ * token, corrected FROM THE CHAIN rather than transcribed (the 503 class).
+ * Beat 6 asserted `session-phase: 'committing'` and run 3 measured
+ * `expected "committing", got "committed"` — the approve SUCCEEDED and the
+ * session reached its TERMINAL phase before the read. `committing` is a
+ * WORKING phase (`LEGACY_SESSION_WORKING_PHASES`), so the beat was asserting a
+ * state the product passes THROUGH: a race the story cannot win.
+ *
+ * Amend-4 is what made it visible. Until the seeding agent wrote themes the
+ * approve never succeeded, so the phase never advanced far enough for its
+ * transience to matter — the third time in this story that fixing one beat is
+ * what made the next one measurable.
+ *
  * AMEND-1 (M4, operator-authorised; `_1.0/gate-manifests/M1-C-S6.amend-1.md`).
  * `forge-8vfn.5.10` and `forge-8vfn.5.14` shipped the four handles this story
  * had been red against: `data-seed-session-id` on the seed banner, and
@@ -305,6 +318,22 @@ export default {
       // The bound is this beat's own, declared here (§3.1), not read from any
       // product constant: a seeding agent reading one repo, against S6's $25
       // ground budget.
+      //
+      // AMEND-5 (T1 ruling 557, the 503 class — a token corrected FROM THE
+      // CHAIN rather than transcribed). The assertion was `committing`, and run
+      // 3 measured `expected "committing", got "committed"`: the approve
+      // SUCCEEDED and the session went to its terminal phase before the read.
+      // `committing` is a WORKING phase — `LEGACY_SESSION_WORKING_PHASES` lists
+      // it beside `analyzing` — so the beat was asserting a state the product
+      // passes THROUGH, which is a race the story cannot win and should never
+      // have been asked to. `committed` is the kind's TERMINAL phase
+      // (`LEGACY_SESSION_TERMINAL_PHASES`), and it is what "approve them into
+      // the knowledge base" actually means.
+      //
+      // Same class as S5 beat 9's moving count, one layer along: a beat that
+      // asserts a transient state is asserting a race. What made it visible was
+      // amend-4 — until the agent wrote themes, the approve never succeeded, so
+      // the phase never advanced far enough for the transience to matter.
       act: 'Read the themes it drafted and approve them into the knowledge base',
       do: [{ press: 'approve-brain' }],
       wait: { for: 'agent', upTo: 300_000 },
@@ -313,7 +342,7 @@ export default {
         data: {
           page: 'session',
           'session-kind': 'project-brain',
-          'session-phase': 'committing',
+          'session-phase': 'committed',
         },
       },
       say: 'Nothing an agent drafts enters the brain without a human saying yes. This is the gate: the operator reads what it wrote, and only then does it become knowledge the next run will act on.',
