@@ -794,7 +794,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const r = renderDemoBundle(demoDir, projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
-      // bead forge-8vfn.17 — see apps/forge/demo-capture-fails-loud.test.ts.
+      // bead forge-8vfn.17 — see apps/forge/tests/regression/demo-capture-fails-loud.test.ts.
       console.error(`forge demo capture: FAILED — ${err instanceof Error ? err.message : String(err)}; demo.json is NOT stamped, so this run produced no evidence.`);
       process.exit(1);
     }

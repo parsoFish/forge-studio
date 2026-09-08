@@ -20,8 +20,8 @@
  * SHAPE for a structurally invalid request, which must be a 400.
  *
  * HARNESS: copied verbatim from the established containment-test pattern
- * (`apps/forge/bridge-studio-demo-builder-containment.test.ts`,
- * `apps/forge/sec04-projectbrain-demo-containment.test.ts`) — `startBridge` on an
+ * (`apps/forge/tests/regression/bridge-studio-demo-builder-containment.test.ts`,
+ * `apps/forge/tests/contract/sec04-projectbrain-demo-containment.test.ts`) — `startBridge` on an
  * ephemeral port against a temp `projectsRoot`, `fetch()` with the
  * mandatory `x-forge-csrf` header for every state-changing POST.
  */

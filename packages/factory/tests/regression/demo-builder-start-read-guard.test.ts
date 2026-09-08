@@ -12,12 +12,12 @@
  * response (200, `{ok:true,sessionId,mode}`), so there is no wire-observable
  * oracle for "did the read escape". A call-record spy is not available
  * either: this repo has empirically verified (see
- * apps/forge/instructions-start-read-guard.test.ts's own header, and the spawn note
- * in apps/forge/ui-bridge-authoring-start.test.ts) that node:test's `mock.method`
+ * apps/forge/tests/regression/instructions-start-read-guard.test.ts's own header, and the spawn note
+ * in apps/forge/tests/integration/ui-bridge-authoring-start.test.ts) that node:test's `mock.method`
  * cannot redefine ui-bridge's named ESM imports.
  *
  * This handler is a SUBTLER case than the instructions/start precedent it
- * mirrors (forge-osz, apps/forge/instructions-start-read-guard.test.ts). There, NO
+ * mirrors (forge-osz, apps/forge/tests/regression/instructions-start-read-guard.test.ts). There, NO
  * guard preceded the read at all. Here, a containment guard —
  * `resolveDemoSessionDir`, which itself calls `resolveGuardedPath(projectsRoot,
  * [project, '_demo', sessionId])` — DOES run earlier in this very block and
@@ -31,7 +31,7 @@
  * changed. The only honest, RED-at-base assertion is therefore structural:
  * the value the read is built from must literally BE the guard's own output,
  * and the raw fold must be gone — the same shape
- * apps/forge/instructions-start-read-guard.test.ts and
+ * apps/forge/tests/regression/instructions-start-read-guard.test.ts and
  * roadmap-serpentine-retired.test.ts use to pin the ABSENCE of a code shape.
  *
  * RED-AT-BASE: inside the `/api/demo-builder/start` block, `repoPath` is
@@ -145,7 +145,7 @@ test('demo-builder/start: body.project must be contained via resolveGuardedPath 
 
 // ===========================================================================
 // Part 2 — behaviour positive controls (must pass BEFORE and AFTER the fix).
-// Wire-level, mirroring apps/forge/bridge-studio-demo-builder-containment.test.ts's
+// Wire-level, mirroring apps/forge/tests/regression/bridge-studio-demo-builder-containment.test.ts's
 // harness (ephemeral port, temp projectsRoot, no SDK spawn).
 // ===========================================================================
 

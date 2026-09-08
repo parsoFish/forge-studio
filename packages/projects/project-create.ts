@@ -200,7 +200,7 @@ function stampAppType(projectDir: string, appType: string): void {
   // that as `scaffolded` + not-hard-green (the preflight's job), not as a
   // failed create. There is nothing to stamp in that case, and throwing here
   // would turn a clause the preflight is supposed to REPORT into a create
-  // that dies. Pinned by `apps/forge/cli-create.test.ts:140`.
+  // that dies. Pinned by `apps/forge/tests/unit/cli-create.test.ts:140`.
   if (!existsSync(configPath)) return;
   const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
   raw.appType = appType;

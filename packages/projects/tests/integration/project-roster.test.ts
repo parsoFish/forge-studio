@@ -8,10 +8,10 @@
  * the whole point of carving the dispatch out of `apps/forge/bridge-studio.ts`.
  *
  * Coverage carried from the bridge-level tests the routes moved out of:
- *   - `apps/forge/bridge-studio.test.ts`'s "GET /api/studio/projects returns
+ *   - `apps/forge/tests/integration/bridge-studio.test.ts`'s "GET /api/studio/projects returns
  *     projects array" / "tolerates project without project.json" /
  *     "sources instructions from AGENTS.md" family.
- *   - `apps/forge/id-rule.test.ts`'s "roster: GET /api/studio/projects lists
+ *   - `apps/forge/tests/contract/id-rule.test.ts`'s "roster: GET /api/studio/projects lists
  *     'trafficGame' verbatim and auto-binds the KB whose binding.ref names
  *     it" — reproduced here via the injected `projectKbBindings` dependency
  *     rather than a real `@forge/knowledge` KB descriptor, since this
@@ -20,7 +20,7 @@
  *     new surface this carve introduced, so it gets its own direct test
  *     (`createProjectsListHandler` deps below) rather than only an indirect
  *     one through `loadProjectsWithMeta`.
- *   - `apps/forge/bridge-studio-writes.test.ts`'s starters coverage, reproduced via
+ *   - `apps/forge/tests/regression/bridge-studio-writes.test.ts`'s starters coverage, reproduced via
  *     the injected `StudioStartersDeps` (dependency-injection note 2).
  */
 import { test } from 'node:test';

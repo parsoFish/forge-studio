@@ -36,7 +36,7 @@ Three labels, applied strictly:
 
 **Verification status is not uniform, and the difference matters.** Rows are marked:
 
-- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts`, `apps/forge/bridge-studio-sibling-containment.test.ts`, `apps/forge/bridge-studio-flow-trigger-oracle.test.ts`, `packages/knowledge/tests/integration/brain-paths-containment.test.ts`, and (from earlier initiatives) `apps/forge/bridge-studio-write.test.ts` / `apps/forge/bridge-studio-flows.test.ts`.
+- **`[exec]`** — an escape was **executed live** against the real HTTP route with byte-level filesystem assertions. Not reasoned about. These live in `packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts`, `apps/forge/tests/contract/bridge-studio-sibling-containment.test.ts`, `apps/forge/tests/regression/bridge-studio-flow-trigger-oracle.test.ts`, `packages/knowledge/tests/integration/brain-paths-containment.test.ts`, and (from earlier initiatives) `apps/forge/tests/integration/bridge-studio-write.test.ts` / `apps/forge/tests/integration/bridge-studio-flows.test.ts`.
 - **`[read]`** — classified by reading the code and its call chain. Structurally sound, but **no live repro was executed**. A `[read]` row is a lead, not a proven exploit.
 - **`[unver]`** — could not be definitively classified. **Never treated as safe.**
 

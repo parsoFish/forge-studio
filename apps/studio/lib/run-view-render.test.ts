@@ -29,7 +29,7 @@
  *   - ceiling provenance `kickoff_ceiling_usd` — the `end` event's
  *     `metadata.kickoff_ceiling_usd` (`orchestrator/run-agent.ts` ~line 387),
  *     already pinned to survive into `GET /api/agents/runs/:runId`'s new
- *     `lines` field by `apps/forge/ui-bridge-agent-run.test.ts`'s new tests.
+ *     `lines` field by `apps/forge/tests/integration/ui-bridge-agent-run.test.ts`'s new tests.
  *   - `RunLogLine[]` — `./run-log-line.ts` (this same WI, item 2).
  *
  * ASSUMED EXPORTS from `../components/studio/agent-builder/RunView.tsx`:

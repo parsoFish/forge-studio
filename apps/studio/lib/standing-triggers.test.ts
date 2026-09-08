@@ -5,7 +5,7 @@
  * creates it with the exact exports this file names.
  *
  * SOURCE OF TRUTH: `GET /api/triggers` (handler `apps/forge/bridge-studio.ts:552-
- * 577`, exercised at the wire by `apps/forge/bridge-studio-triggers.test.ts`)
+ * 577`, exercised at the wire by `apps/forge/tests/integration/bridge-studio-triggers.test.ts`)
  * returns `{ triggers: {on, target:{kind,ref}, projects: string[]|null,
  * sourceFlowId}[] }`. `target.kind` is `'flow' | 'agent'`
  * (`forge-ui/lib/studio-client.ts`'s `TriggerTarget`). Confirmed against

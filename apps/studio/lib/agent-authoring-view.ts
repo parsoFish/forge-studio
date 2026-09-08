@@ -29,7 +29,7 @@ import type { Agent, AgentCapabilityDescriptor, AgentRuntime } from './studio-cl
 // less siblings fine either way) — this is a VALUE import (unlike the
 // `import type` above, which is erased entirely and needs no runtime
 // resolution), and it must resolve under plain Node ESM too:
-// apps/forge/bridge-studio-write-tool-fence.test.ts imports THIS module directly
+// apps/forge/tests/regression/bridge-studio-write-tool-fence.test.ts imports THIS module directly
 // via `node --experimental-strip-types`, which does not do bundler-style
 // extension-less resolution.
 import { TOOL_FENCE_REQUIRED_NAMES } from './tool-fence-required-names.ts';

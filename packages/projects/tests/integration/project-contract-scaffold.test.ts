@@ -3,7 +3,7 @@
  * carved out of `apps/forge/bridge-studio-writes.ts` into
  * `project-contract-scaffold.ts` (M4-projects carve, worker B).
  *
- * CARRIED ACROSS from `apps/forge/bridge-studio-project-create-containment.test.ts`
+ * CARRIED ACROSS from `apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts`
  * (the "~13 ATs" this task's brief asks for): every acceptance test in that
  * file that exercises `checkContractArtifactContainment`/
  * `scaffoldContractArtifacts` THEMSELVES — Defect 5 (the per-write

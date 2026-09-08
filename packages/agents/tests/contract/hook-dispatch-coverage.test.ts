@@ -71,7 +71,14 @@ import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
 
 /** Roots scanned for spawn sites. `cli/` imports `isSafeRunId` from run-agent
  *  but never the pinned query as a value, so it holds no spawn site. */
-const SCAN_ROOTS = ['orchestrator', 'packages', 'apps/forge'];
+// `orchestrator/` left this list when M6-C emptied the tree (the exit row:
+// orchestrator, cli, loops and forge-ui hold zero tracked files). It is not
+// tolerated-if-missing on purpose — these scanners `readdirSync` each name and
+// a missing one THROWS, which is the loud failure
+// `packages/agents/tests/regression/anchor-depth.test.ts` exists to keep. A dead
+// name in this list is therefore a break, not a no-op, and the fix is to remove
+// the name rather than to soften the read.
+const SCAN_ROOTS = ['packages', 'apps/forge'];
 
 /**
  * Files that import the pinned SDK query as a VALUE yet legitimately do not
@@ -408,9 +415,9 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
 describe('the ratchet widens to adapter-registry spawn sites and ignores comment-only wiring (W8-C4)', () => {
   it('a file that spawns only through getAdapter(id).query(...), with no hook wiring, IS an offender (kills: spawnCapableFiles blind to the adapter-registry seam — an eighth site could add itself hook-blind through getAdapter)', () => {
     const root = tmp('w8c4-adapter-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'adapter-spawn-site.ts'),
+      join(root, 'apps', 'forge', 'adapter-spawn-site.ts'),
       [
         "import { getAdapter } from '../../../loops/_adapters/registry.ts';",
         '',
@@ -424,19 +431,19 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
     );
     assert.deepEqual(
       offendersIn(root),
-      ['orchestrator/adapter-spawn-site.ts'],
+      ['apps/forge/adapter-spawn-site.ts'],
       'a getAdapter(...).query(...) spawn site with no sdkHooksForAgent/SdkHooksOption anywhere must be flagged',
     );
   });
 
   it('the same adapter-registry spawn site, WITH sdkHooksForAgent actually placed in the options bag, is NOT an offender (the swap-the-fix twin of the previous pin)', () => {
     const root = tmp('w8c4-adapter-wired-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'adapter-spawn-site.ts'),
+      join(root, 'apps', 'forge', 'adapter-spawn-site.ts'),
       [
         "import { getAdapter } from '../../../loops/_adapters/registry.ts';",
-        "import { sdkHooksForAgent } from '../../../orchestrator/studio/hook-dispatch.ts';",
+        "import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';",
         '',
         'export async function spawnViaAdapter(p: string) {',
         "  const a = getAdapter('claude');",
@@ -452,9 +459,9 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
 
   it('a pinned-query spawn site whose ONLY mention of sdkHooksForAgent/SdkHooksOption is inside comments IS an offender (kills: WIRED matching raw comment text instead of wired code)', () => {
     const root = tmp('w8c4-comment-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'comment-only-wiring.ts'),
+      join(root, 'apps', 'forge', 'comment-only-wiring.ts'),
       [
         "import { pinnedSdkQuery } from '../../../pinned-sdk-query.ts';",
         '',
@@ -469,19 +476,19 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
     );
     assert.deepEqual(
       offendersIn(root),
-      ['orchestrator/comment-only-wiring.ts'],
+      ['apps/forge/comment-only-wiring.ts'],
       'a comment-only mention of the wiring symbols must not count as wired',
     );
   });
 
   it('the same file with the wiring symbol actually in code (not a comment) is NOT an offender', () => {
     const root = tmp('w8c4-real-wiring-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'real-wiring.ts'),
+      join(root, 'apps', 'forge', 'real-wiring.ts'),
       [
         "import { pinnedSdkQuery } from '../../../pinned-sdk-query.ts';",
-        "import { sdkHooksForAgent } from '../../../orchestrator/studio/hook-dispatch.ts';",
+        "import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';",
         '',
         'export function spawnDirect(p: string) {',
         "  const hooks = sdkHooksForAgent({ skill: 'x' } as never);",
@@ -496,9 +503,9 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
 
   it('a type-only import of the adapter registry types (plus a comment naming getAdapter) does NOT make a file spawn-capable (no over-fire)', () => {
     const root = tmp('w8c4-type-only-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'type-only.ts'),
+      join(root, 'apps', 'forge', 'type-only.ts'),
       [
         '/**',
         ' * Real callers reach the SDK via `getAdapter(id).createAgent(...)`; this',
@@ -521,9 +528,9 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
   });
   it('a file that imports a runtime ADAPTER OBJECT directly and calls .query(...) on it IS an offender (kills: an enumeration that only knows the pinned-query import and the literal getAdapter( text — claudeAdapter.query IS pinnedSdkQuery re-exported, so this is a THIRD spawn route, found by adversarial review)', () => {
     const root = tmp('w8f5-adapter-const-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'direct-adapter-site.ts'),
+      join(root, 'apps', 'forge', 'direct-adapter-site.ts'),
       [
         "import { claudeAdapter } from '../../../loops/_adapters/claude/index.ts';",
         '',
@@ -536,16 +543,16 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
     );
     assert.deepEqual(
       offendersIn(root),
-      ['orchestrator/direct-adapter-site.ts'],
+      ['apps/forge/direct-adapter-site.ts'],
       'importing the adapter VALUE bypasses both getAdapter( and the pinned-query import — it must still be enumerated',
     );
   });
 
   it('the same direct-adapter site, WITH the hooks bag wired, is NOT an offender (swap-the-fix twin)', () => {
     const root = tmp('w8f5-adapter-const-wired-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'direct-adapter-site.ts'),
+      join(root, 'apps', 'forge', 'direct-adapter-site.ts'),
       [
         "import { claudeAdapter } from '../../../loops/_adapters/claude/index.ts';",
         "import { sdkHooksForAgent } from '../../studio/hook-dispatch.ts';",
@@ -563,9 +570,9 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
 
   it('the adapter TYPE (PascalCase RuntimeAdapter) does not make a file spawn-capable — only a camelCase adapter VALUE does (no over-fire)', () => {
     const root = tmp('w8f5-adapter-type-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'type-only-adapter.ts'),
+      join(root, 'apps', 'forge', 'type-only-adapter.ts'),
       [
         "import type { RuntimeAdapter } from '../../../loops/_adapters/types.ts';",
         '',
@@ -581,9 +588,9 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
 
   it('a comment nested inside a template-literal ${} hole does NOT count as wiring (kills: a comment stripper that treats a template literal as opaque — the fail-open shape this ratchet exists to close, relocated into a substitution, found by adversarial review)', () => {
     const root = tmp('w8f5-tpl-hole-');
-    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    mkdirSync(join(root, 'apps', 'forge'), { recursive: true });
     writeFileSync(
-      join(root, 'orchestrator', 'tpl-hole-site.ts'),
+      join(root, 'apps', 'forge', 'tpl-hole-site.ts'),
       [
         "import { pinnedStreamQuery } from '../../pinned-sdk-query.ts';",
         '',
@@ -597,7 +604,7 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
     );
     assert.deepEqual(
       offendersIn(root),
-      ['orchestrator/tpl-hole-site.ts'],
+      ['apps/forge/tpl-hole-site.ts'],
       'a ${} hole is a CODE context — a comment inside it is still a comment, not wiring',
     );
   });

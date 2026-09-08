@@ -6,7 +6,7 @@
  * `stageMaterials` below is itself part of this file's RED proof (a genuine
  * "feature not implemented yet" red).
  *
- * WHY THIS FILE EXISTS: apps/forge/ui-bridge-agent-run-materials.test.ts (this WI's
+ * WHY THIS FILE EXISTS: apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts (this WI's
  * route-level acceptance tests) honestly disclosed that three containment
  * shapes — a pre-existing directory symlink at `<runDir>/materials`, a
  * pre-existing file symlink at `<runDir>/materials/notes.md`, and a

@@ -121,7 +121,7 @@ test('seedProjectBrain: Studio KB graph picks the project up via resolveKbBrainD
 });
 
 // The `forge:constraint` inertness oracle moved to
-// `apps/forge/project-brain-seed-constraint-parity.test.ts`: it needs the REAL
+// `apps/forge/tests/contract/project-brain-seed-constraint-parity.test.ts`: it needs the REAL
 // `@forge/projects` parser as well as this package's seeder, and rank-2
 // siblings may not import each other. `apps/forge/` is the one tree with no
 // rule, so the oracle keeps both real implementations instead of one of them

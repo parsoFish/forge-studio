@@ -53,7 +53,7 @@ import {
   // (a) whether the band field renders at all (gated on binding `kind`) and
   // (b) what options it populates (the bound flow's real `bands`, sourced
   // from the new GET /api/studio/flows `bands:` field this same WI adds —
-  // see apps/forge/bridge-studio-flows.test.ts's companion route pin). Colocated
+  // see apps/forge/tests/integration/bridge-studio-flows.test.ts's companion route pin). Colocated
   // here, not as a new lib file, matching this module's existing convention
   // of exporting small pure derivation helpers alongside the `Flow` type
   // they read (parseCapability/parseFanout/buildTriggerDeclaration/etc.).
@@ -1339,7 +1339,7 @@ const BANDED_FLOWS: Pick<Flow, 'id' | 'name' | 'bands'>[] = [
   // Mirrors the REAL shipped forge-develop flow's derived band vocabulary
   // (confirmed live via listFlowBandIds(repoRoot, 'forge-develop') ->
   // ['demo-band', 'review-band'], packages/flows/flow-band-vocab.ts) — same ground
-  // truth apps/forge/bridge-studio-flows.test.ts's companion route pin uses.
+  // truth apps/forge/tests/integration/bridge-studio-flows.test.ts's companion route pin uses.
   { id: 'forge-develop', name: 'Forge Develop', bands: ['demo-band', 'review-band'] },
   { id: 'forge-architect', name: 'Forge Architect', bands: [] },
 ];

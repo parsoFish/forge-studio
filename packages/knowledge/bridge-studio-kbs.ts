@@ -17,7 +17,7 @@
  * package and must keep the module path their consumers already use —
  * `loadKbDescriptors`, `KB_SEEDING_ANCHOR_PREFIX`, `computeAgentCleanupFindings`
  * (`apps/forge/ui-bridge.ts`, `packages/sessions/bridge-studio-sessions.ts`,
- * `apps/forge/id-rule.test.ts`, three bridge tests) and `approveKbCleanup`
+ * `apps/forge/tests/contract/id-rule.test.ts`, three bridge tests) and `approveKbCleanup`
  * (`cli/bridge-studio-affordances.ts`, `kb-drain-structural.test.ts`). No
  * barrel re-export was added for them: they did not move, so nothing needed
  * re-pointing, and a barrel here would have made this file import its own
@@ -570,7 +570,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
  *
  * Sited here (rather than beside the other list-building helpers above) so
  * this declaration is immediately followed by a top-level `export` — the
- * exact structural shape `apps/forge/studio-provenance.test.ts`'s AT-10 walks to
+ * exact structural shape `apps/forge/tests/regression/studio-provenance.test.ts`'s AT-10 walks to
  * prove `provenanceOfOrigin(` is called INSIDE this function and nowhere
  * else (a `function` declaration hoists, so this relocation changes nothing
  * about when or how it runs).

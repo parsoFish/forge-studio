@@ -47,7 +47,14 @@ const ROOT = FORGE_ROOT;
 
 /** Directories scanned for the pass-through invariant. */
 // `cli` dropped by the M4-flows host carve — see pinned-sdk-query.enforce.test.ts.
-const SCANNED_DIRS = ['orchestrator', 'packages', 'apps/forge'];
+// `orchestrator/` left this list when M6-C emptied the tree (the exit row:
+// orchestrator, cli, loops and forge-ui hold zero tracked files). It is not
+// tolerated-if-missing on purpose — these scanners `readdirSync` each name and
+// a missing one THROWS, which is the loud failure
+// `packages/agents/tests/regression/anchor-depth.test.ts` exists to keep. A dead
+// name in this list is therefore a break, not a no-op, and the fix is to remove
+// the name rather than to soften the read.
+const SCANNED_DIRS = ['packages', 'apps/forge'];
 
 const SOURCE_FILE_RE = /\.(ts|tsx|mts|cts)$/;
 const DECLARATION_FILE_RE = /\.d\.(ts|mts|cts)$/;

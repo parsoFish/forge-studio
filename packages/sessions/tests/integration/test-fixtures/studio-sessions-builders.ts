@@ -309,7 +309,7 @@ export function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, proj
 }
 
 /** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly on
- *  disk — mirrors `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
+ *  disk — mirrors `apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
  *  idiom verbatim (that file's own AT-3/AT-4/AT-5 prove this exact minimal
  *  shape is sufficient for `computeAgentCleanupFindings`'s live
  *  `runBrainLint` pass to complete without throwing — no INDEX.md or other

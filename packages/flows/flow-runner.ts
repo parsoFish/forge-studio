@@ -6,7 +6,7 @@
  * ([SPEC.md](../SPEC.md) §2 Station, `docs/roadmaps/1.0.md` §4 M2 Lane B). This
  * file imports no phase and no preflight; the executors, the injectable phase
  * set and the band registrations live in `packages/factory/phases/executor-table.ts`
- * and `executor-deps.ts`, and `apps/forge/flow-runner.port-conformance.test.ts`
+ * and `executor-deps.ts`, and `apps/forge/tests/contract/flow-runner.port-conformance.test.ts`
  * asserts that this source keeps neither import.
  *
  * What the runner still owns, because none of it is a station:

@@ -1074,7 +1074,7 @@ export async function startInstructions(input: {
 // deleted; every instructions affordance now POSTs through the generic
 // `postSessionAffordance` (`@/lib/session-client`) instead. The three bridge
 // routes themselves are unchanged server-side (still real, independently
-// tested bridge surface — apps/forge/ui-bridge-instructions.test.ts) — only their
+// tested bridge surface — apps/forge/tests/regression/ui-bridge-instructions.test.ts) — only their
 // forge-ui client wrappers had no remaining caller.
 
 // ---- Demo-builder (Stage B) ----------------------------------------------

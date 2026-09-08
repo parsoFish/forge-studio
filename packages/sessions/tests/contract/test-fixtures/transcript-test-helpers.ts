@@ -112,7 +112,7 @@ import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
  * `package-layer-order` row, since flows is rank 5 and this package rank 4 —
  * even though the artifact kinds exercised here (instructions, project-brain,
  * authoring, cleanup-plan, …) never parse a manifest. The six cases that DID
- * need the real functions moved to `apps/forge/roadmap-draft-integration.test.ts`,
+ * need the real functions moved to `apps/forge/tests/integration/roadmap-draft-integration.test.ts`,
  * where the assembly may import both.
  *
  * A throwing stub is strictly better than the real function here: it ASSERTS
@@ -122,7 +122,7 @@ import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
 export const parseManifest = (): InitiativeManifest => {
   throw new Error(
     'parseManifest must not be reached by this artifact kind — the roadmap-draft cases that ' +
-      'legitimately parse manifests live in apps/forge/roadmap-draft-integration.test.ts',
+      'legitimately parse manifests live in apps/forge/tests/integration/roadmap-draft-integration.test.ts',
   );
 };
 

@@ -793,7 +793,7 @@ type HttpContext = {
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
  *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
  *  else stays `text/plain`. Module-private and, by convention enforced in
- *  `apps/forge/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
+ *  `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
  *  this file), callable ONLY from `servedFileHeaders` below — every route
  *  that serves a file on the bridge origin must go through the hardened
  *  helper, never this alone. */
@@ -853,7 +853,7 @@ function sanitizeHeaderFilename(filename: string): string {
  *
  *  Deliberately STRUCTURAL, not per-site: this is the only function in the
  *  file allowed to call `contentTypeFor` (enforced by the source-level
- *  ratchet in `apps/forge/ui-bridge-served-file-headers.test.ts`), so a content-type
+ *  ratchet in `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts`), so a content-type
  *  can never be obtained here without the hardening headers riding along —
  *  the eighth route someone adds next year gets this for free by using the
  *  helper, and the ratchet fails loudly if they reach for `contentTypeFor`
@@ -1012,7 +1012,7 @@ async function handleHttp(
     // or one whose turn never ran) is 200 `{events: []}` — never a console
     // 404 on the operator's first screen. A guard-REJECTED path (traversal,
     // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
-    // (apps/forge/sec04-cycleid-containment.test.ts) hold.
+    // (apps/forge/tests/contract/sec04-cycleid-containment.test.ts) hold.
     const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
     if (eventsGuard.ok && !eventsGuard.exists) {
       sendJson(res, 200, { cycleId, events: [] }, origin);
@@ -1177,7 +1177,7 @@ async function handleHttp(
     // `guardedReadFile` below. Legitimate names with spaces, parentheses,
     // em-dashes and a leading `..` pass; separators, `.`/`..` segments, empty
     // segments, control characters, NUL, DEL and encoded separators do not.
-    // Pinned both ways in apps/forge/sec04-cycleid-containment.test.ts (a real
+    // Pinned both ways in apps/forge/tests/contract/sec04-cycleid-containment.test.ts (a real
     // `.capture` name serves 200; every escape shape still refused) and per
     // predicate in cli/studio-path-guard.test.ts.
     if (!isSafeSubPath(filename)) {

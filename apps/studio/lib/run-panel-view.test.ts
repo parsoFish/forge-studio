@@ -14,7 +14,7 @@
  * the implementer creates it with the exact exports this file names.
  *
  * ASSUMED EXPORTS from `./run-panel-view.ts` (mirrors the precedent set by
- * apps/forge/ui-bridge-agent-run-ceiling.test.ts's header, which pins
+ * apps/forge/tests/integration/ui-bridge-agent-run-ceiling.test.ts's header, which pins
  * `buildAgentDispatchArgs`/`parseAgentDispatchArgs` the same way):
  *
  *   export function validateMaterialsClientSide(

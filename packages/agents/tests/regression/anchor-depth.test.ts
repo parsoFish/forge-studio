@@ -57,7 +57,14 @@ export const OLD_FORM = join(dirname(fileURLToPath(import.meta.url)), '..', '..'
  * `['packages','cli','orchestrator','apps']` and would have "proved" something
  * about a list neither lock uses (§15.93 — a fixture pointing at nothing).
  */
-const LOCK_SCANNED_DIRS = ['orchestrator', 'packages', 'apps/forge'] as const;
+// `orchestrator/` left this list when M6-C emptied the tree (the exit row:
+// orchestrator, cli, loops and forge-ui hold zero tracked files). It is not
+// tolerated-if-missing on purpose — these scanners `readdirSync` each name and
+// a missing one THROWS, which is the loud failure
+// `packages/agents/tests/regression/anchor-depth.test.ts` exists to keep. A dead
+// name in this list is therefore a break, not a no-op, and the fix is to remove
+// the name rather than to soften the read.
+const LOCK_SCANNED_DIRS = ['packages', 'apps/forge'] as const;
 
 /** Where `join(dirname, '..', '..')` lands for a file at `<pkg>/tests/<bucket>/`. */
 const POST_MOVE_WRONG_ROOT = join(FORGE_ROOT, 'packages', 'agents');

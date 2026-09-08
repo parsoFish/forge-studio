@@ -19,7 +19,7 @@
  * A plain, framework-free TS module under apps/studio/lib/ (no JSX, no
  * 'use client', no Next-only API) IS importable directly by a `node
  * --experimental-strip-types --test` file under cli/ — see
- * apps/forge/id-rule.test.ts's and packages/sessions/tests/contract/authoring-package-shape-parity.test.ts's own
+ * apps/forge/tests/contract/id-rule.test.ts's and packages/sessions/tests/contract/authoring-package-shape-parity.test.ts's own
  * precedent. This test imports the REAL lint-side array
  * (packages/library/studio-lint-tool-fence.ts's exported `TOOL_FENCE_REQUIRED_NAMES`)
  * alongside the REAL client-side array

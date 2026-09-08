@@ -50,7 +50,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel
  * containment reference at all and unconditionally wrote wherever it was
  * pointed, so the guard depended entirely on the route that started the run
  * having validated the dir first; "one sink, many entry points" — see
- * `apps/forge/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
+ * `apps/forge/tests/integration/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
  * `status.json` turns out to be a symlink escaping that resolved directory
  * the write is refused (never followed).
  *

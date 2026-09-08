@@ -407,7 +407,7 @@ test('P1 (positive control): a declared writes: dir that DOES contain a file sti
 // module) composes the turn prompt from SKILL.md + the phase row + a JSON
 // dump of status.json — it never reads prompt.md. The intended production
 // fix is that `writeAuthoringSession` (apps/forge/ui-bridge.ts, pinned separately
-// in apps/forge/ui-bridge-authoring-start.test.ts) also persists the prompt into
+// in apps/forge/tests/integration/ui-bridge-authoring-start.test.ts) also persists the prompt into
 // status.json. This is the OTHER half of that pin: WITH a status carrying a
 // `prompt` field, proves the actual prompt string handed to queryFn contains
 // the operator's text — the end-to-end proof the words actually reach the

@@ -6,7 +6,7 @@
  * `renderSegment`/`renderNarrative`/`sortLedgerRowsNewestFirst`/`formatWhen`
  * unchanged (D2).
  *
- * ARCHITECTURE: the SERVER route (`apps/forge/ui-bridge-agent-history.test.ts`,
+ * ARCHITECTURE: the SERVER route (`apps/forge/tests/integration/ui-bridge-agent-history.test.ts`,
  * Task 1, `GET /api/agents/:slug/history`) already reduces status/cost to
  * the TARGET's own per-row fact (D3) before the wire and sends
  * already-shaped `LedgerRow[]` — this module's `resolveAgentHistoryFromResponse`
