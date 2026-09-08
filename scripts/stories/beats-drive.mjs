@@ -20,14 +20,24 @@
  * import lines it would have saved.
  */
 import {
-  PLACEHOLDER, answers, resolveExpectations, readObserved,
+  PLACEHOLDER, answers, resolveExpectations, readObserved, routeMatches,
   waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
+
+// `routeMatches` LIVES in `beats-page.mjs` and is re-exported here (T1 ruling
+// 518). It moved because `stopReasonFor` must decide whether a beat is standing
+// on the session it is scoped to, and that is the same question — a string
+// equality there while every compare here went through the predicate is exactly
+// the split 514 existed to close, one function further down. `beats-drive`
+// imports `beats-page`, never the reverse, so the leaf holds it and the caller
+// re-exports for the modules and tests that already name it here.
+export { routeMatches };
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
 import {
   READY_TIMEOUT_MS, beatBound, withAgentProc, beatVerdict, stuckVerdict, resolveBeatRoute,
 } from './beats.mjs';
+
 
 export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
@@ -171,9 +181,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const mints = Object.values(beat.expect.data).some((want) => PLACEHOLDER.test(want));
   if (steps.length > 0 || bound.label !== null || mints) {
     const waitedFrom = Date.now();
-    if (steps.length > 0 && new URL(page.url()).pathname !== target) {
+    if (steps.length > 0 && !routeMatches(page.url(), target)) {
       await page
-        .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
+        .waitForURL((u) => routeMatches(u, target), { timeout: bound.ms })
         .catch(() => {
           /* the press did not navigate here — the nav resolution below reports it honestly */
         });
@@ -189,7 +199,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // field `6.11.10` added to stop a wrong bound. The route change is now just
     // the first part of the wait; the rest of the bound goes where it was
     // declared to go, on the state the beat is actually waiting for.
-    if (new URL(page.url()).pathname === target) {
+    if (routeMatches(page.url(), target)) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
         stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe);
@@ -202,7 +212,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // press navigated. There is nothing to navigate TO. Real-nav-only is about
   // reaching a DIFFERENT route; a form-driven flow dwells on one route across
   // several operator actions, and the shipped runner called that unreachable.
-  if (new URL(page.url()).pathname !== target) {
+  if (!routeMatches(page.url(), target)) {
     // QUERY-BLIND BY PATHNAME (bead `forge-8vfn.7.5.3`, T1 ruling 451).
     //
     // The runner READ a URL query-blind — `readObserved` compares
@@ -230,7 +240,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
             .filter((h) => {
               if (h === null || h === '') return false;
               try {
-                return new URL(h, 'http://forge.invalid').pathname === want;
+                const u = new URL(h, 'http://forge.invalid');
+                const w = new URL(want, 'http://forge.invalid');
+                if (u.pathname !== w.pathname) return false;
+                return w.search === '' ? true : u.search === w.search;
               } catch {
                 return false;
               }
@@ -288,7 +301,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     let clickError = null;
     await Promise.all([
       page
-        .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
+        .waitForURL((u) => routeMatches(u, target), { timeout: READY_TIMEOUT_MS })
         .catch(() => {
           /* did not navigate — the verdict below reports that honestly */
         }),
