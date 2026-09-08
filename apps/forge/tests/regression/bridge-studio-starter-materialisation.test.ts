@@ -1,8 +1,18 @@
 /**
- * agents-44 — a starter agent materialised by a flow save must be DISPATCHABLE.
+ * agents-44 — a materialised starter agent must be DISPATCHABLE.
  *
- * The flow PUT materialises any starter agent a saved canvas names (plan / dev
- * / review) straight into skills/. Before this test that copy was verbatim, so
+ * WHAT MOVED (operator ruling 384, shape settled by T1 ruling 459). The flow
+ * PUT used to materialise any starter a saved canvas named, so an operator
+ * gained three agents by pressing Save. Starters are now explicit opt-in:
+ * `POST /api/studio/starters/seed` materialises them and a save writes
+ * nothing, so a save that references unseeded starters is refused naming
+ * them. This file's CLAIMS are unchanged — a materialised starter derives a
+ * spec, and its package is preserved verbatim apart from the stamped fields —
+ * and they are still worth pinning; only the act that triggers the copy
+ * moved, and the first test now pins the refusal that replaced it.
+ *
+ * The copy lands starters (plan / dev / review) in skills/. Before this test
+ * that copy was verbatim, so
  * the live agent landed WITHOUT a `phase:` field — and `deriveAgentSpec`, which
  * runAgent() calls synchronously as its Step 1 before any spawn, hard-requires
  * one. The operator's Run control read fully ready and every dispatch of
@@ -59,6 +69,22 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
+/**
+ * Ask for the starter roster. Ruling 384 moved materialisation OFF the flow
+ * save and onto this action: a save writes no roster agents, and starters
+ * land in skills/ because the operator asked. What this file pins — that a
+ * materialised starter derives a spec, and that its package is preserved
+ * verbatim apart from the stamped fields — is unchanged and still worth
+ * pinning; only the act that triggers it moved.
+ */
+async function seedStarters(): Promise<Response> {
+  return fetch(`${bridgeUrl}/api/studio/starters/seed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({}),
+  });
+}
+
 /** Save Studio's own shipped basic plan→dev→review starter canvas. */
 async function saveStarterFlow(): Promise<Response> {
   return fetch(`${bridgeUrl}/api/studio/flows/basic-copy`, {
@@ -81,15 +107,35 @@ async function saveStarterFlow(): Promise<Response> {
   });
 }
 
-test('a flow save materialises the starter agents into skills/', async () => {
+test('384: a flow save materialises NOTHING, and is refused naming the starters it cannot resolve', async () => {
   const res = await saveStarterFlow();
-  assert.equal(res.status, 200, `flow save failed: ${await res.text()}`);
+  for (const slug of STARTER_SLUGS) {
+    assert.ok(
+      !existsSync(join(forgeRoot, 'skills', slug, 'SKILL.md')),
+      `a save must not materialise skills/${slug} — starters are explicit opt-in (ruling 384)`,
+    );
+  }
+  assert.notEqual(res.status, 200, 'a flow whose stations point at agents that do not exist is not a flow yet');
+  const body = await res.text();
+  for (const slug of STARTER_SLUGS) {
+    assert.ok(body.includes(slug), `the refusal must NAME what is missing so the operator can act — "${slug}" absent from: ${body}`);
+  }
+});
+
+test('384: the seed action materialises the starter agents into skills/', async () => {
+  const res = await seedStarters();
+  assert.equal(res.status, 200, `seed failed: ${await res.text()}`);
   for (const slug of STARTER_SLUGS) {
     assert.ok(
       existsSync(join(forgeRoot, 'skills', slug, 'SKILL.md')),
-      `expected the flow save to materialise skills/${slug}/SKILL.md`,
+      `expected the seed action to materialise skills/${slug}/SKILL.md`,
     );
   }
+});
+
+test('384: and the same save now succeeds — seed-then-save is a real path', async () => {
+  const res = await saveStarterFlow();
+  assert.equal(res.status, 200, `flow save failed after seeding: ${await res.text()}`);
 });
 
 test('every materialised starter agent derives a spec — runAgent() Step 1 (agents-44)', () => {
