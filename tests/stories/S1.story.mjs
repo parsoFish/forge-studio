@@ -19,8 +19,13 @@
  * of a bridge booted from a lane worktree — none is invented. Some of them sit
  * on nested elements (the project card, the onboard section) rather than on
  * `main[data-page]`; since M1-F the runner judges the page root **and its
- * descendants**, which is what `docs/forge-ui-dom-and-harness.md` has always
- * said the contract is.
+ * descendants**, which is what the DOM contract has always said it is.
+ * REPOINTED (bead `forge-8vfn.7.4.1`, ruling 444): that doc is now
+ * `docs/reference/studio-dom-contract.md` — `docs/forge-ui-dom-and-harness.md`
+ * no longer exists. The claim survives the move verbatim in substance
+ * (`studio-dom-contract.md:4328`: `resolveExpectations` "reads the page root
+ * FIRST and only searches descendants for the keys the root does not answer"),
+ * so unlike S9's beat-8 citation this one is repointed rather than retired.
  *
  * AMENDED 2026-08-30 (M1-C-S1b, bead `forge-8vfn.2.18`) — EXPRESSION ONLY.
  * The ten beats are the ones the operator approved on 2026-08-29; not one
@@ -72,6 +77,14 @@ const GATE = 'python -m pytest tests/';
 /** GitWeave's own README, first line — the north star is the project's, not the story's. */
 const NORTH_STAR =
   'A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling.';
+
+/** The one instruction the story used to have to drop. Beat 6's re-authoring
+ *  recorded it leaving — "no surface on the onboarding path asks for it" — and
+ *  named bead `forge-8vfn.7.2.5` as the reason. Ruling 441 closed that bead
+ *  (#557), so `[data-field="constraints"]` now exists on the brief form and
+ *  travels with the north star and the gate through the generic question-form
+ *  affordance. The story supplies it again without inventing a field. */
+const UNTOUCHABLE_PATHS = 'Never touch infra/ state or config/orgs/*.yaml.';
 
 /** The first piece of work the operator asks the Architect to plan. */
 const IDEA =
@@ -177,10 +190,31 @@ export default {
       // surface, has always opened the panel first; only a story-authoring
       // session may bring S1 into line with it, and this is that session.
       act: 'Open "Brief the agent", give it the north star and the gate command, and press "Run onboarding agent"',
+      //
+      // AMENDED (M6-A s3 sitting, operator ruling 490 — 381's delivery switched
+      // to A1, so S1 itself exercises the onboarding interview). Ruling 441
+      // (#557) made this ONE press start the session at `briefing`, write
+      // `questions.json`, and post the brief through the SAME generic
+      // `awaits: questions` affordance every other kind publishes; the dispatch
+      // happens inside the press, so `onboard-run-status` still reads `running`
+      // and this beat's shape is unchanged. `POST /api/studio/onboarding/start`
+      // no longer dispatches at all — the bespoke form became a CLIENT of the
+      // affordance, which is ADR 043's own direction.
+      //
+      // TWO ADDITIONS, and each is a claim the product could previously not
+      // have kept. `constraints` is the instruction beat 6's re-authoring had
+      // to abandon (see its comment, corrected there). `onboard-run-id` is the
+      // one field whose MEANING 441 changed: `agent-run.dispatched` moved WITH
+      // the dispatch, so the id is published from the moment the run actually
+      // begins and a refused brief publishes NONE — before, the status the
+      // operator watches could read `running` for an agent that never started,
+      // which is the declared-data-fails-open shape on the one surface they
+      // have.
       do: [
         { press: 'toggle-onboard-brief' },
         { fill: 'northStar', with: NORTH_STAR },
         { fill: 'gateCommand', with: GATE },
+        { fill: 'constraints', with: UNTOUCHABLE_PATHS },
         { press: 'run-onboarding-agent' },
       ],
       expect: {
@@ -188,11 +222,12 @@ export default {
         data: {
           section: 'onboard-with-agent',
           'onboard-run-status': 'running',
+          'onboard-run-id': '<onboardRunId>',
           'onboard-session-id': '<sessionId>',
           'onboard-attaching': 'false',
         },
       },
-      say: 'The operator does not fill the contract in by hand. An Agent does it, briefed with the two things only the operator knows: what the project is for, and the command that tells the truth about whether it works.',
+      say: 'The operator does not fill the contract in by hand. An Agent does it, briefed with the three things only the operator knows: what the project is for, the command that tells the truth about whether it works, and what it must not touch. One press asks and answers — the brief travels through the same question form every other session kind publishes, and the run id appears only once an agent is really running.',
     },
     {
       // Fully expressible. The press navigates to
@@ -220,7 +255,19 @@ export default {
       // 285). This beat used to ANSWER the Agent's questions —
       // `[data-field="session-answer"]` + `[data-action="submit-answers"]` —
       // and it could never pass, on any product, for a reason no bound could
-      // fix: THE ONBOARDING KIND NEVER ASKS ANYTHING.
+      // fix: THE ONBOARDING KIND NEVER ASKED ANYTHING.
+      //
+      // CORRECTED (M6-A s3 sitting). That was true when it was written and is
+      // FALSE on main today: ruling 441 (#557) gave onboarding a real
+      // interview, and `studio/session-kinds.yaml` now declares
+      // `{ phase: briefing, step: noop, awaits: questions }` as its one
+      // writable row. The finding below is kept because the LESSON is still
+      // right — a ten-minute bound was chasing a handle that did not exist, and
+      // no bound can fix an absent affordance — but the present tense had to
+      // go, and this file is pinned, so a false statement left standing here is
+      // one a later author would reason from. Where the interview is exercised
+      // now: beat 4, on the project page, through the generic question form
+      // (ruling 490's A1). S9 exercises the BARE spine interview separately.
       //
       // A `question-form` affordance is built in exactly one place
       // (`packages/sessions/studio/session-kinds-affordances.ts`) and only for
@@ -242,13 +289,18 @@ export default {
       // knowledge still enters the story at beat 4, where the product actually
       // asks for it (`northStar` + `gateCommand` on the brief form).
       //
-      // One thing the old beat carried DOES leave the story and is not
-      // replaced: the untouchable-paths instruction ("never touch infra/ state
-      // or config/orgs/*.yaml"). No surface on the onboarding path asks for
-      // it, so the story cannot supply it without inventing a field. That is
-      // the same product question as the interview — bead
-      // `forge-8vfn.7.2.5` (M6) — and it is named here rather than papered
-      // over.
+      // One thing the old beat carried left the story and, at the time, was
+      // not replaced: the untouchable-paths instruction ("never touch infra/
+      // state or config/orgs/*.yaml"). No surface on the onboarding path asked
+      // for it, so the story could not supply it without inventing a field —
+      // named here as the same product question as the interview, bead
+      // `forge-8vfn.7.2.5` (M6), rather than papered over.
+      //
+      // IT IS BACK (M6-A s3 sitting). That bead is closed: the brief form
+      // carries `[data-field="constraints"]` and folds it into the brief the
+      // affordance posts, so beat 4 supplies the instruction with no invented
+      // field. Naming the gap rather than papering over it is what let it be
+      // closed and then noticed — which is the argument for naming gaps.
       //
       // Still NOT expressible, and still not invented: walking to a NAMED
       // stage. `StageSelector.tsx` renders one `[data-action="select-stage"]`
