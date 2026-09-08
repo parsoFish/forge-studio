@@ -240,6 +240,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/review-comments/:cycleId/delete', classification: 'exempt-local', reason: 'removes one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
+  { method: 'POST', route: '/api/studio/starters/seed', classification: 'exempt-local', reason: 'copies starter agent packages already committed in this repo (studio/starters/agents/) into skills/ — local filesystem only, no network, no spawn; the closed slug set is server-controlled and an existing skills/<slug> is never overwritten (ruling 384)' },
   // W7-B4 — library authoring write surface: every route below edits or
   // removes an already-materialised LOCAL file package (skills/<id>/,
   // studio/hooks/<id>/, studio/artifact-templates|demo-elements, flow dirs)
