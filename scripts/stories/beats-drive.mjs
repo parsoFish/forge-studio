@@ -231,26 +231,19 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // The href is resolved against a base so a relative one normalises the same
     // way the browser resolves it; an href that will not parse is skipped rather
     // than guessed at.
-    const hrefs = await page
+    //
+    // THE FILTER RUNS HERE, NOT IN THE PAGE — T1 ruling 527. It used to be a
+    // hand-inlined copy of `routeMatches` inside the `evaluateAll` callback,
+    // because that callback is serialised and executed IN THE BROWSER and
+    // cannot close over a Node-side function. Two copies of a predicate whose
+    // whole purpose is that there is only one of it: the browser callback now
+    // just READS the hrefs, and the one predicate judges them on this side. An
+    // href that will not parse is skipped by `routeMatches` itself rather than
+    // guessed at.
+    const all = await page
       .locator('[data-nav][href], a[href]')
-      .evaluateAll(
-        (els, want) =>
-          els
-            .map((e) => e.getAttribute('href'))
-            .filter((h) => {
-              if (h === null || h === '') return false;
-              try {
-                const u = new URL(h, 'http://forge.invalid');
-                const w = new URL(want, 'http://forge.invalid');
-                if (u.pathname !== w.pathname) return false;
-                return w.search === '' ? true : u.search === w.search;
-              } catch {
-                return false;
-              }
-            }),
-        target,
-      );
-    const distinct = [...new Set(hrefs)];
+      .evaluateAll((els) => els.map((e) => e.getAttribute('href')).filter((h) => h !== null && h !== ''));
+    const distinct = [...new Set(all.filter((h) => routeMatches(h, target)))];
 
     if (distinct.length > 1) {
       // NAMED, never picked. Two links whose pathnames match and whose queries
