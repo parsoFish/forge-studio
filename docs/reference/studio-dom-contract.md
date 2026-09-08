@@ -3423,7 +3423,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   `back-to-project` button are GONE — the artifact pane's brain-structure
   renderer (shared `FilePackage` tabs) is the ONE theme viewer, and the
   session shell's generic back link is the one back link**),
-  `[data-component="brain-brief-input"]`, and
+  `[data-component="brain-brief-input"]` — which **also carries
+  `[data-field="brain-brief"]`** (M6, S6 amend-3): the `data-component` names
+  the box, the `data-field` is what makes it typeable by a story or a journey,
+  and the brief the operator writes here is what steers which findings the
+  seeding agent keeps — and
   `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"return-to-project"]`
   (W6-SW-3 sweep C6#1: renamed from `bind-and-return` — the click only ever
   navigates back to the project; the per-project brain is bound at

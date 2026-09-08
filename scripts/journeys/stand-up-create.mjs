@@ -783,7 +783,7 @@ export const journey = defineJourney({
                     // The real button: a genuine bridge session at 'briefing' — brief it
                     // for real too (the flip to 'analyzing' is real; the spawn is not).
                     await p.waitForSelector('[data-section="brain-briefing"]', { timeout: 10000 }).catch(() => {});
-                    await p.locator('[data-component="brain-brief-input"]').fill('emphasise conventions + module layout').catch(() => {});
+                    await p.locator('[data-field="brain-brief"]').fill('emphasise conventions + module layout').catch(() => {});
                     await p.locator('[data-action="start-brain-analysis"]').click().catch(() => {});
                   }
                 }
