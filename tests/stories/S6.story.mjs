@@ -94,6 +94,23 @@
  * beats gained acts that cause what they assert, one gained a declared bound,
  * and one unreachable value was replaced with the one the product writes.
  *
+ * AMEND-4 (M6, T1 rulings 514/521/526's siblings — 11a and beat 7 are the
+ * mechanical class 483/504 already ruled, the brief is 521;
+ * `_1.0/gate-manifests/M1-C-S6.amend-4.md`). THREE changes, all of them things
+ * RUN 2 MEASURED rather than anything anyone reasoned about:
+ *   - 11a's route was `/projects/mdtoc` and the operator stands on
+ *     `/architect/new`. My own error in amend-3: I copied the route from the
+ *     sitting draft instead of re-deriving it from the component that publishes
+ *     the id. The runner refused it in those words.
+ *   - Beat 7 now NAMES its query. The seeding-session page carries two links
+ *     whose pathname is `/knowledge`, differing only by `?id=story-s6`, and the
+ *     runner will not guess between them. Invisible until beats 5 and 6 started
+ *     carrying the operator to that page.
+ *   - `SEED_BRIEF` is rewritten because the agent made thirty read-family tool
+ *     calls and zero writes. See the constant's own note; it is a prediction to
+ *     be measured by run 3, not a fix asserted in advance.
+ * No assertion was relaxed: two routes got MORE specific and a constant changed.
+ *
  * AMEND-1 (M4, operator-authorised; `_1.0/gate-manifests/M1-C-S6.amend-1.md`).
  * `forge-8vfn.5.10` and `forge-8vfn.5.14` shipped the four handles this story
  * had been red against: `data-seed-session-id` on the seed banner, and
@@ -123,9 +140,27 @@ const DESCRIPTION =
  * What the operator types into the seeding session's brief box before starting
  * the analysis. The product calls this field optional; the story fills it
  * because S6's whole subject is that the operator STEERS what the agent keeps.
+ *
+ * AMEND-4 REWRITE, and the reason is measured rather than stylistic. Run 2's
+ * seeding agent made THIRTY tool calls in 95 seconds and every one was
+ * read-family — one `TodoWrite`, then `Glob`/`Grep`/`Read` throughout, ending
+ * mid-exploration. There is not a single `Write` in the session. The runner
+ * then threw `the agent turn produced no theme files`, which the page reported
+ * honestly as a crash (bead `forge-8vfn.7.6.4`, closed premise-corrected).
+ *
+ * So the agent never reached the writing stage; it was still surveying when the
+ * turn ended. The first brief asked for a QUALITY ("keep what review found")
+ * and set no stopping point, which on a corpus of archived cycles is an
+ * invitation to read all of them. This one asks for a COUNT, names where to
+ * start, and says explicitly when to stop reading — the one lever the operator
+ * actually holds over an agent that is about to run out of turn.
+ *
+ * It is a PREDICTION under T1 ruling 521, to be measured by S6 run 3, not a
+ * fix asserted in advance: if beat 6 still reds with no theme files, the brief
+ * was not the binding constraint and the turn budget is.
  */
 const SEED_BRIEF =
-  'Keep what review found about this codebase\u2019s own conventions \u2014 the rules a reviewer would otherwise rediscover \u2014 and leave out anything specific to one cycle.';
+  'Write three theme pages, no more. Start from `brain/cycles/patterns.md` and `brain/cycles/antipatterns.md`; read at most a handful of the archived cycles under `brain/cycles/_raw/`, and stop reading as soon as you can write the first page. Each page states one rule a reviewer of THIS codebase would otherwise rediscover, and leaves out anything specific to a single cycle. Write the pages before you explore any further \u2014 an unwritten page helps nobody.';
 
 /**
  * The binding. `forge-develop` and `review-band` are both read off the live
@@ -298,9 +333,19 @@ export default {
       // beat 12 reports honestly and this beat was calling success. Pinning
       // `kb-id` ties the right-rail to the KB beat 3 created, so the beat now
       // stays red until a theme lands in THIS one.
+      // AMEND-4: the route NAMES its query. Run 2 refused honestly — `ambiguous
+      // real-nav path to "/knowledge" from "/sessions/project-brain/<sid>": 2
+      // links share that pathname and differ only in their query — /knowledge ,
+      // /knowledge?id=story-s6`. The runner will not pick one, and it is right
+      // not to: the seeding-session page offers two destinations that read as
+      // the same one. This beat means the KB it just seeded, so it says so.
+      // Only reachable at all since beats 5 and 6 started carrying the operator
+      // to that page — the ambiguity was invisible while the story stopped short
+      // of it. (Route matching goes through one predicate since C's #578, so a
+      // declared query is compared, not stripped.)
       act: 'Back on the knowledge base, find a real theme in the graph',
       expect: {
-        route: '/knowledge',
+        route: '/knowledge?id=story-s6',
         data: {
           page: 'knowledge',
           'page-ready': 'true',
@@ -382,8 +427,15 @@ export default {
         { fill: 'cost-ceiling-usd', with: CEILING },
         { press: 'start-architect' },
       ],
+      // AMEND-4: the route is `/architect/new`, MEASURED, not `/projects/mdtoc`.
+      // Amend-3 wrote the wrong page here — beat 10 presses "Architect →" and
+      // LANDS on `/architect/new`, which is exactly where `NewIdeaBox.tsx`
+      // publishes `data-architect-session-id` after Start. Run 2 refused it in
+      // the runner's own words: `no real-nav path to "/projects/mdtoc" from
+      // "/architect/new"`. The mistake was copying the route from the sitting
+      // draft instead of re-deriving it from the component that renders the id.
       expect: {
-        route: '/projects/mdtoc',
+        route: '/architect/new',
         data: { 'architect-session-id': '<architectSessionId>' },
       },
       say: 'The planner is a real agent and a real agent costs money, so the operator caps this run before starting it. Forge starts it and says so on the page the operator is standing on, rather than moving them somewhere they did not ask to go.',
