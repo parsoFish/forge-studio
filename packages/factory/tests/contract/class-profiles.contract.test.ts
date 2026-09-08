@@ -43,6 +43,7 @@ const COLUMNS: ReadonlyArray<keyof GateProfile> = [
   'capture',
   'reviewLenses',
   'singleWiAllowed',
+  'reviewCeilingUsd',
 ];
 
 /**
