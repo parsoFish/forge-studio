@@ -173,7 +173,15 @@ export default {
       // so a fixed number of fills cannot answer a variable interview.
       act: 'Open the session and answer the Architect\'s questions',
       do: [
-        { press: 'open-session' },
+        // `view-architect-session`, NOT `open-session` — T1 ruling 532, bought by
+        // run 2. `open-session` is the LIST surfaces' handle (Home's session
+        // strip, the sessions index, the plan gate). The page that MINTS a
+        // session publishes the architect family's own handle through
+        // `SessionMinted.tsx:24` (`data-action={`view-${kind}-session`}`,
+        // mounted at `NewIdeaBox.tsx:207` as `kind="architect"`), and the DOM
+        // contract names that family. Pressing the list handle on the mint page
+        // spent this beat's full 600 000 ms on a control that page never had.
+        { press: 'view-architect-session' },
         {
           repeat: [
             {
@@ -221,6 +229,24 @@ export default {
       say: 'This is the first of the two human gates. The operator reads what will be built and what it will touch, and approving arms the work — the plan is committed and the gate is no longer waiting on anyone.',
     },
     {
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
+      // route wait and before real-nav, so the beat that follows would press
+      // its control while still standing on the page this beat leaves — and
+      // spend its whole bound on a control that page does not carry. Run 2
+      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
+      // Reached by the artifact page's own breadcrumb
+      // (`app/artifact/page.tsx:953`, `data-crumb="project"`), one hop.
+      // `project-tab-roadmap` lives on `/projects/[id]` (`ProjectTabs.tsx:47`,
+      // a template-literal handle) and nowhere else.
+      act: 'Go back to the project the plan belongs to',
+      expect: {
+        route: '/projects/gitpulse',
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+      say: 'The plan is approved. The operator goes back to the project to start the work it planned.',
+    },
+    {
       // SOURCE-DERIVED. `StartWorkActions.tsx:187` (`data-section="start-work"`),
       // `:230` (`data-action="start-work-develop"`), corroborated by
       // `lib/start-work-render.test.ts:112,114`. `project-tab-roadmap` is
@@ -230,7 +256,13 @@ export default {
       do: [{ press: 'project-tab-roadmap' }, { press: 'start-work-develop' }],
       expect: {
         route: '/projects/gitpulse',
-        data: { page: 'projects', 'project-id': 'gitpulse', section: 'start-work' },
+        // `run-id` BINDS here, in the beat that presses — S5's shape (it binds
+        // `'run-id': '<runId>'` on the beat that presses `run-agent` and routes
+        // on it in the beat after). A beat cannot bind the placeholder its own
+        // route needs, because the route is resolved before the beat runs, so
+        // the binding has to happen on the press that mints the run. The
+        // attribute is `EnqueueOutcomeLine`'s always-present root (A's #582).
+        data: { page: 'projects', 'project-id': 'gitpulse', section: 'start-work', 'run-id': '<runId>' },
       },
       say: 'The plan produced an initiative and the roadmap is where it now lives. Starting it from the card is the point: the operator is not re-describing the work, they are pressing go on the thing the Architect already planned.',
     },
@@ -291,6 +323,26 @@ export default {
       say: 'A machine reviewer goes first, against the acceptance criteria and the change class the plan gate confirmed. Its findings are the reviewer\'s starting point, not its verdict — the human decides.',
     },
     {
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
+      // route wait and before real-nav, so the beat that follows would press
+      // its control while still standing on the page this beat leaves — and
+      // spend its whole bound on a control that page does not carry. Run 2
+      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
+      // Reached by the run page's own gate chip (`PhaseDrawer.tsx:749`).
+      // THE QUERY IS DECLARED (ruling 534): that drawer builds every chip as
+      // `/artifact?run=…&type=…&mode=…`, so a develop run renders several
+      // links sharing this pathname and differing only in their query —
+      // 7.5.3's ambiguity refusal, working as designed. Naming the query is
+      // how a beat says WHICH destination it means (ruling 514).
+      act: 'Open the review verdict at its gate',
+      expect: {
+        route: '/artifact?run=<runId>&type=verdict&mode=gate',
+        data: { page: 'artifact', 'page-ready': 'true' },
+      },
+      say: 'The review has an opinion and the operator goes to read it where the decision is made.',
+    },
+    {
       // SOURCE-DERIVED, and the surface choice is load-bearing. The cycle
       // review gate is `/artifact?type=verdict&mode=gate`
       // (`app/artifact/page.tsx:4-36,922-931`). TWO components render a verdict
@@ -335,6 +387,22 @@ export default {
         data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'review' },
       },
       say: 'No restart, no second cycle, no lost work. The send-back became one more thing to satisfy on the branch that already exists, which is the difference between a review loop and a do-over.',
+    },
+    {
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
+      // route wait and before real-nav, so the beat that follows would press
+      // its control while still standing on the page this beat leaves — and
+      // spend its whole bound on a control that page does not carry. Run 2
+      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
+      // Same gate chip, same declared query: the re-review lands back on the
+      // run page, and the verdict is read at the gate again.
+      act: 'Open the re-reviewed verdict at its gate',
+      expect: {
+        route: '/artifact?run=<runId>&type=verdict&mode=gate',
+        data: { page: 'artifact', 'page-ready': 'true' },
+      },
+      say: 'The fix came back. The operator reads the verdict again before deciding.',
     },
     {
       // SOURCE-DERIVED, and the merge handle is weaker than one would like.
@@ -398,6 +466,23 @@ export default {
       say: 'One figure, and it is the same figure the event log holds. A run that cannot say honestly what it spent cannot be trusted with a ceiling, so this is checked against the log rather than taken from the screen.',
     },
     {
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
+      // route wait and before real-nav, so the beat that follows would press
+      // its control while still standing on the page this beat leaves — and
+      // spend its whole bound on a control that page does not carry. Run 2
+      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
+      // Reached by the monitor's own run row (`app/monitor/page.tsx:155`).
+      // `abandon-run` is on the run page's controls (`RunControls.tsx:34`,
+      // a variable-valued handle), not on the monitor.
+      act: 'Open the running initiative from Monitor',
+      expect: {
+        route: '/flows/forge-develop/run/<runId>',
+        data: { page: 'flow-run', 'page-ready': 'true' },
+      },
+      say: 'Act 2 starts where act 1 was watched from: the operator opens the run they are about to stop.',
+    },
+    {
       // ACT 2 — SOURCE-DERIVED, and NOTHING in the pinned corpus covers it: a
       // grep for `resume`, `forced stop`, `abort`, `kill`, `pause` across all
       // eleven story files returns zero matches. Handles:
@@ -412,10 +497,27 @@ export default {
       act: 'ACT 2 — stop a run mid-flight',
       do: [{ press: 'abandon-run' }, { press: 'confirm-abandon' }],
       expect: {
-        route: '/flows/forge-develop/run/<secondRunId>',
+        route: '/flows/forge-develop/run/<runId>',
         data: { page: 'flow-run', section: 'run-controls', component: 'abandon-confirm' },
       },
       say: 'Things stop halfway. What matters is not that it never happens but that stopping is a decision the operator makes on purpose, twice, rather than something they discover.',
+    },
+    {
+      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
+      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
+      // route wait and before real-nav, so the beat that follows would press
+      // its control while still standing on the page this beat leaves — and
+      // spend its whole bound on a control that page does not carry. Run 2
+      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
+      // Reached by the run page's own project link (`FlowRunDetail.tsx:154`,
+      // `data-action="open-project"`). `recovery-requeue` lives on the
+      // project's roadmap (`InitiativeDetail.tsx:344`).
+      act: 'Go back to the project to pick the stopped work up again',
+      expect: {
+        route: '/projects/gitpulse',
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+      say: 'Recovery is where the operator already is — the roadmap the work lives on, not a special screen.',
     },
     {
       // ACT 2 — SOURCE-DERIVED. The preservation evidence lives on the ROADMAP
