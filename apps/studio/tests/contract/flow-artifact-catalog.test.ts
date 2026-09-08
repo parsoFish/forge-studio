@@ -1,0 +1,100 @@
+/**
+ * Acceptance tests for forge-ui/lib/flow-artifact-catalog.ts (R3-06 / R2-05-F1).
+ *
+ * The module under test does not exist yet — vitest cannot even collect this
+ * file until it lands (module-not-found is the expected red).
+ *
+ * The flow builder's ArtifactPicker today hardcodes a 9-entry ARTIFACTS list
+ * (forge-ui/components/studio/flow-builder/ArtifactPicker.tsx) that includes
+ * two orphans — "reflection" and "demo" — neither of which has a template
+ * file under studio/artifact-templates/. This test proves the picker's
+ * catalog, once relocated to this plain-TS module, has an id set EXACTLY
+ * equal to the real on-disk template set (both directions) — no orphans, no
+ * gaps. It reads the real repo directory rather than a fixture because this
+ * is a fact that must stay true as templates are added/removed.
+ *
+ * AT numbers continue the flat R3-06 sequence started in
+ * orchestrator/studio/template-library.test.ts.
+ */
+import { test, expect } from 'vitest';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { ARTIFACTS, DEFAULT_ARTIFACT_ID, type ArtifactDef } from '../../lib/flow-artifact-catalog.ts';
+
+// Walk up from this test file (forge-ui/lib/) to the repo root (two levels:
+// apps/studio/tests/contract -> apps/studio -> repo root), then into studio/artifact-templates/.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(HERE, '..', '..', '..', '..');
+const TEMPLATES_DIR = join(REPO_ROOT, 'studio', 'artifact-templates');
+
+function onDiskTemplateIds(): string[] {
+  // README.md documents the directory (R3-06) — it is not a template
+  // definition, so it is excluded by name, mirroring the identical exclusion
+  // in the two production loaders that scan this same directory
+  // (`@forge/library/studio/artifact-registry.ts`'s listArtifactTemplates and
+  // orchestrator/studio/template-library.ts's listPlanningEntries). Matched
+  // case-insensitively (a readme.md/Readme.md variant would otherwise slip
+  // the exact-name check and, if it ever carried valid frontmatter, become a
+  // phantom template) — all three sites must stay identical. If any of them
+  // ever stops excluding it, this test must be revisited.
+  return readdirSync(TEMPLATES_DIR)
+    .filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f))
+    .map((f) => f.replace(/\.md$/, ''))
+    .sort();
+}
+
+// AT-52 -------------------------------------------------------------------
+
+test('AT-52: the picker catalog id set is EXACTLY the on-disk studio/artifact-templates/ id set (both directions)', () => {
+  const onDisk = onDiskTemplateIds();
+  const catalog = [...ARTIFACTS.map((a: ArtifactDef) => a.id)].sort();
+
+  const missingFromCatalog = onDisk.filter((id) => !catalog.includes(id));
+  const orphansInCatalog = catalog.filter((id) => !onDisk.includes(id));
+
+  expect(missingFromCatalog, `templates on disk but missing from the picker catalog: ${missingFromCatalog.join(', ') || '(none)'}`).toEqual([]);
+  expect(orphansInCatalog, `picker catalog ids with no on-disk template (orphans): ${orphansInCatalog.join(', ') || '(none)'}`).toEqual([]);
+  expect(catalog).toEqual(onDisk);
+});
+
+// AT-53 -------------------------------------------------------------------
+
+// R4-18 mechanical amendment (2026-08-10): the `contract` template (the
+// onboard-project flow's onboard → contract-check edge) is the 8th entry —
+// the count grows from 7 to 8, same as `studio/artifact-templates/`'s
+// on-disk set (see AT-52 above, which stays the source of truth for the id
+// SET; this test only pins the orphan-free count).
+// M5-A mechanical amendment (2026-09-05, spec §5 item 4): back to 7. The
+// demo-fix loop was deleted, so `demo-fix-spec.json` has neither a producer nor
+// a consumer — the template went with the loop rather than being reclassified.
+test('AT-53: the known orphans ("reflection", "demo", "demo-fix-spec") are gone — the catalog has exactly 7 entries', () => {
+  const ids = ARTIFACTS.map((a: ArtifactDef) => a.id);
+  expect(ids).not.toContain('reflection');
+  expect(ids).not.toContain('demo');
+  // `demo-fix-spec` joined them when spec §5 item 4 deleted the demo-fix loop:
+  // the template described an artifact nothing writes any more.
+  expect(ids).not.toContain('demo-fix-spec');
+  expect(ARTIFACTS.length).toBe(7);
+});
+
+/**
+ * Operator ruling 302: dismissing the ArtifactPicker now LABELS the edge with
+ * `DEFAULT_ARTIFACT_ID` instead of leaving it bare. That makes the default
+ * load-bearing in a way it was not before — every edge the operator dismisses
+ * carries it into `flow.yaml`.
+ *
+ * So it must name a real template. If it drifted to an id with no template on
+ * disk, every dismissed edge would author a flow that `forge studio lint`
+ * refuses (`artifact/no-template`, R2-05-F1) — the failure this file's main
+ * assertion exists to prevent for the LIST, reaching the flow builder through
+ * a single value instead.
+ */
+test('302: the picker\'s default artifact is a real catalog entry, and therefore a real on-disk template', () => {
+  expect(ARTIFACTS.map((a: ArtifactDef) => a.id)).toContain(DEFAULT_ARTIFACT_ID);
+});
+
+test('302: the default is the FIRST entry — the catalog is in pipeline order, so the default is the first artifact a flow produces', () => {
+  expect(ARTIFACTS[0]?.id).toBe(DEFAULT_ARTIFACT_ID);
+});

@@ -31,12 +31,13 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // R6-08 WI-3 (T3 test-writer addition): `components/**/*.test.ts` added
-    // alongside the pre-existing `lib/**/*.test.ts` so
-    // components/studio/knowledge/useForceSim.test.ts (the first pure-fn test
-    // co-located with its source module rather than under lib/) is actually
-    // discovered. No existing test moves or changes scope — this only widens
-    // discovery to a directory that previously had zero test files in it.
-    include: ['lib/**/*.test.ts', 'components/**/*.test.ts'],
+    // M6-C row 2: this tree's 204 tests moved into `tests/{unit,integration,
+    // contract,regression}/`, so ONE include reaches all of them and the two
+    // source-directory globs are gone. Those globs were how a test got
+    // discovered by sitting next to its subject — R6-08 WI-3 widened them to
+    // `components/**` for exactly that reason — and the bucket layout replaces
+    // the convention rather than extending it: a test is found because it is
+    // under `tests/`, not because of what it happens to sit beside.
+    include: ['tests/**/*.test.ts'],
   },
 });
