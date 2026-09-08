@@ -291,6 +291,16 @@ and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
   request handler); its `existsSync`/`readFileSync`/`writeFileSync` growth (+1
   each of the first two, tracked by the sink-count ratchet) is this same
   call, `--write`-accepted below.
+  **M6 addition — `createCategoryIndex` (bead `forge-8vfn.7.6.9`): the SAME
+  `indexPath`, from the same `categoryIndexPathFor`, so the same argument covers
+  it and no second one is written here.** It creates the category index when a
+  freshly SEEDED KB has none (the project-brain agent writes themes and nothing
+  writes the index they belong to, so every seeded KB was born with orphan
+  themes the auto tier could report and never clear). It deliberately does NOT
+  `mkdirSync`: `categoryIndexPathFor` only ever returns a path whose parent
+  already holds the theme that asked for it, so the directory exists by
+  construction and creating it would add a request-reachable `mkdirSync` sink
+  for nothing. `writeFileSync` 3 → 4.
 - **KB-create scaffold `mkdirSync(join(kbDir,'themes'|'_raw'))`**
   (`packages/knowledge/bridge-studio-kbs.ts:993-994`) — `kbDir = kbGuard.realPath` from
   `resolveGuardedPath(brainBase, [id])`, and the route 409s on `kbGuard.exists`

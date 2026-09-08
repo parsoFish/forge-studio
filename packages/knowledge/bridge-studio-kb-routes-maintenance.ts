@@ -134,10 +134,7 @@ export async function handleKbFixAgentStatus(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: the route table hands handlers the
-  // RAW url so an arm that later needs the query string still has it, and
-  // `pathOnly` is idempotent (COMMON §15.2 — an un-normalised handler fails its
-  // own anchored regex against `?x=1`, declines, and the request 404s silently).
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -168,10 +165,7 @@ export async function handleKbConsolidateActive(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: the route table hands handlers the
-  // RAW url so an arm that later needs the query string still has it, and
-  // `pathOnly` is idempotent (COMMON §15.2 — an un-normalised handler fails its
-  // own anchored regex against `?x=1`, declines, and the request 404s silently).
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -232,10 +226,7 @@ export async function handleKbIngestActivity(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: the route table hands handlers the
-  // RAW url so an arm that later needs the query string still has it, and
-  // `pathOnly` is idempotent (COMMON §15.2 — an un-normalised handler fails its
-  // own anchored regex against `?x=1`, declines, and the request 404s silently).
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -323,10 +314,7 @@ export async function handleKbMaintenance(
   method: string,
   runFixTurn?: KbDrainRunFixTurnFn,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: the route table hands handlers the
-  // RAW url so an arm that later needs the query string still has it, and
-  // `pathOnly` is idempotent (COMMON §15.2 — an un-normalised handler fails its
-  // own anchored regex against `?x=1`, declines, and the request 404s silently).
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
