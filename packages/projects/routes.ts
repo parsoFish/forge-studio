@@ -104,7 +104,7 @@
  *
  * The field is non-optional in `RouteEntry` because a carved route that lost
  * its classification would be a route that SPAWNS under `FORGE_DRY_BRIDGE=1`;
- * `tests/contract/routes-table.test.ts` and `apps/forge/dry-bridge-coverage.test.ts`
+ * `tests/contract/routes-table.test.ts` and `apps/forge/tests/contract/dry-bridge-coverage.test.ts`
  * both assert every entry carries one.
  */
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';

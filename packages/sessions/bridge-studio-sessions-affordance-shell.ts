@@ -96,6 +96,21 @@ export type AffordanceRouteContext = StudioContext & {
    *  session shell's own 3s poll (SHELL_POLL_MS,
    *  apps/studio/app/sessions/[kind]/[sessionId]/page.tsx). */
   broadcastKindChanged: (kind: string) => void;
+  /** Ruling 441 — onboarding's brief is the one question-form write that
+   *  starts an AGENT RUN rather than a session turn, so the arm needs the same
+   *  `spawnAgentDispatch` its start route used to call. INJECTED at the
+   *  assembly like `spawnAgentTurn` beside it, never cast into existence: a
+   *  field the context does not declare compiles and then reads `undefined` at
+   *  runtime, which is §15.66's defect. */
+  spawnAgentDispatch: (
+    forgeRoot: string, agentId: string, runId: string, project: string,
+    inputs: Record<string, string>, sessionDir: string, unused: undefined, projectsRoot: string,
+  ) => void;
+  /** The projects root this bridge resolved once at start — the root the
+   *  session dir was created under, handed to the dispatch so the subprocess's
+   *  containment guard checks that root rather than re-deriving one (bead
+   *  forge-c6h). */
+  projectsRoot: string;
 };
 
 /** Minimal `JSON.parse` wrapper — NOT a security primitive (no guard/write
@@ -128,6 +143,29 @@ export function safeParseJson<T>(raw: string): T | null {
  *  (a real round asks a handful of questions with paragraph-length answers)
  *  and named in the 400 they produce, never silently truncated. */
 const MAX_ANSWERS_COUNT = 64;
+
+/**
+ * The ONE shape+size check every question-form arm ran a copy of. Returns the
+ * answers, or the 400 reason. `nonEmpty` is the only thing that ever differed
+ * between the copies: an interview ROUND may legitimately post zero answers,
+ * a BRIEF may not.
+ */
+export function readAnswersBody(
+  body: Record<string, unknown>,
+  nonEmpty: boolean,
+): { answers: { question: string; answer: string }[] } | { error: string } {
+  const raw = body.answers;
+  if (
+    !Array.isArray(raw) ||
+    (nonEmpty && raw.length === 0) ||
+    !raw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
+  ) {
+    return { error: `body.answers must be a${nonEmpty ? ' non-empty' : 'n'} array of {question: string, answer: string}` };
+  }
+  const answers = raw as { question: string; answer: string }[];
+  const capReason = answersCapReason(answers);
+  return capReason === null ? { answers } : { error: capReason };
+}
 
 export function answersCapReason(answers: readonly { question: string; answer: string }[]): string | null {
   if (answers.length > MAX_ANSWERS_COUNT) {

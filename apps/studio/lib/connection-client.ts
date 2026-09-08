@@ -18,7 +18,7 @@
  * (this repo's forge-ui vitest config is `environment: 'node'`, a standing
  * decision; the transport, `bridgeFetch`, requires `window`). The over-the-wire
  * behaviour (list/detail/probe/install round trips, the security core) is
- * pinned by packages/library/bridge-studio-connections.test.ts instead.
+ * pinned by packages/library/tests/integration/bridge-studio-connections.test.ts instead.
  */
 
 import { bridgeFetch } from './bridge-client.ts';
@@ -285,7 +285,7 @@ export function parseConnection(raw: unknown): ConnectionWire {
 
 // ---------------------------------------------------------------------------
 // Fetch helpers — over-the-wire behaviour pinned by
-// packages/library/bridge-studio-connections.test.ts, not by this file's own test (see
+// packages/library/tests/integration/bridge-studio-connections.test.ts, not by this file's own test (see
 // module header: no window/fetch under this repo's node-environment vitest).
 // ---------------------------------------------------------------------------
 

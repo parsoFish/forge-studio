@@ -9,6 +9,35 @@
  * `parsoFish/main` 6889f080, with the operator (H6), in the amended
  * draft-then-review mode. Green expected at M4.
  *
+ * AMEND-1 (M6, operator-confirmed in the attended sitting of 2026-09-08;
+ * `_1.0/gate-manifests/M1-C-S7.amend-1.md`; rulings 396/406/409 + 483, 460,
+ * 415, 484, 503). Four beats, no product change — every product half either
+ * merged earlier in M6 or was already on main. The story goes from 15 beats to
+ * 17 (beats 3 and 13 each split in two).
+ *
+ * The through-line: S7 asserted four different things the product does not do,
+ * and IN EACH CASE THE PRODUCT WAS RIGHT. A hook matcher on a tool-less event,
+ * a route the beat's own press mints, a field belonging to the next phase, and
+ * a category filled with a directory path. Four reds, four story defects, zero
+ * product defects. Each beat carries its own measurement.
+ *
+ * A THIRD DEFECT IN BEAT 13, and the reason this story gains TWO more beats
+ * than the split alone needs. Beat 13 could not be REACHED: the runner reaches
+ * a beat's route by clicking a link on the CURRENT page whose pathname matches
+ * it and never falls back to `page.goto`, and nothing on a template page links
+ * to the instructions launcher. Invisible until the split, because route
+ * resolution failed FIRST on every run and the `do` steps never ran — the same
+ * shape as beat 3's unreachable phase, one beat along. T1 ruling 504 put a
+ * PURE navigation beat inside the split's scope; it took two, and why it took
+ * two is itself the finding below.
+ *
+ * AN IA FINDING, RECORDED NOT FILED. `/sessions/instructions/new` is linked
+ * from exactly ONE place in the product — the Sessions index's kickoff row —
+ * and `/sessions` is not one of `StudioNav`'s seven pillars. So the shortest
+ * path an operator can walk from the parts bin to the launcher for a component
+ * kind the parts bin itself offers is THREE hops. The story now shows that,
+ * because it is true. Whether it should stay true is the operator's call.
+ *
  * THE FORK — TWO DOORS, AND THE OPERATOR'S RULING. §3's row says "via the
  * authoring session", and every one of `/skills/new`, `/hooks/new` and
  * `/templates/new` carries TWO doors: a manual form where the operator types
@@ -123,11 +152,19 @@ export default {
       say: 'A skill is a reusable instruction packet — the unit an agent composes to know how to do something. This page offers two ways to make one, and the operator is about to take the one that does not involve typing markdown.',
     },
     {
-      // Fully expressible AS AN ACT — all three handles are real
-      // (`authoring-launcher-project` is an <input>, not a select). The ROUTE
-      // is what fails: `start-authoring` POSTs and pushes straight to
-      // `/sessions/authoring/<sid>`, so the id is never rendered as a `data-*`
-      // an earlier beat could observe. Bead `forge-8vfn.5.10`.
+      // AMEND-1, beat 3a of a split (rulings 396/406/409, class-stated by 483).
+      // The beat declared the SESSION's route and tried to bind
+      // `<authoringSessionId>` from it — but the runner resolves a route from
+      // PRIOR beats' bindings BEFORE performing any `do` step
+      // (`scripts/stories/beats-drive.mjs`), and this beat's own press is what
+      // mints the id. Unbound on every run; no product change moves a red at
+      // route resolution.
+      //
+      // The product half has since landed (`37e42ae2`): the launcher publishes
+      // `data-minted-session-id` from first paint and stops navigating by
+      // itself (`apps/studio/components/AuthoringLauncher.tsx`). So the
+      // operator stays where they are, and the id is on the page they are
+      // standing on.
       act: 'Describe the skill to the creation agent instead of writing the package by hand',
       do: [
         { fill: 'authoring-launcher-project', with: 'mdtoc' },
@@ -137,27 +174,67 @@ export default {
       // Not in §3.1's schema, and dropped by `validateStory` — see THE FORK
       // above. Both doors on this page must reach the same approved package;
       // a story that proves one of two proves the door, not the promise.
+      // It stays on the MINTING half: the fork is over which door starts the
+      // work, not over how the operator reaches what it started.
       fork: { over: 'authoring-door', cases: DOORS },
+      expect: {
+        route: '/skills/new',
+        data: { 'minted-session-id': '<authoringSessionId>' },
+      },
+      say: 'This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it. Same library, same scan, same approval — different amount of typing.',
+    },
+    {
+      // AMEND-1, beat 3b — the navigation half. `open-minted-session` is a real
+      // `<a href>` (`AuthoringLauncher.tsx`), which is what the runner needs:
+      // it resolves a route only through `[data-nav][href]` or `a[href]` and
+      // never drives a click and hopes.
+      //
+      // `session-phase` CORRECTED, not carried over. The unsplit beat asserted
+      // `working`, which is a `data-lifecycle-state` token and NOT a phase of
+      // this kind: authoring's table is `analyzing` -> `awaiting-review` ->
+      // `committing` -> `committed`/`rejected` (`studio/session-kinds.yaml`),
+      // and the mint is written at `analyzing`
+      // (`packages/sessions/bridge-studio-kickoff.ts`). §15.240 is the lesson
+      // lane A bought on S9 beat 7 for the same value; T1's ruling 503 swept
+      // every `session-phase` assertion in S1–S9 and found it at exactly three
+      // sites, this being one. The route never resolved, so this assertion had
+      // never once been judged — it was simply the next red.
+      act: 'Open the authoring session it just started',
+      do: [{ press: 'open-minted-session' }],
       expect: {
         route: '/sessions/authoring/<authoringSessionId>',
         data: {
           page: 'session',
           'page-ready': 'true',
           'session-kind': 'authoring',
-          'session-phase': 'working',
+          'session-phase': 'analyzing',
         },
       },
-      say: 'This is the fork in the road, and both branches are real: the operator can type the package into the form beside this one, or describe what they want and let the creation agent draft it. Same library, same scan, same approval — different amount of typing.',
+      say: 'Forge mints the session and says so on the page the operator is already standing on, rather than moving them somewhere they did not ask to go. Reaching it is the operator\u2019s own next act.',
     },
     {
-      // NOT expressible — the same unbound segment as beat 3.
-      // `session-package-id` is the ONE field the retired bespoke authoring
-      // panel left behind, and `verdict-approve` is the generic panel's
-      // action; both are transcribed from `docs/forge-ui-dom-and-harness.md`
-      // rather than observed, because observing them costs a creation-agent
-      // spawn. The route it lands on is the skill's own detail page — the
-      // panel navigates there on a package-shaped approve.
+      // AMEND-1 (ruling 460). This beat's red was filed as a MISSING HANDLE and
+      // it is not one. `SessionInteractivePanel.tsx` renders
+      // `session-package-id`, gated generically on `affordance.meta.requires`,
+      // and authoring's `awaiting-review` row is the one that declares it
+      // (`requires: [id]`). The kind's phases are `analyzing` — where the agent
+      // runs and writes `staging/` — then `awaiting-review`, where the operator
+      // reviews. The field belongs to the SECOND. The beat filled it while the
+      // agent was still in the first, and `performSteps` runs a `fill` BEFORE
+      // any consequence wait, so it timed out against a control that had not
+      // rendered YET — which is what the runner's own words said and what was
+      // read as "not at all" (§15.251).
+      //
+      // So the beat declares the wait its act implies: the operator does not
+      // type into a draft that does not exist yet. And it asserts the phase it
+      // waited for, so a red here says "the agent never finished" rather than
+      // "a field timed out" — the operator chose the stronger form at the
+      // sitting.
+      //
+      // Consequence: bead `forge-8vfn.7.3.1` is NOT lane A's product work.
+      // Nothing is owed by A here.
       act: 'Read what it drafted, give the package its directory name, and approve it',
+      wait: { for: 'agent', upTo: 300_000 },
       do: [
         { fill: 'session-package-id', with: 'story-s7-skill' },
         { press: 'verdict-approve' },
@@ -202,12 +279,33 @@ export default {
       // `data-field`, and this is the MANUAL door, the other case of beat 3's
       // fork. A hook this small is exactly the kind an operator writes by hand
       // rather than paying an agent to draft.
-      act: 'Write the hook by hand: what it runs on, what it matches, what it does, and what it may touch',
+      //
+      // AMEND-1 (ruling 415): the `hook-matcher` fill is REMOVED, and the
+      // product was right to refuse it. A matcher is a tool-NAME pattern, so
+      // `hook-library.ts` rejects one on an event that carries no tool
+      // (`TOOL_SCOPED_HOOK_EVENTS` is `['PreToolUse','PostToolUse']`), and a
+      // door test already pins the identical payload. At measurement time the
+      // form still OFFERED the field, the create came back 400, the page
+      // stayed on `/hooks/new`, and beats 7, 8, 9 and 10 all failed behind it
+      // on `no real-nav path to "/hooks/story-s7-hook"`.
+      //
+      // The product half has since landed on main and names this beat as its
+      // measurement: `/hooks/new` now renders the matcher input only when
+      // `eventCarriesTool(on)`, and a `[data-section="hook-matcher-unavailable"]`
+      // note in its place otherwise. So for `SessionEnd` the field does not
+      // exist at all, and this story's remaining defect is entirely its own
+      // — a `fill` against a control the page correctly does not render.
+      //
+      // Removing the line is what the beat already meant. Its own `say` is
+      // about the PERMISSIONS fields and never mentions the matcher, and
+      // `SessionEnd` has to stay because the last beat of this story is "watch
+      // the hook fire on the session ending". The act's words lose "what it
+      // matches" for the same reason.
+      act: 'Write the hook by hand: what it runs on, what it does, and what it may touch',
       do: [
         { fill: 'hook-name', with: 'story S7 hook' },
         { fill: 'hook-description', with: 'Note that a session ended, so the ledger has something to show.' },
         { fill: 'hook-on', with: HOOK_EVENT },
-        { fill: 'hook-matcher', with: '*' },
         { fill: 'hook-script-body', with: HOOK_SCRIPT },
         { fill: 'hook-permissions-env', with: '' },
         { fill: 'hook-permissions-read', with: '' },
@@ -296,10 +394,17 @@ export default {
     {
       // Fully expressible — the Templates shelf's create CTA, then the form,
       // every field of which declares a real `data-field`.
+      //
+      // AMEND-1 (ruling 484, no choice to make): `template-category` is a
+      // `<select>` offering exactly `planning` and `demo-output`, and
+      // `apps/studio/app/templates/new/page.tsx` says in its own comment that
+      // `planning` IS the category written to `studio/artifact-templates/<id>.md`.
+      // The beat had been filling the DIRECTORY where the category goes. The
+      // product is right; this is a transcription error in the story.
       act: 'Press "+ New template" and write the template the hook’s output is filed into',
       do: [
         { press: 'new-template' },
-        { fill: 'template-category', with: 'studio/artifact-templates' },
+        { fill: 'template-category', with: 'planning' },
         { fill: 'template-id', with: 'story-s7-template' },
         { press: 'create-template' },
       ],
@@ -310,17 +415,88 @@ export default {
       say: 'A template is one markdown definition file — the shape an artifact comes out in. It is the least dramatic thing in the library and the one that decides whether two runs produce comparable output.',
     },
     {
-      // NOT expressible — `<instructionsSessionId>` is another of
-      // `forge-8vfn.5.10`'s mint-then-navigate sites. The kickoff form's own
-      // handles ARE real, so the act is honest; only the route it lands on
-      // cannot be bound. No ceiling is set here and none is invented: unlike
-      // the architect kickoff, this form declares no `cost-ceiling-usd` field
-      // at all — read live — so the run takes the policy default.
+      // AMEND-1, NAVIGATION (ruling 504). Route and readiness only: no `do`,
+      // no fill, no press, no product claim. The runner reaches a beat's route
+      // by clicking a link on the CURRENT page whose pathname matches it, so a
+      // beat declaring a route the operator can actually walk to IS the act —
+      // this is the runner's own model, not an invention.
+      //
+      // WHY THREE HOPS, AND WHY THAT IS A FINDING. `/sessions/instructions/new`
+      // is linked from exactly ONE place in the whole product —
+      // `SessionsIndex`'s kickoff row (`KICKOFF_ENTRIES`,
+      // `apps/studio/lib/session-kind-meta.ts`) — and `/sessions` is NOT one of
+      // `StudioNav`'s seven pillars (Home / Monitor / Projects / Flows /
+      // Agents / Library / Knowledge). So from a template page the shortest
+      // real path an operator can walk is: a pillar to Agents, its
+      // `sessions-secondary` entry to Sessions, then the kickoff link. Three
+      // hops to reach the launcher for a component kind the library itself
+      // offers. Recorded as an IA finding in
+      // `_1.0/gate-manifests/M1-C-S7.amend-1.md`, not filed as a story defect.
+      //
+      // Agents rather than Home: `AgentsIndexView` calls its link "this kind's
+      // secondary-nav entry point" in its own comment, and beat 14 goes to an
+      // agent anyway, so this is the operator's own direction of travel.
+      act: 'Head for the Agents pillar',
+      expect: {
+        route: '/agents',
+        data: { page: 'agents-index', 'page-ready': 'true' },
+      },
+      say: 'Instructions are the fourth kind of part, and the only door to them is through Sessions — which is not a pillar. Getting there is three clicks from the parts bin.',
+    },
+    {
+      // AMEND-1, NAVIGATION (504). Same shape.
+      act: 'Follow the Sessions entry',
+      expect: {
+        route: '/sessions',
+        data: { page: 'sessions-index', 'page-ready': 'true' },
+      },
+      say: 'Every session forge has ever run is here, and so is the only list of the kinds it can start.',
+    },
+    {
+      // AMEND-1, beat 13a of a split — the same class as beat 3 (rulings
+      // 396/406/409, class-stated by 483). `<instructionsSessionId>` was
+      // unbindable for the same reason: this beat's own press mints it, and
+      // the runner resolves a route before performing any `do` step.
+      //
+      // Confirmed live on this kind's own launcher: `/sessions/instructions/new`
+      // publishes `data-minted-session-id` from first paint and carries
+      // `data-action="start-session"`; `open-minted-session` appears only once
+      // a session exists, which is the deliberate shape — absence and "not
+      // known yet" must not be the same reading.
+      //
+      // No ceiling is set here and none is invented: unlike the architect
+      // kickoff, this form declares no `cost-ceiling-usd` field at all — read
+      // live — so the run takes the policy default.
+      //
+      // A THIRD DEFECT IN THIS BEAT, and the three beats above are its fix
+      // (T1 ruling 504: a PURE navigation beat is inside the split's scope).
+      // The beat could not be REACHED. `do` acts on the page the operator is
+      // standing on, the previous beat leaves them on
+      // `/templates/story-s7-template`, and the runner reaches a beat's route
+      // by clicking a link on the CURRENT page whose pathname is that route —
+      // it never falls back to `page.goto` (`scripts/stories/beats-drive.mjs`).
+      // Nothing on a template page links to this launcher, so the `fill` had
+      // nowhere to land. Invisible until the split, because route resolution
+      // failed FIRST on every run and the `do` steps never ran.
       act: 'Draft the project’s own working instructions, so the parts have a house style to follow',
       do: [
         { fill: 'kickoff-project', with: 'mdtoc' },
         { press: 'start-session' },
       ],
+      expect: {
+        route: '/sessions/instructions/new',
+        data: { 'minted-session-id': '<instructionsSessionId>' },
+      },
+      say: 'Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.',
+    },
+    {
+      // AMEND-1, beat 13b — the navigation half, the same shape as 3b.
+      // Deliberately asserts NO `session-phase`: the unsplit beat never
+      // asserted one, and inventing one here would be adding a claim the
+      // sitting did not confirm. `page-ready` and the kind are what the beat
+      // always said.
+      act: 'Open the instructions session it just started',
+      do: [{ press: 'open-minted-session' }],
       expect: {
         route: '/sessions/instructions/<instructionsSessionId>',
         data: {
@@ -329,7 +505,7 @@ export default {
           'session-kind': 'instructions',
         },
       },
-      say: 'Instructions are the fourth kind of component and the only one that is about the project rather than about forge: the AGENTS.md every agent dispatched at this repo reads before it does anything.',
+      say: 'Same shape as the skill: forge mints the session and says so where the operator already is, and reaching it is their own next act.',
     },
     {
       // NOT expressible. Binding a hook to an agent means adding it to the

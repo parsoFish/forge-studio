@@ -13,7 +13,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT (D5, `_wave5/unit-specs/R4-21-phase2.md`; mirrored from
- * `packages/library/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
+ * `packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
  * this module's spec):
  *
  *  Wire contract: `POST /api/studio/authoring/finalize { project, sessionId,

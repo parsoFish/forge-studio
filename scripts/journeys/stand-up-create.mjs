@@ -117,7 +117,7 @@ function writeSuLintKbFixture() {
 // so mdtoc's ledger is genuinely empty at this beat) — so seeding it never
 // mutates canonical state (state-ownership rule). It mirrors the EXACT on-disk
 // shape a real archived, merged cycle carries — the positive-control shape in
-// apps/forge/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
+// apps/forge/tests/contract/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
 // (project: mdtoc, flow_id: forge-develop, cycle_id) + a `_logs/<cycleId>/
 // events.jsonl` (cycle.start → cycle.end complete) — so the REAL scanCycles →
 // deriveProjectCycleLedgerRows → HistoryLedger path renders a REAL, clickable row
@@ -783,7 +783,7 @@ export const journey = defineJourney({
                     // The real button: a genuine bridge session at 'briefing' — brief it
                     // for real too (the flip to 'analyzing' is real; the spawn is not).
                     await p.waitForSelector('[data-section="brain-briefing"]', { timeout: 10000 }).catch(() => {});
-                    await p.locator('[data-component="brain-brief-input"]').fill('emphasise conventions + module layout').catch(() => {});
+                    await p.locator('[data-field="brain-brief"]').fill('emphasise conventions + module layout').catch(() => {});
                     await p.locator('[data-action="start-brain-analysis"]').click().catch(() => {});
                   }
                 }

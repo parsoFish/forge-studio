@@ -9,7 +9,7 @@
  * re-implemented the validation would be asserting against its own copy.
  *
  * What that leaves unproven — that the REAL loader agrees — is proven at
- * `apps/forge/library-flow-source.test.ts`, which drives the same fixture tree
+ * `apps/forge/tests/contract/library-flow-source.test.ts`, which drives the same fixture tree
  * through the real binding. Neither half is sufficient alone.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';

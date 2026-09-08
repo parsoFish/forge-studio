@@ -598,7 +598,7 @@ export async function handleSkillDetail(req: IncomingMessage, res: ServerRespons
       const d = (data ?? {}) as Record<string, unknown>;
 
       // WI-3: the forge-ui detail page needs source/usedBy/provenance, which
-      // this route did not carry until now. No packages/library/bridge-studio-skills.test.ts
+      // this route did not carry until now. No packages/library/tests/integration/bridge-studio-skills.test.ts
       // assertion pins an exhaustive key set on this response (checked before
       // making this change), so these are additive fields, not a shape change
       // any existing AT depends on. Reusing listSkillLibrary's own union +

@@ -50,7 +50,7 @@
  *   - The bridge's global anti-CSRF guard (`x-forge-csrf`, apps/forge/ui-bridge.ts)
  *     fires before route dispatch for every non-GET path, so this route
  *     inherits it for free — confirmed empirically by
- *     packages/library/bridge-studio-instructions-draft.test.ts's CSRF-parity cases, not
+ *     packages/library/tests/integration/bridge-studio-instructions-draft.test.ts's CSRF-parity cases, not
  *     just assumed.
  */
 

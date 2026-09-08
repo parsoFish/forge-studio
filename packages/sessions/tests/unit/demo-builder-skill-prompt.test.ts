@@ -1,4 +1,4 @@
-import { OPERATOR_GUIDANCE_SENTINEL, RUNNER_TS_PATH, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
+import { OPERATOR_GUIDANCE_SENTINEL, promptPathSource, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
@@ -6,7 +6,9 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { runDemoBuilderTurn, demoTaskLines, type DemoBuilderStatus } from '../../kinds/demo-builder.ts';
+import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
+import { demoTaskLines } from '../../kinds/demo-generate.ts';
+import type { DemoBuilderStatus } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts/studio/types.ts';
@@ -47,21 +49,25 @@ const MOVED_SENTENCES: Array<{ label: string; text: string }> = [
   {
     // packages/sessions/demo-builder-runner.ts:724 (demoTaskLines, composed branch,
     // same paragraph as the composer sentence above — a distinct sentence).
-    // Verified present in the .ts today; absent from SKILL.md today.
-    label: 'composed branch grounding — "Ground every fragment in a real before/after … REAL output, never fabricated."',
-    text: 'Ground every fragment in a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated).',
+    // AMENDED by bead 6.11.49: this instruction told the WRITE pass to produce
+    // real output, and the write pass no longer has Bash to produce it with. The
+    // instruction did not disappear — it moved to the `ground-it` turn, whose
+    // pass does have Bash. The entry follows it there rather than being deleted,
+    // and AT-10 below pins the other half: no generate-* section may carry it.
+    label: 'grounding instruction — moved to the ground-it turn by the two-pass split (6.11.49)',
+    text: 'render an actual before/after of it — real output on both sides, not a mock.',
   },
 ];
 
 test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 branches + update-mode) moved from the runner .ts into skills/demo-builder/SKILL.md', () => {
-  const tsNorm = norm(readFileSync(RUNNER_TS_PATH, 'utf8'));
+  const tsNorm = norm(promptPathSource());
   const skillNorm = norm(readFileSync(SKILL_MD_PATH, 'utf8'));
 
   for (const { label, text } of MOVED_SENTENCES) {
     const needle = norm(text);
     assert.ok(
       !tsNorm.includes(needle),
-      `${label}: must be ABSENT from packages/sessions/kinds/demo-builder.ts (the prose must move to SKILL.md) — it is still there`,
+      `${label}: must be ABSENT from the kind's prompt path (kinds/demo-builder.ts + kinds/demo-generate.ts) — the prose must move to SKILL.md, and it is still there`,
     );
     assert.ok(
       skillNorm.includes(needle),
@@ -74,8 +80,8 @@ test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 bra
 // AT-2 — no fail-open remains
 // ---------------------------------------------------------------------------
 
-test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from kinds/demo-builder.ts', () => {
-  const tsText = readFileSync(RUNNER_TS_PATH, 'utf8');
+test('AT-2: no fail-open remains — the generic fallback prompt string and the runner-private loadSkillPrompt are both gone from the kind\'s prompt path (kinds/demo-builder.ts + kinds/demo-generate.ts)', () => {
+  const tsText = promptPathSource();
   assert.ok(
     !tsText.includes('You are the forge demo-builder agent.'),
     'the fail-open fallback prompt string must be removed — a fail-open here would ship an agent turn with NO task instructions and no signal',
@@ -94,11 +100,23 @@ const BASE_SENTINEL = 'BASE-SENTINEL-9f3a2b (shared preamble — proves the fixt
 const ELEMENT_ONLY_SENTINEL = 'ELEMENT-ONLY-SENTINEL-71c4';
 const COMPOSED_ONLY_SENTINEL = 'COMPOSED-ONLY-SENTINEL-52e9';
 const LEGACY_ONLY_SENTINEL = 'LEGACY-ONLY-SENTINEL-8d16';
+const GROUND_ONLY_SENTINEL = 'GROUND-ONLY-SENTINEL-3ba7 (the second pass only — must never reach the write pass, which has no Bash to ground anything with)';
 
 /** A fixture SKILL.md carrying one uniquely-sentineled section per planned
  *  turn id (`generate-element` / `generate-composed` / `generate-legacy`) —
  *  this pins the turn-id convention the design document plans; see the file
  *  header. */
+/** Bead 6.11.49 — a generate turn now runs the agent TWICE, so a capture that
+ *  overwrites leaves every assertion below pointing at the GROUNDING pass while
+ *  claiming to describe the write pass. These tests are about what pass 1 is
+ *  told, so they keep both prompts and read the first — and assert that there
+ *  really were two, so a regression to one pass fails here rather than quietly
+ *  re-pointing the assertions. */
+function writePassPrompt(prompts: readonly string[]): string {
+  assert.equal(prompts.length, 2, 'a generate turn must run exactly two agent passes — write, then ground');
+  return prompts[0]!;
+}
+
 function writeSelectionFixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'demo-builder-fixture-'));
   const p = join(dir, 'demo-builder-SKILL.md');
@@ -120,6 +138,9 @@ function writeSelectionFixture(): string {
       '<!-- turn: generate-legacy -->',
       LEGACY_ONLY_SENTINEL,
       '',
+      '<!-- turn: ground-it -->',
+      GROUND_ONLY_SENTINEL,
+      '',
     ].join('\n'),
   );
   return p;
@@ -129,20 +150,23 @@ test('AT-3a: targetElement scenario selects the generate-element turn section on
   const composedProcess: DemoStep[] = [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }];
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' }, composedProcess);
   const skillPromptPath = writeSelectionFixture();
-  let captured = '';
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     skillPromptPath,
-    queryFn: makeElementWritingQueryFn('cli-capture', (p) => { captured = p; }),
+    queryFn: makeElementWritingQueryFn('cli-capture', (p) => { prompts.push(p); }),
     logger: loggerFor(logsRoot, sessionId),
     logsRoot,
   });
+  const captured = writePassPrompt(prompts);
   assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
   assert.ok(captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must reach the prompt for a targetElement scenario');
   assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a targetElement scenario');
   assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a targetElement scenario');
+  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
+  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 test('AT-3b: composed (multi-element, no targetElement) scenario selects the generate-composed turn section only', async () => {
@@ -152,20 +176,23 @@ test('AT-3b: composed (multi-element, no targetElement) scenario selects the gen
   ];
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' }, composedProcess);
   const skillPromptPath = writeSelectionFixture();
-  let captured = '';
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     skillPromptPath,
-    queryFn: makeWritingQueryFn((p) => { captured = p; }),
+    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
     logger: loggerFor(logsRoot, sessionId),
     logsRoot,
   });
+  const captured = writePassPrompt(prompts);
   assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
   assert.ok(captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must reach the prompt for a composed scenario');
   assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a composed scenario');
   assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a composed scenario');
+  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
+  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 test('AT-3c: no-elements-configured (legacy) scenario selects the generate-legacy turn section only', async () => {
@@ -173,20 +200,23 @@ test('AT-3c: no-elements-configured (legacy) scenario selects the generate-legac
   // field — no elements configured at all (the legacy branch).
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' });
   const skillPromptPath = writeSelectionFixture();
-  let captured = '';
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
     projectRoot,
     forgeRoot: FORGE_ROOT,
     skillPromptPath,
-    queryFn: makeWritingQueryFn((p) => { captured = p; }),
+    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
     logger: loggerFor(logsRoot, sessionId),
     logsRoot,
   });
+  const captured = writePassPrompt(prompts);
   assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
   assert.ok(captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must reach the prompt for a no-elements-configured scenario');
   assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a legacy scenario');
   assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a legacy scenario');
+  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
+  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 // ---------------------------------------------------------------------------
@@ -240,15 +270,16 @@ test('AT-5: the composed prompt still carries the runner-injected DATA half — 
   const feedbackSentinel = 'AT5-FEEDBACK-SENTINEL-2201: make it punchier.';
   writeFileSync(join(sessionDir, 'feedback.md'), feedbackSentinel);
 
-  let captured = '';
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
     projectRoot,
     forgeRoot: FORGE_ROOT,
-    queryFn: makeWritingQueryFn((p) => { captured = p; }),
+    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
     logger: loggerFor(logsRoot, sessionId),
     logsRoot,
   });
+  const captured = writePassPrompt(prompts);
 
   assert.ok(captured.includes('Project: AT5-DATA-PROJECT'), 'project name must be injected verbatim, in the "Project: <name>" form');
   assert.ok(captured.includes(repoPath), 'the project repo path must be injected verbatim');
@@ -318,15 +349,16 @@ test('AT-6: the demoTaskLines export contract survives — composed-branch outpu
   // real runner's fully-composed prompt (what the R4-07 descriptor-parity
   // guarantee actually depends on in production).
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' }, FIXTURE_STEPS);
-  let captured = '';
+  const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId,
     projectRoot,
     forgeRoot: FORGE_ROOT,
-    queryFn: makeWritingQueryFn((p) => { captured = p; }),
+    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
     logger: loggerFor(logsRoot, sessionId),
     logsRoot,
   });
+  const captured = writePassPrompt(prompts);
   const runnerPositions = ids.map((id) => {
     const i = captured.indexOf(id);
     assert.ok(i !== -1, `the runner-composed prompt must include element id "${id}"`);
@@ -448,7 +480,11 @@ const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
   {
     label: 'legacy branch — deliverable #2 restated (the part that DID survive)',
     source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, legacy branch)',
-    text: 'a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated). This sample is what the operator reviews to judge the skill.',
+    // AMENDED by bead 6.11.49, same reason as MOVED_SENTENCES' grounding entry:
+    // the write pass authors the sample with marked placeholders, the ground
+    // pass fills them from real output. The restatement that survives in the
+    // legacy turn section is the one frozen here.
+    text: 'a sample produced by running that generator against a representative recent change, structured as a before/after with the captured output left as marked placeholders for the grounding pass. This sample, once grounded, is what the operator reviews to judge the skill.',
   },
   {
     label: "runGenerateStep — UPDATE MODE guidance (mode==='update' block)",
@@ -530,10 +566,10 @@ test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after t
     demoProcess?: DemoStep[],
   ): Promise<string> {
     const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
-    let captured = '';
+    const prompts: string[] = [];
     const queryFn = overrides.targetElement
-      ? makeElementWritingQueryFn(overrides.targetElement, (p) => { captured = p; })
-      : makeWritingQueryFn((p) => { captured = p; });
+      ? makeElementWritingQueryFn(overrides.targetElement, (p) => { prompts.push(p); })
+      : makeWritingQueryFn((p) => { prompts.push(p); });
     await runDemoBuilderTurn({
       sessionId,
       projectRoot,
@@ -543,7 +579,7 @@ test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after t
       logger: loggerFor(logsRoot, sessionId),
       logsRoot,
     });
-    return captured;
+    return writePassPrompt(prompts);
   }
 
   const elementProcess: DemoStep[] = [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }];
@@ -645,5 +681,47 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
     gitLine(repoPath, ['log', '-1', '--pretty=%s']),
     /demo machinery/,
     'the post-dispatch commit ("forge-studio: demo machinery (...)") must have landed on forge-studio despite the throw',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// AT-10 — the two-pass split's own contract, in the SKILL (bead 6.11.49).
+//
+// AT-1 and AT-7 above were amended to follow the grounding instruction into the
+// `ground-it` turn. That alone would be a weaker pin than what it replaced: an
+// instruction is allowed to be in two places, and a generate section that still
+// said "capture real output" would satisfy both. This is the half that makes
+// the amendment a tightening — the write pass has NO Bash, so a generate turn
+// that asks for captured output asks for something the agent cannot do, which
+// is exactly the shape ruling 374 recorded (two instructions fighting, and the
+// skill wins).
+// ---------------------------------------------------------------------------
+
+const GROUNDING_PHRASES = [
+  'Use Bash to actually check out / build / run',
+  'real output on both sides, not a mock',
+  'REAL output, never fabricated',
+];
+
+test('AT-10: no generate-* turn section instructs the agent to capture real output — the write pass has no Bash', () => {
+  const skill = readFileSync(SKILL_MD_PATH, 'utf8');
+  const sections = skill.split(/<!-- turn: /).slice(1);
+  const generate = sections.filter((sec) => sec.startsWith('generate-'));
+  assert.equal(generate.length, 3, 'the skill must still declare exactly the three generate turns');
+  const ground = sections.filter((sec) => sec.startsWith('ground-it'));
+  assert.equal(ground.length, 1, 'the skill must declare the ground-it turn the second pass loads');
+
+  for (const sec of generate) {
+    const turn = sec.slice(0, sec.indexOf(' '));
+    for (const phrase of GROUNDING_PHRASES) {
+      assert.ok(
+        !sec.includes(phrase),
+        `turn "${turn}" tells the WRITE pass to ${phrase} — but that pass runs with Bash removed, so the instruction cannot be obeyed`,
+      );
+    }
+  }
+  assert.ok(
+    GROUNDING_PHRASES.some((phrase) => ground[0]!.includes(phrase)),
+    'the ground-it turn must carry the grounding instruction the generate turns gave up',
   );
 });

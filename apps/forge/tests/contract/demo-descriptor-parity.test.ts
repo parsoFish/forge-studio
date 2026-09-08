@@ -1,0 +1,125 @@
+/**
+ * R4-07-F3 descriptor parity — the typed `demoProcess: DemoStep[]` (project.json,
+ * R1-03) is the ONE shared demo descriptor. Three consumers must agree on it:
+ *
+ *   (a) the preflight DEMO clause (accepts it as contract-green),
+ *   (b) the demo-builder's composition (`demoTaskLines`, Face B — HTML deliverable),
+ *   (c) the integrate band's derivation (`deriveDemoModel`, Face A — executed demo).
+ *
+ * Consumer (c) was the demo-agent's briefing until the LLM demo node was deleted
+ * (spec §5 item 4). The claim it carries is unchanged — the descriptor and its
+ * step ORDER may not drift between the faces — but the third face now DERIVES
+ * the checkpoints instead of describing them to a model.
+ *
+ * One fixture, three consumers — descriptor drift breaks this test. The
+ * deliverables intentionally differ (contract doc §DEMO, "two faces"); the
+ * descriptor and its element ORDER may not.
+ */
+
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+
+import { checkDemo } from '@forge/projects/preflight.ts';
+import { demoTaskLines } from '@forge/sessions/kinds/demo-generate.ts';
+import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
+import { deriveDemoModel } from '@forge/factory/phases/derive-demo-model.ts';
+// `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
+// library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
+// for this importer specifically: `projects` (rank 2) may not import
+// `library` (rank 2, a same-rank sibling) — repointing this line would trade
+// the file's existing `package-to-legacy` debt (already baselined against
+// `registry.ts`) for a NEW `package-layer-order` violation not covered by the
+// carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
+import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
+import type { DemoStep } from '@forge/contracts/studio/types.ts';
+import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+
+
+/** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately
+ * NOT in the library's alphabetical order so order-preservation is actually asserted. */
+const FIXTURE_STEPS: Array<DemoStep & { element: string }> = [
+  { kind: 'capture', text: 'record the CLI before/after with `npm run demo`', element: 'cli-capture' },
+  { kind: 'verify', text: 'encode the gate result', element: 'test-evidence' },
+  { kind: 'present', text: 'one-line essence', element: 'narrative' },
+];
+
+function positionsOf(haystack: string, ids: string[]): number[] {
+  return ids.map((id) => {
+    const i = haystack.indexOf(id);
+    assert.ok(i !== -1, `expected "${id}" to appear`);
+    return i;
+  });
+}
+
+function assertAscending(positions: number[], label: string): void {
+  for (let i = 1; i < positions.length; i += 1) {
+    assert.ok(positions[i]! > positions[i - 1]!, `${label}: element order must follow demoProcess step order`);
+  }
+}
+
+test('consumer (a): the preflight DEMO clause accepts the shared fixture', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'descriptor-parity-'));
+  try {
+    mkdirSync(join(dir, '.forge'), { recursive: true });
+    writeFileSync(
+      join(dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['echo', 'ok'] } }, demoProcess: FIXTURE_STEPS }),
+    );
+    const result = checkDemo(dir);
+    assert.equal(result.pass, true, result.detail);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('consumers (b)+(c): builder composition and the derived demo bundle read the same descriptor in the same order', () => {
+  const library = listDemoElements(FORGE_ROOT);
+  assert.ok(library.length >= 6, 'the studio demo-element library must be present');
+  const byId = new Map(library.map((e) => [e.id, e]));
+  for (const s of FIXTURE_STEPS) assert.ok(byId.has(s.element), `fixture element ${s.element} must exist in the library`);
+
+  // (b) demo-builder composed branch (Face B).
+  const builderText = demoTaskLines({
+    status: { project_repo_path: '/unused' } as unknown as DemoBuilderStatus,
+    composed: true,
+    elementSteps: FIXTURE_STEPS,
+    byId,
+  }).join('\n');
+
+  // (c) the integrate band's derivation (Face A).
+  const derived = deriveDemoModel({
+    initiativeId: 'INIT-parity',
+    title: 'Descriptor parity',
+    project: 'parity',
+    diffStat: '1 file changed',
+    headSha: 'abc',
+    changedFiles: ['src.ts'],
+    workItems: [],
+    acceptanceCriteria: ['AC-1'],
+    gateEvidence: [],
+    demoProcess: FIXTURE_STEPS,
+    capture: 'checkpoints',
+  });
+  assert.equal(derived.ok, true, derived.ok ? '' : derived.errors.join('; '));
+  const captions = derived.ok ? derived.model.checkpoints.map((c) => c.caption) : [];
+
+  const ids = FIXTURE_STEPS.map((s) => s.element);
+  assertAscending(positionsOf(builderText, ids), 'demo-builder');
+
+  // The derivation reads the SAME descriptor: one checkpoint per `capture` step,
+  // in the descriptor's own order, captioned with the operator's own text.
+  assert.deepEqual(
+    captions,
+    FIXTURE_STEPS.filter((s) => s.kind === 'capture').map((s) => s.text),
+    'the derived checkpoints must follow the demoProcess step order',
+  );
+
+  // The builder surfaces each element's generator body/kind, not just the id.
+  for (const s of FIXTURE_STEPS) {
+    const el = byId.get(s.element)!;
+    assert.ok(builderText.includes(el.name), `builder inlines ${s.element} generator header`);
+  }
+});

@@ -124,20 +124,20 @@ Each finalizer **keeps its own realpath/containment guard intact** (`isAllowedSk
 
 ## Amendment — 2026-08-11 (batch-E close): the migration commitment is re-homed, not kept
 
-The batch-E migration pass **measured** (probes driving `runInteractiveTurn` against each runner's WI-0 golden-capture scenario — `_wave5/parks/R4-22-F4-runner-migrations.md`) that **none of the four runners is expressible on the primitive as written**: the spine generalises the plumbing, but the majority of each runner is per-kind prompt/state composition for which `turnSpec` has, by this ADR's own discipline, no seam. Consequences, as ruled by the operator:
+The batch-E migration pass **measured** (probes driving `runInteractiveTurn` against each runner's WI-0 golden-capture scenario — the R4-22-F4 runner-migrations park of 2026-08-11) that **none of the four runners is expressible on the primitive as written**: the spine generalises the plumbing, but the majority of each runner is per-kind prompt/state composition for which `turnSpec` has, by this ADR's own discipline, no seam. Consequences, as ruled by the operator:
 
 - A `STEP_HANDLERS`/prompt-builder registry (the shape §Consequences contemplated for architect) was proposed and **refused** — no new orchestrator surface.
 - The "batch-E migration steps" this ADR committed are **re-homed to R4-23** (`docs/roadmaps/archive/R4-ootb-suite.md`): re-author each runner's composed prompt into its agent's `SKILL.md` (ADR-024's thesis) and accept **live** per kind — a golden byte-match cannot gate a prompt that changes by design.
 - The honest surface accounting: batch E's net production deletion from the migration path was **zero**. The transient growth this ADR disclosed stands; the promised net decrease is **owed via R4-23**, and it is smaller than the original text implied because the spine-owned plumbing is a minority of each runner's lines.
-- The dispatch fork and the four untouched runners remain the standing state — verified byte-identical behind the fork at batch-E close (`_wave5/batch-e-exit-disposition.md`).
+- The dispatch fork and the four untouched runners remain the standing state — verified byte-identical behind the fork at batch-E close (the batch-E exit disposition of 2026-08-11).
 
 ## Amendment — 2026-08-14 (R4-23): architect is never migrated, the mirror is deleted, and the owed decrease is not what this ADR implied
 
-R4-23 (bead `forge-lt4`, wave-5 batch H) executed the re-authoring the 2026-08-11 amendment re-homed. It re-authored all four legacy runners' composed prompts into their agents' `SKILL.md` files as `<!-- turn: <id> -->` sections behind one shared loader (`loadSkillTurnPrompt` / `splitSkillTurnSections`, `orchestrator/skill-path.ts`), with **live per-kind acceptance** — one real spawn per runner producing a real artifact (`_wave5/gate-logs/R4-23-live-{instructions,demo-builder,project-brain,architect}.log`). Three things this ADR left open are now closed.
+R4-23 (bead `forge-lt4`, wave-5 batch H) executed the re-authoring the 2026-08-11 amendment re-homed. It re-authored all four legacy runners' composed prompts into their agents' `SKILL.md` files as `<!-- turn: <id> -->` sections behind one shared loader (`loadSkillTurnPrompt` / `splitSkillTurnSections`, `packages/agents/skill-path.ts`), with **live per-kind acceptance** — one real spawn per runner producing a real artifact (the four R4-23 live acceptance logs of 2026-08-14, one per runner kind). Three things this ADR left open are now closed.
 
 ### 1. §3 corrected — `AGENT_RUNNERS` is NOT deleted, and architect is NEVER migrated onto the primitive
 
-§3 says *"`AGENT_RUNNERS` is deleted only after architect migrates."* That sentence is retired. Architect is **never** migrated onto `turnSpec`, and `AGENT_RUNNERS` therefore survives, deliberately, with its four entries. The reasoning is the F4 measurement pass's recommendation (`_wave5/parks/R4-22-F4-architect-migration.md` §3), adopted here:
+§3 says *"`AGENT_RUNNERS` is deleted only after architect migrates."* That sentence is retired. Architect is **never** migrated onto `turnSpec`, and `AGENT_RUNNERS` therefore survives, deliberately, with its four entries. The reasoning is the F4 measurement pass's recommendation (the R4-22-F4 architect-migration park of 2026-08-11 §3), adopted here:
 
 - The cap-dissolution goal §Consequences claims is **already fully achieved without architect**. Since PR #117/#118 a new interactive kind is a yaml row — `authoring` proved it live. Migrating architect adds **zero** cap-dissolution value; it is pure surface accounting.
 - Architect's four load-bearing behaviours — brain-first prompt injection (ADR-010 makes it *mandatory* for a planner), the fail-open `exploring` step, the forced-emit retry, and the completeness-critic gate (ruling 380) — all fire only on paths a happy-path golden fixture never reaches. A migration's own gate would be structurally blind to exactly what it might break.
@@ -162,7 +162,7 @@ This ADR's §Consequences promised that the transient orchestrator growth would 
 | `orchestrator/demo-builder-runner.ts` | −26 |
 | `orchestrator/agent-dispatch.ts` (mirror deleted) | −12 |
 | `orchestrator/project-brain-builder-runner.ts` | −5 |
-| `orchestrator/skill-path.ts` (the shared turn-section loader) | **+208** |
+| `packages/agents/skill-path.ts` (the shared turn-section loader) | **+208** |
 | **net** | **+110** |
 
 Why, plainly: the ~403 lines the F4 park named as realizable were **spine-owned plumbing** on the *migration* axis — and no runner migrated, so none of it was removed. On the *re-authoring* axis what leaves `orchestrator/` is prompt PROSE, and prose leaves TypeScript for markdown (`skills/*/SKILL.md` grew by ~128 lines net) rather than disappearing. The mechanism that makes a `SKILL.md` per-turn selectable — marker splitting with fenced-block awareness and duplicate-id rejection, a fail-loud loader with three named error paths, and a default-path cache — costs more lines than the four runners shed, even though it replaced four private `loadSkillPrompt` copies.
@@ -238,7 +238,7 @@ The bead forge-eip fence installed `options.canUseTool` but the SDK only consult
 
 ## Amendment — 2026-08-19 (wave-7 FIX-A2): the cancelled phase is STICKY at the status-write seam, and Bash is fenced too
 
-Two contract corrections from the post-land review sweep of W7-A2 (`_wave7/lanes/review-sweep-A2.json`, findings W7A2-01 HIGH and W7A2-03 SECURITY). Both close gaps the 2026-08-19 A2 amendment itself disclosed or implied.
+Two contract corrections from the post-land review sweep of W7-A2 (the W7-A2 post-land review sweep of 2026-08-19, findings W7A2-01 HIGH and W7A2-03 SECURITY). Both close gaps the 2026-08-19 A2 amendment itself disclosed or implied.
 
 ### 1. `cancelled` WINS — the sticky-cancel rule lives at the ONE status-write seam
 

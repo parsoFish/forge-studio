@@ -304,7 +304,7 @@ test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment
 // at the function level; reading its source confirms it adds no cleanup of its
 // own beyond the bare `try { scaffoldGreenfieldProject } catch { print+exit }`.
 // The bridge greenfield route IS driven end-to-end in
-// apps/forge/bridge-studio-writes.test.ts (AT-4on-4 + AT-4on-6).
+// apps/forge/tests/regression/bridge-studio-writes.test.ts (AT-4on-4 + AT-4on-6).
 // ===========================================================================
 
 /** True iff creating a child under `dir` is ACTUALLY blocked by permissions in

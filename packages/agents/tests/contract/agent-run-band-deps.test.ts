@@ -1,5 +1,5 @@
 /**
- * The negative twin of `apps/forge/band-agent-standalone-parity.test.ts`'s
+ * The negative twin of `apps/forge/tests/contract/band-agent-standalone-parity.test.ts`'s
  * assembly assertion (M4-agents, exit row 4).
  *
  * The band pipelines are `@forge/factory` (rank 7) and reach this package only

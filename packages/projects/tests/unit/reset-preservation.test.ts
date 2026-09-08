@@ -13,8 +13,8 @@
  * Q3) proposes `mock.method(fs, 'readFileSync', ...)` to prove
  * `secrets.env` is never opened. Empirically verified NOT to work in this
  * repo/runtime before writing this file (see the two precedents this test
- * follows: `apps/forge/instructions-start-read-guard.test.ts` and
- * `packages/factory/demo-builder-start-read-guard.test.ts`, both of which
+ * follows: `apps/forge/tests/regression/instructions-start-read-guard.test.ts` and
+ * `packages/factory/tests/regression/demo-builder-start-read-guard.test.ts`, both of which
  * document the same finding for `node:child_process`'s `spawn`) — a
  * throwaway probe against BOTH `node:fs`'s `readFileSync` and an ordinary
  * userland named export reproduces the identical

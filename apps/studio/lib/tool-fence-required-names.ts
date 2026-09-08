@@ -11,7 +11,7 @@
  * Hand-mirrored, never a cross-boundary import — forge-ui never imports
  * cli/ at runtime (see `forge-ui/lib/session-lifecycle-client.ts`'s and
  * `forge-ui/lib/session-client.ts`'s own headers for the same stated
- * convention). Kept honest by `packages/library/tool-fence-required-names-parity.test.ts`,
+ * convention). Kept honest by `packages/library/tests/contract/tool-fence-required-names-parity.test.ts`,
  * a NODE-SIDE TEST (not part of either production bundle) that imports BOTH
  * arrays directly and fails the moment they disagree — the exact precedent
  * `forge-ui/lib/authoring-package-shape.ts` /

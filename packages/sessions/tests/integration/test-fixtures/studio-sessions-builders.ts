@@ -10,7 +10,7 @@ import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifes
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-sessions.ts` import is the
- * expected red). Mirrors packages/library/bridge-studio-templates.test.ts's idiom: a real
+ * expected red). Mirrors packages/library/tests/integration/bridge-studio-templates.test.ts's idiom: a real
  * bridge (startBridge) + fetch for the "happy" behavioral tests, plus direct
  * handler invocation for the passthrough contract AND the slug-validation
  * sweep (see the design-decision note below on why the sweep needs direct
@@ -309,7 +309,7 @@ export function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, proj
 }
 
 /** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly on
- *  disk — mirrors `apps/forge/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
+ *  disk — mirrors `apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
  *  idiom verbatim (that file's own AT-3/AT-4/AT-5 prove this exact minimal
  *  shape is sufficient for `computeAgentCleanupFindings`'s live
  *  `runBrainLint` pass to complete without throwing — no INDEX.md or other

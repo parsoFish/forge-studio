@@ -298,12 +298,11 @@ export function deriveContractStages(input: {
   // malformed project.json still reaches `loadProjectConfig` and fails the whole
   // derivation closed, unchanged.
   //
-  // Residual (disclosed, same trust tier as this module's other realpath-not-
-  // atomic notes): once the leaf is proven contained, `loadProjectConfig` also
-  // raw-reads the `.forge/quality_gate_cmd` sidecar; a symlinked SIDECAR could
-  // still fold cmd tokens in when project.json omits `cmd`. Closing that needs the
-  // guard inside `loadProjectConfig` (a shared hot-path function, many callers) —
-  // out of scope for this leaf-tail pass; tracked as an open concern.
+  // The sidecar residual this note used to track is CLOSED, not open:
+  // `loadProjectConfig` reaches `.forge/quality_gate_cmd` through
+  // `readQualityGateSidecar`, which resolves the whole path (leaf included)
+  // with `guardedReadFile`, so a symlinked sidecar is refused rather than
+  // folded into `testProcess.local.cmd`.
   let config: ProjectConfig | null = null;
   if (guardedFile(projectDir, ['.forge', 'project.json'], 'read') !== null) {
     try {

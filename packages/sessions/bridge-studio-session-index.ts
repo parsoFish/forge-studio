@@ -39,7 +39,7 @@ import {
   guardedSessionDir,
   type SessionRootsContext,
 } from './bridge-studio-session-helpers.ts';
-import type { DemoBuilderStatus } from './kinds/demo-builder.ts';
+import type { DemoBuilderStatus } from './kinds/demo-session-store.ts';
 import type { InstructionsStatus } from './kinds/instructions.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import type { ProjectBrainRow as ProjectBrainStatus } from './bridge-studio-project-brain.ts';

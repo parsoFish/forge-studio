@@ -133,7 +133,7 @@ const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ()._[\]-]{0,127}$/;
 /** Comma-separated, declaration-order rendering of an agent's declared
  *  materials kinds for a refusal message — the literal `(none)` when the
  *  agent declares nothing at all (R6-04-F2 WI-1, exact wording pinned by
- *  `apps/forge/ui-bridge-agent-run-materials.test.ts`). */
+ *  `apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts`). */
 function declaredMaterialKindsClause(declared: readonly string[]): string {
   return declared.length > 0 ? declared.join(', ') : '(none)';
 }

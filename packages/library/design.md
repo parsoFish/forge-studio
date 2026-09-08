@@ -42,7 +42,7 @@ The port has **two members answering two different questions, and no path in lib
 
 If a future path wants both members, that is the signal one of them is answering the wrong question — fix the path rather than widening the port.
 
-Two things follow from the boundary rather than from taste. Library's own tests supply the port from `tests/test-fixtures/agent-fixture.ts`, because a test edge is still an edge; what that leaves unproven — that the real binding answers what those fixtures assume — is proven at `apps/forge/library-agent-facts.test.ts`, which also carries the drift guard between `agentUsageIndex` and the assembly's `compositions` walk. And a handful of cases whose subject was the agent loader all along moved out to the assembly, where importing both packages is what the assembly is for.
+Two things follow from the boundary rather than from taste. Library's own tests supply the port from `tests/test-fixtures/agent-fixture.ts`, because a test edge is still an edge; what that leaves unproven — that the real binding answers what those fixtures assume — is proven at `apps/forge/tests/contract/library-agent-facts.test.ts`, which also carries the drift guard between `agentUsageIndex` and the assembly's `compositions` walk. And a handful of cases whose subject was the agent loader all along moved out to the assembly, where importing both packages is what the assembly is for.
 
 ### The palette is scanned, not declared
 

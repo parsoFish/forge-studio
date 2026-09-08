@@ -18,11 +18,12 @@
  * s5 outcome itself raised to sharing the two `makeWritingQueryFn`s, which
  * does hold and which this PR honours.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { demoSessionDir, DEMO_SKILL_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '../../../kinds/demo-builder.ts';
+import { demoSessionDir } from '../../../kinds/demo-builder.ts';
+import { DEMO_SKILL_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '../../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../../interactive-session.ts';
 import { writeSessionStatus } from '../../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
@@ -86,6 +87,17 @@ import type { DemoStep } from '@forge/contracts/studio/types.ts';
 // (COMMON §15.14): a depth-coupled chain silently re-points at a file that
 // does not exist the moment either end moves.
 export const RUNNER_TS_PATH = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'demo-builder.ts');
+/** Bead 6.11.49's split moved the whole prompt-assembly half into its own
+ *  module. AT-1 and AT-2 assert prose and a fail-open are ABSENT — assertions
+ *  that a carve turns VACUOUS unless the file they read follows the code, so
+ *  they read the UNION of the kind's two prompt-path modules, not one of them.
+ *  Repointing the constant instead would have left both tests passing against
+ *  a file that no longer assembles a prompt at all. */
+export const GENERATE_TS_PATH = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'demo-generate.ts');
+/** The kind's whole prompt path, as one string: absence must hold across BOTH. */
+export function promptPathSource(): string {
+  return `${readFileSync(RUNNER_TS_PATH, 'utf8')}\n${readFileSync(GENERATE_TS_PATH, 'utf8')}`;
+}
 export const SKILL_MD_PATH = join(FORGE_ROOT, 'skills', 'demo-builder', 'SKILL.md');
 
 /** Normalise whitespace on both sides before comparing — the moved sentences

@@ -77,7 +77,7 @@ export async function handleSessionCancelRoute(
 ): Promise<boolean> {
   if (method !== 'POST') return false;
   const url = pathOnly(rawUrl);
-  // Inline regex (not a named const) so apps/forge/dry-bridge-coverage.test.ts's
+  // Inline regex (not a named const) so apps/forge/tests/contract/dry-bridge-coverage.test.ts's
   // dispatch scanner can pair this route with its BRIDGE_ROUTE_CLASSIFICATION
   // row (`/api/studio/sessions/:kind/:sessionId/cancel`, exempt-local).
   const routeMatch = url.match(/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/);

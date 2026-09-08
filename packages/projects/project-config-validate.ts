@@ -1,17 +1,9 @@
 /**
  * Per-project configuration — `validateProjectConfig`'s field parsers (every
- * `parse*` helper besides `parseRepo`). Split out of `project-config.ts` (the
- * barrel) when that file grew past the 800-line baseline cap; see
- * `scripts/baselines/file-size.json` / `scripts/check-file-size.mjs`.
- * Siblings: `project-config-types.ts` (the `ProjectConfig` type family),
- * `project-config-sidecar.ts` (the `.forge/quality_gate_cmd` sidecar).
- *
- * `validateProjectConfig` (the dispatcher) and `parseRepo` stay in the barrel
- * rather than moving here with the other field parsers: `parseRepo` carries
- * the one already-baselined `@forge/flows/trigger-payload.ts` edge, and
- * bringing `validateProjectConfig` along to reach it would create a real
- * barrel<->validate import cycle. `project-config.ts`'s own header carries the
- * full reasoning and quotes the baseline row.
+ * `parse*` helper besides `parseRepo`). A leaf of `project-config.ts`, whose
+ * header carries the split's reasoning, the sibling map, and why
+ * `validateProjectConfig` and `parseRepo` stay in the barrel rather than
+ * joining the other field parsers here.
  */
 
 import {

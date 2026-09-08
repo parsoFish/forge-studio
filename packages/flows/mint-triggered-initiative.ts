@@ -73,7 +73,7 @@ function idToken(s: string): string {
  *     of this arm recovered the declaring flow id by parsing `triggeredBy`'s
  *     `cron:<flowId>` prefix when `sourceFlowId` was absent, but no real
  *     caller ever omits it — only pre-fix hand-built test fixtures did, and
- *     the fixture builder (`orchestrator/test-fixtures/flow-run-request.ts`)
+ *     the fixture builder (`packages/flows/tests/test-fixtures/flow-run-request.ts`)
  *     now threads it by default. Same no-fallback posture as webhook above.
  * Only these three origins ever reach this function (drainFlowRunRequests
  * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,

@@ -113,8 +113,17 @@ export function SessionProjectBrainPanel({
             Optionally focus the analysis (e.g. &ldquo;emphasise the build/test conventions and the module
             layout&rdquo;), then start. The agent reads the project and drafts theme pages for your review.
           </p>
+          {/* `data-field` beside the `data-component` the box already carried:
+              a `data-component` names a thing on the page, a `data-field`
+              names something an operator can TYPE INTO, and only the second
+              is addressable — the story runner resolves `[data-field]`
+              (`scripts/stories/beats-drive.mjs`). S6 beat 5's act has always
+              read "brief the seeding agent"; until this attribute existed no
+              story could carry it out, so the beat asserted a phase nothing
+              in it caused. Contract row: `docs/reference/studio-dom-contract.md`. */}
           <textarea
             data-component="brain-brief-input"
+            data-field="brain-brief"
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
             rows={3}

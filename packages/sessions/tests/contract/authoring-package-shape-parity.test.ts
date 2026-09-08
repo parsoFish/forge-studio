@@ -21,7 +21,7 @@
  * A plain, framework-free TS module under apps/studio/lib/ (no JSX, no
  * 'use client', no Next-only API) IS importable directly by a `node
  * --experimental-strip-types --test` file inside a package — see
- * packages/library/tool-fence-required-names-parity.test.ts's own precedent (`import { TOOL_FENCE_REQUIRED_NAMES }
+ * packages/library/tests/contract/tool-fence-required-names-parity.test.ts's own precedent (`import { TOOL_FENCE_REQUIRED_NAMES }
  * from '../../apps/studio/lib/tool-fence-required-names.ts'`). This test uses that
  * SAME precedent to import the REAL client-side array
  * (apps/studio/lib/authoring-package-shape.ts) alongside the REAL server-side

@@ -102,18 +102,17 @@ import { join, resolve } from 'node:path';
 
 import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
+import { runDemoBuilderTurn, demoSessionDir } from '../../kinds/demo-builder.ts';
 import {
-  runDemoBuilderTurn,
-  demoSessionDir,
   DEMO_SKILL_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
-} from '../../kinds/demo-builder.ts';
+} from '../../kinds/demo-session-store.ts';
 import { runProjectBrainTurn, projectBrainSessionDir, type ProjectBrainStatus } from '../../kinds/project-brain.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../../orchestrator/test-fixtures/spawn-capture/normalize.ts';
+import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 // The architect's raw `readStatus`/`writeStatus` pair was deleted with the M4
 // exit door (ruling 129): it had no production caller and was the unguarded
@@ -129,7 +128,7 @@ function writeStatus(sessionDir: string, status: ArchitectStatus): string {
 }
 
 
-const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'orchestrator', 'test-fixtures', 'spawn-capture');
+const FIXTURES_DIR = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture');
 const FIXTURE_ARCHITECT = join(FIXTURES_DIR, 'interactive-architect.json');
 const FIXTURE_INSTRUCTIONS = join(FIXTURES_DIR, 'interactive-instructions.json');
 const FIXTURE_DEMO_BUILDER = join(FIXTURES_DIR, 'interactive-demo-builder.json');
@@ -194,6 +193,9 @@ const DEMO_BUILDER_SKILL_FIXTURE = [
   '',
   '<!-- turn: generate-legacy -->',
   'FIXTURE demo-builder GENERATE-LEGACY turn.',
+  '',
+  '<!-- turn: ground-it -->',
+  'FIXTURE demo-builder GROUND-IT turn.',
 ].join('\n');
 const PROJECT_BRAIN_SKILL_FIXTURE = [
   'You are the forge project-brain builder (golden-capture fixture v2).',
@@ -411,9 +413,14 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
     const logsRoot = join(root, '_logs');
     const logger = createLogger(`_demo-${SESSION_ID}`, logsRoot);
 
-    let captured: Captured | null = null;
+    // Bead 6.11.49 — one generate turn spawns TWICE (write, then ground), so a
+    // single `captured` slot would silently re-point this golden at the SECOND
+    // spawn and keep passing. Both are captured and both are snapshotted: the
+    // property worth pinning is that pass 1 carries no `Bash` and a smaller
+    // maxTurns, which a last-write-wins capture could never see.
+    const captures: Captured[] = [];
     const queryFn: QueryFn = ({ prompt, options }) => {
-      captured = { prompt, options };
+      captures.push({ prompt, options });
       const cwd = (options?.cwd as string | undefined) ?? '.';
       async function* gen(): AsyncGenerator<unknown> {
         mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
@@ -436,11 +443,19 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
     });
 
     assert.equal(result.phase, 'awaiting-review', 'sanity: the fixture must drive the turn to a generated demo awaiting review');
-    assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
+    assert.equal(captures.length, 2, 'a generate turn must spawn exactly twice — the write pass, then the grounding pass');
+    assert.ok(
+      !(captures[0]!.options?.allowedTools as string[] | undefined)?.includes('Bash'),
+      'the WRITE pass must spawn with Bash removed — it is the whole mechanism of bead 6.11.49',
+    );
+    assert.ok(
+      (captures[1]!.options?.allowedTools as string[] | undefined)?.includes('Bash'),
+      'the GROUNDING pass must spawn with Bash restored — a demo that cannot run the project cannot show real output',
+    );
 
     const statusAfter = readJson(join(sessionDir, 'status.json'));
     const normalized = normalizeForSnapshot(
-      { spawn: captured, result, statusAfter },
+      { spawns: captures, result, statusAfter },
       [
         { value: root, placeholder: '<TMP>' },
         { value: String(statusAfter.updated_at), placeholder: '<TIMESTAMP>' },

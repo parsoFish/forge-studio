@@ -18,7 +18,7 @@
  *
  * Ported from `packages/sessions/instructions-runner.ts`. Byte-identical spawn
  * behaviour is pinned by `interactive-runners-golden.test.ts` against
- * `orchestrator/test-fixtures/spawn-capture/interactive-instructions.json`.
+ * `packages/kernel/tests/test-fixtures/spawn-capture/interactive-instructions.json`.
  */
 
 import type { ServerResponse } from 'node:http';
@@ -32,7 +32,7 @@ import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import { parsePendingQuestions } from '../bridge-studio-sessions.ts';
 import {
   affordanceDryBridgeMarker,
-  answersCapReason,
+  readAnswersBody,
   safeParseJson,
   MAX_ANSWER_FIELD_BYTES,
   type AffordanceRouteContext,
@@ -536,20 +536,12 @@ export async function handleInstructionsAnswer(
   sessionId: string,
   body: Record<string, unknown>,
 ): Promise<void> {
-  const answersRaw = body.answers;
-  if (
-    !Array.isArray(answersRaw) ||
-    !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
-  ) {
-    sendJson(res, 400, { error: 'body.answers must be an array of {question: string, answer: string}' }, origin);
+  const parsed = readAnswersBody(body, false);
+  if ('error' in parsed) {
+    sendJson(res, 400, { error: parsed.error }, origin);
     return;
   }
-  const answers = answersRaw as { questionId?: unknown; question: string; answer: string }[];
-  const capReason = answersCapReason(answers);
-  if (capReason !== null) {
-    sendJson(res, 400, { error: capReason }, origin);
-    return;
-  }
+  const answers = parsed.answers as { questionId?: unknown; question: string; answer: string }[];
 
   // W7-C2 T1 review (A3, finding sessions-kinds-19) — CORRELATE BY ID, not
   // by text. The panel renders one control per pending question and posts

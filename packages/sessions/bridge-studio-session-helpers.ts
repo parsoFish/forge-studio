@@ -504,7 +504,7 @@ export function newArchitectSessionId(): string {
   // 3): the timestamp alone has only ONE-SECOND granularity — zero entropy —
   // so a session id was guessable well enough to pre-plant a colliding
   // directory (reproduced live, 100% hit rate over a 4-second candidate
-  // window; see apps/forge/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
+  // window; see apps/forge/tests/integration/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
   // helper is shared by FIVE routes (architect / instructions /
   // project-brain / demo-builder / onboarding start) and nothing downstream
   // string-matches the bare timestamp shape — only SAFE_ID_RE plus a length

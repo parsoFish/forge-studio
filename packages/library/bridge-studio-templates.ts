@@ -269,7 +269,7 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
 /**
  * Shared mutation body for PUT and DELETE /api/studio/templates/:id
  * (W7-B4). One dispatch line per exported handler (not a combined `||`) so
- * the dry-bridge coverage scanner (apps/forge/dry-bridge-coverage.test.ts) derives
+ * the dry-bridge coverage scanner (apps/forge/tests/contract/dry-bridge-coverage.test.ts) derives
  * BOTH candidates — its explicit-method regex reads only the first
  * `method ===` on an if-line. Module-local: the two exported handlers below
  * are its only callers.

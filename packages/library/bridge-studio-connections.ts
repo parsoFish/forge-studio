@@ -13,7 +13,7 @@
  *
  * D1 (structural negative AC): there is NO create/update/delete route for a
  * connection, anywhere. This module exports no write-verb-named function
- * (`packages/library/connections-no-authoring.test.ts` asserts the export
+ * (`packages/library/tests/contract/connections-no-authoring.test.ts` asserts the export
  * surface directly); every other method/URL falls through (`return false`)
  * to the real bridge dispatcher's final 404.
  *
@@ -25,7 +25,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT DECISIONS made here that the spec did not fully dictate (mirrors
- * the AT file's own header — see packages/library/bridge-studio-connections.test.ts):
+ * the AT file's own header — see packages/library/tests/integration/bridge-studio-connections.test.ts):
  *
  *  D-1. Response envelope: `{ connections: [...] }` (list) / a flat
  *       `ConnectionWire` object (detail) — same shape at both depths (D5:

@@ -56,8 +56,18 @@
  * ALREADY described. No act, no `say` and no `expect` was reworded; nothing
  * was removed.
  *
- * ONE BEAT WAS ADDED — beat 4, writing the instructions body. Beat 9 asserts
- * `data-ready-count="6"`, and the six checks are purpose / skill / guard /
+ * AMEND-2 (M6, operator-confirmed in the attended sitting of 2026-09-08;
+ * `_1.0/gate-manifests/M1-C-S5.amend-2.md`; rulings 400/410 and 401/423). Two
+ * beats, no product change at all. Beat 9 asserted a passing COUNT that moved
+ * with the agent's own bindings and now asserts the stable total plus one
+ * NAMED row; beat 13 asked for a finished run 271 ms after pressing Run and
+ * now declares the bound that lets one finish. Both are stated in full in the
+ * beats themselves. Neither assertion was relaxed: beat 9 went from one key to
+ * three, and beat 13 kept every key it had.
+ *
+ * ONE BEAT WAS ADDED — beat 4, writing the instructions body. Beat 9 originally
+ * asserted `data-ready-count="6"` (see its own note for why that moved), and
+ * the six checks are purpose / skill / guard /
  * process / interactivity / runtime; `BLANK_STATE` already ships a guard, an
  * interactivity sentence and a model, the beats below meet purpose and skill,
  * and `process` — the instructions body — was the one check NO authored
@@ -266,16 +276,39 @@ export default {
       say: 'Saving mints the agent and lands the operator on its own page. Nothing linked here a moment ago — the route exists because the button was pressed.',
     },
     {
-      // Fully expressible. Six is the builder's own contract, not a number
-      // this story chose: purpose, skill, guard, process, interactivity,
-      // runtime. A saved agent that cannot pass its own readiness panel is not
-      // one a Flow should be allowed to schedule.
-      act: 'Check the agent is ready — all six readiness checks pass',
+      // AMEND-2 (rulings 400/410). The beat asserted `ready-count: '6'` and the
+      // panel answered 7 — measured in `_1.0/reports/m6-d-S5-1.log` and
+      // identically at `e3c9a402` back in M4. `data-ready-count` is how many
+      // checks PASS, and a seventh `connections` check appears once the agent
+      // fences a tool, so the number moved with the agent's OWN bindings. The
+      // story did nothing wrong; it asserted a figure that was never stable.
+      //
+      // #530 published the stable fact beside it: `data-ready-total` is how
+      // many checks EXIST, always seven
+      // (`apps/studio/components/studio/agent-builder/ReadinessPanel.tsx`).
+      //
+      // BUT A TOTAL ALONE PROVES NOTHING about any row, so 400 asked for the
+      // stable total AND a named row — and naming the row is why `check` is
+      // asserted here and not only `check-state`. Both are per-row keys, so
+      // `resolveExpectations` puts them in its shared-key branch
+      // (`scripts/stories/beats-page.mjs`), where ONE element must carry every
+      // shared key with a matching value. Asserting `check-state` alone would
+      // have been satisfied by ANY ready row — including a run where
+      // `connections`, the check that broke the count in the first place,
+      // never resolved. `connections` is deliberately the row named: it is the
+      // conditional seventh, and the only one whose state depends on a fetch.
+      act: 'Check the agent is ready — every readiness check the panel names',
       expect: {
         route: '/agents/story-s5',
-        data: { page: 'agents', 'agent-id': 'story-s5', 'ready-count': '6' },
+        data: {
+          page: 'agents',
+          'agent-id': 'story-s5',
+          'ready-total': '7',
+          check: 'connections',
+          'check-state': 'ready',
+        },
       },
-      say: 'Readiness is forge refusing to pretend. Six checks, each of which can genuinely fail, and an agent that misses one is an agent that will disappoint a station at three in the morning.',
+      say: 'Readiness is forge refusing to pretend. Every check on that panel can genuinely fail, and an agent that misses one is an agent that will disappoint a station at three in the morning.',
     },
     {
       // Expressible since bead `forge-8vfn.5.15`: the ceiling input carried
@@ -344,7 +377,28 @@ export default {
       // DOM contract says the attribute is OMITTED, never zeroed, when a cost
       // genuinely does not exist, so its PRESENCE with a value is the claim,
       // and a fabricated `0.00` would fail it exactly as it should.
+      //
+      // AMEND-2 (ruling 401, constant settled by 423). The beat had no `do`
+      // and no `wait`, and `waitForConsequence` is entered only when
+      // `steps.length > 0 || bound.label !== null` (`scripts/stories/beats.mjs`)
+      // — so it read the page 271 ms after beat 11's press while asking for
+      // `run-status: 'done'` and a recorded cost. No product change makes a
+      // real agent finish in 271 ms: the beat was red forever as authored,
+      // which is §15.175/178/201's shape exactly.
+      //
+      // The bound is declared HERE, per beat, by design (§3.1) — there is no
+      // product-exported per-kind constant and there should not be. `300_000`
+      // is half of S4 beat 11's `600_000` on an architect session, because
+      // this agent's own ceiling is the $2 beat 10 sets against the
+      // architect's much larger run.
+      //
+      // What it buys: ONE real completed agent turn, comfortably inside 388's
+      // $25 per run, and it converts S5's spend line from UNMEASURED — a turn
+      // reaped mid-hang writes no priced event — into a real figure. S5 is the
+      // story whose whole point is that an agent's page tells the truth about
+      // spend, and until this it had never run one to completion.
       act: 'Read the row: what it cost, where it ran, and how it ended',
+      wait: { for: 'agent', upTo: 300_000 },
       expect: {
         route: '/agents/story-s5',
         data: {

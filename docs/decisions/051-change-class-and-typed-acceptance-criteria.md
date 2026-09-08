@@ -3,7 +3,7 @@
 **Status:** Accepted (operator decision 2026-09-05, as drafted, including the disclosed `packages/sessions` repoint).
 **Date:** 2026-09-05
 **References:** spec §5 items 1, 2, 3, 8, 9; [`docs/roadmaps/1.0.md`](../roadmaps/1.0.md) §4 M5 Lane A, §5 H7; [ADR 037](./037-compiled-wi-contracts.md) (compiled work-item contracts); [ADR 024](./024-phases-as-subagents-invoking-skills.md) (phases as subagents invoking skills); [ADR 036](./036-orchestrator-owned-gate-execution.md) (orchestrator-owned gate execution); [ADR 048](./048-deletable-example-factory.md) (deletable example factory).
-**The table this ADR governs is data, not prose:** `packages/factory/class-profiles.ts`, held to its shape by `packages/factory/class-profiles.contract.test.ts`.
+**The table this ADR governs is data, not prose:** `packages/factory/class-profiles.ts`, held to its shape by `packages/factory/tests/contract/class-profiles.contract.test.ts`.
 
 ## Context
 

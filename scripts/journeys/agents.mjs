@@ -149,7 +149,7 @@ function seedR6_06FlowNodeFixture() {
  * PRODUCTION EMITTER (`orchestrator/run-agent.ts`'s `runAgent`, lines
  * ~320-382: a `start` event with `metadata: {agent_phase, agent_slug}`, an
  * `end` event with the SAME `metadata.agent_slug` plus a top-level
- * `cost_usd`) — the SAME shape `apps/forge/ui-bridge-agent-run.test.ts`'s own
+ * `cost_usd`) — the SAME shape `apps/forge/tests/integration/ui-bridge-agent-run.test.ts`'s own
  * existing fixtures already encode for the sibling `GET /api/agents/runs/
  * <runId>` route's tests (`{event_type:'start', skill:'test-runnable'}` /
  * `{event_type:'end', skill:'test-runnable', cost_usd:0.42}`) — the closest

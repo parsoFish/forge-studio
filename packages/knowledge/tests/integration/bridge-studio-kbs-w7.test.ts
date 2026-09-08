@@ -147,7 +147,7 @@ test('mutating KB routes 409 with the active-job reason while a drain is live (k
     // inline in `apps/forge/ui-bridge.ts` (it mints an interactive session, so ruling
     // 17 forbids carving it into a rank-2 package) — handoff K10 to
     // M4-sessions. A handler-level test cannot reach it, so its 409 assertion
-    // MOVED to `apps/forge/ui-bridge-kb-cleanup.test.ts`, which boots a real bridge
+    // MOVED to `apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts`, which boots a real bridge
     // and already owns that route's test surface. It was not dropped.
 
     const remove = await del(iso.root, '/api/studio/kbs/busy-kb');

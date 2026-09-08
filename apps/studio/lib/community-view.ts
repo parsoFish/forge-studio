@@ -11,7 +11,7 @@
  *
  * D2 — this file owns ZERO trust decisions: it never references
  * approve/override/re-pin machinery, not even in a comment
- * (packages/library/community-no-trust-decisions.test.ts scans this file's source text).
+ * (packages/library/tests/contract/community-no-trust-decisions.test.ts scans this file's source text).
  *
  * W6-CR-2 adds `sortCommunityItems` (operator-locked: SIMPLE SORTS ONLY —
  * name / stars / updated / source, no search/facets/tags sort) and
