@@ -100,13 +100,13 @@ export async function runGenerateStep(args: {
   // never the lever (374); the tool set per pass is. Forbidding Bash outright
   // was the other wrong fix: a demo that cannot run the project cannot show
   // REAL output.
-  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number) => runAgentTurn({
+  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = []) => runAgentTurn({
     queryFn: plumbing.queryFn,
     prompt: turnPrompt,
     cwd: status.project_repo_path,
     model: resolveSessionModel(agentSpec, status.modelTier),
     allowedTools,
-    disallowedTools: agentSpec.disallowedTools,
+    disallowedTools: [...(agentSpec.disallowedTools ?? []), ...denied],
     // W8-B6 — hook dispatch comes from the driver already bound to this turn's
     // logger and initiative id, so no kind can spawn hook-blind.
     ...plumbing.hooksForSkill(agentSpec.skill),
@@ -120,7 +120,7 @@ export async function runGenerateStep(args: {
   const writePass = await runPass(
     prompt,
     agentSpec.allowedTools.filter((t) => t !== 'Bash'),
-    DEMO_WRITE_PASS_MAX_TURNS,
+    DEMO_WRITE_PASS_MAX_TURNS, ['Bash'],
   );
 
   // The required generator skill is the per-element skill when iterating one

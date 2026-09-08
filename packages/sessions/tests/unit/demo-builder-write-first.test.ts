@@ -35,7 +35,7 @@ import { DEMO_WRITE_PASS_MAX_TURNS } from '../../kinds/demo-generate.ts';
 import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 
-type Pass = { allowedTools: string[]; maxTurns: number | undefined; prompt: string };
+type Pass = { allowedTools: string[]; disallowedTools: string[]; maxTurns: number | undefined; prompt: string };
 
 /**
  * A fake SDK that records each pass's tool set and budget. `writeOn` says which
@@ -44,8 +44,8 @@ type Pass = { allowedTools: string[]; maxTurns: number | undefined; prompt: stri
  */
 function recordingQueryFn(writeOn: number | null, passes: Pass[]): QueryFn {
   return ({ prompt, options }) => {
-    const o = (options ?? {}) as { cwd?: string; allowedTools?: string[]; maxTurns?: number };
-    passes.push({ allowedTools: [...(o.allowedTools ?? [])], maxTurns: o.maxTurns, prompt });
+    const o = (options ?? {}) as { cwd?: string; allowedTools?: string[]; disallowedTools?: string[]; maxTurns?: number };
+    passes.push({ allowedTools: [...(o.allowedTools ?? [])], disallowedTools: [...(o.disallowedTools ?? [])], maxTurns: o.maxTurns, prompt });
     const n = passes.length;
     const cwd = o.cwd ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
@@ -71,6 +71,18 @@ test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agen
   });
 
   assert.ok(passes.length >= 1, 'the write pass must run');
+  // THE LOAD-BEARING ASSERTION, and it is not the one below it. Bead
+  // `forge-8vfn.7.3.6`: the first cut of this fix removed Bash from
+  // `allowedTools` only, and TWO funded S1 runs measured pass 1 calling Bash
+  // anyway — run 1 six Read + 2 Bash, run 2 four Bash + one Glob + three Read,
+  // all eight turns spent, neither artifact written. `interactive-session.ts`
+  // says why in its own doc comment, three lines above the parameter that fix
+  // used: "`allowedTools` on its own is NOT a fence: it is auto-allow-without-
+  // prompting, not a restriction … a caller relying on `allowedTools` alone
+  // gets no code-level enforcement at all". `disallowedTools` is the lever
+  // that removes a tool from the model's context. Asserting the advisory field
+  // is how a test agrees with the bug it was written to catch.
+  assert.ok(passes[0].disallowedTools.includes('Bash'), `pass 1 must DENY Bash — got disallowedTools ${passes[0].disallowedTools.join(', ') || '(none)'}`);
   assert.ok(!passes[0].allowedTools.includes('Bash'), `pass 1 must not carry Bash — got ${passes[0].allowedTools.join(', ')}`);
   assert.ok(passes[0].allowedTools.includes('Write'), 'pass 1 keeps the tools it needs to author');
   assert.equal(passes[0].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
@@ -109,6 +121,7 @@ test('6.11.49: once both artifacts exist, a SECOND pass runs WITH Bash and the r
 
   assert.equal(passes.length, 2, 'write pass, then grounding pass');
   assert.ok(passes[1].allowedTools.includes('Bash'), 'grounding needs Bash — a demo that cannot run the project cannot be REAL output');
+  assert.ok(!passes[1].disallowedTools.includes('Bash'), 'the grounding pass must NOT deny Bash — the deny is per-pass, not for the turn');
   assert.ok((passes[1].maxTurns ?? 0) > 0);
   assert.ok(
     (passes[0].maxTurns ?? 0) + (passes[1].maxTurns ?? 0) <= 24,
