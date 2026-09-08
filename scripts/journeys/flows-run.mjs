@@ -305,6 +305,14 @@ export const journey = defineJourney({
                 await sleep(READ);
               }, { readySel: '[data-page="architect-new"]', caption: "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words" });
 
+              // Bead `forge-8vfn.7.6.6` (measured, M6-D S4 run 2): the fixed
+              // activity drawer intercepted this very click. The click below was
+              // always real; it never had the drawer over it. Rationale:
+              // docs/reference/studio-dom-contract.md §activity-drawer.
+              await page.locator('[data-action="toggle-activity-drawer"]').first().click().catch(() => {});
+              await page.waitForSelector('[data-component="activity-drawer"][data-drawer-open="true"]', { timeout: 8000 }).catch(() => {});
+              check(await page.locator('[data-component="activity-drawer"][data-drawer-open="true"]').count() > 0,
+                '7.6.6: the activity drawer is OPEN over the interview — the exact state S4 run 2 measured');
               await page.locator('[data-action="submit-answers"]').click();
               await sleep(ACT);
               // R4-04-F4: the explicit exploring stage sits between the

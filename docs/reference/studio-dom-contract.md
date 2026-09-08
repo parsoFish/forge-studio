@@ -2845,7 +2845,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="start-development"]` until the card flips to `planned`;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` — **W7-A3
   (projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
-  [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start]` line
+  [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start][data-run-id]` line
   (`components/studio/EnqueueOutcomeLine.tsx`): its claim is derived from the
   REAL scheduler status (`lib/scheduler-view.ts`'s `describeEnqueueOutcome` —
   "Enqueued — the scheduler is stopped, so nothing will run until you start
@@ -2856,7 +2856,19 @@ is what this contract reads — but it cannot be the only distinguisher.
   initiative id is the STABLE run handle: a planned run's own id IS its
   initiative id, and the bridge's `findRun` matches `initiativeId` second so
   the same URL resolves after the scheduler's claim renames the run to its
-  cycle id), not the flow index. The roadmap tab also mounts a `strip`
+  cycle id), not the flow index. **`data-run-id` publishes that same handle on
+  the line's always-present root (bead `forge-8vfn.7.6.8`, T1 rulings
+  536/537) — the minted-session rule extended to a minted RUN.** The
+  convention it joins is `data-minted-session-id` /
+  `data-architect-session-id` / `data-onboard-session-id`: a surface names what
+  it just created BEFORE the navigation that consumes it, so a story can bind
+  the id from the page that minted it rather than reading a URL out of an
+  anchor, which no beat can do. Absent when there is no run — never an empty
+  string, which would read as a mint that returned nothing. The id and the
+  `open-*-run` href are derived from ONE prop and are pinned to agree
+  (`tests/regression/enqueue-outcome-render.test.ts`). `recovery-requeue`
+  mounts this same component, so act 2's requeued run is named by the same
+  attribute rather than a second one. The roadmap tab also mounts a `strip`
   SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
   Roadmap tab. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
@@ -3582,6 +3594,22 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-activity-count=<N>]`. Header: `[data-component="activity-phase-chip"]
   [data-phase-active]` (optional — a caller with no phase concept omits it),
   `[data-action="toggle-activity-drawer"]` (flips open/collapsed),
+  **AND IT NEVER COVERS A CONTROL THE OPERATOR MUST REACH** (bead
+  `forge-8vfn.7.6.6`). The drawer is `position: fixed; bottom: 0`, so it
+  overlays the bottom of the VIEWPORT, and it is open by design while a
+  session works — while an architect interview is a phase that is working AND
+  waiting on the operator, so the two overlap. Reserving its height on
+  `document.body` (wave-6) extends the DOCUMENT and stops content being
+  stranded below it; it does NOT stop a minimal `scrollIntoView` parking a
+  mid-document control inside the drawer's band, which is what M6-D's S4 run 2
+  measured on the interview's own Submit ("visible, enabled and stable" →
+  scrolled into view → the drawer's `StructuredOutput` row "intercepts pointer
+  events"). So the drawer publishes its MEASURED height as the CSS custom
+  property `--activity-drawer-h` (`apps/studio/lib/drawer-reservation.ts`,
+  written from the same one number as the padding so the two cannot drift),
+  and every interview control carries
+  `scroll-margin-bottom: var(--activity-drawer-h, 0px)`. A new control an
+  operator must click while a session works takes that margin too.
   `[data-action="expand-all-thinking"]` (expands/collapses every clampable
   row at once — mirrors the mock's own any-collapsed → expand-all-else-
   collapse-all toggle). Collapsed state renders

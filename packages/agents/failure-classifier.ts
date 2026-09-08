@@ -288,7 +288,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       ev(e);
     }
     if (pmErr && Array.isArray(md.hidden_coupling_violations) && md.hidden_coupling_violations.length > 0) { pmHiddenCoupling = true; ev(e); }
-    if (pmErr && typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) { pmInvalidWorkItems = true; ev(e); }
+    if (pmErr && ((typeof md.per_item_error_count === 'number' && md.per_item_error_count > 0) || (Array.isArray(md.set_errors) && md.set_errors.length > 0))) { pmInvalidWorkItems = true; ev(e); } // ruling 507: the PM writes SET-level validation errors (`set_errors` — a missing `creates`, a dangling dependency) as well as per-ITEM ones, and reading only the count left four real cycles unclassified; the argument and the replayed logs are in tests/regression/cycle-failure-classification-traces.test.ts
     if (e.phase === 'project-manager' && msg === 'pm.empty-decomposition') { pmEmptyDecomposition = true; ev(e); }
     // Plan 2.11: a capped PM run that still wrote ≥1 valid WI (incremental-
     // write discipline) is partial-but-usable — a distinct, recoverable class.
@@ -467,7 +467,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // manifest lands in failed/ on the first failure, where an operator can
     // see it.
     if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
-    if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see the per-item errors on the project-manager error event) and re-dispatch', evidence);
+    if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see `set_errors` / the per-item errors on the project-manager error event) and re-dispatch', evidence);
     return null;
   })();
   if (deterministic) return deterministic;
