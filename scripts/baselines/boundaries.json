@@ -59,8 +59,8 @@
   "package-to-assembly|packages/sessions/tests/integration/bridge-studio-agent-capability.test.ts|apps/forge/ui-bridge.ts",
   "package-to-assembly|packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts|apps/forge/ui-bridge.ts",
   "package-to-assembly|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|apps/forge/ui-bridge.ts",
-  "studio-beyond-contracts|apps/studio/components/studio/session/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds-affordances.ts",
-  "studio-beyond-contracts|apps/studio/components/studio/session/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds.ts",
-  "studio-beyond-contracts|apps/studio/lib/session-shell-view.test.ts|packages/sessions/session-resolution.ts",
-  "studio-beyond-contracts|apps/studio/lib/studio-client.test.ts|packages/flows/studio/validate-triggers.ts"
+  "studio-beyond-contracts|apps/studio/tests/contract/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds-affordances.ts",
+  "studio-beyond-contracts|apps/studio/tests/contract/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds.ts",
+  "studio-beyond-contracts|apps/studio/tests/contract/session-shell-view.test.ts|packages/sessions/session-resolution.ts",
+  "studio-beyond-contracts|apps/studio/tests/contract/studio-client.test.ts|packages/flows/studio/validate-triggers.ts"
 ]
