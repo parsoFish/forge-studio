@@ -55,9 +55,11 @@
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree (pid 2560406,
  * `/proc/<pid>/cwd` verified), EXCEPT the session-surface keys of beats 6-8,
- * transcribed from `docs/forge-ui-dom-and-harness.md` — observing a live
- * session costs a real dispatch, which is the thing this story is trying to
- * budget. None is invented. Read live and load-bearing: `/sessions` reports
+ * transcribed from the DOM contract — observing a live session costs a real
+ * dispatch, which is the thing this story is trying to budget. REPOINTED
+ * (bead `forge-8vfn.7.4.1`, ruling 444): that doc is now
+ * `docs/reference/studio-dom-contract.md`; `docs/forge-ui-dom-and-harness.md`
+ * no longer exists, so the old citation named a file a reader could not open. None is invented. Read live and load-bearing: `/sessions` reports
  * `data-session-count="0"` with seven kickoff CTAs, one per kind, each its own
  * unique `data-action`; `/sessions/authoring/new` renders
  * `[data-field="kickoff-project"]`, `[data-field="kickoff-prompt"]` and two
@@ -255,7 +257,17 @@ export default {
           page: 'session',
           'page-ready': 'true',
           'session-kind': 'authoring',
-          'session-phase': 'working',
+          // AMENDED (M6-A s3 sitting, ruling 503). Was `'session-phase':
+          // 'working'`, which no product could ever satisfy: `working` is one
+          // of the FIVE lifecycle tokens `session-lifecycle-client.ts` declares
+          // and publishes under `data-lifecycle-state`, while `authoring`'s own
+          // phases are analyzing / awaiting-review / committing / committed.
+          // The claim is unchanged — this session is RUNNING, on the tier the
+          // operator chose — and it is now made against the attribute that
+          // carries it. It is also stabler: beat 10 already refuses to pin
+          // `phase` because it moves as the agent works, and this beat was
+          // carrying the race beat 10 was written to avoid.
+          'lifecycle-state': 'working',
           component: 'session-model-chip',
           'model-tier': CHOSEN_TIER,
         },
@@ -268,15 +280,30 @@ export default {
       // `{ok, kind, title, sessionId, project, phase, stages, defaultStage,
       // turns, artifact, affordances, modelTier, terminal, lifecycle, [kbId]}`
       // and there is no cost field in it; the activity drawer's cost ticker
-      // renders ONLY from caller-supplied `costUsd`, and
-      // `docs/forge-ui-dom-and-harness.md` states plainly that today only
-      // `RunPanel` has a real source for it while the session-summary types
-      // "carry no cost field yet, a disclosed gap, not papered over". So the
+      // renders ONLY from caller-supplied `costUsd`. The sentence this comment
+      // used to quote — that only `RunPanel` has a real source for cost while
+      // the session-summary types "carry no cost field yet, a disclosed gap,
+      // not papered over" — was in `docs/forge-ui-dom-and-harness.md`, which no
+      // longer exists. REPOINTED (bead `forge-8vfn.7.4.1`, ruling 444) to
+      // `docs/reference/studio-dom-contract.md`, and the quote is NOT carried
+      // across: that doc does not make the claim, and repointing a citation at
+      // a file which does not say the cited thing is worse than a dead path.
+      // What survives is the observation itself, which the beat asserts. So the
       // beat asserts `data-ledger-cost-usd`, the ONE key forge publishes a
       // cost under anywhere in its DOM contract, bound as `<authoringCostUsd>`
       // so the story pins that a figure exists rather than what it is. Owning
       // package `sessions`.
       act: 'Read what the session has cost so far',
+      // AMENDED (M6-A s3 sitting). The attribute is absent because the figure
+      // is genuinely `null` 0.2 s after dispatch: cost is priced at a TURN
+      // BOUNDARY, and ruling 438 gives the mechanism — a beat with no `do` and
+      // no `wait` reads the page ONCE. The operator confirmed what this gives
+      // up: "so far" now means "by the first completed turn", not mid-flight.
+      // A running mid-turn total is a PRODUCT change and its own initiative,
+      // not a beat amendment. What it buys is that beats 13-14 become
+      // reachable in the same run — the authoring session has priced something
+      // by the time `/monitor` is read.
+      wait: { for: 'agent', upTo: 600_000 },
       expect: {
         route: '/sessions/authoring/<authoringSessionId>',
         data: {
@@ -355,16 +382,66 @@ export default {
       say: 'Second variant, and the promise comes apart on it. One kind lets the operator pick a model and the next fixes it read-only — same spine, same form, same words on the page, opposite amount of control. "Per session" has to mean per session, or the operator has to know which kinds it is untrue for.',
     },
     {
-      // NOT expressible as a route — `<onboardingSessionId>` is the same
-      // unbound segment as beat 6, `forge-8vfn.5.10` again. The `do` is
-      // honest and WILL execute: this is the second real dispatch, and the
-      // second half of what this story's $25 ceiling is for. `session-phase`
-      // is not pinned here — onboarding's own phases are its business and this
-      // story is not re-authoring S1.
+      // AMENDED (M6-A s3 sitting, ruling 483 — the class ruled once across
+      // S9, S7 and S6). This beat used to assert
+      // `/sessions/onboarding/<onboardingSessionId>` while NO beat bound that
+      // segment, which made it unsatisfiable by any product change rather than
+      // a finding about the product. Since ruling 396 the press publishes the
+      // minted id and STAYS, so the beat takes its own beat 6's shape: bind
+      // here, navigate next. `forge-8vfn.5.10`'s six mint-then-navigate sites
+      // are still open; this beat no longer depends on that bead to pass.
+      //
+      // The `do` is honest and WILL execute: this is the second real dispatch,
+      // and the second half of what this story's $25 ceiling is for.
       act: 'Start it and let both of them run',
       do: [
         { fill: 'kickoff-project', with: 'mdtoc' },
         { press: 'start-session' },
+      ],
+      expect: {
+        route: '/sessions/onboarding/new',
+        data: {
+          page: 'session-kickoff',
+          'page-ready': 'true',
+          'kickoff-kind': 'onboarding',
+          'minted-session-id': '<onboardingSessionId>',
+        },
+      },
+      say: 'Two assistants now, on two different jobs, one of which the operator chose a model for and one of which chose for itself. Whatever else is true, they are both spending real money right now.',
+    },
+    {
+      // NEW BEAT (M6-A s3 sitting, ruling 441 / 490's sibling half). Row 7
+      // (#557, main `cfe9e111`) gave onboarding a real interview: the kind now
+      // declares `{ phase: briefing, step: noop, awaits: questions }` as its
+      // ONE writable row, and `studio/session-kinds.yaml` says in its own words
+      // that "a session opened from the spine (/sessions/onboarding/new) with
+      // nobody to brief it shows the question form instead of claiming to run".
+      // So this is S9's own truth, not a path borrowed from S1: the operator
+      // started this session from the SPINE, and the spine has nobody to brief
+      // it but them.
+      //
+      // It is also the ONLY place in the nine stories where the BARE generic
+      // interview is exercised — every other briefed kind reaches its agent
+      // through a bespoke form — and without it the onboarding session never
+      // prices anything, so beats 13-14 could not read two costs.
+      //
+      // THE HANDLE IS `session-answer`, the GENERIC `SessionInteractivePanel`'s
+      // — NOT `question-freetext`, which belongs to `ArchitectQuestionForm`.
+      // Bead `6.11.21` records that exact confusion costing S2 beat 12 and S1
+      // beat 6; it is named here so the next author does not pay for it again.
+      //
+      // The `until` is the repeat's OWN and it is reachable: `running` is the
+      // state the brief's submission produces (briefing -> running, written by
+      // the question-form write itself), so the loop ends when the brief is
+      // ACCEPTED rather than borrowing this beat's own expectation — §3.1's
+      // recorded trap, bought by two funded S1 runs (ruling 320).
+      act: 'Tell the assistant what the project is for, and let it start',
+      do: [
+        { repeat: [
+            { fillAll: 'session-answer', with: 'A markdown table-of-contents tool; the gate is `npm test`.' },
+            { press: 'submit-answers' },
+          ],
+          until: { 'session-phase': 'running' } },
       ],
       expect: {
         route: '/sessions/onboarding/<onboardingSessionId>',
@@ -372,9 +449,10 @@ export default {
           page: 'session',
           'page-ready': 'true',
           'session-kind': 'onboarding',
+          'session-phase': 'running',
         },
       },
-      say: 'Two assistants now, on two different jobs, one of which the operator chose a model for and one of which chose for itself. Whatever else is true, they are both spending real money right now.',
+      say: 'A session the operator started from the spine has nobody to brief it but them. The assistant asks for the one thing only they know, and the moment they answer it starts spending — which is what the next two beats go to read.',
     },
     {
       // THE THIRD OF S9's THREE CLAUSES — "cost is shown". `/monitor` carries
