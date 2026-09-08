@@ -42,6 +42,15 @@ function namedLocalImports(source: string): Array<{ from: string; names: string[
   const re = /import\s*\{([^}]*)\}\s*from\s*'(\.\/[^']+\.mjs)'/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(source)) !== null) {
+    // A COMMENTED import is not an import. This file's own doc comment shows the
+    // shape it looks for — `import { a, b as c } from './x.mjs'` — and the
+    // moment `.test.ts` files joined the scanned set (ruling 554) this scanner
+    // read its own documentation as code and demanded a module named `x.mjs`.
+    // A scanner that cannot tell its example from its subject fails on the file
+    // that explains it, which is the least useful place to fail.
+    const lineStart = source.lastIndexOf('\n', m.index) + 1;
+    const line = source.slice(lineStart, m.index);
+    if (/^\s*(\/\*|\*|\/\/)/.test(line)) continue;
     const names = m[1]
       .split(',')
       .map((s) => s.trim())
@@ -53,12 +62,49 @@ function namedLocalImports(source: string): Array<{ from: string; names: string[
   return out;
 }
 
+/**
+ * WHAT IS SCANNED — and why `.test.ts` had to join the list (T1 ruling 554).
+ *
+ * This file was written for `.mjs → .mjs` wiring, and it caught the class it was
+ * written for. Then ruling 553's split moved `performSteps` out of
+ * `beats-drive.mjs` into `beats-steps.mjs`, `beats-repeat.test.ts` went on
+ * importing `performStepsForTest` from the old home — and THIS FILE SAID
+ * NOTHING. The full suite caught it instead, which is the slower door and, on a
+ * day with a funded run waiting, the expensive one.
+ *
+ * A test file naming an export that no longer exists is the same defect as a
+ * module doing it: an identifier that does not resolve, invisible to
+ * `npm run build` (which does not typecheck `.mjs`), invisible to
+ * `node --check` (an undefined name is valid syntax), and answerable here
+ * without running anything. The only thing that made it a different defect was
+ * this list.
+ */
 const harnessModules = readdirSync(HERE)
-  .filter((f) => f.endsWith('.mjs'))
+  .filter((f) => f.endsWith('.mjs') || f.endsWith('.test.ts'))
   .sort();
 
 test('the harness has modules to check (the check itself is not vacuous)', () => {
   assert.ok(harnessModules.length >= 5, `expected the story harness's modules, found ${harnessModules.length}`);
+});
+
+test('554: the scan covers the harness TESTS too, not only its modules', () => {
+  // The guard that keeps the fix from being silently undone. Restricting the
+  // filter back to `.mjs` — the state this file shipped in for its whole life —
+  // makes every assertion below vacuous for test files while leaving them all
+  // green, which is exactly how the `beats-repeat.test.ts` miss survived.
+  const tests = harnessModules.filter((f) => f.endsWith('.test.ts'));
+  assert.ok(
+    tests.length >= 10,
+    `expected the harness's own test files in the scanned set, found ${tests.length}`,
+  );
+  // And at least one of them must actually import a name from a sibling module,
+  // or the coverage is nominal: a set that is scanned but has nothing to check
+  // reports the same green as one that is checked and correct.
+  const withImports = tests.filter((f) => namedLocalImports(readFileSync(join(HERE, f), 'utf8')).length > 0);
+  assert.ok(
+    withImports.length >= 5,
+    `expected several harness tests to import sibling names, found ${withImports.length}`,
+  );
 });
 
 for (const file of harnessModules) {
