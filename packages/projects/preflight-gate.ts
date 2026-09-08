@@ -10,6 +10,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { readQualityGateSidecar } from './project-config-sidecar.ts';
 import type { ProjectConfig } from './project-config.ts';
 import type { ClauseResult } from '@forge/kernel';
 
@@ -196,11 +197,17 @@ function readQualityGateCmd(dir: string, cfg: ProjectConfig | null): { source: s
     }
   }
   // A project may declare the gate in the forge sidecar without a project.json.
-  const sidecar = join(dir, '.forge', 'quality_gate_cmd');
-  if (existsSync(sidecar)) {
-    const cmd = readFileSync(sidecar, 'utf8').trim();
-    if (cmd) return { source: '.forge/quality_gate_cmd', cmd };
-  }
+  //
+  // Bead forge-8vfn.7.2.6 / ruling 470 — ONE reader, and it is the guarded one.
+  // This used to be its own `join` + `existsSync` + `readFileSync` of the same
+  // file `loadProjectConfig` reads through `readQualityGateSidecar`. Two readers
+  // of one file is a drift risk on its own; these two had also drifted on the
+  // thing that matters, because only the loader's copy was SEC-04 hardened. So
+  // a symlinked `.forge/quality_gate_cmd` was refused when the gate command
+  // came from `project.json` and FOLLOWED when it came from here — the same
+  // file, the same question, two answers depending on which door asked.
+  const sidecarArgv = readQualityGateSidecar(dir);
+  if (sidecarArgv) return { source: '.forge/quality_gate_cmd', cmd: sidecarArgv.join(' ') };
   return null;
 }
 
