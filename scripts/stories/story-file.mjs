@@ -211,6 +211,63 @@ export function validateStory(raw) {
     });
   });
 
+  // ── EVERY `<placeholder>` MUST BE BOUND BY AN EARLIER BEAT ────────────────
+  //
+  // T1 ruling 536(ii), narrowed to routes — see below. S10 declared `<runId>`
+  // in four routes and `<secondRunId>`
+  // in a fifth, and NO beat bound either — the story binds a placeholder only by
+  // expecting `'<name>'` as the value of a `data-*` key, and S10 did that twice,
+  // for neither of them. So five beats could never resolve their own route, and
+  // the way we found out was a funded $35 run reporting
+  // `route "/flows/forge-develop/run/<runId>" needs <runId>, which no earlier
+  // beat bound` — at beat 11, after ten minutes had already been spent.
+  //
+  // It is answerable at LOAD, for nothing, and it is answerable for the whole
+  // story at once rather than one beat per run. `driveBeat` already refuses an
+  // unbound placeholder at run time and that check stays: this one exists so a
+  // story with an unresolvable beat never reaches a bridge, a browser or a
+  // budget.
+  //
+  // EARLIER, strictly. A beat's route is resolved BEFORE the beat runs, so a
+  // beat cannot bind the placeholder its own route needs — which is exactly the
+  // trap S10 fell into by naming `<runId>` on the very beats that would have
+  // published it. Bindings are therefore collected AFTER each beat is checked,
+  // never before.
+  //
+  // ROUTES ONLY, and that is a correction to the ruling's own wording, made
+  // from the tree. `<name>` is substituted in exactly ONE place — `beats.mjs`'s
+  // `resolveBeatRoute`, over `beat.expect.route`. A `do` step's `with` value is
+  // passed VERBATIM to `fill()` (`beats-drive.mjs:586,606`); nothing ever
+  // substitutes into it. So `<name>` inside a `with` is literal text the
+  // operator types, and scanning it is a false positive — the first version of
+  // this check refused S10 on
+  // `'Add an --exclude-author <pattern> flag: the inverse of --author…'`, which
+  // is not a placeholder at all but the CLI syntax the story is about. A repeat's
+  // `until` is the same: `answers()` treats `<name>` there as "any non-empty
+  // value", a wildcard, never a reference to an earlier binding.
+  const boundNames = new Set();
+  const namesIn = (text) => [...String(text).matchAll(/<([A-Za-z][A-Za-z0-9_]*)>/g)].map((m) => m[1]);
+
+  beats.forEach((b, i) => {
+    const needed = namesIn(b.expect.route);
+    for (const name of needed) {
+      if (!boundNames.has(name)) {
+        fail(
+          `beats[${i}]`,
+          `route names <${name}>, which no EARLIER beat binds. A beat binds a segment by expecting ` +
+            `'<${name}>' as the value of a data-* key; a beat cannot bind the placeholder its own ` +
+            'route needs, because the route is resolved before the beat runs. Either bind it on an ' +
+            'earlier beat, or name the surface that publishes it.',
+        );
+      }
+    }
+    // Only NOW does this beat's own binding become available to later beats.
+    for (const want of Object.values(b.expect.data)) {
+      const m = /^<([A-Za-z][A-Za-z0-9_]*)>$/.exec(String(want));
+      if (m !== null) boundNames.add(m[1]);
+    }
+  });
+
   return Object.freeze({
     id: raw.id,
     ground: Object.freeze({ project: g.project, realSpawn: g.realSpawn, budget_usd: g.budget_usd }),

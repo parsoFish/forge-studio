@@ -301,3 +301,98 @@ test('AT-6.11.21-7 a step may not name BOTH fill and fillAll', () => {
     /exactly one/,
   );
 });
+
+// ── 536(ii): every `<placeholder>` must be bound by an EARLIER beat ─────────
+
+/**
+ * T1 ruling 536(ii), bought by S10 run 2.
+ *
+ * S10 declared `<runId>` in four routes and `<secondRunId>` in a fifth, and NO
+ * beat bound either: a story binds a placeholder only by expecting `'<name>'`
+ * as the value of a `data-*` key, and S10 did that twice, for neither of them.
+ * Five beats could therefore never resolve their own route — and the way we
+ * found out was a **funded $35 run** reporting `route
+ * "/flows/forge-develop/run/<runId>" needs <runId>, which no earlier beat
+ * bound`, at beat 11, after ten minutes of bounds had already been spent.
+ *
+ * The same story had already survived an unattended drafting pass and an
+ * attended sitting. This is answerable at LOAD, for nothing, for every beat at
+ * once — which is the difference between "author a story, buy a run, learn one
+ * defect" and "author a story, learn every structural defect for free".
+ */
+const beat = (over = {}) => ({
+  act: 'do a thing',
+  say: 'a sentence about the thing.',
+  expect: { route: '/projects/p', data: { page: 'projects' } },
+  ...over,
+});
+
+// Built from `ok` above rather than hand-rolled: a helper that omits a required
+// field fails every test in the block for a reason that has nothing to do with
+// what the block is about, and reads exactly like the feature being broken.
+const story = (beats: unknown[]) => ({ ...ok, beats });
+
+test('536(ii) (RED) a route naming a placeholder no earlier beat binds is refused at load', () => {
+  // S10's exact shape: the route names `<runId>` and nothing ever published it.
+  assert.throws(
+    () => validateStory(story([
+      beat(),
+      beat({ expect: { route: '/flows/forge-develop/run/<runId>', data: { page: 'flow-run' } } }),
+    ])),
+    (err: Error) => {
+      assert.match(err.message, /beats\[1\]/, 'names WHICH beat');
+      assert.match(err.message, /<runId>/, 'and WHICH placeholder');
+      return true;
+    },
+  );
+});
+
+test('536(ii) (RED) the trap S10 fell into: a beat cannot bind the placeholder its OWN route needs', () => {
+  // This is the shape that reads as correct and is not. The route is resolved
+  // BEFORE the beat runs, so publishing `run-id` in the same beat's `data` is
+  // too late — and it is exactly where an author would try to put it.
+  assert.throws(
+    () => validateStory(story([
+      beat(),
+      beat({
+        expect: {
+          route: '/flows/forge-develop/run/<runId>',
+          data: { page: 'flow-run', 'run-id': '<runId>' },
+        },
+      }),
+    ])),
+    /<runId>/,
+  );
+});
+
+test('536(ii) (positive control) `<name>` inside a `do` step\'s text is PROSE, not a placeholder', () => {
+  // The ruling said "a route or a `do` step". The tree says otherwise, and the
+  // tree wins: `<name>` is substituted in exactly ONE place — `resolveBeatRoute`,
+  // over `expect.route`. A `with` value goes VERBATIM to `fill()`, so a `<name>`
+  // there is literal text the operator types.
+  //
+  // MEASURED, on the first version of this check: it refused S10 on
+  // `'Add an --exclude-author <pattern> flag: the inverse of --author…'` — CLI
+  // syntax, which is the whole subject of that story. A rule that cannot tell a
+  // placeholder from the documentation of a command-line flag would make this
+  // domain unwritable.
+  const loaded = validateStory(story([
+    beat({ do: [{ fill: 'idea', with: 'Add an --exclude-author <pattern> flag, the inverse of --author.' }] }),
+  ]));
+  assert.equal(loaded.beats.length, 1);
+});
+
+test('536(ii) (positive control) a placeholder bound by an EARLIER beat loads', () => {
+  // S10's `<architectSessionId>`, which works and must keep working: beat 1
+  // publishes it, beat 2 routes on it.
+  const loaded = validateStory(story([
+    beat({ expect: { route: '/architect/new', data: { page: 'architect-new', 'architect-session-id': '<architectSessionId>' } } }),
+    beat({ expect: { route: '/sessions/architect/<architectSessionId>', data: { page: 'session' } } }),
+  ]));
+  assert.equal(loaded.beats.length, 2);
+});
+
+test('536(ii) (positive control) a story with no placeholders at all is untouched', () => {
+  const loaded = validateStory(story([beat(), beat()]));
+  assert.equal(loaded.beats.length, 2);
+});
