@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DRAWER_HEIGHT_VAR } from '../lib/drawer-reservation';
 
 import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-client';
 
@@ -194,6 +195,11 @@ export function ArchitectQuestionForm({
         disabled={!allAnswered || submitting}
         data-action="submit-answers"
         style={{
+          // Bead 6.11.49's sibling, `forge-8vfn.7.6.6`: the activity drawer is
+          // `position: fixed; bottom: 0` and open by design while a session
+          // works, so a minimal scroll parks this button inside it and the
+          // click is intercepted. Measured in M6-D's S4 run 2.
+          scrollMarginBottom: `var(${DRAWER_HEIGHT_VAR}, 0px)`,
           background: allAnswered && !submitting ? '#238636' : '#21262d',
           color: allAnswered && !submitting ? '#fff' : '#8b949e',
           border: '1px solid #30363d',

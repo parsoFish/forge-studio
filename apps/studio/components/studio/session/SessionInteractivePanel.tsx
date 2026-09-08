@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DRAWER_HEIGHT_VAR } from '../../../lib/drawer-reservation';
 
 import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload, type FilePackageFile } from '@/lib/session-client';
 import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
@@ -462,7 +463,8 @@ export function SessionInteractivePanel({
                 data-action="submit-answers"
                 {...disabledAttrs(busy ? 'Submitting…' : null)}
                 onClick={() => void submit(affordance, { answers: [{ question: isBriefing ? 'Briefing note' : 'Operator response', answer: answerText.trim() }] })}
-                style={{ opacity: busy ? 0.5 : 1 }}
+                // `forge-8vfn.7.6.6` — clear the fixed activity drawer's band.
+                style={{ opacity: busy ? 0.5 : 1, scrollMarginBottom: `var(${DRAWER_HEIGHT_VAR}, 0px)` }}
               >
                 {busy ? 'Sending…' : isBriefing ? 'Start →' : 'Send answer'}
               </button>
