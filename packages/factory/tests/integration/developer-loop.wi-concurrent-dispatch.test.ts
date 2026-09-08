@@ -264,9 +264,19 @@ test('runConcurrentDispatch + mergeAndPublish: diamond DAG (WI-1 -> WI-2,WI-3 ->
       // unambiguous.
       const delay = id === 'WI-2' || id === 'WI-3' ? 30 : 5;
       return async (invocation) => {
-        const start = Date.now();
+        // `performance.now()`, never `Date.now()` — T1 ruling 508, a disclosed
+        // touch from lane C. `Date.now()` is NOT MONOTONIC: it follows the wall
+        // clock, so an NTP step or a WSL2 clock resync during the 30 ms window
+        // can move it backwards. Measured on main, 2026-09-08:
+        // `WI-3={"start":1788834854153,"end":1788834853096}` — an END 1,057 ms
+        // BEFORE its own start, which made the interval-overlap assertion below
+        // read a concurrent dispatch as a serial one and failed a test about
+        // concurrency for a reason that had nothing to do with concurrency.
+        // `performance.now()` is monotonic by specification, and this block only
+        // ever measures a DURATION, so nothing here wants a wall-clock date.
+        const start = performance.now();
         const res = await fileWritingAgent(`${id}.txt`, `${id} content\n`, delay)(invocation);
-        timings[id] = { start, end: Date.now() };
+        timings[id] = { start, end: performance.now() };
         return res;
       };
     };
