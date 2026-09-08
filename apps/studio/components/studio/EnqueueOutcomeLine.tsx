@@ -61,6 +61,11 @@ export function EnqueueOutcomeLineView({
     <div
       data-component="enqueue-outcome"
       data-enqueue-kind={kind}
+      // Bead `forge-8vfn.7.6.8` — the minted-session rule extends to a minted
+      // RUN. `runId` built the href and reached the DOM nowhere, so the run was
+      // nameable only by reading a URL out of an anchor, which no beat can do.
+      // Undefined omits the attribute: no run, no id, never a bindable "".
+      data-run-id={runId}
       data-needs-scheduler-start={outcome.needsSchedulerStart ? 'true' : 'false'}
       style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}
     >
