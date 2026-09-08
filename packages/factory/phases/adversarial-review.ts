@@ -539,7 +539,7 @@ export async function runAdversarialReview(
           findingsAbs,
           findingsRel,
           { initiative_id: input.initiativeId, cycleId: input.cycleId, baseRef: BASE_REF, headSha },
-          { lenses, criteria },
+          { lenses, criteria, scope: `chunk ${label}` },
         );
         if (!harvest.ok) {
           lastErrors = harvest.errors;
@@ -649,7 +649,7 @@ export async function runAdversarialReview(
     // MERGED record against the whole initiative's criteria (each chunk was only
     // validated against its own), persist, scrub.
     const merged = mergeChunkRecords(chunkRecords, unjudgedCriteria);
-    const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria });
+    const mergedErrors = validateReviewFindings(merged, { lenses, criteria: acceptanceCriteria, scope: 'the initiative' });
     if (mergedErrors.length > 0) {
       emit('review.merged.invalid', { errors: mergedErrors, chunks: chunkRecords.length }, { event_type: 'error' });
       return { status: 'failed', reason: 'author-invalid', detail: `merged review-findings invalid: ${mergedErrors.join('; ')}` };

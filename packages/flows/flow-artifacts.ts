@@ -279,6 +279,19 @@ function blank(v: unknown): boolean {
 export type ReviewFindingsExpectation = {
   lenses: readonly string[];
   criteria: readonly string[];
+  /** WHOSE declared set `criteria` is — `chunk unattributed`, `chunk WI-2`, the
+   *  merged record's `the initiative`. It appears in the rejection message and
+   *  nowhere else, and it is required because the message a human reads decides
+   *  what they conclude.
+   *
+   *  G2 resume 5: the reviewer judged `WI-1.md`'s own criterion, copied
+   *  character-for-character, while reviewing the `unattributed` chunk — whose
+   *  declared set is empty BY DESIGN (each chunk is validated against its own;
+   *  the merged record against the whole initiative's). The old message said
+   *  "a criterion this initiative never declared", which is FALSE — the
+   *  initiative declared it — and reads as "the agent hallucinated". It cost a
+   *  funded run and two people's diagnosis before anyone opened `WI-1.md`. */
+  scope: string;
 };
 
 export function validateReviewFindings(raw: unknown, expected: ReviewFindingsExpectation): string[] {
@@ -354,7 +367,7 @@ export function validateReviewFindings(raw: unknown, expected: ReviewFindingsExp
       if (!judged.has(c)) errors.push(`acceptance criterion left unjudged (verbatim): ${c}`);
     }
     for (const c of judged) {
-      if (c !== '' && !expected.criteria.includes(c)) errors.push(`acEvaluations judges a criterion this initiative never declared: ${c}`);
+      if (c !== '' && !expected.criteria.includes(c)) errors.push(`acEvaluations judges a criterion outside ${expected.scope}'s declared set: ${c}`);
     }
   }
   return errors;

@@ -63,14 +63,35 @@ export type AdversarialReviewUserPromptInput = {
 };
 
 export function renderAdversarialReviewUserPrompt(input: AdversarialReviewUserPromptInput): string {
-  const acList =
-    input.acceptanceCriteria.length > 0
-      ? input.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')
-      : '_(no acceptance criteria recorded — review the diff on its own merits)_';
+  // A chunk with NO criteria of its own — `unattributed`, the remainder no work
+  // item claimed — must be told to judge NOTHING, not merely told that none were
+  // recorded. G2 resume 5 died here: the old wording said "review the diff on its
+  // own merits", which is an instruction about FINDINGS and says nothing about
+  // `acEvaluations`, and the work-item list rendered immediately below was read
+  // as the list to judge. The reviewer then copied `WI-1.md`'s own criterion
+  // character-for-character and was refused for it, twice, and the run failed on
+  // its last chunk after the budget wall had not fired once.
+  //
+  // Its expected set is empty BY DESIGN: each chunk is validated against its own
+  // criteria, the merged record against the whole initiative's, and work items
+  // with no chunk are supplied by the orchestrator at merge time.
+  const noCriteria = input.acceptanceCriteria.length === 0;
+  const acList = noCriteria
+    ? [
+        '_(none for this chunk — these files were not claimed by any work item.)_',
+        '',
+        '**Write `acEvaluations: []`.** There is nothing here for you to judge, and an',
+        'empty list is the correct, valid record for this chunk. Judging a criterion',
+        'that is not listed above is refused.',
+      ].join('\n')
+    : input.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n');
+  const wiNote = noCriteria
+    ? '\n\n_Context only — these items\u2019 criteria are not this chunk\u2019s to judge; they are judged by their own chunks, or at merge._'
+    : '';
   const wiList =
-    input.workItems.length > 0
+    (input.workItems.length > 0
       ? input.workItems.map((w) => `- ${w.id} [${w.status}] ${w.title}`).join('\n')
-      : '- _(no work items recorded)_';
+      : '- _(no work items recorded)_') + wiNote;
   const changed =
     input.changedFiles.length > 0
       ? input.changedFiles.map((f) => `- \`${f}\``).join('\n')
