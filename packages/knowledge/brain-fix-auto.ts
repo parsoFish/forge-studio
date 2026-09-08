@@ -140,13 +140,45 @@ export function ensureLinkedAt(indexPath: string, themeFile: string): { ok: bool
   return { ok: true, detail: `linked into ${indexPath}` };
 }
 
+/**
+ * Create the category index a theme belongs to, when the KB has none.
+ *
+ * Bead `forge-8vfn.7.6.9`, measured live in S6 run 4: a freshly SEEDED knowledge
+ * base has theme pages and NO index files at all — the project-brain agent
+ * writes themes and nothing writes the index they belong to. `ensureLinked`
+ * could link a theme INTO an index and could not CREATE one, so every seeded KB
+ * was born permanently unhealthy and "Drain to green" stopped at no-progress on
+ * its first round with findings the auto tier could report and never clear.
+ *
+ * The stub is deliberately minimal and matches the shape the shipped indexes
+ * already have — a title, one line saying what the file is, and the `## Theme
+ * pages` heading `ensureLinkedAt` appends beneath. Curation is a human's; having
+ * somewhere to link is not.
+ */
+function createCategoryIndex(indexPath: string, category: string): void {
+  // No mkdir: `categoryIndexPathFor` only ever returns a path whose PARENT
+  // already holds the theme that asked for it (`brain/<kb>/`, `brain/cycles/`,
+  // `brain/projects/<name>/`), so the directory exists by construction and
+  // creating it would add a request-reachable `mkdirSync` sink for nothing.
+  writeFileSync(
+    indexPath,
+    `# ${category.charAt(0).toUpperCase()}${category.slice(1)} index\n\n` +
+      `> Category index. Lists the theme pages in this knowledge base with \`category: ${category}\`.\n\n` +
+      '## Theme pages\n',
+  );
+}
+
 /** Insert the theme's link line into its category index exactly once (idempotent). */
 function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
   const parsed = parseTheme(themeFile);
   if (!parsed) return { ok: false, detail: 'theme unparseable' };
   const category = String(parsed.data.category ?? '');
   const indexPath = categoryIndexPathFor(forgeRoot, themeFile, category);
-  if (!indexPath || !existsSync(indexPath)) return { ok: false, detail: `no category index for "${category}"` };
+  // A category this brain has no FILE for is created; a category the map does
+  // not know at all is still refused — an unknown category is a theme defect,
+  // not a missing index.
+  if (!indexPath) return { ok: false, detail: `no category index for "${category}"` };
+  if (!existsSync(indexPath)) createCategoryIndex(indexPath, category);
   const r = ensureLinkedAt(indexPath, themeFile);
   if (!r.ok || r.detail === 'already linked') return r;
   return { ok: true, detail: `linked into ${relative(forgeRoot, indexPath)}` };
