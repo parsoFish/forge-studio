@@ -49,6 +49,23 @@ export const MIN_AVAILABLE_MB = 1500;
  * shape Studio itself lists from, so the check sees what the operator's first
  * card would.
  *
+ * INCLUDING A DOT-PREFIXED PROJECT — bead `forge-8vfn.7.6.5`. This walk used to
+ * skip `projects/<name>` whenever the name began with `.`, which made it blind
+ * to the one shape that routinely survives a run: a flow-bound KB seeds itself
+ * through a real project-brain session anchored under
+ * `projects/.kb-<id>/_project-brain/<sid>`. S6 left one behind, S4's preflight
+ * then reported "sessions ok — 1 session(s) on disk, all in gitpulse", and the
+ * S4 run drove S6's CRASHED session: beat 12's captured frame is byte-identical
+ * to S6 beat 6's. A preflight that says "ok" while the residue is on disk is
+ * worse than no preflight — it is the reason nobody looked.
+ *
+ * The skip was never load-bearing. `!project.isDirectory()` already excludes
+ * files, and the kind filter only descends into `_`-prefixed subdirectories, so
+ * a dot-directory that is not a project (`projects/.git`, say) cannot produce a
+ * session path by accident. Ownership decides here exactly as it does
+ * everywhere else in this function: a run whose ground IS the flow-bound KB
+ * counts its own seeding session and passes.
+ *
  * @param {string} root      the forge root this run owns
  * @param {string} ownProject the project this story's ground IS
  */
@@ -57,7 +74,7 @@ export function foreignSessionVerdict(root, ownProject) {
   const foreign = [];
   let seen = 0;
   for (const project of readdirSafe(projectsRoot)) {
-    if (project.name.startsWith('.') || !project.isDirectory()) continue;
+    if (!project.isDirectory()) continue;
     for (const kind of readdirSafe(join(projectsRoot, project.name))) {
       if (!kind.isDirectory() || !kind.name.startsWith('_')) continue;
       for (const session of readdirSafe(join(projectsRoot, project.name, kind.name))) {
