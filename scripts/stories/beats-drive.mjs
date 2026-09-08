@@ -29,6 +29,29 @@ import {
   READY_TIMEOUT_MS, beatBound, withAgentProc, beatVerdict, stuckVerdict, resolveBeatRoute,
 } from './beats.mjs';
 
+/**
+ * Does `url` satisfy the route a beat DECLARED?
+ *
+ * Pathname always; query only when the beat asked for one (T1 ruling 514).
+ *
+ * 7.5.3 made both reading and selection query-BLIND, because three live product
+ * sites mount links carrying `?project=…` and a story should name the route an
+ * operator would say out loud, not the product's parameter plumbing. The
+ * inverse case is just as real: D's S6 beat 7 wants `/knowledge?id=story-s6`
+ * from a page that offers `/knowledge` too, and blind-by-pathname can only see
+ * two links sharing a pathname and refuse.
+ *
+ * So the beat decides. Declare no query and nothing changes — the product stays
+ * free to add parameters. Declare one and it is matched EXACTLY, because a beat
+ * that names a query is naming which of two destinations it means.
+ */
+export function routeMatches(url, declared) {
+  const want = new URL(declared, 'http://forge.invalid');
+  const got = new URL(url, 'http://forge.invalid');
+  if (got.pathname !== want.pathname) return false;
+  return want.search === '' ? true : got.search === want.search;
+}
+
 export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
@@ -171,9 +194,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const mints = Object.values(beat.expect.data).some((want) => PLACEHOLDER.test(want));
   if (steps.length > 0 || bound.label !== null || mints) {
     const waitedFrom = Date.now();
-    if (steps.length > 0 && new URL(page.url()).pathname !== target) {
+    if (steps.length > 0 && !routeMatches(page.url(), target)) {
       await page
-        .waitForURL((u) => new URL(u).pathname === target, { timeout: bound.ms })
+        .waitForURL((u) => routeMatches(u, target), { timeout: bound.ms })
         .catch(() => {
           /* the press did not navigate here — the nav resolution below reports it honestly */
         });
@@ -189,7 +212,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     // field `6.11.10` added to stop a wrong bound. The route change is now just
     // the first part of the wait; the rest of the bound goes where it was
     // declared to go, on the state the beat is actually waiting for.
-    if (new URL(page.url()).pathname === target) {
+    if (routeMatches(page.url(), target)) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
         stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe);
@@ -202,7 +225,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // press navigated. There is nothing to navigate TO. Real-nav-only is about
   // reaching a DIFFERENT route; a form-driven flow dwells on one route across
   // several operator actions, and the shipped runner called that unreachable.
-  if (new URL(page.url()).pathname !== target) {
+  if (!routeMatches(page.url(), target)) {
     // QUERY-BLIND BY PATHNAME (bead `forge-8vfn.7.5.3`, T1 ruling 451).
     //
     // The runner READ a URL query-blind — `readObserved` compares
@@ -230,7 +253,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
             .filter((h) => {
               if (h === null || h === '') return false;
               try {
-                return new URL(h, 'http://forge.invalid').pathname === want;
+                const u = new URL(h, 'http://forge.invalid');
+                const w = new URL(want, 'http://forge.invalid');
+                if (u.pathname !== w.pathname) return false;
+                return w.search === '' ? true : u.search === w.search;
               } catch {
                 return false;
               }
@@ -288,7 +314,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     let clickError = null;
     await Promise.all([
       page
-        .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
+        .waitForURL((u) => routeMatches(u, target), { timeout: READY_TIMEOUT_MS })
         .catch(() => {
           /* did not navigate — the verdict below reports that honestly */
         }),
