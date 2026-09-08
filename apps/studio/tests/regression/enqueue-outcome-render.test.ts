@@ -56,3 +56,47 @@ test('no cycle/flow in the result → no run link fabricated', () => {
   const html = render({});
   expect(html).not.toContain('data-action="open-develop-run"');
 });
+
+// ---------------------------------------------------------------------------
+// Bead `forge-8vfn.7.6.8` (T1 rulings 536/537) — THE MINTED-RUN RULE.
+//
+// The minted-session convention already covers a session an operator has just
+// created: the surface publishes the id BEFORE the navigation that consumes it
+// (`data-minted-session-id`, `data-architect-session-id`,
+// `data-onboard-session-id`), so a story can bind it from the page that minted
+// it. A minted RUN had no such attribute. This line received `runId`, built the
+// href from it, and published the id NOWHERE — so the run was nameable only by
+// reading a URL out of an anchor, which no beat can do.
+//
+// Ruling 536 records the cost: S10 has five routes that need `<runId>` and no
+// beat could bind it. `recovery-requeue` mounts this same component, so act 2's
+// requeued run is covered by the same attribute (537).
+// ---------------------------------------------------------------------------
+
+test('7.6.8: the line publishes the run id it was handed, on the always-present root', () => {
+  const html = render({ runId: INIT, flowId: 'forge-develop' });
+  expect(html).toMatch(new RegExp(`<div[^>]*data-component="enqueue-outcome"[^>]*data-run-id="${INIT}"`));
+});
+
+test('7.6.8: the published id and the run link cannot disagree — one runId, two consumers', () => {
+  // The failure this kills is not "no attribute" but "an attribute that names a
+  // different run than the link beside it" — the two-notions-of-one-thing class
+  // this campaign keeps paying for. Both are derived from the same prop, and
+  // this asserts the rendered result, not the derivation.
+  const html = render({ runId: INIT, flowId: 'forge-develop' });
+  const published = /data-run-id="([^"]*)"/.exec(html)?.[1] ?? null;
+  const linked = /<a[^>]*data-action="open-develop-run"[^>]*href="\/flows\/forge-develop\/run\/([^"]*)"/.exec(html)?.[1] ?? null;
+  expect(published).toBe(INIT);
+  expect(linked).not.toBeNull();
+  expect(decodeURIComponent(linked!)).toBe(published);
+});
+
+test('7.6.8: no run id, no attribute — never an empty string a beat could bind', () => {
+  // `data-run-id=""` would read to the runner as "the product minted nothing",
+  // which is a DIFFERENT and more useful failure than "absent" only when a run
+  // really was minted. Here no run exists, so the honest answer is silence: the
+  // omit-don't-default discipline the ledger row and the cost surfaces keep.
+  const html = render({ runId: undefined, flowId: 'forge-develop' });
+  expect(html).toContain('data-component="enqueue-outcome"');
+  expect(html).not.toContain('data-run-id');
+});
