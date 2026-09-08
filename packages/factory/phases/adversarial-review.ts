@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, 
 import { join } from 'node:path';
 
 import { profileFor, type ChangeClass } from '../class-profiles.ts';
+import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
 import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
 import {
@@ -217,6 +218,11 @@ export async function runAdversarialReview(
   // read it (bead forge-8vfn.6.10.24), so writing it was three dead file writes
   // and three extra request-reachable path sinks for a file nobody consumed.
   const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', `${BASE_REF}...HEAD`]);
+  // The initiative's CHANGE SIZE, for the review ceiling below. `--numstat` and
+  // not the patch itself: bead `forge-8vfn.6.10.24` removed the whole-initiative
+  // patch write, and re-adding it to count its lines would restore three dead
+  // file writes and three request-reachable path sinks for a file nobody reads.
+  const numstatRes = gitCapture(input.worktreePath, ['diff', '--numstat', `${BASE_REF}...HEAD`]);
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
   if (!changedFilesRes.ok || !headShaRes.ok) {
     const detail = `git derivation error: ${[changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
@@ -231,6 +237,28 @@ export async function runAdversarialReview(
   const inputDirAbs = join(input.worktreePath, REVIEW_INPUT_REL_DIR);
   mkdirSync(inputDirAbs, { recursive: true });
   emit('review.input.assembled', { changed_files: changedFiles.length, head_sha: headSha, base_ref: BASE_REF });
+
+  // Beads `forge-gefz` / `forge-jb7i` (operator rulings 475 + 526). ONE ceiling
+  // for the whole initiative, derived from its total change size and bounded by
+  // the operator's per-class wall, handed to EVERY chunk unchanged — ruling
+  // 290's byte-identical option bags are preserved exactly. `undefined` when
+  // the agent declares no flat budget: nothing is invented and
+  // `resolveOneShotBudgetUsd`'s share-based resolution stands, as before.
+  //
+  // A numstat that could not be read is NOT treated as a zero-line change: that
+  // would silently hand every chunk the bare floor and reintroduce the wall
+  // this closes. It falls back to the declared budget's own resolution.
+  const initiativeChangedLines = numstatRes.ok ? changedLinesFromNumstat(numstatRes.out) : null;
+  const ceilingUsd =
+    initiativeChangedLines === null
+      ? undefined
+      : reviewCeilingUsd(def.budgets.maxBudgetUsd, initiativeChangedLines, profileFor(input.changeClass).reviewCeilingUsd);
+  emit('review.ceiling', {
+    declared_usd: def.budgets.maxBudgetUsd ?? null,
+    changed_lines: initiativeChangedLines,
+    class_max_usd: profileFor(input.changeClass).reviewCeilingUsd,
+    ceiling_usd: ceilingUsd ?? null,
+  });
 
   const findingsAbs = join(input.worktreePath, '.forge', REVIEW_FINDINGS_FILENAME);
   const findingsRel = `.forge/${REVIEW_FINDINGS_FILENAME}`;
@@ -418,6 +446,10 @@ export async function runAdversarialReview(
             : `${basePrompt}\n\n## Previous attempt rejected (fix EXACTLY these, change nothing else)\n\n${lastErrors.map((e) => `- ${e}`).join('\n')}`;
 
         // Band 3 — the one-shot spawn (caller lifecycle: this pipeline owns events).
+        //
+        // `ceilingUsd` is the INITIATIVE's, derived once above and identical for
+        // every chunk (ruling 526) — `runAgent` documents `kickoffCeilingUsd` as
+        // winning over the agent's own declared budget.
         let spawn;
         try {
           spawn = await runAgent(def, {
@@ -429,6 +461,7 @@ export async function runAdversarialReview(
             lifecycle: 'caller',
             streamGuard: { label: AGENT_SLUG, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
+            ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),
             queryFn: opts.queryFn,
             ...writeFence,
           });

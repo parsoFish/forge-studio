@@ -22,7 +22,7 @@
     ],
     "canUseTool": "<canUseTool>",
     "maxTurns": 50,
-    "maxBudgetUsd": 2,
+    "maxBudgetUsd": 2.821,
     "abortController": "<AbortController>"
   }
 }

@@ -59,13 +59,13 @@ export type AgentBudgets = {
   maxTurnsPerIteration?: number;
   wedgeKillMs?: number;
   /**
-   * One-shot spawn caps (R4-01-F2, ADR-039). Consumed by `runAgent`'s
-   * `loopStrategy: 'one-shot'` path only — the Ralph loop keeps its
-   * per-iteration caps above. `maxBudgetUsdShare` is a fraction of the bound
-   * initiative's declared cost budget; the effective cap is
-   * `max(maxBudgetUsd, maxBudgetUsdShare × initiative.costBudgetUsd)` so a
-   * flat floor and a proportional share compose (the PM's budget policy,
-   * now declared data).
+   * One-shot spawn caps (R4-01-F2, ADR-039), `runAgent`'s `'one-shot'` path
+   * only — the Ralph loop keeps its per-iteration caps above. Effective cap:
+   * `max(maxBudgetUsd, maxBudgetUsdShare × initiative.costBudgetUsd)`.
+   * `maxBudgetUsd` IS A REQUEST TO THE SDK, NOT A GUARANTEE (bead
+   * `forge-jb7i`): the SDK alone enforces it, measured 36 % over. Forge's own
+   * enforcement is `CostTracker`, over money already SPENT. Any bound derived
+   * from these must assume overshoot — `@forge/factory/phases/review-budget.ts`.
    */
   maxTurns?: number;
   maxBudgetUsd?: number;

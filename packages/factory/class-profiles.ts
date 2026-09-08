@@ -93,6 +93,29 @@ export type GateProfile = {
    *     actor to punish for the architect's scoping.
    */
   singleWiAllowed: boolean;
+  /**
+   * The WALL on a review chunk's derived spend ceiling, in dollars (beads
+   * `forge-gefz` / `forge-jb7i`, operator ruling 475).
+   *
+   * `adversarial-review` no longer hands the SDK its flat declared
+   * `maxBudgetUsd`. The ceiling is DERIVED from the diff the chunk is actually
+   * given (`phases/review-budget.ts`) — because the work scales with the diff
+   * and the declared number does not — and this column is where that curve
+   * stops. Without it "derive from the diff" is "unbounded".
+   *
+   * THE VALUES ARE THE OPERATOR'S, and these are the starting ones (475).
+   * `code` and `infra` are 8: both carry four lenses over the largest diffs,
+   * and the measured failure this closes was a single `code` file whose review
+   * cost $2.7056 against a declared 2.0 — 4x the declared floor leaves room for
+   * a file several times that size before the wall is reached. `docs` and
+   * `config` are 4: read-and-check work whose reviews have never approached
+   * the declared base, so a lower wall costs nothing and keeps a runaway on the
+   * cheapest classes cheap.
+   *
+   * A class's review does NOT get this much by default — it gets the floor,
+   * and reaches the wall only if its own diff is large enough to earn it.
+   */
+  reviewCeilingUsd: number;
 };
 
 export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
@@ -104,6 +127,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     capture: 'checkpoints',
     reviewLenses: ['correctness', 'containment', 'test-strength', 'boundary'],
     singleWiAllowed: false,
+    reviewCeilingUsd: 8,
   },
   docs: {
     iter0FailFirst: 'off',
@@ -114,6 +138,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     capture: 'none',
     reviewLenses: ['accuracy-against-source', 'link-integrity', 'forbidden-tokens', 'structure'],
     singleWiAllowed: true,
+    reviewCeilingUsd: 4,
   },
   config: {
     iter0FailFirst: 'off',
@@ -123,6 +148,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     capture: 'none',
     reviewLenses: ['schema-validity', 'secret-exposure', 'drift-from-declared', 'rollback'],
     singleWiAllowed: true,
+    reviewCeilingUsd: 4,
   },
   infra: {
     iter0FailFirst: 'required',
@@ -132,6 +158,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     capture: 'plan-output',
     reviewLenses: ['blast-radius', 'idempotence', 'secret-exposure', 'rollback'],
     singleWiAllowed: false,
+    reviewCeilingUsd: 8,
   },
 };
 
