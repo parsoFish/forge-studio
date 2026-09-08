@@ -28,7 +28,7 @@
 
 import { statSync } from 'node:fs';
 
-import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
+import { deriveSessionCostUsd, guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 
 /**
  * The rank-4 reads this derivation needs, declared STRUCTURALLY so this package
@@ -200,7 +200,7 @@ export function deriveStandaloneStateFromEvents(parsed: readonly Record<string, 
           : ceilingStopped ? 'budget-exceeded'
             : endEvent ? 'done'
               : 'running';
-  const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : null;
+  const costUsd = deriveSessionCostUsd(parsed); // 7.6.7 — ONE cost rule; why: tests/unit/standalone-cost-one-rule.test.ts
   const failedMeta = failedMarker?.['metadata'] as Record<string, unknown> | undefined;
   const errorText = typeof failedMeta?.['error'] === 'string' ? (failedMeta['error'] as string) : undefined;
   const outputRefs = Array.isArray(endEvent?.['output_refs'])
