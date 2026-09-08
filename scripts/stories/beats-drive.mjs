@@ -39,6 +39,13 @@ import {
 } from './beats.mjs';
 
 
+/** How long a press may be wrong-looking before it is called wrong (ruling 531(3)).
+ *  Long enough to outlast an asynchronous route commit, short enough that it is
+ *  an answer at t+0 rather than a bound. */
+const WRONG_PAGE_GRACE_MS = 2_000;
+/** How often that grace re-asks. */
+const WRONG_PAGE_POLL_MS = 25;
+
 export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
@@ -119,7 +126,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // recently it left one: S1 run 10 beat 9 died `0s in` on the demo session
   // beat 8 had just failed, read during the commit window.
   const sessionScope = bound.label !== null && target.startsWith('/sessions/') ? target : null;
-  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData);
+  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
@@ -378,7 +385,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null) {
+async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -407,7 +414,7 @@ async function performSteps(page, steps, timeoutMs, sessionScope = null, probe =
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
         page, step, left, matches, timeoutMs, sessionScope, probe,
-        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs),
+        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, declaredRoute),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };
@@ -421,6 +428,81 @@ async function performSteps(page, steps, timeoutMs, sessionScope = null, probe =
     const fillsAll = Object.hasOwn(step, 'fillAll');
     const fills = fillsAll || Object.hasOwn(step, 'fill');
     const handle = handleFor(step);
+
+    // T1 ruling 531(3) — STANDING ON THE WRONG PAGE, answered at t+0.
+    //
+    // S10 run 2 beat 4 spent its full declared 600 000 ms pressing
+    // `[data-action="open-session"]` on `/architect/new`, and beat 13 spent
+    // 900 000 ms the same way. Neither was waiting for an agent. `open-session`
+    // is the LIST surfaces' handle (Home's strip, the sessions index, the plan
+    // gate); the mint page publishes `view-architect-session`. No amount of
+    // waiting was going to make that page grow a control it does not have, and
+    // the runner could have said so before the first poll.
+    //
+    // BOTH CONDITIONS, and neither is optional:
+    //
+    //   the handle is absent from the WHOLE document — not merely not-yet, but
+    //   nowhere; and
+    //
+    //   the page is not the beat's declared route.
+    //
+    // The second is what keeps every navigating beat alive. `performSteps` runs
+    // BEFORE the route wait and before real-nav, so a beat is NORMALLY off its
+    // declared route while it presses: S10 beat 2 presses
+    // `start-work-architect` from `/projects/gitpulse`, and that press is what
+    // navigates to `/architect/new`. Off-route alone would red every story at
+    // its first navigating beat.
+    //
+    // The first is what keeps an agent wait alive. A control that appears only
+    // once an agent has acted is the entire reason `waitForHandleOrStall` has a
+    // bound — S2 beat 12's `session-answer` exists only after the architect
+    // ASKS — and that beat stands ON its declared route, so this never fires
+    // for it.
+    //
+    // Presses only. A `fill` names a field inside an affordance the press
+    // before it opened, so "absent" there is the ordinary not-yet this rule
+    // must not touch.
+    if (!fills && declaredRoute !== null && !routeMatches(page.url(), declaredRoute)
+        && (await page.locator(handle).count()) === 0) {
+      // NOT a single sample. A previous beat's act can navigate ASYNCHRONOUSLY,
+      // and during that commit window `page.url()` and the DOM both still
+      // answer for the page being left (the class §2.28 names, and the reason
+      // `6.11.47` scopes stop reasons at all). A one-shot read there reds a beat
+      // that was about to arrive somewhere perfectly correct.
+      //
+      // The first version of this grace waited on
+      // `main[data-page][data-page-ready="true"]` and was a NO-OP, which
+      // `beats-agent-crashed.test.ts` caught immediately: the page being LEFT
+      // satisfies that selector too, so the wait returned in the same tick and
+      // the re-check read the same stale URL. A settle signal that the old page
+      // already satisfies is not a settle signal.
+      //
+      // So the grace waits for the thing that would make this verdict WRONG —
+      // the route arriving, or the handle appearing — and for nothing else.
+      // Bounded at two seconds, never the beat's declared bound: two seconds
+      // against the 600 000 ms this rule exists to stop is still an answer at
+      // t+0, it is just not an answer taken while the page was moving.
+      const graceUntil = Date.now() + Math.min(WRONG_PAGE_GRACE_MS, actLeft());
+      let stillWrong = true;
+      while (Date.now() < graceUntil) {
+        await new Promise((resolve) => setTimeout(resolve, WRONG_PAGE_POLL_MS));
+        if (routeMatches(page.url(), declaredRoute) || (await page.locator(handle).count()) > 0) {
+          stillWrong = false;
+          break;
+        }
+      }
+      if (stillWrong) {
+        const here = new URL(page.url(), 'http://forge.invalid');
+        return {
+          waitedForHandle,
+          error:
+            `standing on the wrong page: "${here.pathname}${here.search}" is not "${declaredRoute}", and ` +
+            `${handle} is on no element of it. The beat was not waiting for an agent — this page does not ` +
+            'carry that control at all, so the bound would have been spent to learn nothing. Reach the page ' +
+            'that renders it first (a navigation beat, or a press that goes there).',
+        };
+      }
+    }
 
     if (i > 0) {
       if (!Object.hasOwn(steps[i - 1], 'fill')) {
