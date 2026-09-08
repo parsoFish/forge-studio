@@ -305,22 +305,10 @@ export const journey = defineJourney({
                 await sleep(READ);
               }, { readySel: '[data-page="architect-new"]', caption: "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words" });
 
-              // BEAD `forge-8vfn.7.6.6` — the door this beat was one step from
-              // being. The activity drawer is `position: fixed; bottom: 0` and
-              // OPEN by design while a session works; an architect interview is
-              // a phase that is working AND waiting on the operator, so the two
-              // overlap on the operator's screen. M6-D's S4 run 2 measured the
-              // consequence: Playwright reported Submit "visible, enabled and
-              // stable", scrolled it into view, finished scrolling, and was then
-              // told the drawer's own StructuredOutput row "intercepts pointer
-              // events". A human clicks Submit and nothing happens.
-              //
-              // The click below was always real and unswallowed — it simply
-              // never had the drawer over it, because this seeded phase leaves
-              // the drawer collapsed. Open it deliberately first and the click
-              // becomes the regression lock for the whole class: if anything
-              // fixed to the viewport ever covers an interview control again,
-              // THIS LINE throws instead of a costed story run finding it.
+              // Bead `forge-8vfn.7.6.6` (measured, M6-D S4 run 2): the fixed
+              // activity drawer intercepted this very click. The click below was
+              // always real; it never had the drawer over it. Rationale:
+              // docs/reference/studio-dom-contract.md §activity-drawer.
               await page.locator('[data-action="toggle-activity-drawer"]').first().click().catch(() => {});
               await page.waitForSelector('[data-component="activity-drawer"][data-drawer-open="true"]', { timeout: 8000 }).catch(() => {});
               check(await page.locator('[data-component="activity-drawer"][data-drawer-open="true"]').count() > 0,
