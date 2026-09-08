@@ -97,6 +97,19 @@ const GOAL =
  * LIVE: pinning it was considered and refused, because a pinned ground stops
  * the story exercising the real repo, which is the whole point of S4.
  */
+/*
+ * AMEND-4 (M6, operator-confirmed in the attended sitting of 2026-09-08;
+ * `_1.0/gate-manifests/M1-C-S4.amend-4.md`; operator ruling 384, shape settled
+ * by 459, first-run consequence confirmed by 474). ONE new beat, inserted
+ * BEFORE the save, and the ORDERING is the whole point — see the beat's own
+ * note. S4 goes from 12 to 13 beats.
+ *
+ * S4 was the only fully green story in its set (12/12). Getting this wrong —
+ * putting the seed AFTER the save, as the first draft of the amendment did —
+ * would have taken it to red at the save with every beat behind it blocked,
+ * because the save's agent-ref check is exactly what the old silent
+ * materialisation existed to satisfy. Nothing else in the story changed.
+ */
 const IDEA =
   'Add test coverage for --compare combined with --since, so the two window filters are proven to work together rather than only apart.';
 
@@ -246,11 +259,47 @@ export default {
       say: 'A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.',
     },
     {
+      // AMEND-4, a NEW beat (operator ruling 384, shape settled by 459/474).
+      // It goes BEFORE the save, and the ordering is the whole point.
+      //
+      // Saving used to materialise three roster agents — `dev`/`plan`/`review`
+      // — that the operator never authored. Not merely as a side effect: the
+      // save folded their definitions into the agents map SO THAT
+      // `validateFlow`'s agent-ref check would pass, and
+      // `apps/forge/bridge-studio-writes.ts`'s own comment said so. None of the
+      // three exists in a checkout; only `skills/architect` does. This story's
+      // flow references all three.
+      //
+      // So under 384 a save that runs BEFORE seeding has three unresolvable
+      // agent refs and is refused. Placing this beat after the save would have
+      // taken S4 from 12/12 — the only fully green story in this set — to red
+      // here, with every beat behind it blocked. Seed first, then save.
+      //
+      // The beat reads back the COUNT and the NAMES because "forge names
+      // exactly what it wrote" is the claim; a count alone would prove that
+      // three of something landed.
+      act: 'Seed the flow\u2019s starter agents \u2014 the roster forge offers, only if the operator asks',
+      do: [{ press: 'seed-starter-agents' }],
+      expect: {
+        route: '/flows/new',
+        data: {
+          'seeded-starter-count': '3',
+          'seeded-starters': 'dev,plan,review',
+        },
+      },
+      say: 'The roster forge offers is not the roster you get. Nothing lands in skills/ because you saved a canvas; it lands because you asked for it, and forge names exactly what it wrote.',
+    },
+    {
       // Fully expressible. The save is a real `data-action`; the route is the
       // flow's own id, and the name was typed already lowercase so the beat
       // does not depend on forge's slug rule. A `/flows/new` save carries
       // `create: true`, so this beat also pins that a new flow is CREATED here
       // rather than silently overwriting an existing one.
+      //
+      // AMEND-4: the save no longer writes any roster agent. It resolves the
+      // starters the beat above seeded, and REFUSES a flow whose starters are
+      // unseeded, naming them — the honest failure rather than a silent
+      // half-save.
       act: 'Press "Save Flow"',
       do: [{ press: 'save-flow' }],
       expect: {
