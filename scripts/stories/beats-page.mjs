@@ -128,8 +128,19 @@ export const TERMINAL_STOPPED_PHASES = Object.freeze(new Set(['failed', 'rejecte
  * that names a query is naming which of two destinations it means.
  */
 export function routeMatches(url, declared) {
-  const want = new URL(declared, 'http://forge.invalid');
-  const got = new URL(url, 'http://forge.invalid');
+  // Ruling 527 moved the link filter's copy of this out of the browser and into
+  // this one function, so `url` is now sometimes a raw `href` off the page. An
+  // href that will not parse is NOT a match — skipped rather than guessed at,
+  // which is what the inlined copy did and what a predicate reading untrusted
+  // page content has to do.
+  let want;
+  let got;
+  try {
+    want = new URL(declared, 'http://forge.invalid');
+    got = new URL(url, 'http://forge.invalid');
+  } catch {
+    return false;
+  }
   if (got.pathname !== want.pathname) return false;
   return want.search === '' ? true : got.search === want.search;
 }

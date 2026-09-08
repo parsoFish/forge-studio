@@ -1,4 +1,4 @@
-import { PLACEHOLDER, resolveExpectations, ERROR_SENTINELS } from './beats-page.mjs';
+import { PLACEHOLDER, resolveExpectations, ERROR_SENTINELS, routeMatches } from './beats-page.mjs';
 
 /**
  * beats.mjs — judging one story beat.
@@ -27,7 +27,18 @@ export function beatVerdict(beat, observed, { boundMs = null } = {}) {
   const failures = [];
   const bindings = {};
 
-  if (observed.route !== beat.expect.route) {
+  // THROUGH `routeMatches`, never `!==` — T1 ruling 527, bought by the aborted
+  // G1/S10 run. Ruling 514 made `observed.route` carry the query; this compare
+  // stayed a string equality, so every beat standing on a page the product
+  // mounts with `?project=` reded ON ARRIVAL. S10 beat 2 declared
+  // `/architect/new`, the product served `/architect/new?project=gitpulse`, and
+  // the run died at 36 s on the harness rather than on anything it was
+  // measuring. 514 replaced five hand-rolled compares and 518 a sixth; this one
+  // — the compare that WRITES THE VERDICT — survived both.
+  // `beats-route-verdict.test.ts` now refuses any `===`/`!==` between two routes
+  // anywhere under `scripts/stories/`, because the rule was carried in prose for
+  // two PRs and prose does not grep.
+  if (!routeMatches(observed.route, beat.expect.route)) {
     failures.push(`route: expected "${beat.expect.route}", got "${observed.route}"`);
   }
 
