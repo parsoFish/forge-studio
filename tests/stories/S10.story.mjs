@@ -196,7 +196,22 @@ export default {
           until: { 'session-phase': 'awaiting-verdict' },
         },
       ],
-      wait: { for: 'agent', upTo: 600_000 },
+      // 30 MINUTES, MEASURED (T1 rulings 551 / 558). This declared 600 000 ms
+      // and run 3 died on it: `answered 1 round(s) and this beat's declared
+      // bound (600000 ms) ran out before its `until``.
+      //
+      // Run 2's OWN evidence already said ten minutes was too few — its
+      // architect started at 05:08:49 and reached `awaiting-verdict` at
+      // 05:27:07, EIGHTEEN minutes — and that figure was written into run 2's
+      // outcome and its evidence README before run 3 was funded. A $35 run
+      // bought a fact that was already on disk. The number here is measurement
+      // plus headroom, not a guess.
+      //
+      // Not comparable to the 2–3 minute `architect` phase in `_1.0/traces/`:
+      // those are non-interactive, out-of-cycle architects. This beat drives the
+      // interactive interview-and-draft session, which is a different thing that
+      // waits on an operator between rounds.
+      wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
         route: '/sessions/architect/<architectSessionId>',
         data: {
@@ -273,6 +288,28 @@ export default {
       // per-row keys are `FlowRunDetail.tsx:282-285`, corroborated at
       // `flow-run-detail-render.test.ts:231-236,247-249`.
       act: 'Watch the run build',
+      // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
+      // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
+      //
+      // The five real gitpulse cycles in `_1.0/traces/` ran their developer-loop
+      // in 17, 20, 21, 24 and **29** minutes. This bound is 30. The audit asked
+      // for 45; `story-file.mjs` refused it, because `MAX_DECLARED_WAIT_MS` is a
+      // deliberate safety limit — "a declared wait is a licence to sit still; an
+      // unbounded or absurd one turns a red run into a hung host" — and 558 kept
+      // the limit rather than widening it for two beats.
+      //
+      // So this beat is a coin flip against its own worst measurement, and it is
+      // written down here rather than discovered again: a red HERE, at the bound,
+      // with `agent.heartbeat` events still streaming, is not a slow product. It
+      // is this number. The fix is not a bigger bound — it is a bound that does
+      // not expire while the agent is demonstrably progressing (bead under 7.5,
+      // the mirror of ruling 518's early exit on a session the product has
+      // already given up on).
+      //
+      // Those are SPAN figures, first to last event of the phase, so a cycle
+      // that sat idle overstates. The five gitpulse cycles have no such gaps,
+      // which is why they are the ones relied on and the betterado trace's
+      // `architect=828m` is not.
       wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
         route: '/flows/forge-develop/run/<runId>',
@@ -381,6 +418,28 @@ export default {
       // SOURCE-DERIVED. The fix lands on the same branch and the run returns to
       // the review station; keys as beat 9.
       act: 'The fix lands on the same branch and comes back for re-review',
+      // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
+      // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
+      //
+      // The five real gitpulse cycles in `_1.0/traces/` ran their developer-loop
+      // in 17, 20, 21, 24 and **29** minutes. This bound is 30. The audit asked
+      // for 45; `story-file.mjs` refused it, because `MAX_DECLARED_WAIT_MS` is a
+      // deliberate safety limit — "a declared wait is a licence to sit still; an
+      // unbounded or absurd one turns a red run into a hung host" — and 558 kept
+      // the limit rather than widening it for two beats.
+      //
+      // So this beat is a coin flip against its own worst measurement, and it is
+      // written down here rather than discovered again: a red HERE, at the bound,
+      // with `agent.heartbeat` events still streaming, is not a slow product. It
+      // is this number. The fix is not a bigger bound — it is a bound that does
+      // not expire while the agent is demonstrably progressing (bead under 7.5,
+      // the mirror of ruling 518's early exit on a session the product has
+      // already given up on).
+      //
+      // Those are SPAN figures, first to last event of the phase, so a cycle
+      // that sat idle overstates. The five gitpulse cycles have no such gaps,
+      // which is why they are the ones relied on and the betterado trace's
+      // `architect=828m` is not.
       wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
         route: '/flows/forge-develop/run/<runId>',
@@ -529,6 +588,12 @@ export default {
       // all, which is why this beat changes surface.
       act: 'ACT 2 — resume it, and see the finished work items survived',
       do: [{ press: 'project-tab-roadmap' }, { press: 'recovery-requeue' }],
+      // 15 minutes, UNCHANGED and UNMEASURED (T1 ruling 558). A RESUMED
+      // developer-loop has never been measured in this campaign — beats 5–22
+      // have never run to completion — so there is no figure to raise this to.
+      // Left alone deliberately rather than guessed at, and said here so that a
+      // red on this beat reads as FIRST MEASUREMENT and not as a bound too
+      // small.
       wait: { for: 'agent', upTo: 900_000 },
       expect: {
         route: '/projects/gitpulse',
