@@ -354,7 +354,7 @@ packages/knowledge/brain-fix-auto.ts execFileSync 2
 packages/knowledge/brain-fix-auto.ts existsSync 4
 packages/knowledge/brain-fix-auto.ts readFileSync 3
 packages/knowledge/brain-fix-auto.ts statSync 1
-packages/knowledge/brain-fix-auto.ts writeFileSync 3
+packages/knowledge/brain-fix-auto.ts writeFileSync 4
 packages/knowledge/brain-index.ts existsSync 10
 packages/knowledge/brain-index.ts readdirSync 3
 packages/knowledge/brain-index.ts readFileSync 3
@@ -533,8 +533,8 @@ packages/projects/preflight-fix-auto.ts existsSync 3
 packages/projects/preflight-fix-auto.ts mkdirSync 1
 packages/projects/preflight-fix-auto.ts readFileSync 1
 packages/projects/preflight-fix-auto.ts writeFileSync 3
-packages/projects/preflight-gate.ts existsSync 3
-packages/projects/preflight-gate.ts readFileSync 3
+packages/projects/preflight-gate.ts existsSync 2
+packages/projects/preflight-gate.ts readFileSync 2
 packages/projects/preflight-instructions.ts existsSync 2
 packages/projects/preflight-instructions.ts readFileSync 1
 packages/projects/preflight-release.ts existsSync 1

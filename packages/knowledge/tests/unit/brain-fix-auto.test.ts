@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -246,6 +246,63 @@ test('applyAutoFixes: index.duplicate for a project-brain theme dedupes the KB\'
     const body = readFileSync(join(kbDir, 'patterns.md'), 'utf8');
     const hits = body.split('\n').filter((l) => l.includes('themes/dup-lesson.md')).length;
     assert.equal(hits, 1, `exactly one link line must survive in the KB's own index, got ${hits}:\n${body}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A freshly SEEDED knowledge base has themes and no category indexes at all —
+ * the project-brain agent writes theme pages and nothing writes the index they
+ * belong to. Bead `forge-8vfn.7.6.9`, measured live in S6 run 4 (2026-09-08):
+ *
+ *   DRAIN TO GREEN — no progress · round 1/5 · auto 3 · $0.00 of $2.00
+ *   gate-quality-and-vacuous-pass.md   orphan  no category index for "pattern"
+ *   unifier-overload-signal.md         orphan  no category index for "pattern"
+ *   verifier-agreement-not-verification.md orphan no category index for "antipattern"
+ *
+ * `ensureLinked` could link a theme INTO an index and could not CREATE one, so
+ * every seeded KB was born permanently unhealthy: three findings the auto tier
+ * reported and could never clear, and "Drain to green" stopping at no-progress
+ * on its first round. That is what caps S6 at 14/15 — a product state, not a
+ * story defect.
+ */
+test('applyAutoFixes: a seeded KB with NO category index gets one created, then linked', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brain-fix-seeded-'));
+  try {
+    // A seeded KB exactly as the project-brain agent leaves it: its own brain
+    // directory, theme pages, and NO index files whatsoever.
+    const kb = join(root, 'brain', 'story-s6');
+    mkdirSync(join(kb, 'themes'), { recursive: true });
+    writeFileSync(join(root, 'brain', 'INDEX.md'), '# Brain\n');
+    writeFileSync(join(kb, 'kb.yaml'), 'id: story-s6\n');
+    writeFileSync(
+      join(kb, 'themes', 'seeded-pattern.md'),
+      theme({ title: 'Seeded', description: 'a seeded theme', category: 'pattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    );
+
+    const findings = runBrainLint({ cwd: root, scope: 'full' }).findings;
+    // The kind is `orphan`, not `index.not-listed` — a KB with NO index at all
+    // reports the theme as orphaned, which is exactly the word the live Health
+    // tab used: `orphan — no category index for "pattern"`.
+    const orphan = findings.find((f) => f.kind === 'orphan');
+    assert.ok(orphan, `precondition: the seeded theme is orphaned; got ${JSON.stringify(findings.map((f) => f.kind))}`);
+
+    const r1 = applyAutoFixes(root, findings);
+    assert.ok(
+      r1.applied.some((a) => a.kind === 'orphan'),
+      `the fixer must CREATE the missing index rather than report "no category index": ${JSON.stringify(r1.skipped ?? [])}`,
+    );
+
+    const indexPath = join(kb, 'patterns.md');
+    assert.ok(existsSync(indexPath), 'patterns.md was created for the seeded KB');
+    assert.match(readFileSync(indexPath, 'utf8'), /themes\/seeded-pattern\.md/, 'and the theme is linked into it');
+    assert.ok(!lintKinds(root).includes('orphan'), 're-lint: the orphan is cleared');
+
+    // Idempotent: a second pass neither re-creates nor re-links.
+    const before = readFileSync(indexPath, 'utf8');
+    applyAutoFixes(root, runBrainLint({ cwd: root, scope: 'full' }).findings);
+    assert.equal(readFileSync(indexPath, 'utf8'), before, 'a second apply changes nothing');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

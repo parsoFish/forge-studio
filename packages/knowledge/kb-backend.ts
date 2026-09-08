@@ -262,18 +262,3 @@ export function tryGetKbBackend(forgeRoot: string, kbId: string): KbBackend | nu
   return resolveKbBrainDir(forgeRoot, kbId) ? new FilesystemKbBackend(forgeRoot, kbId) : null;
 }
 
-/**
- * Async backend resolution — the production entry point. Kept async (and as a
- * distinct symbol callers depend on) so a future graph-memory backend can be
- * routed here without changing call sites; today it resolves the filesystem
- * backend, behaviour-identical to getKbBackend().
- */
-export async function getKbBackendAsync(
-  forgeRoot: string,
-  kbId: string,
-  // Retained for signature stability with callers; unused while the filesystem
-  // backend is the only implementation.
-  _env: NodeJS.ProcessEnv = process.env,
-): Promise<KbBackend> {
-  return getKbBackend(forgeRoot, kbId);
-}
