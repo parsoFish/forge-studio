@@ -48,7 +48,28 @@ export const ERROR_SENTINELS = [
 export const LIFECYCLE_STALLED = 'stalled';
 
 /**
- * The session's own terminal FAILURE phase.
+ * The same contract's word for "the runner's process died".
+ *
+ * Bead `forge-8vfn.7.5.x` (T1 ruling 518), measured on D's S6 run: the
+ * project-brain turn crashed, the page rendered `data-lifecycle-state=
+ * "crashed"` with the runner's own last stderr line beneath it, and beat 6
+ * spent its full declared bound anyway.
+ *
+ * NEITHER existing door could open. A crash is the shape where the process
+ * dies WITHOUT writing a terminal phase, so `status.json` still reads whatever
+ * it read mid-flight and the phase door below stays shut; and
+ * `deriveSessionLifecycle` calls it `crashed`, not `stalled`, so the stall door
+ * stays shut too. The one signal that was true is the one nothing read.
+ *
+ * It also carries the only MESSAGE any of these doors has: `error` is the
+ * runner's own last non-stack stderr line, extracted server-side by
+ * `extractErrorMessage` and rendered in `pre[data-lifecycle-error]`. A beat
+ * that stops here says what the page said.
+ */
+export const LIFECYCLE_CRASHED = 'crashed';
+
+/**
+ * The session's own terminal phases that are NOT a success.
  *
  * Bead `forge-8vfn.6.11.39`, the mirror of `6.11.38`: that one is the loop
  * overshooting the phase it waits for, this is the loop waiting on a corpse.
@@ -70,8 +91,48 @@ export const LIFECYCLE_STALLED = 'stalled';
  * `{ phase: failed, step: terminal }` in `studio/session-kinds.yaml`. Believing
  * a terminal verdict the product published is the opposite of second-guessing
  * it.
+ *
+ * T1 ruling 518 widened this from the single token `failed` to the product's
+ * own closed set. `apps/studio/lib/history-ledger.ts` declares it —
+ * `SESSION_STOPPED_PHASES = rejected | abandoned | cancelled | failed` — and
+ * pins it there against the REAL `studio/session-kinds.yaml`'s `step: terminal`
+ * rows, so a future kind's new terminal token turns that suite red rather than
+ * drifting past this one. A beat waiting on a session the operator REJECTED has
+ * exactly as little to wait for as one waiting on a session that threw, and
+ * before 518 it waited out the whole bound.
+ *
+ * The DONE half of that vocabulary (`committed | locked | applying | applied |
+ * complete`) is deliberately absent: a beat may be waiting for the control a
+ * session renders only once it has committed, and stopping there would invent a
+ * failure out of a success. Copied rather than imported because this harness is
+ * plain `.mjs` run by `node scripts/stories/run.mjs` with no type stripping, so
+ * it cannot import the `.ts` that declares it — `beats-agent-crashed.test.ts`
+ * names the source and the three tokens it adds.
  */
-export const TERMINAL_FAILURE_PHASE = 'failed';
+export const TERMINAL_STOPPED_PHASES = Object.freeze(new Set(['failed', 'rejected', 'abandoned', 'cancelled']));
+
+/**
+ * Does `url` satisfy the route a beat DECLARED?
+ *
+ * Pathname always; query only when the beat asked for one (T1 ruling 514).
+ *
+ * 7.5.3 made both reading and selection query-BLIND, because three live product
+ * sites mount links carrying `?project=…` and a story should name the route an
+ * operator would say out loud, not the product's parameter plumbing. The
+ * inverse case is just as real: D's S6 beat 7 wants `/knowledge?id=story-s6`
+ * from a page that offers `/knowledge` too, and blind-by-pathname can only see
+ * two links sharing a pathname and refuse.
+ *
+ * So the beat decides. Declare no query and nothing changes — the product stays
+ * free to add parameters. Declare one and it is matched EXACTLY, because a beat
+ * that names a query is naming which of two destinations it means.
+ */
+export function routeMatches(url, declared) {
+  const want = new URL(declared, 'http://forge.invalid');
+  const got = new URL(url, 'http://forge.invalid');
+  if (got.pathname !== want.pathname) return false;
+  return want.search === '' ? true : got.search === want.search;
+}
 
 /** How often `waitForConsequence` re-reads the page while it waits. */
 const CONSEQUENCE_POLL_MS = 100;
@@ -167,7 +228,7 @@ export async function readObserved(page, beat, alsoWanted = []) {
   // same condition unmet. The union, not the beat's keys: a key asked for
   // twice is collected once, and nothing that used to be read stops being read.
   const keys = [...new Set([...Object.keys(beat.expect.data), ...alsoWanted, ...ERROR_SENTINELS.map(([a]) => a)])];
-  const { data, nested, lifecycle, sessionPhase } = await page.evaluate(
+  const { data, nested, lifecycle, lifecycleError, sessionPhase } = await page.evaluate(
     ({ wanted, safe }) => {
       const root = document.querySelector('main[data-page]') ?? document.body;
       const pick = (el) => {
@@ -186,6 +247,13 @@ export async function readObserved(page, beat, alsoWanted = []) {
       // the generated how-to would start listing an attribute no beat asked
       // about. It is diagnosis, not an expectation, so it travels beside them.
       const bar = document.querySelector('div[data-section="session-lifecycle"][data-lifecycle-state]');
+      // The runner's OWN last stderr line, which the bar renders beneath a
+      // crash (and beneath a terminal failure that carries one). Read for the
+      // same reason and by the same rule as the bar above — diagnosis, never an
+      // expectation — and it is the whole point of ruling 518's "red it with
+      // the page's own message": a stop that paraphrases the page tells the
+      // operator less than the page already told them.
+      const err = bar === null ? null : bar.querySelector('pre[data-lifecycle-error]');
       // Read by its OWN selector for the same reason the bar is, and never
       // folded into `wanted`: it is diagnosis, not an expectation, so it must
       // not reach `nested` where `resolveExpectations` could return it inside a
@@ -195,6 +263,7 @@ export async function readObserved(page, beat, alsoWanted = []) {
         data: pick(root),
         nested: kids,
         lifecycle: bar === null ? null : bar.getAttribute('data-lifecycle-state'),
+        lifecycleError: err === null ? null : (err.textContent ?? '').trim(),
         sessionPhase: root.getAttribute('data-session-phase'),
       };
     },
@@ -203,16 +272,23 @@ export async function readObserved(page, beat, alsoWanted = []) {
   // Ruling 514: the query is part of the route when a beat declares one, so
   // the observation carries it and the comparison decides what matters.
   const seen = new URL(page.url(), 'http://forge.invalid');
-  return { route: seen.pathname + seen.search, data, nested, lifecycle: lifecycle ?? null, sessionPhase: sessionPhase ?? null };
+  return {
+    route: seen.pathname + seen.search, data, nested,
+    lifecycle: lifecycle ?? null, lifecycleError: lifecycleError ?? null, sessionPhase: sessionPhase ?? null,
+  };
 }
 
 /**
- * Is the product itself saying to stop — either that the session is hung, or
- * that it is terminally failed? Returns the REASON, or `null` to keep waiting.
+ * Is the product itself saying to stop — that the session CRASHED, that it
+ * reached a terminal phase which is not a success, or that it is hung? Returns
+ * the REASON, or `null` to keep waiting.
  *
- * One predicate for both so the two can never drift apart, and so a caller
- * cannot check one and forget the other (which is exactly how `6.11.39`
- * survived alongside the stall check it sits beside).
+ * ONE predicate for all three so they can never drift apart, and so a caller
+ * cannot check one and forget the others — which is exactly how `6.11.39`
+ * survived alongside the stall check it sat beside, and then how the crash door
+ * (ruling 518) survived alongside both of them. Each door was added after a
+ * measured run spent its whole declared bound on a session the product had
+ * already given up on.
  */
 export function stopReasonFor(observed, sessionScope = null) {
   // Bead `forge-8vfn.6.11.47` (T1 ruling 366). A STOP REASON BELONGS TO A
@@ -230,9 +306,24 @@ export function stopReasonFor(observed, sessionScope = null) {
   // session page, and `null` otherwise — so a beat that names no session
   // cannot be stopped by any session's phase, and a beat that names one is
   // stopped only while standing on it.
-  if (sessionScope === null || observed.route !== sessionScope) return null;
-  if (observed.sessionPhase === TERMINAL_FAILURE_PHASE) {
-    return `the session's own phase reached the terminal "${TERMINAL_FAILURE_PHASE}"`;
+  //
+  // T1 ruling 514 made `observed.route` carry the QUERY, and this compare was a
+  // string equality against the beat's DECLARED route — so the moment the
+  // product mounted the session page with its own `?project=` parameter (three
+  // live sites do), a beat that named no query stopped being "about" the
+  // session it was standing on and all three doors below silently closed. The
+  // beat's route is a declaration and `routeMatches` is what reads it: pathname
+  // always, query only when the beat asked for one.
+  if (sessionScope === null || !routeMatches(observed.route, sessionScope)) return null;
+  // Ruling 518 — the crash door FIRST, because it is the only one of the three
+  // that carries the product's own message, and a stop that can say what the
+  // page said should say it.
+  if (observed.lifecycle === LIFECYCLE_CRASHED) {
+    const said = observed.lifecycleError ?? null;
+    return `the session's own lifecycle read "${LIFECYCLE_CRASHED}"` + (said === null || said === '' ? '' : ` — ${said}`);
+  }
+  if (observed.sessionPhase !== null && TERMINAL_STOPPED_PHASES.has(observed.sessionPhase)) {
+    return `the session's own phase reached the terminal "${observed.sessionPhase}"`;
   }
   if (observed.lifecycle === LIFECYCLE_STALLED) {
     return `the session's own lifecycle read "${LIFECYCLE_STALLED}"`;

@@ -20,37 +20,24 @@
  * import lines it would have saved.
  */
 import {
-  PLACEHOLDER, answers, resolveExpectations, readObserved,
+  PLACEHOLDER, answers, resolveExpectations, readObserved, routeMatches,
   waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
+
+// `routeMatches` LIVES in `beats-page.mjs` and is re-exported here (T1 ruling
+// 518). It moved because `stopReasonFor` must decide whether a beat is standing
+// on the session it is scoped to, and that is the same question — a string
+// equality there while every compare here went through the predicate is exactly
+// the split 514 existed to close, one function further down. `beats-drive`
+// imports `beats-page`, never the reverse, so the leaf holds it and the caller
+// re-exports for the modules and tests that already name it here.
+export { routeMatches };
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
 import {
   READY_TIMEOUT_MS, beatBound, withAgentProc, beatVerdict, stuckVerdict, resolveBeatRoute,
 } from './beats.mjs';
 
-/**
- * Does `url` satisfy the route a beat DECLARED?
- *
- * Pathname always; query only when the beat asked for one (T1 ruling 514).
- *
- * 7.5.3 made both reading and selection query-BLIND, because three live product
- * sites mount links carrying `?project=…` and a story should name the route an
- * operator would say out loud, not the product's parameter plumbing. The
- * inverse case is just as real: D's S6 beat 7 wants `/knowledge?id=story-s6`
- * from a page that offers `/knowledge` too, and blind-by-pathname can only see
- * two links sharing a pathname and refuse.
- *
- * So the beat decides. Declare no query and nothing changes — the product stays
- * free to add parameters. Declare one and it is matched EXACTLY, because a beat
- * that names a query is naming which of two destinations it means.
- */
-export function routeMatches(url, declared) {
-  const want = new URL(declared, 'http://forge.invalid');
-  const got = new URL(url, 'http://forge.invalid');
-  if (got.pathname !== want.pathname) return false;
-  return want.search === '' ? true : got.search === want.search;
-}
 
 export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
