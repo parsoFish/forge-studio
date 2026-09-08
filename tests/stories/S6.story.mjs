@@ -40,11 +40,14 @@
  * CLEAN CHECKOUT has, which is the condition 1.0 exits on.
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
- * of a bridge booted from this lane's own worktree, EXCEPT beats 5 and 6,
- * whose session phases are transcribed from
- * `docs/forge-ui-dom-and-harness.md` — observing a project-brain session live
- * costs a real seeding spawn. That is stated here rather than hidden: if you
- * did not see it, say you did not. Beat 3's landing state was confirmed by
+ * of a bridge booted from this lane's own worktree. Beats 5 and 6 used to be
+ * the exception — their session phases were transcribed from
+ * `docs/forge-ui-dom-and-harness.md` because observing a project-brain session
+ * live costs a real seeding spawn — and amend-3 pays that price instead: both
+ * now name handles read out of `SessionProjectBrainPanel` itself, and beat 6
+ * declares the wait that lets the agent reach the phase where its control
+ * renders. A transcribed beat is a beat measured against documentation
+ * (§15.240), and this story was carrying three of them. Beat 3's landing state was confirmed by
  * driving the real form during authoring and then removing the fixture: a KB
  * named "story S6" mints the id `story-s6`, and the form lands on
  * `/knowledge?id=story-s6&seedSession=<sid>&seedProject=.kb-story-s6` with the
@@ -61,17 +64,35 @@
  * take. Three beats now carry the real path — Projects, mdtoc, "Architect →" —
  * and NOT ONE ASSERTION CHANGED. The amendment made the story truer about the
  * operator's journey; it did not make it easier to pass.
- *   - Beat 11 routes to `/sessions/architect/<architectSessionId>`, and this
- *     beat's OWN press is what mints that id. The runner resolves a route
- *     before performing any `do` step, so binding it is a two-beat act. That
- *     is an authoring change, not a product gap — the product has published
- *     `data-architect-session-id` since M1-G.
+ *   - Beat 11 CLOSED by amend-3: it is now 11a (press, stay, bind) + 11b
+ *     (open what the press minted). The product has published
+ *     `data-architect-session-id` since M1-G; it was always an authoring
+ *     change, not a product gap.
  *   - Beat 12's real subject is a planner's READ of this KB (§3 asks for a
  *     visible `brain-index` event). `brain-index` appears nowhere in
  *     forge-ui: every brain-related attribute the UI declares renders the
  *     reflector's WRITE. Asserting one of those would report a write as a
  *     read — the fail-open shape this story exists to catch — so the
  *     read-proof stays named in the narration. Bead `forge-8vfn.5.16`.
+ *
+ * AMEND-3 (M6, operator-confirmed in the attended sitting of 2026-09-08;
+ * `_1.0/gate-manifests/M1-C-S6.amend-3.md`; rulings 480/481/483/503). Three
+ * beats, one product attribute, and one correction to a ruling.
+ *   - Beat 5 gains the brief it always claimed to type, and beat 6 gains the
+ *     handle that actually exists plus the wait that gets it rendered. The
+ *     first draft of both proposed the GENERIC interactive surface's handles;
+ *     `project-brain` does not use that surface, which is measured in each
+ *     beat's own note. `data-field="brain-brief"` is the one attribute this PR
+ *     adds to the product — the textarea was already there.
+ *   - Beat 6 was ruled NOT amended (421) on the premise its red was inherited
+ *     from beat 5. That premise was wrong and 480 corrected it: the beat
+ *     pressed a control this kind never renders.
+ *   - Beat 11 splits (483), and its `session-phase: 'working'` is corrected to
+ *     `interviewing` (503) — the third and last site of the §15.240 class,
+ *     after S9 beat 7 and S7 beat 3.
+ * The story goes from 14 beats to 15. NOT ONE ASSERTION WAS RELAXED: two
+ * beats gained acts that cause what they assert, one gained a declared bound,
+ * and one unreachable value was replaced with the one the product writes.
  *
  * AMEND-1 (M4, operator-authorised; `_1.0/gate-manifests/M1-C-S6.amend-1.md`).
  * `forge-8vfn.5.10` and `forge-8vfn.5.14` shipped the four handles this story
@@ -97,6 +118,14 @@
 /** What this knowledge base is for — what the operator types into the create form. */
 const DESCRIPTION =
   'What adversarial review keeps finding on this codebase, so the next reviewer starts from the last one’s conclusions instead of rediscovering them.';
+
+/**
+ * What the operator types into the seeding session's brief box before starting
+ * the analysis. The product calls this field optional; the story fills it
+ * because S6's whole subject is that the operator STEERS what the agent keeps.
+ */
+const SEED_BRIEF =
+  'Keep what review found about this codebase\u2019s own conventions \u2014 the rules a reviewer would otherwise rediscover \u2014 and leave out anything specific to one cycle.';
 
 /**
  * The binding. `forge-develop` and `review-band` are both read off the live
@@ -189,11 +218,31 @@ export default {
       say: 'Creating a knowledge base starts an agent that fills it. Forge does not leave the operator with an empty graph and a shrug — it offers the session it already started, and the operator goes and watches it.',
     },
     {
-      // Reachable since amend-1 (the same segment beat 4 now binds). The phase
-      // name is still transcribed from `docs/forge-ui-dom-and-harness.md` (a
-      // real briefing POST flips `phase → analyzing` on disk) rather than
-      // observed live: observing it costs a real seeding spawn.
+      // AMEND-3. The beat used to assert `analyzing` with NO `do` block at all,
+      // so nothing in it caused the transition it asserted, and run 3 measured
+      // exactly that: `session-phase: expected "analyzing", got "briefing"`.
+      // The act said BRIEF THE AGENT and the beat briefed nobody.
+      //
+      // The handles are the `project-brain` kind's OWN, not the generic
+      // interactive surface's. `project-brain` declares neither a `turnSpec`
+      // nor a `panel` (`studio/session-kinds.yaml`), so
+      // `deriveSessionAffordances` yields nothing for it
+      // (`packages/sessions/studio/session-kinds-affordances.ts` —
+      // `descriptor.turnSpec?.phases ?? descriptor.panel?.phases`) and the page
+      // renders the bespoke `SessionProjectBrainPanel`. `session-answer` /
+      // `submit-answers` / `verdict-approve` are `SessionInteractivePanel`'s
+      // alone and NEVER appear on an S6 page — the first draft of this
+      // amendment proposed them and was wrong.
+      //
+      // `brain-brief` is new in this PR: the textarea has always been there,
+      // carrying `data-component="brain-brief-input"`, and a `data-component`
+      // is not addressable — `fill` resolves `[data-field]`. One attribute,
+      // not a new control.
       act: 'Brief the seeding agent on what this knowledge base is for, and let it read',
+      do: [
+        { fill: 'brain-brief', with: SEED_BRIEF },
+        { press: 'start-brain-analysis' },
+      ],
       expect: {
         route: '/sessions/project-brain/<seedSessionId>',
         data: {
@@ -205,12 +254,25 @@ export default {
       say: 'A band-scoped knowledge base has no project repo to read — it reads the Flow’s own archived cycles, and synthesises what review kept finding. The operator’s brief is the only thing that tells it which of those findings are worth keeping.',
     },
     {
-      // Reachable since amend-1 — same segment as beats 4 and 5.
-      // `verdict-approve` is the generic interactive panel's real action; the
-      // `committing` phase is likewise transcribed from the DOM contract
-      // rather than observed.
+      // AMEND-3, and the reason it is amended at all is a premise correction.
+      // Ruling 421 reviewed this beat and did NOT amend it, on the premise its
+      // red was inherited from beat 5. Measured, it has its own defect:
+      // `verdict-approve` is the GENERIC panel's action (see beat 5's note)
+      // and never renders here. The control is `approve-brain`, and it renders
+      // only at `awaiting-review`.
+      //
+      // So the agent has to finish between beat 5's press and this one. The
+      // kind's phase chain, from the runner's own tables
+      // (`packages/sessions/session-phases.ts`, `LEGACY_SESSION_AWAITS_PHASES`
+      // + `LEGACY_SESSION_WORKING_PHASES`), is:
+      //   briefing (awaits operator) -> analyzing (agent works)
+      //     -> awaiting-review (awaits operator) -> committing (agent works)
+      // The bound is this beat's own, declared here (§3.1), not read from any
+      // product constant: a seeding agent reading one repo, against S6's $25
+      // ground budget.
       act: 'Read the themes it drafted and approve them into the knowledge base',
-      do: [{ press: 'verdict-approve' }],
+      do: [{ press: 'approve-brain' }],
+      wait: { for: 'agent', upTo: 300_000 },
       expect: {
         route: '/sessions/project-brain/<seedSessionId>',
         data: {
@@ -300,14 +362,20 @@ export default {
       say: 'A knowledge base earns its keep at planning time. So the operator starts a real planner run against the project on the other end of that binding, and gives it a piece of work to think about.',
     },
     {
-      // NOT expressible. `<architectSessionId>` cannot be bound: this beat's
-      // own press is what mints it, and the runner resolves a route BEFORE its
-      // `do` steps run. The product now renders `data-architect-session-id`
-      // beside a `view-architect-session` control after Start (M1-G closed
-      // `forge-8vfn.5.5`), so binding it is a two-beat act — press here, bind
-      // there — which is authoring this story does not do, because the
-      // operator does not stop between pressing Start and watching the run.
-      // Recorded in `_1.0/stories/S6.md`, not filed as a product defect.
+      // AMEND-3, beat 11a of a split (ruling 483 — the same amendment shape as
+      // S7 beats 3 and 13 and S9 beat 12, stated once by the DOM-contract
+      // reference page rather than re-argued per story).
+      //
+      // The unsplit beat declared `/sessions/architect/<architectSessionId>`
+      // and its OWN press was what minted that id — and the runner resolves a
+      // route from PRIOR beats' bindings BEFORE performing any `do` step
+      // (`scripts/stories/beats-drive.mjs`), so the placeholder was unbound on
+      // every run. No product change moves a red at route resolution.
+      //
+      // The product has published `data-architect-session-id` beside a
+      // `view-architect-session` control since M1-G closed `forge-8vfn.5.5`,
+      // so the id is on the page the operator is already standing on. The act
+      // was always two acts: press here, then open what the press minted.
       act: 'Describe the work, cap what this run may spend, and press "Start architect"',
       do: [
         { fill: 'idea', with: IDEA },
@@ -315,15 +383,50 @@ export default {
         { press: 'start-architect' },
       ],
       expect: {
+        route: '/projects/mdtoc',
+        data: { 'architect-session-id': '<architectSessionId>' },
+      },
+      say: 'The planner is a real agent and a real agent costs money, so the operator caps this run before starting it. Forge starts it and says so on the page the operator is standing on, rather than moving them somewhere they did not ask to go.',
+    },
+    {
+      // AMEND-3, beat 11b — the navigation half. `view-architect-session` is
+      // ASSEMBLED as `data-action={`view-${kind}-session`}` in
+      // `SessionMinted.tsx` (§15.239/ruling 450): a literal grep does not find
+      // it and its absence from one has already been mistaken for a missing
+      // build three times. It is real, and it is an anchor — the runner
+      // resolves a route only through `[data-nav][href]` or `a[href]`.
+      //
+      // `session-phase` CORRECTED here, not carried over (§15.240 class; T1
+      // ruling 503 swept all three sites — S9:258, S7:147 and this one; the
+      // operator confirmed the class on S7 beat 3, so this is the same
+      // correction, not a new decision). The unsplit beat asserted `working`,
+      // which is a `data-lifecycle-state` token and NOT a phase of any kind:
+      // architect's vocabulary is `interviewing`/`exploring`/`drafting`/
+      // `finalizing` + `awaiting-answers`/`awaiting-verdict` +
+      // `committed`/`rejected` (`packages/sessions/session-phases.ts`). The
+      // route never resolved, so this assertion had never once been judged —
+      // it was the next red behind the one that was fixed.
+      //
+      // `interviewing` is what the beat REACHES, re-derived rather than
+      // transcribed: `POST /api/architect/start` writes
+      // `phase: 'interviewing'` into the status file before it answers
+      // (`packages/sessions/bridge-studio-architect.ts`), and the page
+      // publishes that value straight through
+      // (`data-session-phase = viewState.phase`). This beat reads at
+      // navigation time with no declared wait, so it reads the minted phase —
+      // the same shape as S7 beat 3's `analyzing`.
+      act: 'Open the architect session it just started',
+      do: [{ press: 'view-architect-session' }],
+      expect: {
         route: '/sessions/architect/<architectSessionId>',
         data: {
           page: 'session',
           'page-ready': 'true',
           'session-kind': 'architect',
-          'session-phase': 'working',
+          'session-phase': 'interviewing',
         },
       },
-      say: 'The planner is a real agent and a real agent costs money, so the operator caps this run before starting it. What happens next is the thing S6 exists to prove.',
+      say: 'What happens next is the thing S6 exists to prove.',
     },
     {
       // NOT expressible, and this is the finding. §3's row asks for a
