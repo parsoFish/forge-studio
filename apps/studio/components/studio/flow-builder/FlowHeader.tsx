@@ -30,6 +30,7 @@ import type { Flow, Kb, FlowTrigger, ShippedTriggerKind, WebhookEventName } from
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { FlowSaveFindings, type FlowSaveFinding } from './FlowSaveFindings';
+import { FlowStarterSeed } from './FlowStarterSeed';
 import { KICKOFF_SURFACES, kickoffSurfaceIdOfKind } from '@/lib/kickoff-surface';
 
 export type FlowHeaderState = {
@@ -327,6 +328,11 @@ export function FlowHeader({
         })()}
 
         <div style={{ flex: 1 }} />
+
+        {/* Ruling 384: starters are opt-in, and the seed goes BEFORE the save
+            because the save now RESOLVES starters rather than writing them —
+            a flow referencing unseeded starters is refused, naming them. */}
+        <FlowStarterSeed />
 
         {/* Save button */}
         <button

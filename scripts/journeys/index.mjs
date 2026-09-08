@@ -25,6 +25,17 @@
  * journey module, not just assumed):
  *   · stand-up-onboard before flows-author — flows-author's seeded-run beat
  *     (J5) reads the project stand-up-onboard onboards (J4_PROJECT) on disk.
+ *   · agents before flows-author — NEW AND LOAD-BEARING (M6, operator ruling
+ *     384). A flow save no longer materialises `plan`/`dev`/`review` as a side
+ *     effect of resolving its agent refs; it REFUSES a flow whose starters are
+ *     not in the roster, naming them. flows-author saves the canvas
+ *     `/flows/new` seeds from the basic starter, which references all three,
+ *     and NONE of them exists in a checkout. agents' J2 beat authors them from
+ *     the starter picker and leaves them on disk (the sweep is this runner's
+ *     top-level finally, not agents' own), so the roster exists by the time
+ *     flows-author saves. Run flows-author ALONE and its save is refused —
+ *     correctly. The operator's other path to the same roster is the flow
+ *     builder's own `[data-action="seed-starter-agents"]`.
  *   · flows-run (all 29 beats, in file-declared order) before roadmap —
  *     roadmap-tab reads the shared cycle log's work-items-snapshot AFTER
  *     flows-run-approve-merge has moved the manifest into `done/`; roadmap

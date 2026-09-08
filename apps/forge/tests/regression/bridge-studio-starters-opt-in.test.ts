@@ -31,7 +31,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 const REAL_ROOT = process.cwd();
 const STARTERS = ['dev', 'plan', 'review'] as const;
