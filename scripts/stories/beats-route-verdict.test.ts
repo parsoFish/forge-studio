@@ -31,6 +31,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beatVerdict } from './beats.mjs';
+import { routeMatches } from './beats-page.mjs';
 import { driveBeat } from './beats-drive.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -166,7 +167,12 @@ const ROUTE_BEARING = /\b(?:route|pathname|href|search)\b|\bpage\.url\(\)/;
 
 /** Operands that make a comparison a GUARD rather than a route compare: a
  *  presence check, or the result of `typeof`. */
-const NOT_A_ROUTE = /^\s*(?:null|undefined|'[a-z]+'|"[a-z]+")\s*$/;
+// A route is never compared to `null`, to a `typeof` string, or to a NUMBER.
+// The numeric case is what a line like
+// `!routeMatches(page.url(), declared) && (await locator.count()) === 0`
+// needs: it mentions a route AND compares a count, and a line-based scan cannot
+// tell those apart without saying what a route is never equal to.
+const NOT_A_ROUTE = /^\s*(?:null|undefined|-?\d+|'[a-z]+'|"[a-z]+")\s*$/;
 
 test('527: no module under scripts/stories compares two routes with === or !==', () => {
   const modules = readdirSync(HERE).filter((f) => f.endsWith('.mjs')).sort();
@@ -199,4 +205,67 @@ test('527: no module under scripts/stories compares two routes with === or !==',
       'here is genuinely not about a route, name the operand something that is not a route. Offences:\n  ' +
       offences.join('\n  '),
   );
+});
+
+// ── 534: the query is compared as PARAMETERS, never as a raw string ─────────
+
+/**
+ * T1 ruling 534, from the S10 amendment's own routes. The navigation beats
+ * before beats 10 and 12 must declare `/artifact?run=<runId>&type=verdict&
+ * mode=gate`, because `PhaseDrawer.tsx:749` builds every artifact chip that way
+ * and a develop run therefore renders several links sharing the `/artifact`
+ * pathname and differing only in their query — 7.5.3's ambiguity refusal,
+ * working exactly as designed, which 514 exists to let a beat resolve.
+ *
+ * That makes the string compare load-bearing, and it was wrong in two ways:
+ *
+ *   ENCODING. The product builds those hrefs with `encodeURIComponent(cycleId)`.
+ *   A run id carrying a character that percent-encodes arrives as `%3A` in the
+ *   href while a story author writes the readable id in the beat. A string
+ *   compare calls those two different destinations. They are the same one.
+ *
+ *   ORDER. `?a=1&b=2` and `?b=2&a=1` are the same request to every server; only
+ *   a string compare disagrees. A beat should not have to guess the order a
+ *   component happens to build its href in, and a component reordering its own
+ *   parameters is not a story defect.
+ *
+ * Still EXACT on content — same key set, same decoded value per key — because a
+ * declared query is a beat naming WHICH destination it means, and "close
+ * enough" is the tie-break 7.5.3 forbids.
+ */
+test('534: a declared query matches an encodeURIComponent-built href with the same values', () => {
+  // The real shape: a cycle id with a `:` in it, as the story author writes it
+  // and as the product encodes it.
+  const declared = '/artifact?run=2026-09-08T05:08:49_INIT-x&type=verdict&mode=gate';
+  const href = `/artifact?run=${encodeURIComponent('2026-09-08T05:08:49_INIT-x')}&type=verdict&mode=gate`;
+
+  assert.notEqual(href, declared, 'the fixture is only meaningful while the two strings genuinely differ');
+  assert.ok(routeMatches(href, declared), `an encoded value is the same value. href=${href}`);
+});
+
+test('534: parameter ORDER does not decide a route', () => {
+  assert.ok(routeMatches('/artifact?mode=gate&type=verdict&run=r1', '/artifact?run=r1&type=verdict&mode=gate'));
+});
+
+test('534 (positive control) a different VALUE is still a mismatch', () => {
+  assert.equal(routeMatches('/artifact?run=r1&type=demo&mode=gate', '/artifact?run=r1&type=verdict&mode=gate'), false);
+});
+
+test('534 (positive control) an EXTRA parameter on either side is still a mismatch', () => {
+  // A declared query names which of several destinations the beat means. A
+  // link carrying one more parameter is a different destination, and a rule
+  // that shrugged at extras would re-open the ambiguity 7.5.3 refuses.
+  assert.equal(routeMatches('/artifact?run=r1&type=verdict&mode=gate&x=1', '/artifact?run=r1&type=verdict&mode=gate'), false);
+  assert.equal(routeMatches('/artifact?run=r1&type=verdict', '/artifact?run=r1&type=verdict&mode=gate'), false);
+});
+
+test('534 (positive control) a REPEATED key compares every value, not just the first', () => {
+  // `get` would call these equal on `tag=a` alone; `getAll` does not.
+  assert.equal(routeMatches('/knowledge?tag=a', '/knowledge?tag=a&tag=b'), false);
+  assert.ok(routeMatches('/knowledge?tag=a&tag=b', '/knowledge?tag=a&tag=b'));
+});
+
+test('534 (positive control) a beat that declares NO query still matches any query', () => {
+  // 514's original case, unchanged: the product stays free to add `?project=…`.
+  assert.ok(routeMatches('/architect/new?project=gitpulse', '/architect/new'));
 });
