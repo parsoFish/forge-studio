@@ -133,6 +133,43 @@ export function routeMatches(url, declared) {
   // href that will not parse is NOT a match — skipped rather than guessed at,
   // which is what the inlined copy did and what a predicate reading untrusted
   // page content has to do.
+  // AN HREF THAT NAMES NO PATH IS NOT A NAVIGATION — T1 ruling 546, bought by
+  // A's funded S9 run, which went 8/15 with SEVEN reds from this one line.
+  //
+  // `url` is sometimes a raw `href` off the page (ruling 527 moved the link
+  // filter in here), and these are resolved against a SYNTHETIC origin. So the
+  // app-wide skip link `href="#main-content"` (`SkipLink.tsx`, on every page)
+  // resolves to pathname `/`:
+  //
+  //     new URL('#main-content', 'http://forge.invalid').pathname === '/'
+  //
+  // and every real-click navigation to `/` then saw `2 links share that
+  // pathname and differ only in their query — #main-content , /` and refused.
+  // The refusal was correct about what it was shown; it was shown a fragment.
+  //
+  // A QUERY-ONLY href is the SAME defect and is fixed with it: `?tab=x`
+  // resolves to pathname `/` here for exactly the same reason. Measured, both.
+  // Neither names a path, so neither can satisfy a route.
+  //
+  // NOT fixed, and deliberately: a protocol-relative `//host/path` resolves to
+  // pathname `/path` and would match a declared `/path` on another host, and a
+  // directory-relative `sub/page` resolves against the origin ROOT rather than
+  // the current page. Both are real, neither occurs in this app (every `Link`
+  // is path-absolute), and the obvious guard — compare hosts — would BREAK the
+  // primary caller: `routeMatches(page.url(), target)` is passed a real
+  // `http://localhost:4124/…`, whose host never equals the synthetic base's. A
+  // guard that breaks the main path to close a shape nobody writes is a worse
+  // trade than saying so here.
+  // `String(url)` because playwright hands `waitForURL`'s predicate a URL
+  // OBJECT, not a string (`beats-drive.mjs` calls this from there), and this
+  // function's other callers pass strings. `new URL(url, base)` below had always
+  // accepted either — URL's constructor stringifies — so the distinction only
+  // became visible the moment a STRING METHOD was applied to the argument, and
+  // it cost 546 a CI red to find: the predicate threw, the swallowing catch ate
+  // it, no arrival wait happened, and every real-nav beat read its page one
+  // navigation early.
+  const raw = String(url);
+  if (raw.startsWith('#') || raw.startsWith('?')) return false;
   let want;
   let got;
   try {

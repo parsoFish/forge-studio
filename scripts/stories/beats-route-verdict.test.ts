@@ -269,3 +269,172 @@ test('534 (positive control) a beat that declares NO query still matches any que
   // 514's original case, unchanged: the product stays free to add `?project=…`.
   assert.ok(routeMatches('/architect/new?project=gitpulse', '/architect/new'));
 });
+
+// ── 546: an href that names no path is not a navigation ────────────────────
+
+/**
+ * T1 ruling 546, bought by A's funded S9 run — **8/15, with seven of the seven
+ * reds from this one line.**
+ *
+ * `SkipLink.tsx` renders `href="#main-content"` on **every page** of the app.
+ * Ruling 527 moved the link filter into `routeMatches`, which resolves an href
+ * against a synthetic origin, and:
+ *
+ *     new URL('#main-content', 'http://forge.invalid').pathname === '/'
+ *
+ * So the skip link became a candidate for every `route: '/'` beat, and each one
+ * refused with `2 links share that pathname and differ only in their query —
+ * #main-content , /`. The refusal was correct about what it was shown. It was
+ * shown a fragment.
+ *
+ * A QUERY-ONLY href is the same defect — `?tab=x` also resolves to pathname `/`
+ * — and is fixed with it. Neither names a path, so neither can satisfy a route.
+ *
+ * Blast radius, measured: beats declaring `route: '/'`, which is S9 and `smoke`.
+ * S10 declares no `/` route and was never affected.
+ */
+test('546 (RED) a fragment-only href is no match — the skip link is on every page', () => {
+  assert.equal(routeMatches('#main-content', '/'), false);
+  assert.equal(routeMatches('#anything', '/knowledge'), false);
+});
+
+test('546 (RED) a query-only href is the same defect and is no match either', () => {
+  assert.equal(routeMatches('?tab=x', '/'), false);
+});
+
+test('546 (positive control) a real path is still a match, fragment or not', () => {
+  // The fix must not reach past hrefs that name no path. An href WITH a path
+  // that also carries a fragment is a navigation to that path.
+  assert.ok(routeMatches('/', '/'));
+  assert.ok(routeMatches('/knowledge#section', '/knowledge'));
+  assert.ok(routeMatches('/knowledge?id=x', '/knowledge'));
+});
+
+test('546 (positive control) the primary caller is untouched — a full page URL still matches', () => {
+  // `routeMatches(page.url(), target)` is the call this predicate exists for,
+  // and it is handed a real `http://localhost:4124/…`. A host-based guard would
+  // have broken exactly this, which is why the fix is about the PATH being
+  // named and not about the origin.
+  assert.ok(routeMatches('http://localhost:4124/knowledge', '/knowledge'));
+  assert.ok(routeMatches('http://localhost:4124/', '/'));
+});
+
+test('546: with the skip link on the page, a `/` beat has exactly ONE candidate', () => {
+  // The end-to-end shape S9 actually hit: a page offering the app-wide skip
+  // link and one real link home. Before the fix this was "2 links share that
+  // pathname"; after it, one candidate and the beat can navigate.
+  const hrefs = ['#main-content', '/'];
+  const candidates = hrefs.filter((h) => routeMatches(h, '/'));
+  assert.deepEqual(candidates, ['/'], 'the skip link is not a way to reach the home route');
+});
+
+// ── 553: a predicate that throws must fail LOUDLY, never silently ──────────
+
+/**
+ * T1 ruling 553, bought by 546's own CI red.
+ *
+ * Both `waitForURL` call sites wrote `.catch(() => {})`, and that catch is
+ * deliberate — a press that did not navigate is reported by the nav resolution,
+ * not by an exception. But it also swallowed **the predicate throwing**.
+ *
+ * When 546 added `url.startsWith('#')` to `routeMatches`, playwright handed the
+ * predicate a URL **object**, `.startsWith` was not a function, the predicate
+ * threw, the catch ate it, and **no arrival wait happened at all**. Every
+ * real-nav beat then read its page before the navigation committed, and the
+ * `proof` story failed with beat 2 reporting `expected "/projects/gitpulse",
+ * got "/projects"` and beat 3 the exact inverse. That reads like a routing
+ * defect. It was a TypeError with its mouth taped shut.
+ *
+ * The two outcomes are now separate: **the URL never matched** is still quiet,
+ * because the beat's own verdict says it better; **the predicate blew up** is
+ * loud, because a runner defect must never be renderable as a fact about the
+ * page.
+ */
+test('553 (RED) a throwing route predicate reds the beat and names the runner, not the page', async () => {
+  // A page whose `waitForURL` calls the predicate with a value that cannot be
+  // stringified — the shape of the real bug, where the argument was not what
+  // the predicate assumed.
+  const hostile = { toString() { throw new TypeError('url is not a string'); } };
+  const page = {
+    url: () => 'http://localhost:4124/projects',
+    goto: async () => {},
+    locator: (sel: string): any => ({
+      first: () => page.locator(sel),
+      evaluateAll: async (fn: any, arg: any) => fn([{ getAttribute: () => '/projects/gitpulse' }], arg),
+      count: async () => 1,
+      async click() {},
+      async evaluate(fn: (n: any) => unknown) {
+        return fn({ tagName: 'A', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+      },
+    }),
+    waitForURL: async (pred: (u: unknown) => boolean) => { pred(hostile); },
+    waitForSelector: () => Promise.resolve(),
+    evaluate: async () => ({
+      data: { page: 'projects', 'page-ready': 'true' },
+      nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+    }),
+  };
+
+  const verdict = await driveBeat(
+    page as never,
+    {
+      act: 'Click the first project card',
+      expect: { route: '/projects/gitpulse', data: { page: 'projects', 'page-ready': 'true' } },
+      say: 'The operator opens a project.',
+    },
+    1,
+    'http://localhost:4124',
+  );
+
+  assert.equal(verdict.status, 'red');
+  const said = verdict.failures.join(' | ');
+  assert.match(said, /predicate threw/, `it must name the predicate. Got: ${said}`);
+  assert.match(said, /defect in the RUNNER/, 'and say whose defect it is');
+  assert.match(said, /no arrival wait happened/, 'and what that cost, so the reader does not trust what follows');
+});
+
+test('553 (positive control) a URL that simply never matches stays QUIET', async () => {
+  // The deliberate catch survives for the case it was written for: a press that
+  // did not navigate is reported by the beat's own verdict, in the beat's own
+  // terms, and must not be dressed up as a runner defect.
+  const page = {
+    url: () => 'http://localhost:4124/projects',
+    goto: async () => {},
+    locator: (sel: string): any => ({
+      first: () => page.locator(sel),
+      evaluateAll: async (fn: any, arg: any) => fn([], arg),
+      count: async () => 0,
+      async click() {},
+      async evaluate(fn: (n: any) => unknown) {
+        return fn({ tagName: 'A', textContent: '', type: '', value: '', querySelector: () => null, disabled: false, title: '', getAttribute: () => null });
+      },
+    }),
+    waitForURL: async (pred: (u: unknown) => boolean, o: { timeout: number }) => {
+      pred('http://localhost:4124/projects');
+      throw new Error(`Timeout ${o.timeout}ms exceeded`);
+    },
+    waitForSelector: () => Promise.resolve(),
+    evaluate: async () => ({
+      data: { page: 'projects-index', 'page-ready': 'true' },
+      nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+    }),
+  };
+
+  const verdict = await driveBeat(
+    page as never,
+    {
+      act: 'Click the first project card',
+      expect: { route: '/projects/gitpulse', data: { page: 'projects', 'page-ready': 'true' } },
+      say: 'The operator opens a project.',
+    },
+    1,
+    'http://localhost:4124',
+  );
+
+  assert.equal(verdict.status, 'red', 'it still fails — it just fails as a page fact');
+  assert.doesNotMatch(
+    verdict.failures.join(' | '),
+    /predicate threw|defect in the RUNNER/,
+    'a URL that never arrived is not a runner defect and must not be reported as one',
+  );
+});
