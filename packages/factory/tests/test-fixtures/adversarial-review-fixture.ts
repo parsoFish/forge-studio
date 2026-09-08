@@ -129,7 +129,7 @@ export const CODE_LENSES = ['correctness', 'containment', 'test-strength', 'boun
 export const CRITERION = '(WI-1) GIVEN a request WHEN handled THEN it returns 200';
 
 /** What every record in this file is validated against (the run's own facts). */
-export const EXPECTED = { lenses: CODE_LENSES, criteria: [CRITERION] };
+export const EXPECTED = { lenses: CODE_LENSES, criteria: [CRITERION], scope: 'the initiative' };
 
 /**
  * The acceptance criteria THIS prompt injected, verbatim. The pipeline reviews

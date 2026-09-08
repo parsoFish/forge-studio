@@ -222,7 +222,7 @@ test('writeVerdictJson: writes the record; overwrite:false keeps the first', () 
 /** The run's own facts a record is checked against — the class's lenses and the
  *  criteria the pipeline injected. Both arrive as DATA (spec §5 item 5). */
 const CRIT_A = '(WI-1) GIVEN a page WHEN it is requested THEN every row appears';
-const EXPECTED = { lenses: ['correctness', 'containment'], criteria: [CRIT_A] };
+const EXPECTED = { lenses: ['correctness', 'containment'], criteria: [CRIT_A], scope: 'the initiative' };
 
 function validFindings(): ReviewFindingsRecord {
   return {
@@ -296,7 +296,7 @@ test('validateReviewFindings: AC coverage is EXACT set membership, both directio
   };
   const errs = validateReviewFindings(nearMiss, EXPECTED);
   assert.ok(errs.some((e) => e.includes('left unjudged')), 'the real criterion is still unjudged');
-  assert.ok(errs.some((e) => e.includes('never declared')), 'and the paraphrase is a criterion nobody declared');
+  assert.ok(errs.some((e) => e.includes("outside the initiative's declared set")), 'and the paraphrase is outside the set, named as the set it was compared against');
 });
 
 test('validateReviewFindings: the record cannot legalise its own lens set', () => {
