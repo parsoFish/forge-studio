@@ -1152,7 +1152,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
-  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **The builder's two
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **Starter agents are
+  EXPLICIT OPT-IN (M6, operator ruling 384):** the header carries
+  `[data-component="flow-starter-seed"]` with `[data-action="seed-starter-agents"]`,
+  and after a seed answers, `[data-seeded-starter-count]` +
+  `[data-seeded-starters]` (comma-joined slugs, sorted) on that component's
+  root. Both are **omitted, never zeroed**, until a seed has answered — absent
+  means "nothing has been asked yet", where `0` would be a claim about the
+  roster. They report the UNION of what this press wrote and what already
+  existed, so a second press writes nothing and can still name the three; the
+  bridge reports `seeded` and `existing` separately for exactly that. A save no
+  longer materialises any roster agent, and REFUSES a flow whose starters are
+  unseeded, naming them. **The builder's two
   CORE acts are declared too (M5-B, `forge-8vfn.5.12`):** a placeable palette
   chip carries `[data-action="place-station-<agentRef>"]`, and each station's
   own two ports carry `[data-action="connect-from-<agentRef>"]` (arm this

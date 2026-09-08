@@ -127,6 +127,69 @@ test('6.11.50: a lane with no sessions at all passes, and says so', () => {
   assert.match(v.reason, /no sessions/i);
 });
 
+/**
+ * `forge-8vfn.7.6.5` (T1 ruling 518's neighbour, D minted) — the check could
+ * not see the sessions that actually got left behind.
+ *
+ * A flow-bound KB seeds itself through a real project-brain session, and that
+ * session is anchored under a DOT-PREFIXED project directory:
+ * `projects/.kb-<id>/_project-brain/<sid>`. `foreignSessionVerdict` skipped
+ * every `projects/<name>` whose name starts with `.`, so the one shape that
+ * routinely survives a run was the one shape the preflight was blind to.
+ *
+ * MEASURED: S6 left one behind. S4's preflight then reported "sessions ok — 1
+ * session(s) on disk, all in gitpulse" and the S4 run drove S6's CRASHED
+ * session — beat 12's captured frame is byte-identical to S6 beat 6's (md5
+ * `999bcd29…`). A preflight that says "ok" while the residue is on disk is
+ * worse than no preflight: it is the reason nobody looked.
+ *
+ * The skip was never load-bearing. `!project.isDirectory()` already excludes
+ * files, and the kind filter below only descends into `_`-prefixed
+ * subdirectories, so a dot-directory that is not a project cannot produce a
+ * session path by accident.
+ */
+test('7.6.5 (RED): a session under a DOT-PREFIXED project directory is refused, by name', () => {
+  const root = mkdtempSync(join(tmpdir(), 'preflight-dotproject-'));
+  // The exact residue S6 left behind: a flow-bound KB's seeding session.
+  const sid = '2026-09-08T01-14-09-88213107';
+  mkdirSync(join(root, 'projects', '.kb-story-s6-flow', '_project-brain', sid), { recursive: true });
+  writeFileSync(
+    join(root, 'projects', '.kb-story-s6-flow', '_project-brain', sid, 'status.json'),
+    JSON.stringify({ phase: 'analyzing', project: '.kb-story-s6-flow' }),
+  );
+
+  const v = foreignSessionVerdict(root, 'gitpulse');
+  assert.equal(v.ok, false, 'a costed run cannot start on top of a foreign session it cannot see');
+  assert.match(v.reason, /\.kb-story-s6-flow/, 'the refusal names the dot-prefixed project');
+  assert.match(v.reason, new RegExp(sid), 'and the session, so the operator can go and look at it');
+});
+
+test('7.6.5: a dot-prefixed project that IS this run\'s own ground does not refuse it', () => {
+  // The positive control that stops "refuse dot directories" from passing for
+  // the wrong reason: ownership is what decides, exactly as it does for every
+  // other project, and a run whose ground IS the flow-bound KB must survive
+  // its own seeding session.
+  const root = mkdtempSync(join(tmpdir(), 'preflight-dotown-'));
+  mkdirSync(join(root, 'projects', '.kb-story-s6-flow', '_project-brain', 'b-1'), { recursive: true });
+  writeFileSync(join(root, 'projects', '.kb-story-s6-flow', '_project-brain', 'b-1', 'status.json'), '{}');
+
+  const v = foreignSessionVerdict(root, '.kb-story-s6-flow');
+  assert.equal(v.ok, true, v.reason);
+  assert.match(v.reason, /1 session/, 'it is COUNTED — seen and owned, not skipped');
+});
+
+test('7.6.5: a dot-prefixed entry that is not a project mints no session', () => {
+  // Why dropping the skip is safe. `.git` under `projects/` has no `_`-prefixed
+  // child, so the walk finds nothing to report and the run is not refused for
+  // a directory that never held a session.
+  const root = mkdtempSync(join(tmpdir(), 'preflight-dotjunk-'));
+  mkdirSync(join(root, 'projects', '.git', 'objects', 'ab'), { recursive: true });
+  mkdirSync(join(root, 'projects', 'gitpulse', '_architect', 'a-1'), { recursive: true });
+
+  const v = foreignSessionVerdict(root, 'gitpulse');
+  assert.equal(v.ok, true, v.reason);
+});
+
 // ── 7.5.7: a story that binds a remote stands on an operator switch ─────────
 //
 // MEASURED (T1 ruling 456, §15.248). `projects.remote.create` is per-worktree
