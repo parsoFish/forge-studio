@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DRAWER_HEIGHT_VAR, reserveDrawerSpace } from '../../lib/drawer-reservation';
 
 import type { EventLogEntry } from '@/lib/bridge-client';
 import { STATUS_COLOR } from '@/lib/status-colors';
@@ -97,16 +98,28 @@ export function ActivityLog({
   // for activity…" intercepted pointer events, agents.mjs:848). Reserve its
   // rendered height on document.body while mounted (and re-measure on open /
   // row-count change) so page content scrolls above it, never under it.
+  //
+  // THE PADDING ALONE WAS NOT ENOUGH, and bead `forge-8vfn.7.6.6` is the
+  // measurement that shows it. Padding extends the DOCUMENT, so nothing is
+  // stranded below the drawer at the END of the page. It says nothing about
+  // where a MINIMAL scroll parks an element mid-document: `scrollIntoView`
+  // moves a control just far enough to be inside the viewport, and that is
+  // this drawer's band. M6-D's S4 run 2 caught it on the architect
+  // interview's own Submit — visible, enabled, stable, scrolled into view,
+  // and then intercepted by the row below. So the SAME measurement is also
+  // published as a CSS variable and the controls carry `scroll-margin-bottom`
+  // against it; `reserveDrawerSpace` writes both from one number so they
+  // cannot drift apart.
   const drawerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = drawerRef.current;
     if (!el || typeof document === 'undefined') return;
     const prev = document.body.style.paddingBottom;
-    const apply = () => { document.body.style.paddingBottom = `${el.getBoundingClientRect().height}px`; };
+    const apply = () => { reserveDrawerSpace(el.getBoundingClientRect().height, document); };
     apply();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
     ro?.observe(el);
-    return () => { ro?.disconnect(); document.body.style.paddingBottom = prev; };
+    return () => { ro?.disconnect(); document.body.style.paddingBottom = prev; document.documentElement.style.setProperty(DRAWER_HEIGHT_VAR, '0px'); };
   }, [open, rows.length]);
 
   return (

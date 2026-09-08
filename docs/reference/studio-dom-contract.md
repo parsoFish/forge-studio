@@ -3571,6 +3571,22 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-activity-count=<N>]`. Header: `[data-component="activity-phase-chip"]
   [data-phase-active]` (optional — a caller with no phase concept omits it),
   `[data-action="toggle-activity-drawer"]` (flips open/collapsed),
+  **AND IT NEVER COVERS A CONTROL THE OPERATOR MUST REACH** (bead
+  `forge-8vfn.7.6.6`). The drawer is `position: fixed; bottom: 0`, so it
+  overlays the bottom of the VIEWPORT, and it is open by design while a
+  session works — while an architect interview is a phase that is working AND
+  waiting on the operator, so the two overlap. Reserving its height on
+  `document.body` (wave-6) extends the DOCUMENT and stops content being
+  stranded below it; it does NOT stop a minimal `scrollIntoView` parking a
+  mid-document control inside the drawer's band, which is what M6-D's S4 run 2
+  measured on the interview's own Submit ("visible, enabled and stable" →
+  scrolled into view → the drawer's `StructuredOutput` row "intercepts pointer
+  events"). So the drawer publishes its MEASURED height as the CSS custom
+  property `--activity-drawer-h` (`apps/studio/lib/drawer-reservation.ts`,
+  written from the same one number as the padding so the two cannot drift),
+  and every interview control carries
+  `scroll-margin-bottom: var(--activity-drawer-h, 0px)`. A new control an
+  operator must click while a session works takes that margin too.
   `[data-action="expand-all-thinking"]` (expands/collapses every clampable
   row at once — mirrors the mock's own any-collapsed → expand-all-else-
   collapse-all toggle). Collapsed state renders
