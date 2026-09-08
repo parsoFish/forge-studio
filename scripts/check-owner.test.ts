@@ -15,6 +15,9 @@ import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// `audit` is `main()`'s own entry point — see the untracked-probe test below for
+// why that test drives it directly instead of the CLI.
+import { audit } from './check-owner.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-owner.mjs');
@@ -147,15 +150,35 @@ test('an UNTRACKED production file is still unowned — a file cannot dodge the 
   // it stays in check-owner's QUARRIED_TREES so a file reappearing there is
   // still accounted for — and that is exactly the claim this probe makes, so
   // the probe has to be able to make it whether or not the tree exists today.
-  const victim = join(ROOT, 'orchestrator/__untracked_owner_probe__.ts');
+  //
+  // PLANTED IN A TEMPORARY REPOSITORY, NOT IN THE LIVE TREE — T1 ruling 512.
+  // This probe used to `mkdirSync` `orchestrator/` in the real checkout and
+  // `rmSync(dirname(victim), { recursive: true })` it again on the way out,
+  // while `check-raw-fs-guarded.mjs`'s reachability walk was walking
+  // `['cli','orchestrator','packages','apps']` from another test file. `node
+  // --test` runs files concurrently, so the removal landed between that walk's
+  // `existsSync` and its `readdirSync` and the whole suite went red with an
+  // ENOENT on a directory that existed a millisecond earlier. The walk was
+  // right; this probe was moving the ground under it.
+  //
+  // The claim survives intact because `audit(root, quarry)` TAKES its root —
+  // it is `main()`'s own entry point, and the untracked half of the claim is
+  // `productionFiles`' `--others --exclude-standard`, which is what is exercised
+  // here. It needs a real repository (`git ls-files` walks up and refuses
+  // outside one), so the fixture is `git init`ed; the CLI wiring around it is
+  // covered by every other test in this file, which all go through `run()`.
+  const root = mkdtempSync(join(tmpdir(), 'owner-untracked-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const victim = join(root, 'orchestrator/__untracked_owner_probe__.ts');
   mkdirSync(dirname(victim), { recursive: true });
   writeFileSync(victim, 'export const probe = 1;\n');
   try {
-    const { code, out } = run();
-    assert.equal(code, 1, `an untracked production file must be counted unowned — got exit 0:\n${out}`);
-    assert.match(out, /unowned: orchestrator\/__untracked_owner_probe__\.ts/);
+    const result = audit(root, readFileSync(join(ROOT, 'QUARRY.md'), 'utf8'));
+    assert.ok(
+      result.unowned.includes('orchestrator/__untracked_owner_probe__.ts'),
+      `an untracked production file must be counted unowned — got:\n${JSON.stringify(result.unowned)}`,
+    );
   } finally {
-    rmSync(victim, { force: true });
-    rmSync(dirname(victim), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 });
