@@ -200,7 +200,10 @@ export async function readObserved(page, beat, alsoWanted = []) {
     },
     { wanted: keys, safe: keys.filter((k) => SAFE_KEY.test(k)) },
   );
-  return { route: new URL(page.url()).pathname, data, nested, lifecycle: lifecycle ?? null, sessionPhase: sessionPhase ?? null };
+  // Ruling 514: the query is part of the route when a beat declares one, so
+  // the observation carries it and the comparison decides what matters.
+  const seen = new URL(page.url(), 'http://forge.invalid');
+  return { route: seen.pathname + seen.search, data, nested, lifecycle: lifecycle ?? null, sessionPhase: sessionPhase ?? null };
 }
 
 /**
