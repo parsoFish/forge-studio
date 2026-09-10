@@ -21,7 +21,7 @@
  * a silent no-op — diagnosis must never be able to fail a beat that would
  * otherwise pass.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** `/sessions/<kind>/<sessionId>` → the runner's log dir for that turn. */
@@ -97,4 +97,79 @@ export function makeAgentProcProbe(forgeRoot, route) {
     );
   };
   return probe;
+}
+
+/**
+ * The product's stall ceiling, in ms.
+ *
+ * ONE CEILING ACROSS THE PRODUCT, NEVER A SECOND INVENTED ONE — the rule
+ * `apps/forge/tests/regression/ui-bridge-standalone-stalled.test.ts:105`
+ * already states. The number lives in
+ * `packages/sessions/bridge-studio-lifecycle.ts` as `DEFAULT_STALL_CEILING_MS`,
+ * and this runner cannot import it: `run.mjs` is plain node with no type
+ * stripping, and the runner never speaks to the bridge over HTTP, so neither
+ * the import nor an API read is available here.
+ *
+ * So it is written once and BOUND BY TEST rather than copied and hoped over:
+ * `beats-offsession-stall.test.ts` imports the TypeScript constant directly —
+ * tests do run with type stripping — and fails if these two ever differ. A
+ * comment asking the next reader to keep two numbers in step would not have
+ * survived this campaign; a red test will.
+ */
+export const STALL_CEILING_MS = 180_000;
+
+/**
+ * Idle time of a FLOW RUN's log, in ms, or null when that run has no channel.
+ *
+ * The two files are the product's own definition of a channel:
+ * `bridge-studio-lifecycle.ts` calls a session stalled when its `.heartbeat` or
+ * `events.jsonl` has been quiet past the ceiling (`:161`, `:199`). This asks the
+ * same question of a flow run, so a beat off a session page can be answered by
+ * the same verdict rather than by a second notion invented here.
+ */
+export function runLogIdleMs(dir, now = Date.now()) {
+  let newest = null;
+  for (const name of ['.heartbeat', 'events.jsonl']) {
+    try {
+      const t = statSync(join(dir, name)).mtimeMs;
+      if (newest === null || t > newest) newest = t;
+    } catch {
+      // A channel that does not exist is not a silent one — it is no channel.
+    }
+  }
+  return newest === null ? null : now - newest;
+}
+
+/**
+ * The log dir of the flow run a beat is watching, or null when the page names
+ * no usable run.
+ *
+ * Mirrors `sessionLogDir` above: the id is validated BEFORE it is joined, so a
+ * `data-run` the page invents can never escape `_logs/`. The leading underscore
+ * is required rather than tolerated — S10 run 5's artifact page carried
+ * `data-run="_architect-2026-09-10T13-54-57-9eaf7fae"`, and a regex without it
+ * would have rejected every real run id on the page it was written for.
+ */
+export function runLogDir(forgeRoot, runId) {
+  if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
+  if (typeof runId !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(runId)) return null;
+  if (runId === '.' || runId === '..') return null;
+  return join(forgeRoot, '_logs', runId);
+}
+
+/**
+ * Build the door an OFF-SESSION wait uses to stop early, or null when there is
+ * no root to read. Returns `(runId) => idleMs | null`.
+ *
+ * Built here, next to the process probe, for the same reason: the runner's ROOT
+ * is known in `run.mjs` and nowhere else, and a tool that resolves its inputs
+ * from its own location answers a different question in each checkout
+ * (§15.148).
+ */
+export function makeOffSessionStallDoor(forgeRoot) {
+  if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
+  return (runId) => {
+    const dir = runLogDir(forgeRoot, runId);
+    return dir === null ? null : runLogIdleMs(dir);
+  };
 }

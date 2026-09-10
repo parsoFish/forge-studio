@@ -25,7 +25,7 @@
  * fresh context per beat re-navigating with `page.goto`, which is exactly the
  * teleporting this runner exists to stop.
  */
-import { makeAgentProcProbe } from './beats-agent-proc.mjs';
+import { makeAgentProcProbe, makeOffSessionStallDoor } from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -295,6 +295,14 @@ async function runStory(story, uiUrl, startedMs) {
   const page = await context.newPage();
 
   const beats = [];
+  // T1 ruling 580 — the stop door for beats that are NOT on a session page.
+  // 518's doors and the process probe both need a `/sessions/<kind>/<id>` route,
+  // so a beat waiting on `/artifact` or a flow-run page had no door at all and
+  // spent its whole declared bound; S10 run 5's beat 16 spent 14 m 13 s of its
+  // fifteen minutes on a run that had already stopped writing. Built ONCE from
+  // ROOT, which is known here and nowhere else (§15.148), and it only ever ends
+  // a wait EARLIER — the declared bound remains a hard maximum.
+  const stallDoor = makeOffSessionStallDoor(ROOT);
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
@@ -305,7 +313,7 @@ async function runStory(story, uiUrl, startedMs) {
       // doing instead of leaving it to be reconstructed afterwards by hand.
       // Built per beat from the route it is about; null for every other beat.
       const probe = makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe);
+      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, stallDoor);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });

@@ -33,7 +33,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null) {
+export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -96,7 +96,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         // for a page mid-commit and hopeless for an agent mid-round. What
         // governs a repeat is its own `until` and the beat's declared bound,
         // and both were already doing their job.
-        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, null),
+        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, null, stallDoor),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };
@@ -201,7 +201,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       }
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
-      const stall = await waitForHandleOrStall(page, handle, actLeft(), sessionScope, probe);
+      const stall = await waitForHandleOrStall(page, handle, actLeft(), sessionScope, probe, stallDoor);
       waitedForHandle = true;
       if (stall !== null) {
         return {

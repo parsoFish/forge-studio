@@ -586,3 +586,84 @@ test('7.5 (ruling 514): a beat whose route CARRIES a query picks that link out o
   assert.equal(unwanted.status, 'red');
   assert.match((unwanted.failures ?? []).join(' | '), /ambiguous real-nav path/);
 });
+
+test('586: two links to one page differing ONLY in fragment are ONE candidate, not an ambiguity', async () => {
+  // RED BEFORE THE FIX, and bought by G1/S10 run 5's beat 6:
+  //
+  //   ambiguous real-nav path to "/projects/gitpulse" … 2 links share that
+  //   pathname and differ only in their query —
+  //   /projects/gitpulse , /projects/gitpulse#roadmap
+  //
+  // They differ in FRAGMENT, and the message named the defect out loud. The
+  // candidates are chosen by `routeMatches`, which has been fragment-blind
+  // since ruling 546 — a fragment-only href is not a different place — and were
+  // then deduped by `new Set` over the RAW HREF STRINGS, which is blind to
+  // nothing. The predicate said "one destination", the Set said "two strings",
+  // and the guard fired on the Set. Beats 6–22 were lost to it.
+  const page = fakeStudio({
+    start: '/artifact',
+    commitMs: 50,
+    pages: {
+      '/artifact': {
+        elements: [
+          READY_MAIN('artifact'),
+          // `el`'s THIRD argument is `navigatesTo`, not the link text — both
+          // land on the same page, which is the whole claim under test.
+          el('a', { href: '/projects/gitpulse' }, '/projects/gitpulse'),
+          el('a', { href: '/projects/gitpulse#roadmap' }, '/projects/gitpulse'),
+        ],
+        data: { page: 'artifact', 'page-ready': 'true' },
+      },
+      '/projects/gitpulse': {
+        elements: [READY_MAIN('projects')],
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    {
+      act: 'Go back to the project the plan belongs to',
+      expect: { route: '/projects/gitpulse', data: { page: 'projects' } },
+      say: 'one page, two ways to say so',
+    },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'green', `failures: ${JSON.stringify(v.failures)}`);
+});
+
+test('586 POSITIVE CONTROL: collapsing fragments does not swallow a QUERY difference', async () => {
+  // The sharp control. "Ignore the fragment" must not become "ignore what is
+  // next to the fragment": these two carry fragments AND differ in query, which
+  // makes them two destinations (ruling 514). The refusal must survive, or the
+  // fix has traded a false refusal for a silent wrong-page assertion — the
+  // tie-break 527 forbids.
+  const page = fakeStudio({
+    start: '/projects/gitpulse',
+    commitMs: 50,
+    pages: {
+      '/projects/gitpulse': {
+        elements: [
+          READY_MAIN('projects'),
+          el('a', { href: '/knowledge?id=a#top' }, '/knowledge'),
+          el('a', { href: '/knowledge?id=b#top' }, '/knowledge'),
+        ],
+        data: { page: 'projects', 'page-ready': 'true' },
+      },
+      '/knowledge': { elements: [READY_MAIN('knowledge')], data: { page: 'knowledge', 'page-ready': 'true' } },
+    },
+  });
+  const v = await driveBeat(
+    page,
+    { act: 'open knowledge', expect: { route: '/knowledge', data: { page: 'knowledge' } }, say: 'which one?' },
+    1,
+    'http://localhost:4124',
+  );
+  assert.equal(v.status, 'red');
+  const said = (v.failures ?? []).join(' | ');
+  assert.match(said, /ambiguous real-nav path/, said);
+  assert.match(said, /id=a/, `it names both candidates: ${said}`);
+  assert.match(said, /id=b/, said);
+  assert.match(said, /QUERY/, `and now the message is true as written: ${said}`);
+});
