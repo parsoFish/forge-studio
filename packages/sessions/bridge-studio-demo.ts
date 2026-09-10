@@ -396,7 +396,6 @@ export async function handleDemoRoutes(
       sendJson(res, 500, { error: String(err) }, origin);
     }
     return true;
-    return true;
   }
 
 
