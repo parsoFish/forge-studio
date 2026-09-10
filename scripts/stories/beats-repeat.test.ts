@@ -43,6 +43,10 @@ function interviewPage({ roundsBeforeDraft }) {
       ? state.phase === 'awaiting-answers'
       : true;
   return {
+    // A real Playwright `Page` always answers `url()`; a fake that cannot is
+    // simply incomplete. The repeat's exhaustion verdict names the page it
+    // stood on, and a failure path that TypeErrors reports nothing at all.
+    url: () => 'http://localhost:4124/sessions/architect/s1',
     state,
     locator(handle) {
       return {
@@ -228,6 +232,10 @@ function movingInterviewPage({ detachFills = 0, visibleAfter = 0 }) {
     state.filled.push(v);
   };
   return {
+    // A real Playwright `Page` always answers `url()`; a fake that cannot is
+    // simply incomplete. The repeat's exhaustion verdict names the page it
+    // stood on, and a failure path that TypeErrors reports nothing at all.
+    url: () => 'http://localhost:4124/sessions/architect/s1',
     state,
     locator(handle) {
       return {
@@ -384,6 +392,10 @@ function laggingFormPage({ boxesPerRound, roundsBeforeDraft, neverFillable = fal
   const answering = () => state.phase === 'awaiting-answers';
 
   return {
+    // A real Playwright `Page` always answers `url()`; a fake that cannot is
+    // simply incomplete. The repeat's exhaustion verdict names the page it
+    // stood on, and a failure path that TypeErrors reports nothing at all.
+    url: () => 'http://localhost:4124/sessions/architect/s1',
     state,
     locator(sel) {
       state.seen.push(sel);
@@ -522,6 +534,10 @@ function shrinkingFormPage({ from, to }) {
       : true;
   const count = (handle) => (!live(handle) ? 0 : handle.includes('question-freetext') ? state.boxes : 1);
   return {
+    // A real Playwright `Page` always answers `url()`; a fake that cannot is
+    // simply incomplete. The repeat's exhaustion verdict names the page it
+    // stood on, and a failure path that TypeErrors reports nothing at all.
+    url: () => 'http://localhost:4124/sessions/architect/s1',
     state,
     locator(handle) {
       const box = (k) => ({
@@ -591,6 +607,10 @@ function turnoverPage({ roundsBeforeDraft }) {
     return showing() ? 1 : 0;
   };
   return {
+    // A real Playwright `Page` always answers `url()`; a fake that cannot is
+    // simply incomplete. The repeat's exhaustion verdict names the page it
+    // stood on, and a failure path that TypeErrors reports nothing at all.
+    url: () => 'http://localhost:4124/sessions/architect/s1',
     state,
     locator(handle) {
       const box = () => ({
@@ -649,4 +669,93 @@ test('6.11.52(B): a form that never comes back still reds at the declared bound'
 
   assert.ok(r.error, 'it must red');
   assert.match(r.error, /repeat/);
+});
+
+/**
+ * A page that simply does not carry the repeat's act — the shape lane A
+ * measured on S9 run 3, beat 13, which burned its full **600 000 ms** and then
+ * reported that "the act kept being available".
+ *
+ * The loop has TWO exhaustion modes and reported one. When the gate handle is
+ * present each pass, rounds get answered and `until` is never met, "the act
+ * kept being available, so the product never moved on" is exactly right. When
+ * the gate is absent on EVERY pass, the loop spends the whole bound in its
+ * poll branch, `rounds` stays 0 — and that same sentence is the precise
+ * opposite of what happened. An operator reading it looks at the agent; the
+ * fault is in the authoring.
+ *
+ * This does NOT re-instate a route compare inside a repeat. T1 ruling 569
+ * removed that for a reason that still holds: between rounds the gate is
+ * legitimately gone while the architect takes its turn, so absence at any one
+ * moment is no evidence at all. Absence for the WHOLE bound is a different
+ * claim, and it is the only one made here — after the bound, not before it.
+ */
+function pageWithoutTheAct(route) {
+  return {
+    url: () => `http://localhost:4124${route}`,
+    locator() {
+      return {
+        count: async () => 0,
+        nth: () => ({ fill: async () => {} }),
+        waitFor: async () => { throw new Error('not present'); },
+        first: () => ({
+          evaluateAll: async (fn, arg) => fn([], arg),
+          waitFor: async () => { throw new Error('not present'); },
+          click: async () => { throw new Error('no element carries that handle'); },
+          fill: async () => {},
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+}
+
+test('569 follow-up: a repeat whose act NEVER appears says so, instead of claiming it kept being available', async () => {
+  const page = pageWithoutTheAct('/monitor');
+  const began = Date.now();
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1200, async () => false);
+  const took = Date.now() - began;
+
+  assert.notEqual(r.error, null);
+  assert.ok(took >= 1000, `the bound is still spent — absence for the whole bound is the claim (took ${took} ms)`);
+  assert.doesNotMatch(
+    r.error,
+    /kept being available/,
+    `the act was never available once. Got: ${r.error}`,
+  );
+  assert.match(r.error, /never became available/, `it must say what actually happened. Got: ${r.error}`);
+  assert.match(r.error, /question-freetext/, 'it must name the act it waited for');
+  assert.match(r.error, /\/monitor/, 'and the page it stood on for the whole bound');
+});
+
+test('569 follow-up (positive control): a gate that WAS there keeps the round-count verdict', async () => {
+  // The other exhaustion mode. The act appeared, a round was answered, and the
+  // agent then went quiet for the rest of the bound — the loop exits from the
+  // poll branch with `sawGate` already true. What is knowable is the round
+  // count and the unmet condition, and that is all this says.
+  let gone = false;
+  const page = {
+    url: () => 'http://localhost:4124/sessions/architect/s1',
+    locator() {
+      return {
+        count: async () => (gone ? 0 : 1),
+        nth: () => ({ fill: async () => {} }),
+        waitFor: async () => {},
+        first: () => ({
+          evaluateAll: async (fn, arg) => fn([], arg),
+          waitFor: async () => {},
+          click: async () => { gone = true; },
+          fill: async () => {},
+        }),
+      };
+    },
+    waitForSelector: async () => {},
+  };
+  const r = await performStepsForTest(page, [{ repeat: ROUND, until: UNTIL }], 1200, async () => false);
+
+  assert.notEqual(r.error, null);
+  assert.match(r.error, /answered 1 round\(s\)/, `Got: ${r.error}`);
+  assert.doesNotMatch(r.error, /never became available/, `the act WAS available. Got: ${r.error}`);
+  // The clause that was never checked is gone from both branches.
+  assert.doesNotMatch(r.error, /kept being available/, `Got: ${r.error}`);
 });

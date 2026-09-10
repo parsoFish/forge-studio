@@ -119,6 +119,10 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
 
   const gate = handleFor(step.repeat[0]);
   let rounds = 0;
+  // Whether the act was EVER on the page. The bound running out means two
+  // very different things depending on this, and the verdict said only one
+  // of them (T1 ruling 569 follow-up, bought by A's S9 run 3 beat 13).
+  let sawGate = false;
 
   while (left() > 0) {
     if (await isSatisfied()) break;
@@ -130,6 +134,7 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
       await new Promise((r) => setTimeout(r, Math.min(POLL_MS, left())));
       continue;
     }
+    sawGate = true;
 
     // A ROUND IS SEVERAL ACTIONS LONG, AND THE PRODUCT CAN LEAVE THE INTERVIEW
     // BETWEEN THEM (bead `forge-8vfn.6.11.38`, ruling 349). The inner steps are
@@ -165,12 +170,36 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
   }
 
   if (!(await isSatisfied())) {
+    // THE ACT WAS NEVER THERE. The loop spent the whole bound in the poll
+    // branch above, so no round was ever attempted. This is the authoring
+    // error lane A measured: S9 beat 13's repeat stood on a page that does
+    // not carry its act and burned 600 000 ms being told the act "kept being
+    // available" — the exact opposite of what happened.
+    //
+    // It is deliberately said only AFTER the bound. Ruling 569 removed the
+    // route compare from inside a repeat because between rounds the gate is
+    // legitimately gone while the agent takes its turn; absence at any one
+    // moment proves nothing. Absence for the entire bound is a different
+    // claim, and it is the only one made here.
+    if (!sawGate) {
+      return {
+        waitedForHandle,
+        error:
+          `repeat: the act ${gate} never became available on "${new URL(page.url()).pathname}" in ` +
+          `this beat's declared bound (${timeoutMs} ms), so no round was ever answered. Either this ` +
+          'repeat is standing on the wrong page, or the affordance never arrived.',
+      };
+    }
+    // The gate WAS there and rounds were answered. What is knowable is the
+    // round count and the unmet condition; whether the act was still on the
+    // page at the instant the bound expired is NOT — the loop reaches here
+    // from the poll branch as often as from a finished round — so it is no
+    // longer asserted.
     return {
       waitedForHandle,
       error:
         `repeat: answered ${rounds} round(s) and this beat's declared bound (${timeoutMs} ms) ran ` +
-        `out before its \`until\` (${JSON.stringify(until)}) was met — the act kept being available, ` +
-        'so the product never moved on.',
+        `out before its \`until\` (${JSON.stringify(until)}) was met.`,
     };
   }
 
