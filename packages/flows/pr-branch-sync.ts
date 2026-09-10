@@ -311,6 +311,19 @@ export type LocalRemoteInvariant = {
  * exact ref hashes into the event log for post-mortem. `assertLocalRemoteSynced`
  * wraps this and throws on `ok === false`.
  */
+/** Commits in a `A..B` range, or `null` when git cannot answer. `null` reads as
+ *  "unknown", never as zero — a failed count must not be reported as a shape. */
+function countRevs(worktreePath: string, range: string): number | null {
+  try {
+    return Number.parseInt(
+      execFileSync('git', ['rev-list', '--count', range], { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).trim(),
+      10,
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvariant {
   const branch = currentBranch(worktreePath);
   const localHead = revParse(worktreePath, 'HEAD');
@@ -344,6 +357,22 @@ export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvaria
     };
   }
   if (originHead !== localHead) {
+    // AHEAD-ONLY IS NOT DIVERGENCE, and calling it that costs a diagnosis.
+    // G2 resume 6 (bead `forge-8vfn.7.6.10`): the close's push failed on a DNS
+    // outage, execution continued here against a stale cached `origin/<branch>`,
+    // and this threw "local diverged from remote". `origin..HEAD` was one commit
+    // and `HEAD..origin` was zero — an unpublished commit, nothing rewritten and
+    // the remote moved nowhere. The run was read as a branch problem while the
+    // real reason sat one event earlier in the log.
+    //
+    // Both remain violations: an unpublished branch is not reviewable either.
+    // Only the WORDING changes, and only so a reader chases the right thing.
+    const behind = countRevs(worktreePath, `${localHead}..${originHead}`);
+    const ahead = countRevs(worktreePath, `${originHead}..${localHead}`);
+    const shape =
+      behind === 0
+        ? `local is ${ahead} commit(s) AHEAD — the branch is not published (the push did not land); this is not a divergence`
+        : `local diverged from remote (${ahead} ahead, ${behind} behind)`;
     return {
       ok: false,
       branch,
@@ -351,7 +380,7 @@ export function checkLocalRemoteSynced(worktreePath: string): LocalRemoteInvaria
       originHead,
       mergeBase,
       mainHead,
-      detail: `origin/${branch} (${originHead.slice(0, 8)}) != local HEAD (${localHead?.slice(0, 8)}) — local diverged from remote`,
+      detail: `origin/${branch} (${originHead.slice(0, 8)}) != local HEAD (${localHead?.slice(0, 8)}) — ${shape}`,
     };
   }
   // NOTE (2026-07-03): the historical third check — `main == merge-base(main, branch)`

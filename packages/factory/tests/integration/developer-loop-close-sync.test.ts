@@ -120,7 +120,10 @@ test('assertDevLoopCloseSync: THROWS + emits dev-loop.branch-divergence when loc
 });
 
 test('assertDevLoopCloseSync: throws when local has an unpushed commit ahead of origin', () => {
-  // Push, then add an unpushed commit → local diverged from remote.
+  // Push, then add an unpushed commit → the branch is AHEAD and unpublished.
+  // (Bead `forge-8vfn.7.6.10`: this used to be called a divergence. It is not —
+  // nothing was rewritten and the remote moved nowhere — and the wrong word cost
+  // a diagnosis on G2 resume 6. The event and the throw are unchanged.)
   const h = setup(true);
   try {
     writeFileSync(join(h.proj, 'extra.txt'), 'unpushed\n');
@@ -134,7 +137,7 @@ test('assertDevLoopCloseSync: throws when local has an unpushed commit ahead of 
     const ev = h.events().find((e) => e.message === 'dev-loop.branch-divergence');
     assert.ok(ev, 'expected a dev-loop.branch-divergence event in the log');
     const md = (ev!.metadata ?? {}) as Record<string, unknown>;
-    assert.match(md.detail as string, /local diverged from remote/);
+    assert.match(md.detail as string, /AHEAD/);
   } finally {
     h.cleanup();
   }
