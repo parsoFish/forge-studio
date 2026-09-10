@@ -17,6 +17,16 @@
  * surface must not own — the deny-by-default execution gate lives entirely
  * in the runtime that later decides whether to actually run the script.
  *
+ * M6-D / ruling 477 — the `fetch` pipeline. A registry item can now be KNOWN
+ * without being on disk and still be installable: `routeCommunityInstall`
+ * returns `{pipeline:'fetch'}` and the caller fetches the package from the
+ * item's own declared upstream, vendors it, and re-routes. Routing stays a
+ * PURE DECISION — this file still writes nothing and reaches no network; the
+ * async work belongs to the caller, which is why the arm carries the source
+ * URL rather than the bytes. `notVendoredReason` survives, narrowed to what is
+ * now the only un-installable case: an item whose upstream is not a GitHub
+ * repository forge can read a package out of.
+ *
  * D9 — a WELL-FORMED slug that resolves to no item is an ordinary not-found:
  * `{pipeline:'none', reason}`, never a throw. A throw is reserved for
  * MALFORMED input (traversal-shaped, non-slug, over-length) — an attack or a
@@ -37,6 +47,8 @@ import { guardedFile } from '@forge/kernel';
 import { listCatalogConnections } from './connection-library.ts';
 import { communitySkillsFromRegistry } from './community-registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
+import { parseCommunityUpstream } from './community-source-url.ts';
+import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 import type { CommunityKind } from './community-index.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-package.ts';
 
@@ -47,6 +59,7 @@ import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-package.ts';
 export type CommunityInstallRoute =
   | { pipeline: 'skill'; packageDir: string; upstream: { source: string } }
   | { pipeline: 'hook'; packageDir: string }
+  | { pipeline: 'fetch'; id: string; sourceUrl: string }
   | { pipeline: 'connection'; connectionId: string }
   | { pipeline: 'none'; reason: string };
 
@@ -59,8 +72,12 @@ function unknownItemReason(kind: CommunityKind, id: string): string {
   return `No ${kind} item "${id}" is known to the community index — unknown id`;
 }
 
-function notVendoredReason(id: string): string {
-  return `Community skill "${id}" is a curated catalog reference with no vendored package on disk — install cannot be driven by this surface`;
+function alreadyInstalledReason(id: string): string {
+  return `Community skill "${id}" is already installed from its upstream — forge will not re-fetch it, because the bytes upstream publishes today may differ from the ones you reviewed. Remove the installed skill first if you want the current version`;
+}
+
+function notVendoredReason(id: string, sourceUrl: string): string {
+  return `Community skill "${id}" has no vendored package on disk and its declared upstream "${sourceUrl}" is not a GitHub repository forge can read a package out of — install cannot be driven by this surface`;
 }
 
 /** T2 ruling (round 6): the real install destination (skills/<id>/) can be
@@ -76,34 +93,60 @@ function collisionReason(id: string): string {
   return `Local skill "${id}" already exists at this id (occupied) but carries no community-install provenance — refusing to touch a file that merely happens to share this id`;
 }
 
-function skillKnownInRegistry(forgeRoot: string, id: string): boolean {
-  return communitySkillsFromRegistry(forgeRoot).some((cs) => cs.id === id);
+function registrySkill(forgeRoot: string, id: string): CommunitySkill | null {
+  return communitySkillsFromRegistry(forgeRoot).find((cs) => cs.id === id) ?? null;
 }
 
 export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id: string): CommunityInstallRoute {
   assertSkillSlug(id); // D9 — throws on traversal-shaped/non-slug/over-length input, before any lookup
 
   if (kind === 'skill') {
+    const known = registrySkill(forgeRoot, id);
+
+    // THE OCCUPANCY REFUSALS COME FIRST, ABOVE THE PIPELINE SPLIT (M6-D
+    // security review of ruling 477, HIGH-2/MEDIUM-3). They used to live
+    // inside the vendored branch, which was safe while every install copied
+    // bytes that were already here. The fetch arm changed that: an install
+    // that reaches a third party and writes into the repo-tracked tree must
+    // refuse BEFORE it spends the operator's rate limit and lands a
+    // stranger's package on disk, not after. A refusal discovered downstream
+    // is the thing this file's own comment warns about — it arrives as a 500
+    // rather than a named 400, and it leaves the fetched bytes behind.
+    if (guardedSkillMdPath(id, forgeRoot) !== null) {
+      const state = communityInstallState(forgeRoot, 'skill', id);
+      if (state === 'present-unmanaged' || state === 'not-installed') {
+        return { pipeline: 'none', reason: collisionReason(id) };
+      }
+      // Occupied by a package THIS pipeline installed (it carries a
+      // provenance block). For a vendored package that is an idempotent
+      // re-install and stays one; for a fetchable row it must NOT be, because
+      // "fetch again" means fetching whatever the upstream says TODAY and
+      // writing it beside a package the operator has already reviewed. The
+      // reviewed copy and the served copy would then be different bytes with
+      // the trust state of the first — so this refuses instead.
+      if (!existsSync(join(vendoredPackageDir(forgeRoot, 'skill', id), 'SKILL.md')) && known !== null) {
+        return { pipeline: 'none', reason: alreadyInstalledReason(id) };
+      }
+    }
+
     const dir = vendoredPackageDir(forgeRoot, 'skill', id);
     if (existsSync(join(dir, 'SKILL.md'))) {
-      // T2 ruling: a real install destination occupied by something that
-      // ISN'T this community package (no provenance block) must refuse
-      // BEFORE dispatch — see collisionReason's own header comment.
-      // W7-B3 (library-31): that occupancy now has its own honest state
-      // token, 'present-unmanaged' (communityInstallState's skill branch) —
-      // the old detection ('not-installed' while the path exists) is kept as
-      // a belt-and-braces alternate so a future state-mapping change can
-      // only widen, never silently disable, this refusal.
-      if (guardedSkillMdPath(id, forgeRoot) !== null) {
-        const state = communityInstallState(forgeRoot, 'skill', id);
-        if (state === 'present-unmanaged' || state === 'not-installed') {
-          return { pipeline: 'none', reason: collisionReason(id) };
-        }
-      }
-      return { pipeline: 'skill', packageDir: dir, upstream: { source: VENDORED_UPSTREAM_SOURCE } };
+      // THE PROVENANCE IS THE ROW'S OWN UPSTREAM WHEN THERE IS A ROW (HIGH-1).
+      // `VENDORED_UPSTREAM_SOURCE` was correct while every vendored package
+      // was forge-authored — its constant's comment says exactly that. Ruling
+      // 477 puts THIRD-PARTY bytes in the same directory, so attributing this
+      // directory to forge's own repo would launder a stranger's package into
+      // a forge-authored one on the record `skill-trust.ts` reads and the UI
+      // renders. A vendored package with no registry row is still forge's own.
+      return { pipeline: 'skill', packageDir: dir, upstream: { source: known?.source ?? VENDORED_UPSTREAM_SOURCE } };
     }
-    if (skillKnownInRegistry(forgeRoot, id)) {
-      return { pipeline: 'none', reason: notVendoredReason(id) };
+
+    if (known !== null) {
+      const upstream = parseCommunityUpstream(known.source);
+      if (upstream !== null && upstream.kind === 'github') {
+        return { pipeline: 'fetch', id, sourceUrl: known.source };
+      }
+      return { pipeline: 'none', reason: notVendoredReason(id, known.source) };
     }
     return { pipeline: 'none', reason: unknownItemReason('skill', id) };
   }

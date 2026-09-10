@@ -18,7 +18,7 @@
  *   - writeHookApprovalLedgerEntry (orchestrator/studio/hook-scan.ts)
  *   - repinSkillPackage            (orchestrator/studio/skill-library.ts)
  *
- * None of the seven community-surface files below may reference any of
+ * None of the community-surface files listed below may reference any of
  * these five identifiers, anywhere in their source text — not as an import,
  * not as a call, not even inside a comment (STATED TRADEOFF: an
  * explanatory comment describing this constraint must phrase it without
@@ -56,8 +56,10 @@ const COMMUNITY_SURFACE_FILES = [
   'packages/library/bridge-studio-community-hook-preinstall.ts',
   'packages/library/studio/community-index.ts',
   'packages/library/studio/community-install.ts',
+  'packages/library/studio/community-fetch-package.ts',
   'apps/studio/lib/community-client.ts',
   'apps/studio/lib/community-view.ts',
+  'apps/studio/lib/community-types.ts',
   'apps/studio/app/community/page.tsx',
   'apps/studio/app/community/[kind]/[id]/page.tsx',
 ];
