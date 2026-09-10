@@ -24,7 +24,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { METHOD_C_CMD, groundManifest, groundChanges, snapshotSiblingGrounds, siblingGroundEscapes } from './ground-hash.mjs';
+import { METHOD_C_CMD, groundManifest, groundChanges, snapshotSiblingGrounds, siblingGroundEscapes, mintedSessionPaths, classifyOwnGroundDrift,} from './ground-hash.mjs';
 
 function fixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'ground-hash-'));
@@ -149,4 +149,90 @@ test('siblingGroundEscapes: a ground APPEARING in a tree that had none is a find
 
 test('siblingGroundEscapes: with no ground declared the fence asks nothing — a story without a ground has none to protect', () => {
   assert.deepEqual(siblingGroundEscapes(null, new Map(), { dirs: () => ['/nonexistent'] }), []);
+});
+
+/**
+ * The run's OWN ground — T1 ruling 594. The fence proves the ground is unchanged
+ * in every OTHER worktree; nobody checked the one the run is using, and three
+ * lanes each paid a run to find that gap in a different place.
+ */
+test('594: the run\'s own product is derived from what it MINTED, never from a list', () => {
+  const logs = mkdtempSync(join(tmpdir(), 'forge-logs-'));
+  const session = (name: string) => {
+    mkdirSync(join(logs, name), { recursive: true });
+    writeFileSync(join(logs, name, 'events.jsonl'), '{}');
+  };
+  session('_architect-2026-08-03T01-09-32');
+  session('_architect-2026-09-10T13-54-57-9eaf7fae');
+  session('_demo-abc123');
+  const before = ['_architect-2026-08-03T01-09-32', 'sessions'];
+  const after = [...before, '_architect-2026-09-10T13-54-57-9eaf7fae', '_demo-abc123'];
+
+  assert.deepEqual(mintedSessionPaths(before, after, logs), [
+    '_architect/2026-09-10T13-54-57-9eaf7fae',
+    '_demo/abc123',
+  ]);
+  // A list of allowed directory names goes stale silently; this cannot, because
+  // it is read from the run's own evidence. Nothing minted, nothing allowed.
+  assert.deepEqual(mintedSessionPaths(before, before, logs), []);
+
+  // THE NAME SHAPE IS NOT ENOUGH, and this assertion is why the rule is not the
+  // regex alone: the runner's OWN `_logs/_story-red-evidence` parses as kind
+  // `story`, id `red-evidence`, and would otherwise have licensed a
+  // `_story/red-evidence` path in the ground that no session ever writes.
+  mkdirSync(join(logs, '_story-red-evidence'), { recursive: true });
+  assert.deepEqual(mintedSessionPaths([], ['_story-red-evidence', 'notes.txt'], logs), []);
+});
+
+test('594: the run\'s own product is reported, and anything else FAILS the run', () => {
+  // Run 5's real shape: the architect wrote its plan into the ground, which is
+  // the product WORKING. Failing on it would fail every green run, and
+  // nine-green is the exit criterion.
+  const minted = ['_architect/2026-09-10T13-54-57-9eaf7fae'];
+  const changes = {
+    added: [
+      '_architect/2026-09-10T13-54-57-9eaf7fae/PLAN.md',
+      '_architect/2026-09-10T13-54-57-9eaf7fae/manifests/INIT-1.md',
+    ],
+    removed: [],
+    modified: [],
+  };
+  const clean = classifyOwnGroundDrift(changes, minted);
+  assert.equal(clean.undeclared.length, 0, `a green run must stay green: ${clean.undeclared.join(' | ')}`);
+  assert.equal(clean.produced.length, 2, 'and its product is still reported, loudly');
+});
+
+test('594: A\'s case — an agent writing INTO the ground repo fails the run', () => {
+  // Measured twice (§15.327). `.gitignore` and `CLAUDE.md` are nobody's declared
+  // product, and no `_logs` entry licences them.
+  const minted = ['_architect/2026-09-10T13-54-57-9eaf7fae'];
+  const changes = {
+    added: ['.forge/agent-run/PROMPT.md', 'brain/themes/x.md', 'roadmap.md'],
+    removed: [],
+    modified: ['.gitignore', 'CLAUDE.md'],
+  };
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted);
+  assert.equal(produced.length, 0);
+  assert.equal(undeclared.length, 5, undeclared.join(' | '));
+  assert.ok(undeclared.some((l) => l.endsWith('.gitignore')), undeclared.join(' | '));
+  assert.ok(undeclared.some((l) => l.endsWith('CLAUDE.md')), undeclared.join(' | '));
+});
+
+test('594: a sibling session dir the run did NOT mint is undeclared, not product', () => {
+  // D's case: a leftover `_onboarding` from an earlier run sitting in the ground.
+  // "It looks like a session dir" is not the test — "this run made it" is.
+  const { undeclared } = classifyOwnGroundDrift(
+    { added: ['_onboarding/from-a-run-two-days-ago/status.json'], removed: [], modified: [] },
+    ['_architect/2026-09-10T13-54-57-9eaf7fae'],
+  );
+  assert.equal(undeclared.length, 1, 'an unminted session dir must still fail the run');
+});
+
+test('594: a path that merely PREFIXES a minted one is not covered by it', () => {
+  // `_architect/abc` must not licence `_architect/abcdef`.
+  const { undeclared } = classifyOwnGroundDrift(
+    { added: ['_architect/abcdef/PLAN.md'], removed: [], modified: [] },
+    ['_architect/abc'],
+  );
+  assert.equal(undeclared.length, 1, 'prefix matching would licence a directory the run never minted');
 });

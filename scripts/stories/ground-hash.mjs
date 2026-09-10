@@ -31,6 +31,7 @@
  * files.
  */
 import { execFileSync } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
@@ -171,4 +172,85 @@ export function describeGroundEscapes(project, escapes) {
     for (const p of e.changes.removed) lines.push(`[stories]   removed  ${p}`);
   }
   return lines;
+}
+
+/**
+ * The run's OWN ground, hashed. The fence above proves the ground is unchanged
+ * in every OTHER worktree; nobody checked the one the run is actually using.
+ *
+ * Three lanes each paid a run to find that gap, in three different places: an
+ * agent writing `.gitignore` and `CLAUDE.md` into the ground repo and COMMITTING
+ * them (A) · a dot-prefixed session dir the preflight's glob could not see (D) ·
+ * and our own test suite writing into the real `projects/`, because `npm test`
+ * takes `.suite-lock` while a story takes `.run-lock` and the two do not exclude
+ * each other (D again).
+ *
+ * @param {string} root the run's own worktree
+ * @param {string|null} project the declared ground project; null = nothing to check
+ */
+export function ownGroundManifest(root, project) {
+  return project === null || project === undefined ? null : groundManifest(join(root, 'projects', project));
+}
+
+/**
+ * The `_logs` entries this run created, as the `<kind>/<id>` pairs their names
+ * encode. `_logs/_architect-2026-09-10T13-54-57-9eaf7fae` is the same session as
+ * the ground's `_architect/2026-09-10T13-54-57-9eaf7fae`, so the run's own
+ * product in the ground is DERIVED from what the run demonstrably minted rather
+ * than from a hand-written list of directory names.
+ *
+ * That distinction is the whole design. A list of allowed paths is a thing that
+ * goes stale silently; a set derived from the run's own evidence cannot.
+ *
+ * The NAME SHAPE IS NOT ENOUGH, and this file's own test caught it: the runner's
+ * `_logs/_story-red-evidence` parses as kind `story`, id `red-evidence`, and
+ * would have licensed a `_story/red-evidence` path in the ground that no session
+ * ever writes. A licence handed out by accident is the same defect as a list
+ * gone stale, so the dir must also CARRY a session's evidence — one of the
+ * channels `bridge-studio-lifecycle.ts` measures, or the turn's pid.
+ *
+ * @param {string[]} before entry names in `_logs` before the run
+ * @param {string[]} after entry names after it
+ * @param {string} logsDir the `_logs` dir itself, to confirm each candidate is a session
+ */
+export function mintedSessionPaths(before, after, logsDir) {
+  const was = new Set(before);
+  const out = [];
+  for (const name of after) {
+    if (was.has(name)) continue;
+    // `_<kind>-<id>` — the kind cannot contain `-`, the id may.
+    const m = /^_([A-Za-z][A-Za-z0-9]*)-(.+)$/.exec(name);
+    if (m === null) continue;
+    const isSession = ['events.jsonl', '.heartbeat', 'turn.pid'].some((f) => {
+      try { return statSync(join(logsDir, name, f)).isFile(); } catch { return false; }
+    });
+    if (isSession) out.push(`_${m[1]}/${m[2]}`);
+  }
+  return out.sort();
+}
+
+/**
+ * Split the run's own ground drift into what the run PRODUCED and what nobody
+ * declared.
+ *
+ * T1 ruling 594. A run's own ground drift is the product WORKING — G1/S10 run 5
+ * ended `731cf1401fbfb896` against a pin of `e12d66d463e094eb` because the
+ * architect had just written its plan into `projects/gitpulse/_architect/<id>/`.
+ * Failing on any drift at all would fail every green run, and nine-green is this
+ * campaign's exit criterion: a gate that cannot be passed is not a gate.
+ *
+ * So the produced half is reported loudly and does not fail the run; anything
+ * else fails it. Note what this still catches: a file COMMITTED on a branch
+ * inside the ground, which `git status` reports as nothing at all (§15.327,
+ * measured twice — 215 insertions in one run, 308 across 10 files in another).
+ * That is why the check is a HASH and never a status.
+ */
+export function classifyOwnGroundDrift(changes, mintedPaths) {
+  const owned = (p) => mintedPaths.some((m) => p === m || p.startsWith(`${m}/`));
+  const produced = [];
+  const undeclared = [];
+  for (const kind of ['added', 'removed', 'modified']) {
+    for (const p of changes[kind]) (owned(p) ? produced : undeclared).push(`${kind[0].toUpperCase()} ${p}`);
+  }
+  return { produced: produced.sort(), undeclared: undeclared.sort() };
 }
