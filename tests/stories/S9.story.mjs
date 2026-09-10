@@ -351,11 +351,21 @@ export default {
           'page-ready': 'true',
           'session-count': '1',
           'session-kind': 'authoring',
-          'session-state': 'working',
-          'needs-you': 'false',
+          // AMENDED (amend-4, OPERATOR ruling 566). S9 run 2 measured
+          // `awaiting-operator` / `needs-you: true` here, and NOTHING IS
+          // BROKEN — the amendment that fixed beat 8 is what moved this beat's
+          // ground. Beat 8 gained `wait: { for: 'agent', upTo: 600_000 }` at
+          // the sitting so a cost figure would exist to read; that wait means
+          // the authoring session has finished its turn by the time the spine
+          // is read, so the state it settles into is the one it asks the
+          // operator from. `working` was a window the wait closed, and
+          // `awaiting-operator` is a settled state — this is the stabler
+          // assertion as well as the true one.
+          'session-state': 'awaiting-operator',
+          'needs-you': 'true',
         },
       },
-      say: 'The spine lists what it started. Kind, project, phase, state, model tier, last update — six columns, and not one of them is money.',
+      say: 'The spine lists what it started, and it is already asking for you: kind, project, phase, state, model tier, last update — six columns that tell the operator a decision is waiting, and not one of them is money.',
     },
     {
       // THE OTHER HALF OF CLAUSE ONE, and the sharpest measurement in this
