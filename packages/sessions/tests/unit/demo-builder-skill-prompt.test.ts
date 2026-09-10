@@ -1,7 +1,7 @@
 import { OPERATOR_GUIDANCE_SENTINEL, promptPathSource, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -633,11 +633,22 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
   gitLine(repoPath, ['add', '-A']);
   gitLine(repoPath, ['commit', '-m', 'init']);
 
+  // AMENDED 2026-09-11 (bead 7.3.6, T1 ruling 593). The agent now writes TWO
+  // things: partial work inside its OWN territory, and a file at the repo root
+  // that is NOT its to commit. The original wrote only the root file and then
+  // asserted the tree ended CLEAN — which could only pass by the commit step
+  // sweeping it up, and that sweep is the defect this bead names. Two funded
+  // S1 runs produced `forge-studio: demo machinery (generating)` commits of 9
+  // and 10 files that were the ONBOARDING agent's leftovers, containing no
+  // demo at all. A test that asserts the sweep agrees with the bug.
   const MARKER_REL = 'AGENT-PARTIAL-WORK-9c21.txt';
+  const OWN_PARTIAL_REL = '.forge/demo/partial-fragment.html';
   const throwingQueryFn: QueryFn = ({ options }) => {
     const cwd = (options?.cwd as string) ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
       // The agent DOES write into the repo this turn ...
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      writeFileSync(join(cwd, OWN_PARTIAL_REL), '<!-- half a fragment -->\n');
       writeFileSync(join(cwd, MARKER_REL), 'partial work from an agent turn that never finished the deliverables\n');
       // ... but never produces .forge/skills/demo-design/SKILL.md or
       // .forge/demo/DEMO.html, so runGenerateStep's existing required-file
@@ -667,20 +678,27 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
     'the repo must be left on the forge-studio branch after the throw',
   );
 
-  // What must ALSO have happened: the post-dispatch commitStudioChange step
-  // (positioned AFTER the dispatch with no try/finally around it) must still
-  // run when the dispatch throws — so the agent's write is committed, not left
-  // dirty on disk.
-  const status = gitLine(repoPath, ['status', '--porcelain']);
-  assert.equal(
-    status,
-    '',
-    `the working tree must be clean after the throw (the post-dispatch commit step must still run despite the mid-turn throw) — got dirty status:\n${status}`,
-  );
+  // What must ALSO have happened, unchanged in intent: the post-dispatch
+  // commit step still runs when the dispatch throws, so the agent's own write
+  // is committed rather than left dirty on disk.
   assert.match(
     gitLine(repoPath, ['log', '-1', '--pretty=%s']),
     /demo machinery/,
     'the post-dispatch commit ("forge-studio: demo machinery (...)") must have landed on forge-studio despite the throw',
+  );
+  assert.match(
+    gitLine(repoPath, ['show', '--stat', '--name-only', '--format=', 'HEAD']),
+    new RegExp(OWN_PARTIAL_REL.replace(/[.]/g, '\\.')),
+    'the agent\'s own partial write belongs in that commit — surviving the throw is the point of this test',
+  );
+  // AMENDED (7.3.6): what must NOT have happened. A file at the repo root is
+  // outside the demo builder's write territory; committing it under a "demo
+  // machinery" subject is how another agent's work ends up in this agent's
+  // history, which is what two funded runs measured.
+  assert.match(
+    gitLine(repoPath, ['status', '--porcelain']),
+    new RegExp(MARKER_REL.replace(/[.]/g, '\\.')),
+    'a file outside the demo builder\'s territory must be left uncommitted for whoever owns it',
   );
 });
 
