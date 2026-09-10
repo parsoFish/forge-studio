@@ -78,7 +78,7 @@
  * (`lib/studio-client.ts:645-654`, confirmed live in `studio-client.test.ts`
  * :1343) with node ids `dev` · `demo` · `adversarial-review` · `review`
  * (`lib/flow-run-detail-render.test.ts:104-109`). A beat asserting a value the
- * product does not carry is red forever (§15.175/178/201), so beat 8 asserts
+ * product does not carry is red forever (§15.175/178/201), so beat 9 asserts
  * `demo` — the truth today — and the 383 PR must amend this beat in the SAME
  * PR that performs the rename (§15.183/204: a class fix goes to every beat that
  * carries it, in one amendment). This comment is the pointer that makes that
@@ -275,6 +275,48 @@ export default {
       say: 'The plan is approved. The operator goes back to the project to start the work it planned.',
     },
     {
+      // T1 ruling 604, bought by G1/S10 run 6. THE STORY WAS MISSING A STATION.
+      //
+      // Run 6 reached here and died on `start-work-develop` being present but
+      // DISABLED, carrying the product's own reason: "the ready initiatives are
+      // not planned yet — Plan first" (`lib/start-work-view.ts:88-95`). A PLAN
+      // AND AN INITIATIVE ARE TWO DIFFERENT OBJECTS. Approving the Architect's
+      // plan is what MINTS the initiative — run 6's session ended
+      // `"phase": "committed"` and produced exactly one manifest — and planning
+      // THAT initiative, decomposing it into work items, is a separate pass.
+      // `planDisabledReason` was null throughout, so the product's path was
+      // enabled beside the disabled button the whole time: the flow was right
+      // and the story was wrong.
+      //
+      // WHY THE CONSEQUENCE IS `plan-state`, NOT THE OUTCOME LINE. Pressing Plan
+      // ENQUEUES: `POST /api/initiatives/:id/plan` "repoints the manifest at
+      // forge-architect + threads its cycle_id, then the scheduler claims it"
+      // (`lib/bridge-client.ts:670-680`). So `data-start-work-outcome="ok"`
+      // means the enqueue succeeded, NOT that planning is done — asserting it
+      // would let the next beat press Develop while the pass was still running
+      // and reproduce run 6's red with a different message. The roadmap node
+      // publishes the real state: `data-plan-state`, whose vocabulary is
+      // `planned | planning | error | needs-confirm | unplanned`
+      // (`RoadmapCanvas.tsx:101-112`, `:578`). `waitForConsequence` polls the
+      // declared keys until they hold, so `planned` is what makes this beat wait
+      // out the pass rather than race it.
+      //
+      // THE CEILING IS DECLARED, NOT MEASURED — the only bound in this story
+      // that is. No run has ever reached this station, so 20 minutes is chosen
+      // as headroom against the Architect's measured 8m49s–10m52s for a smaller
+      // pass. It is a 513/551-class figure and gets TIGHTENED from run 7's
+      // measurement; leaving a guess in place once a real number exists is how
+      // beat 4 cost run 3.
+      act: 'Plan the initiative the Architect produced',
+      do: [{ press: 'project-tab-roadmap' }, { press: 'start-work-plan' }],
+      wait: { for: 'agent', upTo: 1_200_000 },
+      expect: {
+        route: '/projects/gitpulse',
+        data: { page: 'projects', 'project-id': 'gitpulse', 'plan-state': 'planned', 'initiative-ready': 'true' },
+      },
+      say: 'Approving the plan gave the project an initiative; it did not break that initiative into work. Planning is where the work items come from, and it is the station between deciding what to build and starting to build it.',
+    },
+    {
       // SOURCE-DERIVED. `StartWorkActions.tsx:187` (`data-section="start-work"`),
       // `:230` (`data-action="start-work-develop"`), corroborated by
       // `lib/start-work-render.test.ts:112,114`. `project-tab-roadmap` is
@@ -292,7 +334,7 @@ export default {
         // attribute is `EnqueueOutcomeLine`'s always-present root (A's #582).
         data: { page: 'projects', 'project-id': 'gitpulse', section: 'start-work', 'run-id': '<runId>' },
       },
-      say: 'The plan produced an initiative and the roadmap is where it now lives. Starting it from the card is the point: the operator is not re-describing the work, they are pressing go on the thing the Architect already planned.',
+      say: 'The initiative is planned and its work items exist, so the roadmap card can finally be started. Starting it from the card is the point: the operator is not re-describing the work, they are pressing go on work that has already been decided and decomposed.',
     },
     {
       // SOURCE-DERIVED. `FlowRunDetail.tsx:121-127` (page/run-id/run-found/
@@ -429,7 +471,7 @@ export default {
     },
     {
       // SOURCE-DERIVED. The fix lands on the same branch and the run returns to
-      // the review station; keys as beat 9.
+      // the review station; keys as beat 10.
       act: 'The fix lands on the same branch and comes back for re-review',
       // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
       // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
