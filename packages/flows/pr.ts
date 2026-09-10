@@ -29,9 +29,14 @@
  */
 
 import { execFileSync } from 'node:child_process';
+
+import { ghForWorktree, githubOwnerRepoForWorktree } from './gh-pinned.ts';
 // Imported, not merely re-exported: a `export … from` does not bring a name
-// into local scope, and the PR-lifecycle functions below call all three.
-import { currentBranch, pushInitiativeBranch, stripForgeScratchFromBranch } from './pr-branch-sync.ts';
+// into local scope, and the PR-lifecycle functions below call both.
+// (`pushInitiativeBranch` left with the dead `ensurePullRequest` that was its
+// only local caller — it is still exported from `pr-branch-sync.ts` for the
+// callers that use it directly.)
+import { currentBranch, stripForgeScratchFromBranch } from './pr-branch-sync.ts';
 
 import {
   existsSync,
@@ -56,14 +61,6 @@ import { DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRe
 /** Initiative id from a `forge/<initiativeId>` branch name. */
 function basenameInitiativeId(branch: string): string {
   return branch.startsWith('forge/') ? branch.slice('forge/'.length) : branch;
-}
-
-/** Parse `owner/repo` from a git origin URL (https or ssh form). */
-function parseOwnerRepo(originUrl: string): string | null {
-  const s = originUrl.trim().replace(/\.git$/, '');
-  const m =
-    s.match(/github\.com[:/]([^/]+\/[^/]+)$/) ?? s.match(/[:/]([^/]+\/[^/]+)$/);
-  return m ? m[1] : null;
 }
 
 const DEMO_IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
@@ -116,12 +113,9 @@ export function embedDemoInPr(
       .filter((n) => !n.startsWith('.'));
     if (entries.length === 0) return null;
 
-    const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    }).trim();
-    const ownerRepo = parseOwnerRepo(originUrl);
-    if (!ownerRepo) return null; // only GitHub raw URLs render inline
+    const gh = githubOwnerRepoForWorktree(worktreePath);
+    if (!gh) return null; // only GitHub raw URLs render inline
+    const ownerRepo = `${gh.owner}/${gh.repo}`;
 
     // The tracked demo dir is worktree-relative; resolve it through the SSOT so
     // a project with an artifactRoot (e.g. betterado's forge/) links correctly.
@@ -210,17 +204,10 @@ export function assertTrackedDemoExists(worktreePath: string, initiativeId: stri
  */
 export function resolveRepoIsPrivate(worktreePath: string): boolean {
   try {
-    const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    }).trim();
-    const ownerRepo = parseOwnerRepo(originUrl);
-    if (!ownerRepo) return true;
-    const vis = execFileSync(
-      'gh',
-      ['repo', 'view', ownerRepo, '--json', 'isPrivate', '-q', '.isPrivate'],
-      { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
-    ).trim();
+    const gh = githubOwnerRepoForWorktree(worktreePath);
+    if (!gh) return true;
+    const ownerRepo = `${gh.owner}/${gh.repo}`;
+    const vis = ghForWorktree(worktreePath)(['repo', 'view', ownerRepo, '--json', 'isPrivate', '-q', '.isPrivate'], worktreePath).trim();
     return vis !== 'false';
   } catch {
     return true;
@@ -298,21 +285,14 @@ export function openPullRequest(
     const existing = prRef(worktreePath);
     if (existing) {
       try {
-        execFileSync('gh', ['pr', 'edit', String(existing.number), '--body-file', bodyFile], {
-          cwd: worktreePath,
-          stdio: 'pipe',
-        });
+        ghForWorktree(worktreePath)(['pr', 'edit', String(existing.number), '--body-file', bodyFile], worktreePath);
       } catch {
         /* body refresh is best-effort — the new commits are already on the PR */
       }
       return existing.url;
     }
 
-    const out = execFileSync(
-      'gh',
-      ['pr', 'create', '--body-file', bodyFile, '--title', title],
-      { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
-    );
+    const out = ghForWorktree(worktreePath)(['pr', 'create', '--body-file', bodyFile, '--title', title], worktreePath);
     const match = out.match(/https:\S+/);
     return match ? match[0] : out.trim() || null;
   } catch (err) {
@@ -337,48 +317,16 @@ export function prRef(worktreePath: string): PrRef | null {
   const branch = currentBranch(worktreePath);
   if (!branch) return null;
   try {
-    const originUrl = execFileSync('git', ['-C', worktreePath, 'remote', 'get-url', 'origin'], {
-      stdio: 'pipe',
-      encoding: 'utf8',
-    }).trim();
-    const ownerRepo = parseOwnerRepo(originUrl);
-    if (!ownerRepo) return null;
-    const [owner, repo] = ownerRepo.split('/');
-    const out = execFileSync(
-      'gh',
-      ['pr', 'view', branch, '--json', 'number,url,state', '-q', '{n:.number,u:.url,s:.state}'],
-      { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
-    ).trim();
+    const gh = githubOwnerRepoForWorktree(worktreePath);
+    if (!gh) return null;
+    const { owner, repo } = gh;
+    const out = ghForWorktree(worktreePath)(['pr', 'view', branch, '--json', 'number,url,state', '-q', '{n:.number,u:.url,s:.state}'], worktreePath).trim();
     const parsed = JSON.parse(out) as { n: number; u: string; s: string };
     if (!parsed || parsed.s !== 'OPEN' || typeof parsed.n !== 'number') return null;
     return { owner, repo, number: parsed.n, url: parsed.u };
   } catch {
     return null;
   }
-}
-
-/**
- * Idempotent PR ensure (P3 — the PR is the durable review window, created
- * at the END of review iteration 1, NOT gated behind an approve verdict).
- *
- *  - No open PR yet  → `openPullRequest` (push + embed demo + `gh pr create`).
- *  - Open PR exists  → push the latest commits so send-back-round fixes land
- *                      on the SAME PR, and return its URL.
- *
- * Returns null only when there is no remote / `gh` is unavailable.
- */
-export function ensurePullRequest(
-  worktreePath: string,
-  prDescriptionPath: string,
-  title: string,
-): string | null {
-  const existing = prRef(worktreePath);
-  if (existing) {
-    // Subsequent (send-back) round: publish new commits to the same PR.
-    pushInitiativeBranch(worktreePath);
-    return existing.url;
-  }
-  return openPullRequest(worktreePath, prDescriptionPath, title);
 }
 
 /**
@@ -394,10 +342,11 @@ export function ensurePullRequest(
  */
 export function mergePullRequest(worktreePath: string): boolean {
   try {
-    execFileSync('gh', ['pr', 'merge', '--merge'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-    });
+    // 597(a): pinned to the OWNER OF THE REMOTE THIS WORKTREE PUSHES TO, never
+    // to whatever account happens to be active on the host. A pin that cannot be
+    // made throws, and the catch below reports the merge as failed — which is
+    // the right answer: not merging is better than merging as someone nobody named.
+    ghForWorktree(worktreePath)(['pr', 'merge', '--merge'], worktreePath);
     return true;
   } catch (err) {
     // Surface the stderr for diagnostic visibility — the orchestrator's
