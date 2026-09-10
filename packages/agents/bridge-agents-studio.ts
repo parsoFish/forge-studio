@@ -187,7 +187,6 @@ export const handleStudioAgentsList = (): Handler => async (req, res, ctx) => {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
   return true;
-  return true;
 };
 
 /**

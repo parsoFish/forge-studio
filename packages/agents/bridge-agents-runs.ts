@@ -84,7 +84,6 @@ export const handleAgentRunsRecent = (deps: AgentRunsDeps): Handler => async (re
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
   return true;
-  return true;
 };
 
 /**
@@ -175,7 +174,6 @@ export const handleAgentRunCancel = (deps: AgentRunsDeps): Handler => async (req
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
   return true;
-  return true;
 };
 
 /**
@@ -238,6 +236,5 @@ export const handleAgentRunDetail = (deps: AgentRunsDeps): Handler => async (req
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
-  return true;
   return true;
 };

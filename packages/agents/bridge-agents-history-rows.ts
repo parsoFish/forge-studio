@@ -49,6 +49,7 @@ import {
  * implementations.
  */
 export type AgentHistoryDeps = AgentRunStateDeps & {
+  projectsRoot: string; // the root the sessions pass enumerates — bead forge-b6af
   /** `cachedListRuns` — ADR-044 P1's cached per-manifest derivation. */
   cachedListRuns(forgeRoot: string, nowMs: number): readonly AgentFlowRun[];
   /** `buildAgentSlugToNodeId` — agent slug → the node id it occupies. */
@@ -170,7 +171,7 @@ export type RecentAgentRunRow = {
   status: string;
   costUsd: number | null;
   href: string;
-  linkKind: 'flow' | 'standalone';
+  linkKind: 'flow' | 'standalone' | 'session';
   errorText?: string;
 };
 
@@ -301,6 +302,18 @@ export function collectRecentAgentRuns(
       linkKind: 'standalone',
       ...(derived.errorText !== undefined ? { errorText: derived.errorText } : {}),
     });
+  }
+  // Sessions — bead forge-b6af, the third kind of work forge charges for and
+  // the one this route has never listed: the standalone half skips every entry
+  // that is not `_agent-*`, and a session's turn writes to
+  // `_logs/_<kind>-<sessionId>`. Cost is NOT re-derived here — it arrives via
+  // `deriveSessionCostUsd`, the one cost rule, so no second formula can drift.
+  for (const d of kind === 'flow' ? [] : deps.loadSessionKinds(forgeRoot)) {
+    for (const row of collectSessionRows(deps, { forgeRoot, projectsRoot: deps.projectsRoot, logsRoot }, d.agent)) {
+      if (row.linkKind !== 'session' || seenIds.has(row.id)) continue;
+      seenIds.add(row.id);
+      rows.push({ ...row, agents: [d.agent], linkKind: 'session' });
+    }
   }
   // Newest first; rows with no usable `when` sort last (mirrors the client
   // ledger's own rule). Bounded.
