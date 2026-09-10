@@ -238,7 +238,20 @@ export default {
           section: 'architect-plan',
           'architect-phase': 'committed',
           'gate-armed': 'false',
-          'plan-mode': 'gate',
+          // `view`, not `gate` — T1 ruling 570, measured by G1/S10 run 4.
+          //
+          // This beat APPROVES the plan, and approving is what ends gate mode:
+          // `SessionArchitectPanel.tsx:147` builds the plan href as
+          // `phase === 'awaiting-verdict' ? 'gate' : 'view'`, so the two keys
+          // below could never both hold — `architect-phase: committed` is the
+          // post-approval phase and `plan-mode: gate` was the pre-approval one.
+          // The beat was asserting the gate it had just approved at.
+          //
+          // Run 4's timeline shows the product was right throughout: beat 4
+          // green at 10:55:16.757, `approve-plan` enabled at 10:55:16.9,
+          // `status.json` COMMITTED at 10:55:17.386 — the approval WORKED — and
+          // the beat then red at 10:55:32.185 on this one token.
+          'plan-mode': 'view',
         },
       },
       say: 'This is the first of the two human gates. The operator reads what will be built and what it will touch, and approving arms the work — the plan is committed and the gate is no longer waiting on anyone.',
