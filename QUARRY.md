@@ -339,6 +339,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 87 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 53 |
 | packages/flows/pr.ts | flows | verbatim | 431 |
+| packages/flows/gh-pinned.ts | flows | rewritten | 205 |
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 556 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 203 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 132 |

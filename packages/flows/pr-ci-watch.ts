@@ -12,7 +12,7 @@
  * invariants; this module is about a run that has already merged and the
  * question of whether main went red because of it.
  */
-import { execFileSync } from 'node:child_process';
+import { ghForWorktree } from './gh-pinned.ts';
 
 // N6 (plan 2.8) — post-merge CI watch. After a confirmed merge, forge no
 // longer walks away: closure polls the merged commit's GitHub Actions runs
@@ -66,11 +66,7 @@ export function evaluateCiRuns(
 /** The merged PR's merge-commit sha via `gh pr view`. Null when unresolvable. */
 function mergedCommitSha(worktreePath: string): string | null {
   try {
-    const out = execFileSync('gh', ['pr', 'view', '--json', 'mergeCommit'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
+    const out = ghForWorktree(worktreePath)(['pr', 'view', '--json', 'mergeCommit'], worktreePath);
     const parsed = JSON.parse(out) as { mergeCommit?: { oid?: unknown } };
     const oid = parsed.mergeCommit?.oid;
     return typeof oid === 'string' && oid.length > 0 ? oid : null;
@@ -82,11 +78,7 @@ function mergedCommitSha(worktreePath: string): string | null {
 /** Workflow count for the repo. Null when `gh workflow list` fails. */
 function repoWorkflowCount(worktreePath: string): number | null {
   try {
-    const out = execFileSync('gh', ['workflow', 'list', '--json', 'id'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
+    const out = ghForWorktree(worktreePath)(['workflow', 'list', '--json', 'id'], worktreePath);
     const parsed = JSON.parse(out) as unknown;
     return Array.isArray(parsed) ? parsed.length : null;
   } catch {
@@ -97,11 +89,7 @@ function repoWorkflowCount(worktreePath: string): number | null {
 /** Actions runs for the given commit. Null when `gh run list` fails. */
 function listCommitCiRuns(worktreePath: string, sha: string): CiRun[] | null {
   try {
-    const out = execFileSync(
-      'gh',
-      ['run', 'list', '--commit', sha, '--json', 'name,status,conclusion,url,databaseId,workflowName'],
-      { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' },
-    );
+    const out = ghForWorktree(worktreePath)(['run', 'list', '--commit', sha, '--json', 'name,status,conclusion,url,databaseId,workflowName'], worktreePath);
     const parsed = JSON.parse(out) as unknown;
     if (!Array.isArray(parsed)) return null;
     return (parsed as Array<Record<string, unknown>>).map((r) => ({
@@ -120,11 +108,7 @@ function listCommitCiRuns(worktreePath: string, sha: string): CiRun[] | null {
 function failingJobNames(worktreePath: string, runId: number | undefined): string[] {
   if (typeof runId !== 'number') return [];
   try {
-    const out = execFileSync('gh', ['run', 'view', String(runId), '--json', 'jobs'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
+    const out = ghForWorktree(worktreePath)(['run', 'view', String(runId), '--json', 'jobs'], worktreePath);
     const parsed = JSON.parse(out) as { jobs?: Array<{ name?: unknown; conclusion?: unknown }> };
     return (parsed.jobs ?? [])
       .filter((j) => typeof j.conclusion === 'string' && !CI_GOOD_CONCLUSIONS.has(j.conclusion))

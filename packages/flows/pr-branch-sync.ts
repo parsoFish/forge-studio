@@ -14,6 +14,8 @@
  * `currentBranch`, `revParse` and `confirmPrMerged`, all of which live here.
  */
 import { execFileSync } from 'node:child_process';
+
+import { ghForWorktree } from './gh-pinned.ts';
 import { existsSync } from 'node:fs';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
@@ -417,11 +419,7 @@ export function assertLocalRemoteSynced(worktreePath: string): LocalRemoteInvari
  */
 export function confirmPrMerged(worktreePath: string): boolean {
   try {
-    const out = execFileSync('gh', ['pr', 'view', '--json', 'state'], {
-      cwd: worktreePath,
-      stdio: 'pipe',
-      encoding: 'utf8',
-    });
+    const out = ghForWorktree(worktreePath)(['pr', 'view', '--json', 'state'], worktreePath);
     const parsed = JSON.parse(out) as { state?: unknown };
     return typeof parsed.state === 'string' && parsed.state.toUpperCase() === 'MERGED';
   } catch (err) {
