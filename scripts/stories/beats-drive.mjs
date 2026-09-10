@@ -99,7 +99,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
     return Object.freeze({
@@ -179,7 +179,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // recently it left one: S1 run 10 beat 9 died `0s in` on the demo session
   // beat 8 had just failed, read during the commit window.
   const sessionScope = bound.label !== null && target.startsWith('/sessions/') ? target : null;
-  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target);
+  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
