@@ -71,7 +71,7 @@ function communityHookItem(id: string, overrides: Partial<CommunityItem> = {}): 
     // onto B5's shape -- the fixture supplies the field rather than the type being
     // loosened back to optional.
     id, kind: 'hook', name: id, desc: '', category: null, upstream: '', hub: null, signals: null,
-    vendored: false, installState: 'not-installed', probeState: null, origin: 'catalog',
+    vendored: false, upstreamFetchableAs: null, installState: 'not-installed', probeState: null, origin: 'catalog',
     fetchedAt: null, fetchedBy: 'seed', upstreamUpdatedAt: null,
     ...overrides,
   };

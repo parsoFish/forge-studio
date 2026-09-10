@@ -128,6 +128,91 @@ The same shape appears twice in this package, and the rule is one rule: **a call
 
 The first instance: `listConnections` decorates the catalog with `usedBy`, which costs a full agent-roster walk. Measured across its eleven call sites, exactly two read that field: the connections list and detail routes. The community index, the install router, the probe and install routes and agents' run gate all read `kind`/`id`/`name`/`provenance` and the install fields — so they take `listCatalogConnections`, which reads `studio/catalog.yaml` and nothing else. The alternative was handing them a `ConnectionDefinition` with a fabricated empty `usedBy`, which is exactly what `usedByDerivation` exists to make impossible.
 
+### Install by URL fetches through the ONE allowlisted seam, and the URL is never the target
+
+Operator ruling 477 funded *"install by URL is BUILT behind the existing trust gate"*, and the
+shape it was approved in (582) is **reuse of the refresh's fetch seam**, not a new one.
+
+The trust gate was already complete except for its first step. `installSkillPackage`
+quarantines `runtime`/`allowed-tools`/`library`, writes a provenance block with a content
+hash, and lands the skill `status: draft` — `draft-pending-approval` to the browser — and
+`skill-trust.ts` gates palette visibility on `ready`, which only the operator's approval
+produces. All of that ran before this change, but only for a package already on disk;
+`routeCommunityInstall` said so in as many words — *"a curated catalog reference with no
+vendored package on disk"*. `studio/community-fetch-package.ts` is that missing first step and
+nothing else. Everything downstream of it is unchanged, which is why the route GAINED an arm
+rather than a second install path.
+
+**The operator's URL is never a fetch target, and that is the whole SSRF answer.**
+`parseCommunityUpstream` turns `https://github.com/owner/repo` into an *identity*; every request
+is then built from that identity and goes to `https://api.github.com` through
+`fetchAllowedApiUrl` — origin-allowlisted, `redirect: 'manual'`, timeout-bounded, the same seam
+the deterministic refresh uses. `file://`, `localhost` and a link-local address cannot be
+reached by supplying them: supplying them fails the parse, so they never become a request at
+all. The test that asserts this asserts the stub was asked for **nothing**.
+
+**Decide from the tree, then fetch.** The module reads the git *trees* API rather than walking
+`contents`, because one recursive listing reports every path AND ITS SIZE — so
+`MAX_PACKAGE_FILES` and `MAX_PACKAGE_BYTES` are enforced against declared sizes BEFORE a single
+blob is requested. An oversized package costs one listing, not a download; a `contents` walk
+would have to fetch to find out. Two tests count the stub's blob requests, so the claim is
+enforced rather than merely written.
+
+**The credential stays where it was.** `ctx.token` is read by the orchestrator process, passed
+as a parameter, deliberately absent from `AGENT_ENV_ALLOWLIST`, never handed to a spawned agent
+and never logged. Install-by-URL became the third outbound caller after the CLI verb and the
+refresh route, so the one line that reads it out of the environment is shared
+(`communityRequestCtx`) rather than copied — the property the refresh runner's own comment
+claims only survives a third caller if the line is shared.
+
+**Why the install route's refusals are not 500s.** `statusForFetchRefusal` maps each one to what
+the upstream condition deserves: `not-github` / `no-skill-package` → **400** (the item is known
+and the request well-formed; what it names is not an installable package, and the remedy is to
+fix the row, not to retry). `tree-truncated` / `too-many-files` / `too-many-bytes` → **413**,
+the one status that says forge refused a package for its SIZE — a 400 would send the operator
+looking for a malformed request that is not there. A transport failure is a 404, a 429 or a 409
+where the refresh route already made that choice, and otherwise **502**: forge is the gateway
+and the upstream is what failed. Nothing here is a forge fault, so nothing here is a 500.
+
+**What "scanned" does and does NOT mean, stated because the first draft of this section
+got it wrong.** `scanSkillPackage` has exactly one production caller —
+`GET /api/studio/skills/:id` for a draft — so it runs on the draft's own page AFTER the
+install, and it reports facts (quarantined keys, executable files, counts) rather than a
+verdict. **It gates nothing.** What actually holds a fetched package back is the same
+thing that holds a vendored one back: it lands unapproved and is invisible to the palette
+until the operator approves it. The operator-facing copy says exactly that and no longer
+claims a scan stands between the fetch and the install.
+
+**A repo-root package is the whole repository.** When SKILL.md sits at the repo root the
+prefix is empty and every blob is vendored — `.github/` included. The caps bound it (500
+files, 5 MiB) and nothing scopes it further, because a repo-root package has no declared
+boundary. `skills/<id>/` is preferred when both exist.
+
+**What the page is allowed to know.** `upstreamFetchableAs` is derived server-side by
+`toWireItem` from the SAME grammar the route uses, and the detail page follows it rather than
+re-deriving anything. A URL grammar duplicated in the UI is a UI that eventually offers a door
+the route refuses, which is worse than one that offers none. It is `null` for a hook (hook
+items are vendored by construction and the route has no fetch arm for them) and `null` for a
+vendored item (its bytes are already here).
+
+It carries the **resolved** `https://github.com/<owner>/<repo>` rather than a boolean for a
+reason the security review made concrete: a `sourceUrl` can be written to READ like one
+repository and PARSE to another —
+`https://github.com/anthropics/skills/%2e%2e/%2e%2e/attacker/evil` resolves to
+`attacker/evil` — so the link an operator is asked to trust before pressing Install must be
+the identity the fetch will actually reach, not the string the row happens to hold. The
+provenance record uses the same resolved identity, and records the TREE SHA rather than the
+branch name, because a branch name does not identify what was installed once the upstream
+force-pushes.
+
+**Three refusals stand in front of the fetch, and they stand ABOVE the pipeline split.** The
+destination occupied by an unmanaged local skill refuses (it always did, but from inside the
+vendored branch, where the fetch arm never reached it); an id already installed from its
+upstream refuses rather than re-fetching, because "fetch again" means whatever the upstream
+publishes today landing beside a package the operator already reviewed; and a failed install
+after a successful vendor **rolls the vendor back**, so a stranger's bytes never stay in the
+tree for the next install to mistake for forge's own.
+
 ## Deferred, on purpose
 
 **Plugin-host process isolation is not in 1.0.** Spec §0 defers it to a concrete driver. `runHookScript` today is an env-stripped, bounded child process with the credential exclusions its own header documents — not a sandbox, and it says so rather than implying more safety than it has. The honest-limits section in that file is the contract; if isolation is ever built, this is where it goes.

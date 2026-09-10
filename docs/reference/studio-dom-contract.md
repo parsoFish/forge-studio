@@ -1865,10 +1865,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   "install-confirm"|"open-owning"|"present-unmanaged"|"browse-upstream"|
   "none-system"]` — every item either installs, routes to the page that owns
   it, or says exactly why not:
-  - `install` — a vendored skill/hook: the direct
-    `[data-action="install-community-item"][data-install-routed-to=
+  - `install` — a vendored skill/hook, OR (M6-D, operator ruling 477) a
+    NOT-vendored skill whose upstream forge can read a package out of: the
+    direct `[data-action="install-community-item"][data-install-routed-to=
     "skill-draft"|"hook-needs-approval"]` button (draft/approval pipeline
-    owns trust, unchanged);
+    owns trust, unchanged). The second case renders
+    `[data-component="install-fetches-upstream"]` ABOVE the button, naming the
+    upstream and saying that pressing it fetches — an install that reaches a
+    third party is not the same act as one that copies bytes already in the
+    repo, and the operator is told which one this is before pressing. Whether
+    the row is fetchable is the SERVER's answer (`upstreamFetchable` on the
+    wire item), never re-derived in the page: a URL grammar duplicated in the
+    UI eventually offers a door the route refuses;
   - `install-confirm` — an npm connection: the SAME button is a TWO-STEP
     confirm (`[data-confirming="true"|"false"]`; first click fetches the
     REAL server preview — ZERO network/executor calls — and renders it in
@@ -1888,9 +1896,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   - `present-unmanaged` — the id is occupied by an UNMANAGED local skill
     (library-31): `[data-component="present-unmanaged"]` explains and links
     the owning library page; no install control renders;
-  - `browse-upstream` — a non-vendored skill/hook (its source hub publishes
-    a page, not a package — community-09) or an external-method connection:
-    `a[data-action="browse-upstream"]` carries the REAL upstream URL;
+  - `browse-upstream` — a non-vendored skill/hook whose upstream forge CANNOT
+    read a package out of (its source hub publishes a page, not a package —
+    community-09; and every hook, whose items are vendored by construction) or
+    an external-method connection: `a[data-action="browse-upstream"]` carries
+    the REAL upstream URL. Before ruling 477 this was the answer for EVERY
+    non-vendored skill, which is what made §3's "two doors" one door;
   - `none-system` — a system-provided tool the probe reports absent:
     honest "install it on the host" copy, no dead button.
 

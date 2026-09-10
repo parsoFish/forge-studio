@@ -140,6 +140,12 @@ export function installActionForItem(item: {
   kind: CommunityKind;
   id: string;
   vendored: boolean;
+  /** M6-D / ruling 477 — the SERVER's answer to "where would forge fetch this
+   *  row's package from", derived by `toWireItem` from the same grammar the
+   *  install route uses; `null` when there is nothing to fetch. Never
+   *  recomputed here: a URL grammar duplicated in the UI is a UI that
+   *  eventually offers a door the route refuses. */
+  upstreamFetchableAs: string | null;
   installState: CommunityInstallState;
   upstream: string;
   /** Connection kinds only — `install.method` from the detail payload; null
@@ -158,7 +164,18 @@ export function installActionForItem(item: {
     return { action: 'none-system' };
   }
   // skill | hook
-  if (!item.vendored) return { action: 'browse-upstream', href: item.upstream };
+  //
+  // M6-D / ruling 477 — this line is where §3's "two doors" stopped being two.
+  // A not-vendored item used to be a dead-end link no matter what its upstream
+  // was, because nothing fetched what the URL named. Now a row whose upstream
+  // forge can actually READ a package out of offers the install, and the route
+  // fetches it, vendors it and lands it `needs-review` like any other.
+  //
+  // A row forge CANNOT read a package out of still gets the honest link — the
+  // dead-end never became a lie, it became the narrower of the two answers.
+  if (!item.vendored) {
+    return item.upstreamFetchableAs !== null ? { action: 'install' } : { action: 'browse-upstream', href: item.upstream };
+  }
   if (item.installState === 'not-installed') return { action: 'install' };
   return { action: 'open-owning', href: owningHrefForKind(item.kind, item.id) };
 }

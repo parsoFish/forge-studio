@@ -70,7 +70,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, refuseDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
@@ -82,11 +82,14 @@ import {
   communityItem,
   buildConnectionItem,
   readVendoredPackage,
+  vendoredPackageDir,
   COMMUNITY_KINDS,
   type CommunityKind,
 } from './studio/community-index.ts';
 import { routeCommunityInstall, installCommunityHookPackage } from './studio/community-install.ts';
 import { installSkillPackage } from './studio/skill-install.ts';
+import { fetchCommunitySkillPackage, vendorFetchedPackage, type FetchPackageOutcome } from './studio/community-fetch-package.ts';
+import { communityRequestCtx } from './community-refresh-run.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from './studio/connection-probe.ts';
 import { installArgvFor, installConnection, installPreviewFor } from './studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from './studio/community-registry.ts';
@@ -337,13 +340,81 @@ async function handleInstall(ctx: RouteContext, res: ServerResponse, origin: str
       return true;
     }
 
+    if (route.pipeline === 'fetch') {
+      // M6-D / ruling 477 — the item is KNOWN and its upstream is readable,
+      // but nothing is on disk yet. Fetch it, vendor it, and hand the vendored
+      // directory to the SAME install pipeline a pre-vendored package uses.
+      //
+      // DRY-BRIDGE REFUSES, for the refresh route's own reason: this makes an
+      // outbound call with the operator's real PAT and then writes third-party
+      // bytes into the repo-tracked tree. A `ui:journey` or story run that did
+      // that silently is the 2026-07-16 incident shape.
+      // The SAME gate the connection arm above uses, not a narrower one. An
+      // AT that pins `FORGE_ARCHITECT_NO_SPAWN=1` and calls itself hermetic
+      // must not reach api.github.com with whatever credential CI happens to
+      // hold; `bridge-studio-community.test.ts` sets exactly that variable and
+      // fixtures rows at `github.com/test-owner/<id>`, which is fetchable.
+      if (isDryBridge() || process.env['FORGE_ARCHITECT_NO_SPAWN'] === '1') {
+        refuseDryBridge(res, origin, {
+          route: `/api/studio/community/${kind}/${id}/install`,
+          method: 'POST',
+          action: 'network',
+          logsRoot: ctx.logsRoot,
+        });
+        return true;
+      }
+      const outcome = await fetchCommunitySkillPackage(communityRequestCtx(), route.sourceUrl, route.id);
+      if (!outcome.ok) {
+        sendJson(res, statusForFetchRefusal(outcome), { error: outcome.message, reason: outcome.reason }, origin);
+        return true;
+      }
+      // The provenance recorded is the RESOLVED upstream identity and the tree
+      // SHA the bytes actually came from — never this repo's seed source, and
+      // never the raw string the operator typed. A fetched package whose
+      // provenance named forge-studio would be a false attribution on the exact
+      // record `skill-trust.ts` reads; one that named an operator string a
+      // redirect-shaped URL can make look like a different repo would be a
+      // quieter version of the same lie.
+      const vendored = vendorFetchedPackage({ forgeRoot: ctx.forgeRoot, id: route.id, files: outcome.package.files });
+      let result;
+      try {
+        result = installSkillPackage({
+          forgeRoot: ctx.forgeRoot,
+          id: route.id,
+          packageDir: vendoredPackageDir(ctx.forgeRoot, 'skill', route.id),
+          upstream: { source: outcome.package.resolvedUrl, ref: outcome.package.ref },
+        });
+      } catch (err) {
+        // ROLL BACK THE VENDOR. Without this the failed install leaves a
+        // stranger's package sitting in the repo-tracked tree, where the NEXT
+        // install of the same id routes to the vendored pipeline and treats it
+        // as forge's own. The bytes were fetched for this install; if this
+        // install did not happen, they do not stay.
+        rmSync(vendored.dir, { recursive: true, force: true });
+        throw err;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          routedTo: 'skill-draft',
+          fetchedFrom: outcome.package.resolvedUrl,
+          ref: outcome.package.ref,
+          alreadyInstalled: result.alreadyInstalled,
+        },
+        origin,
+      );
+      return true;
+    }
+
     if (route.pipeline === 'connection') {
       const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
       return await handleConnectionInstall(ctx, res, origin, wctx, route.connectionId);
     }
 
     // pipeline === 'none' — item is KNOWN (checked above), so this is always
-    // the "known but not vendored" case, never "unknown".
+    // the "known but nothing installable" case, never "unknown".
     sendJson(res, 400, { error: route.reason }, origin);
     return true;
   } catch (err) {
@@ -389,6 +460,29 @@ async function handleInstall(ctx: RouteContext, res: ServerResponse, origin: str
  * - `write-failed` → **500**: an unexpected I/O condition, and the only reason
  *   here that genuinely is a server fault. The registry on disk is untouched.
  */
+/** The HTTP status for each refusal the install-by-URL fetch can return
+ *  (M6-D / ruling 477). NOT a 500 anywhere: nothing here is a forge fault. The
+ *  reasoning per arm — why 413 rather than 400 for a size refusal, and why a
+ *  transport failure inherits the refresh route's own credential statuses — is
+ *  in `packages/library/design.md` §"Install by URL fetches through the ONE
+ *  allowlisted seam". */
+function statusForFetchRefusal(outcome: Extract<FetchPackageOutcome, { ok: false }>): number {
+  switch (outcome.reason) {
+    case 'not-github':
+    case 'no-skill-package':
+      return 400;
+    case 'tree-truncated':
+    case 'too-many-files':
+    case 'too-many-bytes':
+      return 413;
+    case 'fetch-failed':
+      if (outcome.kind === 'not-found') return 404;
+      if (outcome.kind === 'rate-limited') return 429;
+      if (outcome.kind === 'missing-token' || outcome.kind === 'invalid-token') return 409;
+      return 502;
+  }
+}
+
 function statusForRefreshReason(reason: CommunityRefreshRunReason): number {
   switch (reason) {
     case 'rate-limited':

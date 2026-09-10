@@ -179,11 +179,21 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // ---- stub-actions: community install (R3-07, D2/D9) --------------------
   // For a mcp/tool item this route delegates to the SAME connection-install
   // path as /api/studio/connections/:id/install above (byte-identical
-  // suppression check, argv derivation, and executor) — a skill/hook item
-  // never reaches a real-acting call at all (installSkillPackage /
-  // installCommunityHookPackage only copy already-vendored local bytes).
+  // suppression check, argv derivation, and executor).
+  //
+  // M6-D / ruling 477 CHANGED WHAT THIS ROUTE CAN REACH, and this table is the
+  // SSOT a reviewer reads, so it is corrected here rather than left to the
+  // handler. A skill item whose package is NOT yet vendored now fetches it
+  // from a third-party repository with the operator's PAT and writes the bytes
+  // into the repo-tracked tree. That arm REFUSES outright under either env var
+  // (`bridge-studio-community.ts`, the fetch arm — `refuseDryBridge` with
+  // action 'network', the refresh route's own answer), which is why the row
+  // stays 'stub-actions' rather than becoming 'refuse': the OTHER arms of this
+  // one route — an already-vendored skill, a hook, a connection — still have
+  // real, useful suppressed behaviour and must keep it. The classification is
+  // per-route and this route is no longer uniform; the reason says so.
   { method: 'POST', route: '/api/studio/community/:kind/:id/install', classification: 'stub-actions',
-    reason: 'mcp/tool items route to the same real `npm install` path as /api/studio/connections/:id/install (same suppression, D7); skill/hook items only copy already-vendored local bytes, never real-acting' },
+    reason: 'mcp/tool items route to the same real `npm install` path as /api/studio/connections/:id/install (same suppression, D7); an already-vendored skill/hook only copies local bytes, never real-acting; a NOT-yet-vendored skill fetches its package from GitHub with the operator credential and is REFUSED outright by that arm (action: network, ruling 477)' },
 
   // ---- stub-actions: verdict-approve special case -----------------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',

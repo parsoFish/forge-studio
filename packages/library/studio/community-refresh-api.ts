@@ -149,7 +149,8 @@ export type RequestCtx = {
  * future adapter has to remember. `RequestCtx` is exported with it so a caller
  * (and a test) can construct one.
  */
-export async function fetchAllowedApiUrl(ctx: RequestCtx, url: string, headers: Record<string, string>): Promise<Response> {
+export async function fetchAllowedApiUrl(ctx: RequestCtx, url: string, headersIn: Record<string, string>): Promise<Response> {
+  const headers = { ...headersIn }; // never mutate the caller's object — a dropped credential must not leak back out
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isAllowedApiOrigin(current)) {
@@ -187,6 +188,16 @@ export async function fetchAllowedApiUrl(ctx: RequestCtx, url: string, headers: 
         `"${current}" redirected to "${next}", which is outside the community-refresh API allowlist — refusing to follow it.`,
       );
     }
+    // M6-D security review of ruling 477 (LOW-7): the allowlist has THREE
+    // origins, so "inside the allowlist" is not "the origin the credential was
+    // issued for". A 30x from api.github.com to registry.npmjs.org is an
+    // allowed hop that would forward the operator's PAT to npm. Not reachable
+    // today — GitHub controls its own redirects — but the guard must say what
+    // the design record claims it says. So the credential is dropped on a
+    // CROSS-ORIGIN hop, which is fetch's and curl's own rule.
+    if (new URL(next).origin !== new URL(current).origin) {
+      delete headers['Authorization'];
+    }
     current = next;
   }
   throw new CommunityRefreshError('blocked-redirect', `"${url}" exceeded ${MAX_REDIRECTS} redirects — refusing to follow further.`);
@@ -194,7 +205,7 @@ export async function fetchAllowedApiUrl(ctx: RequestCtx, url: string, headers: 
 
 /** Parses a JSON body, turning any surprise into a named malformed-response
  *  rather than a raw SyntaxError escaping from the middle of a refresh. */
-async function readJson(res: Response, what: string): Promise<Record<string, unknown>> {
+export async function readJson(res: Response, what: string): Promise<Record<string, unknown>> {
   let text: string;
   try {
     text = await res.text();
@@ -235,6 +246,37 @@ function describeRateLimitReset(res: Response): string {
   return new Date(seconds * 1000).toISOString();
 }
 
+/**
+ * The GitHub status classification, in ONE place. Every GitHub arm — repo
+ * facts here, and the package fetch in `community-fetch-package.ts` — renders
+ * the same four operator remedies for the same four statuses. It was inline in
+ * `fetchGithubRepo` while there was exactly one caller; a second caller makes
+ * the copy a drift risk rather than a duplication, so it is extracted rather
+ * than repeated. `what` is the subject the message names ("owner/repo", or a
+ * blob's path) written as a full noun phrase, so each message reads as
+ * English — never a URL, which could carry the credential's query form.
+ */
+export function assertGithubOk(res: Response, what: string): void {
+  if (res.status === 401) {
+    throw new CommunityRefreshError(
+      'invalid-token',
+      `GitHub rejected the credential in ${GH_TOKEN_ENV} (401). Issue a fresh token with public repo read access and re-export ${GH_TOKEN_ENV}. (The value itself is never printed.)`,
+    );
+  }
+  if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
+    throw new CommunityRefreshError(
+      'rate-limited',
+      `GitHub rate limit exhausted (${res.status}). The quota resets at ${describeRateLimitReset(res)}. An authenticated ${GH_TOKEN_ENV} raises the limit from 60 to 5000 requests/hour.`,
+    );
+  }
+  if (res.status === 404) {
+    throw new CommunityRefreshError('not-found', `GitHub has no ${what} (404) — it was renamed, made private, or deleted.`);
+  }
+  if (!res.ok) {
+    throw new CommunityRefreshError('http-error', `GitHub answered ${res.status} for ${what}.`);
+  }
+}
+
 export async function fetchGithubRepo(ctx: RequestCtx, owner: string, repo: string): Promise<GithubRepoFacts> {
   if (ctx.token === undefined || ctx.token === '') {
     // Belt-and-braces: refreshCommunityRegistry checks this up-front so no
@@ -250,24 +292,7 @@ export async function fetchGithubRepo(ctx: RequestCtx, owner: string, repo: stri
     Authorization: `Bearer ${ctx.token}`,
   });
 
-  if (res.status === 401) {
-    throw new CommunityRefreshError(
-      'invalid-token',
-      `GitHub rejected the credential in ${GH_TOKEN_ENV} (401). Issue a fresh token with public repo read access and re-export ${GH_TOKEN_ENV}. (The value itself is never printed.)`,
-    );
-  }
-  if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
-    throw new CommunityRefreshError(
-      'rate-limited',
-      `GitHub rate limit exhausted (${res.status}). The quota resets at ${describeRateLimitReset(res)}. An authenticated ${GH_TOKEN_ENV} raises the limit from 60 to 5000 requests/hour.`,
-    );
-  }
-  if (res.status === 404) {
-    throw new CommunityRefreshError('not-found', `GitHub has no repository "${owner}/${repo}" (404) — it was renamed, made private, or deleted.`);
-  }
-  if (!res.ok) {
-    throw new CommunityRefreshError('http-error', `GitHub answered ${res.status} for "${owner}/${repo}".`);
-  }
+  assertGithubOk(res, `repository "${owner}/${repo}"`);
 
   const body = await readJson(res, 'GitHub repo');
   const stars = body['stargazers_count'];

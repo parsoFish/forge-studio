@@ -72,6 +72,7 @@ function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
     hub: null,
     signals: null,
     vendored: false,
+    upstreamFetchableAs: null,
     installState: 'not-installed',
     probeState: null,
     origin: 'test',
@@ -130,7 +131,7 @@ test('the category term does not widen any OTHER term: a query matching nothing 
 test('parseCommunityItem REFUSES a payload whose "category" key is ABSENT — the same absent-vs-explicit-null rule hub/signals/probeState hold', () => {
   const wellFormed = {
     id: 'x', kind: 'tool', name: 'X', desc: 'd', category: null, upstream: 'https://example.com/x',
-    hub: null, signals: null, vendored: false, installState: 'not-installed', probeState: 'available',
+    hub: null, signals: null, vendored: false, upstreamFetchableAs: null, installState: 'not-installed', probeState: 'available',
     origin: 'test', fetchedAt: null, fetchedBy: 'local', upstreamUpdatedAt: null,
   };
   expect(parseCommunityItem(wellFormed).category).toBeNull();
@@ -245,7 +246,7 @@ test('every hub in the strip, selected in turn, produces the state its own itemC
 const INSTALL_METHODS = ['npm', 'external', 'system-provided', null] as const;
 
 test('a NOT-installed mcp/tool row links its connection page — the exact defect community-18 named', () => {
-  const base = { kind: 'mcp' as const, id: 'memory', vendored: false, installState: 'not-installed' as const, upstream: 'https://example.com/m' };
+  const base = { kind: 'mcp' as const, id: 'memory', vendored: false, upstreamFetchableAs: null, installState: 'not-installed' as const, upstream: 'https://example.com/m' };
   const action = installActionForItem({ ...base, installMethod: 'npm' });
   expect(action).toEqual({ action: 'install-confirm' });          // the install action is UNTOUCHED …
   expect(connectionPageLinkFor(base, action)).toBe('/connections/memory'); // … and the link is ADDED beside it
@@ -261,7 +262,7 @@ test('EVERY kind x installState x installMethod x vendored: a connection row alw
     for (const installState of COMMUNITY_INSTALL_STATES) {
       for (const installMethod of INSTALL_METHODS) {
         for (const vendored of [true, false]) {
-          const it = { kind, id: 'the-id', vendored, installState, upstream: 'https://example.com/u', installMethod };
+          const it = { kind, id: 'the-id', vendored, upstreamFetchableAs: null, installState, upstream: 'https://example.com/u', installMethod };
           const action = installActionForItem(it);
           const link = connectionPageLinkFor(it, action);
           const owningHref = '/connections/the-id';
@@ -301,7 +302,7 @@ test('the added link NEVER replaces the install action: every not-installed conn
   ];
   for (const kind of ['mcp', 'tool'] as const) {
     for (const { installMethod, expected } of cases) {
-      const it = { kind, id: 'c', vendored: false, installState: 'not-installed' as const, upstream: 'https://example.com/u', installMethod };
+      const it = { kind, id: 'c', vendored: false, upstreamFetchableAs: null, installState: 'not-installed' as const, upstream: 'https://example.com/u', installMethod };
       expect(installActionForItem(it).action, `${kind}/${String(installMethod)}`).toBe(expected);
       expect(connectionPageLinkFor(it, installActionForItem(it))).toBe('/connections/c');
     }
@@ -310,7 +311,7 @@ test('the added link NEVER replaces the install action: every not-installed conn
 
 test('an INSTALLED connection is not given a second, duplicate link — its action already routes there', () => {
   for (const kind of ['mcp', 'tool'] as const) {
-    const it = { kind, id: 'c', vendored: false, installState: 'installed' as const, upstream: 'https://example.com/u', installMethod: 'npm' };
+    const it = { kind, id: 'c', vendored: false, upstreamFetchableAs: null, installState: 'installed' as const, upstream: 'https://example.com/u', installMethod: 'npm' };
     const action = installActionForItem(it);
     expect(action).toEqual({ action: 'open-owning', href: '/connections/c' });
     expect(connectionPageLinkFor(it, action)).toBeNull();
@@ -318,6 +319,6 @@ test('an INSTALLED connection is not given a second, duplicate link — its acti
 });
 
 test('the connection href is URL-encoded, exactly like owningHrefForKind — never a raw id spliced into a path', () => {
-  const it = { kind: 'mcp' as const, id: 'a b/c', vendored: false, installState: 'not-installed' as const, upstream: 'https://example.com/u', installMethod: 'npm' };
+  const it = { kind: 'mcp' as const, id: 'a b/c', vendored: false, upstreamFetchableAs: null, installState: 'not-installed' as const, upstream: 'https://example.com/u', installMethod: 'npm' };
   expect(connectionPageLinkFor(it, installActionForItem(it))).toBe(`/connections/${encodeURIComponent('a b/c')}`);
 });

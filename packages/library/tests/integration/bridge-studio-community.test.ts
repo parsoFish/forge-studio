@@ -556,8 +556,8 @@ test('POST .../community/tool/<system-provided, non-installable>/install: 400 â€
   assert.equal(res.status, 400);
 });
 
-test('POST .../community/skill/<catalog-only>/install: 400, naming the reason (pipeline: none)', async () => {
-  writeCatalog({ communitySkills: [{ id: 'route-none-skill' }] });
+test('POST .../community/skill/<catalog-only, unfetchable upstream>/install: 400, naming the reason (pipeline: none)', async () => {
+  writeCatalog({ communitySkills: [{ id: 'route-none-skill', source: 'https://firecrawl.dev/blog/some-post' }] }); // 477: a GitHub upstream now routes to fetch
   const res = await postJson(`${bridgeUrl}/api/studio/community/skill/route-none-skill/install`, {});
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
@@ -575,7 +575,7 @@ test('POST .../community/<kind>/<traversal>/install: 400', async () => {
 });
 
 test('T2 ruling #3, side by side: an UNKNOWN item is 404 and a KNOWN-but-not-vendored item is 400 â€” the bridge does not guess between the two "no route" cases', async () => {
-  writeCatalog({ communitySkills: [{ id: 'side-by-side-known-no-vendor' }] });
+  writeCatalog({ communitySkills: [{ id: 'side-by-side-known-no-vendor', source: 'https://firecrawl.dev/blog/some-post' }] }); // 477: unfetchable, so still a 400
 
   const unknownRes = await postJson(`${bridgeUrl}/api/studio/community/skill/side-by-side-totally-unknown/install`, {});
   const knownNoVendorRes = await postJson(`${bridgeUrl}/api/studio/community/skill/side-by-side-known-no-vendor/install`, {});

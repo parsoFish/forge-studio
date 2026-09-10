@@ -444,6 +444,7 @@ function InstallSection({
     kind: item.kind,
     id: item.id,
     vendored: item.vendored,
+    upstreamFetchableAs: item.upstreamFetchableAs,
     installState: item.installState,
     upstream: item.upstream,
     installMethod: isConnectionDetail(item) ? item.install.method : null,
@@ -542,6 +543,29 @@ function InstallSection({
         <p style={{ fontSize: 12.5, color: 'var(--dim)', margin: 0 }} data-component="connection-page-link">
           Its connection page — env vars, probe state and how forge talks to it — is at{' '}
           <Link href={connectionHref} data-action="open-owning-page">{connectionHref}</Link>.
+        </p>
+      )}
+
+      {/* M6-D / ruling 477 — an install that FETCHES is not the same act as one
+          that copies bytes already in the repo, and the operator is told which
+          one this button is before pressing it.
+          The link names the RESOLVED repository, not the row's raw `sourceUrl`:
+          a URL can be written to read like one repository and parse to another,
+          and the thing an operator is asked to trust must be the thing the
+          fetch will actually reach.
+          The copy says what is ENFORCED and no more — the package lands
+          unapproved and nothing runs until the operator approves it
+          (`skill-install.ts` writes `status: draft`; `skill-trust.ts` gates
+          palette visibility on `ready`). It deliberately does NOT claim a scan
+          gates the install: `scanSkillPackage` reports facts on the draft's own
+          page afterwards and blocks nothing. */}
+      {action.action === 'install' && !item.vendored && item.upstreamFetchableAs !== null && (
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: 0 }} data-component="install-fetches-upstream">
+          Forge has no copy of this {item.kind}. Installing fetches it from{' '}
+          <a href={item.upstreamFetchableAs} target="_blank" rel="noreferrer">
+            {item.upstreamFetchableAs}
+          </a>{' '}
+          and vendors it into this repo — it lands unapproved, and nothing runs until you approve it.
         </p>
       )}
 

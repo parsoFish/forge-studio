@@ -78,7 +78,7 @@ function makeTemplate(id: string, overrides: Partial<TemplateLibraryEntry> = {})
 function makeCommunityItem(id: string, overrides: Partial<CommunityItem> = {}): CommunityItem {
   return {
     id, kind: 'skill', name: id, desc: '', category: null, upstream: '', hub: null, signals: null,
-    vendored: false, installState: 'not-installed', probeState: null, origin: 'catalog',
+    vendored: false, upstreamFetchableAs: null, installState: 'not-installed', probeState: null, origin: 'catalog',
     // required on CommunityItem (community-client.ts): a registry-sourced
     // row that no refresh pass has verified yet — null fetchedAt is the
     // honest "seed — never verified" state, and upstreamUpdatedAt is never
