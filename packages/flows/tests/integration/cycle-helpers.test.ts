@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { commitDevLoopBoundary, openPrInline } from '../../cycle-helpers.ts';
+import { commitDevLoopBoundary, enforceDevLoopCloseInvariant, openPrInline } from '../../cycle-helpers.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
 
@@ -257,5 +257,79 @@ test('runMergeBoundaryGate: FORGE_GATE_TIMEOUT_MS caps a too-slow local suite (r
   } finally {
     fx.cleanup();
     if (priorLocal === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS; else process.env.FORGE_GATE_TIMEOUT_MS = priorLocal;
+  }
+});
+
+/**
+ * The close must not turn a FAILED PUSH into a story about divergence.
+ *
+ * G2 resume 6 (2026-09-08, bead `forge-8vfn.7.6.10`). `pushInitiativeBranch`
+ * failed with, verbatim from the event log's own metadata:
+ *
+ *   fatal: unable to access 'https://github.com/parsoFish/terraform-provider-betterado.git/':
+ *   Could not resolve host: github.com
+ *
+ * — a DNS outage that hit every lane on the host that afternoon. Execution then
+ * continued into `assertLocalRemoteSynced`, whose cached `origin/<branch>` ref
+ * the push had never updated, and it threw `local diverged from remote`. Nothing
+ * had diverged. The run was diagnosed as a branch problem for as long as it took
+ * to read one event earlier in the log.
+ *
+ * The gate is unchanged — an unpublished branch still fails the close. Only the
+ * REASON a human is handed changes, and only to the one that is true.
+ */
+test('enforceDevLoopCloseInvariant: a failed push is reported as the CAUSE, not as a divergence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-close-push-fail-'));
+  try {
+    const wt = join(dir, 'wt');
+    mkdirSync(wt, { recursive: true });
+    sh(wt, ['init', '-q', '-b', 'main']);
+    sh(wt, ['config', 'user.email', 't@forge']);
+    sh(wt, ['config', 'user.name', 'forge-test']);
+    writeFileSync(join(wt, 'README.md'), 'base\n');
+    sh(wt, ['add', '.']);
+    sh(wt, ['commit', '-q', '-m', 'base']);
+
+    // A real bare origin, pushed once — so `origin/<branch>` EXISTS and is not
+    // the "never pushed" case. This must be the AHEAD case specifically.
+    const origin = join(dir, 'origin.git');
+    sh(wt, ['init', '-q', '--bare', origin]);
+    sh(wt, ['remote', 'add', 'origin', origin]);
+    sh(wt, ['push', '-q', 'origin', 'main']);
+    sh(wt, ['checkout', '-q', '-b', 'initiative-close']);
+    writeFileSync(join(wt, 'a.txt'), 'one\n');
+    sh(wt, ['add', '.']);
+    sh(wt, ['commit', '-q', '-m', 'feat: one']);
+    sh(wt, ['push', '-q', '-u', 'origin', 'initiative-close']);
+
+    // The boundary commit the close itself makes, then the network goes away —
+    // the origin is repointed at a path that does not exist, so the push fails
+    // for a reason git states plainly, exactly as DNS did.
+    writeFileSync(join(wt, 'b.txt'), 'boundary\n');
+    sh(wt, ['add', '.']);
+    sh(wt, ['commit', '-q', '-m', 'chore(developer-loop): pre-review boundary snapshot']);
+    sh(wt, ['remote', 'set-url', 'origin', join(dir, 'gone.git')]);
+
+    const logsDir = mkdtempSync(join(tmpdir(), 'forge-close-push-fail-logs-'));
+    const logger = createLogger('TEST-close-push', logsDir);
+
+    let message = '';
+    try {
+      enforceDevLoopCloseInvariant(wt, logger, 'INIT-close-push-test');
+      assert.fail('the close must still FAIL — an unpublished branch is not reviewable');
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+
+    assert.match(message, /could not publish the branch/i, `the push failure must lead: ${message}`);
+    assert.match(message, /gone\.git|does not appear to be a git repository|not found/i, `and carry git's own words: ${message}`);
+    assert.match(message, /CONSEQUENCE/, 'and say the branch state follows from it');
+    assert.doesNotMatch(
+      message,
+      /local diverged from remote/,
+      'nothing diverged — the push simply did not land, and calling it divergence cost a diagnosis once already',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

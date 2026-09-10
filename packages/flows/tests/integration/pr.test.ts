@@ -126,7 +126,7 @@ test('assertLocalRemoteSynced: THROWS when the branch was never pushed (local di
   }
 });
 
-test('assertLocalRemoteSynced: THROWS when local has an unpushed commit ahead of origin', () => {
+test('assertLocalRemoteSynced: THROWS when local has an unpushed commit ahead of origin (still a violation; the WORDING changed under bead forge-8vfn.7.6.10)', () => {
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     pushInitiativeBranch(proj); // origin == local
@@ -135,8 +135,11 @@ test('assertLocalRemoteSynced: THROWS when local has an unpushed commit ahead of
     sh(proj, 'git', ['add', '.']);
     sh(proj, 'git', ['commit', '-q', '-m', 'unpushed work']);
     const inv = checkLocalRemoteSynced(proj);
-    assert.equal(inv.ok, false);
-    assert.match(inv.detail, /local diverged from remote/);
+    assert.equal(inv.ok, false, 'an unpublished branch is still not reviewable — the violation stands');
+    // It used to say "local diverged from remote" here. It does not: ahead-only
+    // is unpublished, and the old wording sent a reader hunting for a rewritten
+    // history that never existed (G2 resume 6).
+    assert.match(inv.detail, /AHEAD/);
     assert.throws(() => assertLocalRemoteSynced(proj), /local↔remote invariant violated/);
   } finally {
     cleanup();
@@ -405,6 +408,67 @@ test('embedDemoInPr (S4 signature): returns null when trackedDemoDir is missing'
   try {
     const result = embedDemoInPr(proj, 'INIT-x', 'forge/INIT-x', join(proj, 'demo', 'INIT-x'), true);
     assert.equal(result, null);
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The close path must not turn a FAILED PUSH into a story about divergence.
+//
+// G2 resume 6 (2026-09-08) died here and cost a diagnosis. `pushInitiativeBranch`
+// failed with, verbatim from the event log's own metadata:
+//
+//   fatal: unable to access 'https://github.com/parsoFish/terraform-provider-betterado.git/':
+//   Could not resolve host: github.com
+//
+// — a DNS outage that hit every lane on the host that afternoon. Execution then
+// continued into `assertLocalRemoteSynced`, whose cached `origin/<branch>` ref
+// was of course stale, and it threw `local diverged from remote`. Nothing had
+// diverged: `origin..HEAD` was one commit and `HEAD..origin` was zero, which is
+// what an unpushed commit looks like. The run was read as a branch problem, and
+// the real reason — recorded, transient, and one line away — was never read.
+//
+// Same class as §15.296/§15.310: a failed WRITE reported as a fact about the
+// world. Bead `forge-8vfn.7.6.10`.
+// ---------------------------------------------------------------------------
+
+test('checkLocalRemoteSynced: a branch that is strictly AHEAD is UNPUBLISHED, not "diverged"', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    pushInitiativeBranch(proj);
+    writeFileSync(join(proj, 'extra.txt'), 'unpushed\n');
+    sh(proj, 'git', ['add', '.']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'unpushed work']);
+    const inv = checkLocalRemoteSynced(proj);
+    assert.equal(inv.ok, false, 'still a violation — the branch is not published');
+    assert.match(inv.detail, /ahead|unpublished|not published/i, `detail should say the branch is unpublished: ${inv.detail}`);
+    assert.doesNotMatch(
+      inv.detail,
+      /diverged/,
+      'a branch that is only ahead has NOT diverged — nothing was rewritten and the remote moved nowhere',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('checkLocalRemoteSynced: a genuinely DIVERGED branch still says diverged', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    pushInitiativeBranch(proj);
+    // Rewrite the local tip so both sides carry a commit the other lacks.
+    writeFileSync(join(proj, 'extra.txt'), 'first\n');
+    sh(proj, 'git', ['add', '.']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'local one']);
+    sh(proj, 'git', ['push', '-q', 'origin', 'HEAD']);
+    sh(proj, 'git', ['reset', '-q', '--hard', 'HEAD~1']);
+    writeFileSync(join(proj, 'other.txt'), 'second\n');
+    sh(proj, 'git', ['add', '.']);
+    sh(proj, 'git', ['commit', '-q', '-m', 'local two']);
+    const inv = checkLocalRemoteSynced(proj);
+    assert.equal(inv.ok, false);
+    assert.match(inv.detail, /diverged/, `real divergence must still be named: ${inv.detail}`);
   } finally {
     cleanup();
   }

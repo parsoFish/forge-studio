@@ -21,7 +21,7 @@ import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel'
 import type { EventLogger } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
-import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
 import { resolveGateTimeoutMs } from '@forge/agents/ralph/stop-conditions.ts';
@@ -287,6 +287,23 @@ export function enforceDevLoopCloseInvariant(
     message: push.pushed ? 'cycle.dev-close-pushed' : 'cycle.dev-close-push-failed',
     metadata: push.pushed ? { branch: push.branch } : { reason: push.reason },
   });
+  // When the PUSH failed, the invariant below is being asked about a cached
+  // `origin/<branch>` the push never updated — so its answer describes the
+  // failed push, not the branch. Lead with the push's own reason.
+  //
+  // G2 resume 6 (bead `forge-8vfn.7.6.10`): the push failed with
+  // `Could not resolve host: github.com` — a DNS outage that hit every lane that
+  // afternoon — and the invariant then threw `local diverged from remote`. The
+  // run was diagnosed as a branch problem for as long as it took someone to read
+  // one event earlier in the log. Same class as §15.296/§15.310: a failed WRITE
+  // reported as a fact about the world.
+  const pre = checkLocalRemoteSynced(worktreePath);
+  if (!pre.ok && !push.pushed) {
+    throw new Error(
+      `dev-loop close could not publish the branch: ${push.reason ?? 'push failed with no reason recorded'} ` +
+        `— the branch state that follows is a CONSEQUENCE of that, not an independent finding: ${pre.detail}`,
+    );
+  }
   const inv = assertLocalRemoteSynced(worktreePath);
   logger.emit({
     initiative_id: initiativeId,
