@@ -29,6 +29,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { __resetGhRunnerCache } from '../../gh-pinned.ts';
+
 import {
   alignLocalToRemote,
   assertLocalRemoteSynced,
@@ -259,33 +261,50 @@ test('stripForgeScratchFromBranch: drops .forge/ scratch but keeps protected pro
 
 // ---- G10 / G1: confirmPrMerged is the ONLY merge signal ----
 
+/**
+ * Ruling 597(a): `confirmPrMerged` now runs `gh` through the pinned runner, so
+ * these fixtures must model the identity handshake as well as the answer —
+ * `gh auth token --user <owner>` then `gh api user`. A shim that answered only
+ * `pr view` would make every case below pass for the WRONG reason: the pin
+ * would fail, the catch would return `false`, and "false for an OPEN PR" would
+ * be proving nothing about state at all.
+ */
 function withGhShim(root: string, stateJson: string | null): string {
-  // A `gh` PATH-shim: `gh pr view --json state` prints `stateJson` (or
-  // exits non-zero when null, modelling "no PR / gh error").
   const binDir = join(root, 'bin');
   mkdirSync(binDir, { recursive: true });
   const shim = join(binDir, 'gh');
-  const body =
+  const answer =
     stateJson === null
-      ? `#!/usr/bin/env node
-process.stderr.write('no pull requests found\\n');
-process.exit(1);
-`
-      : `#!/usr/bin/env node
+      ? `process.stderr.write('no pull requests found\\n'); process.exit(1);`
+      : `if (a[0] === 'pr' && a[1] === 'view') { console.log(${JSON.stringify(stateJson)}); process.exit(0); }
+process.stderr.write('unsupported\\n'); process.exit(1);`;
+  writeFileSync(
+    shim,
+    `#!/usr/bin/env node
 const a = process.argv.slice(2);
-if (a[0] === 'pr' && a[1] === 'view') { console.log(${JSON.stringify(stateJson)}); process.exit(0); }
-process.stderr.write('unsupported\\n');
-process.exit(1);
-`;
-  writeFileSync(shim, body);
+if (a[0] === 'auth' && a[1] === 'token') { console.log('gho_test_token'); process.exit(0); }
+if (a[0] === 'api' && a[1] === 'user') { console.log('parsoFish'); process.exit(0); }
+${answer}
+`,
+  );
   chmodSync(shim, 0o755);
   return binDir;
+}
+
+/** Repoint `origin` at a GitHub URL so the pinned runner has an owner to act
+ *  as. The local bare origin exists for the PUSH tests above; the `gh` tests
+ *  never push again, so swapping the URL costs them nothing and buys them the
+ *  real code path. */
+function pointOriginAtGitHub(proj: string): void {
+  sh(proj, 'git', ['remote', 'set-url', 'origin', 'https://github.com/parsoFish/forge-test.git']);
 }
 
 test('confirmPrMerged: true ONLY when gh reports state MERGED', () => {
   const { root, proj, cleanup } = makeRepoWithOrigin();
   const originalPath = process.env.PATH ?? '';
   try {
+    __resetGhRunnerCache();
+    pointOriginAtGitHub(proj);
     const binDir = withGhShim(root, '{"state":"MERGED"}');
     process.env.PATH = `${binDir}:${originalPath}`;
     assert.equal(confirmPrMerged(proj), true);
@@ -299,6 +318,8 @@ test('confirmPrMerged: false for OPEN PR (no auto-treat-as-merged)', () => {
   const { root, proj, cleanup } = makeRepoWithOrigin();
   const originalPath = process.env.PATH ?? '';
   try {
+    __resetGhRunnerCache();
+    pointOriginAtGitHub(proj);
     const binDir = withGhShim(root, '{"state":"OPEN"}');
     process.env.PATH = `${binDir}:${originalPath}`;
     assert.equal(confirmPrMerged(proj), false);
@@ -312,6 +333,8 @@ test('confirmPrMerged: false when gh errors / no PR (partial/unconfirmed is NOT 
   const { root, proj, cleanup } = makeRepoWithOrigin();
   const originalPath = process.env.PATH ?? '';
   try {
+    __resetGhRunnerCache();
+    pointOriginAtGitHub(proj);
     const binDir = withGhShim(root, null);
     process.env.PATH = `${binDir}:${originalPath}`;
     assert.equal(confirmPrMerged(proj), false);

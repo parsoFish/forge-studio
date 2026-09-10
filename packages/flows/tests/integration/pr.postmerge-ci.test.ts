@@ -17,6 +17,8 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { __resetGhRunnerCache } from '../../gh-pinned.ts';
+
 import { evaluateCiRuns, watchPostMergeCi, type CiRun } from '../../pr.ts';
 
 const run = (over: Partial<CiRun>): CiRun => ({
@@ -98,6 +100,12 @@ const path = require('path');
 const dir = ${JSON.stringify(dir)};
 const a = process.argv.slice(2);
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
+// Ruling 597(a): the CI watch runs gh through the PINNED runner, so the shim
+// answers the identity handshake too. Without these two the pin throws, every
+// arm below degrades, and each test would pass or fail for a reason that has
+// nothing to do with what it is named after.
+if (a[0] === 'auth' && a[1] === 'token') { console.log('gho_test_token'); process.exit(0); }
+if (a[0] === 'api' && a[1] === 'user') { console.log('parsoFish'); process.exit(0); }
 if (a[0] === 'pr' && a[1] === 'view') {
   const sha = read('merge-sha').trim();
   if (!sha) { process.stderr.write('no merged pr\\n'); process.exit(1); }
@@ -127,6 +135,7 @@ process.exit(1);
 `;
   writeFileSync(join(dir, 'gh'), shim);
   chmodSync(join(dir, 'gh'), 0o755);
+  __resetGhRunnerCache(); // the runner cache is process-lifetime; a shim swap must not reuse the previous one
   const oldPath = process.env.PATH;
   process.env.PATH = `${dir}:${oldPath}`;
   return () => {
