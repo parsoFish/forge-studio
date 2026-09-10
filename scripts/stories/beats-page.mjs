@@ -22,6 +22,11 @@
  * answer is how a gate starts agreeing with itself.
  */
 
+// The product's stall ceiling, single-sourced from the module that owns the
+// runner's other agent-evidence reads and bound to the TypeScript constant by
+// `beats-offsession-stall.test.ts` (T1 ruling 580).
+import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
+
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
 export const PLACEHOLDER = /^<([A-Za-z][A-Za-z0-9_]*)>$/;
 
@@ -463,15 +468,12 @@ async function stopNow(page, sessionScope) {
  * Returns a stall record, or null (found, or the bound expired — the act below
  * then throws its own honest failure, exactly as before).
  */
-export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope, probe = null) {
+export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope, probe = null, stallDoor = null) {
   // `sessionScope` replaces the old `watchLifecycle` boolean rather than
   // joining it (`6.11.47`): the flag always stood for "this beat waits on a
   // session", and saying WHICH session is the whole fix. One value, and the
   // predicate cannot be armed without naming what it is armed about.
-  if (sessionScope === null) {
-    await page.locator(handle).first().waitFor({ timeout: timeoutMs }).catch(() => {});
-    return null;
-  }
+  if (sessionScope === null) return waitOffSession(page, handle, timeoutMs, stallDoor);
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
   for (;;) {
@@ -484,6 +486,66 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope
     if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+  }
+}
+
+/**
+ * The wait for a beat that is NOT on a session page — T1 ruling 580.
+ *
+ * This used to be a bare `locator.waitFor`: no poll, no observation, no door.
+ * Every protection built this milestone was therefore inert for exactly the
+ * beats carrying the biggest bounds — 518's doors and the process probe both
+ * need a `/sessions/<kind>/<id>` route, and 531(3) cannot fire on a beat that is
+ * standing ON its declared route. G1/S10 run 5's beat 16 sat 14 m 13 s of its
+ * fifteen minutes on a page whose run had stopped writing before the beat began.
+ *
+ * The signal is the RUN'S OWN LOG, not the page. `readObserved` collects only
+ * the keys the beat declared, so during a wait it changes exactly once — at
+ * success — and a door on it would red every off-session beat at the ceiling
+ * whether or not the agent was working. Run 5 measured the two apart: the
+ * runner's log sat silent 2 m 31 s while the architect's `events.jsonl` grew
+ * 33 822 → 48 409 bytes.
+ *
+ * THE DECLARED BOUND STAYS A HARD MAXIMUM. Nothing runs longer than `timeoutMs`;
+ * the only new exit is earlier. A page that names no run, or a run with no
+ * channel, keeps exactly today's behaviour — no channel is "nothing to judge",
+ * never "it has been quiet".
+ */
+async function waitOffSession(page, handle, timeoutMs, stallDoor) {
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+  const runId = stallDoor === null ? null : await readRunId(page);
+  for (;;) {
+    if ((await page.locator(handle).count()) > 0) return null;
+    if (runId !== null) {
+      const idleMs = stallDoor(runId);
+      if (idleMs !== null && idleMs > STALL_CEILING_MS) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why:
+            `the run this page names (${runId}) has written nothing for ${Math.round(idleMs / 1000)}s, ` +
+            `past the product's own ${Math.round(STALL_CEILING_MS / 1000)}s stall ceiling, and ${handle} ` +
+            'never appeared. The declared bound would have been spent waiting on a run that had stopped.',
+        });
+      }
+    }
+    if (Date.now() >= deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+  }
+}
+
+/**
+ * The run a page says it is showing, from the `data-run` its own contract
+ * publishes (`apps/studio/app/artifact/page.tsx:926`). Read through `evaluate`,
+ * which every page and every fake already models, and null on anything at all —
+ * a page that names no run is answered by the bound alone, exactly as before.
+ */
+async function readRunId(page) {
+  try {
+    const got = await page.locator('main[data-page]').first().evaluate((n) => n.getAttribute('data-run'));
+    return typeof got === 'string' && got !== '' ? got : null;
+  } catch {
+    return null;
   }
 }
 
