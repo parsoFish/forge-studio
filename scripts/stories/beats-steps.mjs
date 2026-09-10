@@ -52,6 +52,24 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
   // the beat's declared bound to a waiter that watches the PAGE for a handle
   // the agent has to produce, rather than to a URL change.
   let waitedForHandle = false;
+  // Where this `do` STARTED — the page the previous BEAT left us on. The
+  // wrong-page check below applies only while we are still standing there
+  // (ruling 569, the multi-surface half). Once one of our own steps has
+  // navigated, the beat is driving and its declared route says nothing about
+  // where the next step should act: S10 beat 5 presses `open-plan` on the
+  // session page and `approve-plan` on `/artifact`, and only the first of those
+  // is judged against where the previous beat left it.
+  //
+  // This keeps the coverage exempting repeats alone would lose: a `do` of
+  // `[{ fill }, { press }]` never navigates before the press, so the press is
+  // still judged — and that is exactly where S10 beat 4's authoring error lived.
+  //
+  // Read ONLY when the check can fire. `performStepsForTest` and a repeat's
+  // inner steps both pass `declaredRoute: null`, and their fakes need not model
+  // `page.url()` at all — an unconditional read here broke eight repeat tests
+  // with `page.url is not a function`, which is a production function
+  // demanding more of a page than it uses.
+  const doStartedAt = declaredRoute === null ? null : page.url();
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
 
@@ -62,7 +80,23 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
         page, step, left, matches, timeoutMs, sessionScope, probe,
-        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, declaredRoute),
+        // `declaredRoute` is NOT passed down — T1 ruling 569, P1, bought by
+        // A's S1 run 2. A beat's declared route is where the beat ENDS; a
+        // repeat runs where the beat PUT it. S1 beat 11 is declared at
+        // `/artifact` (its landing after `approve-plan`) while its repeat
+        // answers the architect on the session page, so every inner
+        // `submit-answers` stands off the declared route BY DESIGN — and
+        // between rounds the handle is legitimately gone while the architect
+        // takes its turn. Both halves of the wrong-page check were true of a
+        // beat doing exactly what it was written to do, and it was refused
+        // mid-loop with "the beat was not waiting for an agent" — which is
+        // precisely what it was doing.
+        //
+        // The grace made it worse rather than saving it: two seconds is right
+        // for a page mid-commit and hopeless for an agent mid-round. What
+        // governs a repeat is its own `until` and the beat's declared bound,
+        // and both were already doing their job.
+        run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, null),
       });
       if (r.waitedForHandle) waitedForHandle = true;
       if (r.error !== null) return { waitedForHandle, error: r.error };
@@ -110,7 +144,8 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // Presses only. A `fill` names a field inside an affordance the press
     // before it opened, so "absent" there is the ordinary not-yet this rule
     // must not touch.
-    if (!fills && declaredRoute !== null && !routeMatches(page.url(), declaredRoute)
+    if (!fills && declaredRoute !== null && page.url() === doStartedAt
+        && !routeMatches(page.url(), declaredRoute)
         && (await page.locator(handle).count()) === 0) {
       // NOT a single sample. A previous beat's act can navigate ASYNCHRONOUSLY,
       // and during that commit window `page.url()` and the DOM both still
