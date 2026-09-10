@@ -1246,9 +1246,9 @@ export const journey = defineJourney({
         const label = (await page.evaluate(() =>
           document.querySelector('[data-action="refresh-community-registry"]')?.textContent ?? '')).trim();
         check(!/agent/i.test(label), `CM-23: the label no longer says "(agent)" — it is not one (got "${label}")`);
-
         await page.locator('[data-action="refresh-community-registry"]').click().catch(() => {});
-        await page.waitForSelector('[data-section="refresh-result"]', { timeout: 20000 }).catch(() => {});
+        // 608(i): the section now exists while in flight, so EXISTING is not ANSWERED — wait for a settled state.
+        await page.waitForSelector('[data-section="refresh-result"]:not([data-refresh-state="in-flight"])', { timeout: 20000 }).catch(() => {});
 
         // It must NOT have navigated. The whole defect this closes is that the
         // affordance used to leave the page to start a session.

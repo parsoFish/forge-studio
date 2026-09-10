@@ -515,6 +515,50 @@ function describeRefreshFailures(errors: readonly { source: string; message: str
   return errors.map((e) => `${e.source}: ${e.message}`).join('\n');
 }
 
+/**
+ * M6-D / T1 ruling 608(i) — the refresh REGION's whole verdict, including the
+ * state the product knew and never stated.
+ *
+ * THE DEFECT THIS CLOSES. The result section rendered only once a result
+ * existed, so while a refresh ran the DOM was indistinguishable from one where
+ * nothing had been clicked. An operator could not tell "working" from "did
+ * nothing", and a beat waiting on the outcome could not tell "not yet" from
+ * "never". That is the declared-data-fails-open family from the other side:
+ * not a fact surfaced and enforced nowhere, but a fact the page KNOWS
+ * (`refreshing === true`) and does not say.
+ *
+ * IT IS NOT A COSMETIC WAIT INDICATOR. The refresh fetches its sources ONE AT
+ * A TIME (`community-refresh-api.ts`'s loop), each bounded at 10 s, and this
+ * repository's registry resolves to four fetchable sources — so a perfectly
+ * healthy refresh can run for tens of seconds. The measurement and the fix for
+ * the duration itself are bead `forge-8vfn.7.6.16` (M7); what belongs here is
+ * that the duration is VISIBLE while it passes.
+ *
+ * IN-FLIGHT WINS OVER A PREVIOUS RESULT, deliberately. A second refresh makes
+ * the first one's verdict stale the moment it starts, and showing a stale
+ * "Refreshed — 4 updated" over a request in progress would be a worse lie than
+ * showing nothing.
+ */
+export type RefreshRegionView = { state: string; headline: string; detail: string | null };
+
+export function refreshRegionView(
+  result: CommunityRefreshResult | null,
+  opts: { refreshing: boolean } & RefreshOutcomeViewOptions,
+): RefreshRegionView | null {
+  if (opts.refreshing) {
+    return {
+      state: 'in-flight',
+      headline: 'Refreshing — checking each declared source against its own API.',
+      // Honest about the shape rather than reassuring: sources are checked one
+      // at a time, so this grows with the registry, and forge is not crawling
+      // anything it was not told about.
+      detail: 'Sources are checked one at a time, so this takes longer as the registry grows. Nothing is crawled that the registry does not already declare.',
+    };
+  }
+  if (result === null) return null;
+  return refreshOutcomeView(result, opts);
+}
+
 export function refreshOutcomeView(
   result: CommunityRefreshResult,
   opts: RefreshOutcomeViewOptions = {},
