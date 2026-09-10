@@ -622,7 +622,7 @@ packages/sessions/kinds/architect.ts existsSync 2
 packages/sessions/kinds/architect.ts readdirSync 2
 packages/sessions/kinds/architect.ts readFileSync 2
 packages/sessions/kinds/architect.ts writeFileSync 2
-packages/sessions/kinds/demo-builder.ts existsSync 4
+packages/sessions/kinds/demo-builder.ts existsSync 5
 packages/sessions/kinds/demo-builder.ts mkdirSync 4
 packages/sessions/kinds/demo-builder.ts readFileSync 3
 packages/sessions/kinds/demo-builder.ts realpathSync 2

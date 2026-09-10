@@ -49,7 +49,10 @@ import {
   sweepStoryResidue,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
-import { snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes } from './ground-hash.mjs';
+import {
+  snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
+  ownGroundManifest, mintedSessionPaths, classifyOwnGroundDrift, groundChanges,
+} from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
 import { driveBeat } from './beats-drive.mjs';
@@ -272,6 +275,14 @@ async function runStory(story, uiUrl, startedMs) {
   // and the fence said nothing. The ground is hashed by METHOD C here and
   // again after the run, which is what the launcher already did by hand.
   const groundsBefore = snapshotSiblingGrounds(story.ground?.project ?? null, { root: ROOT });
+  // T1 ruling 594 — the fence above proves the ground is unchanged in every
+  // OTHER worktree; nobody checked the one this run is using. Three lanes each
+  // paid a run to find that gap, in three different places, and in one of them
+  // the agent COMMITTED its writes so the ground's own `git status` reported
+  // nothing at all (§15.327). Hence a hash, never a status.
+  const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
+  const logsDir = join(ROOT, '_logs');
+  const logsBefore = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
   const outDir = join(ROOT, 'demos', 'stories', story.id);
   const framesDir = join(outDir, 'frames');
   const clipTmp = join(outDir, '_clip');
@@ -431,6 +442,37 @@ async function runStory(story, uiUrl, startedMs) {
   for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
   for (const line of describeGroundEscapes(story.ground?.project ?? null, fence.groundEscapes)) console.log(line);
 
+  // The run's own ground, judged against what the run demonstrably MINTED.
+  // A run's own ground drift is the product WORKING — S10 run 5 ended
+  // `731cf1401fbfb896` against a pin of `e12d66d463e094eb` because the architect
+  // had just written its plan there — so the produced half is reported loudly
+  // and does not fail the run. Failing on any drift at all would fail every
+  // green run, and nine-green is this campaign's exit criterion: a gate that
+  // cannot be passed is not a gate.
+  const ownGroundDrift = { produced: [], undeclared: [] };
+  if (ownGroundBefore !== null) {
+    const minted = mintedSessionPaths(
+      logsBefore,
+      readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
+      logsDir,
+    );
+    const split = classifyOwnGroundDrift(
+      groundChanges(ownGroundBefore, ownGroundManifest(ROOT, story.ground.project)),
+      minted,
+    );
+    ownGroundDrift.produced = split.produced;
+    ownGroundDrift.undeclared = split.undeclared;
+    if (split.produced.length === 0 && split.undeclared.length === 0) {
+      console.log(`[stories] own ground: unchanged — projects/${story.ground.project} is back at the hash it started from`);
+    }
+    for (const line of split.produced) {
+      console.log(`[stories] own ground: PRODUCED ${line} — this run minted the session it belongs to`);
+    }
+    for (const line of split.undeclared) {
+      console.error(`[stories] own ground: UNDECLARED ${line} — nothing this run minted accounts for it`);
+    }
+  }
+
   // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be
   // outlasted, so the report RE-READS rather than trusting itself: anything the
   // sweep or the fence removed that is back is named here. Without this, the
@@ -483,6 +525,14 @@ async function runStory(story, uiUrl, startedMs) {
   // lane is incidentally working — it is the operator's copy of the very repo
   // this run was told to leave alone. Ruling 340's live-process softening does
   // NOT apply to it, deliberately: this is RED regardless of the beats.
+  if (ownGroundDrift.undeclared.length > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${ownGroundDrift.undeclared.length} change(s) in ` +
+      `projects/${story.ground?.project} that nothing this run minted accounts for (named above). ` +
+      'The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
   if (fence.groundEscapes.length > 0) {
     console.error(
       `[stories] ${story.id}: CONTAINMENT FAILURE — projects/${story.ground?.project} CHANGED in ` +
