@@ -210,6 +210,36 @@ export function routeMatches(url, declared) {
   });
 }
 
+/**
+ * What makes two hrefs the SAME PLACE, for the real-nav candidate set.
+ *
+ * `routeMatches` above decides WHICH hrefs are candidates, and it is blind to
+ * the fragment — ruling 546: a fragment-only href is not a different place.
+ * Whatever collapses those candidates has to be blind to exactly the same
+ * thing, or the two steps disagree and the disagreement becomes a refusal.
+ *
+ * It did. G1/S10 run 5's beat 6 was refused with "2 links share that pathname
+ * and differ only in their query — /projects/gitpulse , /projects/gitpulse#roadmap",
+ * because the collapse was `new Set` over the RAW HREF STRINGS. The predicate
+ * said one destination, the Set said two strings, and the message named a query
+ * where a fragment stood. Beats 6-22 were lost to a page that offered its own
+ * route twice.
+ *
+ * Pathname AND query, because a query IS a different destination (ruling 514,
+ * D's S6 beat 7) and naming rather than picking between two of them is exactly
+ * what 527 asks for. Fragment and nothing else is discarded.
+ */
+export function destinationKey(href) {
+  const raw = String(href);
+  if (raw.startsWith('#') || raw.startsWith('?')) return null;
+  try {
+    const u = new URL(raw, 'http://forge.invalid');
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return null;
+  }
+}
+
 /** How often `waitForConsequence` re-reads the page while it waits. */
 const CONSEQUENCE_POLL_MS = 100;
 

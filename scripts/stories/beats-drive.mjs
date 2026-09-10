@@ -20,7 +20,7 @@
  * import lines it would have saved.
  */
 import {
-  PLACEHOLDER, answers, resolveExpectations, readObserved, routeMatches,
+  PLACEHOLDER, answers, resolveExpectations, readObserved, routeMatches, destinationKey,
   waitForConsequence, waitForHandleOrStall,
 } from './beats-page.mjs';
 
@@ -305,7 +305,21 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     const all = await page
       .locator('[data-nav][href], a[href]')
       .evaluateAll((els) => els.map((e) => e.getAttribute('href')).filter((h) => h !== null && h !== ''));
-    const distinct = [...new Set(all.filter((h) => routeMatches(h, target)))];
+    // Collapse by DESTINATION, not by string. `routeMatches` chose these and is
+    // fragment-blind (546); deduping on the raw href is blind to nothing, so the
+    // two steps disagreed and the disagreement surfaced as a refusal — S10 run
+    // 5's beat 6, where `/projects/gitpulse` and `/projects/gitpulse#roadmap`
+    // were reported as two destinations "differing only in their query".
+    // A fragment-free href is preferred within a group so the captured frame
+    // shows the plain route; either member lands on the same page.
+    const byDestination = new Map();
+    for (const h of all.filter((h) => routeMatches(h, target))) {
+      const key = destinationKey(h);
+      if (key === null) continue;
+      const held = byDestination.get(key);
+      if (held === undefined || (held.includes('#') && !h.includes('#'))) byDestination.set(key, h);
+    }
+    const distinct = [...byDestination.values()];
 
     if (distinct.length > 1) {
       // NAMED, never picked. Two links whose pathnames match and whose queries
@@ -317,7 +331,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
         beat,
         observed,
         `ambiguous real-nav path to "${target}" from "${observed.route}": ${distinct.length} links share ` +
-          `that pathname and differ only in their query — ${distinct.join(' , ')}. The runner will not pick ` +
+          `that pathname and differ in their QUERY, which makes them different destinations — ` +
+          `${distinct.join(' , ')}. The runner will not pick ` +
           'one; name the destination the beat means, or give the page one link for it.',
       );
     }
