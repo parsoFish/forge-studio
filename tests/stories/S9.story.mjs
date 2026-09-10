@@ -458,6 +458,27 @@ export default {
       // adding. Same wait, same reason: it stands on a real agent.
       wait: { for: 'agent', upTo: 600_000 },
       do: [
+        // AMENDED (amend-5, T1 ruling 577, mechanical under 574's class). THE
+        // NAVIGATION THE 483 SPLIT REQUIRES. amend-2 made beat 12 STAY on
+        // `/sessions/onboarding/new` to bind `minted-session-id`; that made a
+        // navigation step mandatory here, and the beat I added did not have
+        // one. S9 run 3 measured the cost: `answered 0 round(s)` against the
+        // FULL 600 000 ms bound, on a page frame 13 shows is the kickoff form
+        // — no question form, no `session-answer` anywhere on it.
+        //
+        // It burned the whole bound instead of failing fast because the
+        // repeat's first inner step is a `fillAll`, and the wrong-page check
+        // exempts fills by design (a fill names a field inside an affordance
+        // the press before it opened). Correct for a not-yet-opened
+        // affordance; it also means a repeat standing on the wrong page spends
+        // everything it declared.
+        //
+        // amend-3 blamed the missing wait for this and was WRONG — the wait is
+        // necessary and was never sufficient. `open-minted-session` is the
+        // kickoff page's own handle (`app/sessions/[kind]/new/page.tsx:576`,
+        // the "Open the session →" link), and this is the shape S1 beats 5 and
+        // 11 already use.
+        { press: 'open-minted-session' },
         { repeat: [
             { fillAll: 'session-answer', with: 'A markdown table-of-contents tool; the gate is `npm test`.' },
             { press: 'submit-answers' },
