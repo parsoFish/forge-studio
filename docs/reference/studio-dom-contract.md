@@ -1778,15 +1778,29 @@ is what this contract reads — but it cannot be the only distinguisher.
   that can ever change what it shows: the registry is a declared list forge
   does not crawl on its own (D10 — `studio/community/hubs.yaml`'s own
   header).
-  Its outcome renders in `section[data-section="refresh-result"]
+  Its state renders in `section[data-section="refresh-result"]
   [data-refresh-state]` (absent until the operator has clicked at least
-  once — no empty shell), `data-refresh-state` set from
-  `refreshOutcomeView`'s own `state` (`apps/studio/lib/community-view.ts`) —
-  real values include `'refreshed'`, `'partial'`, `'no-op'`, `'refused'`,
+  once — no empty shell), `data-refresh-state` set from `refreshRegionView`'s
+  own `state` (`apps/studio/lib/community-view.ts`) — real values include
+  **`'in-flight'`**, `'refreshed'`, `'partial'`, `'no-op'`, `'refused'`,
   `'refused-dry-bridge'`, `'server-error'`, `'transport-error'`, and a
   `-stale-view` suffix variant when a successful write's own post-write
   re-read fails (never invent others; read that function for the full,
-  current set). `data-refresh-route` is present **only** on a
+  current set).
+
+  **`'in-flight'` (M6-D, T1 ruling 608(i))** is the state the page KNEW and
+  never stated. The section used to render only once a result existed, so
+  while a refresh ran the DOM was indistinguishable from one where nothing
+  had been clicked: an operator could not tell "working" from "did nothing",
+  and anything waiting on the outcome could not tell "not yet" from "never".
+  It is not a spinner — the refresh fetches its sources ONE AT A TIME
+  (`packages/library/studio/community-refresh-api.ts`), each bounded at 10 s,
+  so a HEALTHY refresh can run for tens of seconds. **Anything that waits on
+  this region must wait for a state that is not `in-flight`**, never merely
+  for the section to exist; `data-refresh-route` is likewise absent while
+  in-flight, because no server has answered yet. A SECOND refresh reads
+  `in-flight` rather than the previous verdict — a stale success rendered
+  over a live request is the worse lie. `data-refresh-route` is present **only** on a
   `'refused-dry-bridge'` outcome, and is set from the route the SERVER
   echoed back — never a hardcoded client-side literal, so its presence is
   evidence the request actually reached that route. Registry rows this

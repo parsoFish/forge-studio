@@ -27,7 +27,7 @@ import {
   lastRefreshLabel,
   isHubDeclaredOnly,
   communityEmptyState,
-  refreshOutcomeView,
+  refreshRegionView,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
   type CommunitySortKey,
@@ -117,9 +117,11 @@ function CommunityBrowserInner() {
   const [queryDraft, setQueryDraft] = useState(viewState.query);
   const [nowMs] = useState(() => Date.now());
   // W8-B5b — the deterministic (LLM-free) refresh: null until the operator
-  // has clicked the button at least once (data-section="refresh-result" is
-  // deliberately absent until then — no empty shell). `refreshing` gates the
-  // button through disabledAttrs while the request is in flight.
+  // has clicked the button at least once. `data-section="refresh-result"` is
+  // absent until the operator clicks — no empty shell — and from 608(i) it
+  // then renders THROUGHOUT, carrying `data-refresh-state="in-flight"` while
+  // the request is in flight and resolving to the outcome after. `refreshing`
+  // also gates the button through disabledAttrs.
   const [refreshResult, setRefreshResult] = useState<CommunityRefreshResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // W8-B5b hostile-review FINDING 1 — whether the post-WRITE re-read (below)
@@ -246,9 +248,8 @@ function CommunityBrowserInner() {
   const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
-  const refreshView = refreshResult !== null
-    ? refreshOutcomeView(refreshResult, { postWriteReloadFailed })
-    : null;
+  // 608(i): the region states the IN-FLIGHT refresh too, not only its outcome.
+  const refreshView = refreshRegionView(refreshResult, { refreshing, postWriteReloadFailed });
 
   // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
   // (every failure — transport, dry-bridge, a typed refusal, a bare 500 — is
@@ -354,11 +355,11 @@ function CommunityBrowserInner() {
             SERVER echoed back in a dry-bridge refusal — never a hardcoded
             client-side literal, so its presence is evidence the request
             actually reached that route. */}
-        {refreshResult !== null && refreshView !== null && (
+        {refreshView !== null && (
           <section
             data-section="refresh-result"
             data-refresh-state={refreshView.state}
-            {...(refreshResult.state === 'refused-dry-bridge' ? { 'data-refresh-route': refreshResult.route } : {})}
+            {...(!refreshing && refreshResult?.state === 'refused-dry-bridge' ? { 'data-refresh-route': refreshResult.route } : {})}
             style={{
               marginBottom: 18, fontSize: 12.5, color: 'var(--dim)',
               border: '1px solid var(--line)', borderRadius: 8, padding: '8px 12px',
