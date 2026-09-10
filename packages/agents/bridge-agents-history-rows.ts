@@ -49,6 +49,7 @@ import {
  * implementations.
  */
 export type AgentHistoryDeps = AgentRunStateDeps & {
+  projectsRoot: string; // the root the sessions pass enumerates — bead forge-b6af
   /** `cachedListRuns` — ADR-044 P1's cached per-manifest derivation. */
   cachedListRuns(forgeRoot: string, nowMs: number): readonly AgentFlowRun[];
   /** `buildAgentSlugToNodeId` — agent slug → the node id it occupies. */
@@ -236,7 +237,6 @@ export function collectRecentAgentRuns(
   logsRoot: string,
   limit: number,
   kind: 'flow' | 'standalone' | 'all' = 'all',
-  projectsRoot?: string,
 ): RecentAgentRunRow[] {
   // Flow runs — run-level facts, plus which agents participated, resolved
   // through the run's OWN flow (node ids are unique per flow, not globally).
@@ -308,8 +308,8 @@ export function collectRecentAgentRuns(
   // that is not `_agent-*`, and a session's turn writes to
   // `_logs/_<kind>-<sessionId>`. Cost is NOT re-derived here — it arrives via
   // `deriveSessionCostUsd`, the one cost rule, so no second formula can drift.
-  for (const d of kind === 'flow' || projectsRoot === undefined ? [] : deps.loadSessionKinds(forgeRoot)) {
-    for (const row of collectSessionRows(deps, { forgeRoot, projectsRoot, logsRoot }, d.agent)) {
+  for (const d of kind === 'flow' ? [] : deps.loadSessionKinds(forgeRoot)) {
+    for (const row of collectSessionRows(deps, { forgeRoot, projectsRoot: deps.projectsRoot, logsRoot }, d.agent)) {
       if (row.linkKind !== 'session' || seenIds.has(row.id)) continue;
       seenIds.add(row.id);
       rows.push({ ...row, agents: [d.agent], linkKind: 'session' });

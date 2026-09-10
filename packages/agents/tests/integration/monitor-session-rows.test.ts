@@ -51,8 +51,9 @@ function plant(): { forgeRoot: string; projectsRoot: string; logsRoot: string } 
   return { forgeRoot, projectsRoot, logsRoot };
 }
 
-function deps(): AgentHistoryDeps {
+function deps(projectsRoot: string): AgentHistoryDeps {
   return {
+    projectsRoot,
     cachedListRuns: () => [],
     buildAgentSlugToNodeId: () => new Map(),
     loadFlowDefinition: () => ({ id: 'none', nodes: [] }),
@@ -71,7 +72,7 @@ function deps(): AgentHistoryDeps {
 test('AT-b6af-1 (RED) an authoring session with a priced event log produces a /monitor row', () => {
   const { forgeRoot, projectsRoot, logsRoot } = plant();
   try {
-    const rows = collectRecentAgentRuns(deps(), forgeRoot, logsRoot, 20, 'all', projectsRoot);
+    const rows = collectRecentAgentRuns(deps(projectsRoot), forgeRoot, logsRoot, 20, 'all');
     const row = rows.find((r) => r.id === SESSION_ID);
     assert.ok(row, `no row for the authoring session — /monitor still cannot show what a session cost. Got: ${JSON.stringify(rows)}`);
   } finally {
@@ -82,7 +83,7 @@ test('AT-b6af-1 (RED) an authoring session with a priced event log produces a /m
 test('AT-b6af-2 the row carries the session’s OWN cost and its agent', () => {
   const { forgeRoot, projectsRoot, logsRoot } = plant();
   try {
-    const row = collectRecentAgentRuns(deps(), forgeRoot, logsRoot, 20, 'all', projectsRoot).find((r) => r.id === SESSION_ID);
+    const row = collectRecentAgentRuns(deps(projectsRoot), forgeRoot, logsRoot, 20, 'all').find((r) => r.id === SESSION_ID);
     assert.ok(row);
     // The exact figure the session's own log carries — the beat-15 assertion.
     assert.equal(row.costUsd, COST);
@@ -100,7 +101,7 @@ test('AT-b6af-3 a session whose log dir does not exist is honestly null, never a
   const { forgeRoot, projectsRoot, logsRoot } = plant();
   try {
     rmSync(join(logsRoot, `_${KIND}-${SESSION_ID}`), { recursive: true, force: true });
-    const row = collectRecentAgentRuns(deps(), forgeRoot, logsRoot, 20, 'all', projectsRoot).find((r) => r.id === SESSION_ID);
+    const row = collectRecentAgentRuns(deps(projectsRoot), forgeRoot, logsRoot, 20, 'all').find((r) => r.id === SESSION_ID);
     assert.ok(row, 'the session still exists and must still be listed');
     assert.equal(row.costUsd, null);
   } finally {
@@ -111,7 +112,7 @@ test('AT-b6af-3 a session whose log dir does not exist is honestly null, never a
 test('AT-b6af-4 kind=flow excludes sessions — the server-side filter still means what it says', () => {
   const { forgeRoot, projectsRoot, logsRoot } = plant();
   try {
-    const rows = collectRecentAgentRuns(deps(), forgeRoot, logsRoot, 20, 'flow', projectsRoot);
+    const rows = collectRecentAgentRuns(deps(projectsRoot), forgeRoot, logsRoot, 20, 'flow');
     assert.equal(rows.find((r) => r.id === SESSION_ID), undefined);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
