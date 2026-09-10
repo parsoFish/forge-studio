@@ -23,17 +23,32 @@
  * every declared source contributes what it publishes, and no row is still a
  * hand-curated seed. `_1.0/stories/S8.md` records what actually happens.
  *
- * TWO DOORS, AND ONLY ONE IS A PATH. §3's row says "install by id AND by URL
- * — they are different paths". They are, and this lane verified live (probe
- * against a bridge booted from this worktree, the row removed again with `git
- * restore` immediately after) that only one of them ends in an install:
- * `/community/new` accepts an upstream URL, writes a real registry row, and
- * routes to `/community/skill/<id>` — where the install section renders
- * `data-install-action="browse-upstream"`, an outbound link. forge can only
- * install what is already VENDORED in its own repo. Beat 9 is that beat, and
- * it carries no `do`: `[data-action="install-community-item"]` is not on that
- * page at all, so there is nothing honest to press. The act names what the
- * operator came to do and stands.
+ * TWO DOORS, AND WHAT BEAT 9 NOW MEASURES. §3's row says "install by id AND by
+ * URL — they are different paths". At authoring time they were not: this lane
+ * verified live (probe against a bridge booted from this worktree, the row
+ * removed again with `git restore` immediately after) that only one of them
+ * ended in an install — `/community/new` accepted an upstream URL, wrote a
+ * real registry row, and routed to `/community/skill/<id>`, where the install
+ * section rendered `data-install-action="browse-upstream"`, an outbound link.
+ * forge could only install what was already VENDORED in its own repo.
+ *
+ * **Operator ruling 477 built the missing half** (M6-D): a row whose upstream
+ * forge can actually read a package out of now offers the install, and pressing
+ * it fetches the package, vendors it, and lands it `needs-review` behind the
+ * same trust gate every other install passes through. Beat 9's assertion is
+ * UNCHANGED — it always asserted `install-action: 'install'`, and it was red
+ * for the whole campaign because the product answered `browse-upstream`.
+ *
+ * It still carries no `do`, and the reason is now a different one, worth
+ * stating plainly rather than leaving as an omission. The door is real, but
+ * `parsoFish/forge-studio` — the URL this row names — publishes no SKILL.md at
+ * any path the fetch looks for, so pressing install would honestly REFUSE. A
+ * beat that pressed it would be red, and a beat that pointed the row at a
+ * stranger's repo would make this story depend on someone else's tree and
+ * vendor their bytes into this one on every run. So the beat proves the door
+ * is OFFERED, which is exactly what 477 changed; that the door WORKS is proved
+ * by `packages/library/tests/unit/community-fetch-package.test.ts`, which
+ * drives the fetch with an injected stub. Two claims, kept separate.
  *
  * GROUND. `mdtoc` — the one project committed to this repo, so it is the only
  * project a CLEAN CHECKOUT has, and 1.0's exit condition is these stories
@@ -58,6 +73,9 @@
  * (`data-scan-verdict="clean"`, 0 findings, 0 criticals); `dependency-diff-
  * review` and it are the only two items whose install section reads
  * `data-install-action="install"` — every other skill reads `browse-upstream`.
+ * That reading was true when it was taken and is deliberately left as the
+ * record of it; under ruling 477 every registry skill with a GitHub upstream
+ * now reads `install` too.
  *
  * WHY BEAT 18 IS GROUNDED ON THE HOOK AND NOT A SKILL. `/agents/brain-ingest`
  * already renders `superpowers-tdd`, `webapp-testing`, `agent-browser` and
@@ -289,15 +307,16 @@ export default {
       say: 'Star counts and last-checked dates are not on this form on purpose — they are facts a fetch establishes, not claims an operator types. A row added here reads "seed — never verified" until a refresh actually checks it.',
     },
     {
-      // NOT expressible as an act — there is no install control on this page
-      // to press. `[data-section="install"]` renders
-      // `data-install-action="browse-upstream"` and a single outbound
-      // `[data-action="browse-upstream"]` link carrying the URL the operator
-      // just typed. Verified live on this exact row before it was removed, and
-      // on `superpowers-tdd`, a real registry row that has been there all
-      // along. So the beat carries no `do`: naming a press for a button that
-      // is structurally absent would be inventing the affordance the story
-      // exists to report missing. Owning package `library`.
+      // Carries no `do`, and under ruling 477 for a NEW reason. The control
+      // now exists — `[data-action="install-community-item"]` renders here,
+      // because the row's upstream is a GitHub repository forge can read a
+      // package out of. Pressing it would fetch, and `parsoFish/forge-studio`
+      // publishes no SKILL.md at any path the fetch looks for, so the press
+      // would honestly refuse. The beat asserts the door is OFFERED — the one
+      // thing 477 changed at this surface. The fetch itself is proved by
+      // `packages/library/tests/unit/community-fetch-package.test.ts` with an
+      // injected stub, never by a story run reaching the network.
+      // Owning package `library`.
       act: 'Install the thing that URL names',
       expect: {
         route: `/community/skill/${URL_ROW.id}`,
@@ -309,7 +328,7 @@ export default {
           'install-action': 'install',
         },
       },
-      say: 'This is where §3’s two paths turn out to be one. forge can install what it has already vendored into its own repo; for everything else the answer is a link to somebody else’s website. Adding a row by URL makes an item browsable and never makes it installable.',
+      say: 'This is §3’s second door, and it was a wall until ruling 477 built it. Adding a row by URL used to make an item browsable and never installable — forge could only install what it had already vendored into its own repo. Now the address is enough: press Install and forge fetches the package, vendors it here, and stops — scanned, unapproved, and waiting for you, exactly like every other install.',
     },
     {
       // Fully expressible. The detail page's breadcrumbs carry a real

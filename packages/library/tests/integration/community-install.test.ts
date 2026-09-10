@@ -179,19 +179,18 @@ describe('routeCommunityInstall — skill', () => {
     assert.ok(typeof route.upstream.source === 'string' && route.upstream.source.length > 0, 'upstream.source must be a real, non-empty attribution');
   });
 
-  it('a catalog-only skill (no matching vendored package) → {pipeline:"none", reason} — D5: the install control is structurally absent', () => {
+  // Ruling 477 narrowed this: a GitHub upstream now routes to fetch
+  // (`community-install-by-url.test.ts`); a blog post stays a dead end.
+  it('a catalog-only skill with an unfetchable upstream → {pipeline:"none", reason} — D5: the install control is structurally absent', () => {
     const root = makeForgeRoot();
-    // T2 round 3 fix: the id under test must be a REAL catalog community-skills
-    // entry — "catalog-only" means "known to the catalog, but no vendored
-    // bytes", not "unknown everywhere" (that is the separate, distinctly-
-    // reasoned case covered by the "unknown item" describe block below).
-    writeCatalog(root, { communitySkills: [{ id: 'catalog-only-with-no-bytes' }] });
-    // Note: no vendorSkillPackage call — id exists nowhere on disk under studio/community/skills/.
+    // No vendorSkillPackage call — the id exists nowhere under studio/community/skills/.
+    writeCatalog(root, { communitySkills: [{ id: 'catalog-only-with-no-bytes', source: 'https://firecrawl.dev/blog/some-post' }] });
     const route = routeCommunityInstall(root, 'skill', 'catalog-only-with-no-bytes');
     assert.equal(route.pipeline, 'none');
     if (route.pipeline !== 'none') return;
     assert.ok(route.reason.length > 0, 'the 400 the bridge returns must NAME this reason — it cannot be blank');
     assert.match(route.reason, /vendor/i, `expected the reason to name the actual cause (no vendored package); got: "${route.reason}"`);
+    assert.match(route.reason, /firecrawl\.dev/, 'the reason must name the upstream it could not read');
   });
 
   // T2 round 6, AT GROUP 4: routeCommunityInstall must refuse a genuine
@@ -295,7 +294,8 @@ describe('routeCommunityInstall — unknown item (T2 ruling #3)', () => {
 
   it('the "unknown item" reason is TEXTUALLY DISTINGUISHABLE from the "known, no vendored package" reason', () => {
     const root = makeForgeRoot();
-    writeCatalog(root, { communitySkills: [{ id: 'known-but-not-vendored' }] });
+    // Ruling 477: the KNOWN row needs an upstream forge cannot read, or it routes to fetch.
+    writeCatalog(root, { communitySkills: [{ id: 'known-but-not-vendored', source: 'https://firecrawl.dev/blog/some-post' }] });
 
     const unknownRoute = routeCommunityInstall(root, 'skill', 'genuinely-unknown-item');
     const knownNoVendorRoute = routeCommunityInstall(root, 'skill', 'known-but-not-vendored');

@@ -449,6 +449,7 @@ packages/library/bridge-studio-community-crud.ts writeFileSync 1
 packages/library/bridge-studio-community-wire.ts existsSync 1
 packages/library/bridge-studio-community.ts execFileSync 1
 packages/library/bridge-studio-community.ts existsSync 2
+packages/library/bridge-studio-community.ts rmSync 1
 packages/library/bridge-studio-community.ts spawnSync 1
 packages/library/bridge-studio-connections.ts spawnSync 1
 packages/library/bridge-studio-hooks.ts mkdirSync 1
@@ -475,11 +476,16 @@ packages/library/skill-staging.ts mkdirSync 1
 packages/library/skill-staging.ts writeFileSync 1
 packages/library/studio/artifact-registry.ts readdirSync 3
 packages/library/studio/artifact-registry.ts readFileSync 3
+packages/library/studio/community-fetch-package.ts existsSync 1
+packages/library/studio/community-fetch-package.ts mkdirSync 3
+packages/library/studio/community-fetch-package.ts renameSync 1
+packages/library/studio/community-fetch-package.ts rmSync 1
+packages/library/studio/community-fetch-package.ts writeFileSync 1
 packages/library/studio/community-index.ts existsSync 9
 packages/library/studio/community-index.ts readdirSync 2
 packages/library/studio/community-index.ts readFileSync 1
 packages/library/studio/community-index.ts realpathSync 1
-packages/library/studio/community-install.ts existsSync 3
+packages/library/studio/community-install.ts existsSync 4
 packages/library/studio/community-install.ts mkdirSync 2
 packages/library/studio/community-install.ts writeFileSync 1
 packages/library/studio/community-registry.ts existsSync 1

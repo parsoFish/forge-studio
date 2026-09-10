@@ -26,118 +26,21 @@
 import { bridgeFetch } from './bridge-client.ts';
 import { parseProbeResult, parseInstallPreview, type ConnectionProbeResult, type InstallPreview } from './connection-client.ts';
 
-// ---------------------------------------------------------------------------
-// Types mirroring server shapes (orchestrator/studio/community-index.ts,
-// packages/library/bridge-studio-community.ts)
-// ---------------------------------------------------------------------------
+// The wire VOCABULARY — every community type and constant this module parses
+// into — lives in `community-types.ts`, and is re-exported here verbatim so
+// no import site moved. It was extracted when this file's check-file-size
+// ceiling left no room for ruling 477's `upstreamFetchable`: an exemption is
+// a ceiling rather than a licence, and a file this size pays for a new field
+// by getting smaller, not by spending someone else's comment.
+export * from './community-types.ts';
 
-export const COMMUNITY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
-export type CommunityKind = (typeof COMMUNITY_KINDS)[number];
-
-export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed', 'present-unmanaged'] as const;
-export type CommunityInstallState = (typeof COMMUNITY_INSTALL_STATES)[number];
-
-export const COMMUNITY_PROBE_STATES = ['not-installed', 'available', 'misconfigured'] as const;
-export type CommunityProbeState = (typeof COMMUNITY_PROBE_STATES)[number];
-
-export type CommunityHub = {
-  id: string;
-  name: string;
-  url: string;
-  kinds: string; // raw curated string, never parsed into an array
-};
-
-export type CommunityHubWithCount = CommunityHub & { itemCount: number };
-
-export type CommunitySignals = {
-  stars: string;
-  attributedTo: string;
-  /** Parsed NUMERIC star count alongside the display `stars` string above —
-   *  null when the curated display string names a different unit or carries
-   *  no figure at all; never fabricated (W6-CR-2). */
-  starsNumeric: number | null;
-};
-
-export type CommunityItem = {
-  id: string;
-  kind: CommunityKind;
-  name: string;
-  desc: string;
-  /** W8-B5 (community-05) — the registry row's own category ("planning",
-   *  "memory", "review", …), mirrored from `CommunityItemWire`. It exists so
-   *  the browse search can match the word the registry itself files rows
-   *  under. `null` for an item with no registry row at all (a vendored
-   *  package, a catalog connection): an honest absence, never an invented
-   *  string and deliberately never `''`. */
-  category: string | null;
-  upstream: string;
-  hub: CommunityHub | null;
-  signals: CommunitySignals | null;
-  vendored: boolean;
-  installState: CommunityInstallState;
-  probeState: CommunityProbeState | null;
-  origin: string;
-  /** ISO date this item was last verified against upstream — null until a
-   *  real refresh pass has run for it, or for an item with no registry row
-   *  at all (a vendored package / connection). NEVER render a date for a
-   *  null fetchedAt — the honest "seed — never verified" state instead
-   *  (W6-CR-2). */
-  fetchedAt: string | null;
-  /** Provenance of the currently-recorded data — "seed" for a
-   *  registry-sourced item, "local" for a vendored package/connection with
-   *  no registry row. Always a real, non-blank string. */
-  fetchedBy: string;
-  /** ISO date the upstream project last published a change, per the
-   *  registry's own curated fact — null when unknown or for an item with no
-   *  registry row; never fabricated. */
-  upstreamUpdatedAt: string | null;
-};
-
-export type CommunityFile = { path: string; body: string };
-
-export const HOOK_SCAN_CATEGORIES = ['network-egress', 'env-read', 'file-read', 'obfuscation'] as const;
-export type HookScanCategory = (typeof HOOK_SCAN_CATEGORIES)[number];
-
-export const HOOK_FINDING_SEVERITIES = ['critical', 'info'] as const;
-export type HookFindingSeverity = (typeof HOOK_FINDING_SEVERITIES)[number];
-
-export const HOOK_SCAN_VERDICTS = ['blocked', 'findings', 'clean'] as const;
-export type HookScanVerdict = (typeof HOOK_SCAN_VERDICTS)[number];
-
-export type HookScanFinding = {
-  category: HookScanCategory;
-  severity: HookFindingSeverity;
-  message: string;
-  match: string;
-  declared: boolean;
-};
-
-export type HookScanReport = {
-  verdict: HookScanVerdict;
-  findings: HookScanFinding[];
-};
-
-export type CommunityConnectionInstallMethod =
-  | { method: 'system-provided' }
-  | { method: 'npm'; package: string; version: string }
-  | { method: 'external'; upstream: string };
-
-export type CommunityConnectionConfigVar = { env: string; required: boolean; purpose: string };
-export type CommunityConnectionCapability = { name: string; summary: string };
-
-export type CommunitySkillDetail = CommunityItem & { files: CommunityFile[] };
-export type CommunityHookDetail = CommunityItem & { files: CommunityFile[]; scan: HookScanReport };
-export type CommunityConnectionDetail = CommunityItem & {
-  install: CommunityConnectionInstallMethod;
-  config: CommunityConnectionConfigVar[];
-  probe: ConnectionProbeResult;
-  /** Present iff the catalog mcp entry declares them — never a fabricated
-   *  empty array for a tool entry or an mcp entry that declares none. */
-  capabilities?: CommunityConnectionCapability[];
-  capabilitiesSource?: 'curated';
-};
-export type CommunityItemDetail = CommunitySkillDetail | CommunityHookDetail | CommunityConnectionDetail;
-
+import type {
+  CommunityHub, CommunityHubWithCount, CommunityItem, CommunityItemDetail, CommunityInstallState,
+  CommunityKind, CommunityProbeState, CommunitySignals, CommunityFile, CommunityConnectionCapability,
+  CommunityConnectionConfigVar, CommunityConnectionInstallMethod, HookScanFinding, HookScanReport,
+  HookScanCategory, HookScanVerdict, HookFindingSeverity,
+} from './community-types.ts';
+import { COMMUNITY_INSTALL_STATES, COMMUNITY_KINDS, COMMUNITY_PROBE_STATES, HOOK_FINDING_SEVERITIES, HOOK_SCAN_CATEGORIES, HOOK_SCAN_VERDICTS } from './community-types.ts';
 // ---------------------------------------------------------------------------
 // Parse helpers — REFUSE malformed input (throw), never coerce.
 // ---------------------------------------------------------------------------
@@ -187,6 +90,15 @@ function requireNullableNumber(r: Record<string, unknown>, key: string): number 
  *  campaign's recurring "declared data fails open" shape, applied to parse
  *  time: silently treating "absent" the same as "explicitly none" hides a
  *  transport bug behind a plausible-looking value). */
+/** A NULLABLE string field whose key must still be PRESENT. Four fields share
+ *  this shape and each carried its own copy; one copy cannot drift. */
+function nullableString(r: Record<string, unknown>, key: string): string | null {
+  return parseNullableField(r, key, (v) => {
+    if (typeof v !== 'string') throw new Error(`expected "${key}" to be a string when present, got ${JSON.stringify(v)}`);
+    return v;
+  });
+}
+
 function parseNullableField<T>(r: Record<string, unknown>, key: string, parse: (raw: unknown) => T): T | null {
   if (!(key in r)) throw new Error(`expected "${key}" key to be present (explicit null is allowed, an absent key is not)`);
   const v = r[key];
@@ -251,26 +163,18 @@ export function parseCommunityItem(raw: unknown): CommunityItem {
     // rule hub/signals/probeState already hold. An absent `category` is a
     // malformed response (a wire projection that forgot to send it), never
     // silently the same as an item that genuinely has none.
-    category: parseNullableField(r, 'category', (v) => {
-      if (typeof v !== 'string') throw new Error(`expected "category" to be a string when present, got ${JSON.stringify(v)}`);
-      return v;
-    }),
+    category: nullableString(r, 'category'),
     upstream: requireString(r, 'upstream'),
     hub: parseNullableField(r, 'hub', parseCommunityHub),
     signals: parseNullableField(r, 'signals', parseCommunitySignals),
     vendored: requireBoolean(r, 'vendored'),
+    upstreamFetchableAs: nullableString(r, 'upstreamFetchableAs'),
     installState: parseCommunityInstallState(r['installState']),
     probeState: parseNullableField(r, 'probeState', parseCommunityProbeState),
     origin: requireString(r, 'origin'),
-    fetchedAt: parseNullableField(r, 'fetchedAt', (v) => {
-      if (typeof v !== 'string') throw new Error(`expected "fetchedAt" to be a string when present, got ${JSON.stringify(v)}`);
-      return v;
-    }),
+    fetchedAt: nullableString(r, 'fetchedAt'),
     fetchedBy: requireString(r, 'fetchedBy'),
-    upstreamUpdatedAt: parseNullableField(r, 'upstreamUpdatedAt', (v) => {
-      if (typeof v !== 'string') throw new Error(`expected "upstreamUpdatedAt" to be a string when present, got ${JSON.stringify(v)}`);
-      return v;
-    }),
+    upstreamUpdatedAt: nullableString(r, 'upstreamUpdatedAt'),
   };
 }
 

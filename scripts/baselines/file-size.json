@@ -23,7 +23,7 @@
   "apps/studio/components/studio/PhaseDrawer.tsx": 950,
   "apps/studio/components/studio/RoadmapCanvas.tsx": 870,
   "apps/studio/lib/bridge-client.ts": 1531,
-  "apps/studio/lib/community-client.ts": 947,
+  "apps/studio/lib/community-client.ts": 851,
   "apps/studio/lib/session-client.ts": 1204,
   "apps/studio/lib/studio-client.ts": 2540,
   "apps/studio/tests/contract/session-shell-view.test.ts": 815,

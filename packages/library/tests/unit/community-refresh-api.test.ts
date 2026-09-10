@@ -591,3 +591,57 @@ test('fetchAllowedApiUrl admits an allowlisted origin and passes the headers thr
   assert.equal(calls.length, 1);
   assert.equal(new Headers(calls[0].init?.headers).get('x-test'), '1');
 });
+
+test('M6-D security review LOW-7: the credential is DROPPED on a cross-origin redirect, even inside the allowlist', async () => {
+  // The allowlist has three origins, so "inside the allowlist" is not "the
+  // origin the credential was issued for". A 30x from api.github.com to
+  // registry.npmjs.org is an allowed hop that would otherwise forward the
+  // operator's PAT to npm.
+  const seen: Array<{ url: string; auth: string | undefined }> = [];
+  const fetchImpl: FetchLike = async (url, init) => {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    seen.push({ url: String(url), auth: headers['Authorization'] });
+    if (seen.length === 1) {
+      return new Response('', { status: 302, headers: { location: 'https://registry.npmjs.org/left-pad' } });
+    }
+    return new Response('{}', { status: 200 });
+  };
+
+  await fetchAllowedApiUrl({ fetchImpl, timeoutMs: 5000, token: TOKEN }, 'https://api.github.com/repos/o/r', {
+    Authorization: `Bearer ${TOKEN}`,
+  });
+
+  assert.equal(seen.length, 2, 'the redirect should have been followed — both hops are allowlisted');
+  assert.equal(seen[0]!.auth, `Bearer ${TOKEN}`, 'the first hop is the origin the credential is for');
+  assert.equal(seen[1]!.auth, undefined, 'the credential must NOT cross to another origin');
+  assert.ok(!JSON.stringify(seen[1]).includes(TOKEN), 'the token must not appear anywhere in the cross-origin request');
+});
+
+test('M6-D security review LOW-7: a same-origin redirect KEEPS the credential — the drop must not break the ordinary case', async () => {
+  const seen: Array<string | undefined> = [];
+  const fetchImpl: FetchLike = async (_url, init) => {
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    seen.push(headers['Authorization']);
+    if (seen.length === 1) {
+      return new Response('', { status: 301, headers: { location: 'https://api.github.com/repositories/12345' } });
+    }
+    return new Response('{}', { status: 200 });
+  };
+
+  await fetchAllowedApiUrl({ fetchImpl, timeoutMs: 5000, token: TOKEN }, 'https://api.github.com/repos/o/r', {
+    Authorization: `Bearer ${TOKEN}`,
+  });
+
+  assert.deepEqual(seen, [`Bearer ${TOKEN}`, `Bearer ${TOKEN}`], 'GitHub redirects a renamed repo to its own origin — that must still authenticate');
+});
+
+test('M6-D security review LOW-7: the caller\'s header object is never mutated — a dropped credential must not leak back out', async () => {
+  const headers = { Authorization: `Bearer ${TOKEN}` };
+  const fetchImpl: FetchLike = async () =>
+    seenOnce ? new Response('{}', { status: 200 }) : ((seenOnce = true), new Response('', { status: 302, headers: { location: 'https://registry.npmjs.org/x' } }));
+  let seenOnce = false;
+
+  await fetchAllowedApiUrl({ fetchImpl, timeoutMs: 5000, token: TOKEN }, 'https://api.github.com/repos/o/r', headers);
+
+  assert.equal(headers.Authorization, `Bearer ${TOKEN}`, 'fetchAllowedApiUrl mutated its caller\'s headers object');
+});

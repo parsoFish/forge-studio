@@ -69,11 +69,13 @@ import { dirname, join } from 'node:path';
 
 import {
   GH_TOKEN_ENV,
+  DEFAULT_REFRESH_TIMEOUT_MS,
   CommunityRefreshError,
   refreshCommunityRegistry,
   type CommunityRefreshFailure,
   type CommunityRefreshOutcome,
   type FetchLike,
+  type RequestCtx,
 } from './studio/community-refresh-api.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from './studio/community-registry.ts';
 import { communitySourceKey } from './studio/community-source-url.ts';
@@ -297,6 +299,26 @@ function verifiedSourcesOf(
     if (row !== undefined) out[o.source] = row;
   }
   return out;
+}
+
+/**
+ * The ONE construction of an outbound `RequestCtx` for the community surface —
+ * credential, timeout and fetch impl in a single place.
+ *
+ * M6-D / ruling 477: install-by-URL became a THIRD outbound caller (after the
+ * CLI verb and the refresh route), and the property this file's own comment
+ * claims — "BOTH surfaces read `process.env[GH_TOKEN_ENV]` through this ONE
+ * line and cannot diverge on which variable, or which emptiness, counts as
+ * absent" — only survives a third caller if the line is shared rather than
+ * copied. An empty string stays absent-by-the-fetch-core's rule; the value is
+ * never logged or echoed.
+ */
+export function communityRequestCtx(opts: { token?: string | undefined; fetchImpl?: FetchLike; timeoutMs?: number } = {}): RequestCtx {
+  return {
+    fetchImpl: opts.fetchImpl ?? ((input, init) => fetch(input as RequestInfo, init as RequestInit)),
+    timeoutMs: opts.timeoutMs ?? DEFAULT_REFRESH_TIMEOUT_MS,
+    token: opts.token !== undefined ? opts.token : process.env[GH_TOKEN_ENV],
+  };
 }
 
 export type RunCommunityRefreshOptions = {

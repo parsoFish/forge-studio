@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { type CommunityItem, type CommunityKind } from './studio/community-index.ts';
 import { listCatalogConnections, type CatalogConnection } from './studio/connection-library.ts';
 import { type ProbeState } from './studio/connection-probe.ts';
+import { parseCommunityUpstream } from './studio/community-source-url.ts';
 import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
 
 /** Every real committed vendored package (studio/community/{skills,hooks}/)
@@ -54,6 +55,19 @@ export type CommunityItemWire = {
   hub: CommunityItem['hub'];
   signals: CommunityItem['signals'];
   vendored: boolean;
+  /** M6-D / ruling 477 — the canonical `https://github.com/<owner>/<repo>`
+   *  forge would FETCH this row's package from, or `null` when there is
+   *  nothing it can fetch.
+   *
+   *  Non-null only for a not-vendored skill whose `upstream` parses to a
+   *  GitHub repository. Computed HERE, from the same grammar
+   *  `routeCommunityInstall` uses, so the page and the route cannot disagree.
+   *  It carries the RESOLVED identity rather than a boolean because the page
+   *  shows the operator where the bytes will come from before they press, and
+   *  a raw `sourceUrl` can be written to look like a different repository than
+   *  the one it parses to. See `packages/library/design.md` §"Install by URL…"
+   *  for why a hook is always `null`. */
+  upstreamFetchableAs: string | null;
   installState: CommunityItem['installState'];
   probeState: ProbeState | null;
   origin: string;
@@ -169,6 +183,18 @@ export function probeStateFor(item: CommunityItem): ProbeState | null {
 /** One item's wire projection. THROWS on a genuine derivation failure — the
  *  caller (`toWireItemSafe`) is the one place that degrades, so this
  *  function itself stays honest about failing loud. */
+/** M6-D / ruling 477 — the ONE derivation of "where forge would fetch this
+ *  row's package from", shared by the wire projection and, through it, the
+ *  detail page. Deliberately narrow: a hook or a connection is always `null`,
+ *  because the route has no fetch arm for either and a non-null would offer a
+ *  door it refuses. */
+function upstreamFetchableFor(item: CommunityItem, upstream: string): string | null {
+  if (item.kind !== 'skill' || item.vendored) return null;
+  const parsed = parseCommunityUpstream(upstream);
+  if (parsed === null || parsed.kind !== 'github') return null;
+  return `https://github.com/${parsed.owner}/${parsed.repo}`;
+}
+
 export function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
   return {
     id: item.id,
@@ -180,6 +206,7 @@ export function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire
     hub: item.hub,
     signals: item.signals,
     vendored: item.vendored,
+    upstreamFetchableAs: upstreamFetchableFor(item, upstreamFor(item, ctx)),
     installState: item.installState,
     probeState: probeStateFor(item),
     origin: originFor(item),
@@ -211,6 +238,10 @@ export function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItem
       hub: item.hub,
       signals: item.signals,
       vendored: item.vendored,
+      // The degraded row could not derive its upstream, so it cannot name one
+      // to fetch from — `null` is the honest answer, and it renders the same
+      // browse-upstream dead-end the row had before this field existed.
+      upstreamFetchableAs: null,
       installState: item.installState,
       probeState: null,
       origin: originFor(item),
