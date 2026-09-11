@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { lockHolders, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV } from './lock-guard.mjs';
+import { lockHolders, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 
 const REPO = new URL('../..', import.meta.url).pathname;
 
@@ -144,7 +144,14 @@ test('DOOR: the suite refuses BEFORE the first test file', () => {
       stderr = err.stderr ?? '';
     }
 
-    assert.equal(code, 1, 'the guard exits 1, so `node scripts/test-guard.mjs && node --test …` never reaches the suite');
+    // AMENDED by T1 ruling 699. The property this asserted — a NON-ZERO exit, so
+    // `node scripts/test-guard.mjs && node --test …` never reaches the suite —
+    // is unchanged. The code is now 75 (`EX_TEMPFAIL`, "try again later") and
+    // DISTINCT from 1 on purpose: every layer above was flattening a refusal
+    // into a failure, and `gate.sh` recorded `FAIL npm test (0s)`, which reads
+    // exactly like a suite that ran and went red. Measured by M6-C three times
+    // in one night and by M6-A three times in one afternoon.
+    assert.equal(code, EXIT_LOCK_REFUSED, 'non-zero, so the suite is never reached — and distinct, so a refusal is not read as a failure');
     assert.match(stderr, /refusing to start the test suite/);
     assert.match(stderr, new RegExp(`pid ${process.pid}`));
   } finally {

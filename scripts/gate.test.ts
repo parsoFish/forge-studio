@@ -589,3 +589,192 @@ test('679/684: NO counts file at all is the same named caveat, not a silent pass
   assert.match(out, /FIX\.sha256: 0 FAILED of 1/);
   assert.match(out, /skew unknown/, 'an absent counts file answers the question no better than a prose one');
 });
+
+/**
+ * T1 ruling 693(ii), §15.388 — THE PIN BLOCK FEEDS THE RC.
+ *
+ * MEASURED by D and verified in the tool: `gate.sh` exits on its STEP LIST only
+ * (`exit $fail`). The pin block prints beside that rc and never touches it. D's
+ * gate on `d7d8dba9` was **rc=0, 20/20, with `M6-T1.sha256: 2 FAILED of 14` in
+ * the same log**, and the merge precondition recorded green over two failing
+ * pins. "A check that runs and is not read is a check that never ran."
+ *
+ * So an undeclared pin failure now fails the gate. A lane that KNOWS a pin will
+ * fail — its own amendment, or a sibling re-pin it will reconcile — declares it
+ * with `--expect-pin-fail <manifest>[:<path>]`, the same shape the campaign's
+ * `pin-precheck.sh` takes.
+ *
+ * THE SKEW TEST IS AN ANCESTRY QUESTION, NOT A STRING ONE (M6-C's finding,
+ * verified against this very tree before the fix: HEAD `82bb8bf4` is a
+ * DESCENDANT of pin `df473067`, so it contains every pinned commit and can
+ * answer perfectly — and the prefix match called it skew). With the rc riding
+ * on this, a prefix match would refuse a lane one commit ahead and hand it
+ * advice it has already followed: "reconcile from a tree at X or later" to a
+ * tree that IS at X or later.
+ */
+
+/** A ci.yml whose one step exits 75 — what the lock guard now does when refused. */
+const REFUSING_CI = `jobs:
+  build-and-test:
+    steps:
+      - name: Refused by the lock guard
+        run: node -e "console.error('[test-guard] refusing: a story run holds .run-lock — pid 1 (cwd /elsewhere)'); process.exit(75)"
+`;
+
+/** A ci.yml whose one step genuinely fails, so the distinction can be shown to be one. */
+const FAILING_CI = `jobs:
+  build-and-test:
+    steps:
+      - name: A real failure
+        run: node -e "process.exit(1)"
+`;
+
+/** A git fixture whose HEAD is a real descendant of an earlier commit. */
+function gitTreeWithHistory(ci: string): { dir: string; first: string; head: string } {
+  const d = tree(ci);
+  const git = (...a: string[]) => spawnSync('git', ['-C', d, ...a], { encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 'gate@test');
+  git('config', 'user.name', 'gate');
+  git('add', '-A');
+  git('commit', '-qm', 'first');
+  const first = (git('rev-parse', 'HEAD').stdout ?? '').trim();
+  writeFileSync(join(d, 'later.txt'), 'a later commit\n');
+  git('add', '-A');
+  git('commit', '-qm', 'second');
+  return { dir: d, first, head: (git('rev-parse', 'HEAD').stdout ?? '').trim() };
+}
+
+// WHY THESE ASSERT ON THE VERDICT LINES AND NOT ON `status`. A synthetic tree
+// can never exit 0: `prod-lines.mjs` refuses it with "this is not a forge
+// checkout" (no `scripts/check-owner.mjs`), so the rc is 1 for reasons that
+// have nothing to do with pins. Asserting `status === 0` here would be pinning
+// the fixture's incompleteness, and asserting `status !== 0` would pass whether
+// or not the pin block contributed anything at all. The `UNDECLARED:` /
+// `declared:` lines ARE the pin block's contribution to `fail`, so they are
+// what these pin — and the one rc fact worth having is covered below, where a
+// gate that differs ONLY in the declaration must differ in its verdict lines.
+
+test('693(ii): an UNDECLARED pin failure is named as such — this is what now feeds the rc', () => {
+  const { dir, head } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-undecl-')), dir, `paths=1 head=${head}\n`);
+  writeFileSync(join(dir, 'pinned.txt'), 'CHANGED\n');
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 1 FAILED of 1/, 'it still says what failed');
+  assert.match(out, /UNDECLARED: FIX:pinned\.txt/, 'and names the path, so `fail=1` is traceable to a file rather than a count');
+});
+
+test('693(ii): the SAME gate with the failure DECLARED reports it declared, and nothing undeclared', () => {
+  const { dir, head } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-decl-')), dir, `paths=1 head=${head}\n`);
+  writeFileSync(join(dir, 'pinned.txt'), 'CHANGED\n');
+
+  const out = gate(dir, camp, '--expect-pin-fail', 'FIX:pinned.txt').out;
+
+  assert.match(out, /declared: FIX:pinned\.txt/, 'a lane that accounts for its own amendment says so');
+  assert.doesNotMatch(out, /UNDECLARED:/, 'and nothing is left to fail the gate');
+  assert.match(out, /FIX\.sha256: 1 FAILED of 1/, 'the count is still printed — declaring is not hiding');
+});
+
+test('693(ii): a clean pin block declares nothing and flags nothing', () => {
+  const { dir, head } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-clean-')), dir, `paths=1 head=${head}\n`);
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 0 FAILED of 1/);
+  assert.doesNotMatch(out, /UNDECLARED:/, 'nothing failed, so nothing may feed the rc');
+});
+
+test('693(ii)/M6-C: a DESCENDANT of the pinned sha is not skew — it contains every pinned commit', () => {
+  const { dir, first } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-desc-')), dir, `paths=1 head=${first}\n`);
+  writeFileSync(join(dir, 'pinned.txt'), 'CHANGED\n');
+
+  const out = gate(dir, camp).out;
+
+  // The prefix match this replaces printed the skew line here and, with the rc
+  // riding on it, would have told a lane one commit ahead to reconcile from a
+  // tree it is already ahead of.
+  assert.doesNotMatch(out, /skew:/, 'a descendant can answer the question, so the count is real');
+  assert.match(out, /UNDECLARED: FIX:pinned\.txt/, 'and a real, undeclared failure must reach the rc');
+});
+
+test('693(ii)/M6-C: a DIVERGENT tree still reports skew, and contributes NOTHING to the rc', () => {
+  const { dir } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-div-')), dir, 'paths=1 head=deadbeefdeadbeef\n');
+  writeFileSync(join(dir, 'pinned.txt'), 'CHANGED\n');
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /skew:/, 'the manifest pins a commit this tree does not contain');
+  assert.doesNotMatch(out, /UNDECLARED:/, 'an UNREADABLE count must not fail a gate — the lane cannot act on it from here (§15.381)');
+});
+
+test('693(ii): an unrecognised flag is still REFUSED, not silently ignored (bead 8vfn.6.9)', () => {
+  const { dir, head } = gitTreeWithHistory(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'rc-bad-')), dir, `paths=1 head=${head}\n`);
+
+  const r = gate(dir, camp, '--expect-pin-fale', 'FIX:pinned.txt');
+
+  assert.equal(r.status, 2, 'a typo in a flag that gates a merge must not read as "no expectations declared"');
+  assert.match(r.err, /--expect-pin-fale/, 'and the refusal names what it did not understand');
+});
+
+/**
+ * T1 ruling 699 — A REFUSAL IS NOT A FAILURE.
+ *
+ * MEASURED by M6-C, three times in one night, and by me three times today:
+ * `gate.sh` holds `.suite-lock` while its `npm test` step is refused by the
+ * 7.6.13 guard because a sibling's story run holds `.run-lock`. The gate records
+ *
+ *     FAIL  npm test  (0s)
+ *
+ * which is indistinguishable from a suite that ran and went red. That is §15.92
+ * one layer up: the guard is careful to name its holder, and the layer above
+ * flattens that into the same word it uses for a real failure. Every time it
+ * happened I had to open the step log to learn nothing had run.
+ *
+ * So the refusal carries a DISTINCT exit code — 75, `EX_TEMPFAIL`, the
+ * conventional "try again later" — and `gate.sh` records the step as `REFUSED`
+ * with the holder, in the same `SKIP` / `OTHER JOB` idiom it already uses for
+ * what it did not run, and exits 3 rather than 1.
+ */
+
+test('699: a step REFUSED by the lock guard is not recorded as FAIL', () => {
+  const { dir, head } = gitTreeWithHistory(REFUSING_CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'refused-')), dir, `paths=1 head=${head}\n`);
+
+  const out = gate(dir, camp).out;
+
+  // COLUMN 0, per 699's addendum: the rc is necessary and not sufficient,
+  // because every merge precondition reads the LOG and a refused gate still
+  // prints a pin block. `^REFUSED ` has to be as greppable as `^FAIL `.
+  assert.match(out, /^REFUSED {2}node -e/m, 'a refusal must not wear the same word as a failure, and must be findable at column 0');
+  assert.doesNotMatch(out, /^FAIL {2}node -e/m, 'and must not be counted as one');
+  assert.match(out, /holds \.run-lock — pid 1 \(cwd \/elsewhere\)/, 'the holder travels onto the step line, so no reader opens the log to learn nothing ran');
+  // `status` is not asserted here for the reason given above the pin tests: a
+  // synthetic tree cannot exit 0, `prod-lines.mjs` refuses it as "not a forge
+  // checkout", and a real failure outranks a refusal by design — so the rc
+  // would be 1 for reasons unrelated to the refusal. The line IS the contract.
+});
+
+test('699: an ordinary failing step is still FAIL with rc 1 — the distinction only helps if it is one', () => {
+  const { dir, head } = gitTreeWithHistory(FAILING_CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'realfail-')), dir, `paths=1 head=${head}\n`);
+
+  const r = gate(dir, camp);
+
+  assert.match(r.out, /^FAIL {2}node -e/m, 'a step that ran and lost is a failure');
+  assert.notEqual(r.status, 3, 'and must never borrow the refusal code');
+});

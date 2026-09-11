@@ -52,6 +52,20 @@ export const SUITE_LOCK_ENV = 'FORGE_SUITE_LOCK';
 export const RUN_LOCK_ENV = 'FORGE_RUN_LOCK';
 
 /**
+ * The exit code a refused suite carries: 75, `EX_TEMPFAIL` (sysexits.h), "try
+ * again later" — and DISTINCT from 1 on purpose (T1 ruling 699). A refusal and
+ * a failure are different facts, and every layer above was flattening them into
+ * one word: `gate.sh` recorded `FAIL npm test (0s)`, which reads exactly like a
+ * suite that ran and went red. Measured by M6-C three times in one night and by
+ * M6-A three times in one afternoon; each cost a step log to learn nothing ran.
+ *
+ * It lives HERE rather than in `test-guard.mjs` because that file runs the
+ * guard at module scope: importing it to read a constant would evaluate the
+ * verdict and could `process.exit` out of whatever imported it.
+ */
+export const EXIT_LOCK_REFUSED = 75;
+
+/**
  * Every process holding `lockPath` open, by file descriptor.
  *
  * @returns {{pid: string, cwd: string|null}[]} — empty when nothing holds it,
