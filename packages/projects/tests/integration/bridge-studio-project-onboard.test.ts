@@ -29,7 +29,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -675,6 +675,54 @@ test('[6.11.13] a forge root WITHOUT the skill gets NO binding — the scaffold 
     assert.equal(captured.status, 200, `expected 200, got ${captured.status} body=${captured.body}`);
     const cfg = JSON.parse(readFileSync(join(forgeRoot, 'projects', 'gitweave', '.forge', 'project.json'), 'utf8'));
     assert.equal('skills' in cfg, false, 'no key at all — an absent binding, not an empty or dead one');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bead `forge-qm4d` (T1 ruling 673(ii)) — THE ROUTE SAYS WHAT IT PUT IN THE
+// OPERATOR'S REPO.
+//
+// S1 run 5 ended RED on containment with nine undeclared paths in
+// `projects/gitweave`. C's 663 attribution reads each session's own
+// `file_change` events and accounts for four. `.gitignore`, `roadmap.md`,
+// `brain/profile.md` and `.forge/project.json` were written by THIS ROUTE, so
+// no session log could ever account for them — and the story failed for the
+// product working, since S1's whole subject is that forge creates `.forge/`
+// rather than the story creating it by hand.
+//
+// The assertion is at the ROUTE, not at the scaffold: `scaffold-write-
+// provenance.test.ts` proves the emission derives from what the scaffold
+// returned, and this proves the route actually performs it. A helper nobody
+// calls is the failure this bead already is.
+// ---------------------------------------------------------------------------
+
+test('forge-qm4d: onboarding emits a file_change for every path it wrote into the ground', async () => {
+  const forgeRoot = withScaffoldSkills(baseForgeRoot());
+  try {
+    const { handleProjectsOnboard } = makeOnboardHandlers(fakeDeps());
+    const { res, captured } = mockRes();
+    await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'gitweave', qualityGateCmd: 'python -m pytest tests/' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(captured.status, 200, `expected 200, got ${captured.status} body=${captured.body}`);
+
+    const runs = readdirSync(join(forgeRoot, '_logs')).filter((d) => d.startsWith('_bridge-'));
+    assert.equal(runs.length, 1, 'one bridge run, named by the request that caused the writes');
+    const changed = readFileSync(join(forgeRoot, '_logs', runs[0]!, 'events.jsonl'), 'utf8')
+      .split('\n').filter(Boolean).map((l) => JSON.parse(l) as { event_type: string; output_refs: string[]; metadata?: Record<string, unknown> })
+      .filter((e) => e.event_type === 'file_change');
+
+    const projectRoot = join(forgeRoot, 'projects', 'gitweave');
+    for (const rel of ['.gitignore', 'roadmap.md', 'brain/profile.md', '.forge/project.json']) {
+      assert.ok(
+        changed.some((e) => e.output_refs[0] === join(projectRoot, rel)),
+        `${rel} was undeclared on S1 run 5 and must now be attributable — got: ${changed.map((e) => e.output_refs[0]).join(', ')}`,
+      );
+    }
+    assert.equal(changed[0]!.metadata?.['cause'], 'POST /api/studio/projects', 'named by its cause — "forge wrote this" without "why" is half an answer');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

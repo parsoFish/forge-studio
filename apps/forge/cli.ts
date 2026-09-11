@@ -30,7 +30,7 @@ import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
 import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
-  ensureLayout, resolveGuardedPath, type InitReport } from '@forge/kernel';
+  ensureLayout, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
@@ -928,9 +928,9 @@ function cmdPreflightConverge(rest: string[]): void {
     acceptAdvisory: acceptAdvisory as Parameters<typeof runContractComplianceLoop>[0]['acceptAdvisory'],
   });
   console.log(formatComplianceReport(report));
-  const artifactDir = join(projectDir, '.forge');
-  mkdirSync(artifactDir, { recursive: true });
-  writeFileSync(join(artifactDir, 'contract-compliance-report.json'), JSON.stringify(report, null, 2) + '\n');
+  // `forge-qm4d` — writes AND emits: this report can no longer land in an operator's repo unattributed.
+  writeProjectGroundFile({ projectRoot: projectDir, segments: ['.forge', 'contract-compliance-report.json'],
+    body: JSON.stringify(report, null, 2) + '\n', forgeRoot: FORGE_ROOT, cause: 'forge contract-compliance' });
   // Hard-green ⇒ 0 so the onboarding agent (and any gate) can branch on it.
   process.exit(report.finalHardGreen ? 0 : 1);
 }

@@ -2354,3 +2354,34 @@ the question-form arm (`handleOnboardingBrief`), which writes `prompt.md` and
 the status through `guardedWriteFile`/`guardedWriteSessionStatus` — the
 per-segment guarded form — so the arm adds no raw sink at all. That is why this
 table shows one addition rather than a relocation.
+
+### Added in M6-A (bead `forge-qm4d`, ruling 673(ii)) — the bridge's ground writes become attributable, through the guard
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/kernel/logging.ts` | `writeFileSync` | 0 | 1 |
+
+**One new sink, and the reason it exists is provenance.** S1 run 5 ended RED on
+containment with nine undeclared paths in `projects/gitweave`. Five of them were
+written by the BRIDGE, not by any session, so no session's `file_change` events
+could account for them — and the story failed for the product working.
+`writeProjectGroundFile` writes one file into a project ground **and** emits its
+`file_change`, in one call, so a caller cannot do one without the other. A
+helper that only emitted would be a convention, and this bead exists because a
+convention was not kept at five separate write sites.
+
+**Guarded, and the guard was added because this check caught it.** The first
+draft joined the caller's segments onto `projectRoot` with a bare `join`, and
+`check-request-path-sinks` reported both `mkdirSync` and `writeFileSync` as
+grown on its very first gate. The write now resolves through
+`guardedFile(projectRoot, segments, 'write')` — the per-segment form, with the
+leaf contained too — and a non-resolving path **throws** rather than falling
+through to an unguarded write. `mkdirSync` returned to its baseline of 1 in the
+same change, because the guard creates the parent chain beneath the root
+itself; only the write remains, and it writes to the realpath the guard
+returned, never to a path the caller composed.
+
+**`projectRoot` is request-derived at the bridge call sites** — `POST
+/api/studio/projects` resolves it from the request body — which is precisely
+why the root/segment split matters here: the untrusted id stays a segment and is
+never folded into the trusted root.

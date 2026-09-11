@@ -4,7 +4,8 @@
  * happened during a cycle (per ADR 008).
  */
 
-import { appendFileSync, mkdirSync, existsSync } from 'node:fs';
+import { appendFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { guardedFile } from './path-guard.ts';
 import { join, resolve } from 'node:path';
 
 export type Phase =
@@ -179,4 +180,106 @@ function newEventId(): string {
   const ts = Date.now().toString(36);
   const rnd = Math.random().toString(36).slice(2, 10);
   return `EV_${ts}_${rnd}`;
+}
+
+/**
+ * Bead `forge-qm4d` (T1 ruling 673(ii)) — PROVENANCE FOR THE BRIDGE'S OWN
+ * WRITES.
+ *
+ * A session says what it wrote: `makeToolEventSink` emits a durable
+ * `file_change` for every tool mutation. The BRIDGE says nothing. Measured on
+ * S1 run 5, five files landed in `projects/gitweave` that no session wrote —
+ * `.forge/agent-run/PROMPT.md`, `.forge/contract-compliance-report.json`,
+ * `.gitignore`, `roadmap.md`, `brain/profile.md` — so a containment check built
+ * on session logs could not account for them, and the story failed for the
+ * product working.
+ *
+ * These three helpers live HERE, not beside `makeToolEventSink`, because the
+ * writers span three packages — `packages/agents`, `packages/projects` and
+ * `apps/forge` — and the kernel is the only layer all three already stand on.
+ * One event vocabulary for session and bridge writes alike; a reader should not
+ * have to know which half of the product made a file.
+ */
+
+/** A run id for writes that belong to no session: the bridge's own. */
+function bridgeCycleId(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
+  return `_bridge-${stamp}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * One durable `file_change` per written path, in a `_bridge-<stamp>` run of its
+ * own — never one summary event, because a summary cannot be attributed path by
+ * path, which is the only question a containment check (or an operator) asks.
+ *
+ * `relPaths` is what was ACTUALLY written, not what might be: every scaffold
+ * write site is `existsSync`-guarded, so the candidate list and the outcome
+ * genuinely differ, and `scaffoldContractArtifacts` already returns the
+ * outcome. An EMPTY list opens no run and creates no directory — "the operator
+ * already had every file" is the scaffold's ordinary result, and a run
+ * directory per no-op would bury the real ones.
+ *
+ * `cause` is the request or command that did the writing, and it is required:
+ * "forge wrote this file" without "why" is half an answer, and the operator
+ * asking what forge put in their project is asking the second half.
+ *
+ * @returns the logger it opened, or `null` when there was nothing to say.
+ */
+export function emitGroundFileChanges(args: {
+  forgeRoot: string;
+  cause: string;
+  projectRoot: string;
+  relPaths: readonly string[];
+  op?: 'write' | 'modify';
+  logger?: EventLogger;
+}): EventLogger | null {
+  if (args.relPaths.length === 0) return null;
+  const op = args.op ?? 'write';
+  const logger = args.logger ?? createLogger(bridgeCycleId(), join(args.forgeRoot, '_logs'));
+  for (const rel of args.relPaths) {
+    const abs = join(args.projectRoot, rel);
+    logger.emit({
+      initiative_id: logger.cycleId,
+      phase: 'orchestrator',
+      skill: 'bridge',
+      event_type: 'file_change',
+      input_refs: [],
+      output_refs: [abs],
+      message: `file.${op}`,
+      metadata: { path: abs, op, cause: args.cause },
+    });
+  }
+  return logger;
+}
+
+/**
+ * Write one file into a project ground AND emit its provenance, in one call.
+ *
+ * The point is that a caller cannot do one without the other. A helper that
+ * only emits is a convention, and this bead exists because a convention was not
+ * kept at five separate write sites.
+ */
+export function writeProjectGroundFile(args: {
+  projectRoot: string;
+  /** Path segments beneath `projectRoot` — never a joined string. */
+  segments: readonly string[];
+  body: string;
+  forgeRoot: string;
+  cause: string;
+}): void {
+  // GUARDED, because `projectRoot` is request-derived at the bridge call sites
+  // and the segments come from the caller. `guardedFile(root, segments,
+  // 'write')` contains the leaf too and creates the parent chain beneath the
+  // root; folding either into a bare `join` is the request-path-sink shape
+  // `check-request-path-sinks` exists to catch, and it caught this on its
+  // first gate.
+  const target = guardedFile(args.projectRoot, args.segments, 'write');
+  if (target === null) {
+    throw new Error(`writeProjectGroundFile: ${args.segments.join('/')} does not resolve beneath ${args.projectRoot}`);
+  }
+  writeFileSync(target, args.body);
+  emitGroundFileChanges({
+    forgeRoot: args.forgeRoot, cause: args.cause,
+    projectRoot: args.projectRoot, relPaths: [args.segments.join('/')],
+  });
 }

@@ -336,6 +336,7 @@ packages/kernel/log-cycles.ts readdirSync 1
 packages/kernel/logging.ts appendFileSync 1
 packages/kernel/logging.ts existsSync 1
 packages/kernel/logging.ts mkdirSync 1
+packages/kernel/logging.ts writeFileSync 1
 packages/kernel/path-guard.ts lstatSync 3
 packages/kernel/path-guard.ts mkdirSync 1
 packages/kernel/path-guard.ts readdirSync 1

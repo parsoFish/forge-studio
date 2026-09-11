@@ -40,6 +40,26 @@ CAMP="${2:-}"
 # fault that was never there.
 [ $# -le 2 ] || die "unexpected argument: '$3'. Usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree> (the flag comes FIRST)"
 [ -d "$R" ] || die "no such worktree: $R"
+# RESOLVE, or REFUSE — never degrade in silence (bead `forge-e8dn`). A RELATIVE
+# campaign dir used to be accepted and then quietly mean three different wrong
+# things: `$CAMP/gate-manifests` did not exist, so the pins section was skipped
+# with NO output; `FORGE_SUITE_LOCK`/`FORGE_RUN_LOCK` pointed inside the
+# WORKTREE at paths nothing creates, and `lock-guard.mjs` reads a missing lock
+# as "nobody is running", so the whole suite ran outside both campaign locks
+# believing it held them; and `mkdir -p "$LOGS"` MINTED `<worktree>/_1.0/`,
+# which being gitignored kept out of `git status` entirely (§15.374). Measured
+# on M6-A's own gates, twice, before anyone noticed.
+#
+# §15.375: `lanes.sh`, ten lines away in this directory, already resolves
+# `camp`, `prompt` and `cwd` before using any of them and says why — "a relative
+# path passed both and launched a promptless session — $0.00, 0 context, an
+# empty box, twice" (bead `forge-uowf`, §15.60). This is that lesson, not a new
+# one; it simply had not travelled between two files in the same folder.
+R="$(cd "$R" && pwd)"
+if [ -n "$CAMP" ]; then
+  [ -d "$CAMP" ] || die "no such campaign dir: '$CAMP'. It names the pin manifests, the step logs and BOTH campaign locks, so a path that does not resolve is refused rather than silently half-applied."
+  CAMP="$(cd "$CAMP" && pwd)"
+fi
 CI="$R/.github/workflows/ci.yml"
 [ -f "$CI" ] || die "no .github/workflows/ci.yml under $R — nothing to derive a gate list from"
 
@@ -152,8 +172,15 @@ echo "SKILL.md:      $(git -C "$R" ls-tree -r --name-only HEAD | grep -c 'skills
 echo "CI run: steps: $(grep -c 'run:' "$CI")"
 echo "tests/stories: $(git -C "$R" status --porcelain -- tests/stories | wc -l) uncommitted path(s)"
 
-if [ -n "$CAMP" ] && [ -d "$CAMP/gate-manifests" ]; then
-  echo "== pins =="
+# NAMED, never silent — this script's own line 13 (§15.92). A pins section that
+# simply does not appear is indistinguishable from one that found nothing wrong,
+# which is exactly how `forge-e8dn` survived two full gates.
+echo "== pins =="
+if [ -z "$CAMP" ]; then
+  echo "SKIP no campaign dir was named — there are no manifests to check, and this gate wrote its logs to a temp dir"
+elif [ ! -d "$CAMP/gate-manifests" ]; then
+  echo "SKIP $CAMP has no gate-manifests/ — no manifests to check"
+else
   for m in "$CAMP"/gate-manifests/*.sha256; do
     [ -f "$m" ] || continue
     # Count FAILED lines only: `grep -vc ': OK$'` also counts sha256sum's WARNING line (§15.105).

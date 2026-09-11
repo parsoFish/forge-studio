@@ -71,6 +71,7 @@ import {
   isReservedId,
   resolveGuardedPath,
   PathGuardContainmentError,
+  emitGroundFileChanges,
   isDryBridge,
   refuseDryBridge,
   type RouteContext,
@@ -502,6 +503,17 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         ...scaffoldedLocal,
         ...brainSeed.files.filter((f) => f.action === 'created').map((f) => f.path),
       ];
+      // `forge-qm4d` — say what this route put in the operator's repo. DERIVED
+      // from what the scaffold RETURNED, never from the containment list above:
+      // every scaffold write is `existsSync`-guarded, so the paths it COULD
+      // write and the paths it DID differ whenever the operator already had a
+      // file. `project.json` joins them because this route wrote it too, a few
+      // lines up. The brain seed is deliberately absent — those land in FORGE's
+      // own repo (ADR-035), not in the ground, and this is the ground's answer.
+      emitGroundFileChanges({
+        forgeRoot: ctx.forgeRoot, cause: 'POST /api/studio/projects',
+        projectRoot, relPaths: [...scaffoldedLocal, '.forge/project.json'],
+      });
 
       // Re-run preflight and surface the clauses that still fail so the UI can
       // either celebrate (ready) or hand off to forge-onboard-project.
