@@ -53,7 +53,7 @@ import {
 import { restoreSweptCommitted, stopOwnScheduler } from './sweep-teardown.mjs';
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
-  ownGroundManifest, mintedSessionPaths, classifyOwnGroundDrift, groundChanges,
+  ownGroundManifest, mintedSessionPaths, mintedSessionWrites, classifyOwnGroundDrift, groundChanges,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge, bridgeSpawnOptions } from './bridge.mjs';
@@ -505,6 +505,7 @@ async function runStory(story, uiUrl, startedMs) {
     const split = classifyOwnGroundDrift(
       groundChanges(ownGroundBefore, ownGroundManifest(ROOT, story.ground.project)),
       minted,
+      mintedSessionWrites(minted, logsDir, join(ROOT, 'projects', story.ground.project)),
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
@@ -512,10 +513,10 @@ async function runStory(story, uiUrl, startedMs) {
       console.log(`[stories] own ground: unchanged — projects/${story.ground.project} is back at the hash it started from`);
     }
     for (const line of split.produced) {
-      console.log(`[stories] own ground: PRODUCED ${line} — this run minted the session it belongs to`);
+      console.log(`[stories] own ground: PRODUCED ${line}`);
     }
     for (const line of split.undeclared) {
-      console.error(`[stories] own ground: UNDECLARED ${line} — nothing this run minted accounts for it`);
+      console.error(`[stories] own ground: UNDECLARED ${line}`);
     }
   }
 

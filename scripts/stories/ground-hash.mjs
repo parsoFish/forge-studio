@@ -31,9 +31,9 @@
  * files.
  */
 import { execFileSync } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 
 /**
  * Method C, verbatim: the pipeline the launcher runs and the ledger quotes.
@@ -244,6 +244,108 @@ export function mintedSessionPaths(before, after, logsDir) {
 }
 
 /**
+ * The tools whose `tool_use` event names a file the session WROTE.
+ *
+ * A BELT TO `file_change`'S BRACES, never the primary read. `makeToolEventSink`
+ * (`packages/agents/tool-event-emit.ts`) emits the `file_change` FIRST and
+ * unconditionally — "file mutations are always durable, independent of the
+ * tool_use sampling decision" — and only then consults the sampler for the
+ * `tool_use` line. So the `tool_use` stream is the LOSSY one, and a rule that
+ * read only `Write`/`Edit` tool uses would be reading the sampled copy of a
+ * record the product already guarantees in full.
+ *
+ * That is not a theoretical ordering: S1 run 5 priced it. The onboarding agent
+ * put `.forge/skills/demo-design/SKILL.md` into the ground through a Bash
+ * command; the run's log carries the `file.add` with no paired `tool_use` line
+ * anywhere near it, and the only Bash tool use naming that path is a `cat` of
+ * the SOURCE file. Attribute from `Write`/`Edit` alone and that path reads as
+ * undeclared — a red run for a file the run demonstrably produced.
+ */
+const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * What ONE session's own event log says IT wrote, as ground-relative paths.
+ *
+ * T1 ruling 663. The containment check knew which session dirs the run minted;
+ * it did not know what those sessions did OUTSIDE their own dirs, so every
+ * write an agent made into the ground proper — the `CLAUDE.md` it edited, the
+ * `CONSTRAINTS.md` it authored — read as undeclared. The session's own
+ * `events.jsonl` already names them.
+ *
+ * READS ARE NOT WRITES, and the fixture for this makes the point with real
+ * bytes: S1 run 5's architect `Read` both `roadmap.md` and `brain/profile.md`,
+ * and a rule that matched on the path appearing in the log at all would have
+ * licensed two files that session never touched. Only `file_change` and a
+ * WRITE tool's `output_refs` count; `input_summary` is deliberately not read.
+ *
+ * A missing or truncated log is a normal end state, not an error: a killed
+ * session's last line is half-written, and a session that never started one
+ * (S1 run 5's `_onboarding/…4857c9a9` holds only a `turn.pid`) has no log at
+ * all. Both mean "this session accounts for nothing", which is the safe answer
+ * — it leaves the path UNDECLARED rather than licensing it.
+ *
+ * @param {string} eventsPath the session's `events.jsonl`
+ * @param {string} groundDir absolute path to the ground being judged
+ * @returns {string[]} ground-relative paths, sorted and deduped
+ */
+export function sessionWriteTargets(eventsPath, groundDir) {
+  let text;
+  try {
+    text = readFileSync(eventsPath, 'utf8');
+  } catch {
+    return [];
+  }
+  const out = new Set();
+  for (const line of text.split('\n')) {
+    if (line === '') continue;
+    let ev;
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue; // a killed session's final line is half-written
+    }
+    const wrote =
+      ev.event_type === 'file_change' ||
+      (ev.event_type === 'tool_use' && WRITE_TOOLS.has(ev.metadata?.tool));
+    if (!wrote) continue;
+    for (const ref of Array.isArray(ev.output_refs) ? ev.output_refs : []) {
+      // ABSOLUTE ONLY. `relative()` resolves a bare name against `process.cwd()`,
+      // so a relative ref would silently land somewhere plausible and wrong —
+      // the same class of defect as #607's `./` prefix, which cost a $3.2562 run.
+      if (typeof ref !== 'string' || !isAbsolute(ref)) continue;
+      const rel = relative(groundDir, ref);
+      if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) continue;
+      out.add(rel);
+    }
+  }
+  return [...out].sort();
+}
+
+/**
+ * Every minted session's own write targets, keyed by the session path
+ * `mintedSessionPaths` produced.
+ *
+ * The session path is `_<kind>/<id>`; the `_logs` entry it came from is
+ * `_<kind>-<id>`. Mapping back rather than carrying both keeps
+ * `mintedSessionPaths` the single place that decides what counts as a session.
+ *
+ * @param {string[]} mintedPaths from `mintedSessionPaths`
+ * @param {string} logsDir the `_logs` dir the sessions live in
+ * @param {string} groundDir absolute path to the ground being judged
+ * @returns {Map<string, string[]>}
+ */
+export function mintedSessionWrites(mintedPaths, logsDir, groundDir) {
+  const out = new Map();
+  for (const p of mintedPaths) {
+    const at = p.indexOf('/');
+    if (at === -1) continue;
+    const dir = `_${p.slice(1, at)}-${p.slice(at + 1)}`;
+    out.set(p, sessionWriteTargets(join(logsDir, dir, 'events.jsonl'), groundDir));
+  }
+  return out;
+}
+
+/**
  * Split the run's own ground drift into what the run PRODUCED and what nobody
  * declared.
  *
@@ -258,13 +360,43 @@ export function mintedSessionPaths(before, after, logsDir) {
  * inside the ground, which `git status` reports as nothing at all (§15.327,
  * measured twice — 215 insertions in one run, 308 across 10 files in another).
  * That is why the check is a HASH and never a status.
+ *
+ * RULING 663 widened the produced half from "inside a dir the run minted" to
+ * "inside a dir the run minted, OR named as a write by one of those sessions'
+ * own event logs". The narrow form failed S1 run 5 on nine paths, four of which
+ * the onboarding agent had demonstrably written; the run was red for the
+ * product working. The licence is still DERIVED and never a list — each line
+ * names the session that accounts for it, so an operator reading the report can
+ * go to that session's log and check.
+ *
+ * @param {{added: string[], removed: string[], modified: string[]}} changes
+ * @param {string[]} mintedPaths from `mintedSessionPaths`
+ * @param {Map<string, string[]>} writesBySession from `mintedSessionWrites`; pass
+ *   an empty Map only when there is genuinely no log to read — there is no
+ *   default, because a caller that silently skipped attribution would report a
+ *   working run as a containment failure and look exactly like a passing one.
  */
-export function classifyOwnGroundDrift(changes, mintedPaths) {
-  const owned = (p) => mintedPaths.some((m) => p === m || p.startsWith(`${m}/`));
+export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession) {
+  const homeOf = (p) => mintedPaths.find((m) => p === m || p.startsWith(`${m}/`)) ?? null;
+  const writersOf = (p) =>
+    [...writesBySession].filter(([, paths]) => paths.includes(p)).map(([s]) => s).sort();
   const produced = [];
   const undeclared = [];
   for (const kind of ['added', 'removed', 'modified']) {
-    for (const p of changes[kind]) (owned(p) ? produced : undeclared).push(`${kind[0].toUpperCase()} ${p}`);
+    for (const p of changes[kind]) {
+      const k = `${kind[0].toUpperCase()} ${p}`;
+      const home = homeOf(p);
+      if (home !== null) {
+        produced.push(`${k} — inside ${home}, a session this run minted`);
+        continue;
+      }
+      const writers = writersOf(p);
+      if (writers.length > 0) {
+        produced.push(`${k} — written by ${writers.join(', ')}`);
+        continue;
+      }
+      undeclared.push(`${k} — nothing this run minted accounts for it`);
+    }
   }
   return { produced: produced.sort(), undeclared: undeclared.sort() };
 }
