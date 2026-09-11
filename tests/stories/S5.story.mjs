@@ -13,7 +13,7 @@
  * a ledger proves nothing; a page that renders `data-ledger-cost-usd="0.00"`
  * for a run that spent four dollars is worse than one that renders nothing.
  * So beat 13 asserts the recorded cost itself, on the row, beside the link
- * kind that says where the run happened — and `docs/forge-ui-dom-and-harness.md`
+ * kind that says where the run happened — and `docs/reference/studio-dom-contract.md`
  * is explicit that the attribute is OMITTED rather than zeroed when no cost
  * exists, so "absent" and "0.00" are different facts and a `<runCost>`
  * placeholder (which takes any non-empty value) is the honest assertion of

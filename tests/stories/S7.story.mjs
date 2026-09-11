@@ -94,7 +94,7 @@
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree, EXCEPT beat 4's session
- * panel, transcribed from `docs/forge-ui-dom-and-harness.md` (observing an
+ * panel, transcribed from `docs/reference/studio-dom-contract.md` (observing an
  * authoring session live costs a real creation-agent spawn). None is invented.
  * Read live and load-bearing: `/hooks` reports `data-hook-count="3"` with
  * `data-needs-review-count="1"`; `post-merge-brain-ingest` is

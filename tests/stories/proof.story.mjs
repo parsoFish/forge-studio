@@ -11,7 +11,7 @@
  *      `/projects/story-proof` before that press;
  *   2. `expect.data` resolves NESTED `data-*` — `card-type`/`card-id` live on
  *      the project card and `section` on the onboard panel, never on
- *      `main[data-page]`, and `docs/forge-ui-dom-and-harness.md` says nested
+ *      `main[data-page]`, and `docs/reference/studio-dom-contract.md` says nested
  *      `data-*` IS the contract;
  *   3. a beat BINDS a route segment a prior beat produced — beat 1 binds
  *      `<someProjectId>` from whatever the product discovered on disk, and

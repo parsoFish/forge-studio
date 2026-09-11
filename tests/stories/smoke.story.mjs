@@ -7,7 +7,7 @@
  * product flow.
  *
  * The `data-*` keys are taken from the contract in
- * `docs/forge-ui-dom-and-harness.md`: Home is
+ * `docs/reference/studio-dom-contract.md`: Home is
  * `main[data-page="home"][data-page-ready]`, the projects index is
  * `[data-page="projects-index"][data-page-ready][data-project-count]`.
  *
