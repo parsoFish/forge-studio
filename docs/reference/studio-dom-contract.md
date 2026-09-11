@@ -1788,6 +1788,21 @@ is what this contract reads — but it cannot be the only distinguisher.
   re-read fails (never invent others; read that function for the full,
   current set).
 
+  **Discovered rows (M6-D, rulings 478 + 616).** A settled, successful refresh
+  may carry `[data-component="discovered-rows"][data-discovered-count]` inside
+  the same section — one `<li>` per row a DECLARED hub publishes that this
+  registry does not carry, each with `[data-discovered-id]`,
+  `[data-discovered-source]` (the repository the INSTALLER will fetch from, not
+  a decoration) and `[data-discovered-path]` (where the `SKILL.md` was
+  matched). Each carries `a[data-action="add-discovered-item"]
+  [data-discovered-id]` to `/community/new?id=…&sourceUrl=…`, which **prefills
+  the add-row form and writes nothing**: the add-row door stays the only write
+  path, so `hubs.yaml`'s D10 — *forge does not crawl on its own* — survives a
+  feature whose whole job is crawling, and a discovery stays a suggestion.
+  **Absent while in-flight and on any refusal**, and never carried over from a
+  previous pass: a stale proposal list over a live request is the same lie the
+  in-flight state exists to refuse.
+
   **`'in-flight'` (M6-D, T1 ruling 608(i))** is the state the page KNEW and
   never stated. The section used to render only once a result existed, so
   while a refresh ran the DOM was indistinguishable from one where nothing

@@ -136,3 +136,12 @@ export type CommunityConnectionDetail = CommunityItem & {
   capabilitiesSource?: 'curated';
 };
 export type CommunityItemDetail = CommunitySkillDetail | CommunityHookDetail | CommunityConnectionDetail;
+
+/** M6-D / ruling 478 — a row a declared hub publishes that this registry does
+ *  not carry. A PROPOSAL: the page offers it and the operator adds it through
+ *  the add-row door, which stays the only write path (`hubs.yaml`'s D10 —
+ *  forge does not crawl on its own, so a discovery is a suggestion rather than
+ *  a change). `sourceUrl` is the repository the INSTALLER will fetch from, not
+ *  a decoration: a discovered row is installable by construction. */
+export type DiscoveredRow = { id: string; sourceUrl: string; path: string };
+

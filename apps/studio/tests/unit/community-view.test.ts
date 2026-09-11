@@ -689,7 +689,7 @@ test('refreshOutcomeView: a clean 200 with no errors renders "refreshed", never 
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: OK_COUNTS,
     outcomes: [],
-    errors: [],
+    errors: [], discovered: [],
   };
   const view = refreshOutcomeView(result);
   expect(view.state).toBe('refreshed');
@@ -707,7 +707,7 @@ test('refreshOutcomeView: a 200 with a non-empty "errors" array is a PARTIAL out
     dryRun: false,
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
-    outcomes: [],
+    outcomes: [], discovered: [],
     errors: [
       { source: 'github.com/obra/superpowers', kind: 'timeout', message: 'request timed out after 10000ms' },
       { source: 'github.com/example/thing', kind: 'not-found', message: '404' },
@@ -730,7 +730,7 @@ test('refreshOutcomeView: a 200 that verified nothing and wrote nothing renders 
     lastRefresh: null,
     counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
     outcomes: [],
-    errors: [],
+    errors: [], discovered: [],
   };
   const view = refreshOutcomeView(result);
   expect(view.state).toBe('no-op');
@@ -800,7 +800,7 @@ const OK_RESULT: CommunityRefreshResult = {
   lastRefresh: '2026-08-24T10:00:00.000Z',
   counts: OK_COUNTS,
   outcomes: [],
-  errors: [],
+  errors: [], discovered: [],
 };
 
 test('refreshOutcomeView: postWriteReloadFailed on a clean refresh keeps the ORIGINAL success headline verbatim and adds an honest staleness notice — never retracted, never a fabricated reassurance', () => {
@@ -823,7 +823,7 @@ test('refreshOutcomeView: postWriteReloadFailed on a PARTIAL outcome (wrote:true
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
     outcomes: [],
-    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }],
+    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }], discovered: [],
   };
   const clean = refreshOutcomeView(partialResult);
   const stale = refreshOutcomeView(partialResult, { postWriteReloadFailed: true });
@@ -837,7 +837,7 @@ test('refreshOutcomeView: postWriteReloadFailed is IGNORED when the result never
   const noOpResult: CommunityRefreshResult = {
     state: 'ok', wrote: false, dryRun: false, lastRefresh: null,
     counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
-    outcomes: [], errors: [],
+    outcomes: [], errors: [], discovered: [],
   };
   expect(refreshOutcomeView(noOpResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(noOpResult));
 });
@@ -858,7 +858,7 @@ test('refreshOutcomeView: a dryRun no-op (unreachable from the UI today — see 
   const dryRunResult: CommunityRefreshResult = {
     state: 'ok', wrote: false, dryRun: true, lastRefresh: null,
     counts: { total: 7, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
-    outcomes: [], errors: [],
+    outcomes: [], errors: [], discovered: [],
   };
   const view = refreshOutcomeView(dryRunResult);
   expect(view.state).toBe('no-op');
