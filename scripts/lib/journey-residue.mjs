@@ -114,6 +114,7 @@ export const JOURNEY_INIT_SLUGS = [
   'e2e-repoint-guard',
   'e2e-studio-demo',
   'e2e-toc-write-mode',
+  'e2e-unparseable',
   // AUTO_CYCLE_ID (journey-fixtures.mjs:77) is built by CONCATENATION —
   // `${CYCLE_ID}-automated` — so it never appears as an `INIT-${X}-slug`
   // literal and the source-scanning ratchet could not see it. Found from the
