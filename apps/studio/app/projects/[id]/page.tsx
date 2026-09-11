@@ -31,6 +31,7 @@ import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/Unparseable
 import { PageLoadError } from '@/components/PageLoadError';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
+import { useRoadmapLiveRefresh } from '@/lib/use-roadmap-live-refresh';
 import { PageHeader } from '@/components/StudioPage';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
@@ -309,6 +310,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     return () => { signal.cancelled = true; };
     // loadKey (page Retry) AND panelKey (panel Retry / panels-only recovery) re-run the panel reads
   }, [isNew, projectKnown, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey]);
+
+  // `forge-8vfn.7.6.27` — the roadmap LISTENS now; the hook owns the reasoning.
+  useRoadmapLiveRefresh(isNew, refreshRoadmap);
 
   // The roadmap's "demo builder →" entrypoint (InitiativeDetail's
   // [data-link="demo-builder"], W6-B10 — used to be a fake `setTab('editor')`
