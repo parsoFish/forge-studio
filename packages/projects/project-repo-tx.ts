@@ -118,10 +118,26 @@ export function ensureStudioBranch(projectDir: string): void {
  * exactly those; otherwise stages everything EXCEPT forge scratch/session dirs.
  * Returns true iff a commit was made (false when nothing changed).
  */
+/** Paths git reports as dirty (modified, added, untracked) in the project repo,
+ *  porcelain-parsed. `[]` for a clean tree, a non-repo, or an unreadable read —
+ *  every one of which means "nothing this caller may claim it wrote". */
+export function dirtyPaths(projectDir: string): string[] {
+  if (!isGitRepo(projectDir)) return [];
+  const out = git(projectDir, ['status', '--porcelain', '-z'], { allowFail: true });
+  return out ? out.split('\0').filter(Boolean).map((e) => e.slice(3)) : [];
+}
+
 export function commitStudioChange(projectDir: string, message: string, paths?: string[]): boolean {
   if (!isGitRepo(projectDir)) return false;
+  // An EMPTY explicit list means "this caller wrote nothing", never "take
+  // everything" — bead forge-npp3. The old `paths && paths.length > 0` fell
+  // through to `add -A` on `[]`, so a caller that correctly computed it had
+  // written nothing got the sweep it was trying to avoid. #608's call site
+  // needed a `length > 0` guard at the call site for exactly this reason; the
+  // footgun belongs here, where every caller is protected at once.
+  if (paths !== undefined && paths.length === 0) return false;
   ensureStudioBranch(projectDir);
-  if (paths && paths.length > 0) {
+  if (paths !== undefined) {
     git(projectDir, ['add', '--', ...paths], { allowFail: true });
   } else {
     git(projectDir, ['add', '-A', '--', '.', ...SCRATCH_EXCLUDES.map((s) => `:(exclude)${s}`)], { allowFail: true });
