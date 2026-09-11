@@ -216,6 +216,27 @@ export function beatBound(beat, domTimeoutMs) {
  * renders a beat's failures, so a trend on a passing beat would become
  * documentation of nothing.
  */
+/**
+ * Say, on a RED verdict, that the channel door did NOT run — T1 ruling 664(i).
+ *
+ * The door is skipped when the declared bound is within twice the ceiling,
+ * because 180 s of a 200 s bound is the verdict rather than an early exit. A
+ * check that silently did not run is the shape this campaign keeps paying for,
+ * so the beat says which of the two it was.
+ */
+export function withDoorSkipped(verdict, skipped, boundMs, ceilingMs) {
+  if (verdict.status !== 'red' || !skipped) return verdict;
+  return Object.freeze({
+    ...verdict,
+    failures: Object.freeze([
+      ...verdict.failures,
+      `the agent-channel door did NOT run: this beat declared ${boundMs} ms, within twice the ${ceilingMs} ms ` +
+        'stall ceiling, and a door that would consume most of a declared bound is the verdict rather than an ' +
+        'early exit. The bound above is the whole story here.',
+    ]),
+  });
+}
+
 export function withAgentProc(verdict, probe) {
   if (verdict.status !== 'red' || probe === null || typeof probe?.summary !== 'function') return verdict;
   let trend = null;

@@ -33,12 +33,13 @@ import {
 // re-exports for the modules and tests that already name it here.
 export { routeMatches };
 import {
-  READY_TIMEOUT_MS, beatBound, withAgentProc, beatVerdict, stuckVerdict, resolveBeatRoute,
+  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute,
 } from './beats.mjs';
 // `performSteps` moved to `beats-steps.mjs` at the 800-line cap (ruling 492).
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
+import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
 
 
 
@@ -400,6 +401,14 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
 
   let verdict = named(beatVerdict(beat, await readObserved(page, beat), { boundMs: bound.ms, bound: bindings }));
   verdict = withAgentProc(verdict, agentProcProbe);
+  // 664(i): a door that did not run says so, rather than leaving the reader to
+  // wonder whether it passed or was skipped.
+  verdict = withDoorSkipped(
+    verdict,
+    stallDoor !== null && sessionScope === null && bound.ms <= 2 * STALL_CEILING_MS,
+    bound.ms,
+    STALL_CEILING_MS,
+  );
   // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
   // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
   // that passes without its declared wait ever running passed by luck, and a
