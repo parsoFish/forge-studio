@@ -27,9 +27,9 @@ import assert from 'node:assert/strict';
 import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
-import { lockHolders, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
+import { lockHolders, lockWaiters, lockOpeners, describeLockOccupants, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 
 const REPO = new URL('../..', import.meta.url).pathname;
 
@@ -57,10 +57,18 @@ function heldLock(): { path: string; release: () => void; unhold: () => void } {
   };
 }
 
-test('a holder is found by FD and named with its pid and cwd — never by matching a command string', () => {
+// RETITLED for 7.6.33 / T1 743. This test opens the lock file and never calls
+// `flock`, so the process it creates is OPEN-NOT-LOCKED — the third class D
+// measured (`( exec 9>T; sleep 3 ) &` gives `/proc/locks` zero rows while
+// `fuser` names the pid). It was asserted against `lockHolders` because before
+// tonight there was only one class and "has the descriptor" was all we could
+// see. It is `lockOpeners` now; the property it pins — found by FD, named with
+// pid and cwd, never by matching a command string — is unchanged and is still
+// the point.
+test('an OPEN-NOT-LOCKED process is found by FD and named with its pid and cwd — never by matching a command string', () => {
   const lock = heldLock();
   try {
-    const holders = lockHolders(lock.path);
+    const holders = lockOpeners(lock.path);
     const me = holders.find((h) => h.pid === String(process.pid));
     assert.ok(me, `this process holds ${lock.path} open, so it must be named — got ${JSON.stringify(holders)}`);
     assert.equal(me!.cwd, process.cwd(), 'the cwd comes from /proc/<pid>/cwd, which is what tells an operator WHICH tree');
@@ -74,6 +82,7 @@ test('an EXISTING lock nobody holds yields an empty list — a real answer about
   try {
     lock.unhold();
     assert.deepEqual(lockHolders(lock.path), [], 'the file is there and free: [] is the honest answer');
+    assert.deepEqual(lockOpeners(lock.path), [], 'and nobody has it merely open either');
   } finally {
     lock.release();
   }
@@ -195,4 +204,63 @@ test('DOOR: the suite refuses BEFORE the first test file', () => {
   } finally {
     lock.release();
   }
+});
+
+test('7.6.33: a WAITER is not a holder — /proc/locks decides, the fd walk cannot', async () => {
+  // MEASURED, not theorised. At 14:2xZ tonight `.run-lock` had three processes
+  // with the file open: A's `flock -w` (holding, costed S1 live), A's story run,
+  // and MY `flock -w … true` queued behind it. An fd census reported all three,
+  // so D's gate refusal named me as a holder and told A's lane to wait for a
+  // process that was itself waiting. I had already reported the same wrong
+  // shape to T1 twice using the same method.
+  //
+  // A process blocked in `flock(2)` holds the descriptor open exactly like the
+  // owner does. `/proc/locks` is the only source that separates them:
+  //
+  //   7:    FLOCK ADVISORY WRITE 2667935 08:30:2313312 0 EOF   ← holder
+  //   7: -> FLOCK ADVISORY WRITE 2683133 08:30:2313312 0 EOF   ← waiter
+  //
+  // The `->` prefix marks a blocked waiter. Corroborated per-process by
+  // `wchan` = `locks_lock_inode_wait`.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-lockwait-'));
+  const lock = join(dir, '.run-lock');
+  writeFileSync(lock, '');
+
+  // A real holder, and a real waiter queued behind it.
+  const holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 400));
+  const waiter = spawn('flock', ['-w', '30', lock, 'true'], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 400));
+
+  try {
+    const held = lockHolders(lock);
+    const waiting = lockWaiters(lock);
+
+    assert.equal(held.length, 1, `exactly one process HOLDS it: ${JSON.stringify(held)}`);
+    assert.equal(String(held[0].pid), String(holder.pid), 'and it is the one that got there first');
+    assert.equal(waiting.length, 1, `and exactly one is WAITING: ${JSON.stringify(waiting)}`);
+    assert.equal(String(waiting[0].pid), String(waiter.pid));
+    assert.ok(held[0].cwd !== undefined, 'cwd still comes from /proc/<pid>/cwd — /proc/locks does not carry it');
+  } finally {
+    holder.kill('SIGKILL');
+    waiter.kill('SIGKILL');
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('7.6.33: the refusal says who holds and HOW MANY wait', () => {
+  // "pid N (cwd X), pid M (cwd Y)" told a reader two lanes were in the way when
+  // one was queued behind the other. What a lane needs in order to choose
+  // between waiting and investigating is which is which.
+  const line = describeLockOccupants(
+    [{ pid: '111', cwd: '/home/parso/forge-m6-a' }],
+    [{ pid: '222', cwd: '/home/parso/forge-m6-c' }, { pid: '333', cwd: '/home/parso/forge-m6-d' }],
+  );
+  assert.match(line, /held by pid 111 \(cwd \/home\/parso\/forge-m6-a\)/, line);
+  assert.match(line, /2 waiting/, line);
+  assert.doesNotMatch(line, /pid 222/, 'a waiter is counted, not named — naming it invites chasing the wrong lane');
+});
+
+test('7.6.33: no holder and no waiter reads as free, not as unknown', () => {
+  assert.equal(describeLockOccupants([], []), 'nothing holds it');
 });
