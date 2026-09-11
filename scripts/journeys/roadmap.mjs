@@ -12,6 +12,7 @@ let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-dev
 let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
 let INIT_PLAN;                              // roadmap-tab → roadmap-plan-trigger (R4-11-F2)
 let INIT_UNPARSEABLE;                       // roadmap-tab only (seeded + asserted + cleaned in one beat)
+let INIT_REFUSED;                           // roadmap-tab only (seeded + asserted + cleaned in one beat)
 let INIT_RECOVERY;                          // roadmap-recovery only (R4-11-T3, self-contained)
 
 export const journey = defineJourney({
@@ -171,6 +172,18 @@ export const journey = defineJourney({
               // AND a queue entry that could not be read. No `class:` key, which
               // ADR-051 made required (packages/flows/manifest.ts:117). Cleaned in
               // this beat's own tail, like INIT_MERGED.
+              // `forge-8vfn.7.6.18` — the scheduler CLAIMED this one and then
+              // REFUSED its own claim, writing the failing hard clause down.
+              // C's run 9 left exactly this on gitpulse and the operator read
+              // `unplanned` for twenty minutes. Swept with its siblings below.
+              INIT_REFUSED = `INIT-${DATE}-e2e-claim-refused`;
+              writeFileSync(join(QDIR('pending'), `${INIT_REFUSED}.md`), [
+                '---', `initiative_id: ${INIT_REFUSED}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
+                'origin: architect', 'class: code', 'claim_blocked_clauses: SKILLS',
+                '---', '', '# mdtoc — blocked on the project contract', '',
+              ].join('\n'));
+
               INIT_UNPARSEABLE = `INIT-${DATE}-e2e-unparseable`;
               writeFileSync(join(QDIR('pending'), `${INIT_UNPARSEABLE}.md`), [
                 '---', `initiative_id: ${INIT_UNPARSEABLE}`, `project: ${PROJECT}`,
@@ -249,6 +262,24 @@ export const journey = defineJourney({
                   };
                 });
                 check(refused.count === '1', `roadmap: [data-unparseable-count] counts the refused manifest (got ${refused.count})`);
+
+                // `forge-8vfn.7.6.18` — the daemon's own refusal, on the card and
+                // in the start-work view. The hard gate is right; the silence was
+                // the defect.
+                // The start-work REASON is not asserted here on purpose: this
+                // fixture seeds other plannable initiatives, so `unplannedReady`
+                // is non-empty and `planDisabledReason` is legitimately null. Its
+                // door is the unit test, which drives `deriveStartWorkState`
+                // directly and is mutation-checked both ways.
+                const blocked = await page.evaluate((id) => {
+                  const card = document.querySelector(`[data-initiative-id="${id}"]`);
+                  return {
+                    clauses: card ? card.getAttribute('data-blocked-clauses') : null,
+                    ready: card ? card.getAttribute('data-initiative-ready') : null,
+                  };
+                }, INIT_REFUSED);
+                check(blocked.clauses === 'SKILLS', `roadmap: the refused claim's clause NAMES reach the card (got ${blocked.clauses})`);
+                check(blocked.ready === 'false', `roadmap: a refused claim does not read ready (got ${blocked.ready})`);
                 check(
                   typeof refused.named === 'string' && /class/.test(refused.named),
                   `roadmap: the refused manifest is NAMED with the parser's own message, not merely counted (got ${JSON.stringify(refused.named)})`,
@@ -548,6 +579,7 @@ export const journey = defineJourney({
               // Self-contained to this beat — clean up the seeded fixture.
               try { rmSync(join(QDIR('pending'), `${INIT_PLAN}.md`), { force: true }); } catch { /* */ }
     try { rmSync(join(QDIR('pending'), `${INIT_UNPARSEABLE}.md`), { force: true }); } catch { /* */ }
+    try { rmSync(join(QDIR('pending'), `${INIT_REFUSED}.md`), { force: true }); } catch { /* */ }
 
         },
       },

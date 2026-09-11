@@ -134,3 +134,41 @@ test('StartWorkActions: with NO roadmap every dispatch button is disabled AND ex
   // The Architect link never disables — it IS the way out.
   expect(html).toContain('data-action="start-work-architect"');
 });
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.18` — the scheduler's OWN refusal reaches the start-work view.
+//
+// Lane C's run 9: the scheduler claimed the Plan job, refused its own claim on
+// the hard SKILLS clause, wrote the reason down, and the operator watched a queue
+// that did not move for twenty minutes. I met the same refusal from the other
+// side — G2 resume 7, four seconds, $0.00, same clause — and only knew because I
+// was reading serve.log directly.
+//
+// §15.400 — what else could make this pass? "every ready initiative is already
+// planned" is the pre-existing reason for an empty unplannedReady set, and it
+// would be produced here too. So the assertion requires the CLAUSE NAME, which
+// only the new path can produce, and the companion pins the old sentence still
+// appearing when nothing was refused.
+// ---------------------------------------------------------------------------
+
+test('start-work: a claim the scheduler refused names the clause, not "already planned"', () => {
+  const state = deriveStartWorkState(
+    [{ initiativeId: 'INIT-BLOCKED', title: 'blocked', status: 'pending', ready: false, blockedClauses: ['SKILLS'] }],
+    [],
+  );
+  // a refused claim is not a Plan target
+  expect(state.unplannedReady.length).toBe(0);
+  // the failing clause NAME must reach the operator — "nothing is ready" is what
+  // they already had, and it is what cost lane C's run 9 twenty minutes
+  expect(state.planDisabledReason ?? '').toMatch(/SKILLS/);
+  // and it must say what KIND of problem it is
+  expect(state.planDisabledReason ?? '').toMatch(/contract/i);
+});
+
+test('start-work: nothing refused keeps the existing reason — the fix adds a case, it does not replace one', () => {
+  const state = deriveStartWorkState(
+    [{ initiativeId: 'INIT-PLANNED', title: 'planned', status: 'pending', ready: true, workItems: [{}] }],
+    [],
+  );
+  expect(state.planDisabledReason).toBe('every ready initiative is already planned');
+});
