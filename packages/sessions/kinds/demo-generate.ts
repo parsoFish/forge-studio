@@ -34,6 +34,14 @@ import {
  *  single pass had: the split costs no budget, it just makes "wrote nothing"
  *  surface at pass 1's end instead of at turn 24. */
 export const DEMO_WRITE_PASS_MAX_TURNS = 8;
+/** The read turn's bound. Measured: run 4 spent 9 tool calls orienting and had
+ *  not begun writing; 6 turns is enough to orient and cannot become the whole
+ *  budget, because the write turn no longer shares it. */
+export const DEMO_READ_PASS_MAX_TURNS = 6;
+/** Read tools, named once. `Grep` is a read by another name. */
+export const DEMO_READ_TOOLS: readonly string[] = ['Read', 'Glob', 'Grep'];
+/** What the write turn may NOT do. Every read door, not just Bash (#558). */
+export const DEMO_WRITE_PASS_DENIED: readonly string[] = ['Bash', 'Read', 'Glob', 'Grep', 'TodoWrite'];
 export const DEMO_GROUND_PASS_MAX_TURNS = 16;
 
 export async function runGenerateStep(args: {
@@ -100,7 +108,7 @@ export async function runGenerateStep(args: {
   // never the lever (374); the tool set per pass is. Forbidding Bash outright
   // was the other wrong fix: a demo that cannot run the project cannot show
   // REAL output.
-  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = []) => runAgentTurn({
+  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = [], onText?: (t: string) => void) => runAgentTurn({
     queryFn: plumbing.queryFn,
     prompt: turnPrompt,
     cwd: status.project_repo_path,
@@ -113,14 +121,26 @@ export async function runGenerateStep(args: {
     maxTurns,
     onToolUse: plumbing.onToolUse,
     onHeartbeat: plumbing.onHeartbeat,
-    onText: plumbing.onText,
+    onText: (t: string) => { onText?.(t); plumbing.onText?.(t); },
     onThinking: plumbing.onThinking,
     label: `demo-builder-${input.sessionId}`,
   });
+  // 7.3.6 (T1 ruling 642) — READ, then WRITE. S1 run 4's write pass spent all 8
+  // turns on 1 TodoWrite + 2 Glob + 6 Read and never began writing; #558 denied
+  // Bash, which removed run-instead-of-write and left read-instead-of-write
+  // wide open. A deny list that leaves ANY read door open is #558 again, so
+  // the write pass loses Read, Glob, Grep and TodoWrite as well, and the
+  // reading it needs happens first, bounded, with its findings injected.
+  let findings = '';
+  await runPass(
+    [prompt, '', '## This turn: READ ONLY', 'Gather what you need to author the demo. Write nothing; your notes are carried to the next turn.'].join('\n'),
+    DEMO_READ_TOOLS, DEMO_READ_PASS_MAX_TURNS, ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash'],
+    (t) => { findings += t; },
+  );
   const writePass = await runPass(
-    prompt,
-    agentSpec.allowedTools.filter((t) => t !== 'Bash'),
-    DEMO_WRITE_PASS_MAX_TURNS, ['Bash'],
+    [prompt, '', '## Findings from your read turn', findings.trim() || '_(none recorded)_'].join('\n'),
+    agentSpec.allowedTools.filter((t) => !DEMO_WRITE_PASS_DENIED.includes(t)),
+    DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED,
   );
 
   // The required generator skill is the per-element skill when iterating one
