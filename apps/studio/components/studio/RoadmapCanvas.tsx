@@ -99,8 +99,8 @@ const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
 const DEFAULT_ATTEMPT: AttemptInfo = { attemptCount: 1, priorCycleIds: [] };
 
 /** planStateAttr — mirrored from RV-1, plus W8-A3's fifth status (see below). */
-export function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'needs-confirm' | 'unplanned' {
-  if (!unplanned) return 'planned';
+export function planStateAttr(phase: 'planned' | 'claimed' | 'pending', plan: PlanCardState): 'planned' | 'planning' | 'error' | 'needs-confirm' | 'unplanned' {
+  if (phase === 'planned') return 'planned'; // `forge-8vfn.7.6.21`: WORK ITEMS EXIST — never "no longer pending"
   // W8-A3 review round 3, S3-7: `needs-confirm` used to fall through to
   // 'unplanned', so a card whose plan was REFUSED was byte-identical in the DOM
   // to one nobody had touched — while the sibling `data-develop-state` passed the
@@ -109,6 +109,7 @@ export function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned
   if (plan.status === 'needs-confirm') return 'needs-confirm';
   if (plan.status === 'error') return 'error';
   if (plan.status === 'planning' || plan.status === 'started') return 'planning';
+  if (phase === 'claimed') return 'planning'; // `7.6.21`: the scheduler has it, the PM has not written a plan yet
   return 'unplanned';
 }
 
@@ -559,8 +560,7 @@ function RoadmapCanvasNode({
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, completedAt } = initiative;
   const colour = STATUS_COLOR[queueStatusToColor(status)];
-  const planned = workItems !== undefined;
-  const unplanned = status === 'pending' && !planned;
+  const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
   const depsCount = dependsOnInitiatives.length;
   const wiTotal = workItems?.length ?? 0;
@@ -575,7 +575,7 @@ function RoadmapCanvasNode({
       data-initiative-id={initiativeId}
       data-initiative-status={status}
       data-develop-state={develop.status}
-      data-plan-state={planStateAttr(unplanned, plan)}
+      data-plan-state={planStateAttr(planPhase, plan)}
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')}
       data-initiative-collapsed="true"
