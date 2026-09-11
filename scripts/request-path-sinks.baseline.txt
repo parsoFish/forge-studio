@@ -629,6 +629,7 @@ packages/sessions/kinds/demo-builder.ts readFileSync 3
 packages/sessions/kinds/demo-builder.ts realpathSync 2
 packages/sessions/kinds/demo-builder.ts writeFileSync 5
 packages/sessions/kinds/demo-generate.ts existsSync 2
+packages/sessions/kinds/demo-generate.ts mkdirSync 1
 packages/sessions/kinds/demo-generate.ts readFileSync 3
 packages/sessions/kinds/demo-generate.ts writeFileSync 3
 packages/sessions/kinds/demo-session-store.ts mkdirSync 1
@@ -644,7 +645,7 @@ packages/sessions/session-resolution.ts readdirSync 1
 packages/sessions/session-status-io.ts mkdirSync 2
 packages/sessions/session-status-io.ts readFileSync 2
 packages/sessions/session-status-io.ts writeFileSync 2
-packages/sessions/session-write-fence.ts realpathSync 2
+packages/sessions/session-write-fence.ts realpathSync 3
 packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
 packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
 packages/sessions/studio/session-artifact-derivers.ts realpathSync 6

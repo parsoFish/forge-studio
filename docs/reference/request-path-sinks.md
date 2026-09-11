@@ -2385,3 +2385,37 @@ returned, never to a path the caller composed.
 /api/studio/projects` resolves it from the request body — which is precisely
 why the root/segment split matters here: the untrusted id stays a segment and is
 never folded into the trusted root.
+
+### Added in M6-A (bead `forge-a9o9` / 7.3.6, ruling 703) — the demo write pass is fenced to its own two roots
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/sessions/kinds/demo-generate.ts` | `mkdirSync` | 0 | 1 |
+| `packages/sessions/session-write-fence.ts` | `realpathSync` | 2 | 3 |
+
+**Two sinks, both created by a fence rather than by a feature.** §15.397 — a deny
+that makes a required protocol step impossible is a trap, not a fence. 7.3.6
+denied `Read` outright in the demo write pass; S1 run 6 measured the consequence,
+since the SDK refuses `Write` to an existing file unless the turn has Read it. So
+`Read` is now **path-scoped** to `.forge/demo/` and `.forge/skills/demo-design/`
+rather than denied, and the pass is write-root fenced to the same two roots.
+
+**`mkdirSync` is GUARDED, and this check is why.** The two directories must exist
+before the turn so the fence can `realpath` them, and the first draft created
+them with a bare `join(status.project_repo_path, rel)`. This check caught it on
+its first gate — the same catch `writeProjectGroundFile` took earlier the same
+day, in the same class of change. Each root now resolves through
+`resolveGuardedPath(status.project_repo_path, rel.split('/'))` and a path that
+does not resolve beneath the repo **throws**; the `mkdirSync` runs on the
+guard's returned realpath, never on a composed string. The segments are
+constants — `project_repo_path` is the request-derived part, which is exactly
+why the root/segment split matters here.
+
+**`realpathSync` is the read-root half of an existing audited residual.** The
+same function already resolved `writeRoots` this way, for the same reason and
+with the same trust statement: the roots are caller-supplied, already-existing
+absolute directories, never request text. The new call resolves `readRoots`
+beside them. **The gate is on the REQUESTED set, not the resolved one** — a
+caller whose roots all fail to resolve gets every `Read` denied rather than
+ungated, so a fence that cannot resolve its roots fails closed instead of
+silently becoming no fence.

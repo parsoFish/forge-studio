@@ -129,7 +129,14 @@ export type WriteRootCanUseTool = (
 // integration shape (a fake `queryFn` capturing `options.canUseTool`) is
 // ALSO covered, but a direct export lets the deny/allow/symlink-escape
 // matrix be pinned without threading every case through a full turn.
-export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence: BashFenceOptions = {}): WriteRootCanUseTool {
+export function makeWriteRootCanUseTool(
+  writeRoots: readonly string[],
+  bashFence: BashFenceOptions = {},
+  /** `forge-a9o9`/7.3.6 (T1 ruling 703) — roots inside which `Read` is PERMITTED.
+   *  Empty (the default) leaves `Read` ungated, which is every existing caller's
+   *  behaviour. See the note above `readRoots` in `writeRootFenceOptions`. */
+  readRoots: readonly string[] = [],
+): WriteRootCanUseTool {
   // Resolved ONCE, at turn start, not per tool call — every root was already
   // provisioned by the caller (see this section's own header), so a root
   // that still fails to realpath here is a caller bug: fail THAT ONE root
@@ -146,7 +153,47 @@ export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence
     })
     .filter((root): root is string => root !== null);
 
+  const realReadRoots = readRoots
+    .map((root) => {
+      try {
+        return realpathSync(root);
+      } catch {
+        return null;
+      }
+    })
+    .filter((root): root is string => root !== null);
+
   return async (toolName, input, _options) => {
+    // `forge-a9o9`/7.3.6 (703). A DENY THAT MAKES A REQUIRED PROTOCOL STEP
+    // IMPOSSIBLE IS A TRAP, NOT A FENCE (§15.397). 7.3.6 denied `Read` in the
+    // demo write pass to stop read-instead-of-write, and S1 run 6 measured what
+    // that left: the SDK refuses `Write` to a file that already exists unless
+    // the turn has Read it, so the agent created `SKILL.md`, could not re-Write
+    // it, concluded "the tool is blocking writes to new files too", fell back to
+    // `Edit` — which only works on files that exist — and looped on the one file
+    // it had. `DEMO.html` was never attempted. Read is scoped to the pass's own
+    // roots instead: enough to satisfy the protocol, not enough to wander.
+    // FAIL CLOSED on the requested set, not the resolved one. `realReadRoots`
+    // drops any root that will not realpath, so testing IT would mean that a
+    // caller whose roots all failed to resolve gets `Read` UNGATED — the fence
+    // asked for silently becoming no fence at all. Testing the REQUESTED set
+    // means the same failure denies every Read instead, which is the direction
+    // this codebase has spent the day moving in.
+    if (readRoots.length > 0 && toolName === 'Read') {
+      const target = extractGatedToolPath(input);
+      if (target === null) {
+        return { behavior: 'deny', message: 'Read: no resolvable file path in tool input — refused by the read-root fence.' };
+      }
+      if (!isUnderWriteRoot(target, realReadRoots)) {
+        return {
+          behavior: 'deny',
+          message:
+            `Read of "${target}" is outside this turn's readable root(s) (${readRoots.join(', ')}) — ` +
+            'refused by the read-root fence. You do not need to read anything else: write your deliverables here.',
+        };
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
     if (toolName === 'Bash') {
       // W7-FIX-A2 (W7A2-03): Bash on a fenced turn — deny by default; a kind
       // that opted in gets the static inspector (fail closed on anything it
@@ -232,13 +279,22 @@ export function writeRootFenceOptions(args: {
   cwd: string;
   /** Absent/`deny` denies every Bash call; `inspect` statically inspects each. */
   bashFence?: BashFenceMode;
+  /** `forge-a9o9`/7.3.6 (703) — roots inside which `Read` is PERMITTED. When
+   *  set, `Read` is stripped from `allowedTools` for the same reason the write
+   *  tools are: a name in `allowedTools` is pre-approved, and the SDK would
+   *  never route it to the callback that scopes it. Omitted leaves `Read`
+   *  ungated, which is every existing caller's behaviour. */
+  readRoots?: readonly string[];
 }): { permissionMode: 'default'; allowedTools: string[]; canUseTool: WriteRootCanUseTool } {
+  const readScoped = (args.readRoots ?? []).length > 0;
+  const stripped = readScoped ? new Set([...FENCE_STRIPPED_TOOLS, 'Read']) : FENCE_STRIPPED_TOOLS;
   return {
     permissionMode: 'default',
-    allowedTools: args.allowedTools.filter((t) => !FENCE_STRIPPED_TOOLS.has(t)),
+    allowedTools: args.allowedTools.filter((t) => !stripped.has(t)),
     canUseTool: makeWriteRootCanUseTool(
       args.writeRoots,
       args.bashFence === 'inspect' ? { bash: 'inspect', cwd: args.cwd } : { bash: 'deny' },
+      args.readRoots ?? [],
     ),
   };
 }
