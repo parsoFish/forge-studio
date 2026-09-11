@@ -522,17 +522,48 @@ export default {
       // session this story started can ever appear in it, and the ledger reads
       // zero after two paid dispatches. Owning package `sessions`.
       act: 'Open the Monitor and read what the two of them cost',
+      // AMENDED 2026-09-11 (amend-8, operator ruling 656) — 2 → 3, and the
+      // three are NAMED here rather than counted, because a bare count against
+      // this ledger has now been wrong twice for two unrelated reasons.
+      //
+      // S9 run 5 (`evidence/m6-a-S9-run5/`, frame 14), read off the page:
+      //   AGENT  onboarding-agent  onboarding-agent    RUNNING
+      //   FLOW   creation-agent    Authoring session   AWAITING-REVIEW  $1.01
+      //   FLOW   onboarding-agent  Onboarding session  RUNNING
+      //
+      // So the ledger carries the TWO SESSIONS this story started — which is
+      // what the act means by "the two of them" — PLUS the standalone dispatch
+      // the onboarding kind makes for itself. The onboarding work appears
+      // twice, as a session and as the agent run beneath it; the authoring
+      // work appears once, because its kind dispatches nothing. That is not a
+      // duplicate row: they are different objects with different ids, and the
+      // ledger is right to list both.
+      //
+      // WHY THE OLD 2 WAS WRONG, twice, differently. In run 4 (head
+      // `6ed2855d`, before `forge-b6af`) it read THREE because two of them
+      // were `_queue/pending` residue — 7.6.17's doubled initiative manifests
+      // from S1 run 3, surfacing as PLANNED flow rows. In run 5 it reads three
+      // again with an empty queue, because b6af taught the ledger to list
+      // sessions at all. Same number, no shared cause.
+      //
+      // `/monitor` merges flow runs, standalone dispatches AND sessions. A
+      // beat asserting a bare total against three independent sources is wrong
+      // again the moment any one of them changes — which is exactly what
+      // happened. `ledger-agent` is asserted alongside so the count cannot
+      // drift back into meaning nothing: a run that produces three rows from
+      // the wrong work still fails here.
       expect: {
         route: '/monitor',
         data: {
           page: 'monitor',
           'page-ready': 'true',
-          'ledger-total': '2',
+          'ledger-total': '3',
           section: 'history-ledger',
-          'ledger-count': '2',
+          'ledger-count': '3',
+          'ledger-agent': 'creation-agent',
         },
       },
-      say: 'The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever.',
+      say: 'The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever. Three rows for two sessions is the honest shape: the onboarding kind dispatches a standalone agent of its own, and the operator is shown both the session and the run beneath it.',
     },
     {
       // Blocked behind beat 13 and asserting the figure itself. Both keys are
