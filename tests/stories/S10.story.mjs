@@ -113,6 +113,8 @@ const SEND_BACK =
   'output. Exclude must win, and the header annotation must say how many commits each ' +
   'filter removed, so a zero-commit report is never ambiguous about which filter emptied it.';
 
+import { ACT_2 } from './S10.act2.mjs';
+
 export default {
   id: 'S10',
   // budget_usd is the exit row's ceiling (ruling 389). realSpawn because every
@@ -377,7 +379,7 @@ export default {
       // measurement; leaving a guess in place once a real number exists is how
       // beat 4 cost run 3.
       act: 'Plan the initiative the Architect produced',
-      do: [{ press: 'project-tab-roadmap' }, { press: 'start-work-plan' }],
+      do: [{ press: 'start-work-plan' }],
       wait: { for: 'agent', upTo: 1_200_000 },
       expect: {
         route: '/projects/gitpulse',
@@ -396,6 +398,23 @@ export default {
         // IS THE FAIL-FAST NOW — ruling 640 put the channel door in that same
         // wait, so a press that dispatches nothing ends at the 180-second
         // stall ceiling with `no-channel`, three minutes instead of twenty.
+        //
+        // AMEND-7 (T1 690/696). `plan-state: 'planned'` NOW MEANS WORK ITEMS
+        // EXIST. It did not when this beat was written, and run 10 paid to find
+        // that out: `planStateAttr` read `unplanned = status === 'pending' &&
+        // !planned` and returned `'planned'` for anything that was merely no
+        // longer pending — so the SCHEDULER'S CLAIM, 288 ms after beat 7 started
+        // it, flipped this key green on an initiative nothing had planned. The
+        // PM had been running for 0.48 s and would not write its first file for
+        // another ten seconds; it was killed mid-decomposition and never wrote a
+        // work item at all. The beat passed anyway.
+        //
+        // D's `forge-8vfn.7.6.21` (#649, `c12ea4f6`) made the attribute mean
+        // what this beat always needed: `planned` iff work items exist, and a
+        // claimed-but-unplanned initiative reads `planning`. So the SAME
+        // assertion is now the Plan station's real measurement instead of a race
+        // the claim wins — §15.386, verify what makes an attribute TRUE, not
+        // that it reads true.
         data: {
           page: 'projects', 'project-id': 'gitpulse',
           'plan-state': 'planned', 'initiative-ready': 'true',
@@ -405,12 +424,20 @@ export default {
     },
     {
       // SOURCE-DERIVED. `StartWorkActions.tsx:187` (`data-section="start-work"`),
-      // `:230` (`data-action="start-work-develop"`), corroborated by
-      // `lib/start-work-render.test.ts:112,114`. `project-tab-roadmap` is
-      // VERIFIED (S1 b10). The disabled reasons are source-FIXED strings in
-      // `lib/start-work-view.ts:80-101`, so a red here names which one fired.
+      // `:230` (`data-action="start-work-develop"`), `:312`
+      // (`data-start-work-outcome`), corroborated by
+      // `lib/start-work-render.test.ts:112,114`. The disabled reasons are
+      // source-FIXED strings in `lib/start-work-view.ts:80-101`, so a red here
+      // names which one fired.
+      //
+      // THE TAB PRESS IS GONE, and it was always inert. `StartWorkActions` is
+      // mounted ABOVE the tab bar — `app/projects/[id]/page.tsx:507`, "the
+      // PRIMARY action group, above the fold on BOTH tabs" — so neither this
+      // button nor `start-work-plan` was ever tab-gated. Beat 7's press is real
+      // and stays: `scheduler-start` renders inside
+      // `data-section="project-roadmap"` and IS behind the tab.
       act: 'Open the roadmap and start development on the planned initiative',
-      do: [{ press: 'project-tab-roadmap' }, { press: 'start-work-develop' }],
+      do: [{ press: 'start-work-develop' }],
       expect: {
         route: '/projects/gitpulse',
         // `run-id` BINDS here, in the beat that presses — S5's shape (it binds
@@ -419,7 +446,32 @@ export default {
         // route needs, because the route is resolved before the beat runs, so
         // the binding has to happen on the press that mints the run. The
         // attribute is `EnqueueOutcomeLine`'s always-present root (A's #582).
-        data: { page: 'projects', 'project-id': 'gitpulse', section: 'start-work', 'run-id': '<runId>' },
+        //
+        // AMEND-7: THIS BEAT COULD NOT HAVE PASSED BEFORE, and not because of
+        // its assertions. Run 10 found `start-work-develop` DISABLED, carrying
+        // the product's own reason — "nothing is ready to start (blocked,
+        // running, or done)". It was right: `eligible` is `pending + ready +
+        // workItems !== undefined` (`start-work-view.ts:67`), the scheduler had
+        // claimed the initiative out of `pending` two beats earlier, and the
+        // PM it started was killed before it wrote a single work item. There was
+        // genuinely nothing to start.
+        //
+        // With 7.6.21 the beat above now WAITS for work items to exist rather
+        // than for the claim, so by the time this beat presses, the button is
+        // enabled for the reason the story always assumed.
+        //
+        // `start-work-outcome` is the press's own verdict and is asserted here.
+        // NOT asserted: "development already enqueued — waiting for the
+        // scheduler to claim it" (`:92`). That string is reachable — but only
+        // AFTER a successful press, because `eligible` excludes
+        // `dispatchedDevelop`, which `StartWorkActions.tsx:119` populates from
+        // the press's own `okIds`. So it is a consequence of this beat, not a
+        // preconstitution of it, and asserting it here would be asserting on
+        // state this same beat creates.
+        data: {
+          page: 'projects', 'project-id': 'gitpulse', section: 'start-work',
+          'run-id': '<runId>', 'start-work-outcome': 'ok',
+        },
       },
       say: 'The initiative is planned and its work items exist, so the roadmap card can finally be started. Starting it from the card is the point: the operator is not re-describing the work, they are pressing go on work that has already been decided and decomposed.',
     },
@@ -666,87 +718,6 @@ export default {
       },
       say: 'One figure, and it is the same figure the event log holds. A run that cannot say honestly what it spent cannot be trusted with a ceiling, so this is checked against the log rather than taken from the screen.',
     },
-    {
-      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
-      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
-      // route wait and before real-nav, so the beat that follows would press
-      // its control while still standing on the page this beat leaves — and
-      // spend its whole bound on a control that page does not carry. Run 2
-      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
-      // Reached by the monitor's own run row (`app/monitor/page.tsx:155`).
-      // `abandon-run` is on the run page's controls (`RunControls.tsx:34`,
-      // a variable-valued handle), not on the monitor.
-      act: 'Open the running initiative from Monitor',
-      expect: {
-        route: '/flows/forge-develop/run/<runId>',
-        data: { page: 'flow-run', 'page-ready': 'true' },
-      },
-      say: 'Act 2 starts where act 1 was watched from: the operator opens the run they are about to stop.',
-    },
-    {
-      // ACT 2 — SOURCE-DERIVED, and NOTHING in the pinned corpus covers it: a
-      // grep for `resume`, `forced stop`, `abort`, `kill`, `pause` across all
-      // eleven story files returns zero matches. Handles:
-      // `data-section="run-controls"` (`RunControls.tsx:176-180`, corroborated
-      // `lib/run-controls-render.test.ts:63-64`), `data-action="abandon-run"` /
-      // `"requeue-run"` / `"resume-run"` (`lib/run-controls.ts:41,49,57`,
-      // corroborated `lib/run-controls.test.ts:60`), and the arm-then-confirm
-      // pair `data-component="abandon-confirm"` + `data-action="confirm-abandon"`
-      // (`RunControls.tsx:227,235,243`, corroborated
-      // `run-controls-render.test.ts:79-80`). THIS SURFACE CONFIRMS; the
-      // roadmap drawer's `recovery-abandon` does not (header note).
-      act: 'ACT 2 — stop a run mid-flight',
-      do: [{ press: 'abandon-run' }, { press: 'confirm-abandon' }],
-      expect: {
-        route: '/flows/forge-develop/run/<runId>',
-        data: { page: 'flow-run', section: 'run-controls', component: 'abandon-confirm' },
-      },
-      say: 'Things stop halfway. What matters is not that it never happens but that stopping is a decision the operator makes on purpose, twice, rather than something they discover.',
-    },
-    {
-      // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
-      // `page`/`page-ready`, nothing else). `performSteps` runs BEFORE the
-      // route wait and before real-nav, so the beat that follows would press
-      // its control while still standing on the page this beat leaves — and
-      // spend its whole bound on a control that page does not carry. Run 2
-      // measured that shape at 600 000 ms on beat 4 and 900 000 ms twice more.
-      // Reached by the run page's own project link (`FlowRunDetail.tsx:154`,
-      // `data-action="open-project"`). `recovery-requeue` lives on the
-      // project's roadmap (`InitiativeDetail.tsx:344`).
-      act: 'Go back to the project to pick the stopped work up again',
-      expect: {
-        route: '/projects/gitpulse',
-        data: { page: 'projects', 'page-ready': 'true' },
-      },
-      say: 'Recovery is where the operator already is — the roadmap the work lives on, not a special screen.',
-    },
-    {
-      // ACT 2 — SOURCE-DERIVED. The preservation evidence lives on the ROADMAP
-      // DRAWER, not on run-controls: `data-recovery-attempt-count` and
-      // `data-recovery-prior-attempts` (`InitiativeDetail.tsx:291-294,302-303`,
-      // corroborated `lib/roadmap-canvas-render.test.ts:292-294`) and
-      // `data-recovery-commits` (`:322`) — the branch's surviving commits.
-      // `RunControls.tsx` carries NO per-work-item preservation attribute at
-      // all, which is why this beat changes surface.
-      act: 'ACT 2 — resume it, and see the finished work items survived',
-      do: [{ press: 'project-tab-roadmap' }, { press: 'recovery-requeue' }],
-      // 15 minutes, UNCHANGED and UNMEASURED (T1 ruling 558). A RESUMED
-      // developer-loop has never been measured in this campaign — beats 5–22
-      // have never run to completion — so there is no figure to raise this to.
-      // Left alone deliberately rather than guessed at, and said here so that a
-      // red on this beat reads as FIRST MEASUREMENT and not as a bound too
-      // small.
-      wait: { for: 'agent', upTo: 900_000 },
-      expect: {
-        route: '/projects/gitpulse',
-        data: {
-          page: 'projects',
-          'project-id': 'gitpulse',
-          section: 'recovery-detail',
-          'recovery-prior-attempts': '1',
-        },
-      },
-      say: 'The second attempt starts from what the first one finished, not from nothing. The work items that passed are still passed and their commits are still on the branch — that is the whole reason a stopped run is recoverable rather than wasted.',
-    },
+    ...ACT_2,
   ],
 };
