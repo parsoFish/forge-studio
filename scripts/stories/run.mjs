@@ -54,7 +54,7 @@ import {
   ownGroundManifest, mintedSessionPaths, classifyOwnGroundDrift, groundChanges,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
-import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge } from './bridge.mjs';
+import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge, bridgeSpawnOptions } from './bridge.mjs';
 import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -210,7 +210,16 @@ async function main() {
       throw refusalError(identity, readProcCwd(identity.pid), ROOT);
     } else if (decision === 'boot') {
       console.log('[stories] 4123 is free — booting our own bridge from this tree');
-      const booted = await bootOwnBridge(ROOT);
+      // 590(i): say whether this bridge can reach the community sources at all.
+      // A run whose refresh refuses for want of a credential and a run whose
+      // refresh refuses because the PRODUCT refused look identical in a beat's
+      // verdict; only this line separates them. The token itself is never
+      // printed — `note` carries the fact, never the value.
+      // ONE read of the credential per boot: the options are built here, the
+      // fact is logged from them, and the SAME object is what gets spawned.
+      const bridgeOpts = bridgeSpawnOptions(ROOT);
+      console.log(`[stories] ${bridgeOpts.note}`);
+      const booted = await bootOwnBridge(ROOT, bridgeOpts);
       bridgeProc = booted.proc;
       uiUrl = booted.uiUrl;
     } else {

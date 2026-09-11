@@ -16,7 +16,78 @@
  * in `apps/forge/forge-watch.ts` already does it and is unit-tested.
  */
 import { readlinkSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+
+/**
+ * The GitHub identity the bridge acts as, named rather than implied — the same
+ * account `packages/flows/gh-pinned.ts` pins every outward `gh` call to (#611),
+ * and the one `packages/projects/project-create.ts` already names as
+ * `REMOTE_ACCOUNT`. Derived here by NAME rather than from the git remote
+ * because this runner is plain `.mjs` and cannot import the TS that does the
+ * derivation without pulling a strip-types flag into every caller.
+ */
+export const STORY_BRIDGE_GH_USER = 'parsoFish';
+
+/** The env name the community refresh reads, and the ONLY credential this
+ *  module places into any child environment. */
+const GH_TOKEN_ENV = 'GH_TOKEN';
+
+/**
+ * Read the operator's GitHub token for {@link STORY_BRIDGE_GH_USER}, or `null`.
+ *
+ * ABSENCE IS A RESULT, NOT AN ERROR: a host with no `gh` login must still be
+ * able to run stories, and S8 beat 4's refusal is a real, honest outcome on
+ * such a host. So a failed read returns `null` and the caller SAYS so.
+ *
+ * The error is deliberately not re-thrown and not logged. `gh` writes
+ * credential state into its own stderr, and this module's whole job with
+ * respect to that value is to move it from the keyring into one child's
+ * environment without it appearing anywhere else — a log line included.
+ * `stdio` discards the child's stderr for the same reason.
+ */
+export function bridgeGhToken({ exec = defaultGhTokenExec } = {}) {
+  try {
+    const out = exec();
+    const token = typeof out === 'string' ? out.trim() : '';
+    return token.length > 0 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+function defaultGhTokenExec() {
+  return execFileSync('gh', ['auth', 'token', '--user', STORY_BRIDGE_GH_USER], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+}
+
+/**
+ * The command, argv and options `bootOwnBridge` spawns with — separated out so
+ * the credential path is testable through a REAL spawn without booting a real
+ * studio, and so what is in `env` versus what is in `args` is inspectable.
+ *
+ * The token goes in `env` and NOWHERE else: argv is world-readable through
+ * `/proc/<pid>/cmdline`, so a credential passed as a flag is a credential
+ * published to every process on the host.
+ */
+export function bridgeSpawnOptions(root, { readToken = bridgeGhToken } = {}) {
+  const token = readToken();
+  const env = { ...process.env };
+  if (token !== null) env[GH_TOKEN_ENV] = token;
+  return {
+    command: process.execPath,
+    args: ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+    env,
+    note:
+      token !== null
+        ? `bridge env carries GH_TOKEN for ${STORY_BRIDGE_GH_USER} — the community refresh can reach its declared sources`
+        : `no GH_TOKEN available for ${STORY_BRIDGE_GH_USER} — the bridge still boots and a community refresh will honestly refuse`,
+  };
+}
 
 /** How long to wait for our own bridge to report ready. */
 const BOOT_TIMEOUT_MS = 120_000;
@@ -66,13 +137,14 @@ export function refusalError(identity, cwd, ownRoot) {
  * `--force-takeover`, so it can only ever bind a genuinely free port.
  * Resolves on the launcher's `forge-studio-ready {json}` stdout line.
  */
-export function bootOwnBridge(root) {
+export function bootOwnBridge(root, opts = bridgeSpawnOptions(root)) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],
-      { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
-    );
+    const proc = spawn(opts.command, opts.args, {
+      cwd: opts.cwd,
+      stdio: opts.stdio,
+      detached: opts.detached,
+      env: opts.env,
+    });
     let buf = '';
     let settled = false;
     const onData = (chunk) => {
