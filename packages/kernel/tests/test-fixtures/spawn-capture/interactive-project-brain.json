@@ -4,13 +4,6 @@
     "options": {
       "cwd": "<TMP>/projects/testproj",
       "model": "claude-sonnet-4-6",
-      "permissionMode": "acceptEdits",
-      "allowedTools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Write"
-      ],
       "disallowedTools": [
         "NotebookEdit",
         "WebFetch",
@@ -21,7 +14,15 @@
         "Agent"
       ],
       "maxTurns": 30,
-      "abortController": "<AbortController>"
+      "abortController": "<AbortController>",
+      "permissionMode": "default",
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write"
+      ],
+      "canUseTool": "<canUseTool>"
     }
   },
   "result": {

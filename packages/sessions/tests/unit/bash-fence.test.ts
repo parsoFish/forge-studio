@@ -283,12 +283,16 @@ test('bash-fence runAgentTurn: writeRoots non-empty ⇒ Bash is stripped from al
   assert.equal(typeof opts.canUseTool, 'function');
 });
 
-test('bash-fence runAgentTurn: writeRoots absent ⇒ Bash passes through allowedTools verbatim (byte-identical prior behaviour for unfenced callers)', async () => {
+// AMENDED by `forge-a9o9`: no turn is unfenced any more. The BASH half is
+// unchanged — without `writeRoots` there is no write-root rule, so Bash is
+// neither stripped nor inspected — but the TOOL gate is always installed, and
+// this now pins both halves at once.
+test('bash-fence runAgentTurn (a9o9): writeRoots absent ⇒ Bash stays declared and unfenced-by-root, while the tool gate is still installed', async () => {
   const fx = fixture();
   const { queryFn, captured } = capturingQueryFn();
   await runAgentTurn({ queryFn, prompt: 'p', cwd: fx.sessionDir, model: MODEL, allowedTools: [...CREATION_AGENT_TOOLS] });
-  assert.deepEqual(captured().allowedTools, [...CREATION_AGENT_TOOLS]);
-  assert.equal(captured().canUseTool, undefined);
+  assert.deepEqual(captured().allowedTools, [...CREATION_AGENT_TOOLS], 'no write-root fence, so no name is stripped');
+  assert.equal(typeof captured().canUseTool, 'function', 'but an undeclared tool still has something to refuse it');
 });
 
 test('bash-fence runAgentTurn: the installed canUseTool honours `bashFence` — default denies `ls`; `inspect` allows `ls` and an in-root write, denies an out-of-root write', async () => {
