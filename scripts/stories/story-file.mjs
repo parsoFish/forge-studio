@@ -171,6 +171,18 @@ function validateWait(raw, at) {
   // name, and the comment above says so — so a `key`/`while` pair left on an
   // `agent` wait would vanish silently and the beat would wait for the wrong
   // thing with no sign of it.
+  // 718(1): `anchor` names an EARLIER press whose work this beat watches. Only
+  // an agent wait has a channel to anchor, so it is refused elsewhere rather
+  // than dropped — the same rule `key`/`while` follow, and for the same reason:
+  // a field silently ignored is a field the author believes is working.
+  if (raw.anchor !== undefined) {
+    if (raw.for !== 'agent') {
+      fail(`${at}.wait.anchor`, `only an agent wait takes \`anchor\`; on for: '${raw.for}' it would be dropped silently`);
+    } else if (typeof raw.anchor !== 'string' || raw.anchor === '') {
+      fail(`${at}.wait.anchor`, `expected the press handle this beat's channel belongs to, got ${JSON.stringify(raw.anchor)}`);
+    }
+  }
+
   for (const stray of ['key', 'while']) {
     if (raw[stray] !== undefined) {
       fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
