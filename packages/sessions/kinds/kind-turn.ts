@@ -53,6 +53,18 @@ import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
 import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
+
+/**
+ * The ONE "hooks, or nothing" spread. `sdkHooksForAgent` returns undefined when
+ * the skill declares no hooks, so every spawn site spreads conditionally to keep
+ * the options bag byte-identical when it does — a conditional that was copied at
+ * four sites, twice as a nine-line IIFE. A site that gets it subtly wrong spawns
+ * HOOK-BLIND with nothing red (`hook-dispatch-coverage.test.ts`'s own shape).
+ */
+export function hooksSpreadForAgent(args: { skill: string; logger: EventLogger; initiativeId: string }): Record<string, unknown> {
+  const hooks = sdkHooksForAgent(args);
+  return hooks !== undefined ? { hooks } : {};
+}
 import { guardedReadSessionStatus, guardedWriteSessionStatus, statusWriteRefusalReason } from '../session-status-io.ts';
 
 /** The operator's revision notes, written beside status.json by a `revise` verdict. */
@@ -333,10 +345,7 @@ export async function runKindTurn<
     return out;
   };
 
-  const hooksForSkill = (skill: string): Record<string, unknown> => {
-    const hooks = sdkHooksForAgent({ skill, logger, initiativeId });
-    return hooks !== undefined ? { hooks } : {};
-  };
+  const hooksForSkill = (skill: string): Record<string, unknown> => hooksSpreadForAgent({ skill, logger, initiativeId });
 
   const plumbing: KindTurnPlumbing = {
     sessionDir,

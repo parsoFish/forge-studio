@@ -18,6 +18,10 @@ export type ArchitectManifestPorts = {
   parseManifest: (content: string) => InitiativeManifest;
   serializeManifest: (m: InitiativeManifest) => string;
   mintAndPersistManifestCycleId: (manifestPath: string, initiativeId: string) => string;
+  /** The QUEUE's own canonical-id predicate (`packages/flows/initiative-id.ts`),
+   *  injected rather than re-implemented: a mint that answers that question
+   *  differently from the guard is how the two drift apart (7.6.17). */
+  isCanonicalInitiativeId: (id: string) => boolean;
   /** `opts` is `{ queueRoot }` alone — read off the real signature, not
    *  guessed; an invented wider shape is a lying declaration (§15.66/§15.73). */
   promoteManifests: (

@@ -33,7 +33,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { hooksSpreadForAgent } from './kind-turn.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
@@ -208,14 +208,11 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // `pinnedSdkQuery` as a VALUE, so it is the spawn-capable module the hook
   // enumeration ratchet (`packages/agents/hook-dispatch-coverage.test.ts`)
   // sees. A kind that forgot the wiring would spawn hook-blind with nothing
-  // red. `sdkHooksForAgent` returns undefined when the skill declares no
-  // hooks, so the spread is a no-op and the bag stays byte-identical to the
-  // per-runner form it replaces.
-  const hooks = sdkHooksForAgent({ skill: variant.eventSkill, logger, initiativeId: cycleId });
+  // red.
   const abortController = new AbortController();
   const options: Record<string, unknown> = {
     ...spawn.options,
-    ...(hooks !== undefined ? { hooks } : {}),
+    ...hooksSpreadForAgent({ skill: variant.eventSkill, logger, initiativeId: cycleId }),
     abortController,
   };
 

@@ -19,7 +19,6 @@ import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs
 
 import { type EventLogger, type Phase, resolveGuardedPath } from '@forge/kernel';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
@@ -27,6 +26,7 @@ import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, type QueryFn } from './interactive-session.ts';
+import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
 import type { BashFenceMode } from './session-write-fence.ts';
 import { guardedWriteSessionStatus, statusWriteRefusalReason, CANCELLED_PHASE } from './session-status-io.ts';
 
@@ -245,14 +245,7 @@ export async function runAgentStyleStep(args: {
       // W8-B6 — this session kind's agent may carry bound library hooks.
       // Derived from the SAME spec the model/tools came from, so a kind
       // re-pointed at another agent can never fire the old agent's hooks.
-      ...(() => {
-        const hooks = sdkHooksForAgent({
-          skill: agentSpec.skill,
-          logger: args.logger,
-          initiativeId: ctx.sessionId,
-        });
-        return hooks !== undefined ? { hooks } : {};
-      })(),
+      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
       writeRoots,
       bashFence: resolveBashFence(turnSpec),

@@ -18,10 +18,9 @@
  * have re-created the same back-edge in a smaller form.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import {
   writePlanDoc, sessionPaths,
   type ArchitectSession, type ProposedInitiative, type CouncilTranscript, type InterviewRound,
@@ -33,7 +32,7 @@ import { requirePorts } from './architect-ports.ts';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
-import type { KindTurnPlumbing } from './kind-turn.ts';
+import { hooksSpreadForAgent, type KindTurnPlumbing } from './kind-turn.ts';
 import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, type RunArchitectTurnInput, type RunArchitectTurnResult, architectAgentSpec, readInterview } from './architect-session.ts';
 import { buildManifest, slugify } from './architect-manifest.ts';
 
@@ -446,6 +445,14 @@ export async function runDraftStep(
   // W8-B6 — the same initiative id every event in this session already uses.
   const initiativeId = `architect-session-${input.sessionId}`;
   const interview = readInterview(input.projectRoot, input.sessionId);
+  /** This step's two log events, which differed only in message, refs and
+   *  metadata — said once so a third one cannot drift from the other two. */
+  const emitLog = (message: string, over: Record<string, unknown> = {}): void => {
+    logger.emit({
+      initiative_id: initiativeId, phase: 'architect', skill: 'architect-runner', event_type: 'log',
+      input_refs: [], output_refs: [], message, metadata: { session_id: input.sessionId }, ...over,
+    });
+  };
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'draft', skillPromptPath: input.skillPromptPath });
 
   const prompt = [
@@ -498,16 +505,7 @@ export async function runDraftStep(
   // empty drafts on the release-CRUD idea, 2026-06-08, has been removed — the architect
   // is operator-driven, so it now runs uncapped.)
   if (draftInitiatives.length === 0) {
-    logger.emit({
-      initiative_id: `architect-session-${input.sessionId}`,
-      phase: 'architect',
-      skill: 'architect-runner',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: 'draft returned no initiatives — retrying with a forced-emit turn (no further research)',
-      metadata: { session_id: input.sessionId },
-    });
+    emitLog('draft returned no initiatives — retrying with a forced-emit turn (no further research)');
     const forceEmitSection = loadForceEmitTurnSection(input.skillPromptPath);
     const retry = await draftOnce(`${prompt}\n\n${forceEmitSection}`);
     if (Array.isArray(retry.output?.initiatives) && retry.output!.initiatives!.length > 0) {
@@ -524,6 +522,21 @@ export async function runDraftStep(
     );
   }
 
+  // 7.6.17 — AN ID IS NOT A SLUG. The critic renders full initiative ids as its
+  // section headers, so a re-draft carrying its findings hands one back as
+  // `slug` (and inside `depends_on`); `slugify` lowercases it and
+  // `buildManifest` prefixes `INIT-<date>-` again, minting
+  // `INIT-2026-09-11-init-2026-09-11-overlay-grants-lint` in two captured runs.
+  // An echoed id is UNWRAPPED, not refused — the round meant the same
+  // initiative, so unwrapping makes it overwrite rather than double. The
+  // predicate is the queue's own, injected.
+  const isCanonicalId = requirePorts(input).isCanonicalInitiativeId;
+  const unwrapId = (s: string): string => (isCanonicalId(s) ? s.slice(CANONICAL_ID_PREFIX_LEN) : s);
+  draftInitiatives = draftInitiatives.map((d) => ({
+    ...d, ...(d.slug ? { slug: unwrapId(d.slug) } : {}),
+    ...(d.depends_on ? { depends_on: d.depends_on.map(unwrapId) } : {}),
+  }));
+
   const created_at = new Date().toISOString();
   const datePart = created_at.slice(0, 10);
   // Slug set lets buildManifest resolve `depends_on` refs to sibling initiatives
@@ -539,7 +552,14 @@ export async function runDraftStep(
   const councilTranscript: CouncilTranscript = { flags: [], escalations: [], perCritic: [], totalCostUsd: 0 };
 
   // Write draft manifests (promoted to the queue only on finalize/approve).
-  if (!existsSync(paths.manifestsDir)) mkdirSync(paths.manifestsDir, { recursive: true });
+  // 7.6.17 — THIS ROUND'S DRAFTS ARE THE SESSION'S DRAFTS. `runDraftRounds` calls
+  // this step once per critic round and `promoteManifests` promotes every `*.md`
+  // it finds, so a round that renamed or dropped an initiative used to leave the
+  // previous round's file to be queued beside its replacement.
+  mkdirSync(paths.manifestsDir, { recursive: true });
+  for (const stale of readdirSync(paths.manifestsDir)) {
+    if (stale.endsWith('.md')) rmSync(join(paths.manifestsDir, stale));
+  }
   for (const m of manifests) {
     writeFileSync(join(paths.manifestsDir, `${m.initiative_id}.md`), requirePorts(input).serializeManifest(m));
   }
@@ -567,14 +587,7 @@ export async function runDraftStep(
   // ARCH-1: build brain_context from the brain/ paths the agent actually Read
   // during the draft turn. Deduplicate paths; use a generic summary since the
   // agent's Read content is not parsed here.
-  const seenPaths = new Set<string>();
-  const brain_context = brainReads
-    .filter((p) => {
-      if (seenPaths.has(p)) return false;
-      seenPaths.add(p);
-      return true;
-    })
-    .map((p) => ({ path: p, summary: 'consulted during architect draft' }));
+  const brain_context = [...new Set(brainReads)].map((p) => ({ path: p, summary: 'consulted during architect draft' }));
 
   const exploreFindings = readExploreFindings(input.projectRoot, input.sessionId);
   const session: ArchitectSession = {
@@ -593,19 +606,9 @@ export async function runDraftStep(
   // `awaiting-verdict` and writes it once, after the critic has passed.
   const planPath = writePlanDoc(session, input.projectRoot);
 
-  logger.emit({
-    initiative_id: `architect-session-${input.sessionId}`,
-    phase: 'architect',
-    skill: 'architect-runner',
-    event_type: 'log',
-    input_refs: [],
+  emitLog(`plan-emitted (${manifests.length} initiative(s), 0 escalation(s))`, {
     output_refs: [planPath],
-    message: `plan-emitted (${manifests.length} initiative(s), 0 escalation(s))`,
-    metadata: {
-      session_id: input.sessionId,
-      initiative_ids: manifests.map((m) => m.initiative_id),
-      escalation_count: 0,
-    },
+    metadata: { session_id: input.sessionId, initiative_ids: manifests.map((m) => m.initiative_id), escalation_count: 0 },
   });
 
   return { phase: 'drafting', wrote: [planPath], planPath };
@@ -619,6 +622,11 @@ export async function runDraftStep(
  * a session with no operator control, is not.
  */
 export const MAX_CRITIC_DRAFT_ROUNDS = 2;
+
+/** `INIT-YYYY-MM-DD-` — the fixed prefix `buildManifest` puts in front of a slug,
+ *  so unwrapping an echoed id is arithmetic on a shape the injected predicate
+ *  already validated, never a second pattern of its own. */
+const CANONICAL_ID_PREFIX_LEN = 'INIT-YYYY-MM-DD-'.length;
 
 /**
  * Ruling 380 — the critic runs BEFORE the operator is asked. Draft, critique,
@@ -707,14 +715,7 @@ async function runStructured<T>(args: {
     cwd: args.cwd,
     allowedTools: architectAgentSpec.allowedTools,
     disallowedTools: architectAgentSpec.disallowedTools,
-    ...(() => {
-      const hooks = sdkHooksForAgent({
-        skill: architectAgentSpec.skill,
-        logger: args.logger,
-        initiativeId: args.initiativeId,
-      });
-      return hooks !== undefined ? { hooks } : {};
-    })(),
+    ...hooksSpreadForAgent({ skill: architectAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId }),
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,
     onText: args.onText,

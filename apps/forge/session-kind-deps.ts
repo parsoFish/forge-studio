@@ -18,6 +18,7 @@ import {
   mintAndPersistManifestCycleId,
 } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
 import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
 import type { ParseManifestPort } from '@forge/sessions/studio/session-transcript.ts';
 
@@ -27,6 +28,7 @@ export const architectManifestPorts: ArchitectManifestPorts = {
   serializeManifest,
   mintAndPersistManifestCycleId,
   promoteManifests,
+  isCanonicalInitiativeId,
 };
 
 /** The single port the `roadmap-draft` artifact renderer needs. */

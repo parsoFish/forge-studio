@@ -41,5 +41,8 @@ export function stubArchitectManifestPorts(): ArchitectManifestPorts {
     },
     mintAndPersistManifestCycleId: (manifestPath) => manifestPath,
     promoteManifests: () => ({ writtenManifestPaths: [], writtenInitiativeIds: [] }),
+    // Nothing is canonical to the stub; the one test that turns on this passes
+    // the REAL one (`architect-draft-round-manifests.test.ts`).
+    isCanonicalInitiativeId: () => false,
   };
 }
