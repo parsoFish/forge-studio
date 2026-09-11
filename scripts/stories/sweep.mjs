@@ -18,7 +18,7 @@
  *   · it is date-independent, so a run on any day cleans any day's residue —
  *     the date-stamped per-id cleanups it replaces could not.
  */
-import { rmSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { rmSync, existsSync, readdirSync, statSync, readFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -703,57 +703,4 @@ export function describeFence(fence, expectedStarters = []) {
     }),
     ...fence.failed.map((f) => `[stories] fence: COULD NOT clear ${f.path}: ${f.error} — the tree is left dirty`),
   ];
-}
-
-/**
- * Put back the COMMITTED artifacts the leading sweep removed and the run never
- * regenerated — T1 ruling 594's second half.
- *
- * THE SWEEP HAS NO PAIRED RESTORE. `demos/stories/<id>/` is deleted before the
- * bridge boots, so a run cannot inherit dead state, and it is rebuilt as beats
- * pass. Any exit between those two points leaves the repo holding whatever the
- * run reached and MISSING every committed file it had not got to — which
- * `git status` then shows as deliberate deletions.
- *
- * The motivating case is not a crash. Lane C's run refused at preflight because
- * a healthy bridge from another lane's worktree held 4123 — the runner doing
- * exactly the right thing — and that correct refusal still left three committed
- * files deleted: two frames and `story.json`. **A preflight refusal is the most
- * likely abort there is, and it was the one that guaranteed the damage.** Lane A
- * measured the same shape from a kill at beat 6 (frames 06–11 plus
- * `story.json`), and S10 has far more frames than S1.
- *
- * ONLY WHAT IS STILL MISSING. A run that finished regenerated its artifacts, and
- * those legitimately differ from HEAD — restoring them would destroy the very
- * output the run exists to produce. So a path is restored only if git tracks it
- * AND it is absent from the disk right now. That single condition is what makes
- * this safe to run unconditionally on every exit path.
- *
- * @param {string} root the run's own worktree
- * @param {string[]} sweptPaths absolute paths the leading sweep reported removing
- * @returns {{restored: string[], failed: {path: string, error: string}[]}}
- */
-export function restoreSweptCommitted(root, sweptPaths) {
-  const restored = [];
-  const failed = [];
-  for (const abs of sweptPaths) {
-    const rel = relative(root, abs);
-    if (rel === '' || rel.startsWith('..')) continue; // never reach outside the run's own tree
-    let tracked = [];
-    try {
-      tracked = execFileSync('git', ['ls-files', '-z', '--', rel], { cwd: root, encoding: 'utf8' })
-        .split('\0').filter((p) => p !== '');
-    } catch {
-      continue; // not a repo, or git unavailable — nothing to restore against
-    }
-    const missing = tracked.filter((p) => !existsSync(join(root, p)));
-    if (missing.length === 0) continue;
-    try {
-      execFileSync('git', ['checkout', '--', ...missing], { cwd: root, encoding: 'utf8' });
-      restored.push(...missing);
-    } catch (e) {
-      failed.push({ path: rel, error: e instanceof Error ? e.message : String(e) });
-    }
-  }
-  return { restored: restored.sort(), failed };
 }
