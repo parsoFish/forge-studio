@@ -582,7 +582,7 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -591,6 +591,24 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     const observed = await readObserved(page, beat);
     const seen = resolveExpectations(beat.expect.data, observed);
     if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
+    // `wait: { for: 'settle', key, while }` — T1 ruling 621(ii), bought by A's
+    // S1 beat 3.
+    //
+    // THE WAITING HALF ALREADY EXISTED, and measuring that is what shaped this:
+    // a plain `for: 'agent'` wait already carries A's beat past its transient
+    // (green in 1208 ms on the fixture). What it does NOT do is stop — a wrong
+    // value is waited out exactly as patiently as a transient one, to the full
+    // declared bound, and the verdict then reports a timeout where it could
+    // have reported the mismatch.
+    //
+    // So `settle` adds SHARPNESS, not patience. The story names the one value
+    // it is willing to sit through; the moment the key holds anything else,
+    // this stops and lets the verdict say what it actually saw. A beat can
+    // never silently wait out a value it should have failed on.
+    if (settle !== null) {
+      const got = seen[settle.key] ?? observed.data?.[settle.key];
+      if (got !== undefined && got !== settle.while) return null;
+    }
     // Ruling 241 step 2. Only for a beat that DECLARED an agent wait: those are
     // the beats that stand on a session, and scoping it there means no other
     // beat gains a new way to fail. The product is believed rather than
