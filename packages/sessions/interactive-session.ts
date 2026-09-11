@@ -72,6 +72,7 @@ import { join } from 'node:path';
 import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
 import type { SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
 import { extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
+import { toolFenceOptions } from '@forge/kernel';
 import type { EventLogger, Phase } from '@forge/kernel';
 import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 
@@ -312,6 +313,8 @@ export async function runStructuredTurn<T>(args: {
   disallowedTools?: readonly string[];
   /** Stream tool_use blocks to the live hex. */
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  /** `forge-a9o9` — a tool the kind never declared, refused by the fence. */
+  onToolDenied?: (toolName: string) => void;
   /** Called at most once per HEARTBEAT_THROTTLE_MS during the stream. */
   onHeartbeat?: () => void;
   /** Called for each non-empty assistant text block (reasoning). */
@@ -334,7 +337,10 @@ export async function runStructuredTurn<T>(args: {
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     model: args.model,
-    allowedTools: args.allowedTools,
+    // `forge-a9o9` — fenced like `runAgentTurn`, and this is the path that
+    // needed it most: it carried NO `permissionMode` at all, so it rested
+    // entirely on `allowedTools`, which the SDK treats as advisory.
+    ...toolFenceOptions({ allowedTools: args.allowedTools, onDeny: (t) => args.onToolDenied?.(t) }),
     outputFormat: { type: 'json_schema', schema: args.schema },
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
     ...(args.cwd !== undefined ? { cwd: args.cwd } : {}),
@@ -443,6 +449,10 @@ export async function runAgentTurn(args: {
    *  when the turn is unfenced. */
   bashFence?: BashFenceMode;
   onToolUse?: (d: ToolUseLiveDetail) => void;
+  /** `forge-a9o9` — a tool the kind never declared, refused by the fence. NOT
+   *  folded into `onToolUse`: a refused call and a performed one must never be
+   *  indistinguishable in a log. */
+  onToolDenied?: (toolName: string) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
   /** Called for each non-empty `thinking` content block, and — with the
@@ -485,22 +495,33 @@ export async function runAgentTurn(args: {
   const options: Record<string, unknown> = {
     cwd: args.cwd,
     model: args.model,
-    permissionMode: 'acceptEdits',
-    allowedTools: args.allowedTools,
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
-    // The three fenced settings arrive TOGETHER, from one builder, or not at
-    // all — an unfenced turn keeps the exact prior shape.
-    ...(fenced
-      ? writeRootFenceOptions({
-          writeRoots: args.writeRoots!,
-          allowedTools: args.allowedTools,
-          cwd: args.cwd,
-          ...(args.bashFence !== undefined ? { bashFence: args.bashFence } : {}),
-        })
-      : {}),
+    // `forge-a9o9` — DENY BY DEFAULT. Every turn is fenced to the tools its
+    // kind declared, because `allowedTools` is advisory and a deny list can
+    // only name tools its authors have heard of (S1 run 5: `LSP`, `TaskOutput`
+    // and `Skill`, declared nowhere in this repo, used to read from a pass
+    // whose whole point was that it could not). The write-root fence, when
+    // present, composes INSIDE it: the tool gate runs first, so an undeclared
+    // tool never reaches it, and a declared one is still subject to its rule.
+    // Three settings from one builder, as before — `permissionMode: 'default'`
+    // is what makes the callback reachable at all.
+    ...toolFenceOptions({
+      allowedTools: args.allowedTools,
+      onDeny: (toolName) => args.onToolDenied?.(toolName),
+      ...(fenced
+        ? {
+            inner: writeRootFenceOptions({
+              writeRoots: args.writeRoots!,
+              allowedTools: args.allowedTools,
+              cwd: args.cwd,
+              ...(args.bashFence !== undefined ? { bashFence: args.bashFence } : {}),
+            }),
+          }
+        : {}),
+    }),
   };
 
   // `null`, not 0: a turn the SDK never priced and a turn that genuinely cost

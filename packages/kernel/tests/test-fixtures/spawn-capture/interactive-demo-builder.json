@@ -5,12 +5,6 @@
       "options": {
         "cwd": "<TMP>/repo",
         "model": "claude-sonnet-4-6",
-        "permissionMode": "acceptEdits",
-        "allowedTools": [
-          "Read",
-          "Glob",
-          "Grep"
-        ],
         "disallowedTools": [
           "NotebookEdit",
           "WebFetch",
@@ -23,7 +17,14 @@
           "Bash"
         ],
         "maxTurns": 6,
-        "abortController": "<AbortController>"
+        "abortController": "<AbortController>",
+        "permissionMode": "default",
+        "allowedTools": [
+          "Read",
+          "Glob",
+          "Grep"
+        ],
+        "canUseTool": "<canUseTool>"
       }
     },
     {
@@ -31,11 +32,6 @@
       "options": {
         "cwd": "<TMP>/repo",
         "model": "claude-sonnet-4-6",
-        "permissionMode": "acceptEdits",
-        "allowedTools": [
-          "Write",
-          "Edit"
-        ],
         "disallowedTools": [
           "NotebookEdit",
           "WebFetch",
@@ -52,7 +48,13 @@
           "Skill"
         ],
         "maxTurns": 8,
-        "abortController": "<AbortController>"
+        "abortController": "<AbortController>",
+        "permissionMode": "default",
+        "allowedTools": [
+          "Write",
+          "Edit"
+        ],
+        "canUseTool": "<canUseTool>"
       }
     },
     {
@@ -60,15 +62,6 @@
       "options": {
         "cwd": "<TMP>/repo",
         "model": "claude-sonnet-4-6",
-        "permissionMode": "acceptEdits",
-        "allowedTools": [
-          "Read",
-          "Grep",
-          "Glob",
-          "Bash",
-          "Write",
-          "Edit"
-        ],
         "disallowedTools": [
           "NotebookEdit",
           "WebFetch",
@@ -77,7 +70,17 @@
           "Agent"
         ],
         "maxTurns": 16,
-        "abortController": "<AbortController>"
+        "abortController": "<AbortController>",
+        "permissionMode": "default",
+        "allowedTools": [
+          "Read",
+          "Grep",
+          "Glob",
+          "Bash",
+          "Write",
+          "Edit"
+        ],
+        "canUseTool": "<canUseTool>"
       }
     }
   ],
