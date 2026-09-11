@@ -303,7 +303,17 @@ export default {
       // not a beat amendment. What it buys is that beats 13-14 become
       // reachable in the same run — the authoring session has priced something
       // by the time `/monitor` is read.
-      wait: { for: 'agent', upTo: 600_000 },
+      // AMENDED 2026-09-11 (amend-7, operator ruling 625) — 600_000 → 300_000.
+      // Beat 8's greens are INSTANT across all four runs: the session's own
+      // cost is on its page the moment the beat reads it (run 4 bound 0.68 at
+      // t+43 s from the press, runs 1-3 likewise). 1.5× the slowest of those
+      // is far below the 5-minute floor, so 300_000 IS the floor rather than a
+      // derived figure — and it is still fifty times the largest green.
+      // Complementary to C's 626 stall door, not redundant with it: this bound
+      // is the ceiling on a beat that is progressing, while 626 stops a
+      // genuinely stuck agent at the product's own 3-minute silence ceiling
+      // first. Neither makes the other unnecessary.
+      wait: { for: 'agent', upTo: 300_000 },
       expect: {
         route: '/sessions/authoring/<authoringSessionId>',
         data: {
@@ -456,7 +466,14 @@ export default {
       // at that same sitting and this beat was not — I asked the bound
       // question of the beat I was amending and never of the beat I was
       // adding. Same wait, same reason: it stands on a real agent.
-      wait: { for: 'agent', upTo: 600_000 },
+      // AMENDED 2026-09-11 (amend-7, operator ruling 625) — 600_000 → 300_000.
+      // Beat 13 went green for the first time in run 4, instantly — amend-5's
+      // `{ press: 'open-minted-session' }` was the missing navigation, and the
+      // beat answers the brief as soon as it is on the right page. The ten
+      // minutes it burned in run 3 was the cost of the missing press, not of
+      // a slow agent: a bound cannot be priced on a red that never reached
+      // the work. 300_000 is the 5-minute floor, above every green measured.
+      wait: { for: 'agent', upTo: 300_000 },
       do: [
         // AMENDED (amend-5, T1 ruling 577, mechanical under 574's class). THE
         // NAVIGATION THE 483 SPLIT REQUIRES. amend-2 made beat 12 STAY on
