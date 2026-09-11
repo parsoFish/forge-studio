@@ -34,7 +34,11 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
-import { memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict } from './preflight.mjs';
+import { spawnSync } from 'node:child_process';
+import {
+  memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
+  queueStateVerdict, declaredCommitsVerdict,
+} from './preflight.mjs';
 import { suiteLockVerdict } from './lock-guard.mjs';
 import {
   applyFence,
@@ -161,6 +165,43 @@ async function main() {
       return 1;
     }
     console.log(`[stories] sessions ok — ${v.reason}`);
+  }
+
+  // 1b-ii. The tree this run will actually execute — T1 ruling 753 (§15.430,
+  //     §15.432). Two checks, both learned from run 12, which passed every
+  //     precondition it had and still measured the wrong thing.
+  //
+  //     The QUEUE must exist and be empty. Run 12's "ready-for-review empty"
+  //     came from `ls <path that has never existed> | wc -l` -> 0 and reached
+  //     the ledger as a measurement; an absent path must never read as a clean
+  //     one. Residue there is worse than noise — it can satisfy a beat's
+  //     assertion before the run does anything.
+  //
+  //     The DECLARED COMMITS must be in THIS tree. Run 12's INTENT named the
+  //     live-refresh fix "on main"; it was, and the run executed a branch forked
+  //     before it, so $2.91 measured the behaviour the fix replaces. `main` is
+  //     not what runs. Declaring nothing refuses; `none` is the stated escape.
+  for (const s of stories) {
+    if (!(s.ground.realSpawn || s.ground.budget_usd > 0)) continue;
+    const q = queueStateVerdict(ROOT);
+    if (!q.ok) {
+      console.error(`[stories] REFUSING ${s.id}: ${q.reason}`);
+      return 1;
+    }
+    console.log(`[stories] queue ok — ${q.reason}`);
+    break;
+  }
+  if (stories.some((s) => s.ground.realSpawn || s.ground.budget_usd > 0)) {
+    const declared = (process.env.FORGE_STORY_REQUIRES ?? '').split(',').map((c) => c.trim()).filter(Boolean);
+    const req = declaredCommitsVerdict(declared, (sha) => {
+      const r = spawnSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { cwd: ROOT });
+      return r.status === 0;
+    });
+    if (!req.ok) {
+      console.error(`[stories] REFUSING: ${req.reason}`);
+      return 1;
+    }
+    console.log(`[stories] tree ok — ${req.reason}`);
   }
 
   // 1c. The operator switch a remote-binding story stands on (bead

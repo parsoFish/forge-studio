@@ -40,7 +40,7 @@ import {
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
-import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
 
 
 
@@ -422,7 +422,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // wonder whether it passed or was skipped.
   verdict = withDoorSkipped(
     verdict,
-    stallDoor !== null && sessionScope === null && bound.ms <= 2 * STALL_CEILING_MS,
+    stallDoor !== null && sessionScope === null && !doorWorthRunning(bound.ms, STALL_CEILING_MS),
     bound.ms,
     STALL_CEILING_MS,
   );

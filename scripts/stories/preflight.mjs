@@ -235,3 +235,76 @@ export function remoteSwitchVerdict(root, storyIds) {
       'restore it unconditionally afterwards (rulings 323/354).',
   };
 }
+
+/**
+ * The queue a costed run is about to fill must EXIST and be EMPTY — §15.430.
+ *
+ * Run 12's precondition was recorded as "ready-for-review empty" from
+ * `ls projects/gitpulse/_queue/ready-for-review | wc -l` -> 0. The queue lives
+ * at the WORKTREE ROOT, so that zero came from a path that has never existed and
+ * reached the campaign ledger as a measured precondition. `2>/dev/null | wc -l`
+ * renders "I could not look" exactly like "I looked and found nothing".
+ *
+ * Both failures matter and they are DIFFERENT failures, so they read
+ * differently: an absent queue is a broken tree, a full one is residue that can
+ * satisfy a beat's assertion before the run does anything (the stale-green shape
+ * that invalidated a sibling lane's S5 run 3). `.gitkeep` is structure, not work.
+ */
+export function queueStateVerdict(root) {
+  const queue = join(root, '_queue');
+  if (!existsSync(queue)) {
+    return { ok: false, reason: `${queue} does not exist — this tree has no queue for a cycle to move work through. An absent path is not an empty one (§15.430).` };
+  }
+  const held = [];
+  let states;
+  try {
+    states = readdirSync(queue, { withFileTypes: true }).filter((e) => e.isDirectory());
+  } catch (err) {
+    return { ok: false, reason: `${queue} could not be read (${err?.code ?? err}) — refusing rather than counting zero.` };
+  }
+  for (const s of states) {
+    const dir = join(queue, s.name);
+    let names;
+    try {
+      names = readdirSync(dir).filter((n) => n !== '.gitkeep');
+    } catch (err) {
+      return { ok: false, reason: `${dir} could not be read (${err?.code ?? err}) — refusing rather than counting zero.` };
+    }
+    if (names.length > 0) held.push(`${s.name}/ holds ${names.join(', ')}`);
+  }
+  if (held.length > 0) {
+    return { ok: false, reason: `${queue} is not empty — ${held.join('; ')}. Residue here can satisfy a beat's assertion before this run does anything.` };
+  }
+  return { ok: true, reason: `queue at ${queue} exists and holds no work (${states.length} state dir(s))` };
+}
+
+/**
+ * Every commit this run's INTENT names must be IN THE TREE THAT RUNS — §15.432.
+ *
+ * Run 12's INTENT declared "#667 live refresh on main". It was on main. The run
+ * ran from a branch forked before it, so the file under test was ABSENT and the
+ * roadmap page carried zero references to it — $2.9118 measuring the behaviour
+ * the fix replaces, while ground hash, memory and ports all passed. A declared
+ * prerequisite is only declared until something asserts it is present.
+ *
+ * `isAncestor` is injected so this is testable without a repo; `run.mjs` passes
+ * a `git merge-base --is-ancestor` probe.
+ *
+ * DECLARING NOTHING REFUSES, and the escape is a STATEMENT: `none` passes and
+ * says so in the log. A silent absence and a stated exception must never render
+ * the same — the same property that makes an absent pin block a refusal rather
+ * than a warning.
+ */
+export function declaredCommitsVerdict(commits, isAncestor) {
+  if (!Array.isArray(commits) || commits.length === 0) {
+    return { ok: false, reason: 'no prerequisite commits were declared. Set FORGE_STORY_REQUIRES to the commits this run needs in its tree, or to `none` to state that it needs none (§15.432).' };
+  }
+  if (commits.length === 1 && commits[0] === 'none') {
+    return { ok: true, reason: 'this run declared that it requires no commit to be present in its tree' };
+  }
+  const missing = commits.filter((c) => c !== 'none' && !isAncestor(c));
+  if (missing.length > 0) {
+    return { ok: false, reason: `declared commit(s) ${missing.join(', ')} are NOT an ancestor of this tree's HEAD — the run would execute a tree missing what its INTENT names (§15.432).` };
+  }
+  return { ok: true, reason: `every declared commit is in this tree: ${commits.join(', ')}` };
+}
