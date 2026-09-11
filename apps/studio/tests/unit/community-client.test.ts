@@ -328,7 +328,24 @@ const WELL_FORMED_REFRESH_OK = {
 
 test('parseCommunityRefreshResponse: a well-formed 200 body round-trips to state:"ok" with every field intact, including an empty "errors" array', () => {
   const r = parseCommunityRefreshResponse(200, WELL_FORMED_REFRESH_OK);
-  expect(r).toEqual({ state: 'ok', ...WELL_FORMED_REFRESH_OK });
+  // `discovered` (ruling 478) defaults to [] when the body omits it — see
+  // `parseDiscoveredRows`: "nothing left to discover" and "a server without
+  // this field" both mean no proposals, and the page renders the same nothing.
+  expect(r).toEqual({ state: 'ok', ...WELL_FORMED_REFRESH_OK, discovered: [] });
+});
+
+test('parseCommunityRefreshResponse: discovered rows round-trip, and a malformed one is a malformed RESPONSE rather than a dropped row', () => {
+  const withRows = {
+    ...WELL_FORMED_REFRESH_OK,
+    discovered: [{ id: 'brainstorming', sourceUrl: 'https://github.com/obra/superpowers', path: 'skills/brainstorming/SKILL.md' }],
+  };
+  const r = parseCommunityRefreshResponse(200, withRows);
+  expect(r.state === 'ok' && r.discovered).toEqual(withRows.discovered);
+
+  // A row missing `sourceUrl` is the field the operator is asked to TRUST —
+  // silently dropping it would offer a shorter list and say nothing.
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, discovered: [{ id: 'x', path: 'y' }] })).toThrow();
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, discovered: 'not-an-array' })).toThrow();
 });
 
 test('parseCommunityRefreshResponse: a 200 with a non-empty "errors" array still parses as state:"ok" — refreshOutcomeView, not the parser, decides "partial"', () => {
