@@ -120,6 +120,45 @@ export function captureRedEvidence({ root, storyId, red, runStamp }) {
       '# "rendered late"; the JSON is identical either way.\n' +
       `${rows.sort().join('\n')}\n`,
   );
+
+  // 718(5) / §15.411: A CAPTURE THAT CANNOT ANSWER "WHEN WAS THIS BORN, AND
+  // WHAT DID THE DAEMON SAY" CANNOT ADJUDICATE A CHANNEL WAIT.
+  //
+  // S10 run 11 reded beat 8 with `no-channel: nothing under _logs/ was created
+  // by this press`. Settling whether that was the product or the door needed
+  // two facts this capture did not hold: the daemon's own claim lines, and the
+  // BIRTH times of `_logs/` dirs. Both were in the tree and neither was in the
+  // evidence, so the question went back to a worktree that a restore could have
+  // erased first. The answer, when it came, was that the daemon had claimed and
+  // started the PM 449 ms BEFORE the beat that was waiting for it.
+  //
+  // Birth time, not mtime: a dir's mtime moves whenever anything inside it is
+  // written, so a long-running cycle's mtime says when it last wrote, not when
+  // it began — and "began" is the whole question a channel wait asks.
+  try {
+    const serveLog = join(root, '_logs', 'daemon', 'serve.log');
+    if (existsSync(serveLog)) cpSync(serveLog, join(dest, 'serve.log'), { preserveTimestamps: true });
+  } catch { /* the daemon may never have started; its absence is itself a fact the log carries */ }
+  try {
+    const logsDir = join(root, '_logs');
+    const births = readdirSync(logsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => {
+        let born = null;
+        try { born = statSync(join(logsDir, e.name)).birthtime.toISOString(); } catch { /* unreadable */ }
+        return `${born ?? 'birth-unknown'}  ${e.name}`;
+      })
+      .sort();
+    writeFileSync(
+      join(dest, 'LOGS-BIRTH.txt'),
+      '# BIRTH times of every _logs/ dir, read before the sweep (718(5)).\n' +
+        '# Birth, not mtime: a cycle dir mtime moves on every write inside it, so it says\n' +
+        '# when the cycle last wrote and never when it STARTED — which is the only thing a\n' +
+        '# channel wait is asking. Run 11 needed exactly this to tell the door from the product.\n' +
+        `${births.join('\n')}\n`,
+    );
+  } catch { /* best-effort: a capture that cannot list is still worth the files it copied */ }
+
   return dest;
 }
 
@@ -165,7 +204,35 @@ export async function captureBeatDom(page, root, storyId, index, act, runStamp) 
 
 /** The run's own words for what it read — printed whether or not it read anything (§15.92). */
 export function describeRedEvidence(dir, root) {
-  return dir === null
-    ? []
-    : [`[stories] red run: ground read into ${relative(root, dir)} BEFORE the sweep (bead 6.11.42) — session files + MTIMES.txt`];
+  if (dir === null) return [];
+  // 718(5) / §15.411. THIS LINE USED TO SAY "session files + MTIMES.txt", and
+  // that is exactly what the next reader copied into the campaign's evidence
+  // dir — me, after run 11. The DOM dumps were already here: `captureBeatDom`
+  // wrote `beat-8-dom.html` five milliseconds before the verdict line, and I
+  // told T1 the capture could not answer what the DOM said. It could. What it
+  // could not do was SAY SO.
+  //
+  // A capture nobody is told about is a capture nobody takes, so the line now
+  // reads the directory and names what is in it. One DOM dump by name plus a
+  // count, not a listing that grows with the story.
+  let doms = [];
+  let extras = [];
+  try {
+    const entries = readdirSync(dir);
+    // NUMERIC, not lexicographic: `.sort()` puts `beat-24` before `beat-8`, so
+    // the example named would be the LAST red rather than the first. The first
+    // red is the one that matters — everything after it is usually cascade.
+    const beatNo = (f) => Number(/^beat-(\d+)-dom\.html$/.exec(f)[1]);
+    doms = entries.filter((f) => /^beat-\d+-dom\.html$/.test(f)).sort((a, b) => beatNo(a) - beatNo(b));
+    extras = entries.filter((f) => f === 'serve.log' || f === 'LOGS-BIRTH.txt').sort();
+  } catch { /* the dir is the thing being described; an unreadable one still gets named */ }
+  const held = [
+    'session files',
+    'MTIMES.txt',
+    ...(doms.length > 0
+      ? [`${doms.length} DOM dump(s) at the moment of each red, e.g. ${doms[0]}`]
+      : []),
+    ...extras,
+  ];
+  return [`[stories] red run: ground read into ${relative(root, dir)} BEFORE the sweep (bead 6.11.42) — ${held.join(', ')}`];
 }
