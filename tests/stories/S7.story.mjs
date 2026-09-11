@@ -32,6 +32,16 @@
  * (`draft`); new beat 5a performs the library approval and asserts `ready`.
  * Same shape as S6's 11a/11b split.
  *
+ * AMEND-3 (M6, T1 ruling 638; `_1.0/gate-manifests/M1-C-S7.amend-3.md`). ONE
+ * pure navigation beat, no product change, 20 beats to 21. Amend-1 made the
+ * instructions launcher reachable and stopped one hop short: its navigation
+ * beats land on `/sessions`, the page that LINKS to the launcher, while the
+ * next beat's first act is a `fill` for a field that only exists ON the
+ * launcher. Run 1 measured the consequence — the wait armed 5 ms after the
+ * previous beat went green and spent its full 14 999 ms bound with nothing
+ * navigating. The beat below carries the trace and the reason a navigation
+ * beat, rather than a longer wait, is the fix.
+ *
  * A THIRD DEFECT IN BEAT 13, and the reason this story gains TWO more beats
  * than the split alone needs. Beat 13 could not be REACHED: the runner reaches
  * a beat's route by clicking a link on the CURRENT page whose pathname matches
@@ -520,6 +530,48 @@ export default {
         data: { page: 'sessions-index', 'page-ready': 'true' },
       },
       say: 'Every session forge has ever run is here, and so is the only list of the kinds it can start.',
+    },
+    {
+      // AMEND-3 (T1 ruling 638) — THE HOP AMEND-1 STOPPED ONE SHORT OF.
+      //
+      // Amend-1 added the two navigation beats above to make the instructions
+      // launcher REACHABLE, and they land the operator on `/sessions` — the
+      // page that LINKS to the launcher. They never land on the launcher
+      // itself, and the next beat's first act is a `fill` for a field that
+      // only exists there.
+      //
+      // MEASURED in run 1, and the timestamps are the whole finding:
+      //
+      //   04:15:06.202  ✓ 15. Follow the Sessions entry
+      //   04:15:06.207  while waiting on [data-field="kickoff-project"]: no element carries that handle yet
+      //   04:15:21.252  ✗ 16. … Timeout 14999ms exceeded
+      //
+      // The wait armed FIVE MILLISECONDS after the previous beat went green and
+      // spent the full DOM bound. **Nothing navigated in between.** It was not
+      // racing a transition — it was waiting on a page that never had the
+      // field and never would.
+      //
+      // WHY A PURE NAVIGATION BEAT IS THE FIX, and not a longer wait or a
+      // harness change: `driveBeat` runs `performSteps`
+      // (`beats-drive.mjs:182`) BEFORE route resolution (`:245`) and before the
+      // navigation section (`:374`). That is ruling 504 working exactly as
+      // written — a beat's `do` acts on the page the operator is STANDING on.
+      // A beat with no `do` skips the step phase entirely and reaches the
+      // navigation section, which is why this shape works where a `fill` does
+      // not. Same instrument as beats 3b and 13b.
+      //
+      // The assertions are measured, not assumed: a walk of this route (no
+      // agent, no spend) read `data-page="session-kickoff"` with
+      // `data-page-ready="true"` 250 ms after the click, and `/sessions`
+      // carries exactly ONE link to `/sessions/instructions/new` — the
+      // Sessions index's kickoff row, which is the IA finding amend-1 already
+      // recorded.
+      act: 'Open the instructions launcher',
+      expect: {
+        route: '/sessions/instructions/new',
+        data: { page: 'session-kickoff', 'page-ready': 'true' },
+      },
+      say: 'Three hops from the parts bin to the door for the fourth kind of part, and this is the third: the launcher itself. The story walks it rather than teleporting, because an operator cannot teleport.',
     },
     {
       // AMEND-1, beat 13a of a split — the same class as beat 3 (rulings
