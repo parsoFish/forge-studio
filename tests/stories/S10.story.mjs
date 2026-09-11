@@ -318,8 +318,25 @@ export default {
       // hazard, not a product defect: the preflight clears `_logs/_agent-*` and
       // re-hashes the ground, and it must also leave no scheduler running.
       // `_queue/pending/` is the same class (run 7's `queue-residue.md`).
+      // AMEND-6, bought by run 8 at twelve seconds of act bound and a whole
+      // beat. `scheduler-start` was absent and I called the product wrong
+      // before the evidence did: `/api/scheduler/status` answered
+      // `{"running":false}` live during the run, which `scheduler-view.ts`
+      // maps to `stopped` → actions `['start']`. The button was renderable.
+      //
+      // It is on the ROADMAP TAB. `<SchedulerCard variant="strip">` lives at
+      // `app/projects/[id]/page.tsx:1228`, inside the block rooted at
+      // `data-section="project-roadmap"`, three lines above the Plan and
+      // Start-development controls — and the project page opens on
+      // `useState<ProjectTab>('editor')` (`:104`). The beat below has pressed
+      // `project-tab-roadmap` first all along, for exactly this reason.
+      //
+      // I verified the handle EXISTS and that its state was reachable, and
+      // never verified WHERE IT RENDERS (§15.358). Existence is not
+      // reachability from the page the beat is standing on, and only the
+      // second is what a beat asserts.
       act: 'Start the scheduler so queued work can be claimed',
-      do: [{ press: 'scheduler-start' }],
+      do: [{ press: 'project-tab-roadmap' }, { press: 'scheduler-start' }],
       expect: {
         route: '/projects/gitpulse',
         data: { page: 'projects', 'project-id': 'gitpulse', 'scheduler-status': 'running' },
@@ -364,15 +381,23 @@ export default {
       wait: { for: 'agent', upTo: 1_200_000 },
       expect: {
         route: '/projects/gitpulse',
-        // `needs-scheduler-start: 'false'` (622) — run 7 spent the WHOLE 20-minute
-        // ceiling on a plan nothing was ever going to claim. The product
-        // publishes this on `EnqueueOutcomeLine.tsx:69`, so a scheduler-less
-        // environment can red in seconds instead of burning the bound in
-        // silence. It is the 531(3) economics argument applied to a STATE
-        // rather than a handle.
+        // `needs-scheduler-start` IS GONE — amend-6, and it never worked.
+        // 622 added it so a scheduler-less environment would "red in seconds
+        // instead of burning the bound in silence". Run 8 returned
+        // `expected "false", ABSENT from the page`: the attribute is published
+        // by `EnqueueOutcomeLine.tsx:69` and `ArchitectCommittedView.tsx:20`,
+        // neither of which is on the roadmap tab this beat stands on. Same
+        // mistake as beat 7 above — the attribute exists in the product and
+        // not on this page (§15.358).
+        //
+        // It could not have failed fast even where it renders:
+        // `waitForConsequence` waits for ALL declared keys until the deadline,
+        // so one key that can never hold still costs the whole bound. THE DOOR
+        // IS THE FAIL-FAST NOW — ruling 640 put the channel door in that same
+        // wait, so a press that dispatches nothing ends at the 180-second
+        // stall ceiling with `no-channel`, three minutes instead of twenty.
         data: {
           page: 'projects', 'project-id': 'gitpulse',
-          'needs-scheduler-start': 'false',
           'plan-state': 'planned', 'initiative-ready': 'true',
         },
       },
