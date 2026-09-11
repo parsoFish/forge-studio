@@ -27,6 +27,7 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
@@ -1178,31 +1179,21 @@ function RoadmapView({
 
   if (!roadmap) {
     return (
-      <div
-        data-section="project-roadmap"
-        data-project-id={projectId}
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
-      >
+      <RoadmapEmpty projectId={projectId}>
         No roadmap data yet — plan with the architect to generate initiatives.
         <ProjectArchitectEntry projectId={projectId} />
-      </div>
+      </RoadmapEmpty>
     );
   }
 
   if (initiatives.length === 0) {
     return (
-      <div
-        data-section="project-roadmap"
-        data-project-id={projectId}
-        data-dep-count="0"
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
-      >
-        No initiatives found for this project.
-        {/* W6-SW-3 (sweep C2#2): the sibling !roadmap branch above already
-            renders this CTA — a roadmap that resolved with zero initiatives
-            is just as much a dead end without it. */}
+      <RoadmapEmpty projectId={projectId} depCount="0" unparseable={roadmap.unparseable}>
+        {(roadmap.unparseable?.length ?? 0) === 0 && 'No initiatives found for this project.'}
+        {/* W6-SW-3: the sibling branch above renders this CTA; a roadmap that
+            resolved with zero initiatives is just as much a dead end without it. */}
         <ProjectArchitectEntry projectId={projectId} />
-      </div>
+      </RoadmapEmpty>
     );
   }
 
@@ -1220,8 +1211,10 @@ function RoadmapView({
       data-section="project-roadmap"
       data-project-id={projectId}
       data-dep-count={String(initLevels.maxLevel)}
+      data-unparseable-count={String(roadmap.unparseable?.length ?? 0)}
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
+      <UnparseableNotice items={roadmap.unparseable} />
       {/* W7-A3 (projects-16 / flows-23): every Plan / Start development
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
