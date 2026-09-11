@@ -2832,7 +2832,21 @@ is what this contract reads — but it cannot be the only distinguisher.
   either end is the selected card — the edge-correctness the serpentine arcs
   carried ZERO `data-*` for. (Note: NO attribute begins with
   `data-dep-edge-`; the edge count lives on `[data-roadmap-edge-count]` — a
-  `\bdata-dep-edge\b` matcher must remember a hyphen is a word boundary.) Per
+  `\bdata-dep-edge\b` matcher must remember a hyphen is a word boundary.)
+
+  **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
+  subscribes to the bridge socket and re-reads on `cycle-list-changed` (every
+  `data-initiative-status` transition — `watchQueue` watches all six `_queue/`
+  dirs) and on debounced cycle `event`s (`data-plan-state`'s
+  `planning` → `planned`, which derives from the WI snapshot under `_logs/` and
+  so fires no queue event of its own). Both are needed; either alone leaves one
+  of the two attributes stale. Before this the surface refreshed ONLY on
+  navigation, a Retry, or an operator action — so a beat that WAITED on a card
+  was watching a screenshot, and one such wait cost a run 180 seconds. A journey
+  or story beat may now assert these attributes on a card it is already looking
+  at, without forcing a re-read.
+
+  Per
   initiative,
   `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
