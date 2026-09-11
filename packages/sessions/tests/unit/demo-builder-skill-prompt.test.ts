@@ -106,15 +106,15 @@ const GROUND_ONLY_SENTINEL = 'GROUND-ONLY-SENTINEL-3ba7 (the second pass only �
  *  turn id (`generate-element` / `generate-composed` / `generate-legacy`) —
  *  this pins the turn-id convention the design document plans; see the file
  *  header. */
-/** Bead 6.11.49 — a generate turn now runs the agent TWICE, so a capture that
- *  overwrites leaves every assertion below pointing at the GROUNDING pass while
- *  claiming to describe the write pass. These tests are about what pass 1 is
- *  told, so they keep both prompts and read the first — and assert that there
- *  really were two, so a regression to one pass fails here rather than quietly
- *  re-pointing the assertions. */
+/** Bead 7.3.6 (T1 ruling 642) — a generate turn runs the agent THREE times:
+ *  READ, then WRITE, then GROUND. These tests are about what the WRITE pass is
+ *  told, so they keep every prompt and read the second — and assert the count,
+ *  so a change to the pass structure fails HERE, loudly, rather than quietly
+ *  re-pointing every assertion below at a different pass. 6.11.49 wrote this
+ *  helper for two passes and it caught exactly that when the third went in. */
 function writePassPrompt(prompts: readonly string[]): string {
-  assert.equal(prompts.length, 2, 'a generate turn must run exactly two agent passes — write, then ground');
-  return prompts[0]!;
+  assert.equal(prompts.length, 3, 'a generate turn must run exactly three agent passes — read, write, ground');
+  return prompts[1]!;
 }
 
 function writeSelectionFixture(): string {
@@ -166,7 +166,7 @@ test('AT-3a: targetElement scenario selects the generate-element turn section on
   assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a targetElement scenario');
   assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a targetElement scenario');
   assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
+  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 test('AT-3b: composed (multi-element, no targetElement) scenario selects the generate-composed turn section only', async () => {
@@ -192,7 +192,7 @@ test('AT-3b: composed (multi-element, no targetElement) scenario selects the gen
   assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a composed scenario');
   assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a composed scenario');
   assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
+  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 test('AT-3c: no-elements-configured (legacy) scenario selects the generate-legacy turn section only', async () => {
@@ -216,7 +216,7 @@ test('AT-3c: no-elements-configured (legacy) scenario selects the generate-legac
   assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a legacy scenario');
   assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a legacy scenario');
   assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[1]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
+  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
 });
 
 // ---------------------------------------------------------------------------

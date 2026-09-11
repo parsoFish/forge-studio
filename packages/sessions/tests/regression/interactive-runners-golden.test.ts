@@ -443,13 +443,18 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
     });
 
     assert.equal(result.phase, 'awaiting-review', 'sanity: the fixture must drive the turn to a generated demo awaiting review');
-    assert.equal(captures.length, 2, 'a generate turn must spawn exactly twice — the write pass, then the grounding pass');
+    // 7.3.6 (T1 ruling 642): READ, then WRITE, then GROUND. 6.11.49 pinned two
+    // and denied Bash on the write pass — S1 run 4 then measured that pass
+    // spending all 8 turns on TodoWrite/Glob/Read and never writing. Denying
+    // Bash removed run-instead-of-write; every read door stayed open. So the
+    // pin is now the whole deny list on the write pass, not one entry of it.
+    assert.equal(captures.length, 3, 'a generate turn must spawn exactly three times — read, write, then ground');
+    const writeAllowed = (captures[1]!.options?.allowedTools as string[] | undefined) ?? [];
+    for (const door of ['Bash', 'Read', 'Glob', 'Grep', 'TodoWrite']) {
+      assert.ok(!writeAllowed.includes(door), `the WRITE pass must spawn without ${door} — a deny list that leaves any read door open is 6.11.49 again`);
+    }
     assert.ok(
-      !(captures[0]!.options?.allowedTools as string[] | undefined)?.includes('Bash'),
-      'the WRITE pass must spawn with Bash removed — it is the whole mechanism of bead 6.11.49',
-    );
-    assert.ok(
-      (captures[1]!.options?.allowedTools as string[] | undefined)?.includes('Bash'),
+      (captures[2]!.options?.allowedTools as string[] | undefined)?.includes('Bash'),
       'the GROUNDING pass must spawn with Bash restored — a demo that cannot run the project cannot show real output',
     );
 

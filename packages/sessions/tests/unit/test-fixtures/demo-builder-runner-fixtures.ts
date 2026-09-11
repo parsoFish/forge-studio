@@ -142,15 +142,17 @@ test('generating with the sample but NOT the reusable demo skill → throws (ski
 test('generate prompt carries the demoProcess, look-and-feel, feedback, and the inlined base CSS', async () => {
   const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating' });
   writeFileSync(join(sessionDir, 'feedback.md'), 'Make the diff bigger and drop the footer.');
-  // Bead 6.11.49: a generate turn now runs TWO agent passes, so a capture that
-  // keeps the last prompt would silently start asserting against the grounding
-  // pass. `captured` is the WRITE pass's prompt — the one these assertions have
-  // always been about.
+  // Bead 7.3.6 (T1 ruling 642): a generate turn now runs THREE agent passes —
+  // READ, then WRITE, then GROUND — so `prompts[1]` is the write pass. 6.11.49
+  // wrote this comment when there were two and `prompts[0]` was the write pass;
+  // the index moved when the read pass went in front of it, and an index that
+  // silently means a different pass is how these assertions would start
+  // proving something nobody asked for.
   const prompts: string[] = [];
   await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
-  const captured = prompts[0];
+  const captured = prompts[1];
   assert.match(captured, /Output matches the golden file/, 'demoProcess steps injected');
   assert.match(captured, /dark and minimal/, 'look-and-feel guidance injected');
   assert.match(captured, /drop the footer/, 'feedback injected');
@@ -161,7 +163,7 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   assert.match(captured, /INITIATIVE'S CHANGES|before\/after/i, 'scopes the demo to an initiative\'s changes');
   // Moved, not dropped: sampling a real recent change is what the GROUNDING
   // pass is for, and it is the pass that has Bash to do it (6.11.49).
-  assert.match(prompts[1], /git (log|diff)/i, 'the grounding pass directs sampling from a real recent change');
+  assert.match(prompts[2], /git (log|diff)/i, 'the grounding pass directs sampling from a real recent change');
   assert.doesNotMatch(captured, /git (log|diff)/i, 'the write pass is not sent looking for a commit it cannot run');
 });
 
@@ -290,7 +292,7 @@ test('composed demo: the generate prompt lists the ordered elements + injects th
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
-  const captured = prompts[0];
+  const captured = prompts[1];
   assert.equal(result.phase, 'awaiting-review');
   assert.match(captured, /COMPOSED of demo elements/, 'composition framing present');
   assert.match(captured, /\[present\] narrative/, 'ordered element list (narrative first)');
@@ -309,7 +311,7 @@ test('per-element iteration: targetElement focuses the turn + requires the eleme
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture', (p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
-  const captured = prompts[0];
+  const captured = prompts[1];
   assert.equal(result.phase, 'awaiting-review');
   assert.match(captured, /Iterate ONE element: 'cli-capture'/, 'focused on the one element');
   // It required + accepted the per-element skill (NOT the demo-design composer).
@@ -342,7 +344,7 @@ test('update mode: the generate prompt carries an UPDATE framing referencing the
   await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
-  const captured = prompts[0];
+  const captured = prompts[1];
   assert.match(captured, /UPDATE MODE/, 'update framing present');
   assert.match(captured, /demo-design\/SKILL\.md/, 'references the existing generator');
   assert.match(captured, /change-notes/i, 'frames the brief as change-notes');
