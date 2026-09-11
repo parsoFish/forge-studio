@@ -39,7 +39,7 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 export type ClaimValidationResult =
   | { ok: true; flowVersion: number }
-  | { ok: false; reason: string; terminal: boolean };
+  | { ok: false; reason: string; terminal: boolean; /** 7.6.18: failing hard-clause NAMES, for the manifest the UI reads. */ blockedClauses?: string };
 
 // ---------------------------------------------------------------------------
 // Internal: skip-set — per-process set of initiative IDs refused for a
@@ -229,6 +229,10 @@ export function validateClaimable(
       return {
         ok: false,
         reason,
+        // 7.6.18: the clause NAMES, separately from the prose. The scheduler
+        // writes these to the manifest so the roadmap and the start-work view
+        // can name the blocker; the prose stays for the log.
+        blockedClauses: failingClauses,
         terminal: false, // leave in pending — operator can fix the project
       };
     }

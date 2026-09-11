@@ -693,16 +693,16 @@ async function runOne(
         // poll — no inFlight slot churn. A fresh `forge serve` after the
         // operator fixes the project clears the set and re-checks.
         moveTo(filename, 'pending', paths);
-        console.warn(
-          `[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`,
-        );
+        // 7.6.18: the surfaces read the MANIFEST, not this log. Clause NAMES only — the prose has colons, and `annotateManifest` writes raw.
+        annotateManifest(join(paths.pending, filename), { claim_blocked_clauses: claimCheck.blockedClauses ?? '' });
+        console.warn(`[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`);
         return; // runOne done — isNonTerminalRefused() guards future polls
       }
     }
 
     // Record the flow version at claim time (edit-lock seam, ADR-028 §6/M3-6).
     // If the on-disk flow version changes mid-run the runner warns (M4 will enforce).
-    annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion) });
+    annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion), claim_blocked_clauses: '' });
 
     const branch = `forge/${manifest.initiativeId}`;
     const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
