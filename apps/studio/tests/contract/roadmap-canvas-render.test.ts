@@ -367,3 +367,81 @@ test('[W6-RV-2] AT7: an empty roadmap still renders the canvas + drawer shell wi
   expect(html).toContain('data-initiative-count="0"');
   expect(html).toContain('data-roadmap-drawer');
 });
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.21` (T1 rulings 689(i)/690(ii)) — `planned` must mean WORK
+// ITEMS EXIST, not "no longer awaiting planning".
+//
+// MEASURED in lane C's S10 run 10, and the timing is the whole finding: the
+// cycle's PM started at 07:52:57.973 and made its first write at 07:53:08.616,
+// the manifest carried no `work_items:` key at all, and beat 8 read
+// `data-plan-state="planned"` **288 ms after the claim** — during the ten
+// seconds in which a plan was being written, not after one existed.
+//
+// The cause is one conjunct. `planned` was already derived from work items
+// (`workItems !== undefined`), but it was then ANDed away:
+//
+//     const unplanned = status === 'pending' && !planned;   // :563
+//     if (!unplanned) return 'planned';                     // :103
+//
+// The scheduler's claim moves the manifest out of `_queue/pending/`, so
+// `status` leaves `'pending'`, `unplanned` goes false, and the attribute
+// reports `planned` without ever consulting the work items again. An
+// attribute derived from the ABSENCE of one state rather than the PRESENCE of
+// the thing it names — and `studio-dom-contract.md` had documented the honest
+// rule all along ("`unplanned` = the … `workItems === undefined` proxy").
+//
+// `planning` is not invented here: it is already in the published vocabulary
+// (`planned | planning | error | needs-confirm | unplanned`), and it is what a
+// claimed-but-undecomposed initiative actually is.
+//
+// THE INPUT IS REAL, NOT IMAGINED. `buildProjectRoadmap`
+// (`apps/forge/bridge-studio.ts:960-961`) sets `workItems` to `undefined`
+// whenever no WI snapshot exists, and takes `status` from the queue directory
+// the manifest sits in — so `{status: 'in-flight', workItems: undefined}` is
+// exactly what run 10's in-flight manifest produces. The sibling assertion in
+// `apps/forge/tests/integration/bridge-studio-roadmap.test.ts` pins that end.
+// ---------------------------------------------------------------------------
+
+function planStateOf(html: string, initiativeId: string): string {
+  const tag = tagContaining(html, `data-initiative-id="${initiativeId}"`);
+  return tag.match(/\bdata-plan-state="([^"]*)"/)?.[1] ?? '<no data-plan-state on that node>';
+}
+
+function oneInitiative(over: Partial<RoadmapInitiative> & { initiativeId: string }): ProjectRoadmap {
+  return { projectId: 'gitpulse', initiatives: [initiative(over)] };
+}
+
+test('[7.6.21] a CLAIMED initiative with NO work items reads `planning` — never `planned`', () => {
+  const id = 'INIT-2026-09-11-exclude-author-filter-flag'; // run 10's own initiative
+  const html = render({ roadmap: oneInitiative({ initiativeId: id, status: 'in-flight' }), cycleGroups: [] });
+
+  expect(planStateOf(html, id)).toBe('planning');
+});
+
+test('[7.6.21] a CLAIMED initiative WITH work items still reads `planned`', () => {
+  const id = 'INIT-CLAIMED-PLANNED';
+  const html = render({
+    roadmap: oneInitiative({ initiativeId: id, status: 'in-flight', workItems: [wi('WI-1')] }),
+    cycleGroups: [],
+  });
+
+  expect(planStateOf(html, id)).toBe('planned');
+});
+
+test('[7.6.21] a PENDING initiative with no work items still reads `unplanned` — the fix must not move this', () => {
+  const id = 'INIT-PENDING-UNPLANNED';
+  const html = render({ roadmap: oneInitiative({ initiativeId: id, status: 'pending' }), cycleGroups: [] });
+
+  expect(planStateOf(html, id)).toBe('unplanned');
+});
+
+test('[7.6.21] a DONE initiative with work items reads `planned` — a terminal card is not re-opened by this rule', () => {
+  const id = 'INIT-DONE';
+  const html = render({
+    roadmap: oneInitiative({ initiativeId: id, status: 'done', workItems: [wi('WI-1')], completedAt: '2026-06-05T09:00:00.000Z' }),
+    cycleGroups: [],
+  });
+
+  expect(planStateOf(html, id)).toBe('planned');
+});

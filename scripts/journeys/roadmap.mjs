@@ -451,7 +451,7 @@ export const journey = defineJourney({
       {
         id: 'roadmap-plan-trigger',
         title: 'Plan trigger + blocked-until-planned lock (R4-11-F2)',
-        narration: 'A WI-less pending initiative shows a "Plan" trigger instead of "Start development" — a blocked-until-planned lock withholds development until it\'s actually decomposed. Clicking Plan repoints the manifest at the forge-architect flow so a real PM pass can produce work items.',
+        narration: 'A WI-less pending initiative shows a "Plan" trigger instead of "Start development" — a blocked-until-planned lock withholds development until it\'s actually decomposed. Clicking Plan repoints the manifest at the forge-architect flow so a real PM pass can produce work items — and the card reads \"planning\", not \"planned\", until those work items actually exist.',
         drive: async (ctx) => {
               const { page, check, frame } = ctx;
               // ── R4-11-F2: Plan trigger + blocked-until-planned lock ──────────────────
@@ -467,6 +467,10 @@ export const journey = defineJourney({
               if (planCardPresent) {
                 const initialState = await planCard.getAttribute('data-plan-state');
                 check(initialState === 'unplanned', `roadmap: a WI-less pending initiative renders [data-plan-state="unplanned"] (got ${initialState})`);
+                // `forge-8vfn.7.6.21`: `planned` means WORK ITEMS EXIST. It is never
+                // inferred from the queue state, so nothing this beat does before a
+                // decomposition may produce it.
+                check(initialState !== 'planned', `roadmap: [data-plan-state] is not "planned" while the initiative has no work items (got ${initialState})`);
 
                 await planCard.scrollIntoViewIfNeeded().catch(() => {});
                 await planCard.click().catch(() => {});
@@ -488,6 +492,10 @@ export const journey = defineJourney({
                 await page.waitForSelector(`[data-initiative-id="${INIT_PLAN}"][data-plan-state="planning"]`, { timeout: 12000 }).catch(() => {});
                 const afterState = await planCard.getAttribute('data-plan-state');
                 check(afterState === 'planning', `plan-initiative transitions to [data-plan-state="planning"] (got ${afterState})`);
+                // The regression `7.6.21` fixes, watched in a real browser: a plan
+                // pass that has been ENQUEUED and CLAIMED has still produced no work
+                // items, so the card must not yet claim it is planned.
+                check(afterState !== 'planned', `plan-initiative does NOT jump to [data-plan-state="planned"] before any work item exists (got ${afterState})`);
                 await frame(page, 'r4-11-2b-planning-started', 'R4-11-F2 — planning started: the initiative will be decomposed into work items', { key: true });
 
                 // The manifest is now claimable on the forge-architect flow. The
