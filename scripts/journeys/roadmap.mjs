@@ -11,6 +11,7 @@ let ROADMAP_SEEDED_WI, roadmapSeeded;       // roadmap-tab → roadmap-start-dev
 let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-development
 let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
 let INIT_PLAN;                              // roadmap-tab → roadmap-plan-trigger (R4-11-F2)
+let INIT_UNPARSEABLE;                       // roadmap-tab only (seeded + asserted + cleaned in one beat)
 let INIT_RECOVERY;                          // roadmap-recovery only (R4-11-T3, self-contained)
 
 export const journey = defineJourney({
@@ -165,6 +166,18 @@ export const journey = defineJourney({
               // `[data-initiative-status="merged"]` without needing a real
               // merge+closure round-trip (that's covered by the orchestrator
               // suite: queue.test.ts, closure.test.ts, finalize-merged.test.ts).
+              // `forge-8vfn.7.6.23` — a manifest the parser REFUSES, seeded beside
+              // the good ones so the surface is driven with a canvas that renders
+              // AND a queue entry that could not be read. No `class:` key, which
+              // ADR-051 made required (packages/flows/manifest.ts:117). Cleaned in
+              // this beat's own tail, like INIT_MERGED.
+              INIT_UNPARSEABLE = `INIT-${DATE}-e2e-unparseable`;
+              writeFileSync(join(QDIR('pending'), `${INIT_UNPARSEABLE}.md`), [
+                '---', `initiative_id: ${INIT_UNPARSEABLE}`, `project: ${PROJECT}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 1', 'cost_budget_usd: 1',
+                '---', '', '# deliberately missing `class:`', '',
+              ].join('\n'));
+
               INIT_MERGED = `INIT-${DATE}-e2e-merged-state`;
               mkdirSync(QDIR('merged'), { recursive: true });
               writeFileSync(join(QDIR('merged'), `${INIT_MERGED}.md`), [
@@ -222,6 +235,24 @@ export const journey = defineJourney({
                 const canvasPresent = await page.evaluate(() =>
                   document.querySelector('[data-roadmap-canvas]') !== null);
                 check(canvasPresent, 'roadmap: the canvas container [data-roadmap-canvas] renders');
+
+                // `forge-8vfn.7.6.23` — the canvas renders AND a manifest was
+                // refused. Both facts must reach the operator; before this, the
+                // second was discarded by a bare `continue` and the surface said
+                // nothing at all.
+                const refused = await page.evaluate(() => {
+                  const sec = document.querySelector('[data-section="project-roadmap"]');
+                  const banner = document.querySelector('[data-component="roadmap-unparseable"]');
+                  return {
+                    count: sec ? sec.getAttribute('data-unparseable-count') : null,
+                    named: banner ? (banner.textContent || '').trim() : null,
+                  };
+                });
+                check(refused.count === '1', `roadmap: [data-unparseable-count] counts the refused manifest (got ${refused.count})`);
+                check(
+                  typeof refused.named === 'string' && /class/.test(refused.named),
+                  `roadmap: the refused manifest is NAMED with the parser's own message, not merely counted (got ${JSON.stringify(refused.named)})`,
+                );
                 const initCount = await page.evaluate(() =>
                   document.querySelectorAll('[data-roadmap-canvas] [data-roadmap-node]').length);
                 check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the canvas (got ${initCount})`);
@@ -516,6 +547,7 @@ export const journey = defineJourney({
 
               // Self-contained to this beat — clean up the seeded fixture.
               try { rmSync(join(QDIR('pending'), `${INIT_PLAN}.md`), { force: true }); } catch { /* */ }
+    try { rmSync(join(QDIR('pending'), `${INIT_UNPARSEABLE}.md`), { force: true }); } catch { /* */ }
 
         },
       },

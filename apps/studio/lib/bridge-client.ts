@@ -436,6 +436,13 @@ export type RoadmapInitiative = {
 export type ProjectRoadmap = {
   projectId: string;
   initiatives: RoadmapInitiative[];
+  /** `forge-8vfn.7.6.23` — manifests in this project's queue dirs that the
+   *  parser REFUSED, each with the parser's own message. Absent when there are
+   *  none; never an empty array, so "no field" and "nothing failed" are the same
+   *  answer and neither is confused with "the scan did not look". The empty
+   *  state reads it so an operator is told "N manifests failed to parse" rather
+   *  than the false "No initiatives found for this project". */
+  unparseable?: { path: string; message: string }[];
 };
 
 /**

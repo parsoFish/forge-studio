@@ -869,7 +869,17 @@ type ScannedManifestEntry = {
  * `buildProjectRoadmap` and `buildProjectAttention` (R4-11-F4) so there is
  * exactly one manifest-ownership scan, not two.
  */
-function scanProjectManifests(projectId: string, forgeRoot: string): ScannedManifestEntry[] {
+/** A manifest in one of this project's queue dirs that `parseManifest` refused,
+ *  with the parser's OWN message. `forge-8vfn.7.6.23`: the parse is deliberately
+ *  fail-fast (`class` is required — ADR-051, `manifest.ts:117`, "There is no
+ *  default"), and this scan used to discard that verdict with a bare `continue`.
+ *  The operator then read "No initiatives found for this project" when the truth
+ *  was "three of this project's manifests failed to parse" — different problems,
+ *  different fixes, and the surface could not tell them apart. A fail-fast check
+ *  whose result is thrown away by its caller is a check that runs and is not read. */
+export type UnparseableManifest = { path: string; message: string };
+
+function scanProjectManifests(projectId: string, forgeRoot: string): { entries: ScannedManifestEntry[]; unparseable: UnparseableManifest[] } {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const stateDirs: Array<[string, QueueState]> = [
     [queuePaths.inFlight, 'in-flight'],
@@ -884,6 +894,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
 
   const seen = new Set<string>();
   const entries: ScannedManifestEntry[] = [];
+  const unparseable: UnparseableManifest[] = [];
 
   for (const [dir, status] of stateDirs) {
     if (!existsSync(dir)) continue;
@@ -904,7 +915,11 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
         // a second matter() call here would parse the same buffer twice on a
         // route the operator UI polls repeatedly.
         manifest = parseManifest(readFileSync(fp, 'utf8'));
-      } catch {
+      } catch (err) {
+        // NEVER a silent `continue`. The path and the parser's own message
+        // travel to the surface so the empty state can say which manifest and
+        // which field, rather than reporting an absence that is not true.
+        unparseable.push({ path: fp, message: err instanceof Error ? err.message : String(err) });
         continue;
       }
       if (manifest.project !== projectId) continue;
@@ -913,7 +928,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
     }
   }
 
-  return entries;
+  return { entries, unparseable };
 }
 
 /**
@@ -948,7 +963,7 @@ function completedAtByInitiative(forgeRoot: string): Map<string, string> {
 
 function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
-  const entries = scanProjectManifests(projectId, forgeRoot);
+  const { entries, unparseable } = scanProjectManifests(projectId, forgeRoot);
   const completedAtById = completedAtByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
@@ -974,7 +989,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     };
   });
 
-  return { projectId, initiatives };
+  return { projectId, initiatives, ...(unparseable.length > 0 ? { unparseable } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,7 +1036,7 @@ function buildProjectAttention(
   forgeRoot: string,
   logsRoot: string,
 ): ProjectAttentionItem {
-  const entries = scanProjectManifests(projectId, forgeRoot);
+  const { entries } = scanProjectManifests(projectId, forgeRoot);
 
   let planned = 0;
   let inFlight = 0;
