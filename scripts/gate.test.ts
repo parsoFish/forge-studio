@@ -470,3 +470,122 @@ test('forge-e8dn: NO campaign argument still names the skip — a gate outside a
   assert.match(out, /== pins ==/);
   assert.match(out, /SKIP.*no campaign/i, 'nothing to check, said out loud rather than omitted');
 });
+
+/**
+ * Bead `forge-e8dn` follow-on (T1 ruling 679) — A COUNT ONLY WHEN THE
+ * COMPARISON MEANS SOMETHING.
+ *
+ * MEASURED. My gate printed `M6-C.sha256: 13 FAILED of 198` and I reported it
+ * to T1 and to M6-C as C's drift. It was not. C's tree was 0 FAILED / 0
+ * MISSING. The 13 was the distance between MY tree and the sha C's manifest
+ * pins: my base was `99ea89ee`, C's #644 landed at `eb46e4c2` after it, and
+ * seven of the nine were one merge of skew — four files that did not exist in
+ * my checkout yet and three that #644 had edited.
+ *
+ * C's general form, §15.381, credited to C: "a manifest hashed against any
+ * other tree measures the distance between the trees, which is exactly what a
+ * manifest is not for."
+ *
+ * So this is `forge-e8dn`'s class one step along. That one said NOTHING when it
+ * checked nothing; this one says `N FAILED` when it checked something other
+ * than what the reader assumes. Both are numbers that read as findings.
+ *
+ * THE THIRD BRANCH IS THE ONE THAT MATTERS. Three of the campaign's eight
+ * `.counts` files carry `head=` (`M6-C`, `M6-D`, `M6-T1`); the rest carry `pin=`
+ * only or are free prose. A check keyed on `head=` that stayed QUIET for the
+ * other five would rebuild the exact defect it is fixing, five times over — so
+ * a manifest whose counts cannot answer "which sha?" gets its count AND a named
+ * caveat, never a silent one.
+ */
+
+/** A fixture campaign: one manifest over one pinned file, plus its counts. */
+function campWithPin(parent: string, treeDir: string, counts: string | null) {
+  const camp = join(parent, 'camp');
+  mkdirSync(join(camp, 'gate-manifests'), { recursive: true });
+  writeFileSync(join(treeDir, 'pinned.txt'), 'pinned\n');
+  const sum = spawnSync('sha256sum', ['pinned.txt'], { encoding: 'utf8', cwd: treeDir }).stdout ?? '';
+  writeFileSync(join(camp, 'gate-manifests', 'FIX.sha256'), sum);
+  if (counts !== null) writeFileSync(join(camp, 'gate-manifests', 'FIX.counts'), counts);
+  return camp;
+}
+
+/** A real git tree, because the check compares against the tree's own HEAD. */
+function gitTree(ci: string): { dir: string; head: string } {
+  const d = tree(ci);
+  const git = (...a: string[]) => spawnSync('git', ['-C', d, ...a], { encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 'gate@test');
+  git('config', 'user.name', 'gate');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture');
+  return { dir: d, head: (git('rev-parse', 'HEAD').stdout ?? '').trim() };
+}
+
+test('679/684: a tree AT the pinned sha reports the count and names the sha it verified at', () => {
+  const { dir, head } = gitTree(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'skew-ok-')), dir, `paths=1 head=${head}\n`);
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 0 FAILED of 1/);
+  assert.match(out, /last verified at/, 'the line says WHICH sha the count belongs to — that is the whole fix');
+  assert.doesNotMatch(out, /skew:/, 'no skew to report');
+});
+
+test('679/684: a CLEAN count from a tree ahead of the pin is a real verification, not tree-distance', () => {
+  // Ruling 684, correcting this block's first draft. `sha256sum -c` verifies
+  // HASHES: 0 FAILED from a tree ahead of the pin means the pinned bytes still
+  // hold HERE. The first draft printed SKIPPED on any skew and threw that real
+  // verification away along with the ambiguous case.
+  const { dir } = gitTree(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'skew-clean-')), dir, 'paths=1 head=deadbeefdeadbeef\n');
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 0 FAILED of 1/, 'the verification stands and must be printed');
+  assert.doesNotMatch(out, /SKIPPED/, 'skew does not invalidate a clean count');
+  assert.doesNotMatch(out, /skew:/, 'and there is nothing ambiguous to warn about');
+  assert.match(out, /last verified at deadbeefdeadbeef/, 'but the reader is told which sha it was last verified at');
+});
+
+test('679/684: a NON-ZERO count across skew is the ambiguous one, and says how to resolve it', () => {
+  // A FAILED line can be real drift or a file the pin simply predates. That is
+  // exactly what cost a round when `M6-C: 13 FAILED of 198` went upward as a
+  // sibling lane's drift from a tree one merge behind.
+  const { dir } = gitTree(CI);
+  installedInPlace(dir);
+  const parent = mkdtempSync(join(tmpdir(), 'skew-fail-'));
+  const camp = campWithPin(parent, dir, 'paths=1 head=deadbeefdeadbeef\n');
+  writeFileSync(join(dir, 'pinned.txt'), 'CHANGED since the pin\n');
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 1 FAILED of 1/, 'the number is still reported');
+  assert.match(out, /skew:/, 'but a non-zero count across skew cannot be read as drift on its own');
+  assert.match(out, /reconcile from a tree at deadbeefdeadbeef or later/, 'and the reader is told what to do about it');
+});
+
+test('679/684: a manifest whose counts cannot say WHICH sha gets its count AND a named caveat', () => {
+  const { dir } = gitTree(CI);
+  installedInPlace(dir);
+  // Free prose — the shape `M6-A.counts` and `M6-B.counts` actually carried.
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'skew-prose-')), dir, 'measured in /somewhere at fa45d7c8\n');
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 0 FAILED of 1/, 'the count is still the best available answer');
+  assert.match(out, /skew unknown/, 'silence here would rebuild the defect eleven manifests over — only 3 of 14 counts carry head=');
+});
+
+test('679/684: NO counts file at all is the same named caveat, not a silent pass', () => {
+  const { dir } = gitTree(CI);
+  installedInPlace(dir);
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'skew-none-')), dir, null);
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /FIX\.sha256: 0 FAILED of 1/);
+  assert.match(out, /skew unknown/, 'an absent counts file answers the question no better than a prose one');
+});
