@@ -89,6 +89,22 @@ esac
 # under us the duration is reported as `?s`, never as a plausible-looking lie.
 secs() { local d=$(( $(date +%s) - $1 )); if [ "$d" -lt 0 ]; then echo "?s (clock stepped)"; else echo "${d}s"; fi; }
 
+# T1 ruling 639 / bead `forge-8vfn.7.6.13`. `npm test` refuses while a story run
+# holds the run-lock, and it learns WHICH lock from the environment — the guard
+# lives in the repo and a permanent artifact never cites a path inside the
+# campaign directory, so the caller that KNOWS the campaign names it. This is
+# that caller: `$CAMP` is already an argument, and both names are derived from
+# it, never written literally.
+#
+# Exported even when `$CAMP` is empty is NOT the same as unset: the guard treats
+# an unnamed lock as "not configured" and says so out loud, which is the honest
+# reading for a gate run outside a campaign. So the export happens only when
+# there IS a campaign to name.
+if [ -n "$CAMP" ]; then
+  export FORGE_SUITE_LOCK="$CAMP/.suite-lock"
+  export FORGE_RUN_LOCK="$CAMP/.run-lock"
+fi
+
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
