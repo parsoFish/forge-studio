@@ -317,8 +317,19 @@ export default {
       // So `scheduler-start` EXISTS ONLY WHILE THE SCHEDULER IS STOPPED. If a
       // previous run left one running, this beat reds at t+0 on a missing
       // handle while the state it wants already holds. That is a residue
-      // hazard, not a product defect: the preflight clears `_logs/_agent-*` and
-      // re-hashes the ground, and it must also leave no scheduler running.
+      // hazard, not a product defect: the preflight re-hashes the ground and
+      // must also leave no scheduler running.
+      //
+      // THIS COMMENT USED TO SAY the preflight "clears `_logs/_agent-*`". It
+      // never did — `reap.mjs` reaps PROCESSES by pid and deletes no directory,
+      // and `sweep.mjs` had no `_agent-*` rule at all. The sentence described the
+      // system as it ought to be and was read as a description of what it was.
+      // The reusable half, C's words: A COMMENT THAT DESCRIBES AN INTENTION AS
+      // A FACT IS A CLAIM NOTHING CHECKS, and it outlives everyone who knew it
+      // was aspirational. Its author believed it on re-reading too.
+      // `forge-8vfn.7.6.24` makes the leading sweep claim them for real; until
+      // that landed, S5 run 3 met run 2b's dir and a beat that had been red all
+      // campaign went GREEN by reading a different run's row (T1 ruling 716(ii)).
       // `_queue/pending/` is the same class (run 7's `queue-residue.md`).
       // AMEND-6, bought by run 8 at twelve seconds of act bound and a whole
       // beat. `scheduler-start` was absent and I called the product wrong

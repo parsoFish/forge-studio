@@ -25,7 +25,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -537,6 +537,122 @@ test('AT-6.12-8 (positive control) with NO starters declared, every removal read
     assert.deepEqual(starterAgentSlugs(root), [], 'a tree with no starters dir yields no expected slugs');
     const fence = applyFence({ restore: [], remove: ['skills/plan'] }, root);
     assert.match(describeFence(fence, starterAgentSlugs(root)).join('\n'), /created by the run, not its artifact/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.24` (T1 ruling 714(a)) — a PREVIOUS run's agent log dir.
+//
+// S5 run 3 met run 2b's and the ledger read two rows:
+//   ✗ 12. data-ledger-count: expected "1", got "2"
+//   ✓ 13. Read the row: what it cost, where it ran, and how it ended   ← 146 ms
+// Beat 12 failed honestly on the COUNT; beat 13 matched the OLD row's CONTENT,
+// so a beat red all campaign went green by reading a different run's artefact.
+//
+// §15.400 — what else could make these pass? A test asserting only "the sweep
+// removed something" passes while the count still reads 2, which IS the failure
+// mode. So the count is what is asserted, the capture is checked for bytes
+// rather than existence, and the dir THIS run would own is planted alongside to
+// prove the sweep does not take it.
+// ---------------------------------------------------------------------------
+
+function plantAgentLogs() {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-agentlogs-'));
+  const logs = join(root, '_logs');
+  // run 2b's, byte for byte in shape: the dir, its events log, its marker.
+  const old = join(logs, '_agent-story-s5-2026-09-11T07-19-59-170-j0zi');
+  mkdirSync(old, { recursive: true });
+  writeFileSync(join(old, 'events.jsonl'), '{"event_type":"end","cost_usd":0.28}\n', 'utf8');
+  writeFileSync(join(old, 'agent-run.marker'), 'run 2b\n', 'utf8');
+  // A DIFFERENT story's dispatch, which this sweep must not touch.
+  const other = join(logs, '_agent-story-s7-2026-09-11T05-00-00-000-zzzz');
+  mkdirSync(other, { recursive: true });
+  writeFileSync(join(other, 'events.jsonl'), '{}\n', 'utf8');
+  return { root, logs, old, other };
+}
+
+test('7.6.24: a previous run\'s agent log is found — and only this story\'s', async () => {
+  const { root, old, other } = plantAgentLogs();
+  try {
+    const { previousAgentLogDirs } = await import('./sweep-agent-logs.mjs');
+    const found = previousAgentLogDirs('S5', root);
+    assert.deepEqual(found, [old], `S5's own dispatch only — got ${JSON.stringify(found)}`);
+    assert.equal(existsSync(other), true, "another story's dispatch is not this story's residue");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.24: it is CAPTURED before it is removed — the bytes survive, not just the name', async () => {
+  const { root, old } = plantAgentLogs();
+  try {
+    const { captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+    const r = captureAndSweepAgentLogs('S5', root, '2026-09-11T13-11-12-000Z');
+    assert.deepEqual(r.removed, [old], 'the previous run\'s dir is gone from where the ledger reads it');
+    assert.equal(existsSync(old), false);
+    const captured = join(root, '_logs', '_story-swept', 'S5', '2026-09-11T13-11-12-000Z',
+      '_agent-story-s5-2026-09-11T07-19-59-170-j0zi', 'events.jsonl');
+    assert.equal(
+      readFileSync(captured, 'utf8'),
+      '{"event_type":"end","cost_usd":0.28}\n',
+      'the captured copy must hold the BYTES — a capture that only made a directory is not evidence',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.24: the capture is STAMPED, so two runs never read as one', async () => {
+  const { root } = plantAgentLogs();
+  try {
+    const { captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+    captureAndSweepAgentLogs('S5', root, 'stamp-one');
+    mkdirSync(join(root, '_logs', '_agent-story-s5-2026-09-11T13-11-40-241-8p1p'), { recursive: true });
+    writeFileSync(join(root, '_logs', '_agent-story-s5-2026-09-11T13-11-40-241-8p1p', 'events.jsonl'), '{}\n', 'utf8');
+    captureAndSweepAgentLogs('S5', root, 'stamp-two');
+    const stamps = readdirSync(join(root, '_logs', '_story-swept', 'S5')).sort();
+    assert.deepEqual(stamps, ['stamp-one', 'stamp-two'],
+      'each run captures under its own stamp — one shared dir is what redEvidenceDir\'s header records as worse than no evidence');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.24: a runStamp that escapes its directory is REFUSED — the same guard the story id gets', async () => {
+  const { root } = plantAgentLogs();
+  try {
+    const { captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+    // The dest is `_logs/_story-swept/<storyId>/<runStamp>/`, and the dirs that
+    // follow the copy are REMOVED. A stamp carrying a separator or `..` lands
+    // the capture outside the namespace whose bytes are about to be deleted.
+    for (const bad of ['../escape', 'a/b', '..', './x', '/abs']) {
+      assert.throws(
+        () => captureAndSweepAgentLogs('S5', root, bad),
+        /unsafe runStamp/,
+        `runStamp ${JSON.stringify(bad)} must be refused, not interpolated`,
+      );
+    }
+    // And the refusal is BEFORE any work: nothing captured, nothing removed.
+    assert.equal(existsSync(join(root, '_logs', '_story-swept')), false,
+      'a refused stamp must not have created the destination on its way to throwing');
+    assert.equal(readdirSync(join(root, '_logs')).filter((d) => d.startsWith('_agent-')).length, 2,
+      'a refused stamp must leave every agent dir exactly where it was');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.24: an unstamped capture is REFUSED rather than defaulted', async () => {
+  const { root } = plantAgentLogs();
+  try {
+    const { captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+    assert.throws(
+      () => captureAndSweepAgentLogs('S5', root, ''),
+      /runStamp is required/,
+      'a call-time default is what mixed two runs into one directory before',
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
