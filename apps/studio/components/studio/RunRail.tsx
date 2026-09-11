@@ -262,7 +262,7 @@ function RunCard({
         <span className="badge badge-dim" style={{ fontSize: 10 }}>
           {run.status === 'gated' ? 'gated' : run.status}
         </span>
-        {run.costUsd > 0 && (
+        {run.costUsd !== null && run.costUsd > 0 && (
           <span
             style={{
               fontFamily: 'var(--font-mono)',
