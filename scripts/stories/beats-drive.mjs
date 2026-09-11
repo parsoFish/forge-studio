@@ -19,6 +19,7 @@
  * and a cycle in the module that judges every beat is not worth the seven
  * import lines it would have saved.
  */
+import { resolveAnchorMs } from './beats-anchor.mjs';
 import {
   PLACEHOLDER, answers, resolveExpectations, readObserved, routeMatches, destinationKey,
   waitForConsequence, waitForHandleOrStall,
@@ -101,7 +102,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map()) {
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
     return Object.freeze({
@@ -181,6 +182,18 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // recently it left one: S1 run 10 beat 9 died `0s in` on the demo session
   // beat 8 had just failed, read during the commit window.
   const sessionScope = bound.label !== null && target.startsWith('/sessions/') ? target : null;
+  // 718(1): remember WHEN each handle was pressed, so a later beat can anchor
+  // its channel search on the press that actually started the work. Recorded
+  // BEFORE `performSteps` runs, so the window opens a few ms EARLY rather than
+  // late — S10 run 11's cycle dir was born 449 ms before its own beat reported
+  // green, and a window that opens late misses exactly that.
+  //
+  // Last write wins: a handle pressed in several beats (`project-tab-roadmap`)
+  // should anchor on its most recent press, not its first.
+  const pressStartedMs = Date.now();
+  for (const step of steps) {
+    if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
+  }
   const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
@@ -266,7 +279,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (routeMatches(page.url(), target)) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
-        stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe, beat.wait?.for === 'settle' ? beat.wait : null, stallDoor);
+        stalled = await waitForConsequence(
+          page, beat, left, sessionScope, agentProcProbe,
+          beat.wait?.for === 'settle' ? beat.wait : null, stallDoor,
+          resolveAnchorMs(beat.wait ?? null, pressedAt, Date.now()),
+        );
         agentWaitConsumed = true;
       }
     }

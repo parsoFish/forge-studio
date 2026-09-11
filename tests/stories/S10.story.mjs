@@ -104,6 +104,44 @@ const IDEA =
 const CEILING = '35';
 
 /**
+ * Beat 8's ceiling — the factory planning AND building the initiative, watched.
+ *
+ * HELD AT A DECLARED FIGURE PENDING T1 721. Run 11 measured the cycle itself at
+ * **2 m 01 s** (`13:21:29.805` orchestrator start → `13:23:30.644` cycle.end,
+ * three work items written). That is the floor, not the answer, because the beat
+ * waits for the ROADMAP to show the finished state and run 11 proved the card
+ * can lag the disk: at the red its node still read
+ * `data-initiative-status="in-flight"` / `data-plan-state="planning"` sixty
+ * seconds after the manifest reached `_queue/ready-for-review/`.
+ *
+ * SETTLED BY 723, and the answer is the harder of the two: **the roadmap has no
+ * live refresh at all.** D read it — `app/projects/[id]/page.tsx` `loadRoadmap`
+ * (`:228`) fires only on mount, Retry, bridge recovery or an operator action
+ * (`:274-278`). No `setInterval`, no SWR, no `subscribe()`, while six sibling
+ * surfaces consume the bridge socket (`bridge-client.ts:1432`). So `:563` was
+ * never re-run after the cycle finished, and run 11's stale card was the only
+ * outcome the page could produce.
+ *
+ * That makes it a PRODUCT finding (bead 7.6.27, D's: the projects page
+ * subscribes to the socket and refreshes on cycle/queue events), and it fixes
+ * this ceiling at **360 s = 3x the measured 2 m 01 s cycle**. There is no
+ * cadence to absorb, because there is no cadence; socket latency once 7.6.27
+ * lands is negligible against that headroom.
+ *
+ * **THIS BEAT ASSERTS THE LIVE CARD. It does not reload, navigate away and back,
+ * or press the panel's Retry.** Any of those would refresh the roadmap by hand
+ * and turn the beat green over a defect that is still there — the operator doing
+ * the product's job, which is the one thing a story must never quietly do. Run
+ * 12 measures 7.6.27 THROUGH this beat, so a green here will mean the page
+ * updated itself.
+ *
+ * Tightened from run 12's measurement regardless: a declared figure that
+ * survives a real one is a guess nobody re-examined (513/551; beat 4 cost run 3
+ * exactly that).
+ */
+const PLAN_AND_BUILD_CEILING_MS = 360_000;
+
+/**
  * The one anchored send-back. It lands on the precedence clause — the risky
  * part the plan gate confirmed the class of — so the fix-WI it becomes is the
  * clause the operator asked to gate, not a stylistic note.
@@ -389,9 +427,28 @@ export default {
       // pass. It is a 513/551-class figure and gets TIGHTENED from run 7's
       // measurement; leaving a guess in place once a real number exists is how
       // beat 4 cost run 3.
-      act: 'Plan the initiative the Architect produced',
-      do: [{ press: 'start-work-plan' }],
-      wait: { for: 'agent', upTo: 1_200_000 },
+      act: 'Watch the factory plan and build the initiative',
+      // NO PRESS. The daemon beat 7 started has already claimed this
+      // initiative — run 11 measured the claim at `13:21:29`, with the cycle
+      // dir born `13:21:29.798`, **449 ms BEFORE beat 7's own green at
+      // 13:21:30.247**. There is nothing for the operator to press; the factory
+      // is already running, and a press here asserts the operator doing what
+      // the factory did.
+      do: [],
+      // ANCHORED ON BEAT 7'S PRESS (718(1)). The door searches `_logs/` for a
+      // dispatch born since a moment the caller names, and that moment used to
+      // be the wait's own start — correct for a press that dispatches its OWN
+      // work, and wrong here by half a second. Run 11 reded `no-channel:
+      // nothing under _logs/ was created by this press` about a cycle that
+      // reached `cycle.end` sixty seconds before the beat gave up.
+      //
+      // The BOUND still runs from this wait's start; only the search window
+      // moves. CEILING: 6 minutes, DECLARED, basis = run 11's measured cycle at
+      // 2m01s (`13:21:29.805` start → `13:23:30.644` cycle.end) with 3x headroom
+      // for a decomposition that finds more work. Tightened from run 12's
+      // measurement — a declared figure that survives a real one is a guess
+      // nobody re-examined (513/551, and beat 4 cost run 3 exactly that).
+      wait: { for: 'agent', anchor: 'scheduler-start', upTo: PLAN_AND_BUILD_CEILING_MS },
       expect: {
         route: '/projects/gitpulse',
         // `needs-scheduler-start` IS GONE — amend-6, and it never worked.
@@ -426,65 +483,72 @@ export default {
         // assertion is now the Plan station's real measurement instead of a race
         // the claim wins — §15.386, verify what makes an attribute TRUE, not
         // that it reads true.
+        // BOTH KEYS, on the same node (T1 720). `plan-state` is NOT dropped:
+        // I had written here that `planned` is a state the daemon runs straight
+        // through and is catchable only by luck. **That was wrong, and I wrote
+        // it while correcting a previous inversion.** D's read of the product
+        // settles it — `RoadmapCanvas.tsx:563`:
+        //
+        //   planPhase = workItems !== undefined ? 'planned'
+        //             : status === 'in-flight'  ? 'claimed'
+        //             : 'pending'
+        //
+        // and `planStateAttr:103` returns `planned` FIRST. So `planned` is the
+        // RESTING state — it holds for as long as work items exist — and
+        // `planning` is the transient. The beat asserts the resting state of a
+        // finished cycle, which is exactly what it should have been doing all
+        // along.
+        //
+        // THE THREE WAYS THIS REDS, so a future red is diagnosable from the
+        // line rather than from a trace:
+        //   `planning`   — claimed, PM has not written its work items yet.
+        //   `unplanned`  — past in-flight with no WI snapshot. NOT `planning`:
+        //                  `claimed` requires `status === 'in-flight'`.
+        //   stale        — the DOM value is older than the manifest's mtime.
+        //
+        // RUN 11 HIT THE THIRD, and it is worth the bytes because it is the one
+        // nobody predicted. At the red (`13:24:30.590`) the card read
+        // `planning`, which by `:563` requires `workItems === undefined`. But
+        // `_logs/<cycle>/work-items-snapshot/WI-1..3.md` were on disk at
+        // `23:23:30.621` and the manifest had been in `_queue/ready-for-review/`
+        // since `23:23:30.604` — **sixty seconds earlier**. The data the
+        // attribute derives from existed a full minute before the attribute was
+        // read. That is staleness in the roadmap refresh, not a planning
+        // failure, and the beat reded about the wrong thing entirely.
+        //
+        // What the factory actually leaves behind is the initiative's STATUS.
+        // `bridge-studio.ts:893` maps `_queue/ready-for-review/` →
+        // `'ready-for-review'`; `RoadmapCanvas.tsx:561` destructures `status`
+        // off the initiative and `:576` publishes it as
+        // `data-initiative-status`. Run 11's manifest ended in
+        // `_queue/ready-for-review/` with its worktree preserved on
+        // `forge/INIT-2026-09-11-exclude-author-flag`, so this is the state the
+        // run really reaches — read from the product, cited, not guessed (718(2)).
+        // `<runId>` BINDS HERE, and it has to: the beat that used to bind it —
+        // "Open the roadmap and start development" — is dropped, because the
+        // daemon had already started development. Every later beat routes on
+        // `/flows/forge-develop/run/<runId>`, and the story-file validator
+        // caught the dangling placeholder before any run did, which is the
+        // check earning its keep.
+        //
+        // IT BINDS FROM `initiative-id`, and the basis is the product's own
+        // line: `RoadmapCanvas.tsx:74` says the success line links THAT run as
+        // `/flows/<flowId>/run/<initiativeId>` — for a develop cycle the run
+        // route is keyed on the INITIATIVE, not on the stamped cycle id (run
+        // 11's cycle log dir was `2026-09-11T13-21-26_INIT-…`, a different
+        // identifier that belongs to the log and not to the route).
+        //
+        // DECLARED, NOT YET MEASURED THROUGH THIS PATH. Run 11 never reached
+        // the run page, so no run has yet proved the binding end to end; beat 9
+        // asserting `run-found: 'true'` is what will, and if it reds on a
+        // missing run the binding is the first suspect rather than the product.
         data: {
           page: 'projects', 'project-id': 'gitpulse',
-          'plan-state': 'planned', 'initiative-ready': 'true',
+          'initiative-status': 'ready-for-review', 'plan-state': 'planned',
+          'initiative-id': '<runId>',
         },
       },
-      say: 'Approving the plan gave the project an initiative; it did not break that initiative into work. Planning is where the work items come from, and it is the station between deciding what to build and starting to build it.',
-    },
-    {
-      // SOURCE-DERIVED. `StartWorkActions.tsx:187` (`data-section="start-work"`),
-      // `:230` (`data-action="start-work-develop"`), `:312`
-      // (`data-start-work-outcome`), corroborated by
-      // `lib/start-work-render.test.ts:112,114`. The disabled reasons are
-      // source-FIXED strings in `lib/start-work-view.ts:80-101`, so a red here
-      // names which one fired.
-      //
-      // THE TAB PRESS IS GONE, and it was always inert. `StartWorkActions` is
-      // mounted ABOVE the tab bar — `app/projects/[id]/page.tsx:507`, "the
-      // PRIMARY action group, above the fold on BOTH tabs" — so neither this
-      // button nor `start-work-plan` was ever tab-gated. Beat 7's press is real
-      // and stays: `scheduler-start` renders inside
-      // `data-section="project-roadmap"` and IS behind the tab.
-      act: 'Open the roadmap and start development on the planned initiative',
-      do: [{ press: 'start-work-develop' }],
-      expect: {
-        route: '/projects/gitpulse',
-        // `run-id` BINDS here, in the beat that presses — S5's shape (it binds
-        // `'run-id': '<runId>'` on the beat that presses `run-agent` and routes
-        // on it in the beat after). A beat cannot bind the placeholder its own
-        // route needs, because the route is resolved before the beat runs, so
-        // the binding has to happen on the press that mints the run. The
-        // attribute is `EnqueueOutcomeLine`'s always-present root (A's #582).
-        //
-        // AMEND-7: THIS BEAT COULD NOT HAVE PASSED BEFORE, and not because of
-        // its assertions. Run 10 found `start-work-develop` DISABLED, carrying
-        // the product's own reason — "nothing is ready to start (blocked,
-        // running, or done)". It was right: `eligible` is `pending + ready +
-        // workItems !== undefined` (`start-work-view.ts:67`), the scheduler had
-        // claimed the initiative out of `pending` two beats earlier, and the
-        // PM it started was killed before it wrote a single work item. There was
-        // genuinely nothing to start.
-        //
-        // With 7.6.21 the beat above now WAITS for work items to exist rather
-        // than for the claim, so by the time this beat presses, the button is
-        // enabled for the reason the story always assumed.
-        //
-        // `start-work-outcome` is the press's own verdict and is asserted here.
-        // NOT asserted: "development already enqueued — waiting for the
-        // scheduler to claim it" (`:92`). That string is reachable — but only
-        // AFTER a successful press, because `eligible` excludes
-        // `dispatchedDevelop`, which `StartWorkActions.tsx:119` populates from
-        // the press's own `okIds`. So it is a consequence of this beat, not a
-        // preconstitution of it, and asserting it here would be asserting on
-        // state this same beat creates.
-        data: {
-          page: 'projects', 'project-id': 'gitpulse', section: 'start-work',
-          'run-id': '<runId>', 'start-work-outcome': 'ok',
-        },
-      },
-      say: 'The initiative is planned and its work items exist, so the roadmap card can finally be started. Starting it from the card is the point: the operator is not re-describing the work, they are pressing go on work that has already been decided and decomposed.',
+      say: 'Starting the scheduler was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.',
     },
     {
       // SOURCE-DERIVED. `FlowRunDetail.tsx:121-127` (page/run-id/run-found/
@@ -515,7 +579,15 @@ export default {
       // that sat idle overstates. The five gitpulse cycles have no such gaps,
       // which is why they are the ones relied on and the betterado trace's
       // `architect=828m` is not.
-      wait: { for: 'agent', upTo: 1_800_000 },
+      // NO AGENT WAIT ANY MORE, and dropping it is the honest half of 718(4).
+      // Beat 8 now waits until the initiative reaches `ready-for-review`, which
+      // means the dev station has ALREADY run by the time this beat looks. A
+      // declared 30-minute agent bound here would be a bound on work that
+      // finished before the beat began — and in this campaign a declared bound
+      // is a SPEND, not a decoration (513/551). What is left is an assertion on
+      // the timeline the finished cycle wrote, under the default consequence
+      // poll, which is what beat 10 has always done and what these three now
+      // are: readers of history, not waiters on it.
       expect: {
         route: '/flows/forge-develop/run/<runId>',
         data: {
@@ -552,7 +624,9 @@ export default {
       // `data-section="review-findings"` is corroborated at
       // `flow-run-detail-render.test.ts:413`.
       act: 'The review station files its findings',
-      wait: { for: 'agent', upTo: 1_200_000 },
+      // Same as beat 9: the review station ran inside the cycle beat 8 waited
+      // through, so this reads the findings it left rather than waiting 20
+      // minutes for them.
       expect: {
         route: '/flows/forge-develop/run/<runId>',
         data: {
