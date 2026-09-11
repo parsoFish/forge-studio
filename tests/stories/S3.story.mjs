@@ -45,7 +45,7 @@
  * `/projects/terraform-provider-betterado` observed directly, `resolved: 'ok'`
  * / `skill-source: 'project'` from `/projects/mdtoc`, and the onboarding
  * session pair (`onboard-run-status: 'running'`, `session-kind: 'onboarding'`)
- * transcribed from `docs/forge-ui-dom-and-harness.md` and S1's own worked
+ * transcribed from `docs/reference/studio-dom-contract.md` and S1's own worked
  * beats, because observing them live costs a real spawn. None is invented.
  * Where the page root does not carry a key, the keys it does not carry are
  * answered together by ONE element, per §3.1's nested-read rule.
@@ -288,7 +288,7 @@ export default {
       // and `onboard-attaching` are all the same <section>, and the minted id
       // is published there BEFORE the navigation that consumes it (M1-G closed
       // `forge-8vfn.5.5` on this surface), so beat 12 can bind it. `running` is
-      // transcribed from `docs/forge-ui-dom-and-harness.md` and S1's beat 4 —
+      // transcribed from `docs/reference/studio-dom-contract.md` and S1's beat 4 —
       // the live page reads `idle` and observing `running` costs a spawn.
       act: 'Run the onboarding agent to re-derive the parts a template cannot write, briefed with the contract’s own north star and gate',
       do: [

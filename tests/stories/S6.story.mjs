@@ -42,7 +42,7 @@
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree. Beats 5 and 6 used to be
  * the exception — their session phases were transcribed from
- * `docs/forge-ui-dom-and-harness.md` because observing a project-brain session
+ * `docs/reference/studio-dom-contract.md` because observing a project-brain session
  * live costs a real seeding spawn — and amend-3 pays that price instead: both
  * now name handles read out of `SessionProjectBrainPanel` itself, and beat 6
  * declares the wait that lets the agent reach the phase where its control

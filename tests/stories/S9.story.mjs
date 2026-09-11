@@ -58,7 +58,7 @@
  * transcribed from the DOM contract — observing a live session costs a real
  * dispatch, which is the thing this story is trying to budget. REPOINTED
  * (bead `forge-8vfn.7.4.1`, ruling 444): that doc is now
- * `docs/reference/studio-dom-contract.md`; `docs/forge-ui-dom-and-harness.md`
+ * `docs/reference/studio-dom-contract.md`; `docs/reference/studio-dom-contract.md`
  * no longer exists, so the old citation named a file a reader could not open. None is invented. Read live and load-bearing: `/sessions` reports
  * `data-session-count="0"` with seven kickoff CTAs, one per kind, each its own
  * unique `data-action`; `/sessions/authoring/new` renders
@@ -283,7 +283,7 @@ export default {
       // renders ONLY from caller-supplied `costUsd`. The sentence this comment
       // used to quote — that only `RunPanel` has a real source for cost while
       // the session-summary types "carry no cost field yet, a disclosed gap,
-      // not papered over" — was in `docs/forge-ui-dom-and-harness.md`, which no
+      // not papered over" — was in `docs/reference/studio-dom-contract.md`, which no
       // longer exists. REPOINTED (bead `forge-8vfn.7.4.1`, ruling 444) to
       // `docs/reference/studio-dom-contract.md`, and the quote is NOT carried
       // across: that doc does not make the claim, and repointing a citation at

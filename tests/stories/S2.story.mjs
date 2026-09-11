@@ -26,7 +26,7 @@
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's worktree, except beat 8's session card,
- * whose attribute set is transcribed from `docs/forge-ui-dom-and-harness.md`
+ * whose attribute set is transcribed from `docs/reference/studio-dom-contract.md`
  * (observing it live costs a real architect spawn). None is invented. Where
  * the page root does not carry a key, the keys it does not carry are answered
  * together by ONE element — the nested-read rule §3.1 states — so a beat never
@@ -363,7 +363,7 @@ export default {
       // (`data-session-phase`, `data-needs-you`) changes while the Agent runs,
       // so pinning one would be asserting the instant the browser happened to
       // look rather than the product. The card's attribute set is transcribed
-      // from `docs/forge-ui-dom-and-harness.md` (`div[data-session-card]
+      // from `docs/reference/studio-dom-contract.md` (`div[data-session-card]
       // [data-session-kind][data-session-id][data-session-phase]
       // [data-needs-you][data-session-state]`) — the only expectation in this
       // story not copied from a live page, because observing it costs a spawn.
