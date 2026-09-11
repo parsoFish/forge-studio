@@ -115,7 +115,7 @@ export const journey = defineJourney({
                 // Grounded (S5, fix item 2): distinct-but-realistic budget (real range
                 // 6-24 iterations / $4-$80 — source _queue/done manifests).
                 `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
-                'origin: architect', `cycle_id: ${DEV_CYCLE_ID}`,
+                'origin: architect', 'class: code', `cycle_id: ${DEV_CYCLE_ID}`,
                 // R4-13: seed a REAL dependency so the DAG draws a genuine edge to
                 // assert. This develop-trigger initiative depends on the completed
                 // INIT (already in _queue/done/), so the roadmap renders a true
@@ -147,7 +147,7 @@ export const journey = defineJourney({
               writeFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), [
                 '---', `initiative_id: ${INIT_PLAN}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
                 `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
-                'origin: architect',
+                'origin: architect', 'class: code',
                 '---', '', '# mdtoc — `--fix` mode (auto-repair drift)', '',
                 'Given a doc whose embedded TOC has drifted, when `mdtoc --fix` runs, then the TOC is rewritten in place.',
               ].join('\n'));
@@ -170,7 +170,7 @@ export const journey = defineJourney({
               writeFileSync(join(QDIR('merged'), `${INIT_MERGED}.md`), [
                 '---', `initiative_id: ${INIT_MERGED}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
                 `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12',
-                'origin: architect',
+                'origin: architect', 'class: code',
                 '---', '', '# mdtoc — `--json` output mode', '',
                 'Given `mdtoc --json` runs against a repo, when the PR merges, then the roadmap card reflects the merged-but-not-yet-reflected state.',
               ].join('\n'));
@@ -639,7 +639,7 @@ export const journey = defineJourney({
               writeFileSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), [
                 '---', `initiative_id: ${INIT_RECOVERY}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
                 `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
-                'origin: architect',
+                'origin: architect', 'class: code',
                 '---', '', '# mdtoc — `--strict` mode (fail on any drift)', '',
                 'Given `mdtoc --strict` runs against a repo with drifted TOCs, when it is invoked, then it exits non-zero listing every drifted file.',
               ].join('\n'));
