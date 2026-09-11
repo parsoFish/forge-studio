@@ -582,11 +582,25 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
+  // T1 ruling 640. THE DOOR WAS ON THE WRONG WAIT. `forge-8vfn.7.5.8` put the
+  // channel door in `waitForHandleOrStall` — the PRE-act wait, which returns
+  // the moment the control appears — and an off-session beat spends its bound
+  // HERE, after the act. Run 7's beat 7 and run 8's beat 8 each sat their full
+  // twenty minutes in this loop with the door a few lines away and never
+  // consulted; run 8's `_logs/` held one dispatch for the beat's whole life,
+  // born NINE MINUTES BEFORE its press, so `no-channel` would have ended it at
+  // 180 s. Seventeen minutes, twice.
+  //
+  // The verdict said so in its own words both times — "gave up at the agent
+  // wait (declared 1200000 ms)" is `beatBound`'s label, produced on THIS path
+  // — and I changed the wait I had been reading instead of the wait the
+  // measurement named (§15.356).
+  const runId = stallDoor === null ? null : await readRunId(page);
   for (;;) {
     const observed = await readObserved(page, beat);
     const seen = resolveExpectations(beat.expect.data, observed);
@@ -614,6 +628,15 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // beat gains a new way to fail. The product is believed rather than
     // second-guessed — `stalled` is server-derived, and re-deriving it here
     // from phases or timestamps is the mistake the bar's own header forbids.
+    if (stallDoor !== null) {
+      const stop = stallDoor(runId, startedAt);
+      if (stop !== null) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why: `${stop.reason}: ${stop.detail} The beat's expectations never held.`,
+        });
+      }
+    }
     if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
     const why = stopReasonFor(observed, sessionScope);
     if (why !== null) {
