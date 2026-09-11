@@ -203,25 +203,34 @@ test('594: the run\'s own product is reported, and anything else FAILS the run',
     removed: [],
     modified: [],
   };
-  const clean = classifyOwnGroundDrift(changes, minted);
+  const clean = classifyOwnGroundDrift(changes, minted, new Map());
   assert.equal(clean.undeclared.length, 0, `a green run must stay green: ${clean.undeclared.join(' | ')}`);
   assert.equal(clean.produced.length, 2, 'and its product is still reported, loudly');
 });
 
-test('594: A\'s case — an agent writing INTO the ground repo fails the run', () => {
-  // Measured twice (§15.327). `.gitignore` and `CLAUDE.md` are nobody's declared
-  // product, and no `_logs` entry licences them.
+test('594/663: A\'s case — a ground write NO minted session declared fails the run', () => {
+  // Measured twice (§15.327). Ruling 663 narrowed what "declared" means rather
+  // than loosening it: a write is the product only if the session that made it
+  // SAYS SO in its own event log. Here nothing does — the writes-by-session map
+  // is empty — so all five still fail, exactly as before.
   const minted = ['_architect/2026-09-10T13-54-57-9eaf7fae'];
   const changes = {
     added: ['.forge/agent-run/PROMPT.md', 'brain/themes/x.md', 'roadmap.md'],
     removed: [],
     modified: ['.gitignore', 'CLAUDE.md'],
   };
-  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted);
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map());
   assert.equal(produced.length, 0);
   assert.equal(undeclared.length, 5, undeclared.join(' | '));
-  assert.ok(undeclared.some((l) => l.endsWith('.gitignore')), undeclared.join(' | '));
-  assert.ok(undeclared.some((l) => l.endsWith('CLAUDE.md')), undeclared.join(' | '));
+  assert.ok(undeclared.some((l) => l.startsWith('M .gitignore ')), undeclared.join(' | '));
+  assert.ok(undeclared.some((l) => l.startsWith('M CLAUDE.md ')), undeclared.join(' | '));
+
+  // The 663 converse, held beside it so the pair cannot drift: let ONE minted
+  // session's log declare `CLAUDE.md` and that line — and only that line —
+  // moves, naming the session that accounts for it.
+  const declared = classifyOwnGroundDrift(changes, minted, new Map([[minted[0], ['CLAUDE.md']]]));
+  assert.deepEqual(declared.produced, [`M CLAUDE.md — written by ${minted[0]}`]);
+  assert.equal(declared.undeclared.length, 4, declared.undeclared.join(' | '));
 });
 
 test('594: a sibling session dir the run did NOT mint is undeclared, not product', () => {
@@ -230,6 +239,7 @@ test('594: a sibling session dir the run did NOT mint is undeclared, not product
   const { undeclared } = classifyOwnGroundDrift(
     { added: ['_onboarding/from-a-run-two-days-ago/status.json'], removed: [], modified: [] },
     ['_architect/2026-09-10T13-54-57-9eaf7fae'],
+    new Map(),
   );
   assert.equal(undeclared.length, 1, 'an unminted session dir must still fail the run');
 });
@@ -239,6 +249,7 @@ test('594: a path that merely PREFIXES a minted one is not covered by it', () =>
   const { undeclared } = classifyOwnGroundDrift(
     { added: ['_architect/abcdef/PLAN.md'], removed: [], modified: [] },
     ['_architect/abc'],
+    new Map(),
   );
   assert.equal(undeclared.length, 1, 'prefix matching would licence a directory the run never minted');
 });
@@ -290,13 +301,13 @@ test('594 REGRESSION: the ownership test runs against the shape `groundManifest`
   writeFileSync(join(logs, runId, 'events.jsonl'), '{}');
   const minted = mintedSessionPaths([], [runId], logs);
 
-  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted);
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map());
   assert.deepEqual(undeclared, [], `the run's own session is its product, not drift: ${undeclared.join(' | ')}`);
   assert.equal(produced.length, 2, 'and both files are reported as produced');
 
   // The control still has to hold in the real shape: something nobody minted.
   writeFileSync(join(ground, 'CLAUDE.md'), 'written by an agent');
-  const after = classifyOwnGroundDrift(groundChanges(before, groundManifest(ground)), minted);
+  const after = classifyOwnGroundDrift(groundChanges(before, groundManifest(ground)), minted, new Map());
   assert.equal(after.undeclared.length, 1, `an unminted write still fails: ${after.undeclared.join(' | ')}`);
-  assert.ok(after.undeclared[0].endsWith('CLAUDE.md'), after.undeclared[0]);
+  assert.ok(after.undeclared[0].startsWith('A CLAUDE.md '), after.undeclared[0]);
 });
