@@ -78,7 +78,7 @@
  * (`lib/studio-client.ts:645-654`, confirmed live in `studio-client.test.ts`
  * :1343) with node ids `dev` · `demo` · `adversarial-review` · `review`
  * (`lib/flow-run-detail-render.test.ts:104-109`). A beat asserting a value the
- * product does not carry is red forever (§15.175/178/201), so beat 9 asserts
+ * product does not carry is red forever (§15.175/178/201), so beat 10 asserts
  * `demo` — the truth today — and the 383 PR must amend this beat in the SAME
  * PR that performs the rename (§15.183/204: a class fix goes to every beat that
  * carries it, in one amendment). This comment is the pointer that makes that
@@ -211,7 +211,18 @@ export default {
       // those are non-interactive, out-of-cycle architects. This beat drives the
       // interactive interview-and-draft session, which is a different thing that
       // waits on an operator between rounds.
-      wait: { for: 'agent', upTo: 1_800_000 },
+      // 18 MINUTES, AND THIS ONE IS MEASURED (T1 ruling 625, 513/551 class).
+      // Five runs have now timed this beat: 8m49s · 10m52s · 11m43s and two
+      // earlier, and the longest GREEN was 11.7 min. 18 = 11.7 x 1.5, so the
+      // bound is headroom over the worst measurement rather than over a guess.
+      // It was 30 minutes, set from run 3's 18-minute architect BEFORE any of
+      // those greens existed; leaving a guess in place once a real number
+      // exists is how beat 4 cost run 3 in the first place.
+      //
+      // The spread is the reason for 1.5x rather than 1.2x: 8m49s to 11m43s on
+      // an UNCHANGED head and ground, so the architect varies by ~3 minutes
+      // run to run and the bound has to cover the range, not the median.
+      wait: { for: 'agent', upTo: 1_080_000 },
       expect: {
         route: '/sessions/architect/<architectSessionId>',
         data: {
@@ -275,6 +286,47 @@ export default {
       say: 'The plan is approved. The operator goes back to the project to start the work it planned.',
     },
     {
+      // T1 ruling 622, bought by G1/S10 run 7. THE ENQUEUE WORKED AND NOTHING
+      // CLAIMED IT. Beat 7 spent its full 20-minute ceiling with
+      // `data-plan-state` never leaving `unplanned` — not even reaching
+      // `planning` — because `POST /api/initiatives/:id/plan` "repoints the
+      // manifest at forge-architect + threads its cycle_id, then THE SCHEDULER
+      // CLAIMS IT" (`lib/bridge-client.ts:670-680`), and no scheduler was
+      // running. Measured, not inferred: no PM run dir under `_logs/` at all,
+      // `_queue/in-flight/` and `_queue/done/` both empty, and every manifest
+      // still sitting in `_queue/pending/` with its mtime moved by the press.
+      //
+      // THE PRODUCT SAYS SO AND THE STORY DID NOT LISTEN.
+      // `data-needs-scheduler-start` is published on `EnqueueOutcomeLine.tsx:69`
+      // and `ArchitectCommittedView.tsx:20`, and the Start control is right
+      // there on this page — `<SchedulerCard variant="strip">`,
+      // `app/projects/[id]/page.tsx:1228`. Pressing it is the operator's real
+      // path; having the harness start it silently would hide a state the
+      // product deliberately shows.
+      //
+      // SOURCE-DERIVED, AND THE STATE MACHINE MATTERS HERE.
+      // `lib/scheduler-view.ts` gives each status its own action list:
+      //   `stopped`  → ['start']            ← the only state carrying this handle
+      //   `running`  → ['pause', 'stop']
+      //   `paused`   → ['resume', 'stop']
+      //   `unknown`  → []   (status not yet read from the bridge — a transient
+      //                      on first paint, which is why the press waits for
+      //                      the handle rather than assuming it)
+      // So `scheduler-start` EXISTS ONLY WHILE THE SCHEDULER IS STOPPED. If a
+      // previous run left one running, this beat reds at t+0 on a missing
+      // handle while the state it wants already holds. That is a residue
+      // hazard, not a product defect: the preflight clears `_logs/_agent-*` and
+      // re-hashes the ground, and it must also leave no scheduler running.
+      // `_queue/pending/` is the same class (run 7's `queue-residue.md`).
+      act: 'Start the scheduler so queued work can be claimed',
+      do: [{ press: 'scheduler-start' }],
+      expect: {
+        route: '/projects/gitpulse',
+        data: { page: 'projects', 'project-id': 'gitpulse', 'scheduler-status': 'running' },
+      },
+      say: 'Planning and building are done by a scheduler that claims queued work. Nothing the operator enqueues moves until it is running, and the product says so plainly rather than leaving the work to sit — so starting it is part of the journey, not setup hidden behind it.',
+    },
+    {
       // T1 ruling 604, bought by G1/S10 run 6. THE STORY WAS MISSING A STATION.
       //
       // Run 6 reached here and died on `start-work-develop` being present but
@@ -312,7 +364,17 @@ export default {
       wait: { for: 'agent', upTo: 1_200_000 },
       expect: {
         route: '/projects/gitpulse',
-        data: { page: 'projects', 'project-id': 'gitpulse', 'plan-state': 'planned', 'initiative-ready': 'true' },
+        // `needs-scheduler-start: 'false'` (622) — run 7 spent the WHOLE 20-minute
+        // ceiling on a plan nothing was ever going to claim. The product
+        // publishes this on `EnqueueOutcomeLine.tsx:69`, so a scheduler-less
+        // environment can red in seconds instead of burning the bound in
+        // silence. It is the 531(3) economics argument applied to a STATE
+        // rather than a handle.
+        data: {
+          page: 'projects', 'project-id': 'gitpulse',
+          'needs-scheduler-start': 'false',
+          'plan-state': 'planned', 'initiative-ready': 'true',
+        },
       },
       say: 'Approving the plan gave the project an initiative; it did not break that initiative into work. Planning is where the work items come from, and it is the station between deciding what to build and starting to build it.',
     },
@@ -471,7 +533,7 @@ export default {
     },
     {
       // SOURCE-DERIVED. The fix lands on the same branch and the run returns to
-      // the review station; keys as beat 10.
+      // the review station; keys as beat 11.
       act: 'The fix lands on the same branch and comes back for re-review',
       // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
       // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
