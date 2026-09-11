@@ -68,13 +68,7 @@ export async function handleKbDrainCancel(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -146,13 +140,7 @@ export async function handleKbActiveJob(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -185,13 +173,7 @@ export async function handleKbRuns(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -225,13 +207,7 @@ export async function handleKbDrainRun(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -293,13 +269,7 @@ export async function handleKbDrainStart(
   method: string,
   runFixTurn?: KbDrainRunFixTurnFn,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
@@ -381,13 +351,7 @@ export async function handleKbDrainStatus(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  // Normalise here, not only in the caller: this function is reached BOTH
-  // from `handleStudioKbDrainRoutes` (which already stripped) and from
-  // `packages/knowledge/routes.ts`'s table, which hands handlers the RAW
-  // url so any arm that later needs the query string still has it.
-  // `pathOnly` is idempotent, so the pre-stripped call path is unchanged;
-  // without this line a query-bearing request fails every anchored regex
-  // below and 404s silently.
+  // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
