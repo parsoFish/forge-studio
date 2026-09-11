@@ -63,7 +63,7 @@
  * `/proc/<pid>/cwd` verified), EXCEPT the post-install states of beats 14-16,
  * which are transcribed from `/hooks/pre-pr-security-review` — a real hook in
  * the same `needs-review` state this install lands in — and from
- * `docs/forge-ui-dom-and-harness.md`'s `data-install-state` vocabulary.
+ * `docs/reference/studio-dom-contract.md`'s `data-install-state` vocabulary.
  * Observing the post-install page live would have vendored the package into
  * the tree before the story ever ran it. None is invented. Read live and
  * load-bearing: `/community` reports `data-item-count="20"` across
@@ -414,7 +414,7 @@ export default {
       // `data-install-routed-to="hook-needs-approval"` (read live), the
       // browser stating which pipeline owns the trust decision it is refusing
       // to make. The post-install `install-state` is the
-      // `docs/forge-ui-dom-and-harness.md` vocabulary token for a hook that
+      // `docs/reference/studio-dom-contract.md` vocabulary token for a hook that
       // has landed and not been approved.
       act: 'Take the second door in — install it by id',
       do: [{ press: 'install-community-item' }],

@@ -21,7 +21,7 @@
  * `main[data-page]`; since M1-F the runner judges the page root **and its
  * descendants**, which is what the DOM contract has always said it is.
  * REPOINTED (bead `forge-8vfn.7.4.1`, ruling 444): that doc is now
- * `docs/reference/studio-dom-contract.md` — `docs/forge-ui-dom-and-harness.md`
+ * `docs/reference/studio-dom-contract.md` — the path it carried before the move
  * no longer exists. The claim survives the move verbatim in substance
  * (`studio-dom-contract.md:4328`: `resolveExpectations` "reads the page root
  * FIRST and only searches descendants for the keys the root does not answer"),
