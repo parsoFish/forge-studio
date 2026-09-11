@@ -514,10 +514,13 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope
 async function waitOffSession(page, handle, timeoutMs, stallDoor) {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
-  const runId = stallDoor === null ? null : await readRunId(page);
+  // 664(i), same rule as the consequence wait: a bound within twice the ceiling
+  // would be consumed rather than cut short, so the door does not run at all.
+  const doored = stallDoor !== null && timeoutMs > 2 * STALL_CEILING_MS;
+  const runId = doored ? await readRunId(page) : null;
   for (;;) {
     if ((await page.locator(handle).count()) > 0) return null;
-    if (stallDoor !== null) {
+    if (doored) {
       // Bead `forge-8vfn.7.5.8`. 580 read only the run the PAGE names; run 7's
       // beat 7 pressed Plan from a page that names none, so nothing observed it
       // and it sat all twenty minutes. The door now falls back to the newest
@@ -640,7 +643,18 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // `stopReasonFor` is the PRODUCT's own crashed/stalled/terminal verdict for
     // the session in scope. The channel door exists for the beats that have no
     // session to ask about, and it belongs only to them.
-    if (stallDoor !== null && sessionScope === null) {
+    // 664(i): THE DOOR MUST NEVER BE THE BOUND. It fires at a fixed 180 s
+    // whatever the beat declared, so on a short bound it is not an early exit —
+    // it is the verdict. Lane A's S1 beat 9 declared 200 s and the door fired at
+    // 180 s, leaving the beat twenty seconds of its own patience; run 9's
+    // seventeen minutes came from a 20-minute bound, where 180 s is a small
+    // fraction rather than 90% of it.
+    //
+    // A beat that asked for 200 s has SAID it expects to wait that long. So the
+    // door is skipped entirely when the declared bound is within twice the
+    // ceiling, and the verdict says so rather than staying silent about a check
+    // that did not run. One ceiling, no scaling.
+    if (stallDoor !== null && sessionScope === null && timeoutMs > 2 * STALL_CEILING_MS) {
       const stop = stallDoor(runId, startedAt);
       if (stop !== null) {
         return Object.freeze({
