@@ -421,6 +421,8 @@ export type RoadmapInitiative = {
   /** plan-everything-before-kickoff: dependency-gate eligibility (meaningful while status==='pending'). */
   ready: boolean;
   blockedBy: string[];
+  /** 7.6.18 — see the `[data-blocked-clauses]` row in studio-dom-contract.md. */
+  blockedClauses?: string[];
   workItems?: RoadmapWorkItem[];
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), sourced from
@@ -531,22 +533,6 @@ export async function recoveryRequeue(
 /** Abandon a stuck initiative: move to failed/ + clean its worktree + branch. */
 export async function recoveryAbandon(initiativeId: string): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/abandon`);
-}
-
-// ---- Daemon-stall liveness (Feature #8) ----------------------------------
-
-export type LivenessReport = {
-  inFlightCount: number;
-  maxHeartbeatAgeMs: number;
-  staleHeartbeatMs: number;
-  stallThresholdMs: number;
-  stalled: boolean;
-};
-
-/** Fetch the daemon-stall liveness report (max heartbeat age across in-flight
- *  cycles vs the stall threshold). Returns null when the bridge is offline. */
-export async function fetchLiveness(): Promise<LivenessReport | null> {
-  return bridgeReadOr404<LivenessReport>('/api/liveness');
 }
 
 export type SchedulerStatus = {

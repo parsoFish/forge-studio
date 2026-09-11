@@ -2882,6 +2882,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   per-node run dig-in `[data-section="initiative-runs"]` with one
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
+  Every roadmap node carries `[data-blocked-clauses]` — the failing hard-clause
+  NAMES from a claim the SCHEDULER made and then REFUSED (`SKILLS`, comma-joined;
+  empty when nothing refused it). `[data-initiative-ready]` already accounts for
+  them, and the start-work view's `planDisabledReason` says
+  *"not contract-ready — SKILLS: fix the project contract"* rather than the older
+  *"every ready initiative is already planned"*, which was true and useless. The
+  hard gate itself is RIGHT and unchanged: a project that is not contract-ready
+  must not have work claimed against it. What changed is that the fact the daemon
+  already knew, decided on and wrote onto the manifest now reaches the two places
+  an operator watches — lane C's run 9 read `unplanned` for twenty minutes while
+  `serve.log` carried the reason (`forge-8vfn.7.6.18`).
+
   The roadmap section carries `[data-unparseable-count]` in BOTH its populated and
   its empty branch — the number of manifests in this project's queue dirs that the
   parser REFUSED. When it is non-zero a `[data-component="roadmap-unparseable"]`

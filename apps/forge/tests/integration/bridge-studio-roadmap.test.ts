@@ -11,7 +11,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -119,6 +119,19 @@ before(async () => {
     ].join('\n'),
   );
 
+  // `forge-8vfn.7.6.18` — the scheduler CLAIMED this one and then REFUSED its own
+  // claim, writing the failing hard-clause NAMES onto the manifest (#646). Real
+  // shape: lane C's run 9 left exactly this on gitpulse's manifest, and my own G2
+  // resume 7 hit the same clause from the other side.
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', 'INIT-BLOCKED.md'),
+    makeManifest('INIT-BLOCKED') + '\n',
+  );
+  {
+    const p = join(forgeRoot, '_queue', 'pending', 'INIT-BLOCKED.md');
+    writeFileSync(p, readFileSync(p, 'utf8').replace(/^---\n/, '---\nclaim_blocked_clauses: SKILLS\n'));
+  }
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -141,6 +154,7 @@ type RoadmapBody = {
       blockedBy: string[];
       workItems?: Array<{ id: string }>;
       completedAt?: string;
+      blockedClauses?: string[];
     }>;
     unparseable?: Array<{ path: string; message: string }>;
   };
@@ -398,4 +412,39 @@ test('roadmap: the refused manifest is NOT counted as an initiative, and the goo
       `${id} must still be returned — naming the bad manifest must not fail the whole scan closed`,
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.18` — the daemon's own refusal reaches the surface.
+//
+// The hard gate is RIGHT and stays: a project that is not contract-ready must not
+// have work claimed against it. The defect is that the fact the daemon knows,
+// decides on, and WRITES DOWN never reached the roadmap or the start-work view,
+// so the operator watched a queue that simply did not move. Measured by lane C
+// (run 9, gitpulse, twenty minutes reading `unplanned`) and by me from the other
+// side (G2 resume 7, four seconds, $0.00, the same SKILLS clause).
+//
+// §15.400 — what else could make these pass? `ready` alone would pass if the
+// initiative were dependency-blocked for an unrelated reason, so the first test
+// asserts blockedBy is EMPTY while ready is false: the clause is the only cause.
+// ---------------------------------------------------------------------------
+
+test('roadmap: a claim the scheduler REFUSED carries its failing clause names, and is not ready (`forge-8vfn.7.6.18`)', async () => {
+  const roadmap = await fetchRoadmap();
+  const b = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-BLOCKED');
+  assert.ok(b, 'INIT-BLOCKED present in the roadmap');
+  assert.deepEqual(b!.blockedClauses, ['SKILLS'], 'the failing hard-clause NAMES travel, not merely a boolean');
+  assert.deepEqual(b!.blockedBy, [], 'and it is not dependency-blocked — the clause is the only reason it is held');
+  assert.equal(b!.ready, false, 'so it must not read ready, which is what offered it to Plan for twenty minutes');
+});
+
+test('roadmap: an initiative with no refusal carries no clauses and stays ready', async () => {
+  const roadmap = await fetchRoadmap();
+  const a = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-A');
+  assert.ok(a, 'INIT-A present');
+  assert.equal(a!.ready, true, 'the fix must not hold back an initiative nothing refused');
+  assert.ok(
+    a!.blockedClauses === undefined || a!.blockedClauses.length === 0,
+    'and it carries no clause names',
+  );
 });

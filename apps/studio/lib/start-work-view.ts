@@ -23,6 +23,9 @@ export type StartWorkInitiative = {
   status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
   ready: boolean;
   workItems?: unknown[];
+  /** `forge-8vfn.7.6.18` — failing hard-clause NAMES from a claim the scheduler
+   *  REFUSED. Absent when nothing refused it. */
+  blockedClauses?: string[];
 };
 
 export type StartWorkFlow = {
@@ -71,6 +74,15 @@ export function deriveStartWorkState(
     return kind !== 'idea' && kind !== 'trigger-only';
   });
   const runCandidates = list.filter((i) => i.status === 'pending');
+  // `forge-8vfn.7.6.18` — the scheduler CLAIMED these and then REFUSED its own
+  // claim, writing the failing hard clause down. Without this the view said
+  // "every ready initiative is already planned", which is true and useless: lane
+  // C's run 9 read that for twenty minutes while the daemon already knew the
+  // project was not contract-ready. The clause NAMES are what an operator can act
+  // on, so they are what the reason says.
+  const refusedClauses = [...new Set(
+    list.filter((i) => i.status === 'pending').flatMap((i) => i.blockedClauses ?? []),
+  )];
 
   return {
     unplannedReady,
@@ -82,7 +94,9 @@ export function deriveStartWorkState(
         ? null
         : list.length === 0
           ? 'no roadmap yet — start with the Architect'
-          : 'every ready initiative is already planned',
+          : refusedClauses.length > 0
+            ? `not contract-ready — ${refusedClauses.join(', ')}: fix the project contract`
+            : 'every ready initiative is already planned',
     startDisabledReason:
       eligible.length > 0
         ? null

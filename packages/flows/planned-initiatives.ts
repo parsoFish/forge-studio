@@ -33,6 +33,15 @@ export type PlannedInitiative = {
 };
 
 /** List the decomposed, not-yet-running initiatives in `_queue/pending/`. */
+/** 7.6.18 — the failing hard-clause NAMES the scheduler writes when it REFUSES its
+ *  own claim. RAW frontmatter: `parseManifest` models only architect-written keys.
+ *  Exported so there is exactly ONE reader; two formulas for one fact is the drift
+ *  this bead is about. */
+export function manifestBlockedClauses(rawFrontmatter: string): string[] {
+  return (rawFrontmatter.match(/^claim_blocked_clauses:\s*(.+)$/m)?.[1] ?? '')
+    .split(',').map((c) => c.trim()).filter((c) => c !== '');
+}
+
 export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[] {
   const paths = getPaths(queueRoot);
   const out: PlannedInitiative[] = [];
@@ -54,10 +63,7 @@ export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[
       /* malformed manifest still surfaces (with filename-derived defaults) */
     }
     const blockedBy = checkInitiativeDeps(filename, paths);
-    // RAW frontmatter: `parseManifest` drops keys it does not model, and the
-    // scheduler writes this one, not the architect.
-    const blockedClauses = (rawFrontmatter.match(/^claim_blocked_clauses:\s*(.+)$/m)?.[1] ?? '')
-      .split(',').map((c) => c.trim()).filter((c) => c !== '');
+    const blockedClauses = manifestBlockedClauses(rawFrontmatter);
     out.push({ initiativeId, project, title, ready: blockedBy.length === 0 && blockedClauses.length === 0, blockedBy, blockedClauses });
   }
   return out;

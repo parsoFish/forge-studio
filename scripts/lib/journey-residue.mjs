@@ -103,6 +103,7 @@ export const QUEUE_STATES = ['pending', 'in-flight', 'ready-for-review', 'merged
  */
 export const JOURNEY_INIT_SLUGS = [
   'authored-flow-run',
+  'e2e-claim-refused',
   'e2e-dag-elsewhere',
   'e2e-dag-leaf',
   'e2e-dag-mid',

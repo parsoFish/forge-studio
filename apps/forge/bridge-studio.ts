@@ -42,6 +42,8 @@ import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
+// `forge-8vfn.7.6.18` — the ONE reader of the scheduler's refusal clauses.
+import { manifestBlockedClauses } from '@forge/flows/planned-initiatives.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
 import type { QueueState } from '@forge/flows/queue.ts';
@@ -860,6 +862,11 @@ type ScannedManifestEntry = {
   /** Bare filename (e.g. `INIT-1.md`) — what `checkInitiativeDeps` expects. */
   file: string;
   manifest: ReturnType<typeof parseManifest>;
+  /** `forge-8vfn.7.6.18` — the failing hard-clause NAMES the scheduler wrote when
+   *  it REFUSED its own claim. `parseManifest` models only architect-written keys,
+   *  so this comes from the raw frontmatter through `manifestBlockedClauses`, the
+   *  ONE reader `@forge/flows` exports for it. */
+  blockedClauses: string[];
 };
 
 /**
@@ -909,12 +916,14 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
       if (seen.has(initId)) continue;
       const fp = join(dir, file);
       let manifest: ReturnType<typeof parseManifest>;
+      let rawManifest = '';
       try {
         // W6-RV-1 perf fix: parseManifest already runs matter() internally and
         // now exposes `title` (orchestrator/manifest.ts, additive-optional) —
         // a second matter() call here would parse the same buffer twice on a
         // route the operator UI polls repeatedly.
-        manifest = parseManifest(readFileSync(fp, 'utf8'));
+        rawManifest = readFileSync(fp, 'utf8');
+        manifest = parseManifest(rawManifest);
       } catch (err) {
         // NEVER a silent `continue`. The path and the parser's own message
         // travel to the surface so the empty state can say which manifest and
@@ -924,7 +933,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
       }
       if (manifest.project !== projectId) continue;
       seen.add(initId);
-      entries.push({ initId, status, file, manifest });
+      entries.push({ initId, status, file, manifest, blockedClauses: manifestBlockedClauses(rawManifest) });
     }
   }
 
@@ -966,7 +975,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
   const { entries, unparseable } = scanProjectManifests(projectId, forgeRoot);
   const completedAtById = completedAtByInitiative(forgeRoot);
 
-  const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
+  const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest, blockedClauses }) => {
     // W7-A4 (projects-10 / flows-26): the ONE title derivation the run model
     // also uses — manifest metadata (title: / initiative_id), never a heading.
     const title = initiativeTitle(manifest);
@@ -982,8 +991,14 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       title,
       status,
       dependsOnInitiatives: manifest.depends_on_initiatives ?? [],
-      ready: blockedBy.length === 0,
+      // `forge-8vfn.7.6.18`: ready means the scheduler WOULD claim it. A claim it
+      // already refused for a named hard clause is not ready, and saying so is the
+      // whole bead — lane C's run 9 read `unplanned` for twenty minutes while the
+      // daemon had already decided and written the reason down. The SAME rule
+      // `planned-initiatives.ts` applies daemon-side, so the two cannot disagree.
+      ready: blockedBy.length === 0 && blockedClauses.length === 0,
       blockedBy,
+      ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
     };
