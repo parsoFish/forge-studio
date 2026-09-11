@@ -262,3 +262,70 @@ describe('gate.sh — an argument it does not understand is refused, never ignor
     assert.match(listed.out, /^RUN /m);
   });
 });
+
+/**
+ * T1 ruling 639 / bead `forge-8vfn.7.6.13` — the gate names the campaign's locks
+ * for the guard that refuses on them.
+ *
+ * `npm test` refuses while a story run holds the run-lock, and it learns WHICH
+ * lock from `FORGE_RUN_LOCK`. The guard lives in the repo and a permanent
+ * artifact never cites a path inside the campaign directory, so the caller that
+ * KNOWS the campaign has to name it — and this is that caller, since `$CAMP` is
+ * already its second argument.
+ *
+ * The step the assertions read is a real `run:` line in the fixture's own
+ * ci.yml, so what is proven is that the EXPORT reaches a gate step's
+ * environment — not that a variable was assigned somewhere in the script.
+ */
+const ENV_CI = `jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record the lock env
+        run: printenv FORGE_SUITE_LOCK FORGE_RUN_LOCK > lock-env.txt || echo "NEITHER SET" > lock-env.txt
+`;
+
+/** What the gate STEP saw, read from the tree it ran in. The gate prints only
+ *  PASS/FAIL per step and sends stdout to its own log, so a test that read the
+ *  gate's console would be asserting on the wrong stream. */
+function lockEnvSeenBy(d: string): string {
+  return readFileSync(join(d, 'lock-env.txt'), 'utf8');
+}
+
+test('639: a gate given a campaign exports BOTH lock names into its steps, derived from that campaign', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const camp = mkdtempSync(join(tmpdir(), 'camp-'));
+
+  gate(d, camp);
+  const seen = lockEnvSeenBy(d);
+
+  assert.match(seen, new RegExp(`^${camp}/\\.suite-lock$`, 'm'), 'the suite lock must be named from the campaign argument');
+  assert.match(seen, new RegExp(`^${camp}/\\.run-lock$`, 'm'), 'and the run lock with it');
+  assert.equal(seen.includes('NEITHER SET'), false);
+});
+
+test('639: the paths are DERIVED, never literal — a different campaign yields different locks', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const campA = mkdtempSync(join(tmpdir(), 'campA-'));
+  const campB = mkdtempSync(join(tmpdir(), 'campB-'));
+
+  gate(d, campA);
+  const seenA = lockEnvSeenBy(d);
+  gate(d, campB);
+  const seenB = lockEnvSeenBy(d);
+
+  assert.match(seenA, new RegExp(`^${campA}/\\.run-lock$`, 'm'));
+  assert.match(seenB, new RegExp(`^${campB}/\\.run-lock$`, 'm'));
+  assert.equal(seenA.includes(campB), false, 'a hard-coded path would leak one campaign into the other run');
+});
+
+test('639: NO campaign exports nothing — the guard must reach its honest "not configured" line, not an empty lock', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+
+  gate(d);
+
+  assert.match(lockEnvSeenBy(d), /NEITHER SET/, 'an empty FORGE_RUN_LOCK would be a lock nothing can hold — worse than an absent one');
+});

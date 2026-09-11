@@ -410,7 +410,15 @@ cmd_launch() {
   tmux new-session -d -s "$s" -c "$cwd" -x 200 -y 50
   tmux pipe-pane -o -t "$s" "cat >> '$camp/heartbeat/$lane.tmux.log'"
   # LANES_* reach the hook; `; exit` ends the tmux session when the claude session ends.
-  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
+  #
+  # FORGE_*_LOCK — T1 ruling 639 / bead `forge-8vfn.7.6.13`. A lane's story run
+  # refuses while the full suite holds its lock and `npm test` refuses while a
+  # story run holds its own; the guard lives in the repo, so it learns WHICH
+  # locks from the environment rather than naming a path inside the campaign
+  # directory. This launcher knows the campaign — both are derived from `$camp`,
+  # never written literally — and a lane that never sees them gets the guard's
+  # honest "not configured" line rather than a silent non-exclusion.
+  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' FORGE_SUITE_LOCK='$camp/.suite-lock' FORGE_RUN_LOCK='$camp/.run-lock' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
   # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
   local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
   while [ "$(date +%s)" -lt "$deadline" ]; do

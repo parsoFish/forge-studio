@@ -142,6 +142,7 @@ echo $! > '${join(dir, `${name}.detachedpid`)}'
     name,
     `#!/usr/bin/env bash
 printf '%s\\0' "$@" > '${argvFile}'
+printenv > '${join(dir, `${name}.env`)}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
 ${detach}${row}
@@ -194,6 +195,11 @@ function meminfo(availableKb: number) {
 }
 function argvOf(name: string) {
   return readFileSync(join(dir, `${name}.argv`), 'utf8').replace(/\0$/, '').split('\0');
+}
+/** The ENVIRONMENT the lane's program actually received — `argvOf`'s sibling (639). */
+function envOf(name: string): Record<string, string> {
+  const lines = readFileSync(join(dir, `${name}.env`), 'utf8').split('\n').filter((l) => l.includes('='));
+  return Object.fromEntries(lines.map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 }
 function git(cwd: string, ...args: string[]) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' });
@@ -760,5 +766,32 @@ describe('lanes.sh events — one line per lane state, read from the roster and 
     assert.match(out, new RegExp(`^LANE_IDLE: ${PREFIX}ev-idle finished its turn, heartbeat 16666 min old`, 'm'), 'idle with no heartbeat is the relay hole');
     assert.doesNotMatch(out, new RegExp(`${PREFIX}ev-busy`), 'a busy lane with a fresh heartbeat is not an event');
     assert.equal(out.split('\n').filter((l) => l.startsWith('LANE_') || l.startsWith('STALL')).length, 5, 'exactly one line per state, no repeats within a pass');
+  });
+});
+
+/**
+ * T1 ruling 639 / bead `forge-8vfn.7.6.13` — a launched lane knows which locks to
+ * refuse on. The guard lives in the repo and never names a path inside the
+ * campaign dir, so the launcher that KNOWS the campaign supplies both. Asserted
+ * against the environment the lane's PROGRAM received: a variable on the
+ * send-keys line is only real if the process at the end of it can read it.
+ */
+describe('lanes.sh launch — the lane inherits the campaign\'s lock names (639)', () => {
+  test('both FORGE_*_LOCK names reach the lane, derived from the campaign argument', () => {
+    const bin = laneBin('lane-locks', { register: 'busy' });
+    const lane = 'locks';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const prompt = join(dir, 'lock-prompt.md');
+    writeFileSync(prompt, kickoff('KICKOFF\nbody'));
+    setRoster([{ name: 't1-under-test', pid: process.pid, kind: 'interactive', status: 'busy' }]);
+
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', dir], { LANES_CLAUDE_BIN: bin });
+
+    assert.equal(r.status, 0, `launch should succeed; stderr=${r.stderr}`);
+    const env = envOf('lane-locks');
+    assert.equal(env['FORGE_SUITE_LOCK'], join(camp, '.suite-lock'), 'the suite lock is derived from THIS campaign');
+    assert.equal(env['FORGE_RUN_LOCK'], join(camp, '.run-lock'), 'and the run lock with it');
+    assert.equal(env['LANES_LANE'], lane, 'the existing LANES_* wiring is undisturbed');
   });
 });
