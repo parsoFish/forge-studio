@@ -458,7 +458,20 @@ async function runStory(story, uiUrl, startedMs) {
       // question is exactly the difference between the two.
       if (verdict.status !== 'green') await captureBeatDom(page, ROOT, story.id, i, beat.act, runStamp);
       const mark = verdict.status === 'green' ? '✓' : '✗';
-      console.log(`  ${mark} ${i + 1}. ${beat.act}`);
+      // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
+      // `do` navigates and then asserts — which is right for a navigation beat
+      // and a trap for a beat that MEANT to act. S7's beat 21 sat for a
+      // campaign asserting the post-condition of a click it never made, because
+      // a stale comment said the click was "NOT expressible"; run 3 read 21/22
+      // over a binding that never happened. The verdict line said `✗ 21.` and
+      // looked exactly like a beat that tried and failed.
+      //
+      // So the line now says which it is. A no-do beat is not wrong — most
+      // navigation beats have none — but a reader deciding whether to suspect
+      // the product or the story needs to know that nothing was pressed, and
+      // that is the one fact the transcript never carried.
+      const acted = Array.isArray(beat.do) && beat.do.length > 0;
+      console.log(`  ${mark} ${i + 1}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
     }
   } finally {

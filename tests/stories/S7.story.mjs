@@ -670,15 +670,56 @@ export default {
       say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the only way back to a worker is the pillar the operator started from.',
     },
     {
-      // NOT expressible. Binding a hook to an agent means adding it to the
-      // builder's `[data-accepts="hook"]` drop zone, and the only way to do
-      // that is to click a `.catalog-chip[data-id="story-s7-hook"]
-      // [data-kind="hook"]` — no `data-action`, so no `do` verb can name it.
-      // This is S5's finding on the same surface. `accepts` and `count` are
-      // the same zone, so one element answers both. The guard and hook zones
-      // are DISTINCT by design and must never merge, which is why this beat
-      // names the hook zone specifically.
+      // THIS COMMENT USED TO SAY "NOT expressible — no `data-action`, so no
+      // `do` verb can name it". **It became false on 2026-09-04 and stayed in
+      // the file.** `CatalogPalette.tsx:111` has carried
+      // `data-action={`add-${g.kind}-${item.id}`}` since `4de6e5e4` (bead
+      // 5.15), documented at `studio-dom-contract.md:2213`, and its own comment
+      // says the kind is in the name ON PURPOSE — "adding a skill and adding a
+      // tool are different acts on the same widget".
+      //
+      // §15.418: A COMMENT ASSERTING WHAT THE PRODUCT CANNOT DO CARRIES AN
+      // EXPIRY DATE NOBODY SETS. It was true when written, the product grew the
+      // handle, and nothing re-read the claim — so under 504 this beat
+      // NAVIGATED and then asserted the post-condition of a click it never
+      // made. The hook zone honestly read `count=0` (`hooks: []` in the
+      // definition preview, D's read) and S7 run 3 went 21/22 on a bind that
+      // never happened. The together-rule was right throughout; there is no
+      // scoping defect here.
+      //
+      // NO `toggle-advanced` PRESS, and this is deliberate (T1 729). The five
+      // drop zones sit inside a collapsed `<details>` (`app/agents/[id]/
+      // page.tsx:720-770`) — but `CatalogPalette` renders at `:608`, a
+      // DIFFERENT COLUMN of the three-column workbench, so the chip is visible
+      // and clickable with the block shut. And this beat reads ATTRIBUTES, not
+      // pixels: `DropZone.tsx:131-132` renders `data-accepts`/`data-count`
+      // unconditionally, and a closed `<details>` hides its children from
+      // LAYOUT while keeping them in the DOM.
+      //
+      // S7 run 4 is the execution proof. If the press does not bind through the
+      // closed block this reds at `count: '0'` and the remedy is one line —
+      // and that red is INFORMATIVE, where pressing `toggle-advanced` first
+      // would make the run unable to tell "the press binds" from "the press
+      // binds only because we opened the block".
+      //
+      // `accepts` and `count` are the same zone, so one element answers both.
+      // The guard and hook zones are DISTINCT by design and must never merge,
+      // which is why this beat names the hook zone specifically.
+      // THE SAVE IS NOT OPTIONAL, and D caught that it was missing from this
+      // beat's first draft. `addToZone` (`app/agents/[id]/page.tsx:231-238`) is
+      // `setState` + `markDirty()` — nothing more. So the zone reads `count=1`
+      // from LOCAL STATE the instant the chip is clicked, while the agent still
+      // RUNS from what was last saved. Without `save-agent` (`:779`, outside the
+      // `<details>`), beat 22 would dispatch an agent that never received the
+      // hook, and this beat would assert a binding that exists only in the
+      // browser.
+      //
+      // That is the fail-open shape S7 exists to catch, one surface over: a
+      // parsed-and-surfaced value enforced nowhere. Asserting `count: '1'` off
+      // unsaved state would have been this story telling itself the truth about
+      // a screen and a lie about the system.
       act: 'Open an agent from the Agents pillar and bind the hook to it',
+      do: [{ press: 'add-hook-story-s7-hook' }, { press: 'save-agent' }],
       expect: {
         route: '/agents/brain-ingest',
         data: { page: 'agents', 'agent-id': 'brain-ingest', accepts: 'hook', count: '1' },
@@ -686,8 +727,12 @@ export default {
       say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
     },
     {
-      // NOT expressible, and this is the beat §3's row ends on. NOTHING in
-      // `forge-ui` names a hook EXECUTION — the whole declared hook
+      // NOT expressible — and UNLIKE beat 21's identical phrase, this one is
+      // still TRUE as of 2026-09-12, re-checked rather than inherited (§15.418:
+      // such a claim carries an expiry date nobody sets, so it cites what it
+      // checked). Beat 21's version had been false since `4de6e5e4`.
+      //
+      // NOTHING in `forge-ui` names a hook EXECUTION — the whole declared hook
       // vocabulary is `data-hook-count`, `-event`, `-id`, `-runnable`,
       // `-trust`, `-url`, `-verdict`, `-carried-by-count`, every one of them a
       // fact about the DEFINITION or its TRUST, none about a run. So the beat
