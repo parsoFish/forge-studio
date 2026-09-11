@@ -552,6 +552,31 @@ export default {
       // happened. `ledger-agent` is asserted alongside so the count cannot
       // drift back into meaning nothing: a run that produces three rows from
       // the wrong work still fails here.
+      //
+      // AMENDED 2026-09-11 (amend-9, T1 ruling 705) — SPLIT IN TWO, because
+      // amend-8 asked for a combination this page cannot answer in one
+      // element. S9 run 6 read `data-ledger-agent: expected "creation-agent",
+      // absent from the page` — and the value was ON the page, in the runner's
+      // own `beat-14-dom.html` captured at the instant of the verdict.
+      //
+      // `resolveExpectations` (`scripts/stories/beats-page.mjs:284`) answers
+      // from the page ROOT first, then requires ONE record to satisfy every
+      // remaining SHARED key at once. Carrier census on that DOM:
+      //
+      //   data-page, data-page-ready, data-ledger-total   → on <main>, the root
+      //   data-section                                     → 7 carriers, SHARED
+      //   data-ledger-agent                                → 3 carriers, SHARED
+      //   data-ledger-count                                → 1, on the <section>
+      //
+      // `<section data-section="history-ledger">` carries the counts and NOT
+      // `ledger-agent`; the three rows carry `ledger-agent` and NO `section`.
+      // No element can satisfy both, so the together-rule scored, chose the
+      // section, and reported the key that record lacks. The rule is right —
+      // it exists to refuse an ambiguous match — and the EXPECTATION was
+      // unsatisfiable.
+      //
+      // So this beat keeps the section's totals and beat 14a takes the row
+      // identity. The `say` below already named two facts on two elements.
       expect: {
         route: '/monitor',
         data: {
@@ -560,10 +585,33 @@ export default {
           'ledger-total': '3',
           section: 'history-ledger',
           'ledger-count': '3',
+        },
+      },
+      say: 'The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever. Three rows for two sessions is the honest shape.',
+    },
+    {
+      // 14a — the other half of amend-9's split: the ROW, not the section.
+      //
+      // `ledger-agent` is the only SHARED key here, so the creation-agent row
+      // satisfies it alone. `ledger-total` comes from the page root, which
+      // `resolveExpectations` reads BEFORE sharing is considered — which is
+      // why pairing it with `ledger-agent` is safe even though it has two
+      // carriers of its own. M6-C raised exactly that worry; the answer is
+      // that a key the root answers never enters the shared set at all.
+      //
+      // Asserted because the count alone cannot say WHOSE work was paid for:
+      // three rows from the wrong work would still satisfy beat 14.
+      act: 'Read which agent the paid row belongs to',
+      expect: {
+        route: '/monitor',
+        data: {
+          page: 'monitor',
+          'page-ready': 'true',
+          'ledger-total': '3',
           'ledger-agent': 'creation-agent',
         },
       },
-      say: 'The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever. Three rows for two sessions is the honest shape: the onboarding kind dispatches a standalone agent of its own, and the operator is shown both the session and the run beneath it.',
+      say: 'A count is not an answer to "what did this cost me". The ledger names the agent behind each row, so the authoring session the operator started is identifiable among the three — the onboarding kind dispatches a standalone agent of its own, and the operator is shown both the session and the run beneath it.',
     },
     {
       // Blocked behind beat 13 and asserting the figure itself. Both keys are
