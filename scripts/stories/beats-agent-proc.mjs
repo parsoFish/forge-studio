@@ -21,7 +21,7 @@
  * a silent no-op — diagnosis must never be able to fail a beat that would
  * otherwise pass.
  */
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** `/sessions/<kind>/<sessionId>` → the runner's log dir for that turn. */
@@ -171,5 +171,99 @@ export function makeOffSessionStallDoor(forgeRoot) {
   return (runId) => {
     const dir = runLogDir(forgeRoot, runId);
     return dir === null ? null : runLogIdleMs(dir);
+  };
+}
+
+/**
+ * The newest `_logs/_*` directory created at or after `sinceMs`, or null.
+ *
+ * The THIRD channel, and the one that catches the case the other two miss: a
+ * beat that presses something which dispatches an agent from a page that names
+ * no run. S10 run 7's beat 7 pressed Plan on `/projects/gitpulse` — not a
+ * session route, so `stopReasonFor` had nothing to scope to, and the page
+ * publishes no `data-run`, so 580's door had nothing to read either. It sat its
+ * full twenty minutes.
+ *
+ * Matched on `_`-prefixed entries only, which is what every dispatch dir is
+ * (`_architect-…`, `_demo-…`, `_agent-…`), and by BIRTH time rather than mtime:
+ * a pre-existing dir that happens to be written during the wait is somebody
+ * else's run, not evidence that this press started one.
+ */
+export function newestChannelSince(logsDir, sinceMs) {
+  let best = null;
+  let bestAt = -1;
+  let entries;
+  try {
+    entries = readdirSync(logsDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory() || !e.name.startsWith('_')) continue;
+    let born;
+    try {
+      born = statSync(join(logsDir, e.name)).birthtimeMs || statSync(join(logsDir, e.name)).ctimeMs;
+    } catch {
+      continue;
+    }
+    if (born < sinceMs) continue;
+    if (born > bestAt) { bestAt = born; best = join(logsDir, e.name); }
+  }
+  return best;
+}
+
+/**
+ * The door every agent-scale wait consults — bead `forge-8vfn.7.5.8`.
+ *
+ * WHAT IT GENERALISES. 580 gave off-session waits a stop door keyed to the run
+ * the PAGE names. Run 7 proved that is not enough: a press can dispatch an
+ * agent from a page that names no run at all, and then nothing observes it.
+ * Every full-ceiling burn this milestone — about 160 minutes of them — was an
+ * off-session red, and no GREEN agent wait in 41 run logs exceeded 11.7 min.
+ * So a wait that reaches the ceiling with nothing to show has, measurably,
+ * already failed.
+ *
+ * THE CHANNEL, in order: the run the page names (`data-run` → `_logs/<id>`),
+ * else the newest `_logs/_*` dispatch created since the press. The session in
+ * scope is the first channel and is handled by `stopReasonFor` on the scoped
+ * path, which runs before this.
+ *
+ * TWO NAMED REASONS, because they are different findings:
+ *   `no-channel`    — nothing ever started. The press enqueued into a void, or
+ *                     dispatched nothing at all. Run 7 beat 7's shape.
+ *   `channel-quiet` — something started and then stopped writing. The product's
+ *                     own stalled verdict, applied off-session.
+ *
+ * The declared `upTo` remains the hard maximum; this can only end a wait
+ * EARLIER. A beat whose channel is writing keeps its full bound.
+ *
+ * @param {string} forgeRoot
+ * @returns {null | ((runId: string|null, sinceMs: number) => {reason: string, detail: string}|null)}
+ */
+export function makeAgentChannelDoor(forgeRoot) {
+  if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
+  const logsDir = join(forgeRoot, '_logs');
+  return (runId, sinceMs) => {
+    const named = runLogDir(forgeRoot, runId);
+    const dir = named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs);
+    if (dir === null) {
+      const waited = Date.now() - sinceMs;
+      if (waited <= STALL_CEILING_MS) return null;
+      return {
+        reason: 'no-channel',
+        detail:
+          `no agent channel appeared in ${Math.round(waited / 1000)}s — nothing under _logs/ was created by ` +
+          `this press and the page named no run. The declared bound would have been spent waiting on work ` +
+          `that never started.`,
+      };
+    }
+    const idle = runLogIdleMs(dir);
+    if (idle === null || idle <= STALL_CEILING_MS) return null;
+    return {
+      reason: 'channel-quiet',
+      detail:
+        `the agent channel ${dir.slice(dir.lastIndexOf('/') + 1)} has written nothing for ` +
+        `${Math.round(idle / 1000)}s, past the product's own ${Math.round(STALL_CEILING_MS / 1000)}s stall ceiling.`,
+    };
   };
 }
