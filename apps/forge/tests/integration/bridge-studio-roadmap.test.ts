@@ -90,6 +90,14 @@ before(async () => {
     makeWorkItem('WI-1', 'INIT-D'),
   );
 
+  // `forge-8vfn.7.6.21` — a CLAIMED initiative with no decomposition. This is
+  // the shape lane C's S10 run 10 produced: the scheduler moved the manifest to
+  // `_queue/in-flight/` and the PM had not yet written a `work_items:` key, so
+  // the roadmap's input for that card is `{status: 'in-flight', workItems:
+  // undefined}`. The UI side of the same claim is pinned in
+  // `apps/studio/tests/contract/roadmap-canvas-render.test.ts`.
+  writeFileSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-E.md'), makeManifest('INIT-E'));
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -313,4 +321,16 @@ test('roadmap: dep moves to done/ → dependent initiative flips to ready', asyn
       join(forgeRoot, '_queue', 'pending', 'INIT-A.md'),
     );
   }
+});
+
+test('roadmap: CLAIMED initiative with no WI snapshot → status in-flight, workItems undefined (`forge-8vfn.7.6.21`)', async () => {
+  const roadmap = await fetchRoadmap();
+  const e = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-E');
+  assert.ok(e, 'INIT-E present in roadmap');
+  assert.equal(e!.status, 'in-flight', 'the scheduler claimed it — the manifest sits in _queue/in-flight/');
+  assert.equal(
+    e!.workItems,
+    undefined,
+    'and nothing has decomposed it yet — a claim is not a plan, which is exactly what the card must not call "planned"',
+  );
 });

@@ -2882,11 +2882,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   per-node run dig-in `[data-section="initiative-runs"]` with one
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
-  prior attempt. Each pending initiative also carries `[data-plan-state="unplanned"
-  |"planning"|"planned"|"needs-confirm"|"error"]` (`unplanned` = the R4-05
-  `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
-  has run yet; this attribute lives on the CARD itself, so it's queryable
-  without opening the drawer): the drawer renders the
+  prior attempt. Every initiative carries `[data-plan-state="unplanned"
+  |"planning"|"planned"|"needs-confirm"|"error"]` on the CARD itself, so it is
+  queryable without opening the drawer. **`planned` means WORK ITEMS EXIST**
+  (the R4-05 `enqueuePlanRun`-derived `workItems !== undefined`) and nothing
+  else — it is never inferred from the queue state. A card the scheduler has
+  CLAIMED but nothing has decomposed reads `planning`: the claim moves the
+  manifest out of `_queue/pending/` long before the PM writes a `work_items:`
+  key, and calling that window `planned` tells an operator — and a story beat —
+  that a plan exists while one is still being written (`forge-8vfn.7.6.21`,
+  measured at 288 ms after the claim in S10 run 10). `unplanned` is the
+  remaining case: no work items and no pass running: the drawer renders the
   `[data-action="plan-initiative"]` button plus a blocked-until-planned lock
   badge (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
