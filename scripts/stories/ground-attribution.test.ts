@@ -215,3 +215,90 @@ test('663: a RELATIVE output_ref is ignored, never resolved against cwd — #607
     rmSync(logs, { recursive: true, force: true });
   }
 });
+
+test('673(iii): a BRIDGE run the run minted attributes its ground writes — no new mechanism, and this is the test that keeps it', () => {
+  // MEASURED BEFORE BUILDING. T1 ruled a follow-up here: `mintedSessionWrites`
+  // should also read `_logs/_bridge-*` dirs born since the run's start. It
+  // already does, and nothing needed to change — so what this test adds is not
+  // behaviour but a GUARD on behaviour that arrived by accident of shape.
+  //
+  // Three existing decisions compose to produce it, none of which was made with
+  // the bridge in mind:
+  //   * `mintedSessionPaths`' name regex is `_<kind>-<id>` with the kind free,
+  //     so `_bridge-<stamp>-<rand>` parses as kind `bridge` with no special case.
+  //   * its session-evidence check accepts any dir carrying `events.jsonl`, and
+  //     `emitGroundFileChanges` (`packages/kernel/logging.ts:228`) opens exactly
+  //     one per bridge run.
+  //   * the before/after LISTING already answers "born since the run's start"
+  //     — the snapshot is taken at run start, so a dir created during the run is
+  //     in `after` and not `before`. Birth time would give the same answer here
+  //     and is not needed while that snapshot exists.
+  //
+  // A rename of the bridge's run-id prefix, or a logger that wrote its first
+  // event somewhere other than `events.jsonl`, would silently un-attribute every
+  // bridge write and send S1's five paths back to UNDECLARED — a red run for the
+  // product working, which is the exact failure 594 and 663 were both about.
+  const logs = mkdtempSync(join(tmpdir(), 'stories-bridge-'));
+  const ground = '/home/parso/forge-m6-a/projects/gitweave';
+  try {
+    // The shape `bridgeCycleId()` really produces: `_bridge-<ISO with : and .
+    // replaced by ->-<8 random chars>`.
+    const dir = '_bridge-2026-09-11T08-52-11-000-ab12cd34';
+    mkdirSync(join(logs, dir));
+    writeFileSync(
+      join(logs, dir, 'events.jsonl'),
+      ['.gitignore', 'roadmap.md', 'brain/profile.md']
+        .map((rel) => JSON.stringify({
+          cycle_id: dir,
+          event_type: 'file_change',
+          output_refs: [`${ground}/${rel}`],
+          message: 'file.write',
+          metadata: { path: `${ground}/${rel}`, op: 'write' },
+        }))
+        .join('\n') + '\n',
+    );
+
+    const minted = mintedSessionPaths([], readdirSync(logs), logs);
+    assert.deepEqual(minted, ['_bridge/2026-09-11T08-52-11-000-ab12cd34'], 'the bridge run is minted with no special case');
+
+    const { produced, undeclared } = classifyOwnGroundDrift(
+      { added: ['.gitignore', 'roadmap.md', 'brain/profile.md'], removed: [], modified: [] },
+      minted,
+      mintedSessionWrites(minted, logs, ground),
+    );
+    assert.deepEqual(undeclared, [], `the bridge's own writes are the product working: ${undeclared.join(' | ')}`);
+    assert.equal(produced.length, 3);
+    assert.ok(produced.every((l) => l.includes('written by _bridge/')), produced.join(' | '));
+  } finally {
+    rmSync(logs, { recursive: true, force: true });
+  }
+});
+
+test('673(iii): a bridge dir that PREDATES the run is not this run\'s, and stays undeclared', () => {
+  // The control, and the reason the before/after listing is the right mechanism
+  // rather than "any `_bridge-*` dir". A long-lived bridge writes into a ground
+  // between runs; those writes belong to whoever caused them, not to the next
+  // run that happens to hash the ground afterwards.
+  const logs = mkdtempSync(join(tmpdir(), 'stories-bridge-old-'));
+  const ground = '/home/parso/forge-m6-a/projects/gitweave';
+  try {
+    const dir = '_bridge-2026-09-10T01-00-00-000-99999999';
+    mkdirSync(join(logs, dir));
+    writeFileSync(join(logs, dir, 'events.jsonl'), `${JSON.stringify({
+      event_type: 'file_change', output_refs: [`${ground}/.gitignore`], message: 'file.write',
+    })}\n`);
+
+    // It is in BEFORE as well as after — the run did not mint it.
+    const minted = mintedSessionPaths(readdirSync(logs), readdirSync(logs), logs);
+    assert.deepEqual(minted, [], 'a dir present before the run is not minted by it');
+
+    const { undeclared } = classifyOwnGroundDrift(
+      { added: ['.gitignore'], removed: [], modified: [] },
+      minted,
+      mintedSessionWrites(minted, logs, ground),
+    );
+    assert.equal(undeclared.length, 1, 'so its write is undeclared, and the run is right to say so');
+  } finally {
+    rmSync(logs, { recursive: true, force: true });
+  }
+});
