@@ -37,7 +37,7 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { guardedFile, guardedWriteFile, sendJson } from '@forge/kernel';
+import { emitGroundFileChanges, guardedFile, guardedWriteFile, sendJson } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import {
   DEMO_HISTORY_REL_DIR,
@@ -257,6 +257,14 @@ function runLockStep(args: {
   if (!existsSync(join(status.project_repo_path, DEMO_REL_DIR))) {
     mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
   }
+  // Read BEFORE the write, or a re-lock looks like a creation (#663's shape:
+  // a write that MODIFIES cannot appear in a created-list by construction).
+  // GUARDED, not `existsSync(lockPath)`: `project_repo_path` is request-derived
+  // and `check-request-path-sinks` refused the bare form on this PR's first
+  // run. `guardedFile(root, segments, 'read')` is null for absent OR
+  // unresolvable, which is the same existence answer with the root contained —
+  // the shape `bridge-studio-demo.ts:126` already uses on this exact file.
+  const lockExisted = guardedFile(status.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null;
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
   // Archive this locked demo into history/<sessionId>/ so previous demos remain
@@ -265,6 +273,37 @@ function runLockStep(args: {
   mkdirSync(histDir, { recursive: true });
   writeFileSync(join(histDir, 'DEMO.html'), readFileSync(demoPath, 'utf8'));
   writeFileSync(join(histDir, 'meta.json'), `${JSON.stringify(lock, null, 2)}\n`);
+
+  // forge-qm4d's EIGHTH writer, undeclared until S1 run 7 because no run had
+  // ever REACHED this step: it throws without a DEMO.html, which the write
+  // pass could not produce until #666. The `log` event below names two of
+  // these paths already, but the containment fence reads `file_change` and a
+  // write tool's refs by name — a path appearing in a log is not evidence the
+  // run wrote it. `logger` is the SESSION's: handed none,
+  // `emitGroundFileChanges` opens a bridge run and the fence stays green with
+  // the wrong author recorded.
+  const lockCause = `demo-builder lock (session ${status.session_id})`;
+  emitGroundFileChanges({
+    forgeRoot: plumbing.forgeRoot,
+    cause: lockCause,
+    projectRoot: status.project_repo_path,
+    relPaths: [DEMO_LOCK_REL_PATH],
+    op: lockExisted ? 'modify' : 'write',
+    logger,
+  });
+  // `history/<sessionId>/` is per-session, so these two are always creations —
+  // stated as a fact about the path, not assumed from the lock's own op.
+  emitGroundFileChanges({
+    forgeRoot: plumbing.forgeRoot,
+    cause: lockCause,
+    projectRoot: status.project_repo_path,
+    relPaths: [
+      `${DEMO_HISTORY_REL_DIR}/${status.session_id}/DEMO.html`,
+      `${DEMO_HISTORY_REL_DIR}/${status.session_id}/meta.json`,
+    ],
+    op: 'write',
+    logger,
+  });
 
   // W7-C2 T1 review (P0-4, sessions-kinds-36) — the permanent "what this
   // session produced" pointer (see instructions-runner's own note for why
