@@ -29,16 +29,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
-import {
-  applyFence,
-  sweepStoryRemotes,
-  starterAgentSlugs,
-  describeFence,
-  fenceBreaches,
-  fixturePathsFor,
-  parseGitPorcelain,
-  productFixturePathsFor,
-  sweepStoryResidue, restoreSweptCommitted,} from './sweep.mjs';
+import { applyFence, sweepStoryRemotes, starterAgentSlugs, describeFence, fenceBreaches, fixturePathsFor, parseGitPorcelain, productFixturePathsFor, sweepStoryResidue } from './sweep.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-'));
 const plant = (p) => {
@@ -640,4 +632,71 @@ test('594(2): an untracked artifact is not resurrected, and nothing outside the 
   assert.deepEqual(restoreSweptCommitted(root, ['/etc']).restored, []);
   assert.deepEqual(restoreSweptCommitted(root, [join(root, '..', 'elsewhere')]).restored, []);
   assert.deepEqual(restoreSweptCommitted(root, swept).restored, []);
+});
+
+/**
+ * Stopping the scheduler the run started — T1 ruling 657(ii), bought by S10
+ * run 9, where beat 7 pressed Start, a real daemon came up, and it was still
+ * alive after the sweep.
+ *
+ * A scheduler left running is not cosmetic: `scheduler-start` renders ONLY at
+ * `status: stopped` (`lib/scheduler-view.ts:44`), so the next run's beat 7 reds
+ * at t+0 on a missing handle while the state it wants already holds.
+ */
+test('657(ii): the pid file path is the PRODUCT\'s, bound by this test', async () => {
+  // `run.mjs` is plain node and cannot import the TypeScript, so the path is
+  // written once in `sweep.mjs` and bound here — the same shape as
+  // `STALL_CEILING_MS`. I looked for `_logs/.scheduler.pid` after run 9 and
+  // reported a product gap that did not exist; a path written from memory is
+  // the same class as a fixture written from memory.
+  const { daemonPaths } = await import('../../packages/flows/daemon.ts');
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  assert.equal(join(root, DAEMON_PID_FILE), daemonPaths(root).pidFile);
+});
+
+test('657(ii): a daemon in ANOTHER tree is never ours to stop', () => {
+  // `pkill -f` has matched the searcher's own shell three times this campaign.
+  // The cwd check is why this signals nothing it does not own — and the pid
+  // used here is THIS process, which is alive and demonstrably not in the
+  // fixture tree, so the refusal is about ownership rather than liveness.
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(process.pid));
+
+  const r = stopOwnScheduler(root);
+
+  assert.equal(r.stopped, null, 'it must not signal a process it does not own');
+  assert.match(r.note ?? '', /not this tree/, r.note ?? '');
+  assert.doesNotThrow(() => process.kill(process.pid, 0), 'and this process is still alive, which is the point');
+});
+
+test('657(ii): no pid file is silence, not an error', () => {
+  // A run whose beat 7 never pressed Start started no daemon. The sweep must
+  // say nothing rather than invent a failure.
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, note: null });
+});
+
+test('657(ii): a pid file holding nonsense says so instead of signalling', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  writeFileSync(join(root, DAEMON_PID_FILE), 'not-a-pid');
+
+  const r = stopOwnScheduler(root);
+  assert.equal(r.stopped, null);
+  assert.match(r.note ?? '', /not a pid/, r.note ?? '');
+});
+
+test('657(ii): a dead pid is reported as gone, never as a kill', () => {
+  // The distinction the log has to preserve: "I stopped it" and "it had already
+  // exited" are different facts, and a sweep that says the first about the
+  // second is the kind of claim this campaign keeps having to retract.
+  const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  // A pid that is real in shape and certainly not running.
+  writeFileSync(join(root, DAEMON_PID_FILE), '999999');
+
+  const r = stopOwnScheduler(root);
+  assert.equal(r.stopped, null);
+  assert.match(r.note ?? '', /already gone/, r.note ?? '');
 });
