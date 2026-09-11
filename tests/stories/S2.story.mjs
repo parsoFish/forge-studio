@@ -440,11 +440,23 @@ export default {
       // main showed the beat red not because the product was wrong but because
       // `beats.mjs` had ONE bound, `READY_TIMEOUT_MS = 15_000`, for a local DOM
       // update and for an architect's interview alike (bead
-      // `forge-8vfn.6.11.10`, #438). Ten minutes is a STATED GUESS that the
-      // next run turns into a number, and the verdict now names which bound
-      // gave up — so that run cannot confuse "the agent was slow" with "the
-      // product is wrong".
-      wait: { for: 'agent', upTo: 600_000 },
+      // `forge-8vfn.6.11.10`, #438).
+      //
+      // AMENDED 2026-09-11 (operator ruling 625) — 600_000 → 780_000, and this
+      // one is a RAISE. The comment above used to end "ten minutes is a STATED
+      // GUESS that the next run turns into a number"; the next run turned it
+      // into a number and the number was BIGGER than the guess allowed for.
+      // The slowest measured green is 8.7 minutes, so 1.5× it is 13 minutes
+      // and the old ten-minute ceiling sat BELOW its own measurement — close
+      // enough to the observed maximum that a working interview could have
+      // been reported as a product red.
+      //
+      // n = 1, and that is stated rather than smoothed over: this is the one
+      // of 625's three bounds priced on a single observation, so it is the one
+      // to revisit first if a later run lands near it. The verdict still names
+      // which bound gave up, so a run that hits 780_000 cannot be confused for
+      // "the product is wrong".
+      wait: { for: 'agent', upTo: 780_000 },
       expect: {
         route: '/sessions/architect/<architectSessionId>',
         data: {
