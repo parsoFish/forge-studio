@@ -39,7 +39,7 @@ import { DEFAULT_STALL_CEILING_MS } from '../../packages/sessions/bridge-studio-
 import {
   STALL_CEILING_MS, runLogDir, runLogIdleMs, newestChannelSince, makeAgentChannelDoor,
 } from './beats-agent-proc.mjs';
-import { waitForHandleOrStall } from './beats-page.mjs';
+import { waitForHandleOrStall, waitForConsequence } from './beats-page.mjs';
 
 test('580: the runner uses the PRODUCT\'s ceiling — one number, bound by this test', () => {
   // The runner cannot import the TypeScript constant (`run.mjs` is plain node)
@@ -280,4 +280,105 @@ test('626: the fallback takes a dispatch born SINCE the press, never a bystander
   // reach, which is how a fixture starts dictating the behaviour instead of
   // checking it. The `no-channel` path is covered by the test above, on a tree
   // with no bystander in it.
+});
+
+/**
+ * THE TEST THAT WAS MISSING — T1 ruling 640, bought twice at twenty minutes.
+ *
+ * `forge-8vfn.7.5.8` put the channel door in `waitForHandleOrStall`, and every
+ * test above exercises it there. But that is the PRE-act wait: it returns the
+ * moment the control appears, which is what a press does. An off-session beat
+ * spends its bound in `waitForConsequence`, AFTER the act — and that is where
+ * S10 run 7's beat 7 and run 8's beat 8 each sat their full twenty minutes with
+ * the door a few lines away and never consulted.
+ *
+ * Both verdicts said which wait it was, in their own words: "gave up at the
+ * agent wait (declared 1200000 ms)" is `beatBound`'s label, produced on the
+ * consequence path. The door was tested against the wait I had changed rather
+ * than the wait the measurement named (§15.356), so the tests passed and the
+ * defect shipped.
+ *
+ * These drive `waitForConsequence` directly, which is the only place this could
+ * have been caught.
+ */
+function planPage() {
+  // Beat 8's shape: the page is fine, the press succeeded, and the state the
+  // beat waits for will never arrive because nothing is going to compute it.
+  const locator = (): any => ({
+    first: () => locator(), count: async () => 1, nth: () => locator(),
+    evaluateAll: async (fn: any, a: any) => fn([], a), waitFor: async () => {},
+    click: async () => {}, fill: async () => {},
+  });
+  return {
+    url: () => 'http://localhost:4124/projects/gitpulse',
+    locator,
+    waitForSelector: async () => {},
+    evaluate: async (_fn: unknown, arg?: { wanted?: string[] }) => {
+      const all: Record<string, string> = {
+        page: 'projects', 'page-ready': 'true', 'project-id': 'gitpulse', 'plan-state': 'unplanned',
+      };
+      const w = arg?.wanted ?? null;
+      return {
+        data: w === null ? all : Object.fromEntries(Object.entries(all).filter(([k]) => w.includes(k))),
+        nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+      };
+    },
+  };
+}
+
+const PLAN_BEAT = {
+  act: 'Plan the initiative the Architect produced',
+  expect: { route: '/projects/gitpulse', data: { page: 'projects', 'plan-state': 'planned' } },
+  say: 'the station between deciding and building',
+};
+
+test('640 (RED before the fix): the CONSEQUENCE wait consults the door — beat 8\'s exact shape', async () => {
+  // Run 8's condition as the door SEES it: no channel belonging to this press.
+  //
+  // The run's `_logs/` did hold one dispatch, born nine minutes before the
+  // press — but a directory's birth time cannot be back-dated (`utimes` moves
+  // atime and mtime only), so a fixture cannot stage "born before a press that
+  // is itself older than the ceiling". An empty log dir puts the door in
+  // exactly the state that one produced, and the birth-time filter that makes
+  // them equivalent is pinned by its own test above. What THIS test is for is
+  // WHICH WAIT asks — and before 640 the answer was neither.
+  const { door } = realDoor();
+  const pressedAt = Date.now() - (STALL_CEILING_MS + 5_000);
+
+  const began = Date.now();
+  const stall = await waitForConsequence(
+    planPage() as never, PLAN_BEAT, 20_000, null, null, null,
+    // The door as the runner builds it, given the press time this beat began at.
+    (runId: string | null) => door(runId, pressedAt),
+  );
+  const took = Date.now() - began;
+
+  assert.notEqual(stall, null, 'before 640 this returned null and the beat spent its whole bound');
+  assert.match(stall!.why, /no-channel/, `and it names WHICH finding: ${stall!.why}`);
+  assert.ok(took < 5_000, `it must end at the door, not at the 20 s bound — took ${took} ms`);
+});
+
+test('640 (CONTROL): a run that IS writing keeps the consequence bound', async () => {
+  const { logs, door } = realDoor();
+  const fresh = join(logs, '_architect-live');
+  mkdirSync(fresh, { recursive: true });
+  writeFileSync(join(fresh, 'events.jsonl'), '{}');
+  const pressedAt = Date.now() - 1_000;
+
+  const began = Date.now();
+  const stall = await waitForConsequence(
+    planPage() as never, PLAN_BEAT, 1_200, null, null, null,
+    (runId: string | null) => door(runId, pressedAt),
+  );
+
+  assert.equal(stall, null, 'a writing channel is not a stalled one');
+  assert.ok(Date.now() - began >= 1_000, 'and the declared bound still governs');
+});
+
+test('640 (CONTROL): no door at all leaves the consequence wait exactly as it was', async () => {
+  const began = Date.now();
+  const stall = await waitForConsequence(planPage() as never, PLAN_BEAT, 1_000, null, null, null, null);
+
+  assert.equal(stall, null);
+  assert.ok(Date.now() - began >= 900, 'unchanged: the bound is what governs when there is nothing to observe');
 });
