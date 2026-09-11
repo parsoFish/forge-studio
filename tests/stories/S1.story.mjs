@@ -327,14 +327,24 @@ export default {
       // its own. That reasoning is superseded (the question never comes) but
       // the bound is not: it now bounds a terminal phase instead.
       //
-      // 10 minutes remains a STATED GUESS, not a measurement — no S1 run has
-      // ever reached a terminal onboarding phase, so the true figure is only
-      // known to be larger than anything observed. It is generous enough to
-      // be a real measurement and short enough that a genuine product red
-      // does not hold the host for half an hour, and the verdict names which
-      // bound gave up, so the next run record cannot confuse "the agent was
+      // AMENDED 2026-09-11 (amend-11, operator ruling 625) — 600_000 → 420_000,
+      // a GUESS REPLACED BY A MEASUREMENT.
+      //
+      // The comment that stood here said "10 minutes remains a STATED GUESS,
+      // not a measurement — no S1 run has ever reached a terminal onboarding
+      // phase". That is no longer true, and leaving it would have been the
+      // more misleading half of this edit: beat 6 has now gone GREEN twice,
+      // at 2 m 15 s (run 4) and 2 m 36 s (run 3), each time on the session
+      // reaching `complete`. Across the four runs 625 priced, the slowest
+      // green was 4.3 minutes.
+      //
+      // 420_000 is 1.5× that maximum (the 513/551 rule, floor 5 min): far
+      // enough above every observed green that a slow agent is not called a
+      // product defect, and short enough that a genuine red gives the host
+      // back in seven minutes instead of ten. The verdict still names which
+      // bound gave up, so a future run record cannot confuse "the agent was
       // slow" with "the product is wrong".
-      wait: { for: 'agent', upTo: 600_000 },
+      wait: { for: 'agent', upTo: 420_000 },
       expect: {
         route: '/sessions/onboarding/<sessionId>',
         data: {
