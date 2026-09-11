@@ -21,6 +21,17 @@
  * a category filled with a directory path. Four reds, four story defects, zero
  * product defects. Each beat carries its own measurement.
  *
+ * AMEND-2 (M6, T1 rulings 618/619; `_1.0/gate-manifests/M1-C-S7.amend-2.md`).
+ * ONE beat splits in two, no product change, 19 beats to 20. Beat 5 asserted
+ * `skill-trust: ready` and its own `do` could never produce it: finishing an
+ * authoring session INSTALLS the package as a draft, and the library's own
+ * approval is a second, deliberate act on a second surface. The story asserted
+ * the end of a two-gate sequence as if one press did it, so it reported the
+ * trust gate as free — and paid its whole 300 000 ms bound each run waiting for
+ * a value that could never move. Beat 5 now asserts what its own act produces
+ * (`draft`); new beat 5a performs the library approval and asserts `ready`.
+ * Same shape as S6's 11a/11b split.
+ *
  * A THIRD DEFECT IN BEAT 13, and the reason this story gains TWO more beats
  * than the split alone needs. Beat 13 could not be REACHED: the runner reaches
  * a beat's route by clicking a link on the CURRENT page whose pathname matches
@@ -233,6 +244,42 @@ export default {
       //
       // Consequence: bead `forge-8vfn.7.3.1` is NOT lane A's product work.
       // Nothing is owed by A here.
+      //
+      // AMEND-2 (T1 ruling 619, from 618's static trace). This beat asserted
+      // `skill-trust: 'ready'` and its own `do` could never cause it. There are
+      // TWO approvals here and they are different acts on different surfaces:
+      //
+      //   1. the SESSION's `verdict-approve`, below — finalises the authoring
+      //      session and INSTALLS the package, as a DRAFT;
+      //   2. the LIBRARY's own `Approve` on `/skills/<id>`, beat 5a — runs
+      //      `approveSkillDraft`, the only thing that deletes `status: draft`
+      //      and therefore the only thing that makes trust read `ready`.
+      //
+      // `draft` here is DETERMINISTIC, not this run's luck. The finalize lands
+      // the package in `_interactive-library/<id>/` and then INSTALLS it —
+      // `bridge-studio-authoring.ts:383` -> `finalizeSkillFromLanded` ->
+      // `installSkillPackage`, and `skill-install.ts:195-196` writes
+      // `status: draft` + `library: false` UNCONDITIONALLY, whatever the
+      // authoring agent typed into its frontmatter (a drafted `library: true`
+      // is quarantined by D4). Pinned end to end through the live route at
+      // `bridge-studio-authoring-finalize.test.ts:350-365`. So no agent output
+      // can make this beat read `ready`, and none can make 5a's control absent.
+      //
+      // The second gate is deliberate product truth, not an accident: it is the
+      // same trust gate the operator ruled S8 beat 9 behind. So the beat now
+      // asserts the state its OWN act produces — `draft` — and beat 5a performs
+      // the second act and asserts `ready`. 504's class, S6 11a/11b's split.
+      //
+      // The trace that settled it, recorded because it also resolves an
+      // apparent contradiction in run 1's capture: the fill IS honoured end to
+      // end (`bridge-studio-authoring.ts:496` reads the body's `id`, `:303`
+      // writes `package_id`, `interactive-agent-step.ts:350` reads it into
+      // `FinalizerContext.packageId`), and the authoring kind has NO
+      // `step: finalize` phase, so the agent cannot install under a name of its
+      // own. Run 1's frame showed the title `md-link-checker` while the
+      // `skill-id` assertion PASSED because `app/skills/[id]/page.tsx:182`
+      // renders the frontmatter NAME and `:174` sets `data-skill-id` from the
+      // DIRECTORY. Both were true of the same instant.
       act: 'Read what it drafted, give the package its directory name, and approve it',
       wait: { for: 'agent', upTo: 300_000 },
       do: [
@@ -245,10 +292,32 @@ export default {
           page: 'skill-detail',
           'skill-id': 'story-s7-skill',
           'page-ready': 'true',
+          // The honest state the session's approve produces. An installed
+          // package is a DRAFT: quarantined, not palette-visible, not runnable.
+          'skill-trust': 'draft',
+        },
+      },
+      say: 'The agent drafts; the operator names and approves. Nothing an agent wrote enters the library on the agent’s own say-so, and the id the operator types is the directory it lands in — as a draft, which is not the same as trusted.',
+    },
+    {
+      // AMEND-2 (ruling 619) — beat 5a, the SECOND approval, and the reason the
+      // split exists rather than a looser assertion on beat 5. Finishing the
+      // authoring session installs the package; it does not trust it. The
+      // library’s own approval gate is a separate, deliberate act on a separate
+      // surface, and a story that skipped it would report the trust gate as
+      // free.
+      act: 'Trust it: approve the draft in the library',
+      do: [{ press: 'approve-skill' }],
+      expect: {
+        route: '/skills/story-s7-skill',
+        data: {
+          page: 'skill-detail',
+          'skill-id': 'story-s7-skill',
+          'page-ready': 'true',
           'skill-trust': 'ready',
         },
       },
-      say: 'The agent drafts; the operator names and approves. Nothing an agent wrote enters the library on the agent’s own say-so, and the id the operator types is the directory it lands in.',
+      say: 'Two approvals, because they answer different questions. The first says the draft is finished; this one says you trust it enough to let an agent load it. Until this press the package is installed, quarantined and invisible to every palette — which is what a trust gate is for.',
     },
     {
       // AMENDED after the first run (2026-08-30, same authoring session,

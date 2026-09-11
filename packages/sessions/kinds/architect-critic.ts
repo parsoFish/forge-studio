@@ -36,7 +36,7 @@ import { join } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import type { EventLogger } from '@forge/kernel';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { hooksSpreadForAgent } from './kind-turn.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
@@ -266,14 +266,7 @@ export async function runCompletenessCritic(
       model: COMPLETENESS_CRITIC_MODEL,
       allowedTools: completenessCriticAgentSpec.allowedTools,
       disallowedTools: completenessCriticAgentSpec.disallowedTools,
-      ...(() => {
-        const hooks = sdkHooksForAgent({
-          skill: completenessCriticAgentSpec.skill,
-          logger: input.logger,
-          initiativeId: input.initiativeId,
-        });
-        return hooks !== undefined ? { hooks } : {};
-      })(),
+      ...hooksSpreadForAgent({ skill: completenessCriticAgentSpec.skill, logger: input.logger, initiativeId: input.initiativeId }),
       onToolUse: input.onToolUse,
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,

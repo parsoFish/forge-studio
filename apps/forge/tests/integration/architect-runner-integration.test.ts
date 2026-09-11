@@ -48,12 +48,12 @@ import {
 import { createLogger } from '@forge/kernel';
 import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
 import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
 
-/** The REAL functions: this file asserts what `promoteManifests` actually wrote
- *  parses back, so a stub would let it agree with a format the product never
- *  produces. That is why it keeps its `@forge/flows` row deliberately. */
-const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests };
+/** The REAL functions — this file asserts that what `promoteManifests` wrote
+ *  parses back, and a stub would let it agree with a format the product never produces. */
+const realManifestPorts: ArchitectManifestPorts = { parseManifest, serializeManifest, mintAndPersistManifestCycleId, promoteManifests, isCanonicalInitiativeId };
 import { REDACTED_THINKING_MARKER } from '@forge/sessions/interactive-session.ts';
 import { COMPLETENESS_CRITIC_MODEL, completenessCriticAgentSpec, CRITIC_MAX_TOTAL_PROMPT_CHARS } from '@forge/sessions/kinds/architect-critic.ts';
 

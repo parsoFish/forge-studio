@@ -94,8 +94,16 @@ const HOOK_DISPATCH_EXEMPT: Record<string, string> = {
     'the registry TABLE itself: it value-imports the four adapter objects only to key them by sdk id (`getAdapter`/`resolveSdkId`) and never builds, holds or passes an options bag — every caller that obtains an adapter here is itself enumerated by ADAPTER_CALL and must wire its own. Newly enumerated by W8-F5\'s ADAPTER_VALUE_IMPORT rule, which exists to catch a CONSUMER importing an adapter object directly.',
 };
 
-/** Any of these means the file participates in hook dispatch. */
-const WIRED = /sdkHooksForAgent|SdkHooksOption/;
+/** Any of these means the file participates in hook dispatch.
+ *
+ *  `hooksSpreadForAgent` (`packages/sessions/kinds/kind-turn.ts`) is admitted
+ *  because its ENTIRE body is `sdkHooksForAgent` plus the conditional spread
+ *  every spawn site owes — five sites held a copy of that conditional, two as a
+ *  nine-line IIFE, and a sixth divergent copy is exactly what this ratchet
+ *  cannot see (bead `forge-8vfn.7.6.17`). Naming the helper IS wiring hook
+ *  dispatch; a spawn-capable file naming NEITHER symbol is still an offender,
+ *  and the comment-only kill-test below still holds for both. */
+const WIRED = /sdkHooksForAgent|SdkHooksOption|hooksSpreadForAgent/;
 
 /** A VALUE import of the pinned query (a `type`-only import cannot spawn). */
 const VALUE_IMPORT = /import\s*\{[^}]*\bpinned(?:SdkQuery|StreamQuery)\b[^}]*\}\s*from/;
