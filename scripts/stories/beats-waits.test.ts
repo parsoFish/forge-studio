@@ -457,11 +457,32 @@ test('6.11.10: a beat with NO declared wait still gives up at the DOM bound — 
   // The control that keeps the fix from becoming "make everything slower":
   // an undeclared beat must be bounded exactly as before, so a genuine
   // product red still fails fast.
-  const page = fakeStudio({ start: '/sessions/architect/arch-1', commitMs: 0, pages: phasePage(600) });
+  //
+  // DE-FLAKED (T1 ruling 636(i), `_1.0/known-flakes.md`). This used to race a
+  // 200 ms bound against a 600 ms consequence and assert completion under
+  // 500 ms — three wall-clock numbers, two of them within a factor of three of
+  // each other. On a loaded host (another lane's funded run plus `npm test`
+  // workers, MemAvailable 4.6 GiB) the 200 ms bound was not reached before the
+  // 600 ms patch landed, so the beat went GREEN where the test requires RED:
+  // 1 red in 13 `gate.sh` runs, 3/3 green in isolation.
+  //
+  // A race between two wall-clock delays cannot be made reliable by widening
+  // the gap — it can only be made less likely, which is what a flake is. So the
+  // consequence is removed entirely: `phasePage(null)` never patches, and the
+  // beat MUST red whatever the host is doing. The half this gives up — that a
+  // consequence arriving after the bound is not waited for — is proved by the
+  // sibling test below, where the same page with a DECLARED wait goes green
+  // because the patch does land. Between them the two halves are covered, and
+  // neither depends on the clock.
+  const page = fakeStudio({ start: '/sessions/architect/arch-1', commitMs: 0, pages: phasePage(null) });
   const started = Date.now();
   const v = await driveBeat(page, phaseBeat(), 1, 'http://localhost:4124', {}, 200);
+  const took = Date.now() - started;
   assert.equal(v.status, 'red');
-  assert.ok(Date.now() - started < 500, 'an undeclared beat must not silently inherit the agent bound');
+  // Two orders of magnitude below the agent bound the sibling test declares, so
+  // it still catches an undeclared beat silently inheriting one, and no amount
+  // of host load reaches it.
+  assert.ok(took < 5_000, `an undeclared beat must not silently inherit the agent bound — took ${took} ms`);
   assert.match(v.failures.join(' | '), /data-session-phase: expected "awaiting-verdict", got "interviewing"/);
 });
 
