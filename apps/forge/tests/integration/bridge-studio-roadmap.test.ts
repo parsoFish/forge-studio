@@ -98,6 +98,27 @@ before(async () => {
   // `apps/studio/tests/contract/roadmap-canvas-render.test.ts`.
   writeFileSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-E.md'), makeManifest('INIT-E'));
 
+  // `forge-8vfn.7.6.23` — a manifest the parser REFUSES. `class` is required
+  // (ADR-051, packages/flows/manifest.ts:117, "There is no default"), and this
+  // one omits it. Written by hand rather than through makeManifest so the
+  // refusal is the fixture's whole point and cannot drift if makeManifest gains
+  // a default.
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', 'INIT-UNPARSEABLE.md'),
+    [
+      '---',
+      'initiative_id: INIT-UNPARSEABLE',
+      `project: ${PROJECT_ID}`,
+      "created_at: '2026-09-11T00:00:00.000Z'",
+      'iteration_budget: 1',
+      'cost_budget_usd: 1',
+      '---',
+      '',
+      '## no class key',
+      '',
+    ].join('\n'),
+  );
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -121,6 +142,7 @@ type RoadmapBody = {
       workItems?: Array<{ id: string }>;
       completedAt?: string;
     }>;
+    unparseable?: Array<{ path: string; message: string }>;
   };
 };
 
@@ -333,4 +355,47 @@ test('roadmap: CLAIMED initiative with no WI snapshot → status in-flight, work
     undefined,
     'and nothing has decomposed it yet — a claim is not a plan, which is exactly what the card must not call "planned"',
   );
+});
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.23` — a manifest that fails to parse must be NAMED, never
+// silently skipped.
+//
+// `parseManifest` is deliberately fail-fast; `scanProjectManifests` wrapped it in
+// `catch { continue; }` and threw that verdict away. Measured cost: three seeded
+// manifests on disk, route 200 with `count: 0`, and a page reporting "No
+// initiatives found for this project" — which is a DIFFERENT problem from the one
+// that was true, with a different fix.
+//
+// §15.400 — what else could make these assertions pass? A count alone would pass
+// if any other fixture happened to be unparseable, so each asserts the PATH and
+// the parser's own MESSAGE, and the last one asserts the good initiatives are
+// STILL returned: a change that made the whole scan fail closed would satisfy a
+// "names the bad one" test while destroying the route.
+// ---------------------------------------------------------------------------
+
+test('roadmap: a manifest the parser refuses is REPORTED with its path and the parser\'s own message (`forge-8vfn.7.6.23`)', async () => {
+  const roadmap = await fetchRoadmap();
+  const bad = (roadmap.unparseable ?? []).find((u) => u.path.endsWith('INIT-UNPARSEABLE.md'));
+  assert.ok(bad, `the unparseable manifest must be named — got ${JSON.stringify(roadmap.unparseable ?? [])}`);
+  assert.match(
+    bad!.message,
+    /class/,
+    'and the parser\'s own message must travel, so the operator learns WHICH field, not merely that something failed',
+  );
+});
+
+test('roadmap: the refused manifest is NOT counted as an initiative, and the good ones still are', async () => {
+  const roadmap = await fetchRoadmap();
+  assert.equal(
+    roadmap.initiatives.find((i) => i.initiativeId === 'INIT-UNPARSEABLE'),
+    undefined,
+    'a manifest that would not parse cannot appear as an initiative',
+  );
+  for (const id of ['INIT-A', 'INIT-D', 'INIT-E']) {
+    assert.ok(
+      roadmap.initiatives.find((i) => i.initiativeId === id),
+      `${id} must still be returned — naming the bad manifest must not fail the whole scan closed`,
+    );
+  }
 });
