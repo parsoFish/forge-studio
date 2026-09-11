@@ -90,7 +90,7 @@
  *     guessed literal).
  *
  * Bootstrap / regenerate (per fixture, or the whole file):
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/sessions/interactive-runners-golden.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/sessions/tests/regression/interactive-runners-golden.test.ts
  * (or delete a fixture) rewrites it from the current code.
  */
 

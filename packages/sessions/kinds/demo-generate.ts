@@ -40,8 +40,13 @@ export const DEMO_WRITE_PASS_MAX_TURNS = 8;
 export const DEMO_READ_PASS_MAX_TURNS = 6;
 /** Read tools, named once. `Grep` is a read by another name. */
 export const DEMO_READ_TOOLS: readonly string[] = ['Read', 'Glob', 'Grep'];
-/** What the write turn may NOT do. Every read door, not just Bash (#558). */
-export const DEMO_WRITE_PASS_DENIED: readonly string[] = ['Bash', 'Read', 'Glob', 'Grep', 'TodoWrite'];
+/** What the write turn may NOT do. Every read door, not just Bash (#558) — and
+ *  the last three are doors the product never declared anywhere, measured being
+ *  used to read on S1 run 5 (`forge-a9o9`). Naming them closes the three that
+ *  were caught; only deny-by-default closes the next three. */
+export const DEMO_WRITE_PASS_DENIED: readonly string[] = [
+  'Bash', 'Read', 'Glob', 'Grep', 'TodoWrite', 'LSP', 'TaskOutput', 'Skill',
+];
 export const DEMO_GROUND_PASS_MAX_TURNS = 16;
 
 export async function runGenerateStep(args: {
@@ -137,8 +142,25 @@ export async function runGenerateStep(args: {
     DEMO_READ_TOOLS, DEMO_READ_PASS_MAX_TURNS, ['Write', 'Edit', 'MultiEdit', 'Bash'],
     (t) => { findings += t; },
   );
+  // `forge-a9o9` — the pass says what it HOLDS, because the prompt it inherits
+  // says otherwise. `loadSkillTurnPrompt` returns `${base}\n\n${section}`, and
+  // `base` carries the SKILL.md frontmatter: `allowed-tools: [Read, Grep, Glob,
+  // Bash, Write, Edit]`, true of the KIND and false of this pass. On S1 run 5
+  // the agent believed it over four failing tool calls — TaskOutput, LSP, Glob,
+  // Skill — before writing one of its two deliverables and ending the turn.
   const writePass = await runPass(
-    [prompt, '', '## Findings from your read turn', findings.trim() || '_(none recorded)_'].join('\n'),
+    [
+      prompt, '',
+      '## This turn: WRITE ONLY',
+      'You hold Write and Edit. You have no Read, Grep, Glob, Bash, LSP, TaskOutput or Skill: the',
+      'tool list in the frontmatter above is this KIND across all its turns, not what you hold now.',
+      'Do not spend calls hunting for another way to read — the reading is done and its findings are',
+      'below. Author BOTH deliverables from them, leaving the captured output as the marked',
+      'placeholders the grounding pass replaces. That pass has Bash to run the generator; you do not,',
+      'so a sample you cannot run is expected of you and a sample you invent is not.',
+      '',
+      '## Findings from your read turn', findings.trim() || '_(none recorded)_',
+    ].join('\n'),
     agentSpec.allowedTools.filter((t) => !DEMO_WRITE_PASS_DENIED.includes(t)),
     DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED,
   );
