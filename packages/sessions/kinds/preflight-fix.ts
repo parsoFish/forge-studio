@@ -16,7 +16,7 @@
  * because the two kinds sit side by side and the difference is deliberate.
  */
 import { runPreflight, type ClauseId } from '@forge/projects/preflight.ts';
-import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
+import { ensureStudioBranch, commitStudioChange, dirtyPaths } from '@forge/projects/project-repo-tx.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
@@ -44,7 +44,7 @@ export type RunPreflightFixResult = FixTurnResult & {
   cleared: boolean;
 };
 
-export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflightFixResult, void> = {
+export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflightFixResult, string[]> = {
   cycleIdPrefix: '_preflight-fix',
   eventPhase: 'orchestrator',
   eventSkill: 'preflight-fix',
@@ -76,7 +76,7 @@ export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflight
     ].join('\n');
 
     return {
-      pre: undefined,
+      pre: dirtyPaths(input.projectDir), // npp3 — what was ALREADY dirty is not this turn's to commit
       spawn: {
         prompt: [skillPrompt, '', userPayload].join('\n'),
         // The bespoke runner's key order, unchanged — see fix-turn.ts's header
@@ -93,7 +93,7 @@ export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflight
     };
   },
 
-  finish: ({ input, crashed }) => {
+  finish: ({ input, pre, crashed }) => {
     if (crashed) {
       // No commit and no verification re-run on this path, exactly as before:
       // a crashed turn's partial edits are not promoted to the branch and
@@ -104,7 +104,7 @@ export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflight
     // Persist the agent's edits onto forge-studio (durable; survives a later
     // tree reset) BEFORE the verification re-run reads the working tree.
     try {
-      commitStudioChange(input.projectDir, `forge-studio: preflight-fix ${input.clause}`);
+      commitStudioChange(input.projectDir, `forge-studio: preflight-fix ${input.clause}`, dirtyPaths(input.projectDir).filter((p) => !pre.includes(p)));
     } catch {
       /* best-effort */
     }
