@@ -15,6 +15,18 @@
  * `ci.yml` runs `npm test` (§15.353 — the file is the list).
  */
 
+/**
+ * NOTHING IMPORTABLE MAY LIVE IN THIS FILE, because importing it RUNS it.
+ *
+ * The verdict below executes at module scope. Inside `npm test`, where
+ * `FORGE_RUN_LOCK` is set, an `import` of this module merely to read a constant
+ * would evaluate that verdict and could `process.exit(EXIT_LOCK_REFUSED)` out of
+ * the suite the instant a sibling story run took the lock — a guard killing the
+ * thing it exists to protect. Lane A hit exactly that while drafting T1 ruling
+ * 699 and moved the constant to `lock-guard.mjs` (pure, already imported
+ * everywhere) instead. Recorded here, next to the hazard, rather than in the
+ * file that worked around it.
+ */
 import { runLockVerdict, EXIT_LOCK_REFUSED } from './stories/lock-guard.mjs';
 
 const verdict = runLockVerdict();
