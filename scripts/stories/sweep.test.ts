@@ -25,8 +25,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import {
   applyFence,
@@ -37,8 +38,7 @@ import {
   fixturePathsFor,
   parseGitPorcelain,
   productFixturePathsFor,
-  sweepStoryResidue,
-} from './sweep.mjs';
+  sweepStoryResidue, restoreSweptCommitted,} from './sweep.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-'));
 const plant = (p) => {
@@ -549,4 +549,95 @@ test('AT-6.12-8 (positive control) with NO starters declared, every removal read
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * The leading sweep's missing paired restore — T1 ruling 594, half 2.
+ *
+ * `demos/stories/<id>/` is deleted before the bridge boots and rebuilt as beats
+ * pass. Any exit between those two points leaves the repo missing committed
+ * files, which `git status` then shows as deliberate deletions. Measured on
+ * three lanes; the motivating case is a run that **refused at preflight** —
+ * the runner doing exactly the right thing — and still lost three committed
+ * files.
+ */
+function repoFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'forge-sweep-restore-'));
+  const run = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  run('init', '-q');
+  run('config', 'user.email', 't@t');
+  run('config', 'user.name', 't');
+  mkdirSync(join(root, 'demos', 'stories', 'S10', 'frames'), { recursive: true });
+  writeFileSync(join(root, 'demos', 'stories', 'S10', 'story.json'), '{"beats":[]}');
+  for (const n of ['01', '02', '03']) writeFileSync(join(root, 'demos', 'stories', 'S10', 'frames', `${n}.png`), n);
+  run('add', '-A');
+  run('commit', '-qm', 'committed artifacts');
+  return { root, swept: [join(root, 'demos', 'stories', 'S10')] };
+}
+
+test('594(2) RED: an abort after the leading sweep leaves committed files deleted — they come back', () => {
+  const { root, swept } = repoFixture();
+  rmSync(join(root, 'demos', 'stories', 'S10'), { recursive: true, force: true });
+
+  const { restored, failed } = restoreSweptCommitted(root, swept);
+
+  assert.deepEqual(failed, []);
+  assert.equal(restored.length, 4, `all four committed paths return: ${restored.join(', ')}`);
+  assert.ok(existsSync(join(root, 'demos', 'stories', 'S10', 'story.json')));
+  assert.ok(existsSync(join(root, 'demos', 'stories', 'S10', 'frames', '03.png')));
+  assert.equal(
+    execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim(),
+    '',
+    'and the tree stops lying about what the repo contains',
+  );
+});
+
+test('594(2) POSITIVE CONTROL: a run that REGENERATED its artifacts keeps them', () => {
+  // The condition that makes this safe to run on every exit path. A finished
+  // run's artifacts legitimately differ from HEAD; restoring them would destroy
+  // the output the run exists to produce.
+  const { root, swept } = repoFixture();
+  writeFileSync(join(root, 'demos', 'stories', 'S10', 'story.json'), '{"beats":["fresh"]}');
+
+  const { restored } = restoreSweptCommitted(root, swept);
+
+  assert.deepEqual(restored, [], 'nothing was missing, so nothing is touched');
+  assert.equal(
+    readFileSync(join(root, 'demos', 'stories', 'S10', 'story.json'), 'utf8'),
+    '{"beats":["fresh"]}',
+    'the run\'s own output survives',
+  );
+});
+
+test('594(2) POSITIVE CONTROL: a PARTIAL run keeps what it made and recovers what it did not reach', () => {
+  // A's shape exactly: killed at beat 6, frames 02-05 modified and 06-11 plus
+  // `story.json` deleted. The two halves must be judged per path, not per run.
+  const { root, swept } = repoFixture();
+  writeFileSync(join(root, 'demos', 'stories', 'S10', 'frames', '01.png'), 'regenerated');
+  rmSync(join(root, 'demos', 'stories', 'S10', 'frames', '02.png'));
+  rmSync(join(root, 'demos', 'stories', 'S10', 'frames', '03.png'));
+
+  const { restored } = restoreSweptCommitted(root, swept);
+
+  assert.deepEqual(restored, ['demos/stories/S10/frames/02.png', 'demos/stories/S10/frames/03.png']);
+  assert.equal(
+    readFileSync(join(root, 'demos', 'stories', 'S10', 'frames', '01.png'), 'utf8'),
+    'regenerated',
+    'what the run DID reach is untouched',
+  );
+});
+
+test('594(2): an untracked artifact is not resurrected, and nothing outside the tree is reachable', () => {
+  const { root, swept } = repoFixture();
+  // S10's demo dir has never been committed on some heads; an untracked path
+  // that the sweep removed is simply gone, and that is correct.
+  mkdirSync(join(root, 'demos', 'stories', 'S11'), { recursive: true });
+  const untracked = [join(root, 'demos', 'stories', 'S11')];
+  rmSync(join(root, 'demos', 'stories', 'S11'), { recursive: true, force: true });
+  assert.deepEqual(restoreSweptCommitted(root, untracked).restored, []);
+
+  // A path outside the run's own worktree is refused before git is asked.
+  assert.deepEqual(restoreSweptCommitted(root, ['/etc']).restored, []);
+  assert.deepEqual(restoreSweptCommitted(root, [join(root, '..', 'elsewhere')]).restored, []);
+  assert.deepEqual(restoreSweptCommitted(root, swept).restored, []);
 });
