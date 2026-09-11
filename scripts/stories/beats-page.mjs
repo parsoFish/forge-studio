@@ -517,15 +517,17 @@ async function waitOffSession(page, handle, timeoutMs, stallDoor) {
   const runId = stallDoor === null ? null : await readRunId(page);
   for (;;) {
     if ((await page.locator(handle).count()) > 0) return null;
-    if (runId !== null) {
-      const idleMs = stallDoor(runId);
-      if (idleMs !== null && idleMs > STALL_CEILING_MS) {
+    if (stallDoor !== null) {
+      // Bead `forge-8vfn.7.5.8`. 580 read only the run the PAGE names; run 7's
+      // beat 7 pressed Plan from a page that names none, so nothing observed it
+      // and it sat all twenty minutes. The door now falls back to the newest
+      // dispatch created since this wait began, and reports WHICH of the two
+      // findings it is.
+      const stop = stallDoor(runId, startedAt);
+      if (stop !== null) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,
-          why:
-            `the run this page names (${runId}) has written nothing for ${Math.round(idleMs / 1000)}s, ` +
-            `past the product's own ${Math.round(STALL_CEILING_MS / 1000)}s stall ceiling, and ${handle} ` +
-            'never appeared. The declared bound would have been spent waiting on a run that had stopped.',
+          why: `${stop.reason}: ${stop.detail} ${handle} never appeared.`,
         });
       }
     }

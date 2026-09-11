@@ -25,7 +25,7 @@
  * fresh context per beat re-navigating with `page.goto`, which is exactly the
  * teleporting this runner exists to stop.
  */
-import { makeAgentProcProbe, makeOffSessionStallDoor } from './beats-agent-proc.mjs';
+import { makeAgentProcProbe, makeAgentChannelDoor } from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -313,7 +313,7 @@ async function runStory(story, uiUrl, startedMs) {
   // fifteen minutes on a run that had already stopped writing. Built ONCE from
   // ROOT, which is known here and nowhere else (§15.148), and it only ever ends
   // a wait EARLIER — the declared bound remains a hard maximum.
-  const stallDoor = makeOffSessionStallDoor(ROOT);
+  const stallDoor = makeAgentChannelDoor(ROOT);
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};

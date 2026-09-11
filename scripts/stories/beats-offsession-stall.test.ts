@@ -36,7 +36,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { DEFAULT_STALL_CEILING_MS } from '../../packages/sessions/bridge-studio-lifecycle.ts';
-import { STALL_CEILING_MS, runLogDir, runLogIdleMs, makeOffSessionStallDoor } from './beats-agent-proc.mjs';
+import {
+  STALL_CEILING_MS, runLogDir, runLogIdleMs, newestChannelSince, makeAgentChannelDoor,
+} from './beats-agent-proc.mjs';
 import { waitForHandleOrStall } from './beats-page.mjs';
 
 test('580: the runner uses the PRODUCT\'s ceiling — one number, bound by this test', () => {
@@ -93,16 +95,13 @@ test('580: the door resolves a page-supplied run id to its idle time', () => {
   mkdirSync(join(root, '_logs', runId), { recursive: true });
   writeFileSync(join(root, '_logs', runId, 'events.jsonl'), '{}');
 
-  const door = makeOffSessionStallDoor(root);
+  const door = makeAgentChannelDoor(root);
   assert.notEqual(door, null);
-  const idle = door(runId);
-  assert.ok(idle !== null && idle < 5_000, `a just-written log is not idle: ${idle}`);
-
-  // A run the page names but that has no log dir is not a stalled run.
-  assert.equal(door('_nothing-here'), null);
-  // And a root the runner does not have is no door at all, rather than a door
-  // that answers wrongly.
-  assert.equal(makeOffSessionStallDoor(''), null);
+  // A just-written channel is not stalled, and the door says nothing.
+  assert.equal(door(runId, Date.now()), null);
+  // A root the runner does not have is no door at all, rather than a door that
+  // answers wrongly.
+  assert.equal(makeAgentChannelDoor(''), null);
 });
 
 /**
@@ -125,19 +124,26 @@ function artifactPage({ runId, hasHandle = false }: { runId: string | null; hasH
 const HANDLE = '[data-action="open-reflect"]';
 const BOUND = 4_000;
 /** Shrunk so a test can cross it; the real one is bound to the product above. */
-const door = (idleMs: number | null) => () => idleMs;
+/**
+ * A stand-in for the real channel door. Its SHAPE is the contract under test:
+ * `(runId, sinceMs) => {reason, detail} | null`, where null means "nothing to
+ * report, keep waiting".
+ */
+const door = (stop: { reason: string; detail: string } | null) => () => stop;
+const QUIET = { reason: 'channel-quiet', detail: 'has written nothing for 200s, past the 180s stall ceiling.' };
+const NONE = { reason: 'no-channel', detail: 'no agent channel appeared in 200s.' };
 
 test('580 (RED before the fix): a run that has gone silent ends the wait early, not at the bound', async () => {
   // Beat 16's exact shape. Before this, the unscoped branch was a bare
   // `waitFor` and this spent every millisecond of the declared bound.
   const page = artifactPage({ runId: '_architect-2026-09-10T13-54-57-9eaf7fae' });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(STALL_CEILING_MS + 1));
+  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(QUIET));
   const took = Date.now() - began;
 
   assert.notEqual(stall, null, 'it must report a stall, not simply return');
   assert.ok(took < BOUND / 2, `it must end early, not at the bound — took ${took} ms of ${BOUND}`);
-  assert.match(stall!.why, /_architect-2026-09-10T13-54-57-9eaf7fae/, `it names the run: ${stall!.why}`);
+  assert.match(stall!.why, /channel-quiet/, `it names WHICH finding this is: ${stall!.why}`);
   assert.match(stall!.why, /stall ceiling/, stall!.why);
   assert.match(stall!.why, /open-reflect/, `and the handle that never came: ${stall!.why}`);
 });
@@ -148,28 +154,130 @@ test('580 (CONTROL): a run that IS writing keeps its full declared bound', async
   // door that fired here would kill beats that are progressing normally.
   const page = artifactPage({ runId: '_architect-live' });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(1_000));
+  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(null));
   const took = Date.now() - began;
 
   assert.equal(stall, null, 'a writing run is not a stalled one');
   assert.ok(took >= BOUND - 200, `it must spend the whole declared bound — took ${took} ms of ${BOUND}`);
 });
 
-test('580 (CONTROL): a page naming no run behaves exactly as before', async () => {
+test('7.5.8: a page naming NO run still gets a door — this is what 580 was missing', async () => {
+  // SUPERSEDES 580's control, deliberately. Under 580 this case had no door at
+  // all: `data-run` was the only channel, so a beat that pressed something from
+  // a page naming no run sat its whole bound. That is exactly what S10 run 7's
+  // beat 7 did — twenty minutes on `/projects/gitpulse`, which publishes no
+  // run — and the door now falls back to the newest dispatch created since the
+  // press, reporting `no-channel` when none ever appears.
   const page = artifactPage({ runId: null });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(STALL_CEILING_MS + 1));
+  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(NONE));
   const took = Date.now() - began;
 
-  assert.equal(stall, null, 'no run named means nothing to judge — never a stall verdict');
-  assert.ok(took >= BOUND - 200, `and the bound is still what governs — took ${took} ms`);
+  assert.notEqual(stall, null, 'a page naming no run is no longer un-doored');
+  assert.ok(took < BOUND / 2, `it must end early, not at the bound — took ${took} ms of ${BOUND}`);
+  assert.match(stall!.why, /no-channel/, `and say WHICH finding it is: ${stall!.why}`);
+  assert.match(stall!.why, /open-reflect/, stall!.why);
+});
+
+test('7.5.8 (CONTROL): no door at all is still today\'s behaviour', async () => {
+  // The runner without a ROOT — `makeAgentChannelDoor('')` returns null — must
+  // spend the declared bound exactly as before. A missing door is not a stall
+  // verdict.
+  const page = artifactPage({ runId: null });
+  const began = Date.now();
+  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, null);
+
+  assert.equal(stall, null);
+  assert.ok(Date.now() - began >= BOUND - 200, 'the bound still governs when there is nothing to observe');
 });
 
 test('580 (CONTROL): the handle appearing still wins, immediately', async () => {
   const page = artifactPage({ runId: '_architect-silent', hasHandle: true });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(STALL_CEILING_MS + 1));
+  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(QUIET));
 
   assert.equal(stall, null);
   assert.ok(Date.now() - began < 500, 'a present handle is checked before the door');
+});
+
+/**
+ * The two fixtures ruling 626 requires, driven through the REAL door against a
+ * REAL `_logs` tree rather than a stand-in.
+ *
+ * The stand-in above pins the WAIT's behaviour given a door's answer. These pin
+ * the DOOR's answer given a filesystem — and they are written this way because
+ * the last defect in this area was a hand-written fixture agreeing with its
+ * author: five green tests against a path shape the producer never emitted
+ * (#615). A fake door cannot tell you that `newestChannelSince` reads birth
+ * time, or that a dispatch dir is `_`-prefixed.
+ */
+function realDoor() {
+  const root = mkdtempSync(join(tmpdir(), 'forge-channel-'));
+  mkdirSync(join(root, '_logs'), { recursive: true });
+  return { root, logs: join(root, '_logs'), door: makeAgentChannelDoor(root)! };
+}
+
+test('626 (RED): nothing ever starts — run 7 beat 7\'s shape — is `no-channel` after the ceiling', () => {
+  // Beat 7 pressed Plan, the enqueue succeeded, and no scheduler claimed it:
+  // no dispatch dir was ever created. Twenty minutes of a funded run.
+  const { door } = realDoor();
+  const pressedAt = Date.now() - (STALL_CEILING_MS + 5_000);
+
+  const stop = door(null, pressedAt);
+  assert.notEqual(stop, null, 'past the ceiling with no channel, the wait must end');
+  assert.equal(stop!.reason, 'no-channel');
+  assert.match(stop!.detail, /never started|nothing under _logs/, stop!.detail);
+
+  // BEFORE the ceiling it says nothing — a dispatch is allowed to take a moment
+  // to create its directory, and this must not red a beat that is merely early.
+  assert.equal(door(null, Date.now() - 1_000), null);
+});
+
+test('626 (RED): a channel that goes quiet is `channel-quiet`, and a writing one is neither', () => {
+  const { logs, door } = realDoor();
+  const pressedAt = Date.now() - 60_000;
+  const dispatch = join(logs, '_architect-2026-09-11T00-00-00-abcd1234');
+  mkdirSync(dispatch, { recursive: true });
+  const events = join(dispatch, 'events.jsonl');
+  writeFileSync(events, '{}');
+
+  // Written just now: the agent is working, and the beat keeps its full bound.
+  assert.equal(door(null, pressedAt), null, 'a writing channel is not a stalled one');
+
+  // Now age it past the ceiling.
+  const old = (Date.now() - (STALL_CEILING_MS + 10_000)) / 1000;
+  utimesSync(events, old, old);
+  const stop = door(null, pressedAt);
+  assert.notEqual(stop, null);
+  assert.equal(stop!.reason, 'channel-quiet');
+  assert.match(stop!.detail, /_architect-2026-09-11T00-00-00-abcd1234/, `it names the channel: ${stop!.detail}`);
+});
+
+test('626: the fallback takes a dispatch born SINCE the press, never a bystander', () => {
+  // A pre-existing dir that happens to be written during the wait belongs to
+  // somebody else's run. Matching it would let another lane's activity hold
+  // this beat's bound open — or end it with a verdict about a channel this
+  // press never started.
+  const { logs } = realDoor();
+  const older = join(logs, '_agent-from-an-earlier-run');
+  mkdirSync(older, { recursive: true });
+  writeFileSync(join(older, 'events.jsonl'), '{}');
+
+  // A press AFTER that directory was born finds no channel of its own.
+  assert.equal(
+    newestChannelSince(logs, Date.now() + 1_000),
+    null,
+    "a dir born before the press is not this press's channel",
+  );
+  // And one before it does.
+  assert.equal(newestChannelSince(logs, Date.now() - 60_000), older);
+
+  // NOT ASSERTED HERE, deliberately: that the door then reports `no-channel`
+  // for this tree. That needs a dispatch born before a press which is ALSO
+  // further in the past than the stall ceiling, and a directory's birth time
+  // cannot be back-dated — `utimes` moves atime and mtime, never `birthtime`.
+  // Writing it anyway would mean weakening the filter to something a test can
+  // reach, which is how a fixture starts dictating the behaviour instead of
+  // checking it. The `no-channel` path is covered by the test above, on a tree
+  // with no bystander in it.
 });
