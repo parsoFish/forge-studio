@@ -71,7 +71,10 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
 
   const tally = phaseTally(run);
   const ceiling = flow.costCeilingUsd;
-  const pct = ceiling ? Math.min((run.costUsd / ceiling) * 100, 100) : 0;
+  // bead forge-ygys: no recorded cost is not a cost of zero, so it is not a
+  // 0 % bar either — an unmeasured run shows no fill rather than a full-width
+  // claim that it has spent nothing against its ceiling.
+  const pct = ceiling && run.costUsd !== null ? Math.min((run.costUsd / ceiling) * 100, 100) : 0;
   const fillClass = pct >= 90 ? ' crit' : pct >= 70 ? ' warn' : '';
   const elapsedStr = formatRunElapsed(run.startedAt, run.completedAt, Date.now());
 
@@ -98,7 +101,7 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
     <div
       className="fb-summary-strip"
       data-active-run={run.id}
-      data-run-cost-usd={run.costUsd.toFixed(4)}
+      {...(run.costUsd !== null ? { 'data-run-cost-usd': run.costUsd.toFixed(4) } : {})}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -113,7 +116,7 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         <SummaryKV
           label="Cost"
-          value={`$${run.costUsd.toFixed(2)}`}
+          value={run.costUsd === null ? 'unmeasured' : `$${run.costUsd.toFixed(2)}`}
           ember
         />
         <SummaryKV label="Elapsed" value={elapsedStr} final={!!run.completedAt} />
@@ -145,7 +148,7 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
                 color: 'var(--dim)',
               }}
             >
-              ${run.costUsd.toFixed(2)} of ${ceiling} ceiling
+              {run.costUsd === null ? `unmeasured of $${ceiling} ceiling` : `$${run.costUsd.toFixed(2)} of $${ceiling} ceiling`}
             </div>
             <div
               style={{

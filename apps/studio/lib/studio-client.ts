@@ -189,7 +189,7 @@ export type Run = {
    *  'triggered' is a real, producible origin since R2-08-F4; the narrower
    *  client type forced consumers to handle only two of three cases. */
   origin: 'architect' | 'human-directed' | 'triggered';
-  costUsd: number;
+  costUsd: number | null; // null = no cost recorded, never a fabricated 0 — forge-ygys, why: tests/integration/run-cost-null.test.ts
   startedAt?: string;
   /**
    * W7-A3 (flows-29): the real cycle-end instant, mirrored from
@@ -1057,7 +1057,7 @@ export function parseRun(raw: unknown): Run {
     initiative:    r.initiative    ?? '',
     status:        r.status        ?? 'planned',
     origin:        r.origin        ?? 'human-directed',
-    costUsd:       r.costUsd       ?? 0,
+    costUsd:       r.costUsd       ?? null,
     startedAt:     r.startedAt,
     // W7-A3 (flows-29): served since W6-RV-2, dropped here until now — the
     // declared-data-fails-open class the field-parity pin exists for.
