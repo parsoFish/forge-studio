@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
-import { lockHolders, lockWaiters, describeLockOccupants, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
+import { lockHolders, lockWaiters, lockOpeners, describeLockOccupants, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 
 const REPO = new URL('../..', import.meta.url).pathname;
 
@@ -57,10 +57,18 @@ function heldLock(): { path: string; release: () => void; unhold: () => void } {
   };
 }
 
-test('a holder is found by FD and named with its pid and cwd — never by matching a command string', () => {
+// RETITLED for 7.6.33 / T1 743. This test opens the lock file and never calls
+// `flock`, so the process it creates is OPEN-NOT-LOCKED — the third class D
+// measured (`( exec 9>T; sleep 3 ) &` gives `/proc/locks` zero rows while
+// `fuser` names the pid). It was asserted against `lockHolders` because before
+// tonight there was only one class and "has the descriptor" was all we could
+// see. It is `lockOpeners` now; the property it pins — found by FD, named with
+// pid and cwd, never by matching a command string — is unchanged and is still
+// the point.
+test('an OPEN-NOT-LOCKED process is found by FD and named with its pid and cwd — never by matching a command string', () => {
   const lock = heldLock();
   try {
-    const holders = lockHolders(lock.path);
+    const holders = lockOpeners(lock.path);
     const me = holders.find((h) => h.pid === String(process.pid));
     assert.ok(me, `this process holds ${lock.path} open, so it must be named — got ${JSON.stringify(holders)}`);
     assert.equal(me!.cwd, process.cwd(), 'the cwd comes from /proc/<pid>/cwd, which is what tells an operator WHICH tree');
@@ -74,6 +82,7 @@ test('an EXISTING lock nobody holds yields an empty list — a real answer about
   try {
     lock.unhold();
     assert.deepEqual(lockHolders(lock.path), [], 'the file is there and free: [] is the honest answer');
+    assert.deepEqual(lockOpeners(lock.path), [], 'and nobody has it merely open either');
   } finally {
     lock.release();
   }
