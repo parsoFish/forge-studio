@@ -613,12 +613,23 @@ test('679/684: NO counts file at all is the same named caveat, not a silent pass
  * tree that IS at X or later.
  */
 
-/** A ci.yml whose one step exits 75 — what the lock guard now does when refused. */
+/** A ci.yml whose one step exits 75 — what the lock guard now does when refused.
+ *
+ *  The step runs a FILE, not an inline `node -e`, and that is load-bearing: the
+ *  gate echoes `$cmd` verbatim onto the REFUSED line, so a command containing
+ *  the holder text would satisfy an assertion about the holder whether or not
+ *  the extraction worked at all. The first version of this fixture did exactly
+ *  that and its assertion was vacuous — it passed under a mutation that put the
+ *  extraction back to reading line 1. Keeping the message OUT of the command is
+ *  what makes the extracted reason the only place it can come from.
+ *
+ *  The banner lines matter too: npm writes `> forge@0.9.0 pretest` first in a
+ *  real log, and the guard's line is the fifth. */
 const REFUSING_CI = `jobs:
   build-and-test:
     steps:
       - name: Refused by the lock guard
-        run: node -e "console.error('[test-guard] refusing: a story run holds .run-lock — pid 1 (cwd /elsewhere)'); process.exit(75)"
+        run: node refuse.mjs
 `;
 
 /** A ci.yml whose one step genuinely fails, so the distinction can be shown to be one. */
@@ -752,6 +763,13 @@ test('693(ii): an unrecognised flag is still REFUSED, not silently ignored (bead
 test('699: a step REFUSED by the lock guard is not recorded as FAIL', () => {
   const { dir, head } = gitTreeWithHistory(REFUSING_CI);
   installedInPlace(dir);
+  writeFileSync(join(dir, 'refuse.mjs'), [
+    "console.error('> forge@0.9.0 pretest');",
+    "console.error('> node scripts/test-guard.mjs');",
+    "console.error('');",
+    "console.error('[test-guard] refusing to start the test suite: a story run holds .run-lock — pid 1 (cwd /elsewhere)');",
+    'process.exit(75);',
+  ].join('\n'));
   const camp = campWithPin(mkdtempSync(join(tmpdir(), 'refused-')), dir, `paths=1 head=${head}\n`);
 
   const out = gate(dir, camp).out;
@@ -759,9 +777,10 @@ test('699: a step REFUSED by the lock guard is not recorded as FAIL', () => {
   // COLUMN 0, per 699's addendum: the rc is necessary and not sufficient,
   // because every merge precondition reads the LOG and a refused gate still
   // prints a pin block. `^REFUSED ` has to be as greppable as `^FAIL `.
-  assert.match(out, /^REFUSED {2}node -e/m, 'a refusal must not wear the same word as a failure, and must be findable at column 0');
-  assert.doesNotMatch(out, /^FAIL {2}node -e/m, 'and must not be counted as one');
+  assert.match(out, /^REFUSED {2}node refuse\.mjs/m, 'a refusal must not wear the same word as a failure, and must be findable at column 0');
+  assert.doesNotMatch(out, /^FAIL {2}node refuse\.mjs/m, 'and must not be counted as one');
   assert.match(out, /holds \.run-lock — pid 1 \(cwd \/elsewhere\)/, 'the holder travels onto the step line, so no reader opens the log to learn nothing ran');
+  assert.match(out, /^REFUSED {2}node refuse\.mjs {2}\(\d+s\) — refusing to start/m, 'the reason is EXTRACTED onto the line — found by name, since npm\'s banner is line 1 and the guard\'s line is the fifth');
   // `status` is not asserted here for the reason given above the pin tests: a
   // synthetic tree cannot exit 0, `prod-lines.mjs` refuses it as "not a forge
   // checkout", and a real failure outranks a refusal by design — so the rc
