@@ -128,6 +128,21 @@ function candidateRoots(id: string): readonly string[] {
   return ['SKILL.md', `skills/${id}/SKILL.md`, `${id}/SKILL.md`];
 }
 
+/** The repo's whole tree at its default branch, for a caller that wants to see
+ *  what a repository PUBLISHES rather than pull one package out of it
+ *  (`community-hub-index.ts`). Exported so the hub indexer reuses this seam
+ *  rather than opening a second one — the allowlist, the redirect policy, the
+ *  timeout and the credential all live here and nowhere else. */
+export async function githubRepoTree(
+  ctx: RequestCtx,
+  owner: string,
+  repo: string,
+): Promise<{ entries: readonly { path: string }[]; truncated: boolean; ref: string }> {
+  const branch = await fetchDefaultBranch(ctx, owner, repo);
+  const { entries, truncated, sha } = await fetchTree(ctx, owner, repo, branch);
+  return { entries, truncated, ref: sha };
+}
+
 async function fetchDefaultBranch(ctx: RequestCtx, owner: string, repo: string): Promise<string> {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   const res = await fetchAllowedApiUrl(ctx, url, GITHUB_API_HEADERS(requireToken(ctx)));

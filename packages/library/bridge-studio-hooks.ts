@@ -169,8 +169,18 @@ function toClientListEntry(forgeRoot: string, entry: ReturnType<typeof listHookL
       error: sanitizeError(err),
     };
   }
+  return { ok: true, ...hookWireFields(entry, runState, ledgerEntry, declinedEntry) };
+}
+
+/** The hook's wire projection, in ONE place — written out twice before, twelve
+ *  identical fields each. Costs 5 lines net: the point is the drift (608). */
+function hookWireFields(
+  entry: ReturnType<typeof listHookLibrary>[number],
+  runState: ReturnType<typeof hookRunState>,
+  ledgerEntry: Parameters<typeof computeTrust>[1],
+  declinedEntry: Parameters<typeof computeTrust>[2],
+): Record<string, unknown> {
   return {
-    ok: true,
     id: entry.id,
     name: entry.name,
     description: entry.description,
@@ -761,17 +771,7 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
 
       sendJson(res, 200, {
         ok: true,
-        id: entry.id,
-        name: entry.name,
-        description: entry.description,
-        on: entry.on,
-        ...(entry.matcher !== undefined ? { matcher: entry.matcher } : {}),
-        permissions: entry.permissions,
-        carriedBy: entry.carriedBy,
-        carriedByDerivation: entry.carriedByDerivation,
-        scanVerdict: runState.verdict,
-        trust: computeTrust(runState, ledgerEntry, declinedEntry),
-        runnable: runState.runnable,
+        ...hookWireFields(entry, runState, ledgerEntry, declinedEntry),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
         // Present iff a live ledger entry exists; never fabricated.
