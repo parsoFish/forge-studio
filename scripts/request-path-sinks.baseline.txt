@@ -258,7 +258,7 @@ packages/flows/phases/wi-spec-compile.ts writeFileSync 2
 packages/flows/planned-initiatives.ts readFileSync 1
 packages/flows/pr-branch-sync.ts execFileSync 21
 packages/flows/pr-branch-sync.ts existsSync 2
-packages/flows/pr.ts execFileSync 5
+packages/flows/pr.ts execFileSync 2
 packages/flows/pr.ts existsSync 4
 packages/flows/pr.ts mkdirSync 1
 packages/flows/pr.ts readdirSync 1
@@ -612,10 +612,10 @@ packages/sessions/kinds/architect-session.ts mkdirSync 1
 packages/sessions/kinds/architect-session.ts readdirSync 1
 packages/sessions/kinds/architect-session.ts readFileSync 1
 packages/sessions/kinds/architect-session.ts writeFileSync 1
-packages/sessions/kinds/architect-steps.ts existsSync 1
 packages/sessions/kinds/architect-steps.ts mkdirSync 1
+packages/sessions/kinds/architect-steps.ts readdirSync 1
 packages/sessions/kinds/architect-steps.ts readFileSync 1
-packages/sessions/kinds/architect-steps.ts rmSync 1
+packages/sessions/kinds/architect-steps.ts rmSync 2
 packages/sessions/kinds/architect-steps.ts sessionPaths@caller 1
 packages/sessions/kinds/architect-steps.ts writeFileSync 1
 packages/sessions/kinds/architect.ts existsSync 2

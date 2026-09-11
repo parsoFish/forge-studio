@@ -49,6 +49,7 @@ import {
   mintAndPersistManifestCycleId,
 } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
+import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
 
 import { architectManifestPorts, parseManifestPort } from '../../session-kind-deps.ts';
 
@@ -62,13 +63,14 @@ test('every architect manifest port is bound to the real flows function', () => 
     'mintAndPersistManifestCycleId must be the flows function itself',
   );
   assert.equal(architectManifestPorts.promoteManifests, promoteManifests, 'promoteManifests must be the flows function itself');
+  assert.equal(architectManifestPorts.isCanonicalInitiativeId, isCanonicalInitiativeId, 'isCanonicalInitiativeId must be the QUEUE\'s own predicate — a mint that answers differently from the guard is how the two drift apart (7.6.17)');
 });
 
 test('the port object is fully populated — no member declared and left undefined', () => {
   const keys = Object.keys(architectManifestPorts).sort();
   assert.deepEqual(
     keys,
-    ['mintAndPersistManifestCycleId', 'parseManifest', 'promoteManifests', 'serializeManifest'],
+    ['isCanonicalInitiativeId', 'mintAndPersistManifestCycleId', 'parseManifest', 'promoteManifests', 'serializeManifest'],
     'a port silently missing from the bound object would make the kind refuse at run time for a reason no test named',
   );
   for (const k of keys) {
