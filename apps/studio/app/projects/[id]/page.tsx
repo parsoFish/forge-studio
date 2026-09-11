@@ -27,6 +27,7 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { RoadmapEmpty, UnparseableNotice } from '@/components/studio/UnparseableNotice';
 import { PageLoadError } from '@/components/PageLoadError';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
@@ -1178,43 +1179,21 @@ function RoadmapView({
 
   if (!roadmap) {
     return (
-      <div
-        data-section="project-roadmap"
-        data-project-id={projectId}
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
-      >
+      <RoadmapEmpty projectId={projectId}>
         No roadmap data yet — plan with the architect to generate initiatives.
         <ProjectArchitectEntry projectId={projectId} />
-      </div>
+      </RoadmapEmpty>
     );
   }
 
   if (initiatives.length === 0) {
     return (
-      <div
-        data-section="project-roadmap"
-        data-project-id={projectId}
-        data-dep-count="0"
-        data-unparseable-count={String(roadmap.unparseable?.length ?? 0)}
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
-      >
-        {/* `forge-8vfn.7.6.23`: "no initiatives" and "the manifests would not
-            parse" are different problems with different fixes, and this surface
-            used to report the first when the second was true. The parser's own
-            message travels, so the operator learns WHICH field. */}
-        {(roadmap.unparseable?.length ?? 0) > 0 ? (
-          <span data-component="roadmap-unparseable">
-            {roadmap.unparseable!.length} manifest{roadmap.unparseable!.length === 1 ? '' : 's'} failed to
-            parse — {roadmap.unparseable![0]!.message}
-          </span>
-        ) : (
-          'No initiatives found for this project.'
-        )}
-        {/* W6-SW-3 (sweep C2#2): the sibling !roadmap branch above already
-            renders this CTA — a roadmap that resolved with zero initiatives
-            is just as much a dead end without it. */}
+      <RoadmapEmpty projectId={projectId} depCount="0" unparseable={roadmap.unparseable}>
+        {(roadmap.unparseable?.length ?? 0) === 0 && 'No initiatives found for this project.'}
+        {/* W6-SW-3: the sibling branch above renders this CTA; a roadmap that
+            resolved with zero initiatives is just as much a dead end without it. */}
         <ProjectArchitectEntry projectId={projectId} />
-      </div>
+      </RoadmapEmpty>
     );
   }
 
@@ -1235,20 +1214,7 @@ function RoadmapView({
       data-unparseable-count={String(roadmap.unparseable?.length ?? 0)}
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
-      {/* `forge-8vfn.7.6.23`: a project can have a rendering canvas AND a
-          manifest the parser refused. The empty state's message only reaches
-          the all-empty case, so the count rides on the section in BOTH branches
-          and the banner below covers the populated one. */}
-      {(roadmap.unparseable?.length ?? 0) > 0 && (
-        <div
-          data-component="roadmap-unparseable"
-          style={{ background: 'var(--panel)', border: '1px solid var(--ember, #9e6a03)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 12, color: 'var(--ember, #9e6a03)' }}
-        >
-          {roadmap.unparseable!.length} manifest{roadmap.unparseable!.length === 1 ? '' : 's'} in this
-          project&apos;s queue failed to parse and {roadmap.unparseable!.length === 1 ? 'is' : 'are'} not
-          shown — {roadmap.unparseable![0]!.message}
-        </div>
-      )}
+      <UnparseableNotice items={roadmap.unparseable} />
       {/* W7-A3 (projects-16 / flows-23): every Plan / Start development
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
