@@ -445,12 +445,12 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  * first-class phase-table source.
  */
 export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
-  // W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal reserved
-  // terminal phase, checked FIRST for every kind: written only by the
-  // generic cancel route (packages/sessions/bridge-studio-lifecycle.ts), never by any
-  // runner, and deliberately absent from every per-kind table (see
-  // CANCELLED_PHASE's own doc comment, apps/forge/bridge-studio.ts).
-  if (phase === CANCELLED_PHASE) return true;
+  // TWO universal reserved terminal phases, checked FIRST for every kind: one
+  // shared writer produces each for ALL kinds, so neither is a per-kind row a
+  // table can be said to have forgotten. `cancelled` — the generic cancel route
+  // (W7-A2, ADR-043 §1). `failed` — writeSessionTerminalPhase (agent-run.ts:249
+  // /:381; 7.3.3: only onboarding listed it, so six kinds derived `working`).
+  if (phase === CANCELLED_PHASE || phase === 'failed') return true;
   const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;
   if (phases !== undefined) {
     return phases.some((p) => p.step === 'terminal' && p.phase === phase);
