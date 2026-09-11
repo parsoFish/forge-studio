@@ -220,6 +220,30 @@ if [ -z "$CAMP" ]; then
 elif [ ! -d "$CAMP/gate-manifests" ]; then
   echo "SKIP $CAMP has no gate-manifests/ — no manifests to check"
 else
+  # WHICH MANIFESTS THIS VERDICT IS ABOUT (`forge-8vfn.7.6.32`, T1 738).
+  # Measured 2026-09-11: M6-C amended `M6-C.sha256` fourteen seconds after a
+  # lane's `pin-precheck` read this block, and the precheck reported two
+  # undeclared failures that re-derived `OK` on a direct check seconds later.
+  # Neither instrument was wrong; each was correct about a different instant.
+  # `pin-precheck` already guards the TREE moving between here and the merge —
+  # nothing carried the identity of the MANIFESTS forward, so its `:145`
+  # diagnosis blamed a tree that had not moved.
+  #
+  # The asymmetry is the reason this matters: that instance printed a loud false
+  # REFUSAL. An amendment that ADDED rows instead of rehashing them would have
+  # produced `PIN_PRECHECK_OK` against a manifest already disagreeing with the
+  # tree, and the merge would have gone through on it.
+  #
+  # SCOPE: `*.sha256` AND `*.counts`, and the second half is not obvious. The
+  # verdict is computed from `.sha256`, so a first draft covered only that —
+  # but `pin-precheck.sh:107` reads `${m%.sha256}.counts` for `head=`, and
+  # `:129` uses `head=` to choose rc 4 (unreadable across skew, proceeds loudly)
+  # over rc 3 (undeclared drift, blocks). Opposite outcomes at the merge slot.
+  # `.globs` and `amend-*.md` stay out, measured: nothing in this block or in
+  # `pin-precheck` reads them (grep, both files, zero hits). If this block ever
+  # grows a `pin-glob-check` call, `.globs` reaches the log and this line must
+  # widen with it.
+  echo "PIN_MANIFESTS=$(sha256sum "$CAMP"/gate-manifests/*.sha256 "$CAMP"/gate-manifests/*.counts 2>/dev/null | sha256sum | cut -c1-16)"
   # SKEW MAKES A **FAILED** COUNT AMBIGUOUS -- IT DOES NOT INVALIDATE A CLEAN ONE
   # (T1 ruling 684, correcting this block's first draft; §15.381 credited to M6-C).
   # `sha256sum -c` verifies HASHES, so `0 FAILED` from a tree AHEAD of the pin is a
