@@ -693,23 +693,15 @@ async function runOne(
         // poll — no inFlight slot churn. A fresh `forge serve` after the
         // operator fixes the project clears the set and re-checks.
         moveTo(filename, 'pending', paths);
-        // 7.6.18 (658): the reason goes to the MANIFEST, which the roadmap and
-        // start-work view read — a refusal living only in `serve.log` is a state
-        // the daemon knows and the operator cannot see (run 9: 20 min of
-        // `unplanned`). Clause NAMES only: the prose carries colons that would
-        // break the frontmatter `annotateManifest` writes raw.
+        // 7.6.18: the surfaces read the MANIFEST, not this log. Clause NAMES only — the prose has colons, and `annotateManifest` writes raw.
         annotateManifest(join(paths.pending, filename), { claim_blocked_clauses: claimCheck.blockedClauses ?? '' });
-        console.warn(
-          `[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`,
-        );
+        console.warn(`[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`);
         return; // runOne done — isNonTerminalRefused() guards future polls
       }
     }
 
     // Record the flow version at claim time (edit-lock seam, ADR-028 §6/M3-6).
     // If the on-disk flow version changes mid-run the runner warns (M4 will enforce).
-    // 7.6.18: a successful claim CLEARS any blocker a previous tick wrote — one
-    // that never clears is the same lie as one never written.
     annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion), claim_blocked_clauses: '' });
 
     const branch = `forge/${manifest.initiativeId}`;
