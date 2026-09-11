@@ -48,6 +48,7 @@ import {
   removePaths,
   sweepProductFixtures,
   sweepStoryResidue,
+  restoreSweptCommitted,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
 import {
@@ -203,10 +204,14 @@ async function main() {
 
   let bridgeProc = null;
   let exitCode = 0;
+  // What the leading sweep removed, so the teardown can put back anything the
+  // run never regenerated (T1 ruling 594, half 2).
+  const sweptPaths = [];
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
       const { removed, failed } = sweepStoryResidue(s.id, ROOT);
+      sweptPaths.push(...removed);
       for (const p of removed) console.log(`[stories] leading sweep removed ${p}`);
       for (const f of failed) console.warn(`[stories] leading sweep could not remove ${f.path}: ${f.error}`);
     }
@@ -244,6 +249,17 @@ async function main() {
       exitCode = (await runStory(story, uiUrl, startedMs)) || exitCode;
     }
   } finally {
+    // THE SWEEP'S PAIRED RESTORE. `demos/stories/<id>/` was deleted before the
+    // bridge booted; anything the run never regenerated is still missing, and
+    // `git status` shows it as a deliberate deletion. The motivating case is not
+    // a crash — a run that REFUSED at preflight against a foreign bridge, the
+    // runner doing exactly the right thing, still left three committed files
+    // deleted. Only paths git tracks AND that are absent right now are touched,
+    // so a finished run's own output is never destroyed by its own teardown.
+    const put = restoreSweptCommitted(ROOT, sweptPaths);
+    for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);
+    for (const f of put.failed) console.warn(`[stories] could not restore ${f.path}: ${f.error}`);
+
     // The abort backstop. `runStory` reaps into each story's own verdict
     // record; this catches the paths that never reach one — a throw, a
     // refusal after the bridge booted, a Ctrl-C between stories. Idempotent:
