@@ -19,7 +19,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 import { detectProjectLanguage } from './gate-recipes.ts';
-import { projectBrainDir, rootManagesProject, rootMismatchReason } from '@forge/kernel';
+import { projectBrainDir, rootManagesProject, rootMismatchReason, emitGroundFileChanges } from '@forge/kernel';
 import { runPreflight, SCRATCH_PATHS, BUILD_ARTIFACT_HINTS, type ClauseId, type ClauseResult } from './preflight.ts';
 
 export type PreflightAutoFixResult = {
@@ -82,17 +82,18 @@ export function applyPreflightAutoFixes(input: {
 
 // --- fixers ---------------------------------------------------------------
 
-function fixScratchHygiene({ projectDir }: FixContext): FixOutcome {
-  return appendGitignore(projectDir, SCRATCH_PATHS, 'forge scratch');
+function fixScratchHygiene(ctx: FixContext): FixOutcome {
+  return appendGitignore(ctx, SCRATCH_PATHS, 'forge scratch');
 }
 
-function fixBuildArtifacts({ projectDir }: FixContext): FixOutcome {
+function fixBuildArtifacts(ctx: FixContext): FixOutcome {
+  const { projectDir } = ctx;
   const lang = detectProjectLanguage(projectDir);
   const hints = BUILD_ARTIFACT_HINTS[lang];
   if (lang === 'unknown' || hints.length === 0) {
     return { ok: false, detail: 'unknown project language — no build-output globs to ignore' };
   }
-  return appendGitignore(projectDir, [...hints], `${lang} build outputs`);
+  return appendGitignore(ctx, [...hints], `${lang} build outputs`);
 }
 
 function fixArchContext({ projectDir, forgeRoot, projectName }: FixContext): FixOutcome {
@@ -126,19 +127,40 @@ function fixArchContext({ projectDir, forgeRoot, projectName }: FixContext): Fix
 
 // --- helpers --------------------------------------------------------------
 
-/** Append any of `entries` not already present in `<dir>/.gitignore` (idempotent). */
-function appendGitignore(dir: string, entries: readonly string[], label: string): FixOutcome {
-  const giPath = join(dir, '.gitignore');
-  const existing = existsSync(giPath) ? readFileSync(giPath, 'utf8') : '';
+/** Append any of `entries` not already present in `<dir>/.gitignore` (idempotent).
+ *
+ *  `forge-qm4d`'s SEVENTH WRITER (T1 ruling 702). S1 run 6 ended with exactly one
+ *  undeclared path — `UNDECLARED M .gitignore` — written here. The onboard
+ *  scaffold's emission could never have covered it: that one reports the list it
+ *  RETURNS, the paths it created, and every scaffold write site is
+ *  `existsSync`-guarded. A ground that already has a `.gitignore` is skipped
+ *  there and APPENDED to here, so **a bridge write that modifies an existing
+ *  file cannot appear in a created-list by construction**.
+ *
+ *  The op distinguishes the two, because "forge touched this file" does not tell
+ *  an operator whether forge brought it into existence. */
+function appendGitignore(ctx: FixContext, entries: readonly string[], label: string): FixOutcome {
+  const giPath = join(ctx.projectDir, '.gitignore');
+  const existed = existsSync(giPath);
+  const existing = existed ? readFileSync(giPath, 'utf8') : '';
   const present = new Set(
     existing.split('\n').map((l) => l.trim()).filter(Boolean),
   );
   const missing = entries.filter((e) => !present.has(e));
+  // Nothing changed, so nothing is claimed — the scaffold half learned the same
+  // rule: an idempotent re-run is not a write.
   if (missing.length === 0) return { ok: true, detail: `${label}: already covered in .gitignore` };
 
   const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
   const block = `${prefix}# ${label} (forge preflight auto-fix)\n${missing.join('\n')}\n`;
   writeFileSync(giPath, existing + block);
+  emitGroundFileChanges({
+    forgeRoot: ctx.forgeRoot,
+    cause: `forge preflight auto-fix (${label})`,
+    projectRoot: ctx.projectDir,
+    relPaths: ['.gitignore'],
+    op: existed ? 'modify' : 'write',
+  });
   return { ok: true, detail: `${label}: added ${missing.join(', ')} to .gitignore` };
 }
 
