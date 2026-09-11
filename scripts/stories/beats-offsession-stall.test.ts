@@ -122,7 +122,12 @@ function artifactPage({ runId, hasHandle = false }: { runId: string | null; hasH
 }
 
 const HANDLE = '[data-action="open-reflect"]';
-const BOUND = 4_000;
+// Over 664(i)'s gate (2 x the 180 s ceiling), because a bound at or under it is
+// deliberately NOT doored. Nothing waits this long: every doored test below ends
+// at the door on its first poll; the bound is here to clear the gate, not to be
+// spent. The two controls that DO spend a bound use `SHORT` instead.
+const BOUND = 2 * STALL_CEILING_MS + 10_000;
+const SHORT = 4_000;
 /** Shrunk so a test can cross it; the real one is bound to the product above. */
 /**
  * A stand-in for the real channel door. Its SHAPE is the contract under test:
@@ -154,11 +159,11 @@ test('580 (CONTROL): a run that IS writing keeps its full declared bound', async
   // door that fired here would kill beats that are progressing normally.
   const page = artifactPage({ runId: '_architect-live' });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, door(null));
+  const stall = await waitForHandleOrStall(page as never, HANDLE, SHORT, null, null, door(null));
   const took = Date.now() - began;
 
   assert.equal(stall, null, 'a writing run is not a stalled one');
-  assert.ok(took >= BOUND - 200, `it must spend the whole declared bound — took ${took} ms of ${BOUND}`);
+  assert.ok(took >= SHORT - 200, `it must spend the whole declared bound — took ${took} ms of ${SHORT}`);
 });
 
 test('7.5.8: a page naming NO run still gets a door — this is what 580 was missing', async () => {
@@ -185,10 +190,10 @@ test('7.5.8 (CONTROL): no door at all is still today\'s behaviour', async () => 
   // verdict.
   const page = artifactPage({ runId: null });
   const began = Date.now();
-  const stall = await waitForHandleOrStall(page as never, HANDLE, BOUND, null, null, null);
+  const stall = await waitForHandleOrStall(page as never, HANDLE, SHORT, null, null, null);
 
   assert.equal(stall, null);
-  assert.ok(Date.now() - began >= BOUND - 200, 'the bound still governs when there is nothing to observe');
+  assert.ok(Date.now() - began >= SHORT - 200, 'the bound still governs when there is nothing to observe');
 });
 
 test('580 (CONTROL): the handle appearing still wins, immediately', async () => {
@@ -347,7 +352,7 @@ test('640 (RED before the fix): the CONSEQUENCE wait consults the door — beat 
 
   const began = Date.now();
   const stall = await waitForConsequence(
-    planPage() as never, PLAN_BEAT, 20_000, null, null, null,
+    planPage() as never, PLAN_BEAT, 2 * STALL_CEILING_MS + 10_000, null, null, null,
     // The door as the runner builds it, given the press time this beat began at.
     (runId: string | null) => door(runId, pressedAt),
   );
@@ -402,10 +407,66 @@ test('640 REGRESSION: a SESSION beat is never doored by the channel — lane A\'
   const consequenceDoor = src.slice(src.indexOf('export async function waitForConsequence'));
   assert.match(
     consequenceDoor,
-    /if \(stallDoor !== null && sessionScope === null\) \{/,
+    /if \(stallDoor !== null && sessionScope === null && timeoutMs > 2 \* STALL_CEILING_MS\) \{/,
     'the consequence wait must consult the channel door only when there is no session to ask about',
   );
   // And the pre-act wait reaches it only through `waitOffSession`, which is
   // already unreachable for a session beat.
   assert.match(src, /if \(sessionScope === null\) return waitOffSession\(/, 'the handle wait stays scoped as it was');
+});
+
+test('664(i): the door is NEVER CONSULTED when it would consume most of the bound', async () => {
+  // Lane A's S1 beat 9: a 200 s bound against a 180 s ceiling leaves the beat
+  // twenty seconds of its own patience. A beat that asked for 200 s has SAID it
+  // expects to wait; the door firing there is the verdict, not an early exit.
+  //
+  // Asserted by giving the wait a door that THROWS if it is called, and a
+  // handle that arrives quickly. The first draft of this test waited the whole
+  // 360 s bound to prove the same thing and took six minutes of wall clock —
+  // a test that burns the bound to prove the bound is not burned.
+  const page = artifactPage({ runId: null, hasHandle: true });
+  const exploding = () => { throw new Error('the door must not be consulted on a short bound'); };
+
+  const stall = await waitForHandleOrStall(
+    page as never, HANDLE, 2 * STALL_CEILING_MS, null, null, exploding as never,
+  );
+
+  assert.equal(stall, null, 'the handle arrived and the wait ended on it');
+});
+
+test('664(i): a bound comfortably over twice the ceiling IS still doored', async () => {
+  // The control: the rule must not disable the door generally. Run 9's beat had
+  // a 20-minute bound and the door saved seventeen minutes of it.
+  const page = artifactPage({ runId: null });
+  const began = Date.now();
+  const stall = await waitForHandleOrStall(page as never, HANDLE, 2 * STALL_CEILING_MS + 1, null, null, door(NONE));
+
+  assert.notEqual(stall, null, 'a long bound keeps its door');
+  assert.ok(Date.now() - began < 5_000, 'and ends at the door rather than the bound');
+});
+
+test('664(ii): the door states what it scanned, so an off-session red is decidable', () => {
+  // S1 beat 9 reded `no-channel` with no probe beside it and nobody could tell
+  // whether the door was right: `makeAgentProcProbe` returns null for every
+  // non-session route, so an off-session beat is doored by evidence it never
+  // prints. Beat 6's false red was provable only because its session path
+  // printed 1768 samples.
+  //
+  // Staged with an EMPTY `_logs`, which is the state a press that dispatched
+  // nothing actually produces. The other branch — "newest dir born N seconds
+  // BEFORE this press" — needs a directory born before a press that is itself
+  // older than the ceiling, and birth time cannot be back-dated (`utimes` moves
+  // atime and mtime only). That is the third time this fixture limit has caught
+  // me in this file; it is recorded here rather than worked around, because the
+  // alternative is weakening the filter to something a test can reach.
+  const { door: realDoorFn } = realDoor();
+
+  assert.equal(realDoorFn(null, Date.now() - 1_000), null, 'before the ceiling it says nothing');
+
+  const past = realDoorFn(null, Date.now() - (STALL_CEILING_MS + 5_000));
+  assert.notEqual(past, null);
+  assert.equal(past!.reason, 'no-channel');
+  assert.match(past!.detail, /Scanned /, `it must state its evidence: ${past!.detail}`);
+  assert.match(past!.detail, /0 dispatch dir\(s\)/, past!.detail);
+  assert.match(past!.detail, /newest none/, past!.detail);
 });
