@@ -250,6 +250,10 @@ function CommunityBrowserInner() {
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
   // 608(i): the region states the IN-FLIGHT refresh too, not only its outcome.
   const refreshView = refreshRegionView(refreshResult, { refreshing, postWriteReloadFailed });
+  // Only a settled, successful pass has proposals; an in-flight or refused one
+  // has nothing to show, and a stale list from the previous pass would be the
+  // same lie the in-flight state exists to refuse.
+  const discovered = !refreshing && refreshResult?.state === 'ok' ? refreshResult.discovered : [];
 
   // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
   // (every failure — transport, dry-bridge, a typed refusal, a bare 500 — is
@@ -368,6 +372,38 @@ function CommunityBrowserInner() {
             <div style={{ color: 'var(--text)' }}>{refreshView.headline}</div>
             {refreshView.detail !== null && (
               <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{refreshView.detail}</div>
+            )}
+
+            {/* M6-D / rulings 478 + 616 — what the declared hubs publish that
+                this registry does not carry. PROPOSALS: each row links to the
+                add-row door with its id and upstream prefilled, and that door
+                stays the ONLY write path. forge does not crawl on its own
+                (`hubs.yaml`'s D10) and a discovery is a suggestion, never a
+                change — nothing here writes the registry.
+                The `sourceUrl` shown is the one the INSTALLER will fetch from,
+                not a decoration: a discovered row is installable by
+                construction (`community-hub-index.ts`). */}
+            {discovered.length > 0 && (
+              <div data-component="discovered-rows" data-discovered-count={discovered.length} style={{ marginTop: 10 }}>
+                <div style={{ color: 'var(--text)' }}>
+                  {discovered.length} row(s) the declared sources publish that this registry does not carry.
+                </div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                  {discovered.map((d) => (
+                    <li key={`${d.sourceUrl} ${d.id}`} data-discovered-id={d.id} data-discovered-source={d.sourceUrl} data-discovered-path={d.path}>
+                      <code style={{ fontSize: 11.5 }}>{d.id}</code>{' '}
+                      <span style={{ color: 'var(--faint)' }}>from {d.sourceUrl} ({d.path})</span>{' '}
+                      <Link
+                        href={`/community/new?id=${encodeURIComponent(d.id)}&sourceUrl=${encodeURIComponent(d.sourceUrl)}`}
+                        data-action="add-discovered-item"
+                        data-discovered-id={d.id}
+                      >
+                        Add
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
         )}

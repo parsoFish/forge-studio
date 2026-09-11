@@ -91,10 +91,20 @@ function toInput(form: FormState): RegistryItemInput {
 
 function RegistryItemFormInner(): JSX.Element {
   const router = useRouter();
-  const editId = useSearchParams().get('edit');
+  const params = useSearchParams();
+  const editId = params.get('edit');
   const editing = editId !== null && editId !== '';
 
-  const [form, setForm] = useState<FormState>(EMPTY);
+  // M6-D / ruling 616 — a PROPOSAL arrives prefilled. `/community` renders the
+  // rows a declared hub publishes that this registry lacks, and each links here
+  // with its id and upstream already filled in. The operator still reviews and
+  // still submits: this seeds a form, it does not write a row, so the add-row
+  // door stays the only write path (D10) and a discovery stays a suggestion.
+  // Only for a NEW row — an `?edit=` load fetches the real record and must not
+  // be second-guessed by a query string.
+  const [form, setForm] = useState<FormState>(() =>
+    editing ? EMPTY : { ...EMPTY, id: params.get('id') ?? '', sourceUrl: params.get('sourceUrl') ?? '' },
+  );
   const [loaded, setLoaded] = useState(!editing);
   // W8-B5 (community-30): the load's OUTCOME, not just an error string. A
   // real 404 renders the shared NotFound; an unreachable/erroring bridge

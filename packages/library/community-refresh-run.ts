@@ -78,6 +78,8 @@ import {
   type RequestCtx,
 } from './studio/community-refresh-api.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from './studio/community-registry.ts';
+import { listCommunityHubs } from './studio/community-index.ts';
+import { indexGithubHub, type DiscoveredItem } from './studio/community-hub-index.ts';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
@@ -126,6 +128,12 @@ export type CommunityRefreshRunResult =
        *  are carried forward byte-for-byte) and reports the failures. Callers
        *  must treat a non-empty `errors` as a failed run — the CLI exits 1. */
       errors: readonly CommunityRefreshFailure[];
+      /** M6-D / ruling 478 — rows the DECLARED hubs publish that this registry
+       *  does not carry. PROPOSALS, never writes: the operator adds one through
+       *  the CRUD door they already use, so D10's "forge does not crawl on its
+       *  own" survives — a discovery is a suggestion, not a change. Empty when
+       *  every hub is already fully indexed, unreachable, or not GitHub-shaped. */
+      discovered: readonly DiscoveredItem[];
     }
   | {
       ok: false;
@@ -341,6 +349,42 @@ export type RunCommunityRefreshOptions = {
  * back IF anything was actually verified. Never throws for an expected
  * failure — every one of them is a typed `{ok:false, reason}`.
  */
+/**
+ * Ask every DECLARED hub what it publishes, and return what this registry is
+ * missing. Ruling 478, scoped by 608 to GitHub-shaped hubs.
+ *
+ * NEVER THROWS and never fails the refresh. A hub that is unreachable, not
+ * GitHub-shaped, or answering badly contributes nothing and the pass continues:
+ * discovery is additive, and a refresh that verified its sources has already
+ * done the job an operator asked for. The per-hub reasons are deliberately not
+ * surfaced here — `not-reachable` is what `skills.sh`'s and `smithery.ai`'s
+ * chips already say, and repeating it as an error would turn a known, ruled
+ * limitation into noise on every refresh.
+ */
+async function discoverFromHubs(
+  opts: RunCommunityRefreshOptions,
+  registry: CommunityRegistry,
+  token: string | undefined,
+): Promise<readonly DiscoveredItem[]> {
+  const ctx = communityRequestCtx({
+    token,
+    ...(opts.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {}),
+    ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+  });
+  const known = new Set(registry.items.map((i) => i.id));
+  const out: DiscoveredItem[] = [];
+  for (const hub of listCommunityHubs(opts.forgeRoot)) {
+    const outcome = await indexGithubHub(ctx, hub, known);
+    if (!outcome.ok) continue;
+    for (const d of outcome.discovered) {
+      if (known.has(d.id)) continue; // two hubs publishing the same id: first wins, deterministically
+      known.add(d.id);
+      out.push(d);
+    }
+  }
+  return out;
+}
+
 export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Promise<CommunityRefreshRunResult> {
   const path = communityRegistryPath(opts.forgeRoot);
   const dryRun = opts.dryRun === true;
@@ -458,6 +502,20 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
     }
   }
 
+  // Ruling 478 — the second half of what "refresh" has to mean. Re-verifying
+  // rows that already exist never turns a declared hub into a browsable one, so
+  // four of the nine contributed nothing through every refresh this product has
+  // ever run. This asks each GitHub-shaped hub what it publishes and returns
+  // what the registry is missing.
+  //
+  // COST, STATED RATHER THAN HIDDEN: these fetches are serial like the source
+  // pass above, so they add to a refresh that is already 4 x 10 s worst case.
+  // Bead `forge-8vfn.7.6.16` (M7) owns making both concurrent. It is folded in
+  // here rather than given its own button because the operator's question is
+  // one question — "make this list reflect its sources" — and answering half of
+  // it behind a second control is the shape S8 beat 5 exists to refuse.
+  const discovered = await discoverFromHubs(opts, registry, token);
+
   return {
     ok: true,
     path,
@@ -468,5 +526,6 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
     counts,
     outcomes: result.outcomes,
     errors: result.errors,
+    discovered,
   };
 }

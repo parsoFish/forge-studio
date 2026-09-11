@@ -30,6 +30,7 @@ const OK_WROTE: CommunityRefreshResult = {
   counts: { total: 4, refreshed: 4, unchanged: 0, noUpstream: 0, failed: 0 },
   outcomes: [],
   errors: [],
+  discovered: [],
   lastRefresh: '2026-09-11T09:00:00.000Z',
 };
 
