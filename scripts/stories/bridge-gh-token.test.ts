@@ -111,3 +111,32 @@ test('(d) with no token available the bridge still boots, and the refusal stays 
 test('the identity is the one #611 pinned, and it is named rather than implied', () => {
   assert.equal(STORY_BRIDGE_GH_USER, 'parsoFish');
 });
+
+test('(e) an AMBIENT GH_TOKEN never reaches the bridge when no token was read', () => {
+  // MEASURED, not hypothetical: a gate launcher of mine exported GH_TOKEN for
+  // its own `git push`, the export was inherited through `gate.sh` into
+  // `npm test`, and test (d) — whose whole subject is "there is no token" —
+  // was handed one by the process that started it. `bridgeSpawnOptions` copies
+  // `process.env` wholesale, so the fence was open from behind.
+  const before = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = 'gho_AMBIENT_from_the_launcher_0123456789';
+  try {
+    const opts = bridgeSpawnOptions('/tmp', { readToken: () => null });
+    assert.equal(
+      'GH_TOKEN' in (opts.env as NodeJS.ProcessEnv),
+      false,
+      'absence must be REPRESENTED: "no token was read" has to mean no token in the child env, ' +
+        'not merely "none was added" — otherwise the ambient one rides through',
+    );
+    // And the real child, not just the options bag: same proof shape as (a).
+    const printed = execFileSync(
+      process.execPath,
+      ['-e', 'process.stdout.write(String(process.env.GH_TOKEN ?? "<absent>"))'],
+      { env: opts.env as NodeJS.ProcessEnv, encoding: 'utf8' },
+    );
+    assert.equal(printed, '<absent>', 'the spawned bridge must not see a credential nobody handed it');
+  } finally {
+    if (before === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = before;
+  }
+});

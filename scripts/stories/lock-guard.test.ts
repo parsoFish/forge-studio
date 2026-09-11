@@ -34,15 +34,24 @@ import { lockHolders, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK
 const REPO = new URL('../..', import.meta.url).pathname;
 
 /** A lock file this process holds open, exactly as `flock` would. */
-function heldLock(): { path: string; release: () => void } {
+function heldLock(): { path: string; release: () => void; unhold: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'lock-guard-'));
   const path = join(dir, '.some-lock');
   writeFileSync(path, 'held by a test\n');
   const fd = openSync(path, 'r');
+  let closed = false;
+  const unhold = () => {
+    if (!closed) closeSync(fd);
+    closed = true;
+  };
   return {
     path,
+    // `unhold` drops the HOLD and leaves the file — a real campaign lock nobody
+    // is using. `release` removes the file too, which is a different state and
+    // the whole point of `forge-e8dn`.
+    unhold,
     release: () => {
-      closeSync(fd);
+      unhold();
       rmSync(dir, { recursive: true, force: true });
     },
   };
@@ -60,10 +69,39 @@ test('a holder is found by FD and named with its pid and cwd — never by matchi
   }
 });
 
-test('a lock nothing holds yields no holders — indistinguishable from nobody running, as it should be', () => {
+test('an EXISTING lock nobody holds yields an empty list — a real answer about a real file', () => {
+  const lock = heldLock();
+  try {
+    lock.unhold();
+    assert.deepEqual(lockHolders(lock.path), [], 'the file is there and free: [] is the honest answer');
+  } finally {
+    lock.release();
+  }
+});
+
+test('a path that is NOT a lock yields null — absence is a state, and not the same one', () => {
+  const lock = heldLock();
+  lock.release(); // the file is gone, not merely unheld
+  assert.equal(
+    lockHolders(lock.path),
+    null,
+    'this used to return [], byte-identical to "nobody is running" — so no observation could ' +
+      'tell a free lock from a path that is not a lock, and the guard could not be falsified',
+  );
+});
+
+test('a CANNOT-CHECK verdict names the path and what it is therefore not enforcing', () => {
   const lock = heldLock();
   lock.release();
-  assert.deepEqual(lockHolders(lock.path), []);
+  const v = suiteLockVerdict({ [SUITE_LOCK_ENV]: lock.path });
+  assert.equal(v.ok, true, 'an unresolvable path must not block work — a checkout with a bad path still runs');
+  assert.match(v.reason, /CANNOT CHECK/, 'but it must say it could not check, not imply it checked');
+  assert.match(v.reason, new RegExp(lock.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'and NAME the path it could not find');
+  assert.equal(
+    /nothing holds/.test(v.reason),
+    false,
+    'it must never claim nothing holds a file it could not even resolve — that sentence is the defect',
+  );
 });
 
 test('a story run REFUSES while the suite lock is held, and the reason names the holder', () => {

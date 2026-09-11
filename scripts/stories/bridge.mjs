@@ -74,7 +74,16 @@ function defaultGhTokenExec() {
 export function bridgeSpawnOptions(root, { readToken = bridgeGhToken } = {}) {
   const token = readToken();
   const env = { ...process.env };
+  // ABSENCE IS REPRESENTED, NOT MERELY NOT-ADDED (T1 ruling 688(ii)). This used
+  // to only ADD the key when a token was read, which leaves an AMBIENT one from
+  // whatever shell or launcher started the run riding through to the bridge —
+  // the credential fence open from behind. Measured: a gate launcher of mine
+  // exported GH_TOKEN for its own `git push`, the export was inherited into
+  // `npm test`, and the test whose entire subject is "there is no token" was
+  // handed one by the process that started it (§15.384 — pinned per command,
+  // never exported, not to a shell, an agent, or a suite).
   if (token !== null) env[GH_TOKEN_ENV] = token;
+  else delete env[GH_TOKEN_ENV];
   return {
     command: process.execPath,
     args: ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],

@@ -68,16 +68,31 @@ export const EXIT_LOCK_REFUSED = 75;
 /**
  * Every process holding `lockPath` open, by file descriptor.
  *
- * @returns {{pid: string, cwd: string|null}[]} — empty when nothing holds it,
- *          which is indistinguishable from "nobody is running", as it should be.
+ * ABSENCE IS A STATE, AND IT IS NOT THE SAME STATE AS "NOBODY IS RUNNING"
+ * (bead `forge-e8dn`, T1 ruling 672). This used to return `[]` for a path that
+ * does not exist, with a comment calling that "indistinguishable, as it should
+ * be". It should not be: handed a real lock nobody holds and handed a path that
+ * is not a lock at all, the old shape produced byte-identical output, so no
+ * observation anywhere could tell them apart and the guard could not be
+ * falsified. It stayed silent through two of lane A's collisions while
+ * `gate.sh` fed it a relative campaign dir that resolved to a file nothing ever
+ * creates — correct-looking, and blind.
+ *
+ * So a path that cannot be resolved returns `null`, and every caller must say
+ * which answer it got. `[]` now means one thing only: this IS a lock file and
+ * nobody holds it.
+ *
+ * @returns {{pid: string, cwd: string|null}[] | null} holders, or `null` when
+ *          `lockPath` names nothing this process can resolve — never `[]` for
+ *          a path that is not there.
  */
 export function lockHolders(lockPath, procRoot = '/proc') {
-  if (!existsSync(lockPath)) return [];
+  if (!existsSync(lockPath)) return null;
   let target;
   try {
     target = realpathSync(lockPath);
   } catch {
-    return [];
+    return null;
   }
   const holders = [];
   let pids;
@@ -135,6 +150,21 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
     };
   }
   const holders = lockHolders(lockPath, procRoot);
+  if (holders === null) {
+    // NAMED, never silent. The guard is configured and cannot do its job: the
+    // path it was told to watch does not exist, so it is watching nothing. A
+    // campaign lock is created by the first `flock` and persists, so a missing
+    // one means the PATH is wrong — a stale campaign dir, a typo, a resolve
+    // site that changed. Work proceeds (an unconfigured checkout must still be
+    // able to run) but the verdict says exactly what is NOT being enforced.
+    return {
+      ok: true,
+      reason:
+        `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which does not exist, so ` +
+        `${thisKind} is NOT excluded from ${otherKind}. A campaign lock is created by its first ` +
+        'holder and persists, so a missing one means the path is wrong rather than idle.',
+    };
+  }
   if (holders.length === 0) {
     return { ok: true, reason: `overlap ok — nothing holds ${lockPath}` };
   }
