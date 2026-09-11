@@ -38,7 +38,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
 // `FORGE_ROOT` (this install's root — `orchestrator/studio/` sits two levels
 // below it): single source is `studio/derive.ts`'s exported const. This
@@ -294,6 +294,22 @@ function recordRunMarkerBestEffort(logsRoot: string, runId: string, token: strin
 export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<RunAgentResult> {
   const lifecycle = ctx.lifecycle ?? 'self';
   if (!ctx.workdir) throw new Error('runAgent: ctx.workdir is required');
+  // ABSOLUTE, or refuse (T1 ruling 685). Truthiness was the only check, and a
+  // relative `workdir` does not crash — it drops silently, two layers away:
+  // the prompt path below is `join(ctx.workdir, …)`, and
+  // `sessionWriteTargets` (scripts/stories/ground-hash.mjs) discards a
+  // non-absolute `output_refs` entry without a word (#607's `./` prefix cost a
+  // $3.2562 run). So every bridge write `forge-qm4d` just taught forge to
+  // declare would vanish from the attribution, and the containment failure
+  // would read exactly as it did before the fix: a file nothing accounts for.
+  // Same move `createLogger` made under ruling 101, for the same reason.
+  if (!isAbsolute(ctx.workdir)) {
+    throw new Error(
+      `runAgent: ctx.workdir must be ABSOLUTE — got '${ctx.workdir}'. A relative workdir resolves against ` +
+        'whatever directory this process happened to start in, and the file_change events this run emits ' +
+        'would be dropped as non-absolute by every consumer rather than reported as wrong.',
+    );
+  }
   if (!ctx.prompt) throw new Error('runAgent: ctx.prompt is required');
 
   const loopStrategy = def.runtime.loopStrategy;

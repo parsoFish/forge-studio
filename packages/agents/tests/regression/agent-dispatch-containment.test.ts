@@ -473,3 +473,70 @@ test('5.50 a SUPPRESSED run records NO marker — a marker is a record of a chil
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+/**
+ * T1 ruling 685 — `ctx.workdir` MUST BE ABSOLUTE, or `runAgent` refuses.
+ *
+ * MEASURED by M6-D on `forge-qm4d`'s emission, and it is a silent-drop chain
+ * rather than a crash. `sessionWriteTargets` (`scripts/stories/ground-hash.mjs`)
+ * discards an `output_refs` entry that is not absolute, without a word:
+ *
+ *     if (typeof ref !== 'string' || !isAbsolute(ref)) continue;
+ *
+ * The comment there names #607's `./` prefix, which cost a $3.2562 run. The
+ * prompt path this bead emits is `join(ctx.workdir, '.forge', 'agent-run',
+ * 'PROMPT.md')`, absolute only because `ctx.workdir` happens to be — and the
+ * only check on it was truthiness. So a relative `workdir` would make every
+ * bridge write this campaign just taught forge to declare vanish from the
+ * attribution, and a containment failure would return reading exactly as it
+ * did before the fix: a file nothing accounts for.
+ *
+ * Refusing at the boundary is the same move `createLogger` made under ruling
+ * 101, for the same reason: it used to default its logs root to `'_logs'`,
+ * which `resolve()` anchors on `process.cwd()`, so a caller that omitted it
+ * "silently wrote its events wherever the process happened to start".
+ */
+
+test('685: runAgent REFUSES a relative workdir, naming it — a silent drop downstream is worse than a loud stop here', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-relative-workdir-'));
+  try {
+    await assert.rejects(
+      () => runAgent(
+        invocationDef('project-scoped-review'),
+        {
+          runId: 'RELATIVE-WORKDIR-TEST',
+          logsRoot: join(dir, '_logs'),
+          workdir: 'projects/gitweave',
+          queryFn: (() => { throw new Error('the spawn must never be reached'); }) as unknown as StreamQueryFn,
+        } as never,
+      ),
+      (err: Error) => {
+        assert.match(err.message, /workdir/, 'the refusal names the field');
+        assert.match(err.message, /absolute/i, 'and says what was wrong with it');
+        assert.match(err.message, /projects\/gitweave/, 'and quotes the value, so the caller can see its own mistake');
+        return true;
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('685: an ABSOLUTE workdir is unaffected — this refuses a shape, not a caller', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agent-absolute-workdir-'));
+  try {
+    const captured: { value: { options: Record<string, unknown> } | null } = { value: null };
+    await dispatchAgentRun({
+      slug: 'project-scoped-review',
+      skillsDir: SKILLS,
+      runId: 'ABSOLUTE-WORKDIR-TEST',
+      logsRoot: join(dir, '_logs'),
+      workdir: dir,
+      loadDefs: () => [invocationDef('project-scoped-review')],
+      queryFn: capturingQueryFn(captured),
+    });
+    assert.ok(captured.value, 'an absolute workdir still reaches the spawn');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
