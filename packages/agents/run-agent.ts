@@ -47,7 +47,7 @@ import { dirname, join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
-import { createLogger, type EventLogger } from '@forge/kernel';
+import { createLogger, emitGroundFileChanges, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
@@ -691,6 +691,14 @@ async function runInvocationSpawn(
   const promptPath = join(ctx.workdir, '.forge', 'agent-run', 'PROMPT.md');
   if (!existsSync(dirname(promptPath))) mkdirSync(dirname(promptPath), { recursive: true });
   writeFileSync(promptPath, ctx.prompt);
+  // `forge-qm4d` — this file lands in the OPERATOR's repo, and until now nothing
+  // said so: S1 run 5 counted it among five bridge writes no session could own.
+  // The logger is already live here (it has been emitting since the top of this
+  // function), so this is an emission, not a reordering.
+  emitGroundFileChanges({
+    forgeRoot: FORGE_ROOT, cause: `agent run ${initiativeId}`,
+    projectRoot: ctx.workdir, relPaths: ['.forge/agent-run/PROMPT.md'], logger,
+  });
 
   const info = await agent({
     promptPath,
