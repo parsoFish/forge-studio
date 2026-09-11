@@ -524,6 +524,12 @@ test('685: runAgent REFUSES a relative workdir, naming it — a silent drop down
 
 test('685: an ABSOLUTE workdir is unaffected — this refuses a shape, not a caller', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'agent-absolute-workdir-'));
+  // CI sets `FORGE_ARCHITECT_NO_SPAWN: "1"` (`.github/workflows/ci.yml:37`),
+  // which short-circuits BEFORE the spawn options are built — so this test
+  // passed locally and failed in CI, with `captured.value` null at 1.7 ms.
+  // Every other spawn-reaching test in this file already clears it; this one
+  // did not, and the helper's own doc comment says exactly why it exists.
+  const restoreEnv = withoutSpawnSuppressionEnv();
   try {
     const captured: { value: { options: Record<string, unknown> } | null } = { value: null };
     await dispatchAgentRun({
@@ -537,6 +543,7 @@ test('685: an ABSOLUTE workdir is unaffected — this refuses a shape, not a cal
     });
     assert.ok(captured.value, 'an absolute workdir still reaches the spawn');
   } finally {
+    restoreEnv();
     rmSync(dir, { recursive: true, force: true });
   }
 });
