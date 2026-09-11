@@ -28,7 +28,7 @@
       }
     },
     {
-      "prompt": "You are the forge demo-builder (golden-capture fixture v2).\n\nFIXTURE demo-builder GENERATE-LEGACY turn.\n\nMode: create\nProject: testproj\nProject repo (your working directory): <TMP>/repo\n\nOperator look-and-feel guidance:\nShow the before/after of the headline command, dark and minimal.\n\nConfigured demo process (capture / verify / present steps to bake into the skill):\n1. [capture] Run the CLI on a fixture input.\n2. [verify] Output matches the golden fixture.\n\n## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit\n```css\n/* forge demo base stylesheet unavailable — use the dark forge palette: bg #0a0e14, fg #e6edf3 */\n```\n\n## This turn: WRITE ONLY\nYou hold Write and Edit. You have no Read, Grep, Glob, Bash, LSP, TaskOutput or Skill: the\ntool list in the frontmatter above is this KIND across all its turns, not what you hold now.\nDo not spend calls hunting for another way to read — the reading is done and its findings are\nbelow. Author BOTH deliverables from them, leaving the captured output as the marked\nplaceholders the grounding pass replaces. That pass has Bash to run the generator; you do not,\nso a sample you cannot run is expected of you and a sample you invent is not.\n\n## Findings from your read turn\n_(none recorded)_",
+      "prompt": "You are the forge demo-builder (golden-capture fixture v2).\n\nFIXTURE demo-builder GENERATE-LEGACY turn.\n\nMode: create\nProject: testproj\nProject repo (your working directory): <TMP>/repo\n\nOperator look-and-feel guidance:\nShow the before/after of the headline command, dark and minimal.\n\nConfigured demo process (capture / verify / present steps to bake into the skill):\n1. [capture] Run the CLI on a fixture input.\n2. [verify] Output matches the golden fixture.\n\n## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit\n```css\n/* forge demo base stylesheet unavailable — use the dark forge palette: bg #0a0e14, fg #e6edf3 */\n```\n\n## This turn: WRITE ONLY\nYou hold Write and Edit. You have no Read, Grep, Glob, Bash, LSP, TaskOutput or Skill: the\ntool list in the frontmatter above is this KIND across all its turns, not what you hold now.\nDo not spend calls hunting for another way to read — the reading is done and its findings are\nbelow. Author BOTH deliverables from them, leaving the captured output as the marked\nplaceholders the grounding pass replaces. That pass has Bash to run the generator; you do not,\nso a sample you cannot run is expected of you and a sample you invent is not.\n\nWRITE `.forge/demo/DEMO.html` FIRST, in one call. It does not exist yet, and a path that does\nnot exist needs no prior Read. Then write the SKILL. You may Read inside `.forge/demo/` and\n`.forge/skills/demo-design/` if you need to re-write a file you already created — nowhere else.\n\n## Findings from your read turn\n_(none recorded)_",
       "options": {
         "cwd": "<TMP>/repo",
         "model": "claude-sonnet-4-6",
@@ -39,7 +39,6 @@
           "Task",
           "Agent",
           "Bash",
-          "Read",
           "Glob",
           "Grep",
           "TodoWrite",
@@ -50,10 +49,7 @@
         "maxTurns": 8,
         "abortController": "<AbortController>",
         "permissionMode": "default",
-        "allowedTools": [
-          "Write",
-          "Edit"
-        ],
+        "allowedTools": [],
         "canUseTool": "<canUseTool>"
       }
     },

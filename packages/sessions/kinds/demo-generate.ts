@@ -5,9 +5,10 @@
  * here, why the DAG is one-way, and why the agent spec arrives as a parameter:
  * `packages/sessions/design.md` §"The demo kind is three modules".
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { resolveGuardedPath } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
 import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
 import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents/phase-agent.ts';
@@ -45,8 +46,14 @@ export const DEMO_READ_TOOLS: readonly string[] = ['Read', 'Glob', 'Grep'];
  *  used to read on S1 run 5 (`forge-a9o9`). Naming them closes the three that
  *  were caught; only deny-by-default closes the next three. */
 export const DEMO_WRITE_PASS_DENIED: readonly string[] = [
-  'Bash', 'Read', 'Glob', 'Grep', 'TodoWrite', 'LSP', 'TaskOutput', 'Skill',
+  'Bash', 'Glob', 'Grep', 'TodoWrite', 'LSP', 'TaskOutput', 'Skill',
 ];
+/** `forge-a9o9`/7.3.6 (T1 ruling 703) — the two directories this pass exists to
+ *  fill. `Read` is PERMITTED inside them and refused everywhere else, which is
+ *  why it left the deny list above. §15.397: a deny that makes a required
+ *  protocol step impossible is a trap, not a fence — S1 run 6 measured the
+ *  trap, and the measurement is in `session-write-fence.ts`'s read-root note. */
+export const DEMO_PASS_ROOTS: readonly string[] = ['.forge/demo', '.forge/skills/demo-design'];
 export const DEMO_GROUND_PASS_MAX_TURNS = 16;
 
 export async function runGenerateStep(args: {
@@ -113,7 +120,8 @@ export async function runGenerateStep(args: {
   // never the lever (374); the tool set per pass is. Forbidding Bash outright
   // was the other wrong fix: a demo that cannot run the project cannot show
   // REAL output.
-  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = [], onText?: (t: string) => void) => runAgentTurn({
+  const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = [], onText?: (t: string) => void, roots: readonly string[] = []) => runAgentTurn({
+    ...(roots.length > 0 ? { writeRoots: roots, readRoots: roots } : {}),
     queryFn: plumbing.queryFn,
     prompt: turnPrompt,
     cwd: status.project_repo_path,
@@ -148,6 +156,19 @@ export async function runGenerateStep(args: {
   // Bash, Write, Edit]`, true of the KIND and false of this pass. On S1 run 5
   // the agent believed it over four failing tool calls — TaskOutput, LSP, Glob,
   // Skill — before writing one of its two deliverables and ending the turn.
+  // The two directories this pass fills, created before the turn so the fence
+  // can realpath them — a root that will not resolve now DENIES rather than
+  // ungates (see `makeWriteRootCanUseTool`'s fail-closed note).
+  // GUARDED, because `project_repo_path` is request-derived at the bridge and
+  // `check-request-path-sinks` caught the bare `join` on its first gate — the
+  // same catch `writeProjectGroundFile` took earlier today, in the same class of
+  // change. The segments are constants; the ROOT is the untrusted part.
+  const passRoots = DEMO_PASS_ROOTS.map((rel) => {
+    const guarded = resolveGuardedPath(status.project_repo_path, rel.split('/'));
+    if (!guarded.ok) throw new Error(`demo write pass: ${rel} does not resolve beneath ${status.project_repo_path}`);
+    mkdirSync(guarded.realPath, { recursive: true });
+    return guarded.realPath;
+  });
   const writePass = await runPass(
     [
       prompt, '',
@@ -159,10 +180,14 @@ export async function runGenerateStep(args: {
       'placeholders the grounding pass replaces. That pass has Bash to run the generator; you do not,',
       'so a sample you cannot run is expected of you and a sample you invent is not.',
       '',
+      'WRITE `.forge/demo/DEMO.html` FIRST, in one call. It does not exist yet, and a path that does',
+      'not exist needs no prior Read. Then write the SKILL. You may Read inside `.forge/demo/` and',
+      '`.forge/skills/demo-design/` if you need to re-write a file you already created — nowhere else.',
+      '',
       '## Findings from your read turn', findings.trim() || '_(none recorded)_',
     ].join('\n'),
     agentSpec.allowedTools.filter((t) => !DEMO_WRITE_PASS_DENIED.includes(t)),
-    DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED,
+    DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED, undefined, passRoots,
   );
 
   // The required generator skill is the per-element skill when iterating one

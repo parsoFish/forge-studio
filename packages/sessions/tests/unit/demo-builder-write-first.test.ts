@@ -35,7 +35,8 @@ import { DEMO_WRITE_PASS_MAX_TURNS, DEMO_READ_PASS_MAX_TURNS } from '../../kinds
 import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 
-type Pass = { allowedTools: string[]; disallowedTools: string[]; maxTurns: number | undefined; prompt: string };
+type CanUseTool = (t: string, i: Record<string, unknown>, o: Record<string, unknown>) => Promise<{ behavior: string; message?: string }>;
+type Pass = { allowedTools: string[]; disallowedTools: string[]; maxTurns: number | undefined; prompt: string; canUseTool?: CanUseTool };
 
 /**
  * A fake SDK that records each pass's tool set and budget. `writeOn` says which
@@ -44,8 +45,15 @@ type Pass = { allowedTools: string[]; disallowedTools: string[]; maxTurns: numbe
  */
 function recordingQueryFn(writeOn: number | null, passes: Pass[]): QueryFn {
   return ({ prompt, options }) => {
-    const o = (options ?? {}) as { cwd?: string; allowedTools?: string[]; disallowedTools?: string[]; maxTurns?: number };
-    passes.push({ allowedTools: [...(o.allowedTools ?? [])], disallowedTools: [...(o.disallowedTools ?? [])], maxTurns: o.maxTurns, prompt });
+    const o = (options ?? {}) as { cwd?: string; allowedTools?: string[]; disallowedTools?: string[]; maxTurns?: number; canUseTool?: CanUseTool };
+    passes.push({
+      allowedTools: [...(o.allowedTools ?? [])], disallowedTools: [...(o.disallowedTools ?? [])],
+      maxTurns: o.maxTurns, prompt,
+      // 703 — the fence is where the write pass's real permissions now live, so
+      // a recorder that captured only the advisory lists could no longer see
+      // what this turn may do.
+      ...(o.canUseTool !== undefined ? { canUseTool: o.canUseTool } : {}),
+    });
     const n = passes.length;
     const cwd = o.cwd ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
@@ -84,7 +92,15 @@ test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agen
   // is how a test agrees with the bug it was written to catch.
   assert.ok(passes[1].disallowedTools.includes('Bash'), `pass 1 must DENY Bash — got disallowedTools ${passes[1].disallowedTools.join(', ') || '(none)'}`);
   assert.ok(!passes[1].allowedTools.includes('Bash'), `pass 1 must not carry Bash — got ${passes[1].allowedTools.join(', ')}`);
-  assert.ok(passes[1].allowedTools.includes('Write'), 'pass 1 keeps the tools it needs to author');
+  // AMENDED by 703: the write pass is now write-root AND read-root FENCED to
+  // `.forge/demo/` + `.forge/skills/demo-design/`, and a fenced turn STRIPS the
+  // gated names from `allowedTools` on purpose — a name left there is
+  // pre-approved by the SDK and would never reach the callback that scopes it
+  // (`session-write-fence.ts`: "a fence is three settings, not one"). So the
+  // property "it can still author" is asserted at the CALLBACK, below, where it
+  // now lives, rather than at a list that no longer decides it.
+  assert.ok(!passes[1].allowedTools.includes('Write'), 'a fenced turn strips the gated name so the SDK routes it to the fence');
+  assert.equal(typeof passes[1].canUseTool, 'function', 'and the fence is installed');
   assert.equal(passes[1].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
   assert.ok(DEMO_WRITE_PASS_MAX_TURNS < 24, 'the write budget is well inside the old 24-turn one');
 });
@@ -155,7 +171,7 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   // removed run-instead-of-write; Read, Glob, Grep and TodoWrite were still
   // open, and that is where the budget went. A deny list that leaves ANY read
   // door open is #558 again, so this pins the whole list rather than one entry.
-  const { projectRoot, logsRoot, sessionId } = setup();
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup();
   const passes: Pass[] = [];
   await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT,
@@ -163,11 +179,33 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   });
 
   const write = passes[1]!;
-  for (const door of ['Bash', 'Read', 'Glob', 'Grep', 'TodoWrite']) {
+  // AMENDED by T1 ruling 703 — `Read` LEFT this list. §15.397: a deny that makes
+  // a required protocol step impossible is a trap, not a fence. S1 run 6
+  // measured the trap: the SDK refuses `Write` to a file that already exists
+  // unless the turn has Read it, so the agent created `SKILL.md`, could not
+  // re-Write it, concluded "the tool is blocking writes to new files too", fell
+  // back to `Edit` — which only works on files that exist — and looped on the
+  // one file it had. `DEMO.html` was never attempted. Read is now PATH-SCOPED
+  // to the pass's own two roots and refused everywhere else, which is asserted
+  // at the callback below.
+  for (const door of ['Bash', 'Glob', 'Grep', 'TodoWrite']) {
     assert.ok(write.disallowedTools.includes(door), `the write pass must DENY ${door} — got ${write.disallowedTools.join(', ') || '(none)'}`);
     assert.ok(!write.allowedTools.includes(door), `the write pass must not CARRY ${door} — got ${write.allowedTools.join(', ')}`);
   }
-  assert.ok(write.allowedTools.includes('Write'), 'it keeps the one tool the pass exists to use');
+  assert.ok(!write.allowedTools.includes('Write'), 'the fence strips the gated name so the SDK routes it to the callback (703)');
+
+  // WHERE THE PASS'S REAL PERMISSIONS NOW LIVE. 703 scoped `Read` to the two
+  // directories this pass exists to fill instead of denying it outright, because
+  // the SDK refuses `Write` to an existing file unless the turn has Read it —
+  // so the old blanket deny made a required protocol step impossible (§15.397),
+  // and S1 run 6 measured the agent looping on `Edit` because of it.
+  const fence = write.canUseTool!;
+  assert.equal((await fence('Write', { file_path: `${repoPath}/.forge/demo/DEMO.html`, content: 'x' }, {})).behavior, 'allow', 'it can still author, in its own root');
+  const readIn = await fence('Read', { file_path: `${repoPath}/.forge/skills/demo-design/SKILL.md` }, {});
+  assert.equal(readIn.behavior, 'allow', 'and re-read what it wrote, which is what the Write-after-Read rule demands');
+  const readOut = await fence('Read', { file_path: `${repoPath}/README.md` }, {});
+  assert.equal(readOut.behavior, 'deny', 'but nowhere else — the scope is the fence, not the absence of one');
+  assert.match(String(readOut.message), /read-root fence/, 'and the refusal says which fence refused it');
 
   // And the reading it needs happens first, bounded, with writes denied there.
   const read = passes[0]!;

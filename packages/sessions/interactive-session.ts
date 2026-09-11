@@ -443,6 +443,10 @@ export async function runAgentTurn(args: {
    *  unaffected. See `makeWriteRootCanUseTool`'s own doc comment for the
    *  mechanism and why this does not reopen ADR 020. */
   writeRoots?: readonly string[];
+  /** `forge-a9o9`/7.3.6 (703) — roots inside which `Read` is permitted. Fences
+   *  a turn that needs SOME read to satisfy a protocol step without letting it
+   *  wander: §15.397, a deny that makes a required step impossible is a trap. */
+  readRoots?: readonly string[];
   /** W7-FIX-A2 (W7A2-03) — Bash policy when `writeRoots` fences the turn:
    *  absent/`deny` denies every Bash call; `inspect` statically inspects
    *  each command against the write roots (see `BashFenceOptions`). Ignored
@@ -518,6 +522,7 @@ export async function runAgentTurn(args: {
               allowedTools: args.allowedTools,
               cwd: args.cwd,
               ...(args.bashFence !== undefined ? { bashFence: args.bashFence } : {}),
+              ...(args.readRoots !== undefined ? { readRoots: args.readRoots } : {}),
             }),
           }
         : {}),
