@@ -25,6 +25,11 @@ export type PlannedInitiative = {
   ready: boolean;
   /** Prerequisite initiative ids not yet satisfied (empty when ready). */
   blockedBy: string[];
+  /** 7.6.18 — hard contract clauses the scheduler REFUSED this claim over, as it
+   *  wrote them to the manifest. This listing claims to show "exactly what the
+   *  scheduler would actually claim"; it mirrored only ONE of the scheduler's two
+   *  refusals, so a contract-blocked initiative read as ready. */
+  blockedClauses: string[];
 };
 
 /** List the decomposed, not-yet-running initiatives in `_queue/pending/`. */
@@ -36,8 +41,10 @@ export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[
     let initiativeId = filename.replace(/\.md$/, '');
     let project: string | null = null;
     let title = initiativeId;
+    let rawFrontmatter = '';
     try {
       const raw = readFileSync(manifestPath, 'utf8');
+      rawFrontmatter = raw;
       const m = parseManifest(raw);
       initiativeId = m.initiative_id || initiativeId;
       project = m.project ?? null;
@@ -47,7 +54,11 @@ export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[
       /* malformed manifest still surfaces (with filename-derived defaults) */
     }
     const blockedBy = checkInitiativeDeps(filename, paths);
-    out.push({ initiativeId, project, title, ready: blockedBy.length === 0, blockedBy });
+    // RAW frontmatter: `parseManifest` drops keys it does not model, and the
+    // scheduler writes this one, not the architect.
+    const blockedClauses = (rawFrontmatter.match(/^claim_blocked_clauses:\s*(.+)$/m)?.[1] ?? '')
+      .split(',').map((c) => c.trim()).filter((c) => c !== '');
+    out.push({ initiativeId, project, title, ready: blockedBy.length === 0 && blockedClauses.length === 0, blockedBy, blockedClauses });
   }
   return out;
 }
