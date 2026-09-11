@@ -114,7 +114,7 @@ function validateDoSteps(raw, at) {
  */
 /** Wait kinds a beat may declare. `agent` is the only one so far, and adding
  *  a second is a deliberate edit here — the friction is the point. */
-const WAIT_KINDS = ['agent'];
+const WAIT_KINDS = ['agent', 'settle'];
 
 /** The widest bound a beat may declare, in ms. A declared wait is a licence to
  *  sit still; an unbounded or absurd one turns a red run into a hung host,
@@ -147,6 +147,34 @@ function validateWait(raw, at) {
       `${at}.wait.upTo`,
       `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
     );
+  }
+  // `settle` — T1 ruling 621(ii), bought by A's S1 beat 3. It waits for a NAMED
+  // key to leave a DECLARED transient value, and both halves are required
+  // because the alternative is a blanket longer wait, which sits through a
+  // genuinely wrong value exactly as patiently as through a transient one and
+  // turns a real red into a timeout. Naming what it is willing to wait out is
+  // what keeps the failure sharp: `preflight-status` may pass through
+  // `pending`, and a beat that declared that can still red on `soft-fail`.
+  if (raw.for === 'settle') {
+    if (typeof raw.key !== 'string' || raw.key === '') {
+      fail(`${at}.wait.key`, `a settle wait must name the data-* key it watches, got ${JSON.stringify(raw.key)}`);
+    }
+    if (typeof raw.while !== 'string' || raw.while === '') {
+      fail(
+        `${at}.wait.while`,
+        `a settle wait must name the transient value it is willing to wait out, got ${JSON.stringify(raw.while)}`,
+      );
+    }
+    return Object.freeze({ for: raw.for, upTo: raw.upTo, key: raw.key, while: raw.while });
+  }
+  // Fail-closed the other way too. This function DROPS every key it does not
+  // name, and the comment above says so — so a `key`/`while` pair left on an
+  // `agent` wait would vanish silently and the beat would wait for the wrong
+  // thing with no sign of it.
+  for (const stray of ['key', 'while']) {
+    if (raw[stray] !== undefined) {
+      fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
+    }
   }
   return Object.freeze({ for: raw.for, upTo: raw.upTo });
 }

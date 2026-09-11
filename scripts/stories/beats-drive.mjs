@@ -41,6 +41,7 @@ import {
 import { performSteps } from './beats-steps.mjs';
 
 
+
 /**
  * `page.waitForURL` whose PREDICATE cannot fail silently.
  *
@@ -264,7 +265,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (routeMatches(page.url(), target)) {
       const left = bound.ms - (Date.now() - waitedFrom);
       if (left > 0) {
-        stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe);
+        stalled = await waitForConsequence(page, beat, left, sessionScope, agentProcProbe, beat.wait?.for === 'settle' ? beat.wait : null);
         agentWaitConsumed = true;
       }
     }

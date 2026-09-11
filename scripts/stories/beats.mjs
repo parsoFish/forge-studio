@@ -197,7 +197,7 @@ export const READY_TIMEOUT_MS = 15_000;
 export function beatBound(beat, domTimeoutMs) {
   const declared = beat.wait;
   if (declared === undefined || declared === null) return { ms: domTimeoutMs, label: null };
-  return { ms: declared.upTo, label: `agent wait (declared ${declared.upTo} ms)` };
+  return { ms: declared.upTo, label: `${declared.for} wait (declared ${declared.upTo} ms)` };
 }
 
 
