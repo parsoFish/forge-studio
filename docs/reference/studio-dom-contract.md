@@ -2882,6 +2882,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   per-node run dig-in `[data-section="initiative-runs"]` with one
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
+  The roadmap section carries `[data-unparseable-count]` in BOTH its populated and
+  its empty branch — the number of manifests in this project's queue dirs that the
+  parser REFUSED. When it is non-zero a `[data-component="roadmap-unparseable"]`
+  names them and carries the parser's own message, so the operator learns WHICH
+  field. Before `forge-8vfn.7.6.23` the scan discarded a parse failure with a bare
+  `continue`, and the surface reported *"No initiatives found for this project"* —
+  a true-sounding sentence about a different problem. A populated canvas can carry
+  a refused manifest too, which is why the count is on the section in both branches
+  and not only in the empty state.
+
   prior attempt. Every initiative carries `[data-plan-state="unplanned"
   |"planning"|"planned"|"needs-confirm"|"error"]` on the CARD itself, so it is
   queryable without opening the drawer. **`planned` means WORK ITEMS EXIST**
