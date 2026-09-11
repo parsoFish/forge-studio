@@ -50,7 +50,7 @@ import {
   sweepStoryResidue,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
-import { restoreSweptCommitted, stopOwnScheduler } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './sweep-teardown.mjs';
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
   ownGroundManifest, mintedSessionPaths, mintedSessionWrites, classifyOwnGroundDrift, groundChanges,
@@ -261,8 +261,28 @@ async function main() {
     // `status: stopped`, so the NEXT run's beat 7 would red at t+0 on a missing
     // handle while the state it wants already holds.
     const sched = stopOwnScheduler(ROOT);
-    if (sched.stopped !== null) console.log(`[stories] stopped the scheduler this run started — pid ${sched.stopped} by ${sched.how}`);
+    if (sched.stopped !== null) {
+      // 689(iii): SAY WHETHER IT DRAINED. "stopped by SIGKILL" and "stopped by
+      // SIGKILL without draining" are the same sentence to a reader and
+      // different facts to the next run — a daemon killed mid-drain never
+      // released its claim, so `_queue/in-flight/` still holds a manifest with a
+      // heartbeat that will never advance, and the next run reds at the develop
+      // beat for a reason that has nothing to do with the code under test.
+      const how = sched.drained ? `${sched.how}, drained` : `${sched.how}, DID NOT DRAIN`;
+      console.log(`[stories] stopped the scheduler this run started — pid ${sched.stopped} by ${how}`);
+    }
     if (sched.note !== null) console.log(`[stories] scheduler: ${sched.note}`);
+    // The fallback, and ONLY the fallback: a daemon that drained handed its
+    // claims back itself, with its cycle's own state, which is always better
+    // than this. This runs when it could not — the claim is otherwise left in
+    // `_queue/in-flight/` with a frozen heartbeat, and `_queue/` is gitignored,
+    // so the tree reports clean over it and the NEXT run reds at the develop
+    // beat for a reason that is not its own.
+    if (sched.stopped !== null && !sched.drained) {
+      const rel = releaseOwnInFlight(ROOT);
+      for (const p of rel.released) console.log(`[stories] released _queue/in-flight/${p} — this tree's claim, held by a daemon that could not drain`);
+      for (const f of rel.failed) console.warn(`[stories] could not release _queue/in-flight/${f.path}: ${f.error}`);
+    }
 
     const put = restoreSweptCommitted(ROOT, sweptPaths);
     for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);
