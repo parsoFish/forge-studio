@@ -218,3 +218,46 @@ tree for the next install to mistake for forge's own.
 **Plugin-host process isolation is not in 1.0.** Spec §0 defers it to a concrete driver. `runHookScript` today is an env-stripped, bounded child process with the credential exclusions its own header documents — not a sandbox, and it says so rather than implying more safety than it has. The honest-limits section in that file is the contract; if isolation is ever built, this is where it goes.
 
 **One door, not two.** `index.ts` is the public surface; every consumer still uses deep `@forge/library/<file>.ts` paths. Collapsing them is a cross-package change and is recorded rather than quietly left undone.
+
+## A hub is asked what it publishes, and only a hub forge can reach
+
+Operator ruling 478, scoped by T1 608 to **GitHub-shaped hubs only**.
+`studio/community-hub-index.ts`.
+
+**The gap.** A refresh re-verifies rows that already exist and never discovers one. Four of the
+nine declared hubs contribute nothing and stay that way through every refresh, so their chip
+reads *"declared — nothing indexed"* forever. The mechanism that was supposed to close that —
+the `community-refresh` AGENT plus `commitRegistryDraft` — was retired in wave 8, leaving
+`hubs.yaml`'s own W6-CR-3 amendment a promise with no implementation.
+
+**GitHub-shaped hubs only, and the two that are left out are left out on purpose.**
+`skills.sh` and `smithery.ai` are declared hubs that are **not** on the community fetch
+allowlist. Adding an origin is a new external dependency — ask-first by CLAUDE.md and by
+`hubs.yaml`'s own header — so they answer `not-reachable`, which is the truth and is what their
+chip already says. That is operator item 20 and it is M7 work; S8 beat 5 names `skills-sh`
+specifically and therefore stays red, with its citation narrowed from *"no path in forge indexes
+a declared hub"* to *"this hub is not a source forge reaches"*.
+
+**It proposes; it never writes.** Nothing here touches `registry.yaml`. A row an operator
+accepts is written by the CRUD path they already use, so D10 survives intact: **forge does not
+crawl on its own, and a discovery is a suggestion rather than a change.** That is also why the
+retired `commitRegistryDraft` did not need rebuilding — the approval surface that already exists
+is the one the operator knows.
+
+**The convention is the one install-by-URL already reads, and that is the point.** A skill is a
+directory containing `SKILL.md`; its id is that directory's name. A discovered row carries
+`sourceUrl` = the hub's repo, and `community-fetch-package.ts` looks for `skills/<id>/SKILL.md`
+in exactly that repo — so **a discovered row is installable by construction**. The two halves are
+pinned against each other in `community-hub-index.test.ts`'s last case rather than each against
+its own idea of the layout: discovery that proposes something the installer cannot fetch is a
+decoration.
+
+**A hub with a different layout indexes nothing and says so.** `modelcontextprotocol/servers`
+publishes under `src/<name>/` with no `SKILL.md` anywhere, and forge proposes nothing from it.
+That is a real limit rather than a bug — inferring a layout from a stranger's tree is how you
+propose rows that cannot be installed.
+
+**A directory name is a stranger's string.** It becomes a registry id and then a path segment,
+so it passes `assertSkillSlug` like every other id in this package; a name that fails is
+**skipped, never sanitised into** something that looks valid.
+

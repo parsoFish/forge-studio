@@ -308,3 +308,61 @@ test('P1: the route and the CLI produce the same registry for the same input (ON
     rmSync(cliRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Ruling 478 — the refresh DISCOVERS as well as re-verifies
+// ---------------------------------------------------------------------------
+
+test('478: a declared GitHub hub contributes the rows it publishes that the registry lacks — proposed, never written', async () => {
+  seed();
+  mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'hubs.yaml'),
+    'hubs:\n  - id: superpowers\n    name: obra/superpowers\n    url: https://github.com/obra/superpowers\n    kinds: skills\n' +
+      '  - id: skills-sh\n    name: skills.sh\n    url: https://skills.sh\n    kinds: skills\n',
+    'utf8',
+  );
+
+  const r = await withEnv({ GH_TOKEN: FAKE_TOKEN }, () =>
+    withUpstream(async (url) => {
+      if (/\/git\/trees\//.test(url)) {
+        return jsonRes(200, {
+          sha: 'treesha',
+          truncated: false,
+          tree: [
+            { path: 'skills/brainstorming/SKILL.md', type: 'blob', mode: '100644', sha: 'a', size: 10 },
+            { path: 'src/not-a-skill/index.ts', type: 'blob', mode: '100644', sha: 'b', size: 10 },
+          ],
+        });
+      }
+      return jsonRes(200, { stargazers_count: 1, pushed_at: '2026-01-01T00:00:00Z', html_url: url, default_branch: 'main' });
+    }, postRefresh),
+  );
+
+  const discovered = (r.body as { discovered?: Array<{ id: string; sourceUrl: string }> }).discovered ?? [];
+  assert.deepEqual(discovered.map((d) => d.id), ['brainstorming'], 'the hub publishes one skill the registry lacks');
+  assert.equal(discovered[0]!.sourceUrl, 'https://github.com/obra/superpowers', 'the row points at the repo install-by-URL will fetch from');
+
+  // THE PROPERTY THAT MATTERS: a discovery is a suggestion, not a change. The
+  // operator adds the row through the CRUD door they already use, so D10 — forge
+  // does not crawl on its own — survives a feature whose whole job is crawling.
+  assert.ok(!readFileSync(registryPath, 'utf8').includes('brainstorming'), 'discovery must NOT write the row');
+});
+
+test('478: a hub forge cannot reach contributes nothing and does not fail the refresh', async () => {
+  seed();
+  mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'hubs.yaml'),
+    'hubs:\n  - id: skills-sh\n    name: skills.sh\n    url: https://skills.sh\n    kinds: skills\n',
+    'utf8',
+  );
+
+  const r = await withEnv({ GH_TOKEN: FAKE_TOKEN }, () =>
+    withUpstream(async (url) => jsonRes(200, { stargazers_count: 1, pushed_at: '2026-01-01T00:00:00Z', html_url: url, default_branch: 'main' }), postRefresh),
+  );
+
+  assert.equal(r.status, 200, 'an unreachable hub is a known, ruled limitation — never a failed refresh');
+  assert.deepEqual((r.body as { discovered?: unknown[] }).discovered ?? [], []);
+});
+

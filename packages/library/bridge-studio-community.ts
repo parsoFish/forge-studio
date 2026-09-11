@@ -653,6 +653,10 @@ export async function handleCommunityRefresh(req: IncomingMessage, res: ServerRe
           counts: result.counts,
           outcomes: result.outcomes,
           errors: result.errors,
+          // Ruling 478 — rows the declared hubs publish that this registry
+          // lacks. PROPOSALS: the page offers them, the operator adds one
+          // through the CRUD door, and nothing here writes the registry.
+          discovered: result.discovered,
         },
         origin,
       );
