@@ -182,7 +182,13 @@ while IFS= read -r cmd; do
       # refused gate still prints a pin block — a precondition would otherwise
       # run `pin-precheck.sh` over a log whose `npm test` never executed and
       # record the pins green.
-      echo "REFUSED  $cmd  ($(secs "$t0")) — $(sed -n '1s/^\[[^]]*\] *//p' "$log" 2>/dev/null)"
+      # BY NAME, NEVER BY POSITION. The first draft read LINE 1 of the step log
+      # and printed an empty reason: npm's own banner (`> forge@0.9.0 pretest`)
+      # sits there, and the guard's line is the fifth. Same defect as the
+      # `head -3 <gate log>` recipe M6-C shipped an hour earlier, in the change
+      # whose whole subject is not being silent — position was never the
+      # property; "the line the guard wrote" is.
+      echo "REFUSED  $cmd  ($(secs "$t0")) — $(grep -m1 -F '[test-guard]' "$log" 2>/dev/null | sed 's/^\[[^]]*\] *//')"
       refused=1
     else
       echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
