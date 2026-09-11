@@ -240,6 +240,40 @@ export function newestChannelSince(logsDir, sinceMs) {
  * @param {string} forgeRoot
  * @returns {null | ((runId: string|null, sinceMs: number) => {reason: string, detail: string}|null)}
  */
+/**
+ * What the door looked at, in one line — T1 ruling 664(ii).
+ *
+ * Lane A's S1 run 5 beat 9 reded `no-channel` and nobody could decide whether
+ * the door was right, because an off-session beat has no `/proc` probe beside
+ * it: `makeAgentProcProbe` returns null for every route `sessionLogDir` cannot
+ * parse. Beat 6's false red was PROVABLE only because its session path printed
+ * 1768 samples; beat 9's was a maybe.
+ *
+ * So the door states its own evidence: the directory it scanned, how many
+ * `_`-prefixed entries it saw, and the newest birth time against the press it
+ * is judging. A reader can then tell "nothing was ever dispatched" from "the
+ * dispatch is older than this press" without another run.
+ */
+function scanSummary(logsDir, sinceMs) {
+  let entries = [];
+  try {
+    entries = readdirSync(logsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith('_'));
+  } catch {
+    return `${logsDir} (unreadable)`;
+  }
+  let newest = -1;
+  let newestName = null;
+  for (const e of entries) {
+    try {
+      const st = statSync(join(logsDir, e.name));
+      const born = st.birthtimeMs || st.ctimeMs;
+      if (born > newest) { newest = born; newestName = e.name; }
+    } catch { /* a dir that vanished mid-scan is not evidence */ }
+  }
+  const age = newest < 0 ? 'none' : `${newestName} born ${Math.round((sinceMs - newest) / 1000)}s BEFORE this press`;
+  return `${logsDir}: ${entries.length} dispatch dir(s), newest ${age}`;
+}
+
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
@@ -249,12 +283,19 @@ export function makeAgentChannelDoor(forgeRoot) {
     if (dir === null) {
       const waited = Date.now() - sinceMs;
       if (waited <= STALL_CEILING_MS) return null;
+      // 664(ii): SAY WHAT WAS SCANNED. Lane A's S1 beat 9 reded `no-channel`
+      // with no probe beside it and nobody could tell whether the door was
+      // right — `makeAgentProcProbe` returns null for every non-session route,
+      // so an off-session beat is doored by evidence it never prints. A verdict
+      // that cannot be checked is a defect on its own terms, so the door now
+      // carries what it looked at.
+      const scanned = scanSummary(logsDir, sinceMs);
       return {
         reason: 'no-channel',
         detail:
           `no agent channel appeared in ${Math.round(waited / 1000)}s — nothing under _logs/ was created by ` +
           `this press and the page named no run. The declared bound would have been spent waiting on work ` +
-          `that never started.`,
+          `that never started. Scanned ${scanned}.`,
       };
     }
     const idle = runLogIdleMs(dir);
