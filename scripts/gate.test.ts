@@ -346,3 +346,127 @@ test('639: NO campaign exports nothing — the guard must reach its honest "not 
 
   assert.match(lockEnvSeenBy(d), /NEITHER SET/, 'an empty FORGE_RUN_LOCK would be a lock nothing can hold — worse than an absent one');
 });
+
+/**
+ * Bead `forge-e8dn` — the campaign dir is RESOLVED, or the gate REFUSES.
+ *
+ * MEASURED on M6-A's own gates, twice, before anyone noticed. `gate.sh` took
+ * `$CAMP` as `$2` and never resolved it, so a relative argument — which reads
+ * perfectly naturally from inside a worktree — quietly meant three different
+ * wrong things at once, and the gate still printed a full verdict and exited 0:
+ *
+ *   1. `$CAMP/gate-manifests` did not exist, so the whole pins section was
+ *      skipped with NO output. Two full gates reported PASS rows for 20 steps
+ *      and checked zero pins. That contradicts this script's own contract,
+ *      thirteen lines into it: "What it does not run, it NAMES (§15.92 — a
+ *      check whose negative result is indistinguishable from 'nothing to
+ *      report' is not a check)". It names SKIP for `npm ci` and OTHER JOB for
+ *      every run-lock job; pins were the one thing it dropped in silence.
+ *
+ *   2. `FORGE_SUITE_LOCK`/`FORGE_RUN_LOCK` pointed INSIDE the worktree at paths
+ *      nothing ever creates, and `lock-guard.mjs` reads a missing lock as
+ *      "nobody is running" — right for a real lock path, wrong for a fabricated
+ *      one. The suite then ran outside BOTH campaign locks believing it held
+ *      them, and collided with a sibling lane's gate twice.
+ *
+ *   3. `mkdir -p "$LOGS"` MINTED `<worktree>/_1.0/reports/` and wrote every
+ *      step log there. `_1.0` is gitignored, so `git status` reported a clean
+ *      tree over it (§15.374).
+ *
+ * §15.375: `lanes.sh`, ten lines away in the same skill directory, already
+ * resolves `camp`, `prompt` and `cwd` to absolute before using any of them, and
+ * says why — "a relative path passed both and launched a promptless session —
+ * $0.00, 0 context, an empty box, twice" (bead `forge-uowf`, §15.60). This is
+ * not a novel failure; it is a known one that did not travel between two files
+ * in the same folder.
+ */
+
+/** `gate()` with a chosen cwd — a relative argument has no meaning without one. */
+function gateFrom(cwd: string, ...args: string[]) {
+  const { FORGE_SUITE_LOCK: _suite, FORGE_RUN_LOCK: _run, ...env } = process.env;
+  const r = spawnSync('bash', [GATE, ...args], { encoding: 'utf8', env, cwd });
+  return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
+}
+
+/** A campaign dir with one real manifest, so the pins section has something to report. */
+function campWithManifest(parent: string, name: string, treeDir: string) {
+  const camp = join(parent, name);
+  mkdirSync(join(camp, 'gate-manifests'), { recursive: true });
+  writeFileSync(join(treeDir, 'pinned.txt'), 'pinned\n');
+  const sum = spawnSync('sha256sum', ['pinned.txt'], { encoding: 'utf8', cwd: treeDir }).stdout ?? '';
+  writeFileSync(join(camp, 'gate-manifests', 'TEST.sha256'), sum);
+  return camp;
+}
+
+test('forge-e8dn: a RELATIVE campaign dir is resolved to absolute — the locks it names are absolute too', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const parent = mkdtempSync(join(tmpdir(), 'rel-'));
+  const camp = campWithManifest(parent, 'camp', d);
+
+  // Spawned FROM `parent`, so `camp` is a relative argument with a real meaning.
+  const r = gateFrom(parent, d, 'camp');
+
+  assert.notEqual(r.status, 2, `a resolvable relative dir must not be refused — got: ${r.err}`);
+  const seen = lockEnvSeenBy(d);
+  assert.match(seen, new RegExp(`^${camp}/\\.suite-lock$`, 'm'), 'the suite lock must be ABSOLUTE — a relative one points inside the worktree at a path nothing creates, and the guard reads that as "nobody is running"');
+  assert.match(seen, new RegExp(`^${camp}/\\.run-lock$`, 'm'), 'and the run lock with it');
+  assert.equal(seen.includes('NEITHER SET'), false);
+});
+
+test('forge-e8dn: a relative campaign dir still gets its PINS CHECKED — the silent skip is the whole defect', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const parent = mkdtempSync(join(tmpdir(), 'relpin-'));
+  campWithManifest(parent, 'camp', d);
+
+  const out = gateFrom(parent, d, 'camp').out;
+
+  assert.match(out, /== pins ==/, 'the pins section must run');
+  assert.match(out, /TEST\.sha256: 0 FAILED of 1/, 'and actually verify the manifest, not merely print a header');
+});
+
+test('forge-e8dn: a relative campaign dir does NOT mint a campaign dir inside the worktree', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const parent = mkdtempSync(join(tmpdir(), 'relmint-'));
+  campWithManifest(parent, 'camp', d);
+
+  gateFrom(parent, d, 'camp');
+
+  assert.equal(
+    readdirSync(d).includes('camp'), false,
+    'the logs belong to the CAMPAIGN; a stray copy under the worktree is invisible to git status because _1.0 is gitignored (§15.374)',
+  );
+});
+
+test('forge-e8dn: a campaign dir that does not resolve is REFUSED, never half-applied', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+
+  const r = gate(d, join(tmpdir(), `no-such-campaign-${process.pid}`));
+
+  assert.equal(r.status, 2, 'the `:31` rule — REFUSE what it does not understand — applies to a path as much as to a flag');
+  assert.match(r.err, /campaign dir/i, 'and the refusal names what was wrong');
+});
+
+test('forge-e8dn: a campaign with no gate-manifests/ NAMES the skip, the way SKIP and OTHER JOB are named', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+  const camp = mkdtempSync(join(tmpdir(), 'nomanifests-'));
+
+  const out = gate(d, camp).out;
+
+  assert.match(out, /== pins ==/, 'the section appears even when there is nothing to check');
+  assert.match(out, /SKIP.*gate-manifests/, 'a check that did not run must be indistinguishable from nothing — §15.92 is this script\'s own line 13');
+});
+
+test('forge-e8dn: NO campaign argument still names the skip — a gate outside a campaign is a real use', () => {
+  const d = tree(ENV_CI);
+  installedInPlace(d);
+
+  const out = gate(d).out;
+
+  assert.match(out, /== pins ==/);
+  assert.match(out, /SKIP.*no campaign/i, 'nothing to check, said out loud rather than omitted');
+});
