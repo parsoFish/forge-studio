@@ -15,12 +15,12 @@
  * `ci.yml` runs `npm test` (§15.353 — the file is the list).
  */
 
-import { runLockVerdict } from './stories/lock-guard.mjs';
+import { runLockVerdict, EXIT_LOCK_REFUSED } from './stories/lock-guard.mjs';
 
 const verdict = runLockVerdict();
 if (!verdict.ok) {
   console.error(`[test-guard] ${verdict.reason}`);
-  process.exit(1);
+  process.exit(EXIT_LOCK_REFUSED);
 }
 // The configured-and-clear case says so; the not-configured case says THAT,
 // because a guard that is silent when it is not enforcing is indistinguishable

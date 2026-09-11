@@ -38,7 +38,21 @@ CAMP="${2:-}"
 # tool that answers an unrecognised argument with a ten-minute suite cannot be
 # told apart from one that is, and the operator's next move is to work around a
 # fault that was never there.
-[ $# -le 2 ] || die "unexpected argument: '$3'. Usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree> (the flag comes FIRST)"
+# T1 693(ii) — a lane that KNOWS a pin will fail (its own amendment, or a sibling
+# re-pin it will reconcile) declares it; anything else fails the gate. Same shape
+# as the campaign's `pin-precheck.sh`, so one declaration serves both.
+EXPECTED_PIN_FAILS=""
+shift 2 2>/dev/null || shift $# 
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --expect-pin-fail)
+      [ $# -ge 2 ] || die "--expect-pin-fail needs <manifest>[:<path>]"
+      EXPECTED_PIN_FAILS="$EXPECTED_PIN_FAILS $2"; shift 2 ;;
+    # A TYPO IN A FLAG THAT GATES A MERGE MUST NOT READ AS "no expectations
+    # declared" — that is bead 8vfn.6.9's shape with a merge riding on it.
+    *) die "unexpected argument: '$1'. Usage: gate.sh <worktree> [campaign-dir] [--expect-pin-fail <manifest>[:<path>]]... | gate.sh --list <worktree> (the flag comes FIRST)" ;;
+  esac
+done
 [ -d "$R" ] || die "no such worktree: $R"
 # RESOLVE, or REFUSE — never degrade in silence (bead `forge-e8dn`). A RELATIVE
 # campaign dir used to be accepted and then quietly mean three different wrong
@@ -128,6 +142,7 @@ fi
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
+refused=0
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -152,9 +167,27 @@ while IFS= read -r cmd; do
     mv -f "$log.part" "$log"
     echo "PASS  $cmd  ($(secs "$t0"))"
   else
+    rc=$?
     mv -f "$log.part" "$log"
-    echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
-    fail=1
+    # A REFUSAL IS NOT A FAILURE (T1 ruling 699). 75 is `EX_TEMPFAIL`, which the
+    # 7.6.13 lock guard exits when a sibling's story run holds `.run-lock`.
+    # Recording that as `FAIL` is §15.92 one layer up: the guard names its
+    # holder carefully and this line used to flatten it into the word it uses
+    # for a suite that ran and went red. Named here, in the same idiom as SKIP
+    # and OTHER JOB, with its own rc so no verdict reader has to open the log.
+    if [ "$rc" -eq 75 ]; then
+      # COLUMN 0, same shape as FAIL / SKIP / OTHER JOB, so `^REFUSED ` is a
+      # stable grep (699 addendum, D's half): the rc alone is necessary and not
+      # sufficient, because every lane's merge precondition reads the LOG, and a
+      # refused gate still prints a pin block — a precondition would otherwise
+      # run `pin-precheck.sh` over a log whose `npm test` never executed and
+      # record the pins green.
+      echo "REFUSED  $cmd  ($(secs "$t0")) — $(sed -n '1s/^\[[^]]*\] *//p' "$log" 2>/dev/null)"
+      refused=1
+    else
+      echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
+      fail=1
+    fi
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')
 
@@ -199,6 +232,22 @@ else
   # eleven would rebuild `forge-e8dn` eleven manifests over.
   head_now="$(git -C "$R" rev-parse HEAD 2>/dev/null || echo '')"
   short="${head_now:0:8}"
+  # A FAILED count the lane did not declare fails the gate (693(ii), §15.388):
+  # D's gate was rc=0, 20/20, with `M6-T1.sha256: 2 FAILED of 14` in the same
+  # log. Declarations are matched by MANIFEST or by `MANIFEST:path`, so a lane
+  # can account for one amended file without blanketing the whole manifest.
+  pin_fail() {
+    local man="$1" manifest="$2" undeclared=0 p
+    case " $EXPECTED_PIN_FAILS " in *" $man "*) echo "  declared: every failure in $man is accounted for by this PR"; return 0 ;; esac
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      case " $EXPECTED_PIN_FAILS " in
+        *" $man:$p "*) echo "  declared: $man:$p" ;;
+        *) echo "  UNDECLARED: $man:$p"; undeclared=1 ;;
+      esac
+    done < <(cd "$R" && sha256sum -c "$manifest" 2>/dev/null | sed -n 's/^\(.*\): FAILED$/\1/p')
+    [ "$undeclared" -eq 0 ] || fail=1
+  }
   for m in "$CAMP"/gate-manifests/*.sha256; do
     [ -f "$m" ] || continue
     counts="${m%.sha256}.counts"
@@ -207,13 +256,27 @@ else
     # Count FAILED lines only: `grep -vc ': OK$'` also counts sha256sum's WARNING line (§15.105).
     n="$(cd "$R" && sha256sum -c "$m" 2>&1 | grep -cE ': FAILED|No such file')"
     total="$(wc -l < "$m")"
+    man="$(basename "$m" .sha256)"
+    # SKEW IS AN ANCESTRY QUESTION, NOT A STRING ONE (M6-C, verified on a real
+    # tree: HEAD `82bb8bf4` is a DESCENDANT of pin `df473067`, so it contains
+    # every pinned commit and can answer perfectly — and a prefix match called
+    # it skew). With the rc riding on this, a prefix match would refuse a lane
+    # one commit ahead and hand it advice it has already followed.
+    readable=1
+    if [ -n "$pinned" ] && ! git -C "$R" merge-base --is-ancestor "$pinned" HEAD 2>/dev/null; then readable=0; fi
     if [ -z "$pinned" ]; then
-      echo "$(basename "$m"): $n FAILED of $total — tree at ${short:-unknown} (no head= in $(basename "$counts") — skew unknown)"
-    elif [ "$n" -gt 0 ] && [ "${head_now#"$pinned"}" = "$head_now" ]; then
-      echo "$(basename "$m"): $n FAILED of $total — tree at $short; last verified at $pinned — skew: reconcile from a tree at $pinned or later before reading these as drift (§15.381)"
+      echo "$man.sha256: $n FAILED of $total — tree at ${short:-unknown} (no head= in $(basename "$counts") — skew unknown)"
+      [ "$n" -gt 0 ] && pin_fail "$man" "$m" || true
+    elif [ "$n" -gt 0 ] && [ "$readable" -eq 0 ]; then
+      echo "$man.sha256: $n FAILED of $total — tree at $short; last verified at $pinned — skew: reconcile from a tree at $pinned or later before reading these as drift (§15.381)"
     else
-      echo "$(basename "$m"): $n FAILED of $total — tree at ${short:-unknown}; last verified at $pinned"
+      echo "$man.sha256: $n FAILED of $total — tree at ${short:-unknown}; last verified at $pinned"
+      [ "$n" -gt 0 ] && pin_fail "$man" "$m" || true
     fi
   done
 fi
-exit $fail
+# A real failure outranks a refusal: a gate that both lost a step AND was
+# refused another is red, not "try again later".
+if [ "$fail" -ne 0 ]; then exit "$fail"; fi
+[ "$refused" -eq 0 ] || exit 3
+exit 0
