@@ -44,7 +44,7 @@
  * the lane's own Monitor is what waits.
  */
 
-import { readdirSync, readlinkSync, realpathSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, readlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
 
 /** Env name → the campaign's full-suite lock, excluded by a story run. */
 export const SUITE_LOCK_ENV = 'FORGE_SUITE_LOCK';
@@ -86,6 +86,93 @@ export const EXIT_LOCK_REFUSED = 75;
  *          `lockPath` names nothing this process can resolve — never `[]` for
  *          a path that is not there.
  */
+/**
+ * Who the KERNEL says holds `lockPath`, and who is blocked waiting for it.
+ *
+ * THE FD WALK BELOW CANNOT TELL THEM APART, and that is not a subtlety — it is
+ * a wrong answer with a lane's name on it. A process blocked in `flock(2)` keeps
+ * the descriptor open exactly like the owner does, so `/proc/<pid>/fd` reports
+ * both. Measured on 2026-09-11: `.run-lock` had A's holder, A's costed S1, and
+ * MY `flock -w … true` queued behind them; the fd census named all three, D's
+ * gate refusal told A's lane I was in the way, and I had already sent T1 the
+ * same wrong shape twice from the same method.
+ *
+ * `/proc/locks` separates them. The `->` prefix marks a BLOCKED waiter:
+ *
+ *   7:    FLOCK ADVISORY WRITE 2667935 08:30:2313312 0 EOF   ← holder
+ *   7: -> FLOCK ADVISORY WRITE 2683133 08:30:2313312 0 EOF   ← waiter
+ *
+ * MATCHED ON THE INODE, never on the pid or the path (D's caveat, and it is
+ * right twice over): filtering by pid finds every lock that process holds
+ * anywhere, and the inode is the only stable identity if the lock file is ever
+ * replaced rather than truncated. `/proc/locks` gives no `cwd`, which is why
+ * the fd walk stays — each source supplies exactly what the other cannot, and
+ * the sentence a lane needs ("held by pid N (cwd X); K waiting") requires both.
+ *
+ * @returns {{holders: {pid: string}[], waiters: {pid: string}[]}|null} null when
+ *   the lock file is absent — the caller distinguishes "nothing holds it" from
+ *   "there is nothing to hold".
+ */
+function kernelLockRows(lockPath, procRoot = '/proc') {
+  let ino;
+  try {
+    ino = statSync(lockPath).ino;
+  } catch {
+    return null;
+  }
+  let raw;
+  try {
+    raw = readFileSync(`${procRoot}/locks`, 'utf8');
+  } catch {
+    // Unreadable /proc/locks is NOT "nothing is locked". Say so by returning
+    // null so the caller reports a guard that cannot check, exactly as it does
+    // for a missing lock file.
+    return null;
+  }
+  const holders = [];
+  const waiters = [];
+  for (const line of raw.split('\n')) {
+    if (line === '') continue;
+    // `<n>: [->] FLOCK ADVISORY WRITE <pid> <maj>:<min>:<ino> <start> <end>`
+    const m = /^\s*\d+:\s*(->)?\s*\S+\s+\S+\s+\S+\s+(\d+)\s+[0-9a-f]+:[0-9a-f]+:(\d+)\s/.exec(line);
+    if (m === null) continue;
+    if (Number(m[3]) !== ino) continue;
+    (m[1] === '->' ? waiters : holders).push({ pid: m[2] });
+  }
+  return { holders, waiters };
+}
+
+/** `cwd` for a pid, which `/proc/locks` does not carry. */
+function cwdOf(pid, procRoot) {
+  try {
+    return readlinkSync(`${procRoot}/${pid}/cwd`);
+  } catch {
+    return null; // a process we cannot introspect is still worth naming
+  }
+}
+
+/** Processes BLOCKED waiting for `lockPath` — never the ones holding it. */
+export function lockWaiters(lockPath, procRoot = '/proc') {
+  const rows = kernelLockRows(lockPath, procRoot);
+  if (rows === null) return existsSync(lockPath) ? [] : null;
+  return rows.waiters.map((w) => ({ pid: w.pid, cwd: cwdOf(w.pid, procRoot) }));
+}
+
+/**
+ * The one sentence a lane needs to choose between waiting and investigating.
+ *
+ * Waiters are COUNTED, not named: naming them is what sent D to my lane for a
+ * process that was itself queued. A reader acts on who holds; how many wait
+ * tells them how long the queue is, and nothing more.
+ */
+export function describeLockOccupants(holders, waiters) {
+  if (holders.length === 0 && waiters.length === 0) return 'nothing holds it';
+  const who = holders.length === 0
+    ? 'nothing holds it'
+    : holders.map((h) => `held by pid ${h.pid} (cwd ${h.cwd ?? '<unreadable>'})`).join(', ');
+  return waiters.length === 0 ? who : `${who}; ${waiters.length} waiting`;
+}
+
 export function lockHolders(lockPath, procRoot = '/proc') {
   if (!existsSync(lockPath)) return null;
   let target;
@@ -94,6 +181,22 @@ export function lockHolders(lockPath, procRoot = '/proc') {
   } catch {
     return null;
   }
+  // 7.6.33: ASK THE KERNEL FIRST. When `/proc/locks` is readable it is the
+  // authority on who HOLDS the lock; the fd walk below is kept only to supply
+  // the `cwd` that `/proc/locks` does not carry, and — as a fallback — to name
+  // occupants at all where `/proc/locks` cannot be read.
+  const rows = kernelLockRows(lockPath, procRoot);
+  if (rows !== null && (rows.holders.length > 0 || rows.waiters.length > 0)) {
+    // The kernel KNOWS this inode, so it is the authority and the fd walk would
+    // only add waiters back in as though they were holders.
+    return rows.holders.map((h) => ({ pid: h.pid, cwd: cwdOf(h.pid, procRoot) }));
+  }
+  // The kernel knows NOTHING about this inode, and that is not the same as
+  // "free". `exec 9>lock; flock 9` opens before it locks, so a process can hold
+  // the descriptor with no kernel row yet — the pre-flock window. Falling
+  // through to the fd walk names it, which REFUSES, which is the safe direction:
+  // a guard that let a run start inside that window would be excluding nothing.
+
   const holders = [];
   let pids;
   try {
@@ -168,7 +271,11 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   if (holders.length === 0) {
     return { ok: true, reason: `overlap ok — nothing holds ${lockPath}` };
   }
-  const who = holders.map((h) => `pid ${h.pid} (cwd ${h.cwd ?? '<unreadable>'})`).join(', ');
+  // 7.6.33: the refusal names the HOLDER and COUNTS the waiters. It used to
+  // list both undifferentiated, so a lane queued behind the real holder was
+  // reported as being in the way — which sent D to my lane for a process that
+  // was itself waiting, while the lane actually holding the lock went unnamed.
+  const who = describeLockOccupants(holders, lockWaiters(lockPath, procRoot) ?? []);
   return {
     ok: false,
     reason:
