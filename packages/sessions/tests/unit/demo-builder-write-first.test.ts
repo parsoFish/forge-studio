@@ -177,3 +177,74 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   }
   assert.equal(read.maxTurns, DEMO_READ_PASS_MAX_TURNS);
 });
+
+test('forge-a9o9: the write pass denies the doors the PRODUCT NEVER DECLARED — LSP, TaskOutput, Skill', async () => {
+  // MEASURED, S1 run 5 (evidence/m6-a-S1-run5/_demo-.../events.jsonl). The test
+  // above pins the five doors 7.3.6 knew about and the write pass STILL read:
+  //
+  //   TaskOutput -> LSP -> Glob -> Skill(glob) -> Write -> Edit -> LSP
+  //
+  // Four of seven calls hunting for a way to read, three of them through tools
+  // that appear NOWHERE in this repo — not in an allowed-tools list, not in a
+  // disallowed-tools list, not in any kind's spec. The SDK ships them anyway.
+  // The agent said so itself, in the run's own log: "The tools available are
+  // Read, Grep, Glob, Bash, Write, Edit per the skill spec — but the environment
+  // only has a subset. Let me use what's actually available."
+  //
+  // So the deny list is incomplete BY CONSTRUCTION, not by oversight: it can
+  // only name tools its authors have heard of. This test closes the three doors
+  // that were measured open. It does not — cannot — close the next three, and
+  // that is the point of the structural fix (`forge-a9o9`, T1 ruling 662(ii)):
+  // deny by default, from the SDK's real surface, so an undeclared tool is
+  // refused without anyone having to name it here first.
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const passes: Pass[] = [];
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
+  });
+
+  const write = passes[1]!;
+  for (const door of ['LSP', 'TaskOutput', 'Skill']) {
+    assert.ok(
+      write.disallowedTools.includes(door),
+      `the write pass must DENY ${door} — it was USED to read on S1 run 5. Got: ${write.disallowedTools.join(', ') || '(none)'}`,
+    );
+    assert.ok(!write.allowedTools.includes(door), `the write pass must not CARRY ${door} — got ${write.allowedTools.join(', ')}`);
+  }
+
+  // The read pass keeps them: it is ALLOWED to read, so an undeclared read door
+  // is not a defect there. Pinning this stops the fix being over-applied into
+  // the one pass whose whole job is reading.
+  assert.ok(!passes[0]!.disallowedTools.includes('LSP'), 'the READ pass is not harmed by a read door — do not deny it there');
+});
+
+test('forge-a9o9: the write pass is TOLD what it holds, so it stops hunting for a door', async () => {
+  // The other half of the same measurement, and the reason denying three more
+  // names is not enough on its own. The agent did not guess it had read tools —
+  // it READ that it did. `loadSkillTurnPrompt` returns `${base}\n\n${section}`,
+  // and `base` is everything above the first turn marker: the SKILL.md
+  // frontmatter included, `allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]`
+  // and all. That line is TRUE of the kind and FALSE of this pass, and the agent
+  // believed the frontmatter over its own tool-call failures for four calls.
+  //
+  // The read pass has said `## This turn: READ ONLY` since #630. The write pass
+  // was given no such header and inherited the contradiction instead. This pins
+  // the matching one.
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const passes: Pass[] = [];
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
+  });
+
+  const write = passes[1]!.prompt;
+  assert.match(write, /## This turn: WRITE ONLY/, 'the write pass declares itself, as the read pass does');
+  assert.match(write, /no Read, Grep, Glob, Bash/i, 'and names the doors it does not have, against a frontmatter that says it does');
+  // The deliverable the pass kept failing to produce is the one the SKILL
+  // describes as "produced by running that generator" — with Bash denied, that
+  // reading is unfollowable. The same SKILL sentence also says the captured
+  // output is left as MARKED PLACEHOLDERS for the grounding pass, which is the
+  // half this pass can actually do. The header says which half is this turn's.
+  assert.match(write, /placeholder/i, 'it says how to produce the sample WITHOUT running anything');
+});
