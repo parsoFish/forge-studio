@@ -134,7 +134,7 @@ export async function runGenerateStep(args: {
   let findings = '';
   await runPass(
     [prompt, '', '## This turn: READ ONLY', 'Gather what you need to author the demo. Write nothing; your notes are carried to the next turn.'].join('\n'),
-    DEMO_READ_TOOLS, DEMO_READ_PASS_MAX_TURNS, ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash'],
+    DEMO_READ_TOOLS, DEMO_READ_PASS_MAX_TURNS, ['Write', 'Edit', 'MultiEdit', 'Bash'],
     (t) => { findings += t; },
   );
   const writePass = await runPass(
