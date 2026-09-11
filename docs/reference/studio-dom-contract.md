@@ -1129,6 +1129,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     in display text) and is deliberately **not** `data-run-cost-usd`, which
     `MonitorSummary.tsx` already emits at `.toFixed(4)` — reusing that name
     would make one attribute mean two precisions.
+  - **Both cost attributes are OMITTED when the cost is `null`, never rendered
+    as `0.00`** (bead `forge-ygys`). An absent cost and a run that genuinely
+    cost nothing are different facts, and a reader cannot tell them apart from
+    a zero. `data-ledger-cost-usd` has always omitted; `data-run-cost-usd` now
+    does too, because `Run.costUsd` is `number | null` and `parseRun` no longer
+    coerces `?? 0`. A story asserting either attribute is asserting that a cost
+    EXISTS as well as what it is.
   - `data-narrative-kinds` is the **authoritative machine surface**: the
     ordered, comma-joined segment kinds from a closed seven-member vocabulary
     (`work-items · gate-fails · review-findings · gate-waiting · failed ·
