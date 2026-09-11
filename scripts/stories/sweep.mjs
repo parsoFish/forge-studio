@@ -28,7 +28,7 @@ import { liveProcessRoots, liveSessionOwners } from './fence-attribution.mjs';
 /** A story id must be a single safe path segment — it is interpolated into
  *  paths that are then removed recursively. `..` or a separator would resolve
  *  outside the story's namespace. */
-function assertSafeStoryId(storyId) {
+export function assertSafeStoryId(storyId) {
   if (typeof storyId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(storyId) || storyId.includes('..')) {
     throw new Error(
       `unsafe story id ${JSON.stringify(storyId)}: expected a single path segment of [A-Za-z0-9._-]`,
@@ -50,7 +50,7 @@ function assertSafeStoryId(storyId) {
  * `story-` stays a reserved prefix in every variant, so the guard that keeps a
  * story named after its own ground from deleting that ground is untouched.
  */
-function storyFixtureNames(storyId) {
+export function storyFixtureNames(storyId) {
   const names = new Set([`story-${storyId}`, `story-${storyId.toLowerCase()}`]);
   return [...names];
 }

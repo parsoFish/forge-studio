@@ -50,6 +50,7 @@ import {
   sweepStoryResidue,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
+import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './sweep-teardown.mjs';
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
@@ -214,6 +215,20 @@ async function main() {
       sweptPaths.push(...removed);
       for (const p of removed) console.log(`[stories] leading sweep removed ${p}`);
       for (const f of failed) console.warn(`[stories] leading sweep could not remove ${f.path}: ${f.error}`);
+      // `forge-8vfn.7.6.24` — the agent log dirs a PREVIOUS run of this story
+      // left. Captured before removal, and LEADING ONLY: nothing here can belong
+      // to this run, because the run has not started. Stamped so two runs'
+      // captures can never read as one (`redEvidenceDir`'s own lesson).
+      const sweepStamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const agentLogs = captureAndSweepAgentLogs(s.id, ROOT, sweepStamp);
+      for (const p of agentLogs.removed) {
+        console.log(`[stories] leading sweep captured and removed ${p} — a previous run's dispatch log; ` +
+          'left in place it inflates this run\'s ledger count and can turn a red beat green');
+      }
+      for (const f of agentLogs.failed) {
+        console.warn(`[stories] leading sweep could not clear ${f.path}: ${f.error} — the residue STAYS, ` +
+          'because losing the bytes is worse than carrying it one more run');
+      }
     }
 
     // 5. Bridge identity — never drive a bridge serving another tree.
