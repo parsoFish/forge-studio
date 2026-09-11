@@ -31,7 +31,7 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
-import { DEMO_WRITE_PASS_MAX_TURNS } from '../../kinds/demo-generate.ts';
+import { DEMO_WRITE_PASS_MAX_TURNS, DEMO_READ_PASS_MAX_TURNS } from '../../kinds/demo-generate.ts';
 import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 
@@ -82,10 +82,10 @@ test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agen
   // gets no code-level enforcement at all". `disallowedTools` is the lever
   // that removes a tool from the model's context. Asserting the advisory field
   // is how a test agrees with the bug it was written to catch.
-  assert.ok(passes[0].disallowedTools.includes('Bash'), `pass 1 must DENY Bash — got disallowedTools ${passes[0].disallowedTools.join(', ') || '(none)'}`);
-  assert.ok(!passes[0].allowedTools.includes('Bash'), `pass 1 must not carry Bash — got ${passes[0].allowedTools.join(', ')}`);
-  assert.ok(passes[0].allowedTools.includes('Write'), 'pass 1 keeps the tools it needs to author');
-  assert.equal(passes[0].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
+  assert.ok(passes[1].disallowedTools.includes('Bash'), `pass 1 must DENY Bash — got disallowedTools ${passes[1].disallowedTools.join(', ') || '(none)'}`);
+  assert.ok(!passes[1].allowedTools.includes('Bash'), `pass 1 must not carry Bash — got ${passes[1].allowedTools.join(', ')}`);
+  assert.ok(passes[1].allowedTools.includes('Write'), 'pass 1 keeps the tools it needs to author');
+  assert.equal(passes[1].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
   assert.ok(DEMO_WRITE_PASS_MAX_TURNS < 24, 'the write budget is well inside the old 24-turn one');
 });
 
@@ -105,8 +105,8 @@ test('6.11.49: an agent that writes NOTHING fails NAMING both artifacts, inside 
     },
   );
 
-  assert.equal(passes.length, 1, 'the grounding pass must NOT run once the write pass produced nothing');
-  assert.equal(passes[0].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
+  assert.equal(passes.length, 2, 'read then write ran; the grounding pass must NOT run once the write pass produced nothing');
+  assert.equal(passes[1].maxTurns, DEMO_WRITE_PASS_MAX_TURNS);
   assert.ok(!existsSync(join(repoPath, DEMO_HTML_REL_PATH)));
 });
 
@@ -119,12 +119,12 @@ test('6.11.49: once both artifacts exist, a SECOND pass runs WITH Bash and the r
     queryFn: recordingQueryFn(1, passes), logger: logger(logsRoot, sessionId),
   });
 
-  assert.equal(passes.length, 2, 'write pass, then grounding pass');
-  assert.ok(passes[1].allowedTools.includes('Bash'), 'grounding needs Bash — a demo that cannot run the project cannot be REAL output');
-  assert.ok(!passes[1].disallowedTools.includes('Bash'), 'the grounding pass must NOT deny Bash — the deny is per-pass, not for the turn');
-  assert.ok((passes[1].maxTurns ?? 0) > 0);
+  assert.equal(passes.length, 3, 'read pass, write pass, then grounding pass');
+  assert.ok(passes[2].allowedTools.includes('Bash'), 'grounding needs Bash — a demo that cannot run the project cannot be REAL output');
+  assert.ok(!passes[2].disallowedTools.includes('Bash'), 'the grounding pass must NOT deny Bash — the deny is per-pass, not for the turn');
+  assert.ok((passes[2].maxTurns ?? 0) > 0);
   assert.ok(
-    (passes[0].maxTurns ?? 0) + (passes[1].maxTurns ?? 0) <= 24,
+    (passes[1].maxTurns ?? 0) + (passes[2].maxTurns ?? 0) <= 24,
     'the two passes together spend no more than the single pass they replace',
   );
   assert.equal(result.phase, 'awaiting-review');
@@ -139,10 +139,41 @@ test('6.11.49: the two passes carry DIFFERENT instructions — the write pass is
     queryFn: recordingQueryFn(1, passes), logger: logger(logsRoot, sessionId),
   });
 
-  assert.notEqual(passes[0].prompt, passes[1].prompt, 'two passes, two tasks');
+  assert.notEqual(passes[1].prompt, passes[2].prompt, 'two passes, two tasks');
   // The measured defect in one assertion: the instruction to check out, build
   // and RUN the project belongs to the pass that has Bash, not to the one that
   // must author two files first.
-  assert.doesNotMatch(passes[0].prompt, /check out \/ build \/ run/i, 'the write pass is not told to run anything');
-  assert.match(passes[1].prompt, /check out \/ build \/ run/i, 'the grounding pass is');
+  assert.doesNotMatch(passes[1].prompt, /check out \/ build \/ run/i, 'the write pass is not told to run anything');
+  assert.match(passes[2].prompt, /check out \/ build \/ run/i, 'the grounding pass is');
+});
+
+test('7.3.6: the WRITE pass has no read door at all — Bash was never the only one', async () => {
+  // THE ASSERTION THIS FILE EXISTS FOR, one bead later. 6.11.49 denied Bash so
+  // the agent 'cannot run the project before it has written anything'. S1 run 4
+  // measured what that left: 1 TodoWrite + 2 Glob + 6 Read in eight seconds,
+  // the whole 8-turn budget spent, not one write attempted. Denying Bash
+  // removed run-instead-of-write; Read, Glob, Grep and TodoWrite were still
+  // open, and that is where the budget went. A deny list that leaves ANY read
+  // door open is #558 again, so this pins the whole list rather than one entry.
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const passes: Pass[] = [];
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: recordingQueryFn(2, passes), logger: logger(logsRoot, sessionId),
+  });
+
+  const write = passes[1]!;
+  for (const door of ['Bash', 'Read', 'Glob', 'Grep', 'TodoWrite']) {
+    assert.ok(write.disallowedTools.includes(door), `the write pass must DENY ${door} — got ${write.disallowedTools.join(', ') || '(none)'}`);
+    assert.ok(!write.allowedTools.includes(door), `the write pass must not CARRY ${door} — got ${write.allowedTools.join(', ')}`);
+  }
+  assert.ok(write.allowedTools.includes('Write'), 'it keeps the one tool the pass exists to use');
+
+  // And the reading it needs happens first, bounded, with writes denied there.
+  const read = passes[0]!;
+  assert.ok(read.allowedTools.includes('Read') && read.allowedTools.includes('Glob'), 'the read pass can read');
+  for (const w of ['Write', 'Edit']) {
+    assert.ok(read.disallowedTools.includes(w), `the read pass must DENY ${w} — a pass that can write is not a read pass`);
+  }
+  assert.equal(read.maxTurns, DEMO_READ_PASS_MAX_TURNS);
 });
