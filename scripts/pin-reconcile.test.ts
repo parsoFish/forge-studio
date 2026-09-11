@@ -105,3 +105,96 @@ test('AT-6.9.2-3 the to-sha may be given SHORT — a prefix of the real HEAD is 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// T1 ruling 707 — a rehash that does not advance `head=` leaves the manifest
+// describing a tree it does not describe.
+//
+// MEASURED: C's precheck named `agent-dispatch-containment.test.ts` as C's drift
+// because `M6-D.counts` still read `head=c1a751ea` while `M6-D.sha256` pinned
+// main's current bytes. Every lane's skew test reads that field, so a stale one
+// turns one lane's correct re-pin into another lane's phantom drift.
+//
+// §15.400 — what else could make these pass? Writing `head=` unconditionally
+// would satisfy the first two and quietly break the third and fourth, so the
+// untouched-manifest and still-FAILED cases are asserted, not assumed.
+// ---------------------------------------------------------------------------
+
+test('707: a rehashed manifest gains head=<to> in its .counts, created when absent', () => {
+  const { root, repo, camp, g, first, second } = plant();
+  try {
+    // no .counts at all — the state four of M6-D's story manifests were in
+    const r = reconcile(repo, camp, first, second);
+    assert.equal(r.code, 0, r.out);
+    const counts = readFileSync(join(g, 'M5-B.counts'), 'utf8');
+    assert.match(counts, new RegExp(`head=${second.slice(0, 8)}`), `counts should name the to-sha — got ${counts}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('707: an EXISTING head= is advanced, not duplicated', () => {
+  const { root, repo, camp, g, first, second } = plant();
+  try {
+    writeFileSync(join(g, 'M5-B.counts'), 'paths=1 head=deadbeef tree=/somewhere\n', 'utf8');
+    const r = reconcile(repo, camp, first, second);
+    assert.equal(r.code, 0, r.out);
+    const counts = readFileSync(join(g, 'M5-B.counts'), 'utf8');
+    assert.match(counts, new RegExp(`head=${second.slice(0, 8)}`));
+    assert.equal(/deadbeef/.test(counts), false, 'the stale sha must be gone, not accompanied');
+    assert.equal((counts.match(/head=/g) ?? []).length, 1, 'exactly one head= field, never two to disagree');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('707: a manifest the run did NOT rehash is left alone', () => {
+  const { root, repo, camp, g, first, second } = plant();
+  try {
+    // M5-C pins a file the merge never touched, so the loop skips it entirely.
+    writeFileSync(join(g, 'M5-C.sha256'), `${'0'.repeat(64)}  untouched.txt\n`, 'utf8');
+    writeFileSync(join(g, 'M5-C.counts'), 'paths=1 head=deadbeef tree=/somewhere\n', 'utf8');
+    const r = spawnSync('bash', [RECONCILE, repo, camp, 'M5-*', first, second, 'a label'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+    assert.equal(
+      readFileSync(join(g, 'M5-C.counts'), 'utf8'),
+      'paths=1 head=deadbeef tree=/somewhere\n',
+      'a manifest this run did not rehash must not have its head= advanced — that would claim a ' +
+        'verification the run never performed',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('707: a manifest still FAILED after the rehash does NOT get a head naming this tree', () => {
+  const { root, repo, camp, g, first, second } = plant();
+  try {
+    // Pin a second path the merge DELETES: the script leaves that entry in
+    // place (the gate reads it as missing, which is honest), so the manifest is
+    // still non-zero after the rehash.
+    writeFileSync(join(repo, 'doomed.txt'), 'x\n', 'utf8');
+    const gone = spawnSync('sha256sum', ['doomed.txt'], { cwd: repo, encoding: 'utf8' }).stdout.split(' ')[0];
+    writeFileSync(join(g, 'M5-B.sha256'), `${readFileSync(join(g, 'M5-B.sha256'), 'utf8').trim()}\n${gone}  doomed.txt\n`, 'utf8');
+    git(repo, 'add', 'doomed.txt');
+    git(repo, 'commit', '-qm', 'add doomed');
+    const withDoomed = git(repo, 'rev-parse', 'HEAD').stdout.trim();
+    rmSync(join(repo, 'doomed.txt'));
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-qm', 'delete doomed');
+    const afterDelete = git(repo, 'rev-parse', 'HEAD').stdout.trim();
+
+    const r = reconcile(repo, camp, withDoomed, afterDelete);
+    assert.equal(r.code, 0, r.out);
+    const counts = readFileSync(join(g, 'M5-B.counts'), 'utf8');
+    assert.equal(
+      new RegExp(`head=${afterDelete.slice(0, 8)}`).test(counts),
+      false,
+      'head= records a tree the manifest VERIFIED against; naming one it still fails is the ' +
+        'stale-head defect pointing the other way',
+    );
+    assert.match(counts, /still FAILED|not verified/i, 'and the .counts must say why it was not advanced');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
