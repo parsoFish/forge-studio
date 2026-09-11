@@ -629,6 +629,47 @@ export default {
       say: 'Same shape as the skill: forge mints the session and says so where the operator already is, and reaching it is their own next act.',
     },
     {
+      // AMEND-4 (T1 ruling 668), NAVIGATION (504) — amend-3's shape, one hop
+      // further on, and the same class of miss.
+      //
+      // MEASURED in run 2. The runner's own words are the whole diagnosis:
+      //
+      //   05:08:59.402  ✓ 19. Open the instructions session it just started
+      //   05:08:59.461  ✗ 20. Open an agent from the Agents pillar and bind the hook to it
+      //       no real-nav path to "/agents/brain-ingest" from
+      //       "/sessions/instructions/2026-09-11T05-08-59-34e16588": no
+      //       [data-nav] pillar and no link whose PATHNAME is that route
+      //
+      // **59 ms.** The next beat never waited for anything, because there was
+      // nothing on the session page to wait for — and its own `act` says "from
+      // the Agents pillar", describing an operator this story had never sent
+      // there. The hop was missing, not the assertion.
+      //
+      // WHY THE PILLAR IS NOT THE PROBLEM, since the runner's message reads as
+      // if it were. `beats-drive.mjs:308` collects every `[data-nav][href],
+      // a[href]` on the page and `:318` keeps only those matching the TARGET,
+      // so "no [data-nav] pillar" means no pillar matched THAT route — not
+      // that the page has none. `/agents/brain-ingest` is a DETAIL route and
+      // no pillar carries it; the pillar carries `/agents`. The session page
+      // renders the pillar throughout: this page mounts `StudioArchitectShell`
+      // (`app/sessions/[kind]/[sessionId]/page.tsx:390`), which mounts
+      // `<StudioNav/>` (`StudioArchitectShell.tsx:50`), which stamps
+      // `data-nav="agents"` with `href="/agents"` (`StudioNav.tsx:94`). So the
+      // index is reachable from here where the detail was not, and the beat
+      // below is the hop that makes the next one's first act possible.
+      //
+      // Same assertions as beat 15's arrival at this route, deliberately:
+      // route plus `page` and `page-ready`, and nothing else. No judgement
+      // content, which is what 504's class allows to be authored without going
+      // back to the operator.
+      act: 'Head back to the Agents pillar',
+      expect: {
+        route: '/agents',
+        data: { page: 'agents-index', 'page-ready': 'true' },
+      },
+      say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the only way back to a worker is the pillar the operator started from.',
+    },
+    {
       // NOT expressible. Binding a hook to an agent means adding it to the
       // builder's `[data-accepts="hook"]` drop zone, and the only way to do
       // that is to click a `.catalog-chip[data-id="story-s7-hook"]
