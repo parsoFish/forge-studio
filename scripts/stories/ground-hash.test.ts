@@ -64,7 +64,13 @@ test('groundManifest: node_modules and .git are excluded — the cost objection 
   try {
     const files = [...groundManifest(dir)!.files.keys()];
     assert.ok(files.every((f) => !f.includes('node_modules') && !f.includes('.git/')), `excluded paths leaked in: ${files.join(', ')}`);
-    assert.deepEqual(files.sort(), ['./.gitignore', './CLAUDE.md', './src/main.py']);
+    // BARE, not `./`-prefixed. `METHOD_C_CMD` is `find . …`, so these arrived
+    // with a `./` until S10 run 7 showed what that cost: every other path in the
+    // runner is repo-relative and bare, `classifyOwnGroundDrift` compared the two
+    // shapes, matched nothing, and failed a run on containment for the session it
+    // had just minted. Normalised at the source in `groundManifest`; the digest
+    // hashes the raw text stream, so no ground hash moved.
+    assert.deepEqual(files.sort(), ['.gitignore', 'CLAUDE.md', 'src/main.py']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -82,9 +88,9 @@ test('groundChanges: names the files — a digest alone tells the operator somet
     writeFileSync(join(dir, 'roadmap.md'), '# roadmap\n');
     rmSync(join(dir, 'src', 'main.py'));
     const changes = groundChanges(before, groundManifest(dir)!);
-    assert.deepEqual(changes.modified, ['./CLAUDE.md']);
-    assert.deepEqual(changes.added, ['./roadmap.md']);
-    assert.deepEqual(changes.removed, ['./src/main.py']);
+    assert.deepEqual(changes.modified, ['CLAUDE.md']);
+    assert.deepEqual(changes.added, ['roadmap.md']);
+    assert.deepEqual(changes.removed, ['src/main.py']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -108,8 +114,8 @@ test('siblingGroundEscapes: a planted edit inside a sibling worktree\'s ground i
     const found = siblingGroundEscapes('gitweave', before, { dirs });
     assert.equal(found.length, 1, 'the changed ground must be reported');
     assert.equal(found[0].root, sibling);
-    assert.deepEqual(found[0].changes.added, ['./.gitignore']);
-    assert.deepEqual(found[0].changes.modified, ['./CLAUDE.md']);
+    assert.deepEqual(found[0].changes.added, ['.gitignore']);
+    assert.deepEqual(found[0].changes.modified, ['CLAUDE.md']);
     assert.notEqual(found[0].before, found[0].after, 'the two method-C digests must differ and both be reported');
   } finally {
     rmSync(sibling, { recursive: true, force: true });
@@ -141,7 +147,7 @@ test('siblingGroundEscapes: a ground APPEARING in a tree that had none is a find
     const found = siblingGroundEscapes('gitweave', before, { dirs });
     assert.equal(found.length, 1);
     assert.equal(found[0].before, null, 'the ground was absent before');
-    assert.deepEqual(found[0].changes.added, ['./CLAUDE.md']);
+    assert.deepEqual(found[0].changes.added, ['CLAUDE.md']);
   } finally {
     rmSync(sibling, { recursive: true, force: true });
   }
@@ -235,4 +241,62 @@ test('594: a path that merely PREFIXES a minted one is not covered by it', () =>
     ['_architect/abc'],
   );
   assert.equal(undeclared.length, 1, 'prefix matching would licence a directory the run never minted');
+});
+
+test('594 REGRESSION: the ownership test runs against the shape `groundManifest` REALLY emits', () => {
+  // RED BEFORE THE FIX, and bought by S10 run 7 at $3.2562.
+  //
+  // Every door test above hand-wrote its changed paths as `_architect/<id>/…`.
+  // `groundManifest` shells `find .`, so what it emitted was
+  // `./_architect/<id>/…`, and the ownership test — `p === m ||
+  // p.startsWith(m + '/')` — matched none of it. The run reported all nine files
+  // of the architect session it had just minted as UNDECLARED and failed itself
+  // on containment: the exact false red ruling 594 chose (a) to avoid, shipped
+  // by the check whose whole job is noticing when something wrote where it
+  // should not have.
+  //
+  // A HAND-WRITTEN FIXTURE IS A SECOND IMPLEMENTATION OF THE THING UNDER TEST,
+  // AND IT IS ALWAYS THE ONE THAT AGREES WITH YOU. So this test does not
+  // describe the shape — it drives the REAL function over a real tree and feeds
+  // the real output through.
+  const ground = mkdtempSync(join(tmpdir(), 'forge-own-ground-'));
+  // A ground always has files. It matters here: `METHOD_C_CMD` ends in
+  // `xargs -0 sha256sum`, and with no input `sha256sum` reads STDIN and reports
+  // one phantom entry named `-`, so an EMPTY dir's manifest is not empty. Not
+  // reachable in production — no ground is empty — and deliberately not fixed in
+  // this PR, because `METHOD_C_CMD` is the recipe the ledger's INTENTs quote and
+  // lanes run by hand; changing it belongs in its own change, not folded into a
+  // regression fix. Filed in `_1.0/plans/M6-C-post-run-integrity.md`.
+  writeFileSync(join(ground, 'README.md'), 'the ground');
+  const before = groundManifest(ground);
+
+  const runId = '_architect-2026-09-10T23-10-42-0f5e5f27';
+  mkdirSync(join(ground, '_architect', '2026-09-10T23-10-42-0f5e5f27', 'manifests'), { recursive: true });
+  writeFileSync(join(ground, '_architect', '2026-09-10T23-10-42-0f5e5f27', 'PLAN.md'), '# plan');
+  writeFileSync(join(ground, '_architect', '2026-09-10T23-10-42-0f5e5f27', 'manifests', 'INIT-1.md'), 'x');
+
+  const changes = groundChanges(before, groundManifest(ground));
+  // The contract the fix establishes: names are repo-relative and bare, like
+  // every other path in the runner. Pinned here so a future `find` change that
+  // re-introduces a prefix fails loudly instead of silently un-owning every
+  // session again.
+  assert.ok(
+    changes.added.length > 0 && changes.added.every((p) => !p.startsWith('./')),
+    `manifest names must be bare: ${JSON.stringify(changes.added)}`,
+  );
+
+  const logs = mkdtempSync(join(tmpdir(), 'forge-own-logs-'));
+  mkdirSync(join(logs, runId), { recursive: true });
+  writeFileSync(join(logs, runId, 'events.jsonl'), '{}');
+  const minted = mintedSessionPaths([], [runId], logs);
+
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted);
+  assert.deepEqual(undeclared, [], `the run's own session is its product, not drift: ${undeclared.join(' | ')}`);
+  assert.equal(produced.length, 2, 'and both files are reported as produced');
+
+  // The control still has to hold in the real shape: something nobody minted.
+  writeFileSync(join(ground, 'CLAUDE.md'), 'written by an agent');
+  const after = classifyOwnGroundDrift(groundChanges(before, groundManifest(ground)), minted);
+  assert.equal(after.undeclared.length, 1, `an unminted write still fails: ${after.undeclared.join(' | ')}`);
+  assert.ok(after.undeclared[0].endsWith('CLAUDE.md'), after.undeclared[0]);
 });

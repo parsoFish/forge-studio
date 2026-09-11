@@ -70,7 +70,21 @@ export function groundManifest(dir) {
     // two-space run only, so a filename containing spaces survives intact.
     const at = line.indexOf('  ');
     if (at === -1) continue;
-    files.set(line.slice(at + 2), line.slice(0, at));
+    // NORMALISE AT THE SOURCE, not at each comparison. `METHOD_C_CMD` is
+    // `find . …`, so every name arrives `./`-prefixed while every other path in
+    // the runner is repo-relative and bare. S10 run 7 paid $3.2562 to find out
+    // what that costs: `classifyOwnGroundDrift` compared `./_architect/<id>/…`
+    // against a minted `_architect/<id>`, matched nothing, and failed the run on
+    // containment for the session it had just minted itself.
+    //
+    // Stripping it here fixes every present and future consumer at once, where
+    // stripping it at the comparison would have fixed exactly one (lane A's
+    // suggestion, and it is the better half of the fix). SAFE FOR THE DIGEST,
+    // verified empirically rather than argued: the digest hashes the raw `out`
+    // TEXT STREAM above, never the parsed map, so no ground hash can move —
+    // `projects/gitpulse` reads `e12d66d463e094eb` before and after.
+    const name = line.slice(at + 2);
+    files.set(name.startsWith('./') ? name.slice(2) : name, line.slice(0, at));
   }
   // `| sha256sum | cut -c1-16` — the digest is over the TEXT STREAM, exactly as
   // the pipeline computes it, so re-deriving it from the parsed map would be a
