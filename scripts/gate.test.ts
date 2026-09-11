@@ -21,7 +21,24 @@ import { join, basename } from 'node:path';
 const GATE = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'gate.sh');
 
 function gate(...args: string[]) {
-  const r = spawnSync('bash', [GATE, ...args], { encoding: 'utf8' });
+  // T1 ruling 649. THIS FILE'S SUBJECT IS WHICH VARIABLES `gate.sh` EXPORTS, so
+  // it must not inherit them. 639 gave `gate.sh` those exports; an outer
+  // `gate.sh <worktree> <campaign>` therefore exports both before running
+  // `npm test`, `spawnSync` here inherited that environment, and the
+  // no-campaign case below asserted about ITS OWN CALLER rather than about the
+  // gate it spawned — `gate.sh <worktree> _1.0` could never be green on its own
+  // suite, while the file alone was 13/13.
+  //
+  // Fixed on the TEST side on purpose: a test that asserts an ABSENCE owns the
+  // environment it asserts about. The alternative — teaching `gate.sh` which of
+  // its steps are self-referential — would put knowledge of this test inside
+  // the thing under test.
+  //
+  // The positive cases are unaffected: they pass a campaign, and `gate.sh`
+  // exports both from `$CAMP` itself, so stripping the INHERITED pair cannot
+  // hide an export the script actually makes.
+  const { FORGE_SUITE_LOCK: _suite, FORGE_RUN_LOCK: _run, ...env } = process.env;
+  const r = spawnSync('bash', [GATE, ...args], { encoding: 'utf8', env });
   return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
 }
 /** A throwaway tree with its own ci.yml — the point is that the gate reads THIS one. */
