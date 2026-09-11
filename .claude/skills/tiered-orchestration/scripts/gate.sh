@@ -181,10 +181,39 @@ if [ -z "$CAMP" ]; then
 elif [ ! -d "$CAMP/gate-manifests" ]; then
   echo "SKIP $CAMP has no gate-manifests/ — no manifests to check"
 else
+  # SKEW MAKES A **FAILED** COUNT AMBIGUOUS -- IT DOES NOT INVALIDATE A CLEAN ONE
+  # (T1 ruling 684, correcting this block's first draft; §15.381 credited to M6-C).
+  # `sha256sum -c` verifies HASHES, so `0 FAILED` from a tree AHEAD of the pin is a
+  # true statement -- the pinned bytes still hold here. Only a NON-ZERO count is
+  # unreadable across skew, because a MISSING or DIFF line can be a file the pin
+  # predates rather than drift. The first draft SKIPPED on any skew and threw the
+  # real verification away with the ambiguous one.
+  #
+  # MEASURED, and reported wrongly before it was understood: this block printed
+  # `M6-C.sha256: 13 FAILED of 198` from a tree one merge behind, and it went
+  # upward as a sibling lane's drift. C's tree was 0 FAILED / 0 MISSING; seven of
+  # the nine were files that did not exist in this checkout yet.
+  #
+  # THE NO-`head=` BRANCH IS NOT DECORATION. Only three of the campaign's fourteen
+  # `.counts` carry `head=`; a check keyed on it that stayed QUIET for the other
+  # eleven would rebuild `forge-e8dn` eleven manifests over.
+  head_now="$(git -C "$R" rev-parse HEAD 2>/dev/null || echo '')"
+  short="${head_now:0:8}"
   for m in "$CAMP"/gate-manifests/*.sha256; do
     [ -f "$m" ] || continue
+    counts="${m%.sha256}.counts"
+    pinned=""
+    [ -f "$counts" ] && pinned="$(grep -o 'head=[0-9a-f]\{7,40\}' "$counts" | head -1 | cut -d= -f2)"
     # Count FAILED lines only: `grep -vc ': OK$'` also counts sha256sum's WARNING line (§15.105).
-    echo "$(basename "$m"): $(cd "$R" && sha256sum -c "$m" 2>&1 | grep -cE ': FAILED|No such file') FAILED of $(wc -l < "$m")"
+    n="$(cd "$R" && sha256sum -c "$m" 2>&1 | grep -cE ': FAILED|No such file')"
+    total="$(wc -l < "$m")"
+    if [ -z "$pinned" ]; then
+      echo "$(basename "$m"): $n FAILED of $total — tree at ${short:-unknown} (no head= in $(basename "$counts") — skew unknown)"
+    elif [ "$n" -gt 0 ] && [ "${head_now#"$pinned"}" = "$head_now" ]; then
+      echo "$(basename "$m"): $n FAILED of $total — tree at $short; last verified at $pinned — skew: reconcile from a tree at $pinned or later before reading these as drift (§15.381)"
+    else
+      echo "$(basename "$m"): $n FAILED of $total — tree at ${short:-unknown}; last verified at $pinned"
+    fi
   done
 fi
 exit $fail
