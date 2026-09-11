@@ -31,7 +31,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -381,4 +381,31 @@ test('640 (CONTROL): no door at all leaves the consequence wait exactly as it wa
 
   assert.equal(stall, null);
   assert.ok(Date.now() - began >= 900, 'unchanged: the bound is what governs when there is nothing to observe');
+});
+
+test('640 REGRESSION: a SESSION beat is never doored by the channel — lane A\'s S1 run 5', () => {
+  // 640 shipped without this gate and it cost another lane two beats of a
+  // funded run. A session beat's dispatch dir was born when the SESSION
+  // started, long before this beat's wait began, so `newestChannelSince`
+  // finds nothing and the door reports `no-channel` about an agent that is
+  // demonstrably working: S1 beats 6 and 9 were killed at 180 s of a 420 s
+  // bound while the beat's own probe printed `SDK child utime 18 → 371`.
+  //
+  // A session beat is already doored, and better — `stopReasonFor` is the
+  // PRODUCT's crashed/stalled/terminal verdict for the session in scope. The
+  // channel door is for beats with no session to ask about.
+  //
+  // Asserted at the GATE rather than through the wait, because the wait would
+  // need a whole session fixture to reach the same line and would then be
+  // testing the fixture. The condition IS the fix.
+  const src = readFileSync(new URL('./beats-page.mjs', import.meta.url), 'utf8');
+  const consequenceDoor = src.slice(src.indexOf('export async function waitForConsequence'));
+  assert.match(
+    consequenceDoor,
+    /if \(stallDoor !== null && sessionScope === null\) \{/,
+    'the consequence wait must consult the channel door only when there is no session to ask about',
+  );
+  // And the pre-act wait reaches it only through `waitOffSession`, which is
+  // already unreachable for a session beat.
+  assert.match(src, /if \(sessionScope === null\) return waitOffSession\(/, 'the handle wait stays scoped as it was');
 });

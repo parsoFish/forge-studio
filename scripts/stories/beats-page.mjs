@@ -628,7 +628,19 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // beat gains a new way to fail. The product is believed rather than
     // second-guessed — `stalled` is server-derived, and re-deriving it here
     // from phases or timestamps is the mistake the bar's own header forbids.
-    if (stallDoor !== null) {
+    // OFF-SESSION ONLY, and 640 shipped without this gate. A SESSION beat's
+    // dispatch dir was born when the SESSION started — long before this beat's
+    // wait began — so `newestChannelSince(logs, startedAt)` finds nothing and
+    // reports `no-channel` about an agent that is working. Lane A measured it
+    // on S1 run 5: beats 6 and 9 killed at 180 s of a 420 s bound while the
+    // beat's OWN probe printed `SDK child utime 18 → 371`. Four minutes of
+    // unspent bound discarded on a healthy run, in two different sessions.
+    //
+    // A session beat is already doored, three lines below and better:
+    // `stopReasonFor` is the PRODUCT's own crashed/stalled/terminal verdict for
+    // the session in scope. The channel door exists for the beats that have no
+    // session to ask about, and it belongs only to them.
+    if (stallDoor !== null && sessionScope === null) {
       const stop = stallDoor(runId, startedAt);
       if (stop !== null) {
         return Object.freeze({
