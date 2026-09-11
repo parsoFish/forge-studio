@@ -63,6 +63,40 @@ for f in "$G"/$GLOB.sha256; do
     fi
   done
   after=$(cd "$R" && sha256sum -c --quiet "$f" 2>&1 | grep -c FAILED || true)
+  # T1 ruling 707 — ADVANCE `head=` IN THE SAME EDIT THAT REHASHES.
+  #
+  # A manifest whose `.sha256` was rehashed while its `.counts` still names an
+  # older sha describes a tree it does not describe, and EVERY lane's skew test
+  # reads that field: C's precheck named M6-D's `agent-dispatch-containment.test.ts`
+  # as C's drift for exactly this reason. Only manifests this run rehashed are
+  # touched — a `head=` advanced on a manifest nobody verified is the same lie
+  # pointing the other way.
+  #
+  # `head=` means "last verified 0-FAILED against", so it is written ONLY when
+  # the rehash actually reached zero. A manifest still failing (a pinned path the
+  # merge DELETED, left in place above) records why instead.
+  counts="${f%.sha256}.counts"
+  if [ "$after" = "0" ]; then
+    if [ -f "$counts" ] && grep -q 'head=[0-9a-f]\{7,40\}' "$counts"; then
+      sed -i "s/head=[0-9a-f]\{7,40\}/head=${TO:0:8}/" "$counts"
+    elif [ -f "$counts" ]; then
+      printf '%s head=%s\n' "$(head -1 "$counts")" "${TO:0:8}" > "$counts.tmp"
+      tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+    else
+      # Created per ruling 680's format. `paths` and `manifest` are measured
+      # here; `owner` is not knowable from this script and is left to the lane.
+      printf 'paths=%s manifest=%s head=%s tree=%s\n' \
+        "$(grep -c . "$f")" "$(sha256sum "$f" | cut -c1-16)" "${TO:0:8}" "$R" > "$counts"
+      printf '# Created by pin-reconcile.sh (T1 ruling 707, format per 680). head= is the sha this\n# manifest was last verified 0-FAILED against.\n' >> "$counts"
+    fi
+    echo "  $n: head= -> ${TO:0:8} (rehashed to 0 FAILED against this tree)"
+  else
+    [ -f "$counts" ] || printf 'paths=%s tree=%s\n' "$(grep -c . "$f")" "$R" > "$counts"
+    grep -q 'head-not-advanced' "$counts" || \
+      printf '# head= NOT advanced to %s: still FAILED %s after the rehash (a pinned path the merge\n# deleted, or bytes this tree does not hold). head-not-advanced=%s\n' \
+        "${TO:0:8}" "$after" "${TO:0:8}" >> "$counts"
+    echo "  $n: head= NOT advanced — still FAILED $after after the rehash"
+  fi
   log=$(ls "$G"/"$n".amend-*.md 2>/dev/null | tail -1 || true); [ -n "$log" ] || log="$G/$n.amend-1.md"
   printf '\n## Amendment (at `%s`, §15.105, pin-reconcile.sh) after %s: %s rehashed — FAILED %s → %s.\n' \
     "${TO:0:8}" "$LABEL" "$(echo "$touched" | tr '\n' ' ')" "$before" "$after" >> "$log"
