@@ -35,6 +35,7 @@ import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
 import { memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict } from './preflight.mjs';
+import { suiteLockVerdict } from './lock-guard.mjs';
 import {
   applyFence,
   describeFence,
@@ -175,6 +176,18 @@ async function main() {
     return 1;
   }
   console.log(`[stories] remote switch ok — ${remote.reason}`);
+
+  // 1d. The OTHER kind of work in this checkout — bead `forge-8vfn.7.6.13`
+  //     (ruling 634). A full test suite writes into `projects/`
+  //     (`agent-run-dispatch.test.ts`'s fixture), which is the directory the
+  //     ground hash below measures before and after to prove this run's ground
+  //     did not drift. The two took different locks and so overlapped by
+  //     construction; lane A's fence caught one as an UNATTRIBUTABLE write.
+  //     Refused HERE, beside the other refusals and before the bridge, and it
+  //     never sleeps — the lane's own Monitor is what waits (§15.335).
+  const overlap = suiteLockVerdict();
+  console.log(`[stories] ${overlap.reason}`);
+  if (!overlap.ok) return 1;
 
   // 2. Memory — a starved host OOM-kills the browser and the crash reads as a
   //    code defect.

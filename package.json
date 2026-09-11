@@ -20,6 +20,7 @@
     "build:orchestrator": "tsc",
     "build:ui": "npm run build --workspace=forge-ui",
     "build:watch": "tsc --watch",
+    "pretest": "node scripts/test-guard.mjs",
     "test": "node --test --experimental-strip-types skills/*/*.test.ts scripts/*.test.ts scripts/stories/*.test.ts scripts/ui-walkthrough/*.test.ts packages/*/*.test.ts packages/*/*/*.test.ts packages/*/*/*/*.test.ts apps/forge/tests/*/*.test.ts",
     "lint": "markdownlint-cli2 \"docs/**/*.md\" \"*.md\"",
     "forge": "node --experimental-strip-types apps/forge/cli.ts",
