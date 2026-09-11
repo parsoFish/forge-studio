@@ -15,6 +15,7 @@
 
 /** The JSONL event log (ADR 008) — SPEC.md §3 Artifact. */
 export * from './logging.ts';
+export * from './tool-fence.ts';
 /** The one cost rule: stream usage to dollars, computed in exactly one place. */
 export * from './event-cost.ts';
 /** Config and layout, plus the env-assertion boundary. */

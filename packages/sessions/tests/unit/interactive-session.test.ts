@@ -435,8 +435,14 @@ test('runAgentTurn: writeRoots installs a REAL canUseTool on options that denies
     return gen();
   };
 
+  // `Write` is DECLARED here, and under `forge-a9o9` it has to be: this test
+  // is about the write-ROOT rule, and the tool gate now runs first. Before the
+  // fence this same turn declared only ['Read','Grep'] and could still Write —
+  // `allowedTools` was advisory and the write-root fence only judged the PATH,
+  // so a tool the kind never declared reached the filesystem. That is the hole,
+  // and this fixture was quietly standing in it.
   await runAgentTurn({
-    queryFn, prompt: 'p', cwd: writeRoot, model: MODEL, allowedTools: TOOLS,
+    queryFn, prompt: 'p', cwd: writeRoot, model: MODEL, allowedTools: [...TOOLS, 'Write'],
     writeRoots: [writeRoot],
   });
 
@@ -452,7 +458,12 @@ test('runAgentTurn: writeRoots installs a REAL canUseTool on options that denies
   assert.equal(inside.behavior, 'allow', 'a Write inside the declared write root must still be allowed');
 });
 
-test('runAgentTurn: writeRoots absent/empty installs NO canUseTool — byte-identical prior behaviour for every non-opted-in caller', async () => {
+// AMENDED by `forge-a9o9`: there is no longer an unfenced turn. `allowedTools`
+// is advisory, so a turn with no `canUseTool` cannot refuse a tool nobody named
+// — which is how S1 run 5's write pass read through `LSP`, `TaskOutput` and
+// `Skill`. What survives is the property that mattered: a caller that opts into
+// no WRITE-ROOT fence still gets its declared tools verbatim.
+test('runAgentTurn (a9o9): writeRoots absent/empty still installs the TOOL fence — the declared list is untouched, the undeclared are refused', async () => {
   let capturedOptions: Record<string, unknown> | undefined;
   const queryFn: QueryFn = ({ options }) => {
     capturedOptions = options;
@@ -462,5 +473,6 @@ test('runAgentTurn: writeRoots absent/empty installs NO canUseTool — byte-iden
     return gen();
   };
   await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: TOOLS });
-  assert.equal(capturedOptions!.canUseTool, undefined);
+  assert.equal(typeof capturedOptions!.canUseTool, 'function', 'an unfenced turn is what this bead removed');
+  assert.deepEqual([...(capturedOptions!.allowedTools as readonly string[])], [...TOOLS], 'and the caller keeps every tool it declared');
 });

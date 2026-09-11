@@ -24,6 +24,8 @@ export type PathReplacement = { value: string; placeholder: string };
 
 /**
  * Recursively walk a captured `{prompt, options}` value, replacing:
+ *  - functions (e.g. `canUseTool`) -> `<name>`. PRESENCE is the fact; a
+ *    dropped function would let a fence disappear without the pin noticing.
  *  - `AbortController` instances -> a fixed marker string. Identity is never
  *    meaningful (a fresh controller is constructed on every call) and
  *    `JSON.stringify` would otherwise silently collapse it to `{}` — masking
@@ -53,6 +55,11 @@ export function normalizeForSnapshot(value: unknown, replacements: readonly Path
     if (typeof AbortController !== 'undefined' && v instanceof AbortController) {
       return '<AbortController>';
     }
+    // `forge-a9o9` — a live callback, like the AbortController above: identity
+    // is never the fact under test, PRESENCE is. Without a marker `JSON.stringify`
+    // drops it, so the fixture could never record that a turn is fenced at all —
+    // and the pin would go on passing for a turn that had lost its fence.
+    if (typeof v === 'function') return `<${v.name || 'anonymous'}>`;
     if (typeof v === 'string') return replaceInString(v);
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === 'object') {

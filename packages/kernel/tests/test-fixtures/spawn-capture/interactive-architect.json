@@ -3,12 +3,14 @@
     "prompt": "# Brain navigation index\n\nRead relevant brain theme files listed below before answering. Your first tool calls must be Read against brain/ paths.\n\n<!-- BRAIN INDEX: brain/INDEX.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/cycles/patterns.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/cycles/antipatterns.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/cycles/decisions.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/cycles/operations.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/forge-dev/decisions.md (missing) -->\n\n---\n\n<!-- BRAIN INDEX: brain/forge-dev/reference.md (missing) -->\n\n---\n\nYou are the forge architect (golden-capture fixture v2).\n\nFIXTURE architect INTERVIEW turn.\n\nProject: testproj\n\nOperator idea / brief:\nAdd a dark-mode toggle to the settings page.\n\nInterview so far:\n_(no answers yet — this is the first round)_",
     "options": {
       "model": "claude-sonnet-4-6",
+      "permissionMode": "default",
       "allowedTools": [
         "Read",
         "Grep",
         "Glob",
         "Bash"
       ],
+      "canUseTool": "<canUseTool>",
       "outputFormat": {
         "type": "json_schema",
         "schema": {
