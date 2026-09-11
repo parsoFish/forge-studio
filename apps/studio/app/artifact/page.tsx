@@ -1074,7 +1074,7 @@ function ArtifactPageInner() {
               </span>
             )}
             {run?.initiative && <span>{run.initiative}</span>}
-            {run && run.costUsd > 0 && (
+            {run && run.costUsd !== null && run.costUsd > 0 && (
               <span style={{ color: 'var(--amber)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                 ${run.costUsd.toFixed(2)}
               </span>
