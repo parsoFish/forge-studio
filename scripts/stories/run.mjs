@@ -48,9 +48,9 @@ import {
   removePaths,
   sweepProductFixtures,
   sweepStoryResidue,
-  restoreSweptCommitted,
   sweepStoryRemotesFromManifest,
 } from './sweep.mjs';
+import { restoreSweptCommitted, stopOwnScheduler } from './sweep-teardown.mjs';
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
   ownGroundManifest, mintedSessionPaths, classifyOwnGroundDrift, groundChanges,
@@ -256,6 +256,14 @@ async function main() {
     // runner doing exactly the right thing, still left three committed files
     // deleted. Only paths git tracks AND that are absent right now are touched,
     // so a finished run's own output is never destroyed by its own teardown.
+    // T1 ruling 657(ii). Beat 7 presses Start and a real daemon comes up; run 9's
+    // was still alive after the sweep, and `scheduler-start` renders only at
+    // `status: stopped`, so the NEXT run's beat 7 would red at t+0 on a missing
+    // handle while the state it wants already holds.
+    const sched = stopOwnScheduler(ROOT);
+    if (sched.stopped !== null) console.log(`[stories] stopped the scheduler this run started — pid ${sched.stopped} by ${sched.how}`);
+    if (sched.note !== null) console.log(`[stories] scheduler: ${sched.note}`);
+
     const put = restoreSweptCommitted(ROOT, sweptPaths);
     for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);
     for (const f of put.failed) console.warn(`[stories] could not restore ${f.path}: ${f.error}`);
