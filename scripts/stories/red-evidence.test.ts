@@ -25,7 +25,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, utimes
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { captureBeatDom, captureRedEvidence, redEvidenceDir } from './red-evidence.mjs';
+import { captureBeatDom, captureRedEvidence, describeRedEvidence, redEvidenceDir } from './red-evidence.mjs';
 
 /** One run's stamp — `6.11.50`: every capture of a run shares exactly one. */
 const STAMP = '2026-09-07T04-00-11-553Z';
@@ -202,4 +202,35 @@ test('6.11.50: two runs of one story do not write into the same directory', () =
 
   assert.notEqual(nine, ten, 'each run owns its own directory');
   assert.ok(ten.includes('S2'), 'still filed under the story');
+});
+
+test('718(5): the red line NAMES what the dir holds, so the next reader copies all of it', () => {
+  // §15.411 — and this is the half I got wrong. I told T1 the capture could not
+  // answer "what did the DOM say at the red", and reported it as a missing
+  // instrument. The instrument was there: `captureBeatDom` had written
+  // `beat-8-dom.html` into this very dir, five milliseconds before the verdict
+  // line. What was missing was ANY MENTION OF IT in the line the operator reads.
+  //
+  // The old text said "session files + MTIMES.txt", so that is what I copied
+  // into the evidence dir, and T1 had to send me back to the tree twice to
+  // settle a question the run had already answered. A capture nobody is told
+  // about is a capture nobody takes.
+  const root = mkdtempSync(join(tmpdir(), 'forge-red-desc-'));
+  const dir = join(root, '_logs', '_story-red-evidence', 'S10', 'stamp');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'MTIMES.txt'), 'x');
+  writeFileSync(join(dir, 'beat-8-dom.html'), '<html>');
+  writeFileSync(join(dir, 'beat-24-dom.html'), '<html>');
+  writeFileSync(join(dir, 'serve.log'), '[serve] claimed: X');
+
+  const line = describeRedEvidence(dir, root).join(' ');
+
+  assert.match(line, /beat-8-dom\.html/, `the DOM dumps must be named: ${line}`);
+  assert.match(line, /serve\.log/, `the daemon's own log must be named: ${line}`);
+  assert.match(line, /MTIMES\.txt/, line);
+  assert.doesNotMatch(line, /beat-24-dom\.html/, 'one example plus a count, not a listing that grows with the story');
+});
+
+test('718(5): a green run still says nothing', () => {
+  assert.deepEqual(describeRedEvidence(null, '/anywhere'), []);
 });

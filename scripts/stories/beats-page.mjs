@@ -585,7 +585,7 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -655,7 +655,12 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // ceiling, and the verdict says so rather than staying silent about a check
     // that did not run. One ceiling, no scaling.
     if (stallDoor !== null && sessionScope === null && timeoutMs > 2 * STALL_CEILING_MS) {
-      const stop = stallDoor(runId, startedAt);
+      // 718(1): the search window opens at the beat's declared ANCHOR when it
+      // has one — the press whose work this beat is watching — and at this
+      // wait's own start otherwise. The BOUND is unaffected either way: it is
+      // still measured from `startedAt`, because a bound says how long THIS
+      // step may take and nothing about where its evidence begins.
+      const stop = stallDoor(runId, anchorMs ?? startedAt);
       if (stop !== null) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,
