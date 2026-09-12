@@ -113,11 +113,49 @@ cd "$R" || die "cannot enter $R"
 link="$(readlink -f node_modules/@forge/kernel 2>/dev/null || true)"
 echo "== gate on $(git rev-parse --short HEAD 2>/dev/null || echo '?') ($(date '+%FT%T%z')) in $R =="
 echo "kernel link: ${link:-<none>}"
+# WHICH CHECKOUT IS THIS? (`forge-8vfn.7.6.36`, T1 757, §15.433.)
+#
+# `#670` merged `PIN_MANIFESTS=` into this file and `main` carried it — the blob
+# grepped 1. But every lane's gate invokes
+# `/home/parso/forge/.claude/…/gate.sh` BY ABSOLUTE PATH, and that shared
+# checkout was a merge behind with the OLD copy, grep 0. A `pin-precheck.sh`
+# restore on "main has it" would have refused every gate log on the box, with no
+# re-gate able to fix it, because the tool that emits the line was not on disk.
+# M6-C found it by paying: rebased so their gate would emit it, verified their
+# own worktree greps 1, launched, and watched it invoke the shared copy anyway.
+#
+# It is run 12's shape at a different scale — an INTENT said "#667 is on main"
+# and #667 WAS on main; the run executed a worktree forked before it. A
+# dependency satisfied on `main` is not a dependency satisfied in the tree that
+# RUNS. So the tree that runs names itself, in the header, before any step.
+echo "GATE_CHECKOUT=$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
 case "$link" in
   "$R"/*) ;;
   *) echo "BORROWED node_modules — this tree is running another tree's install; verdict void (§15.13)"; exit 2 ;;
 esac
 
+# IS IT BEHIND? A gate from a checkout that does not contain `parsoFish/main` is
+# a verdict produced by a tool nobody merged, and the reader cannot tell from the
+# log. Named `GATE_CHECKOUT_STALE`, rc 3, and it prints the sha to advance TO so
+# the remedy is in the refusal rather than in someone's head.
+#
+# A FAILED OR ABSENT READ DOES NOT REFUSE — it is NAMED (§15.92, line 13 of this
+# file). A network blip must not turn every gate on the box into an outage: that
+# is the "a precondition introduced as an outage is one that gets removed" trap.
+# An unanswerable question and a clean answer must look different, and they do —
+# one prints `GATE_CHECKOUT_UNKNOWN`. A statement is not an absence; only the
+# absence is forbidden.
+if git -C "$R" rev-parse --verify --quiet parsoFish/main >/dev/null 2>&1; then
+  git -C "$R" fetch parsoFish --quiet >/dev/null 2>&1 \
+    || echo "GATE_CHECKOUT_UNKNOWN: \`git fetch parsoFish\` failed — comparing against the ref as it stands, which may itself be stale (§15.296)"
+  gate_main="$(git -C "$R" rev-parse --short=8 parsoFish/main 2>/dev/null || echo '')"
+  if [ -n "$gate_main" ] && ! git -C "$R" merge-base --is-ancestor parsoFish/main HEAD >/dev/null 2>&1; then
+    echo "GATE_CHECKOUT_STALE: this checkout does not contain parsoFish/main ($gate_main) — every verdict below would come from a tool that is behind what merged, and a lane reading this log cannot tell. Advance $R to $gate_main and re-run."
+    exit 3
+  fi
+else
+  echo "GATE_CHECKOUT_UNKNOWN: no parsoFish/main ref in $R — staleness not checked, so this log does not say whether its tooling is current"
+fi
 # A wall-clock delta is a proxy, and a proxy that can report an impossible number is a broken
 # measurement, not a fast step (§15.48: `real 0m0.000s` for 2 s of work). If the clock stepped
 # under us the duration is reported as `?s`, never as a plausible-looking lie.
