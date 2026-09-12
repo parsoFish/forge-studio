@@ -256,9 +256,21 @@ export function hubReason(outcomes: readonly HubOutcomeRow[], hubId: string, ser
  *  The reason is the reader's own token (`blocked-origin`, `not-reachable`,
  *  `fetch-failed`, `tree-truncated`) rather than a second wording of it: a
  *  label that paraphrases drifts from what the code actually decided. */
-export function declaredOnlyLabel(outcomes: readonly HubOutcomeRow[], hubId: string, served?: string): string {
+export function declaredOnlyLabel(
+  outcomes: readonly HubOutcomeRow[], hubId: string, served?: string, kinds?: string,
+): string {
   const reason = hubReason(outcomes, hubId, served);
-  return reason === null ? 'declared — nothing indexed' : `declared — nothing indexed (fetch: ${reason})`;
+  if (reason === null) return 'declared — nothing indexed';
+  // A hub forge READ FINE and that publishes nothing this installer accepts is
+  // not a fetch failure, and saying "fetch:" about it would be exactly the
+  // paraphrase the DOM contract forbids. The token stays the reader's own; the
+  // label says what it means, and names the kinds the hub itself declares.
+  if (reason === 'no-installable-kind') {
+    return kinds === undefined
+      ? 'declared — nothing forge can install'
+      : `declared — nothing forge can install (publishes: ${kinds})`;
+  }
+  return `declared — nothing indexed (fetch: ${reason})`;
 }
 
 export function isHubDeclaredOnly(hub: { itemCount: number }): boolean {
