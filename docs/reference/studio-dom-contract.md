@@ -2473,6 +2473,22 @@ is what this contract reads — but it cannot be the only distinguisher.
   page is DERIVED from the event log; nothing is stored** (ADR-008) — reading
   a run writes no file.
 
+  **REVIEW FINDINGS NAME THEIR OWN ABSENCE, `forge-8vfn.7.6.63`.** The panel
+  renders `[data-section="review-findings"]` in **three** distinguishable
+  states, never nothing: with findings (`[data-findings-count]`), with
+  `[data-findings-state="absent"]` — the review has not run and no artifact was
+  produced — and with `[data-findings-state="error"]` — the read FAILED, which
+  says nothing about whether the artifact exists. The run page used to render
+  **nothing** for the last two, so "has not run", "could not load" and "still
+  loading" were one appearance; `lib/flow-run-detail-client.ts`'s
+  `fetchReviewFindings` collapsed a 404, a 500 and a thrown fetch into one
+  `null`, so the page had nothing to tell them apart with.
+  `fetchReviewFindingsChecked` returns `{ doc, failed }` and the derivation
+  matches `app/artifact/page.tsx:775-776` exactly — `absent = doc === null &&
+  !failed`, `error = doc === null && failed`. A beat asserting only
+  `[data-section="review-findings"]` is satisfied by all three: **assert the
+  state.**
+
   **THE PENDING GATE, `forge-8vfn.7.6.62`.** A gated run renders
   `a[data-action="open-gate"][data-gate-type][data-gate-node]` whose `href` is
   `/artifact?run=<runId>&type=<gate-type>&mode=gate`. **`data-gate-type` is the

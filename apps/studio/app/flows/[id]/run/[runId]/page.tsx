@@ -46,7 +46,7 @@ import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { useDocumentTitle } from '@/lib/document-title';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
-import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
+import { fetchFlowRunDetail, fetchReviewFindingsChecked, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchStudioFlows, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
@@ -60,7 +60,7 @@ export default function FlowRunPage() {
 
   const [resolution, setResolution] = useState<FlowRunDetailResolution | null>(null);
   const [flow, setFlow] = useState<Flow | null>(null);
-  const [findings, setFindings] = useState<ReviewFindingsDoc | null>(null);
+  const [findings, setFindings] = useState<{ doc: ReviewFindingsDoc | null; failed: boolean }>({ doc: null, failed: false });
   // Distinct from `resolution?.kind === 'found'` — the fetch simply hasn't
   // resolved yet, so the page must not render either the timeline or the
   // not-found body for a run it hasn't actually checked yet (mirrors
@@ -100,7 +100,7 @@ export default function FlowRunPage() {
     // review node — only fetch once it completed (no 404 spam). W7-FIX-A3
     // (A3-11): the producer is derived from the flow definition, not a
     // literal node id.
-    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run, flowDef) ? await fetchReviewFindings(res.run.id) : null;
+    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run, flowDef) ? await fetchReviewFindingsChecked(res.run.id) : { doc: null, failed: false };
     if (signal.cancelled) return;
     setResolution(res);
     setFlow(flowDef);

@@ -125,7 +125,7 @@ function baseProps(over: Partial<FlowRunDetailProps> = {}): FlowRunDetailProps {
     flow: developFlow(),
     run: archivedRun(),
     rows: rows(),
-    findings: null,
+    findings: { doc: null, failed: false },
     expandedNodeId: null,
     nodeLogLines: {},
     ...over,
