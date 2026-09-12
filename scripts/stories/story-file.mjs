@@ -104,7 +104,49 @@ function validateDoSteps(raw, at) {
         if (step.repeat.some((inner) => inner !== null && typeof inner === 'object' && Object.hasOwn(inner, 'repeat'))) {
           fail(`${where}.repeat`, 'a repeat cannot nest another repeat');
         }
-        return Object.freeze({ repeat: validateDoSteps(step.repeat, where), until: Object.freeze({ ...step.until }) });
+        // 7.6.98 — THE PROGRESS BOUND BELONGS HERE, not on the beat's `wait`.
+        //
+        // It shipped on `wait` (7.6.77) and that was wrong twice over. `driveBeat`
+        // hands ONE wait object to the repeat AND to the consequence wait, which
+        // stand on DIFFERENT PAGES: S1 beat 11's repeat runs on the session page
+        // where `session-phase` changes every round, while its consequence wait
+        // runs on `/artifact`, which renders `data-session-phase` zero times. A
+        // failure there reported `no-progress-key (consequence)` — true, and
+        // pointed at the story file for a product failure.
+        //
+        // `progressKey` MUST BE A KEY `until` NAMES. That is the whole point of
+        // moving it: the repeat's own stop condition already names a key it can
+        // observe on the page it stands on, so binding the two makes them unable
+        // to disagree and makes a key-on-the-wrong-page impossible by
+        // construction rather than by a reviewer noticing.
+        const hasPer = step.perTransition !== undefined;
+        const hasKey = step.progressKey !== undefined;
+        if (hasPer !== hasKey) {
+          fail(
+            `${where}.${hasPer ? 'progressKey' : 'perTransition'}`,
+            `\`perTransition\` and \`progressKey\` are both-or-neither on a repeat: ${hasPer
+              ? '`perTransition` without `progressKey` is a budget nothing can reset'
+              : '`progressKey` without `perTransition` is a key nothing reads'}`,
+          );
+        }
+        if (hasPer) {
+          if (!Number.isInteger(step.perTransition) || step.perTransition <= 0) {
+            fail(`${where}.perTransition`, `expected a positive integer in ms, got ${JSON.stringify(step.perTransition)}`);
+          }
+          if (typeof step.progressKey !== 'string' || !Object.hasOwn(step.until, step.progressKey)) {
+            fail(
+              `${where}.progressKey`,
+              `expected one of the keys \`until\` names (${Object.keys(step.until).join(', ')}), got ` +
+              `${JSON.stringify(step.progressKey)} — a progress key the loop's own stop condition does not ` +
+              'mention is a key this repeat has no reason to be able to see',
+            );
+          }
+        }
+        return Object.freeze({
+          repeat: validateDoSteps(step.repeat, where),
+          until: Object.freeze({ ...step.until }),
+          ...(hasPer ? { perTransition: step.perTransition, progressKey: step.progressKey } : {}),
+        });
       }
       // 7.6.54 (ruling 795): `pressBound` names a handle whose id is minted at
       // run time — `open-initiative-<initiativeId>` cannot be written literally
