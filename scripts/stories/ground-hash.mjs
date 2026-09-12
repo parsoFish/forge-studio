@@ -445,6 +445,13 @@ export function mintedSessionWrites(mintedPaths, logsDir, groundDir) {
  */
 export function seedIgnoredBorn(groundDir, relPaths) {
   if (relPaths.length === 0) return [];
+  // EVERY PATH IS CHECKED BEFORE ANY IS WRITTEN, and that ordering is
+  // load-bearing rather than tidy. A seed is a `writeFileSync` over whatever is
+  // at that path, so checking per-path inside the write loop would clobber a
+  // real tracked file before reaching the one that fails — measured: seeding
+  // `README.md` refuses with rc 1 and leaves `README.md` intact. Someone
+  // optimising this into a single pass would silently make a bad story
+  // destructive (C, on 7.6.52's review).
   const ignore = groundIgnoreFromGit(groundDir);
   const notIgnored = relPaths.filter((p) => !ignore.isIgnored(p));
   if (notIgnored.length > 0) {
