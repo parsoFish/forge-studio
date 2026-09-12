@@ -1735,7 +1735,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   count is DERIVED per request, never declared; a real hub with nothing
   indexed from it yet keeps `data-hub-item-count="0"` and reads "declared —
   nothing indexed" (`data-hub-declared-only="true"`) — never dropped, and
-  never presented as a browsable source. Per card:
+  never presented as a browsable source. **7.6.84 PR C: an empty chip says WHY
+  when the reader gave a reason** — `[data-hub-reason]` on the chip's count
+  span carries the indexer's OWN token (`not-reachable`, `fetch-failed`,
+  `tree-truncated`), never a paraphrase, and the label reads "declared —
+  nothing indexed (fetch: <reason>)". The attribute is ABSENT in the two cases
+  where there is nothing to explain: before a refresh has settled, and for a
+  hub that WAS read and published nothing forge can install — a source's own
+  emptiness is not a failure and must not render as one. Per card:
   `[data-card-type="community-item"]
   [data-item-id][data-item-kind][data-item-hub][data-install-state]
   [data-has-signals="true"|"false"]` — `data-item-hub` is simply ABSENT for an
