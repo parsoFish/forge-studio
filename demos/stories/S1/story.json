@@ -80,7 +80,7 @@
       },
       {
         "act": "Open \"Brief the agent\", give it the north star and the gate command, and press \"Run onboarding agent\"",
-        "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the two things only the operator knows: what the project is for, and the command that tells the truth about whether it works.",
+        "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the three things only the operator knows: what the project is for, the command that tells the truth about whether it works, and what it must not touch. One press asks and answers — the brief travels through the same question form every other session kind publishes, and the run id appears only once an agent is really running.",
         "do": [
           {
             "press": "toggle-onboard-brief"
@@ -94,6 +94,10 @@
             "with": "python -m pytest tests/"
           },
           {
+            "fill": "constraints",
+            "with": "Never touch infra/ state or config/orgs/*.yaml."
+          },
+          {
             "press": "run-onboarding-agent"
           }
         ],
@@ -102,6 +106,7 @@
           "data": {
             "section": "onboard-with-agent",
             "onboard-run-status": "running",
+            "onboard-run-id": "<onboardRunId>",
             "onboard-session-id": "<sessionId>",
             "onboard-attaching": "false"
           }
@@ -128,29 +133,20 @@
         }
       },
       {
-        "act": "Answer the Agent's questions about the quality gate and what GitWeave must never touch, stage by stage, until the contract and secrets stages read present",
-        "say": "This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator's. The secrets stage names the environment variables and never their values.",
-        "do": [
-          {
-            "fill": "session-answer",
-            "with": "The quality gate is `python -m pytest tests/`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation."
-          },
-          {
-            "press": "submit-answers"
-          }
-        ],
+        "act": "Watch the Agent work through the contract until the onboarding session finishes",
+        "say": "Onboarding is a dispatch, not a conversation. What only a human can say went in at the brief — the north star and the quality gate — and from here the Agent works the contract criteria alone, invoking the Skills built for the purpose, until the session reaches a terminal phase. The clip is the wait, and the wait is the work.",
+        "do": [],
         "wait": {
           "for": "agent",
-          "upTo": 600000
+          "upTo": 420000
         },
         "expect": {
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
+            "page": "session",
+            "page-ready": "true",
             "session-kind": "onboarding",
-            "session-stage": "secrets",
-            "buildout-mode": "detail",
-            "buildout-active-stage": "secrets",
-            "stage-detail-status": "present"
+            "session-phase": "complete"
           }
         }
       },
@@ -169,57 +165,77 @@
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
             "stage-detail-stage": "demo",
-            "action": "view-demo-session"
+            "action": "view-demo-session",
+            "demo-session-id": "<demoSessionId>"
           }
         }
       },
       {
-        "act": "Come back to the demo builder when it has finished",
-        "say": "The operator can leave a heavy session and come back — the session is the record, not the terminal it was started from. This is the beat that proves it: the demo builder was started from one surface, left alone, and read from another, and the work is there and finished.",
+        "act": "Come back to the demo builder, brief it, and lock the demo it makes",
+        "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.",
         "do": [
           {
             "press": "view-demo-session"
+          },
+          {
+            "fill": "session-answer",
+            "with": "The demo should show the end-to-end scan and the human-readable summary the quality gate checks — that is this project's one capability worth seeing, and what a newcomer needs in order to believe it works. Design and write the demo; do not run the project to find out."
+          },
+          {
+            "press": "submit-answers"
+          },
+          {
+            "press": "verdict-approve"
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 1800000
+        },
         "expect": {
           "route": "/sessions/demo/<demoSessionId>",
           "data": {
             "page": "session",
             "page-ready": "true",
             "session-kind": "demo",
-            "session-phase": "complete"
+            "session-phase": "locked"
           }
         }
       },
       {
-        "act": "Return to the project, apply the auto-fixable clauses and record a decision on the ones that need your judgement",
+        "act": "Return to the project and close whatever the agent could not",
         "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
         "do": [
           {
             "press": "back-to-project"
           },
           {
-            "press": "apply-preflight-auto"
-          },
-          {
-            "fill": "clause-decision-C1b",
-            "with": "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command."
-          },
-          {
-            "press": "apply-clause-decision"
+            "repeat": [
+              {
+                "fill": "clause-decision-C1b",
+                "with": "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command."
+              },
+              {
+                "press": "apply-clause-decision"
+              }
+            ],
+            "until": {
+              "preflight-status": "ok",
+              "flow-ready": "true"
+            }
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 200000
+        },
         "expect": {
           "route": "/projects/gitweave",
           "data": {
             "page": "projects",
             "project-id": "gitweave",
             "preflight-status": "ok",
-            "flow-ready": "true",
-            "section": "contract-resolution",
-            "resolution-failing-count": "3",
-            "resolution-user-count": "0",
-            "resolution-agent-count": "3"
+            "flow-ready": "true"
           }
         }
       },
@@ -263,19 +279,39 @@
             "press": "view-architect-session"
           },
           {
+            "repeat": [
+              {
+                "fillAll": "question-freetext",
+                "with": "Keep it to the onboarding path only — no changes to the existing scan commands. The quality gate stays `python -m pytest tests/`, and the human-readable output must not change."
+              },
+              {
+                "press": "submit-answers"
+              }
+            ],
+            "until": {
+              "session-phase": "awaiting-verdict"
+            }
+          },
+          {
             "press": "open-plan"
           },
           {
             "press": "approve-plan"
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 600000,
+          "perTransition": 480000,
+          "progressKey": "session-phase"
+        },
         "expect": {
           "route": "/artifact",
           "data": {
             "section": "architect-plan",
             "architect-phase": "committed",
             "gate-armed": "false",
-            "plan-mode": "gate"
+            "plan-mode": "view"
           }
         }
       }
@@ -331,16 +367,18 @@
     },
     {
       "act": "Open \"Brief the agent\", give it the north star and the gate command, and press \"Run onboarding agent\"",
-      "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the two things only the operator knows: what the project is for, and the command that tells the truth about whether it works.",
+      "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the three things only the operator knows: what the project is for, the command that tells the truth about whether it works, and what it must not touch. One press asks and answers — the brief travels through the same question form every other session kind publishes, and the run id appears only once an agent is really running.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "sessionId": "2026-09-05T06-38-10-ace5d1d4"
+        "onboardRunId": "_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
+        "sessionId": "2026-09-12T16-38-59-3367bbeb"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-05T06-38-10-ace5d1d4",
+        "onboard-run-id": "_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
+        "onboard-session-id": "2026-09-12T16-38-59-3367bbeb",
         "onboard-attaching": "false"
       },
       "frame": "frames/04-open-brief-the-agent-give-it-the-north-s.png"
@@ -362,63 +400,61 @@
       "frame": "frames/05-follow-view-onboarding-session.png"
     },
     {
-      "act": "Answer the Agent's questions about the quality gate and what GitWeave must never touch, stage by stage, until the contract and secrets stages read present",
-      "say": "This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator's. The secrets stage names the environment variables and never their values.",
-      "status": "red",
-      "failures": [
-        "could not fill [data-field=\"session-answer\"] with \"The quality gate is `python -m pytest tests/`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"session-answer\"]').first()\u001b[22m\n. no element carries that handle."
-      ],
+      "act": "Watch the Agent work through the contract until the onboarding session finishes",
+      "say": "Onboarding is a dispatch, not a conversation. What only a human can say went in at the brief — the north star and the quality gate — and from here the Agent works the contract criteria alone, invoking the Skills built for the purpose, until the session reaches a terminal phase. The clip is the wait, and the wait is the work.",
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
         "session-kind": "onboarding",
-        "session-stage": "contract"
+        "session-phase": "complete"
       },
-      "frame": "frames/06-answer-the-agent-s-questions-about-the-q.png"
+      "frame": "frames/06-watch-the-agent-work-through-the-contrac.png"
     },
     {
       "act": "Select the demo stage and hand it to the demo builder — the heavy one",
       "say": "Not every contract component is a question and an answer. The demo process is a build in its own right, so it gets its own long-running session rather than blocking the onboarding one. Handing it over does not take the operator anywhere: the demo session is minted and named on the page they are standing on, so they can walk into it now or come back to it later.",
       "status": "green",
       "failures": [],
-      "bindings": {},
+      "bindings": {
+        "demoSessionId": "2026-09-12T16-41-54-534f5110"
+      },
       "data": {
         "action": "view-demo-session",
-        "stage-detail-stage": "demo"
+        "stage-detail-stage": "demo",
+        "demo-session-id": "2026-09-12T16-41-54-534f5110"
       },
       "frame": "frames/07-select-the-demo-stage-and-hand-it-to-the.png"
     },
     {
-      "act": "Come back to the demo builder when it has finished",
-      "say": "The operator can leave a heavy session and come back — the session is the record, not the terminal it was started from. This is the beat that proves it: the demo builder was started from one surface, left alone, and read from another, and the work is there and finished.",
-      "status": "red",
-      "failures": [
-        "route \"/sessions/demo/<demoSessionId>\" needs <demoSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
-      ],
+      "act": "Come back to the demo builder, brief it, and lock the demo it makes",
+      "say": "Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.",
+      "status": "green",
+      "failures": [],
       "bindings": {},
-      "data": {},
-      "frame": "frames/08-come-back-to-the-demo-builder-when-it-ha.png"
+      "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "demo",
+        "session-phase": "locked"
+      },
+      "frame": "frames/08-come-back-to-the-demo-builder-brief-it-a.png"
     },
     {
-      "act": "Return to the project, apply the auto-fixable clauses and record a decision on the ones that need your judgement",
+      "act": "Return to the project and close whatever the agent could not",
       "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
-      "status": "red",
-      "failures": [
-        "data-flow-ready: expected \"true\", got \"false\"",
-        "data-resolution-failing-count: expected \"3\", got \"4\"",
-        "data-resolution-user-count: expected \"0\", got \"1\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "gitweave",
-        "section": "contract-resolution",
-        "resolution-failing-count": "4",
-        "resolution-user-count": "1",
-        "resolution-agent-count": "3",
         "preflight-status": "ok",
-        "flow-ready": "false"
+        "flow-ready": "true"
       },
-      "frame": "frames/09-return-to-the-project-apply-the-auto-fix.png"
+      "frame": "frames/09-return-to-the-project-and-close-whatever.png"
     },
     {
       "act": "Press \"Plan with Architect\" and describe the first piece of work",
@@ -426,72 +462,94 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-05T06-38-37-56cb82d4"
+        "architectSessionId": "2026-09-12T16-45-13-7156ec87"
       },
       "data": {
         "page": "projects",
         "project-id": "gitweave",
         "section": "new-idea",
-        "architect-session-id": "2026-09-05T06-38-37-56cb82d4"
+        "architect-session-id": "2026-09-12T16-45-13-7156ec87"
       },
       "frame": "frames/10-press-plan-with-architect-and-describe-t.png"
     },
     {
       "act": "Open the session, read the plan and press Approve",
       "say": "The plan is approved and committed. An existing repo that forge knew nothing about half an hour ago is now an onboarded project with a contract, a demo, a knowledge profile and an approved roadmap — ready for a Factory to build.",
-      "status": "red",
-      "failures": [
-        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
-      "data": {},
+      "data": {
+        "section": "architect-plan",
+        "architect-phase": "committed",
+        "gate-armed": "false",
+        "plan-mode": "view"
+      },
       "frame": "frames/11-open-the-session-read-the-plan-and-press.png"
     }
   ],
   "reap": {
-    "reaped": [
+    "reaped": [],
+    "skipped": [
       {
-        "pid": 2562420,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
-        "signal": "SIGTERM",
-        "via": "descendant"
+        "pid": 1557046,
+        "dir": "/home/parso/forge-clean-m6a/_logs/_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
+        "reason": "pid 1557046: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 2551264,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
-        "signal": "SIGTERM",
-        "via": "descendant"
+        "pid": 1694766,
+        "dir": "/home/parso/forge-clean-m6a/_logs/_architect-2026-09-12T16-45-13-7156ec87",
+        "reason": "pid 1694766: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 2541411,
-        "dir": "/home/parso/forge-m5-b/_logs/_agent-onboarding-agent-2026-09-05T06-38-10-271-a3b8",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 2541122,
-        "dir": "/home/parso/forge-m5-b/_logs/_agent-onboarding-agent-2026-09-05T06-38-10-271-a3b8",
-        "signal": "SIGTERM",
-        "via": "cwd"
-      },
-      {
-        "pid": 2550551,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T06-38-37-56cb82d4",
-        "signal": "SIGTERM",
-        "via": "cwd"
+        "pid": 1646856,
+        "dir": "/home/parso/forge-clean-m6a/_logs/_demo-2026-09-12T16-41-54-534f5110",
+        "reason": "pid 1646856: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
-    "skipped": []
+    "cancelled": []
   },
   "sweep": {
     "removed": [],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [
+        {
+          "path": "/home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md",
+          "state": "pending",
+          "reason": "created_at 2026-09-12T16:53:51.875Z falls inside this run"
+        }
+      ],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 1 — INIT-2026-09-12-overlay-team-grant-lint.md",
+        "[stories] queue claim: CLAIMED /home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md — created_at 2026-09-12T16:53:51.875Z falls inside this run; captured to /home/parso/forge-clean-m6a/demos/stories/S1/queue-claim/pending before removal",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 1 — INIT-2026-09-12-overlay-team-grant-lint.md",
+      "[stories] queue claim: CLAIMED /home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md — created_at 2026-09-12T16:53:51.875Z falls inside this run; captured to /home/parso/forge-clean-m6a/demos/stories/S1/queue-claim/pending before removal",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
-    "removed": [
-      "brain/projects/gitweave/"
-    ],
-    "failed": []
+    "removed": [],
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
   }
 }
