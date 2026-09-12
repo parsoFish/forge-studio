@@ -59,6 +59,7 @@ import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './s
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
   ownGroundManifest, mintedSessionPaths, mintedSessionWrites, classifyOwnGroundDrift, groundChanges,
+  groundIgnoreFromGit,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge, bridgeSpawnOptions } from './bridge.mjs';
@@ -571,8 +572,9 @@ async function runStory(story, uiUrl, startedMs) {
   // and does not fail the run. Failing on any drift at all would fail every
   // green run, and nine-green is this campaign's exit criterion: a gate that
   // cannot be passed is not a gate.
-  const ownGroundDrift = { produced: [], undeclared: [] };
+  const ownGroundDrift = { produced: [], undeclared: [], ignored: [] };
   if (ownGroundBefore !== null) {
+    const groundDir = join(ROOT, 'projects', story.ground.project);
     const minted = mintedSessionPaths(
       logsBefore,
       readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
@@ -581,15 +583,31 @@ async function runStory(story, uiUrl, startedMs) {
     const split = classifyOwnGroundDrift(
       groundChanges(ownGroundBefore, ownGroundManifest(ROOT, story.ground.project)),
       minted,
-      mintedSessionWrites(minted, logsDir, join(ROOT, 'projects', story.ground.project)),
+      mintedSessionWrites(minted, logsDir, groundDir),
+      groundIgnoreFromGit(groundDir),
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
-    if (split.produced.length === 0 && split.undeclared.length === 0) {
+    ownGroundDrift.ignored = split.ignored;
+    if (split.produced.length === 0 && split.undeclared.length === 0 && split.ignored.length === 0) {
       console.log(`[stories] own ground: unchanged — projects/${story.ground.project} is back at the hash it started from`);
     }
     for (const line of split.produced) {
       console.log(`[stories] own ground: PRODUCED ${line}`);
+    }
+    // UNCONDITIONAL, EVEN AT ZERO, and always naming the rule that produced the
+    // number. `0 ignored-born` and "no ignore check ran" must never render the
+    // same line — that is `forge-e8dn`, and C's run 12 printed a `0` from
+    // `ls <a path that has never existed>` which reached the ledger as a
+    // measurement. The count is the ground's OWN toolchain output: S1 run 8 read
+    // 4500 of these as containment failures because method C prunes only
+    // `node_modules` and `.git`.
+    console.log(
+      `[stories] own ground: IGNORED-BY-GROUND ${split.ignored.length} path(s) — ` +
+      `unattributed and ignored by ${split.ignoreSource}; reported, never red`,
+    );
+    for (const line of split.ignored) {
+      console.log(`[stories] own ground: ignored-born ${line}`);
     }
     for (const line of split.undeclared) {
       console.error(`[stories] own ground: UNDECLARED ${line}`);

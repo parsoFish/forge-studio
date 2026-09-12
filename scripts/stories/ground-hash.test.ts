@@ -20,11 +20,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { METHOD_C_CMD, groundManifest, groundChanges, snapshotSiblingGrounds, siblingGroundEscapes, mintedSessionPaths, classifyOwnGroundDrift,} from './ground-hash.mjs';
+import { METHOD_C_CMD, groundManifest, groundChanges, snapshotSiblingGrounds, siblingGroundEscapes, mintedSessionPaths, classifyOwnGroundDrift, groundIgnoreFromGit, groundIgnoreNoneForTests,} from './ground-hash.mjs';
 
 function fixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'ground-hash-'));
@@ -203,7 +203,7 @@ test('594: the run\'s own product is reported, and anything else FAILS the run',
     removed: [],
     modified: [],
   };
-  const clean = classifyOwnGroundDrift(changes, minted, new Map());
+  const clean = classifyOwnGroundDrift(changes, minted, new Map(), groundIgnoreNoneForTests());
   assert.equal(clean.undeclared.length, 0, `a green run must stay green: ${clean.undeclared.join(' | ')}`);
   assert.equal(clean.produced.length, 2, 'and its product is still reported, loudly');
 });
@@ -219,7 +219,7 @@ test('594/663: A\'s case — a ground write NO minted session declared fails the
     removed: [],
     modified: ['.gitignore', 'CLAUDE.md'],
   };
-  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map());
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map(), groundIgnoreNoneForTests());
   assert.equal(produced.length, 0);
   assert.equal(undeclared.length, 5, undeclared.join(' | '));
   assert.ok(undeclared.some((l) => l.startsWith('M .gitignore ')), undeclared.join(' | '));
@@ -228,7 +228,7 @@ test('594/663: A\'s case — a ground write NO minted session declared fails the
   // The 663 converse, held beside it so the pair cannot drift: let ONE minted
   // session's log declare `CLAUDE.md` and that line — and only that line —
   // moves, naming the session that accounts for it.
-  const declared = classifyOwnGroundDrift(changes, minted, new Map([[minted[0], ['CLAUDE.md']]]));
+  const declared = classifyOwnGroundDrift(changes, minted, new Map([[minted[0], ['CLAUDE.md']]]), groundIgnoreNoneForTests());
   assert.deepEqual(declared.produced, [`M CLAUDE.md — written by ${minted[0]}`]);
   assert.equal(declared.undeclared.length, 4, declared.undeclared.join(' | '));
 });
@@ -240,6 +240,7 @@ test('594: a sibling session dir the run did NOT mint is undeclared, not product
     { added: ['_onboarding/from-a-run-two-days-ago/status.json'], removed: [], modified: [] },
     ['_architect/2026-09-10T13-54-57-9eaf7fae'],
     new Map(),
+    groundIgnoreNoneForTests(),
   );
   assert.equal(undeclared.length, 1, 'an unminted session dir must still fail the run');
 });
@@ -250,6 +251,7 @@ test('594: a path that merely PREFIXES a minted one is not covered by it', () =>
     { added: ['_architect/abcdef/PLAN.md'], removed: [], modified: [] },
     ['_architect/abc'],
     new Map(),
+    groundIgnoreNoneForTests(),
   );
   assert.equal(undeclared.length, 1, 'prefix matching would licence a directory the run never minted');
 });
@@ -301,13 +303,209 @@ test('594 REGRESSION: the ownership test runs against the shape `groundManifest`
   writeFileSync(join(logs, runId, 'events.jsonl'), '{}');
   const minted = mintedSessionPaths([], [runId], logs);
 
-  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map());
+  const { produced, undeclared } = classifyOwnGroundDrift(changes, minted, new Map(), groundIgnoreNoneForTests());
   assert.deepEqual(undeclared, [], `the run's own session is its product, not drift: ${undeclared.join(' | ')}`);
   assert.equal(produced.length, 2, 'and both files are reported as produced');
 
   // The control still has to hold in the real shape: something nobody minted.
   writeFileSync(join(ground, 'CLAUDE.md'), 'written by an agent');
-  const after = classifyOwnGroundDrift(groundChanges(before, groundManifest(ground)), minted, new Map());
+  const after = classifyOwnGroundDrift(groundChanges(before, groundManifest(ground)), minted, new Map(), groundIgnoreNoneForTests());
   assert.equal(after.undeclared.length, 1, `an unminted write still fails: ${after.undeclared.join(' | ')}`);
   assert.ok(after.undeclared[0].startsWith('A CLAUDE.md '), after.undeclared[0]);
+});
+
+// ---------------------------------------------------------------------------
+// 7.6.38 — the ground's own ignore rules (T1 ruling 756(ii))
+// ---------------------------------------------------------------------------
+
+test('7.6.38: an unattributed path the GROUND ignores is its own class, not undeclared', () => {
+  // S1 run 8's real shape: 4500 undeclared paths, every one gitweave's own
+  // toolchain — `.venv/` 4442, `__pycache__/` 49, `.pytest_cache/` 5,
+  // `infra/.terraform*` 4 — built by the demo builder running `pytest` to learn
+  // what to demo. Method C excludes `node_modules` and `.git`: a
+  // JavaScript-shaped exclusion list judging a Python-and-Terraform ground.
+  const changes = {
+    added: ['.venv/bin/pip', 'tests/__pycache__/test_structure.pyc', 'roadmap.md'],
+    removed: [],
+    modified: [],
+  };
+  const ignore = {
+    isIgnored: (p: string) => p.startsWith('.venv/') || p.includes('__pycache__/'),
+    source: 'gitweave/.gitignore',
+  };
+  const r = classifyOwnGroundDrift(changes, [], new Map(), ignore);
+  assert.deepEqual(r.ignored, [
+    'A .venv/bin/pip — ignored by the ground (gitweave/.gitignore)',
+    'A tests/__pycache__/test_structure.pyc — ignored by the ground (gitweave/.gitignore)',
+  ]);
+  // The one path the ground does NOT ignore is still a containment failure.
+  assert.deepEqual(r.undeclared, ['A roadmap.md — nothing this run minted accounts for it']);
+  assert.equal(r.ignoreSource, 'gitweave/.gitignore');
+});
+
+test('7.6.38: ATTRIBUTION WINS — a forge write into an ignored path stays PRODUCED', () => {
+  // The load-bearing ordering, and the reason the ignore file cannot launder a
+  // breach. The ground's ignore rules say who is EXPECTED to have written a
+  // path — "a human's toolchain writes here" — which is a different claim from
+  // "forge did not write here". The two coincide for gitweave's 4500 and come
+  // apart the instant a forge writer touches an ignored path.
+  const changes = { added: ['.venv/bin/forge-wrote-this'], removed: [], modified: [] };
+  const ignore = { isIgnored: () => true, source: 'x/.gitignore' };
+
+  const attributed = classifyOwnGroundDrift(
+    changes, [], new Map([['_demo/abc', ['.venv/bin/forge-wrote-this']]]), ignore,
+  );
+  assert.deepEqual(attributed.produced, ['A .venv/bin/forge-wrote-this — written by _demo/abc']);
+  assert.equal(attributed.ignored.length, 0, 'an attributed write is never demoted to the ignored class');
+
+  // Same path, same ignore rule, nobody claims it → the ignored class takes it.
+  const orphan = classifyOwnGroundDrift(changes, [], new Map(), ignore);
+  assert.equal(orphan.produced.length, 0);
+  assert.equal(orphan.ignored.length, 1);
+});
+
+test('7.6.38: a session-dir home also beats the ignore rule', () => {
+  const changes = { added: ['_demo/abc/generations/1/DEMO.html'], removed: [], modified: [] };
+  const r = classifyOwnGroundDrift(changes, ['_demo/abc'], new Map(), {
+    isIgnored: () => true, source: 'x/.gitignore',
+  });
+  assert.equal(r.produced.length, 1);
+  assert.equal(r.ignored.length, 0);
+});
+
+test('7.6.38: the ignored class is REPORTED AT ZERO — e8dn, not a silent absence', () => {
+  // `0 ignored` and "no ignore check ran" must never render the same. C's run 12
+  // printed `0` from `ls <path that has never existed> | wc -l` and that zero
+  // reached the campaign ledger as a measurement.
+  const changes = { added: ['roadmap.md'], removed: [], modified: [] };
+  const r = classifyOwnGroundDrift(changes, [], new Map(), {
+    isIgnored: () => false, source: 'gitweave/.gitignore',
+  });
+  assert.deepEqual(r.ignored, [], 'the class EXISTS and is empty');
+  assert.equal(r.ignoreSource, 'gitweave/.gitignore', 'and it still names the rule that produced the zero');
+});
+
+test('7.6.38: the ignore argument is REQUIRED — a caller cannot skip the check silently', () => {
+  // Same reason the writes-by-session map has no default: a caller that skipped
+  // the check would report a working run as a containment failure and look
+  // exactly like a passing one.
+  const changes = { added: ['x'], removed: [], modified: [] };
+  // The message must be the REFUSAL, not any throw. Deleting the guard still
+  // throws — `groundIgnore.isIgnored` on undefined is a TypeError whose text
+  // contains "isIgnored", so a /ignore/i door passes against no guard at all.
+  // Measured: that door stayed green under the mutation that removes the check.
+  assert.throws(
+    () => (classifyOwnGroundDrift as unknown as (...a: unknown[]) => unknown)(changes, [], new Map()),
+    (e: unknown) => {
+      const m = (e as Error).message;
+      assert.match(m, /a ground-ignore classifier is REQUIRED/);
+      assert.match(m, /groundIgnoreNoneForTests/, 'and it names the explicit opt-out');
+      return true;
+    },
+  );
+  // A malformed classifier is refused too, not just an absent one.
+  assert.throws(
+    () => (classifyOwnGroundDrift as unknown as (...a: unknown[]) => unknown)(changes, [], new Map(), {}),
+    /a ground-ignore classifier is REQUIRED/,
+  );
+});
+
+test('7.6.38: groundIgnoreFromGit is INDEX-AWARE — a tracked file matching a pattern is NOT ignored', () => {
+  // The one-flag difference T1 asked to pin. `--no-index` calls a tracked
+  // `*.pyc` ignored; plain `check-ignore` does not, because a tracked file is
+  // part of the project's state whatever the patterns say. Without this door,
+  // adding `--no-index` would quietly reclassify tracked files as toolchain
+  // noise and nothing would go red.
+  const g = mkdtempSync(join(tmpdir(), 'forge-ignore-'));
+  const git = (...a: string[]) => execFileSync('git', ['-C', g, ...a], { encoding: 'utf8' });
+  git('init', '-q', '.');
+  git('config', 'user.email', 'a@b');
+  git('config', 'user.name', 'c');
+  writeFileSync(join(g, '.gitignore'), 'build/\n*.pyc\n');
+  mkdirSync(join(g, 'src'), { recursive: true });
+  mkdirSync(join(g, 'build'), { recursive: true });
+  writeFileSync(join(g, 'src/keep.txt'), 'k');
+  writeFileSync(join(g, 'src/tracked.pyc'), 'q');   // matches *.pyc but is COMMITTED
+  writeFileSync(join(g, 'build/out.o'), 'o');
+  git('add', '-f', '.gitignore', 'src/keep.txt', 'src/tracked.pyc');
+  git('commit', '-qm', 'init');
+
+  const ig = groundIgnoreFromGit(g);
+  assert.equal(ig.isIgnored('build/out.o'), true, 'untracked + matching → ignored');
+  assert.equal(ig.isIgnored('src/keep.txt'), false, 'tracked + not matching → not ignored');
+  assert.equal(ig.isIgnored('src/tracked.pyc'), false, 'TRACKED and matching → NOT ignored (never --no-index)');
+
+  // The removed-path case, which is why this is `check-ignore` and not
+  // `ls-files -co --exclude-standard`: that lists the not-ignored set of files
+  // that EXIST, so a deleted path is absent from it for the same reason an
+  // ignored one is — and a run that deleted a real tracked file would have the
+  // deletion classified as ignored and dropped out of the undeclared count.
+  rmSync(join(g, 'build/out.o'));
+  assert.equal(ig.check(['build/out.o']).has('build/out.o'), true, 'still answers after the file is gone');
+  assert.equal(ig.check(['never/existed.pyc']).has('never/existed.pyc'), true);
+
+  rmSync(g, { recursive: true, force: true });
+});
+
+test('7.6.38: groundIgnoreFromGit REFUSES outside a git repo — a failed read is not a state', () => {
+  // The fail-open direction silently converts every unattributed path into a
+  // clean one, which is the single move this change must not make. rc 128 is
+  // "not a git repository"; rc 0 and 1 are the only answers.
+  const notARepo = mkdtempSync(join(tmpdir(), 'forge-norepo-'));
+  // The premise the door rests on, asserted rather than assumed: if TMPDIR ever
+  // sat inside a repo, git would answer instead of refusing and this door would
+  // silently become a no-op. Checked here so a failure reads as "the premise
+  // broke" and not as "the refusal regressed".
+  let probe = '';
+  try {
+    probe = execFileSync('git', ['-C', notARepo, 'rev-parse', '--is-inside-work-tree'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    probe = 'not-a-repo'; // rev-parse exits 128 outside a work tree, which is the premise holding
+  }
+  assert.notEqual(probe, 'true', `premise broken: ${notARepo} is inside a git work tree`);
+  const ig = groundIgnoreFromGit(notARepo);
+  assert.throws(() => ig.isIgnored('anything'), (e: unknown) => {
+    assert.match((e as Error).message, /Refusing rather than reporting an unchecked remainder as clean/);
+    assert.match((e as Error).message, /exited 128|not a git repository/i, 'and it names the status it got');
+    return true;
+  });
+  rmSync(notARepo, { recursive: true, force: true });
+});
+
+test('7.6.38: an empty path list asks git nothing and returns nothing', () => {
+  // Cheap, but it is the difference between "no paths to check" and a spawn
+  // whose empty stdin git could answer however it likes.
+  const ig = groundIgnoreFromGit(mkdtempSync(join(tmpdir(), 'forge-empty-')));
+  assert.equal(ig.check([]).size, 0);
+});
+
+test('7.6.38: no PRODUCTION story module may call groundIgnoreNoneForTests', () => {
+  // C's objection, made structural. In a real call site the test-only opt-out
+  // would be a one-word way to switch the IGNORED-BY-GROUND class off while
+  // every other door still passed — constraint 3 defeated by the export written
+  // to enforce it. The rename makes it visible; this makes it fail.
+  //
+  // It scans the production story scripts, not a list of known callers: a list
+  // goes stale the moment someone adds a module, which is the same defect class
+  // the bead is about.
+  const dir = new URL('.', import.meta.url).pathname;
+  const production = readdirSync(dir)
+    .filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))
+    .filter((f) => f !== 'ground-hash.mjs'); // its definition site
+  assert.ok(production.length >= 3, `expected several production story modules, saw ${production.length}`);
+
+  const offenders = production.filter((f) =>
+    readFileSync(join(dir, f), 'utf8').includes('groundIgnoreNoneForTests'));
+  assert.deepEqual(
+    offenders, [],
+    `production modules must pass a REAL ignore classifier (groundIgnoreFromGit): ${offenders.join(', ')}`,
+  );
+
+  // The positive control — without it this passes just as well when the scan is
+  // pointed at an empty directory or the substring is misspelled.
+  const selfCheck = readdirSync(dir).filter((f) =>
+    f.endsWith('.test.ts') && readFileSync(join(dir, f), 'utf8').includes('groundIgnoreNoneForTests'));
+  assert.ok(selfCheck.length > 0, 'the scan can find the symbol when it IS present');
 });
