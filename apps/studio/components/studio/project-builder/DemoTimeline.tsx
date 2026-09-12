@@ -161,9 +161,23 @@ export function DemoTimeline({
       // not keep: a surface that starts a session publishes the id on its OWN
       // root, under a key no page root shadows. `SessionMinted`'s generic
       // `data-session-id` is shadowed by the onboarding session page's root,
-      // so it could never bind `/sessions/demo/<id>` (S1 beat 8). "No id, no
-      // key" (6.11.5) — never published present-and-empty.
-      {...(demoSessionId === null ? {} : { 'data-demo-session-id': demoSessionId })}
+      // so it could never bind `/sessions/demo/<id>` (S1 beat 8).
+      //
+      // ALWAYS PRESENT, `''` BEFORE THE MINT — `forge-8vfn.7.6.64`, rulings
+      // 409/422/436/438. This shipped as "no id, no key" under 6.11.5, and 438
+      // reversed that on the record: absent is the same race one step earlier,
+      // because an observer collecting nested `data-*` in ONE read cannot tell
+      // "no key" from "not yet". What changed was the READER, not the
+      // judgement, and this site was ~100 rulings stale.
+      //
+      // M6-C's 835 read settles what the migration is FOR, and it is not a
+      // race: `beats-page.mjs:610` asks `Object.hasOwn(seen, attr) &&
+      // answers(...)`, so an absent key and `''` are "not satisfied yet" on
+      // identical terms and the loop polls to its bound either way. The two
+      // differ only in the VERDICT TEXT once the bound expires — absent gets
+      // "absent from the page", `''` gets 438's bound-naming branch — and in
+      // one key having had two shapes across three sibling surfaces.
+      data-demo-session-id={demoSessionId ?? ''}
     >
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Demo Process <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />

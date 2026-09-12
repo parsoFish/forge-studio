@@ -42,8 +42,14 @@ export function DemoStageHandoff({ project }: { project: string }): JSX.Element 
       // renders THIS handoff, so the beat asserted a key its page never
       // published. `SessionMinted`'s generic `data-session-id` cannot serve:
       // the session page root carries that same key and shadows it.
-      // "No id, no key" (6.11.5) — never published present-and-empty.
-      {...(sessionId === null ? {} : { 'data-demo-session-id': sessionId })}
+      //
+      // ALWAYS PRESENT, `''` BEFORE THE MINT — `forge-8vfn.7.6.64`, rulings
+      // 409/422/436/438, which reversed 6.11.5's "no id, no key" on the record:
+      // absent is the same race one step earlier for an observer collecting
+      // nested `data-*` in one read. Per M6-C's 835, the migration buys
+      // CONSISTENCY and verdict text, not an early answer — `beats-page.mjs:610`
+      // treats absent and `''` identically until the bound expires.
+      data-demo-session-id={sessionId ?? ''}
     >
       <button
         type="button"
