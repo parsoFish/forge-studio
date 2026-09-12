@@ -71,40 +71,7 @@
  * stands red with a product owner. Recorded in `M1-C-S1.amend-2.md`.
  */
 
-/** The gate command GitWeave's own repo answers to — `tests/` is pytest. */
-const GATE = 'python -m pytest tests/';
-
-/** GitWeave's own README, first line — the north star is the project's, not the story's. */
-const NORTH_STAR =
-  'A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling.';
-
-/** The one instruction the story used to have to drop. Beat 6's re-authoring
- *  recorded it leaving — "no surface on the onboarding path asks for it" — and
- *  named bead `forge-8vfn.7.2.5` as the reason. Ruling 441 closed that bead
- *  (#557), so `[data-field="constraints"]` now exists on the brief form and
- *  travels with the north star and the gate through the generic question-form
- *  affordance. The story supplies it again without inventing a field. */
-const UNTOUCHABLE_PATHS = 'Never touch infra/ state or config/orgs/*.yaml.';
-
-/** The first piece of work the operator asks the Architect to plan. */
-const IDEA =
-  'Add an overlay lint that fails the plan when a repo overlay names a team that no module in the org actually grants, so a broken grant is caught before it reaches GitHub.';
-
-/** This run's ceiling, in dollars — the same figure the ground declares. */
-const CEILING = '25';
-/** C1b is operator-tier and only OPEN when the onboarding agent left it so. */
-const C1B_DECISION = "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command.";
-
-/**
- * What the operator tells the architect when it interviews. It names a scope
- * and a constraint — an answer, not a restatement of the idea — because the
- * architect asks what to build, and S4 run 4 measured what happens when the
- * reply is a constraint alone: the architect asks again.
- */
-const ANSWER =
-  'Keep it to the onboarding path only — no changes to the existing scan commands. ' +
-  'The quality gate stays `python -m pytest tests/`, and the human-readable output must not change.';
-
+import { GATE, NORTH_STAR, UNTOUCHABLE_PATHS, IDEA, CEILING, C1B_DECISION, ANSWER } from './S1.constants.mjs';
 export default {
   id: 'S1',
   ground: { project: 'gitweave', realSpawn: true, budget_usd: 25 },
