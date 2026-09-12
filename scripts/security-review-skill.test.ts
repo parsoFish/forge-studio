@@ -62,18 +62,38 @@ function repoWith(remotes: Record<string, string>, refs: string[]): string {
 }
 
 describe('7.6.69 — the review range is derived, and a failure to derive it REFUSES', () => {
-  test('in THIS repo it resolves to a usable base — the outcome, not the path', () => {
+  test('in THIS repo it either resolves or REFUSES BY NAME — never a silent wrong answer', () => {
+    // THIS DOOR'S FIRST VERSION ASSERTED rc=0 AND FAILED IN CI, which is the
+    // finding: it asserted a property of the ENVIRONMENT as if it were a
+    // property of the code. `actions/checkout` fetches the PR merge ref into a
+    // remote called `origin` with no `origin/HEAD` and no `origin/main`, so the
+    // deriver correctly refused:
+    //
+    //   REFUSING: cannot tell which branch is origin's default: origin/HEAD is
+    //   unset and neither origin/main nor origin/master exists
+    //
+    // That is the DESIGNED answer — a shallow CI checkout has no published base
+    // to diff against, and this skill is a pre-commit review run inside a lane
+    // worktree, not a CI step. So both outcomes are correct here and the door
+    // asserts what must hold in EITHER: a usable range, or a refusal that names
+    // its cause. The claim that resolution actually works is carried by the
+    // fixture doors below, which build their own repos and do not depend on
+    // where the suite happens to be running.
     const { rc, out } = runIn(process.cwd());
-    assert.equal(rc, 0, `the skill must work where it lives:\n${out}`);
-    const got = Object.fromEntries(out.trim().split('\n').map((l) => l.split('=') as [string, string]));
 
-    // The remote is whatever THIS repo has, read from git rather than asserted
-    // by name — the door must not hardcode what the script must not hardcode.
-    const remotes = execFileSync('git', ['remote'], { encoding: 'utf8' }).trim().split('\n');
-    assert.ok(remotes.includes(got['REMOTE']!), `REMOTE=${got['REMOTE']} is not one of ${remotes.join(', ')}`);
-    assert.match(got['BASE']!, /^[0-9a-f]{40}$/, `BASE must be a resolved commit, got ${got['BASE']}`);
-    execFileSync('git', ['cat-file', '-e', `${got['BASE']}^{commit}`]); // throws if it is not a real commit
-    assert.match(got['RANGE']!, /\.\.HEAD$/);
+    if (rc === 0) {
+      const got = Object.fromEntries(out.trim().split('\n').map((l) => l.split('=') as [string, string]));
+      const remotes = execFileSync('git', ['remote'], { encoding: 'utf8' }).trim().split('\n');
+      assert.ok(remotes.includes(got['REMOTE']!), `REMOTE=${got['REMOTE']} is not one of ${remotes.join(', ')}`);
+      assert.match(got['BASE']!, /^[0-9a-f]{40}$/, `BASE must be a resolved commit, got ${got['BASE']}`);
+      execFileSync('git', ['cat-file', '-e', `${got['BASE']}^{commit}`]); // throws if it is not a real commit
+      assert.match(got['RANGE']!, /\.\.HEAD$/);
+      return;
+    }
+
+    assert.equal(rc, 2, `the only other legal outcome is a refusal, got rc=${rc}:\n${out}`);
+    assert.match(out, /^REFUSING: \S/m, `a refusal must name its cause, never exit quietly:\n${out}`);
+    assert.doesNotMatch(out, /^BASE=/m, 'and must not print a range it could not derive');
   });
 
   test('no remote name is baked in — the bundled skill\'s defect with a new string', () => {
