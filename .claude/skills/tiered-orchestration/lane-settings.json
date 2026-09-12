@@ -11,5 +11,16 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": false,
+    "gopls-lsp@claude-plugins-official": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bash /home/parso/forge/.claude/skills/tiered-orchestration/scripts/lane-lsp.sh status)",
+      "Bash(bash /home/parso/forge/.claude/skills/tiered-orchestration/scripts/lane-lsp.sh stop)"
+    ]
   }
 }
