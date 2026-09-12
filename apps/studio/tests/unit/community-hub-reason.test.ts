@@ -47,3 +47,25 @@ test('hubReason: only this hub’s outcome answers for this hub', () => {
   expect(hubReason(outcomes, 'mcp-registry')).toBeNull();
   expect(hubReason(outcomes, 'a-hub-not-in-this-pass')).toBeNull();
 });
+
+test('the SERVED reason wins over the in-session one — it is what survives a reload', () => {
+  // S8 run 5's defect, pinned from the other side: the in-session outcomes die
+  // with the page, so a chip that preferred them would go quiet on reload while
+  // every other attribute on it survived.
+  const inSession = [{ hubId: 'skills-sh', discovered: 0, reason: 'stale-in-session' }];
+  expect(hubReason(inSession, 'skills-sh', 'not-reachable')).toBe('not-reachable');
+  expect(declaredOnlyLabel(inSession, 'skills-sh', 'not-reachable')).toBe('declared — nothing indexed (fetch: not-reachable)');
+});
+
+test('with nothing served, the in-session reason still explains a refresh immediately', () => {
+  // The fallback earns its place: after pressing refresh, before any reload,
+  // the page can say why without waiting for a round trip.
+  expect(hubReason([{ hubId: 'skills-sh', discovered: 0, reason: 'not-reachable' }], 'skills-sh', undefined)).toBe('not-reachable');
+});
+
+test('a served empty string is not a reason', () => {
+  // A server that sends "" is saying nothing, and "" must not render as
+  // "(fetch: )" — the absent case and the empty case mean the same thing.
+  expect(hubReason([], 'skills-sh', '')).toBeNull();
+  expect(declaredOnlyLabel([], 'skills-sh', '')).toBe('declared — nothing indexed');
+});

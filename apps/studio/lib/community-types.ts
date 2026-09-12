@@ -40,7 +40,7 @@ export type CommunityHub = {
   kinds: string; // raw curated string, never parsed into an array
 };
 
-export type CommunityHubWithCount = CommunityHub & { itemCount: number };
+export type CommunityHubWithCount = CommunityHub & { itemCount: number; reason?: string };
 
 export type CommunitySignals = {
   stars: string;

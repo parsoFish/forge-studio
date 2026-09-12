@@ -445,8 +445,8 @@ function CommunityBrowserInner() {
                     }
                   >
                     {hub.name}{' '}
-                    <span style={{ color: 'var(--faint)' }} data-hub-reason={hubReason(hubOutcomes, hub.id) ?? undefined}>
-                      {declaredOnly ? `· ${declaredOnlyLabel(hubOutcomes, hub.id)}` : `· ${hub.itemCount}`}
+                    <span style={{ color: 'var(--faint)' }} data-hub-reason={hubReason(hubOutcomes, hub.id, hub.reason) ?? undefined}>
+                      {declaredOnly ? `· ${declaredOnlyLabel(hubOutcomes, hub.id, hub.reason)}` : `· ${hub.itemCount}`}
                     </span>
                   </button>
                   <a

@@ -236,7 +236,14 @@ export type CommunityEmptyState = { state: CommunityEmptyStateKind; message: str
 /** The refusal reason the READER gave for this hub on the settled refresh, or
  *  null when it gave none — it contributed rows, or no refresh has run. Pure,
  *  so the page renders a decision made here rather than one inlined in JSX. */
-export function hubReason(outcomes: readonly HubOutcomeRow[], hubId: string): string | null {
+export function hubReason(outcomes: readonly HubOutcomeRow[], hubId: string, served?: string): string | null {
+  // SERVED FIRST. The in-session outcomes die with the page — that is the whole
+  // defect S8 run 5 found: beat 4 refreshed, beat 5 navigated, and the chip's
+  // "why" was gone 600 ms later while every other attribute on it survived.
+  // `served` is the last refresh's verdict read from `meta.hubs`, so the answer
+  // outlives the tab that produced it; the in-session value stays as the
+  // fallback that explains a refresh instantly, before any reload.
+  if (served !== undefined && served !== '') return served;
   const o = outcomes.find((x) => x.hubId === hubId);
   return o?.reason ?? null;
 }
@@ -249,8 +256,8 @@ export function hubReason(outcomes: readonly HubOutcomeRow[], hubId: string): st
  *  The reason is the reader's own token (`blocked-origin`, `not-reachable`,
  *  `fetch-failed`, `tree-truncated`) rather than a second wording of it: a
  *  label that paraphrases drifts from what the code actually decided. */
-export function declaredOnlyLabel(outcomes: readonly HubOutcomeRow[], hubId: string): string {
-  const reason = hubReason(outcomes, hubId);
+export function declaredOnlyLabel(outcomes: readonly HubOutcomeRow[], hubId: string, served?: string): string {
+  const reason = hubReason(outcomes, hubId, served);
   return reason === null ? 'declared — nothing indexed' : `declared — nothing indexed (fetch: ${reason})`;
 }
 
