@@ -122,7 +122,7 @@ function parseCommunityRegistrySources(raw: unknown, file: string): Record<strin
 
 /** What one declared hub did on the LAST refresh, as persisted. `reason` is the
  *  indexer's own token and is present only when the hub could not be read. */
-export type RegistryHubOutcome = { hubId: string; discovered: number; reason?: string };
+export type RegistryHubOutcome = { hubId: string; discovered: number; reason?: string; kinds?: string };
 
 /** Absent is EMPTY, never an error (a registry written before this field, or
  *  never refreshed). Anything PRESENT is parsed strictly — a malformed row is a
@@ -138,7 +138,9 @@ function parseRegistryHubOutcomes(raw: unknown, file: string): RegistryHubOutcom
     if (typeof discovered !== 'number' || !Number.isInteger(discovered)) throw new Error(`${file}: meta.hubs[${i}].discovered must be an integer`);
     const reason = r['reason'];
     if (reason !== undefined && typeof reason !== 'string') throw new Error(`${file}: meta.hubs[${i}].reason must be a string when present`);
-    return { hubId, discovered, ...(typeof reason === 'string' ? { reason } : {}) };
+    const kinds = r['kinds'];
+    if (kinds !== undefined && typeof kinds !== 'string') throw new Error(`${file}: meta.hubs[${i}].kinds must be a string when present`);
+    return { hubId, discovered, ...(typeof reason === 'string' ? { reason } : {}), ...(typeof kinds === 'string' ? { kinds } : {}) };
   });
 }
 

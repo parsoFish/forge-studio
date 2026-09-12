@@ -69,3 +69,32 @@ test('a served empty string is not a reason', () => {
   expect(hubReason([], 'skills-sh', '')).toBeNull();
   expect(declaredOnlyLabel([], 'skills-sh', '')).toBe('declared — nothing indexed');
 });
+
+// ---------------------------------------------------------------- 7.6.91
+test('no-installable-kind does NOT borrow the fetch wording, and names the kinds', () => {
+  // A hub forge READ PERFECTLY and that publishes nothing this installer accepts
+  // is not a fetch failure. "(fetch: no-installable-kind)" would be true about
+  // the token and false about the world, which is the paraphrase the DOM
+  // contract forbids — and the operator would go looking for a network problem.
+  const outcomes = [{ hubId: 'cc-templates', discovered: 0, reason: 'no-installable-kind' }];
+  expect(declaredOnlyLabel(outcomes, 'cc-templates', 'no-installable-kind', 'hooks'))
+    .toBe('declared — nothing forge can install (publishes: hooks)');
+  // The ATTRIBUTE stays the bare token like its three siblings (T1 973), so the
+  // story beat asserts a token rather than a sentence that moves with the yaml.
+  expect(hubReason(outcomes, 'cc-templates', 'no-installable-kind')).toBe('no-installable-kind');
+});
+
+test('no-installable-kind without kinds still refuses the fetch wording', () => {
+  // The kinds come from the live hub declaration, so they can be absent for a
+  // caller that has the reason and not the hub. The label degrades to the true
+  // half rather than to the false one.
+  expect(declaredOnlyLabel([], 'cc-templates', 'no-installable-kind'))
+    .toBe('declared — nothing forge can install');
+});
+
+test('the other three reasons keep the fetch wording', () => {
+  // The negative that stops the new branch swallowing its siblings.
+  for (const r of ['not-reachable', 'fetch-failed', 'tree-truncated']) {
+    expect(declaredOnlyLabel([], 'h', r, 'skills')).toBe(`declared — nothing indexed (fetch: ${r})`);
+  }
+});
