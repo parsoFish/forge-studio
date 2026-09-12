@@ -8,7 +8,7 @@
  * on this box at this beat — and `run.mjs` only orchestrates.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { summariseRunSpend, spendCeilingVerdict } from './spend.mjs';
+import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict } from './spend.mjs';
 import { join } from 'node:path';
 
 /** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
@@ -108,19 +108,33 @@ export function collectSpendDirs(root, sinceMs) {
  * reap. §15.449 recurring inside the fix for itself: A CEILING IN A STRING IS A
  * LABEL, and the caller that must decide cannot read a sentence.
  *
- * @returns {{spend: ReturnType<typeof summariseRunSpend>, verdict: ReturnType<typeof spendCeilingVerdict>, lines: string[]}}
+ * AND THE HALT IS A VALUE FOR THE SAME REASON (7.6.71). `stop` says whether
+ * this boundary ends the run and WHY — a breach on a number, or a ceiling that
+ * went blind when a turn ended unpriced. The caller branches on `stop.halt`; it
+ * never parses `lines`.
+ *
+ * @returns {{spend: ReturnType<typeof summariseRunSpend>, verdict: ReturnType<typeof spendCeilingVerdict>, unpriced: ReturnType<typeof endedUnpricedTurns>, stop: ReturnType<typeof ceilingHaltVerdict>, lines: string[]}}
  */
 export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
-  const spend = summariseRunSpend({
-    realSpawn,
-    // COLLECTED BY `collectSpendDirs`, NOT BY THE REAPER'S COLLECTOR
-    // (`forge-rzrs`): `collectAgentRuns` gates on `turn.pid`/markers — the
-    // directories it could KILL — and a cycle's phase dir has neither, so S10
-    // run 15 enforced a $35 ceiling against 76.4% of its own spend.
-    events: collectSpendDirs(root, startedMs).map(readRunEvents),
-  });
+  // COLLECTED BY `collectSpendDirs`, NOT BY THE REAPER'S COLLECTOR
+  // (`forge-rzrs`): `collectAgentRuns` gates on `turn.pid`/markers — the
+  // directories it could KILL — and a cycle's phase dir has neither, so S10
+  // run 15 enforced a $35 ceiling against 76.4% of its own spend. Read ONCE
+  // and shared: the money and the unpriced-turn question are two readings of
+  // the same rows, and two collections could disagree about which run they are
+  // describing.
+  const events = collectSpendDirs(root, startedMs).map(readRunEvents);
+  const spend = summariseRunSpend({ realSpawn, events });
   const v = spendCeilingVerdict(spend, ceilingUsd);
+  const unpriced = endedUnpricedTurns(events);
+  const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced });
   const lines = [`[stories] spend ${label}: ${v.reason}`];
   for (const n of spend.notes ?? []) lines.push(`[stories] spend: ${n}`);
-  return { spend, verdict: v, lines };
+  // PRINTED EVERY BEAT once it is true, not only at the halt: the run that
+  // went blind should say so in the transcript at the beat it happened, and a
+  // guard that speaks only when it fires reads like one that never ran.
+  for (const t of unpriced) {
+    lines.push(`[stories] spend ${label}: a turn ENDED UNPRICED — reason=${t.reason}, tokens_out=${t.tokensOut ?? 'unrecorded'}, tokens_in=${t.tokensIn ?? 'unrecorded'}, session=${t.sessionId}`);
+  }
+  return { spend, verdict: v, unpriced, stop, lines };
 }

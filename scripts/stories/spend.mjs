@@ -244,3 +244,124 @@ export function effectiveCeiling(declaredUsd, fundedUsd) {
       + (fundedUsd === declaredUsd ? ' (they agree)' : `; enforcing the LOWER (${source})`),
   });
 }
+
+/**
+ * Turns that ENDED with nobody pricing them — bead `forge-8vfn.7.6.71`,
+ * T1 ruling 849 option (d).
+ *
+ * THE DIFFERENCE THAT DECIDES EVERYTHING IS "ENDED" (823). A dispatched turn
+ * with no priced event and no terminal row is IN FLIGHT: unmeasured is the
+ * correct live state, it may still price itself on its own `end`, and a runner
+ * that halted on it would kill healthy runs at every beat. A turn that has
+ * ENDED unpriced is a different fact with the same symptom — there is no
+ * figure coming, and the ceiling above it will never compare anything again.
+ *
+ * 7.6.51 printed `spend UNMEASURED against ceiling $X` at every beat and
+ * carried on. Honest, and blind exactly when it matters: D's S7 run 4 spent an
+ * unknown amount against a declared $25 while the enforcer narrated its own
+ * blindness twenty-three times. THE HONEST FIX FOR BLINDNESS IS TO STOP ON
+ * BLINDNESS, not to manufacture sight — 849 refused a pricing table for the
+ * same reason, because a ceiling compared against a figure we derived
+ * ourselves fails in the direction that looks safe.
+ *
+ * WHAT COUNTS AS THE END OF A TURN, and why it is not `event_type: 'end'`.
+ * Plenty of honest `end` rows carry no `cost_usd` — a phase's terminal move, a
+ * closure step — and treating those as unpriced turns would halt every healthy
+ * run at beat 1. The row this reads is the one 7.6.55 (#698) added for exactly
+ * this purpose: the runner writes `interactive.turn-ended-unpriced` when a turn
+ * ends without the SDK's priced `result`, carrying the tokens it was observed
+ * to consume and `unpriced_reason: abort|died`. TWO INDEPENDENT MARKERS are
+ * accepted — that message, or `metadata.priced === false` — because a guard
+ * keyed to a single string literal in another package goes silently blind the
+ * day someone renames it, which is this campaign's own fail-open shape.
+ * `spend-unpriced.test.ts` holds a door on the literal for the same reason.
+ *
+ * A ROW THAT DID GET A PRICE IS NOT ONE OF THESE. `cost_usd` present means the
+ * turn was priced after all, whatever its message says; the evidence wins over
+ * the label.
+ *
+ * Deduped by `event_id` like `summariseRunSpend`, because a cycle channel
+ * re-logs a session's own terminal row and one turn must not read as two.
+ *
+ * @param {{event_id?: unknown, message?: unknown, cost_usd?: unknown, tokens_in?: unknown, tokens_out?: unknown, metadata?: Record<string, unknown>}[][]} eventLists
+ * @returns {ReadonlyArray<{reason: string, tokensIn: number|null, tokensOut: number|null, sessionId: string}>}
+ */
+export function endedUnpricedTurns(eventLists) {
+  const seen = new Set();
+  const out = [];
+  for (const rows of eventLists ?? []) {
+    for (const r of rows ?? []) {
+      const meta = (r?.metadata ?? {});
+      const marked = r?.message === 'interactive.turn-ended-unpriced' || meta['priced'] === false;
+      if (!marked) continue;
+      if (typeof r?.cost_usd === 'number') continue;
+      const id = typeof r?.event_id === 'string' ? r.event_id : null;
+      if (id !== null) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      out.push(Object.freeze({
+        reason: typeof meta['unpriced_reason'] === 'string' ? meta['unpriced_reason'] : 'unstated',
+        tokensIn: typeof r?.tokens_in === 'number' ? r.tokens_in : null,
+        tokensOut: typeof r?.tokens_out === 'number' ? r.tokens_out : null,
+        sessionId: typeof meta['session_id'] === 'string' ? meta['session_id'] : 'unknown',
+      }));
+    }
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Does this beat boundary stop the run? — bead `forge-8vfn.7.6.71`.
+ *
+ * THREE STATES, NOT TWO (§15.504): green, red, and UNKNOWN — and UNKNOWN never
+ * resolves toward proceeding. A breach is red on a number. A turn that ended
+ * unpriced under an enforceable ceiling is UNKNOWN, and it stops the run
+ * because the guard above it can no longer do its job, not because anything
+ * was proven over budget.
+ *
+ * THE BREACH IS CHECKED FIRST and that ordering is deliberate: when part of the
+ * spend is priced and already over, the honest headline is the number we have,
+ * not the one we lost. The measured total is a LOWER BOUND once a turn has gone
+ * unpriced, so `EXCEEDED` remains true whatever the missing row held.
+ *
+ * NO USABLE CEILING MEANS NOTHING TO MAKE UNENFORCEABLE. An unbounded run is
+ * already `effectiveCeiling`'s finding and prints as one; adding a second
+ * verdict for it here would stop runs on a condition this bead was not ruled
+ * for and 7.6.52 already names up front.
+ *
+ * THE BOUND THIS DOES NOT COVER, stated rather than discovered later: it runs
+ * at beat boundaries, so a turn that ends unpriced after the LAST boundary is
+ * reported by the spend column and not halted on. The run is in teardown by
+ * then and the reap runs regardless; what is lost is the red, not the kill.
+ *
+ * @param {{spend: ReturnType<typeof summariseRunSpend>, ceilingUsd: number, unpriced: ReturnType<typeof endedUnpricedTurns>}} args
+ * @returns {Readonly<{halt: boolean, kind: 'breach'|'unenforceable'|null, headline: string|null, reason: string, note: string}>}
+ */
+export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced }) {
+  const v = spendCeilingVerdict(spend, ceilingUsd);
+  if (v.breached) {
+    return Object.freeze({
+      halt: true, kind: 'breach', headline: 'CEILING BREACHED', reason: v.reason,
+      note: 'The run was stopped at the ceiling, so the beat score above is a partial run, not a verdict on the product.',
+    });
+  }
+  const enforceable = typeof ceilingUsd === 'number' && Number.isFinite(ceilingUsd) && ceilingUsd >= 0;
+  const ended = unpriced ?? [];
+  if (enforceable && ended.length > 0) {
+    const t = ended[0];
+    const tokens = [
+      t.tokensOut === null ? 'tokens_out=unrecorded' : `tokens_out=${t.tokensOut}`,
+      t.tokensIn === null ? 'tokens_in=unrecorded' : `tokens_in=${t.tokensIn}`,
+    ].join(', ');
+    return Object.freeze({
+      halt: true, kind: 'unenforceable', headline: 'CEILING UNENFORCEABLE',
+      reason:
+        `ceiling $${ceilingUsd.toFixed(2)} UNENFORCEABLE: ${ended.length} turn(s) ended unpriced ` +
+        `(first: reason=${t.reason}, ${tokens}, session=${t.sessionId}) — no figure is coming for ` +
+        'them, so nothing below this ceiling can be compared to it again',
+      note: 'The run was stopped because its ceiling went blind, NOT because a limit was exceeded — the beat score above is a partial run and the spend total is a lower bound.',
+    });
+  }
+  return Object.freeze({ halt: false, kind: null, headline: null, reason: v.reason, note: '' });
+}
