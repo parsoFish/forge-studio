@@ -80,6 +80,77 @@ export async function checkHonestPillarRead(page, check, pageId, label) {
 }
 
 /**
+ * PUBLISH AND STAY — read the id a surface just MINTED, off the handle it
+ * renders. TWO FAMILIES of handle exist, which is why both the selector and the
+ * attribute are arguments rather than constants
+ * (`docs/reference/studio-dom-contract.md`, "A minted id is rendered BEFORE the
+ * navigation that consumes it" / "Publish, never navigate"):
+ *
+ *   `data-minted-session-id` + `a[data-action="open-minted-session"]`, at four
+ *   sites (generic kickoff, authoring launcher, instructions kickoff, architect
+ *   launcher) — rulings 396/406/409/422/436. Published `""` from first paint.
+ *
+ *   `SessionMinted` (M1-G, bead 5.5) — `data-session-id` on
+ *   `a[data-action="view-<kind>-session"]`, and the anchor exists only once the
+ *   id does. Read it through an EXPLICIT anchor selector, never a bare
+ *   `[data-session-id]`: ruling 307 records that the generic key is shadowed by
+ *   the enclosing session page's own root, so a resolver that binds the
+ *   best-covering candidate silently answers with the wrong session's id.
+ *
+ * Null on timeout rather than a throw: the caller's soft `check()` is what
+ * reports, and a beat that throws here sweeps nothing.
+ */
+export async function readPublishedSid(page, sel, attr = 'data-minted-session-id', timeout = 20000) {
+  await page.waitForFunction(
+    ([s, a]) => (document.querySelector(s)?.getAttribute(a) || '') !== '',
+    [sel, attr], { timeout },
+  ).catch(() => {});
+  return await page.evaluate(
+    ([s, a]) => document.querySelector(s)?.getAttribute(a) || null, [sel, attr]) || null;
+}
+
+/**
+ * The rest of the publish-and-stay contract, asserted in lockstep and then
+ * followed as the operator would. Four properties, and any three of them
+ * passing still leaves the operator stranded: the page STAYED, an anchor
+ * addresses THAT session, following it lands, and (the caller's, above) the id
+ * published at all. `waitForURL(/\/sessions\/authoring\//)` asserted none of
+ * them — it passed on any authoring session, including one a previous beat
+ * left behind.
+ *
+ * Prefix, not equality, on the href: `SessionMinted` appends `?project=<p>`
+ * while `AuthoringLauncher` does not, and the property both share is "addresses
+ * the session that was just minted".
+ *
+ * Takes `sid` rather than reading it, so the caller records it for cleanup
+ * between the read and the first assertion.
+ */
+export async function assertPublishAndStay(page, check, { sid, label, anchor, stay, hrefFor, landing }) {
+  check(!!sid, `${label}: the minting surface PUBLISHES the id it minted`);
+  const at = new URL(page.url()).pathname;
+  check(at === stay, `${label}: and STAYS on ${stay} — publish-and-stay, not a navigation (got ${at})`);
+  const want = hrefFor(sid);
+  const href = await page.evaluate((s) => document.querySelector(s)?.getAttribute('href') ?? null, anchor)
+    .catch(() => null);
+  check(typeof href === 'string' && href.startsWith(want),
+    `${label}: a real anchor addresses that session (want ${want}*, got ${href})`);
+  await page.locator(anchor).click().catch(() => {});
+  if (landing) await page.waitForURL(landing, { timeout: 20000 }).catch(() => {});
+}
+
+/** `AuthoringLauncher` is ONE component with TWO mount points (`/skills/new`,
+ *  `/hooks/new`) and therefore one contract: same anchor, same address shape,
+ *  same landing. Only the page it stays on differs, so only that is a
+ *  parameter — a change to the launcher's DOM edits this line, not two
+ *  journeys that drifted apart. */
+export function assertLauncherPublishAndStay(page, check, { sid, label, stay }) {
+  return assertPublishAndStay(page, check, {
+    sid, label, stay, anchor: 'a[data-action="open-minted-session"]',
+    hrefFor: (s) => `/sessions/authoring/${s}`, landing: /\/sessions\/authoring\/[^/?]+/,
+  });
+}
+
+/**
  * @param {object}   [opts]
  * @param {function} [opts.frame]    async (page, name, caption) — capture helper for held-open frames.
  * @param {number}   [opts.dwellMs]  how long to hold an opened drawer before the frame (default 4200).

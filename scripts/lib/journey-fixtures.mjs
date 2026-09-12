@@ -1796,14 +1796,10 @@ const AUTH_LANDED_HOOK_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_HOOK_
 
 export function authoringDir(sid) { return join(projectRoot, '_authoring', sid); }
 
-/** Parse a real authoring session id out of a `/sessions/authoring/<sid>` URL
- *  (null if not there) — shared by both skills.mjs and hooks.mjs's own new
- *  build beats, mirroring instrSidFromUrl/pbSidFromUrl's own loose
- *  substring-match shape in stand-up-create.mjs. */
-export function authoringSidFromUrl(url) {
-  const m = /\/authoring\/([^/?#]+)/.exec(url);
-  return m ? decodeURIComponent(m[1]) : null;
-}
+/* `authoringSidFromUrl` DELETED with 7.6.46 along with its last two callers:
+ * `AuthoringLauncher` publishes the minted id and STAYS, so there is no
+ * `/sessions/authoring/<sid>` URL to parse at the moment of the read.
+ * `instrSidFromUrl`/`pbSidFromUrl` are untouched — their surfaces navigate. */
 
 /** Merge-patch the REAL status.json the real POST /start already wrote
  *  (phase/project/runId/prompt/startedAt) — every field the real route wrote

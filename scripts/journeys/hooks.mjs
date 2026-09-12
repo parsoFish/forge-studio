@@ -9,10 +9,10 @@ import {
   HK_BIND_AGENT_SLUG, HK_BIND_AGENT_PATH,
   stashHookBindAgent, restoreHookBindAgent,
   cleanHookArtifacts, cleanHookSecurityArtifacts, cleanHookCreateArtifacts,
-  AUTH_HOOK_ID, AUTH_HOOK_DIR, authoringDir, authoringSidFromUrl,
+  AUTH_HOOK_ID, AUTH_HOOK_DIR, authoringDir,
   seedAuthoringHookDraft, cleanAuthoringHookArtifacts,
 } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, readPublishedSid, assertLauncherPublishAndStay } from '../lib/journey-assertions.mjs';
 
 // ── R3-03-F4 helpers: real, disk-derived cross-checks ────────────────────────
 // These mirror orchestrator/studio/hook-library.ts's own derivations (read
@@ -757,9 +757,9 @@ export const journey = defineJourney({
               await frame(page, 'hk-10-authoring-launcher', 'Part 2 (hooks) — the authoring launcher, describing the automation', { key: true });
 
               await page.locator('[data-action="start-authoring"]').click().catch(() => {});
-              await page.waitForURL(/\/sessions\/authoring\//, { timeout: 15000 }).catch(() => {});
-              const sid = authoringSidFromUrl(page.url());
-              check(!!sid, `HK-5: starting opens a real session at /sessions/authoring/<sid> (${page.url()})`);
+              // PUBLISH AND STAY — same launcher as SK-6, which carries the why.
+              const sid = await readPublishedSid(page, '[data-section="authoring-launcher"]');
+              await assertLauncherPublishAndStay(page, check, { sid, label: 'HK-5', stay: '/hooks/new' });
 
               check(await page.locator('main[data-page="session"][data-session-kind="authoring"]').count() > 0,
                 'HK-5: the shared session shell renders for the authoring kind');

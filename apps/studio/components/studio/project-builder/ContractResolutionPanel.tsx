@@ -140,12 +140,14 @@ export function ContractResolutionPanel({
       const s = await startInstructions({ project: projectId, mode: 'init' });
       if (s.ok && s.sessionId) router.push(`/sessions/instructions/${encodeURIComponent(s.sessionId)}`);
     } else if (r.route === 'demo-builder') {
-      // W6-B10 (R1-03-F2 reversed): navigates straight to the dedicated
-      // session screen, exactly like the 'instructions' branch above —
-      // there is no inline panel to hand a started session off to anymore.
-      // forge-8vfn.5.5: publish the id, then let the operator (or a story
-      // beat) follow it — navigating inside the minting click made the id
-      // unobservable to everything, so no story could bind /sessions/demo/<id>.
+      // PUBLISH AND STAY, and note this branch does NOT navigate while the
+      // 'instructions' branch above still does — the asymmetry is the point.
+      // W6-B10 (R1-03-F2 reversed) killed the inline panel, so the demo builder
+      // is the dedicated session screen; forge-8vfn.5.5 then stopped this click
+      // from going there, because `router.push` inside the minting click left
+      // the id observable to nothing and no story could bind
+      // /sessions/demo/<id>. Publish it on the root above, render the way in,
+      // and let the operator (or a beat) follow it.
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
       if (s.ok && s.sessionId) setDemoSessionId(s.sessionId);
     } else if (r.route === 'brain-fix') {
@@ -182,6 +184,24 @@ export function ContractResolutionPanel({
   return (
     <div
       data-section="contract-resolution"
+      // M1-G / forge-8vfn.5.5, applied here LAST of the three demo-minting
+      // sites. `<SessionMinted kind="demo">` at :295 publishes only the generic
+      // `data-session-id`, which ruling 307 records as unusable: a minting
+      // surface renders inside another session's page, whose own root carries
+      // that same key, so a resolver binding the best-covering candidate
+      // answers with the WRONG session's id and the shadowing is silent.
+      //
+      // ALWAYS PRESENT, `''` BEFORE THE MINT — rulings 409/422/436/438, the
+      // form `NewIdeaBox.tsx:131` ships and the DOM contract ratifies for every
+      // minting surface. This DIFFERS from the two sibling demo sites on
+      // purpose: `DemoTimeline.tsx:166` and `DemoStageHandoff.tsx:46` still
+      // render the key absent-when-null under 6.11.5, with doors pinning that
+      // shape (ruling 332) — and 438 superseded it, on the record: absent is
+      // the same race one step earlier, because an observer collecting nested
+      // `data-*` in one read cannot tell "no key" from "not yet". What changed
+      // was the READER, not the judgement. Those two sites and their doors are
+      // stale by ~100 rulings; migrating them is not this PR's business.
+      data-demo-session-id={demoSessionId ?? ''}
       data-resolution-failing-count={failing.length}
       data-resolution-auto-count={auto.length}
       data-resolution-agent-count={agent.length}
