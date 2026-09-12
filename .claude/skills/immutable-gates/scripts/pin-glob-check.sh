@@ -58,13 +58,32 @@ for f in "$G"/$GLOB.sha256; do
   # What the manifest lists, with sha256sum's optional binary `*` prefix stripped.
   listed=$(awk '{ p=$2; sub(/^\*/,"",p); if (p != "") print p }' "$f" | sort -u)
   unlisted=""
-  count=0
+  # `forge-8vfn.7.6.99`. MATCHES ARE DEDUPED BEFORE THEY ARE COUNTED, because a
+  # file matched by two globs is ONE file and was being counted twice.
+  #
+  # Measured on `M1-C-S1`, which pins the story file by name AND (since T1 961)
+  # carries `tests/stories/S1.*.mjs` — so `S1.story.mjs` matched both patterns
+  # and the check reported `OK — 3 file(s)` for a manifest listing 2. The verdict
+  # was right and the NUMBER was not, which is the worse half: a reader
+  # comparing "3 file(s) match" against `paths=2` concludes something is
+  # unlisted, i.e. exactly the drift this tool exists to report, in a manifest
+  # that has none.
+  #
+  # Both branches had it — `$count` for the OK line and `grep -c .` over an
+  # accumulated `$unlisted` for the DRIFT line — so an unlisted file matching two
+  # globs would have been reported as two unlisted files, and listed twice.
+  matched=""
   while IFS= read -r pattern; do
     case "$pattern" in ''|'#'*) continue;; esac
     # Expand in the repo, not here: the glob is repo-relative by contract.
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
-      count=$((count + 1))
+      # Seen through THIS manifest's globs already? Then it is the same file,
+      # not a second one. Checked with grep's own status for the same reason the
+      # listed-check below is: `printf | grep -q` under `pipefail` can report a
+      # match as a miss (`forge-m86d`).
+      if grep -Fxq -- "$hit" <<<"$matched"; then continue; fi
+      matched="$matched$hit"$'\n'
       # A HERESTRING, never `printf … | grep -q` (bead `forge-m86d`). Under the
       # `set -o pipefail` above, `grep -q` exits the instant it matches, and if
       # `printf` is still writing it takes SIGPIPE and exits 141 — which pipefail
@@ -92,6 +111,8 @@ for f in "$G"/$GLOB.sha256; do
 $(cd "$R" && eval "ls -1 -d -- $pattern" 2>/dev/null || true)
 EOF
   done < "$gl"
+  # Counted from the DEDUPED set, never from the loop's iteration count.
+  count="$(printf '%s' "$matched" | grep -c . || true)"
   checked=$((checked + count))
   if [ -n "$unlisted" ]; then
     drift=1
