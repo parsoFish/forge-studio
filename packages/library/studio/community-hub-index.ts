@@ -41,7 +41,11 @@ export interface DiscoveredItem {
 }
 
 export type HubIndexOutcome =
-  | { ok: true; hubId: string; discovered: DiscoveredItem[] }
+  /** `partial` is TRUE when the source had more to give and the reader stopped
+   *  at its own bound — the list is a FLOOR, not a total. Absent/false means
+   *  the source was read to the end. A reader that returns a floor with no way
+   *  to say so hands its caller a number that looks like an answer. */
+  | { ok: true; hubId: string; discovered: DiscoveredItem[]; partial?: boolean; readCap?: string }
   | { ok: false; hubId: string; reason: 'not-reachable'; message: string }
   | { ok: false; hubId: string; reason: 'tree-truncated'; message: string }
   | { ok: false; hubId: string; reason: 'fetch-failed'; kind: CommunityRefreshErrorKind; message: string };
@@ -100,6 +104,7 @@ export async function indexMcpRegistryHub(
   const discovered: DiscoveredItem[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
+  let partial = false;
   try {
     for (let page = 0; page < MAX_PAGES; page++) {
       const qs = new URLSearchParams({ version: 'latest', limit: '50' });
@@ -132,6 +137,11 @@ export async function indexMcpRegistryHub(
         metadata !== null && typeof metadata === 'object' ? (metadata as Record<string, unknown>)['nextCursor'] : undefined;
       if (typeof nextCursor !== 'string' || nextCursor === '') break;
       cursor = nextCursor;
+      // A cursor still outstanding as the last page is consumed means the
+      // registry has more and this reader is about to stop. MEASURED: it holds
+      // at least 2000 servers and this bound reads 250, so silence here would
+      // report a floor as a total.
+      if (page === MAX_PAGES - 1) partial = true;
     }
   } catch (err) {
     if (err instanceof CommunityRefreshError) {
@@ -139,7 +149,12 @@ export async function indexMcpRegistryHub(
     }
     throw err; // a genuine crash, never laundered into a refusal
   }
-  return { ok: true, hubId: hub.id, discovered: discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) };
+  return {
+    ok: true,
+    hubId: hub.id,
+    discovered: discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    ...(partial ? { partial: true, readCap: `${MAX_PAGES} pages of 50` } : {}),
+  };
 }
 
 /** The reader for a hub, by URL; the GitHub reader's refusal names the limit. */

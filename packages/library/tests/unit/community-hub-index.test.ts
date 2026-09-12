@@ -266,3 +266,33 @@ test('the reader is chosen by URL, never by the hub’s declared kinds', () => {
   assert.equal(indexerForHub({ url: 'https://skills.sh' }), indexGithubHub, 'a host with no reader falls to the one whose refusal names the limit');
   assert.equal(indexerForHub({ url: 'not a url' }), indexGithubHub);
 });
+
+test('MCP: a list cut short by the reader’s own bound is marked a FLOOR', async () => {
+  // MEASURED against the live registry: it holds at least 2000 servers and this
+  // reader takes 5 pages of 50. Returning 250 with no way to say "there is more"
+  // is a floor presented as a total — the shape this field exists to refuse.
+  const { ctx } = mcpStub([
+    { names: ['io.github.a/one-server'], next: 'C2' },
+    { names: ['io.github.a/two-server'], next: 'C3' },
+    { names: ['io.github.a/three-server'], next: 'C4' },
+    { names: ['io.github.a/four-server'], next: 'C5' },
+    { names: ['io.github.a/five-server'], next: 'C6' }, // still more, and we stop
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, true);
+  assert.equal(out.ok === true ? out.partial : null, true);
+  assert.equal(out.ok === true ? out.readCap : null, '5 pages of 50');
+  assert.equal(ids(out).length, 5);
+});
+
+test('MCP: a list read to the end is NOT marked partial', async () => {
+  // The other half, and the one that keeps the flag meaningful: a source that
+  // ended is not reported as truncated, so `partial` says something when set.
+  const { ctx } = mcpStub([
+    { names: ['io.github.a/one-server'], next: 'C2' },
+    { names: ['io.github.a/two-server'] }, // no cursor: the registry is done
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, true);
+  assert.equal(out.ok === true ? out.partial : 'unset', undefined);
+});
