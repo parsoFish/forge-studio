@@ -316,6 +316,47 @@ else
     done < <(cd "$R" && sha256sum -c "$manifest" 2>/dev/null | sed -n 's/^\(.*\): FAILED$/\1/p')
     [ "$undeclared" -eq 0 ] || fail=1
   }
+  # 7.6.43 — A DECLARATION THAT NAMES NOTHING REFUSES.
+  #
+  # C's case (773): `--expect-pin-fail M6-C:tests/stories/S7.story.mjs` was
+  # accepted in silence although only `M1-C-S7` pins that path, and it surfaced
+  # only because a REAL undeclared failure happened to sit beside it. A
+  # declaration is the PR's claim about ITSELF, and `--expect-pin-fail` is the
+  # flag that turns a red gate green — so a claim matching nothing must not be
+  # indistinguishable from one that matched.
+  #
+  # THE MESSAGE NAMES WHICH OF THREE, because a refusal that catches only the
+  # third leaves two more ways to write a declaration that looks like cover:
+  #   1. the manifest does not exist at all
+  #   2. the path is pinned by no manifest anywhere (a typo)
+  #   3. manifest and path are both real but WRONG PAIR  <- C's, and the worst,
+  #      since a reader checking either half in isolation finds it
+  for decl in $EXPECTED_PIN_FAILS; do
+    [ -n "$decl" ] || continue
+    dman="${decl%%:*}"
+    if [ ! -f "$CAMP/gate-manifests/$dman.sha256" ]; then
+      echo "  declaration names nothing: $decl — no manifest named '$dman' in $CAMP/gate-manifests"
+      refused=1; continue
+    fi
+    [ "$decl" = "$dman" ] && continue          # manifest-level, and it exists
+    dpath="${decl#*:}"
+    if awk '{ q=$2; sub(/^\*/,"",q); print q }' "$CAMP/gate-manifests/$dman.sha256" \
+         | grep -Fxq "$dpath"; then continue; fi
+    holder=""
+    for other in "$CAMP"/gate-manifests/*.sha256; do
+      [ -f "$other" ] || continue
+      if awk '{ q=$2; sub(/^\*/,"",q); print q }' "$other" | grep -Fxq "$dpath"; then
+        holder="$holder $(basename "$other" .sha256)"
+      fi
+    done
+    if [ -n "$holder" ]; then
+      echo "  declaration names nothing: $decl — '$dman' does not pin that path;$holder does. Wrong pair."
+    else
+      echo "  declaration names nothing: $decl — no manifest pins '$dpath' at all (typo?)"
+    fi
+    refused=1
+  done
+
   for m in "$CAMP"/gate-manifests/*.sha256; do
     [ -f "$m" ] || continue
     counts="${m%.sha256}.counts"
