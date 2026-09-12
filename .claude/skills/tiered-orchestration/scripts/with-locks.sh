@@ -83,19 +83,22 @@ done
 
 ts() { date -u +%H:%M:%S; }
 
-# §15.483 — a FREE reading is the absence of an ATTRIBUTABLE holder. `/proc/locks`
-# rows carry a pid; a holder that cannot be attributed is named UNNAMEABLE rather
-# than reported as absent, because "nobody holds it" and "I cannot tell who does"
-# are different statements and only one of them is safe to act on.
+# §15.516 (was §15.483) — ONE READER, and it is not this file's. `lock-state.sh`
+# answers all three questions at once: the `flock -n` probe says whether the lock
+# is held, `/proc/locks` names the holder when it can, and the fd census lists
+# everyone else on the file labelled OPEN/WAITING rather than as a holder.
+#
+# This function used to read `/proc/locks` alone, which under-attributes: a lock
+# taken on an inherited descriptor (`exec 9>lock; flock -n 9`) has no row at all,
+# and this printed "no /proc/locks row names an owner" for a lock that was
+# plainly held. It is only ever called after a `flock -w` TIMEOUT, so the lock
+# IS held and that message was never a false FREE here — but the same shape
+# copied into a wait would be, and it was: three lanes backed off a free
+# `.suite-lock` the same night (`forge-8vfn.7.6.96`).
 name_holder() {
-  local path="$1" ino pid cwd out=""
-  ino=$(stat -c %i "$path" 2>/dev/null) || { printf 'UNNAMEABLE (cannot stat the lock file)'; return; }
-  while read -r _ _ _ _ pid _ minor _; do
-    case "$minor" in *":$ino") ;; *) continue ;; esac
-    cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null)
-    out="$out $pid(cwd ${cwd:-gone})"
-  done < <(awk '{print $1, $2, $3, $4, $5, $6, $6, $7}' /proc/locks 2>/dev/null | sed 's/$//')
-  [ -n "$out" ] && printf '%s' "$out" || printf 'UNNAMEABLE (no /proc/locks row names an owner)'
+  local reader="$(dirname "${BASH_SOURCE[0]}")/lock-state.sh"
+  [ -x "$reader" ] || { printf 'UNNAMEABLE (no lock-state.sh beside this script)'; return; }
+  printf '%s' " $("$reader" say "$1" 2>/dev/null || true)"
 }
 
 take() { # take <fd> <path> <label> <failure-exit>
