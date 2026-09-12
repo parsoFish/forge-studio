@@ -28,6 +28,21 @@
 # INERT OF SPEND (§15.494): it runs what it is given. The spend step lives in the
 # caller, which is the only place that can hold a funding ruling.
 #
+# NEVER NAME A LOCK THE COMMAND ITSELF TAKES. Measured by deadlocking a gate:
+# `gate.sh` takes `.suite-lock` on its own and detects "held by an ancestor pid"
+# so an inner `flock` cannot block on its own caller — and that detection reads
+# the INHERITED descriptor. This script closes both descriptors for the child
+# (it must, or a killed wrapper never releases), so the ancestor becomes
+# invisible: `gate.sh` reported "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the
+# inherited-fd shape" and waited on a lock its own caller held.
+#
+# The two properties are in genuine tension and both are wanted, so the rule is
+# at the call site instead: name only the locks the command does NOT take. For a
+# gate that is `run` — the lock `npm test` refuses under and `gate.sh` never
+# takes — and the suite-lock stays gate.sh's own. Deliberately NOT enforced here:
+# this script cannot know what its command locks, and a test for "do not do
+# this" would have to deadlock to prove it.
+#
 # ON THE FIRST ARGUMENT. The bead writes `<worktree>`; this takes the CAMPAIGN
 # dir, because that is where `.suite-lock` and `.run-lock` live and a tool given
 # the worktree would have to resolve the campaign dir implicitly — §15.148's
