@@ -92,3 +92,45 @@ test('a malformed meta.hubs row is a malformed REGISTRY, never a row dropped in 
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+/**
+ * THE DOOR THAT WAS MISSING, and its absence is why S8 run 6 was still red.
+ *
+ * The first version of this change enriched `hubsWithCounts` — a function the
+ * PAGE'S ROUTE does not call. The route builds its payload with
+ * `hubCountsFrom(rawItems, listCommunityHubs(root))` directly, so the served
+ * hubs never carried a reason and `data-hub-reason` was absent even though the
+ * registry on disk had it. The seam door above stopped at "outcomes on disk"
+ * and passed against exactly that.
+ *
+ * This one goes one seam further: through the function the route calls.
+ */
+test('the ROUTE’s own hub builder serves the persisted reason — not just the file', async () => {
+  const d = root();
+  try {
+    const before = loadCommunityRegistry(communityRegistryPath(d));
+    writeFileSync(
+      communityRegistryPath(d),
+      serializeCommunityRegistry({
+        schemaVersion: before.schemaVersion,
+        lastRefresh: '2026-09-12T14:00:00.000Z',
+        hubs: [{ hubId: 'skills-sh', discovered: 0, reason: 'not-reachable' }],
+        sources: before.sources,
+        items: before.items,
+        leadingComments: before.leadingComments,
+      }),
+    );
+
+    const { hubCountsFrom } = await import('../../studio/community-index.ts');
+    // The route's exact call shape, with the hub list it would pass.
+    const hubs = hubCountsFrom([], [{ id: 'skills-sh', name: 'skills.sh', url: 'https://skills.sh', kinds: 'skills' }] as never, d);
+    assert.equal(hubs[0]?.reason, 'not-reachable', 'the payload the page receives must carry the reason');
+
+    // …and WITHOUT a root it carries none: a caller that does not ask for disk
+    // state must not get a stale one silently.
+    const bare = hubCountsFrom([], [{ id: 'skills-sh', name: 'skills.sh', url: 'https://skills.sh', kinds: 'skills' }] as never);
+    assert.equal(bare[0]?.reason, undefined);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});
