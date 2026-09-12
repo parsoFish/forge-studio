@@ -541,3 +541,94 @@ test('below twice the ceiling the door would consume most of the bound, so it is
 test('a bound far above the ceiling always runs the door', () => {
   assert.equal(doorWorthRunning(20 * 60_000, STALL_CEILING_MS), true);
 });
+
+// --------------------------------------------------------------- forge-flvq
+/**
+ * A FINISHED TURN AND A HUNG TURN ARE IDENTICAL TO A SILENCE DETECTOR.
+ *
+ * S10 run 15 beat 8: the door said the channel "has written nothing for 180s,
+ * past the product's own 180s stall ceiling" and stopped at 332s of a declared
+ * 360000 ms bound. True, and the conclusion was wrong — `_queue/failed/` held
+ * the initiative, the last `events.jsonl` row was `event_type=error`, and a
+ * 12.5 KB report was on disk. The product had already published its verdict.
+ *
+ * It masked the real blocker: the first reading of run 15 was "the dev agent
+ * stalled" when the truth was "the PM's work-item set was rejected".
+ */
+function quietDispatch(logs: string, name: string): string {
+  const dispatch = join(logs, name);
+  mkdirSync(dispatch, { recursive: true });
+  const events = join(dispatch, 'events.jsonl');
+  writeFileSync(events, '{"event_type":"start"}\n');
+  const old = (Date.now() - (STALL_CEILING_MS + 10_000)) / 1000;
+  utimesSync(events, old, old);
+  return dispatch;
+}
+function queueFile(root: string, state: string, initiative: string): void {
+  mkdirSync(join(root, '_queue', state), { recursive: true });
+  writeFileSync(join(root, '_queue', state, `${initiative}.md`), '# an initiative\n');
+}
+
+test('flvq: run 15\'s exact shape — quiet AND terminal is `channel-ended`, not `channel-quiet`', () => {
+  const { root, logs, door } = realDoor();
+  const initiative = 'INIT-2026-09-12-exclude-author-flag';
+  const dispatch = quietDispatch(logs, `_dev-2026-09-12T07-28-42_${initiative}`);
+  writeFileSync(join(dispatch, 'events.jsonl'), '{"event_type":"start"}\n{"event_type":"error"}\n');
+  const old = (Date.now() - (STALL_CEILING_MS + 10_000)) / 1000;
+  utimesSync(join(dispatch, 'events.jsonl'), old, old);
+  queueFile(root, 'failed', initiative);
+
+  const stop = door(null, Date.now() - 300_000);
+  assert.notEqual(stop, null, 'the wait still ends — the finding changes, not the stopping');
+  assert.equal(stop!.reason, 'channel-ended', `a terminated channel is not a stalled one: ${stop!.detail}`);
+  assert.match(stop!.detail, /_queue\/failed\//, 'and it names the product\'s own word for what happened');
+});
+
+test('flvq: quiet with the channel genuinely OPEN is still `channel-quiet`', () => {
+  // The property that keeps the original finding alive: a turn that really has
+  // hung must still be caught, and the detail must say the terminal state was
+  // read and found open rather than leaving a reader to assume it.
+  const { root, logs, door } = realDoor();
+  const initiative = 'INIT-2026-09-12-still-running';
+  quietDispatch(logs, `_dev-2026-09-12T07-28-42_${initiative}`);
+  queueFile(root, 'in-flight', initiative);
+
+  const stop = door(null, Date.now() - 300_000);
+  assert.equal(stop!.reason, 'channel-quiet');
+  assert.match(stop!.detail, /terminal state was READ and is open/, stop!.detail);
+});
+
+test('flvq: a state no constant knows about is still terminal — states come from DISK', () => {
+  // `journey-residue.mjs` exports a six-name QUEUE_STATES and this reads the
+  // directory instead, for `queue-claim.mjs`'s reason in its own words: a
+  // constant cannot see a seventh state someone adds later, and the failure
+  // mode of missing one is SILENCE. `abandoned/` is that seventh state.
+  const { root, logs, door } = realDoor();
+  const initiative = 'INIT-2026-09-12-seventh-state';
+  quietDispatch(logs, `_dev-2026-09-12T07-28-42_${initiative}`);
+  queueFile(root, 'abandoned', initiative);
+
+  const stop = door(null, Date.now() - 300_000);
+  assert.equal(stop!.reason, 'channel-ended', 'a state added later must not read as "still running"');
+  assert.match(stop!.detail, /_queue\/abandoned\//);
+});
+
+test('flvq: an UNREADABLE terminal check must not masquerade as an open channel', () => {
+  // §15.430 one layer up. With no `_queue/` and no readable events, the door
+  // still stops — but it must NOT claim the channel was read and found open,
+  // because that is the sentence a reader acts on.
+  const { logs, door } = realDoor();
+  const dispatch = join(logs, '_dev-2026-09-12T07-28-42_INIT-nothing-readable');
+  mkdirSync(dispatch, { recursive: true });
+  // A dispatch dir whose events.jsonl does not exist: `runLogIdleMs` falls back
+  // to the directory's own mtime, so it is quiet without being readable.
+  const old = (Date.now() - (STALL_CEILING_MS + 10_000)) / 1000;
+  utimesSync(dispatch, old, old);
+
+  const stop = door(null, Date.now() - 300_000);
+  if (stop === null) return; // idle unreadable — the door said nothing, which is also honest
+  assert.doesNotMatch(
+    stop.detail, /terminal state was READ and is open/,
+    `an unread check must never be reported as a read one: ${stop.detail}`,
+  );
+});
