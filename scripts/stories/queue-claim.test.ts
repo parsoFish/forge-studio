@@ -41,9 +41,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, renameSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { writeManifest, type InitiativeManifest } from '../../packages/flows/manifest.ts';
 import { claimQueueWrites } from './queue-claim.mjs';
 
+const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const QUEUE_STATES = ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed'];
 
 function manifest(id: string, project: string, createdAt: string): InitiativeManifest {
@@ -233,4 +235,41 @@ test('7.6.74: an UNQUOTED created_at (a Date after YAML parsing) still attribute
   assert.equal(r.claimed.length, 1, `claimed by window alone: ${JSON.stringify(r, null, 2)}`);
   assert.match(r.claimed[0]!.reason, /inside this run/);
   assert.equal(existsSync(path), false);
+});
+
+/**
+ * THE OPTIONS ACTUALLY REACH THE SWEEP — bead `forge-8vfn.7.6.74`'s delivery seam,
+ * closed after A's R3 (T1 951).
+ *
+ * Every door above calls `claimQueueWrites` DIRECTLY with options this file
+ * builds, so not one of them proves that `run.mjs` hands the real ones to
+ * `sweepProductFixtures`. A's mutation demonstrated the shape on their own bead: a
+ * bound can be correct, attached to the right consumer, and never delivered, while
+ * the whole suite stays green.
+ *
+ * TWO THINGS COVER IT AND ONLY ONE IS EVIDENCE. `sweepProductFixtures` THROWS when
+ * the options are absent rather than defaulting — a mitigation, not a proof. And
+ * the costless stories print the census every run, which IS the delivery observed
+ * end to end (fourteen lines in gate `7694c`, on real residue). What that lacks is
+ * a RED: if the delivery broke, nothing fails and someone has to notice a line
+ * stopped appearing — and a green suite reads identically either way.
+ *
+ * WHAT THIS DOOR IS, AND WHAT IT IS NOT. It reads the call site and asserts the
+ * two options are NAMED there, in the 7.6.51 wiring-door pattern that already
+ * guards the ceiling chain. **It catches deletion, not corruption**: a call that
+ * passes the wrong `sinceMs` satisfies it. The stronger form is A's — call the
+ * PRODUCER and assert the consumer received it — and it needs `run.mjs`'s bundle
+ * construction extracted, which is unaffordable at 799/800 until `forge-0fli`.
+ * When that extraction lands, this door should be REPLACED rather than kept
+ * beside it.
+ */
+test('7.6.74: the trailing sweep call NAMES the window and the evidence dir', () => {
+  const src = readFileSync(join(REPO, 'scripts', 'stories', 'run.mjs'), 'utf8');
+  const call = /sweepProductFixtures\(([^;]*?)\);/s.exec(src);
+  assert.notEqual(call, null, 'run.mjs must call sweepProductFixtures at all');
+
+  const args = call![1];
+  assert.match(args, /\bsinceMs:/, 'without a window every INIT is either all ours or none');
+  assert.match(args, /\bevidenceDir:/, 'without somewhere to capture to, claiming would delete uncaptured bytes');
+  assert.match(args, /\bgroundProject:/, 'without the ground, only the time window can attribute');
 });
