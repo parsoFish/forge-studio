@@ -36,7 +36,7 @@
  * `test-guard.mjs` records; the shared pieces live in `lock-guard.mjs`.
  */
 import { spawnSync } from 'node:child_process';
-import { runLockVerdict, lockHolders, EXIT_LOCK_REFUSED } from './stories/lock-guard.mjs';
+import { overlapVerdict, lockHolders, EXIT_LOCK_REFUSED } from './stories/lock-guard.mjs';
 
 /** The bound, and the interval between saying so. Both overridable so a caller
  *  can state a different budget rather than edit this file. */
@@ -57,7 +57,19 @@ function who() {
   return holders.map((h) => `pid ${h.pid} (cwd ${h.cwd ?? '?'})`).join(', ');
 }
 
-const verdict = runLockVerdict();
+// `overlapVerdict` DIRECTLY, not `runLockVerdict` — T1 985(1). The convenience
+// wrapper hardcodes `thisKind: 'the test suite'`, so this guard's first real
+// line in a merged-main verify read "the test suite is NOT excluded from a story
+// run" about a BUILD. The mechanism was right and the sentence was about the
+// wrong job, which is the hardest shape to catch by review: it is correct about
+// the lock, so every reader checking the logic passes it. The kinds are this
+// caller's to state.
+const verdict = overlapVerdict({
+  lockPath,
+  envName: 'FORGE_RUN_LOCK',
+  thisKind: 'a build',
+  otherKind: 'a story run',
+});
 if (verdict.ok) {
   // The not-configured and the clear cases both SAY so: a guard silent when it
   // is not enforcing cannot be told from one that checked.
