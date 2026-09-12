@@ -131,13 +131,21 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // page-ready wait both consume it and neither watches an agent — which is
   // precisely how `6.11.17` hid — so neither sets this.
   let agentWaitConsumed = false;
+  // WHO stopped the beat decides the clause. A stop carrying `stoppedBy:
+  // 'runner'` is the RUNNER's own finding — 7.6.77's per-transition bound —
+  // and appending "the product had already said so about this session" to it
+  // would attribute a measurement the product never made, sending a reader to
+  // look for a product verdict that does not exist. Every existing stop is
+  // unmarked and keeps the wording it has.
   const named = (verdict) => {
     if (verdict.status !== 'red') return verdict;
+    const because = stalled?.stoppedBy === 'runner'
+      ? 'the beat stopped there rather than sitting out its declared bound'
+      : 'the product had already said so about this session, so the beat stopped there instead of sitting out ' +
+        'its declared bound';
     const why =
       stalled !== null
-        ? `${stalled.why} ${Math.round(stalled.afterMs / 1000)}s into the ` +
-          `${bound.label} — the product had already said so about this session, so the beat stopped there instead ` +
-          'of sitting out its declared bound'
+        ? `${stalled.why} ${Math.round(stalled.afterMs / 1000)}s into the ${bound.label} — ${because}`
         : bound.label === null
           ? null
           : `gave up at the ${bound.label}`;
@@ -295,6 +303,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           page, beat, left, sessionScope, agentProcProbe,
           beat.wait?.for === 'settle' ? beat.wait : null, stallDoor,
           resolveAnchorMs(beat.wait ?? null, pressedAt, Date.now()),
+          // 7.6.77. Both fields or neither — `validateWait` refuses a wait
+          // carrying one alone, so a wait that has `perTransition` has
+          // `progressKey` too and this needs no second test.
+          beat.wait?.perTransition !== undefined ? beat.wait : null,
         );
         agentWaitConsumed = true;
       }

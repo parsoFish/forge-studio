@@ -255,6 +255,67 @@ test('a wait with no upTo, a non-integer, or an out-of-range bound is REFUSED', 
 });
 
 /**
+ * `perTransition` / `progressKey` — bead `forge-8vfn.7.6.77`, T1 ruling 881,
+ * C's conditions 1 and 2.
+ *
+ * A wait may bound PROGRESS as well as wall-clock time: `perTransition` resets
+ * every time `progressKey` changes, so expiry means "no transition" rather than
+ * "no completion". These doors are about what the validator REFUSES, because
+ * every refusal below describes a declaration that would read as protection and
+ * provide none.
+ */
+test('7.6.77: a per-transition wait survives validation with BOTH its fields', () => {
+  const s = validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 480_000, progressKey: 'architect-turns' }));
+  assert.deepEqual(s.beats[0].wait, { for: 'agent', upTo: 600_000, perTransition: 480_000, progressKey: 'architect-turns' });
+});
+
+test('7.6.77 (C condition 1): `perTransition` and `progressKey` are BOTH or NEITHER', () => {
+  // `progressKey` alone is a key nothing reads. `perTransition` alone is worse
+  // than doing nothing: a budget nothing can ever reset is a SHORTER wall-clock
+  // bound wearing a progress bound's name, so it reds EARLIER than today while
+  // claiming to measure progress.
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 480_000 })),
+    /wait\.progressKey/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, progressKey: 'architect-turns' })),
+    /wait\.perTransition/);
+});
+
+test('7.6.77 (C condition 2): a per-transition bound ABOVE the ceiling is refused', () => {
+  // It could never fire — `upTo` would always end the beat first — so the
+  // declaration would read as protection and provide none. The equal case is
+  // legal: it fires exactly once, at the ceiling.
+  assert.throws(
+    () => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 600_001, progressKey: 'k' })),
+    /wait\.perTransition/,
+  );
+  assert.equal(
+    validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 600_000, progressKey: 'k' })).beats[0].wait.perTransition,
+    600_000,
+  );
+});
+
+test('7.6.77: the bound must be a positive integer of ms, and the key a non-empty string', () => {
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: '480000', progressKey: 'k' })),
+    /wait\.perTransition/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 0, progressKey: 'k' })),
+    /wait\.perTransition/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 1_000, progressKey: '' })),
+    /wait\.progressKey/);
+  assert.throws(() => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 1_000, progressKey: 7 })),
+    /wait\.progressKey/);
+});
+
+test('7.6.77: only an AGENT wait takes a per-transition bound', () => {
+  // A settle wait stops on the first value that is not the one it is sitting
+  // through; there are no transitions for a budget to reset on. Refused by name
+  // rather than dropped, which is the rule `anchor` was broken by (7.6.82).
+  assert.throws(
+    () => validateStory(withWait({ for: 'settle', upTo: 10_000, key: 'preflight-status', while: 'pending', perTransition: 1_000, progressKey: 'k' })),
+    /wait\.perTransition/,
+  );
+});
+
+/**
  * `fillAll` — one step answers a WHOLE round (bead `forge-8vfn.6.11.21`,
  * T1 ruling 271).
  *

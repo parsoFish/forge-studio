@@ -143,6 +143,25 @@ function validateDoSteps(raw, at) {
  *  a second is a deliberate edit here — the friction is the point. */
 const WAIT_KINDS = ['agent', 'settle'];
 
+/**
+ * The shape a `progressKey` may take — IDENTICAL to `beats-page.mjs`'s
+ * `SAFE_KEY`, and bound to it by a door rather than by a comment.
+ *
+ * WHY THE VALIDATOR CARES, found in this bead's own hand security review
+ * (§15.333; the `security-review` skill still aborts on `origin/HEAD`, bead
+ * `forge-8vfn.7.6.69`). `readObserved` reads the ROOT's attributes by name —
+ * `getAttribute` takes any string — but builds its DESCENDANT selector from
+ * `SAFE_KEY`-passing keys only. So a key like `foo:bar` would be read on the
+ * page root and invisible on every child, and the per-transition bound would
+ * then report "the key never appeared" about a key a descendant is rendering.
+ * That is the conflation species re-entering by a side door: absent-because-
+ * uncollected and absent-because-unrendered arriving as one answer.
+ *
+ * Refused at the boundary instead, where the author is told which character is
+ * the problem, rather than half-honoured at run time.
+ */
+export const PROGRESS_KEY_SHAPE = /^[A-Za-z][A-Za-z0-9-]*$/;
+
 /** The widest bound a beat may declare, in ms. A declared wait is a licence to
  *  sit still; an unbounded or absurd one turns a red run into a hung host,
  *  which is worse than the defect it was added to fix. */
@@ -175,46 +194,12 @@ function validateWait(raw, at) {
       `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
     );
   }
-  // `settle` — T1 ruling 621(ii), bought by A's S1 beat 3. It waits for a NAMED
-  // key to leave a DECLARED transient value, and both halves are required
-  // because the alternative is a blanket longer wait, which sits through a
-  // genuinely wrong value exactly as patiently as through a transient one and
-  // turns a real red into a timeout. Naming what it is willing to wait out is
-  // what keeps the failure sharp: `preflight-status` may pass through
-  // `pending`, and a beat that declared that can still red on `soft-fail`.
-  if (raw.for === 'settle') {
-    if (typeof raw.key !== 'string' || raw.key === '') {
-      fail(`${at}.wait.key`, `a settle wait must name the data-* key it watches, got ${JSON.stringify(raw.key)}`);
-    }
-    if (typeof raw.while !== 'string' || raw.while === '') {
-      fail(
-        `${at}.wait.while`,
-        `a settle wait must name the transient value it is willing to wait out, got ${JSON.stringify(raw.while)}`,
-      );
-    }
-    return Object.freeze({ for: raw.for, upTo: raw.upTo, key: raw.key, while: raw.while });
-  }
-  // Fail-closed the other way too. This function DROPS every key it does not
-  // name, and the comment above says so — so a `key`/`while` pair left on an
-  // `agent` wait would vanish silently and the beat would wait for the wrong
-  // thing with no sign of it.
-  // 718(1): `anchor` names an EARLIER press whose work this beat watches. Only
-  // an agent wait has a channel to anchor, so it is refused elsewhere rather
-  // than dropped — the same rule `key`/`while` follow, and for the same reason:
-  // a field silently ignored is a field the author believes is working.
-  if (raw.anchor !== undefined) {
-    if (raw.for !== 'agent') {
-      fail(`${at}.wait.anchor`, `only an agent wait takes \`anchor\`; on for: '${raw.for}' it would be dropped silently`);
-    } else if (typeof raw.anchor !== 'string' || raw.anchor === '') {
-      fail(`${at}.wait.anchor`, `expected the press handle this beat's channel belongs to, got ${JSON.stringify(raw.anchor)}`);
-    }
-  }
-
-  for (const stray of ['key', 'while']) {
-    if (raw[stray] !== undefined) {
-      fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
-    }
-  }
+  // PLACED ABOVE THE `settle` BRANCH DELIBERATELY, and my own door is why. The
+  // first cut of this sat below it — and that branch RETURNS, so a settle wait
+  // carrying `perTransition` had both fields dropped SILENTLY: the exact defect
+  // 7.6.82 was minted for, reproduced inside the fix that cites it. Every kind
+  // must reach these checks, and the `for !== 'agent'` refusal below is then
+  // what makes a settle wait say so out loud.
   // 7.6.77 (T1 881, C's 612 ack) — PROGRESS, not wall-clock.
   //
   // S1 beat 11's `upTo` has to cover a VARIABLE NUMBER of VARIABLE-LENGTH turns:
@@ -262,8 +247,57 @@ function validateWait(raw, at) {
     if (typeof raw.progressKey !== 'string' || raw.progressKey === '') {
       fail(`${at}.wait.progressKey`, `expected the data-* key whose CHANGE counts as progress, got ${JSON.stringify(raw.progressKey)}`);
     }
+    if (!PROGRESS_KEY_SHAPE.test(raw.progressKey)) {
+      fail(
+        `${at}.wait.progressKey`,
+        `expected a plain data-* key (letter, then letters/digits/hyphens), got ${JSON.stringify(raw.progressKey)} — ` +
+        'the runner builds its descendant selector from keys of that shape only, so this one would be read on the ' +
+        'page root and invisible on every child, and the bound would then report "the key never appeared" about a ' +
+        'key a descendant is rendering',
+      );
+    }
   }
 
+  // `settle` — T1 ruling 621(ii), bought by A's S1 beat 3. It waits for a NAMED
+  // key to leave a DECLARED transient value, and both halves are required
+  // because the alternative is a blanket longer wait, which sits through a
+  // genuinely wrong value exactly as patiently as through a transient one and
+  // turns a real red into a timeout. Naming what it is willing to wait out is
+  // what keeps the failure sharp: `preflight-status` may pass through
+  // `pending`, and a beat that declared that can still red on `soft-fail`.
+  if (raw.for === 'settle') {
+    if (typeof raw.key !== 'string' || raw.key === '') {
+      fail(`${at}.wait.key`, `a settle wait must name the data-* key it watches, got ${JSON.stringify(raw.key)}`);
+    }
+    if (typeof raw.while !== 'string' || raw.while === '') {
+      fail(
+        `${at}.wait.while`,
+        `a settle wait must name the transient value it is willing to wait out, got ${JSON.stringify(raw.while)}`,
+      );
+    }
+    return Object.freeze({ for: raw.for, upTo: raw.upTo, key: raw.key, while: raw.while });
+  }
+  // Fail-closed the other way too. This function DROPS every key it does not
+  // name, and the comment above says so — so a `key`/`while` pair left on an
+  // `agent` wait would vanish silently and the beat would wait for the wrong
+  // thing with no sign of it.
+  // 718(1): `anchor` names an EARLIER press whose work this beat watches. Only
+  // an agent wait has a channel to anchor, so it is refused elsewhere rather
+  // than dropped — the same rule `key`/`while` follow, and for the same reason:
+  // a field silently ignored is a field the author believes is working.
+  if (raw.anchor !== undefined) {
+    if (raw.for !== 'agent') {
+      fail(`${at}.wait.anchor`, `only an agent wait takes \`anchor\`; on for: '${raw.for}' it would be dropped silently`);
+    } else if (typeof raw.anchor !== 'string' || raw.anchor === '') {
+      fail(`${at}.wait.anchor`, `expected the press handle this beat's channel belongs to, got ${JSON.stringify(raw.anchor)}`);
+    }
+  }
+
+  for (const stray of ['key', 'while']) {
+    if (raw[stray] !== undefined) {
+      fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
+    }
+  }
   // 7.6.82 (T1 883) — `anchor` IS CARRIED. It was validated eleven lines above
   // and then dropped by this rebuild, so `S10.story.mjs:398`'s
   // `anchor: 'scheduler-start'` never reached `resolveAnchorMs` and beat 8 took

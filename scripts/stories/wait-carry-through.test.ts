@@ -64,6 +64,12 @@ const VALID_SHAPES: Record<string, unknown>[] = [
   { for: 'agent', upTo: 1_000 },
   { for: 'agent', upTo: 1_000, anchor: 'scheduler-start' },
   { for: 'settle', upTo: 1_000, key: 'preflight-status', while: 'pending' },
+  // 7.6.77's shape, added because the meta-door below DEMANDED it: the moment
+  // `validateWait` began inspecting `perTransition`/`progressKey`, that door
+  // red-ed naming both fields, without anyone remembering to extend this list.
+  // That is the whole reason it derives its population from the validator's
+  // source instead of trusting this array.
+  { for: 'agent', upTo: 600_000, perTransition: 480_000, progressKey: 'architect-turns' },
 ];
 
 describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
