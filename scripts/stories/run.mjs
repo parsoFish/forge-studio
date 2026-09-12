@@ -33,7 +33,7 @@ import { chromium } from 'playwright-core';
 
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
-import { spendGateVerdict, summariseRunSpend } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict } from './spend.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
@@ -440,6 +440,10 @@ async function runStory(story, uiUrl, startedMs) {
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
+  // 7.6.51: set when a beat boundary finds the ceiling breached; the run stops
+  // there and the verdict below is RED for that reason rather than for a beat.
+  let spendBreach = null;
+  const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   try {
     for (const [i, beat] of story.beats.entries()) {
       // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
@@ -457,6 +461,33 @@ async function runStory(story, uiUrl, startedMs) {
       // the product HAD; this says what was on the screen, and S2 run 8's open
       // question is exactly the difference between the two.
       if (verdict.status !== 'green') await captureBeatDom(page, ROOT, story.id, i, beat.act, runStamp);
+      // Bead `forge-8vfn.7.6.51` (ruling 788) — THE CEILING IS ENFORCED HERE,
+      // at every beat boundary, because this is the only place the run is
+      // between two units of work and can still be stopped cheaply.
+      //
+      // §15.449: until now `budget_usd` was a label. It was interpolated into
+      // `spendGateVerdict`'s reason, printed in `--list`, and compared to
+      // nothing — so `--approve-spend` authorised an unbounded run, and the
+      // $35 on runs 12 and 13 was a number in an INTENT. The product agrees:
+      // `developer-loop.ts:573` sets `costBudgetUsd: POSITIVE_INFINITY`.
+      //
+      // The running total is printed EVERY beat, not only on breach: a guard
+      // that speaks only when it fires is indistinguishable from one that never
+      // ran, which is `test-guard.mjs`'s own rule and the reason "host quiet"
+      // was worth nothing without the numbers beside it.
+      if (costs) {
+        const sofar = summariseRunSpend({
+          realSpawn: story.ground?.realSpawn === true,
+          events: collectAgentRuns(ROOT, startedMs).map((r) => readRunEvents(r.dir)),
+        });
+        const ceiling = spendCeilingVerdict(sofar, story.ground?.budget_usd);
+        console.log(`[stories] spend after beat ${i + 1}: ${ceiling.reason}`);
+        if (ceiling.breached) {
+          console.error(`[stories] CEILING BREACHED — ${ceiling.reason}. Tearing down what this run started.`);
+          spendBreach = ceiling;
+          break;
+        }
+      }
       const mark = verdict.status === 'green' ? '✓' : '✗';
       // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
       // `do` navigates and then asserts — which is right for a navigation beat
@@ -664,6 +695,15 @@ async function runStory(story, uiUrl, startedMs) {
 
   const row = storyRowFrom(result);
   console.log(`[stories] ${story.id}: ${row.status} — ${row.greenBeats}/${row.beats} beats green`);
+  // 7.6.51: a breach is RED on its own terms and must not be read off the beat
+  // score. A run stopped at beat 8 of 23 for spending its ceiling has a beat
+  // count that looks like an ordinary red, and the two are different facts —
+  // one says the product failed, the other says we stopped paying. The line
+  // below is printed AFTER the score so both are on the record, and the exit
+  // code is non-zero whatever the beats did.
+  if (spendBreach !== null) {
+    console.error(`[stories] ${story.id}: RED — ${spendBreach.reason}. The run was stopped at the ceiling, so the beat score above is a partial run, not a verdict on the product.`);
+  }
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
 
@@ -706,7 +746,7 @@ async function runStory(story, uiUrl, startedMs) {
     return 1;
   }
 
-  return row.status === 'green' ? 0 : 1;
+  return (row.status === 'green' && spendBreach === null) ? 0 : 1;
 }
 
 const slug = (s) =>
