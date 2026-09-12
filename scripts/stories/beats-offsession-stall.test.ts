@@ -38,6 +38,7 @@ import { tmpdir } from 'node:os';
 import { DEFAULT_STALL_CEILING_MS } from '../../packages/sessions/bridge-studio-lifecycle.ts';
 import {
   STALL_CEILING_MS, runLogDir, runLogIdleMs, newestChannelSince, makeAgentChannelDoor,
+  doorWorthRunning, scanSummary,
 } from './beats-agent-proc.mjs';
 import { waitForHandleOrStall, waitForConsequence } from './beats-page.mjs';
 
@@ -407,7 +408,7 @@ test('640 REGRESSION: a SESSION beat is never doored by the channel — lane A\'
   const consequenceDoor = src.slice(src.indexOf('export async function waitForConsequence'));
   assert.match(
     consequenceDoor,
-    /if \(stallDoor !== null && sessionScope === null && timeoutMs > 2 \* STALL_CEILING_MS\) \{/,
+    /if \(stallDoor !== null && sessionScope === null && doorWorthRunning\(timeoutMs, STALL_CEILING_MS\)\) \{/,
     'the consequence wait must consult the channel door only when there is no session to ask about',
   );
   // And the pre-act wait reaches it only through `waitOffSession`, which is
@@ -469,4 +470,74 @@ test('664(ii): the door states what it scanned, so an off-session red is decidab
   assert.match(past!.detail, /Scanned /, `it must state its evidence: ${past!.detail}`);
   assert.match(past!.detail, /0 dispatch dir\(s\)/, past!.detail);
   assert.match(past!.detail, /newest none/, past!.detail);
+});
+
+/**
+ * T1 ruling 751 (§15.430) — THE DOOR WAS LOOKING AT THE WRONG SHELF.
+ *
+ * Run 12's beat 23 reported `newest _architect-2026-09-11T15-11-38 born 857s
+ * BEFORE this press` and that was read as "nothing was dispatched". It was true
+ * and irrelevant: the daemon HAD claimed within a second of beat 7's green and
+ * run a full cycle to ready-for-review, into
+ * `_logs/2026-09-11T15-19-39_INIT-2026-09-11-exclude-author-flag/`.
+ *
+ * Dispatch dirs come in two shapes and the door only knew one:
+ *
+ *   _architect-<ts>-<id>   _bridge-<ts>-<id>    `_`-prefixed sessions
+ *   <ISO-ts>_INIT-<slug>                         cycle dirs — NO leading `_`
+ *
+ * `startsWith('_')` in `newestChannelSince` AND in `scanSummary` skipped every
+ * cycle dir, so a press that started a REAL CYCLE could be doored `no-channel`,
+ * and the scan line printed to justify it named an unrelated older session.
+ * 664(ii) added that scan line so a reader could CHECK the door — which is worth
+ * nothing while the scan shares the door's blind spot.
+ */
+test('a cycle dir counts as a dispatch — it does not start with an underscore', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-cycle-scan-'));
+  const logs = join(root, '_logs');
+  mkdirSync(logs, { recursive: true });
+  const before = Date.now() - 1000;
+  mkdirSync(join(logs, '2026-09-11T15-19-39_INIT-2026-09-11-exclude-author-flag'));
+  const found = newestChannelSince(logs, before);
+  assert.notEqual(found, null);
+  assert.ok(String(found).includes('_INIT-2026-09-11-exclude-author-flag'));
+});
+
+test('the scan line counts cycle dirs too, so it can be used to check the door', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-cycle-scan2-'));
+  const logs = join(root, '_logs');
+  mkdirSync(logs, { recursive: true });
+  mkdirSync(join(logs, '_architect-2026-09-11T15-11-38-197f1c6a'));
+  mkdirSync(join(logs, '2026-09-11T15-19-39_INIT-exclude-author-flag'));
+  mkdirSync(join(logs, 'not-a-dispatch'));
+  // Asserted on `scanSummary` directly. Reaching it through the door would need
+  // dispatch dirs OLDER than the press, and birth time cannot be backdated —
+  // the test would end up asserting the fixture rather than the scan.
+  const line = scanSummary(logs, Date.now());
+  assert.ok(line.includes('2 dispatch dir(s)'), line);
+  assert.ok(line.includes('_INIT-exclude-author-flag'), line);
+});
+
+/**
+ * §15.431 — A BOUND AT EXACTLY TWICE THE CEILING MUST NOT RETIRE THE DOOR.
+ *
+ * Beat 8's bound was cut 20 min -> 6 min on run 11's measured 2m01s cycle. 6 min
+ * is EXACTLY `2 * STALL_CEILING_MS`, and the skip test was `<=`, so the
+ * tightening silently retired the door that had saved 34 minutes the run before.
+ * Two correct decisions whose composition nobody measured — and run 12 spent 6
+ * minutes on beat 8 where 3 would have done.
+ *
+ * At exactly 2x the door still saves HALF the bound, which is the whole reason
+ * it exists. The skip belongs to bounds a door really would swallow.
+ */
+test('at exactly twice the stall ceiling the door still runs — it saves half the bound', () => {
+  assert.equal(doorWorthRunning(2 * STALL_CEILING_MS, STALL_CEILING_MS), true);
+});
+
+test('below twice the ceiling the door would consume most of the bound, so it is skipped', () => {
+  assert.equal(doorWorthRunning(2 * STALL_CEILING_MS - 1, STALL_CEILING_MS), false);
+});
+
+test('a bound far above the ceiling always runs the door', () => {
+  assert.equal(doorWorthRunning(20 * 60_000, STALL_CEILING_MS), true);
 });

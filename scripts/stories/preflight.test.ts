@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 
 import {
   memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict,
-  remoteSwitchVerdict, REMOTE_BINDING_STORIES,
+  remoteSwitchVerdict, REMOTE_BINDING_STORIES, queueStateVerdict, declaredCommitsVerdict,
 } from './preflight.mjs';
 
 test('ample memory passes', () => {
@@ -265,4 +265,92 @@ test('7.5.7: a truthy-but-not-true switch is still OFF', () => {
 
 test('7.5.7: the remote-binding set is explicit, so extending it is one line', () => {
   assert.deepEqual([...REMOTE_BINDING_STORIES], ['S2']);
+});
+
+/**
+ * §15.430 — AN ABSENT PATH MUST NOT READ AS AN EMPTY ONE.
+ *
+ * Run 12's precondition was recorded as "ready-for-review empty" from:
+ *
+ *   ls projects/gitpulse/_queue/ready-for-review | wc -l   ->  0
+ *   # ls: cannot access '...': No such file or directory
+ *
+ * The queue is at the WORKTREE ROOT, so that zero came from a path that has
+ * never existed and was reported upward as a measured precondition. The capture
+ * and clear had used the right path, so nothing false followed — but the line
+ * that confirmed it was worth nothing and could not have caught the failure it
+ * exists for. `2>/dev/null | wc -l` renders "I could not look" identically to
+ * "I looked and found nothing", and those are different facts.
+ */
+test('queueStateVerdict REFUSES when the queue dir does not exist, and names the path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-queue-absent-'));
+  const v = queueStateVerdict(root);
+  assert.equal(v.ok, false);
+  assert.ok(v.reason.includes(join(root, '_queue')), v.reason);
+  assert.ok(/does not exist|absent/i.test(v.reason), v.reason);
+});
+
+test('queueStateVerdict REFUSES a queue holding work, and names what is in it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-queue-dirty-'));
+  mkdirSync(join(root, '_queue', 'ready-for-review'), { recursive: true });
+  mkdirSync(join(root, '_queue', 'pending'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'ready-for-review', 'INIT-old.md'), 'stale');
+  const v = queueStateVerdict(root);
+  assert.equal(v.ok, false);
+  assert.ok(v.reason.includes('ready-for-review'), v.reason);
+  assert.ok(v.reason.includes('INIT-old.md'), v.reason);
+});
+
+test('queueStateVerdict passes on an existing, empty queue — .gitkeep is not work', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-queue-clean-'));
+  for (const d of ['pending', 'ready-for-review']) {
+    mkdirSync(join(root, '_queue', d), { recursive: true });
+    writeFileSync(join(root, '_queue', d, '.gitkeep'), '');
+  }
+  const v = queueStateVerdict(root);
+  assert.equal(v.ok, true, v.reason);
+});
+
+/**
+ * §15.432 — THE RUN EXECUTES THE WORKTREE, NOT MAIN.
+ *
+ * Run 12's INTENT declared "#667 live refresh on main" and it WAS on main. The
+ * run ran from a branch forked BEFORE it: `use-roadmap-live-refresh.ts` was
+ * ABSENT at `8e60c039` and the roadmap page had zero references to the hook. So
+ * $2.9118 measured the pre-fix card and proved nothing about the fix, while
+ * every other precondition — ground hash, memory, ports — passed.
+ *
+ * A declared prerequisite is only declared until something asserts it is in the
+ * tree that will run.
+ */
+test('declaredCommitsVerdict REFUSES when a declared commit is not an ancestor of HEAD', () => {
+  const v = declaredCommitsVerdict(['0000000000000000000000000000000000000000'], () => false);
+  assert.equal(v.ok, false);
+  assert.ok(v.reason.includes('0000000'), v.reason);
+  assert.ok(/not .*ancestor|missing from/i.test(v.reason), v.reason);
+});
+
+test('declaredCommitsVerdict passes when every declared commit is an ancestor', () => {
+  const v = declaredCommitsVerdict(['804124ff', 'f4e25132'], () => true);
+  assert.equal(v.ok, true, v.reason);
+  assert.ok(v.reason.includes('804124ff'), v.reason);
+});
+
+test('declaring nothing is not a pass — it is refused, so the check cannot be skipped by omission', () => {
+  const v = declaredCommitsVerdict([], () => true);
+  assert.equal(v.ok, false);
+  assert.ok(v.reason.includes('FORGE_STORY_REQUIRES'), v.reason);
+});
+
+/**
+ * The escape exists, and it is a STATEMENT rather than a silence — the shape
+ * argued for `merge-slot.sh`'s `PIN_GATE_LOG` hole. A run that requires nothing
+ * says so and the line lands in the log; landing this as a hard refusal with no
+ * escape would block every lane that has not wired a declaration yet, and a
+ * precondition introduced as an outage is one that gets removed.
+ */
+test('an explicit "none" is accepted and says so — a stated exception is not a silent absence', () => {
+  const v = declaredCommitsVerdict(['none'], () => false);
+  assert.equal(v.ok, true, v.reason);
+  assert.ok(/declared that it requires no commit/i.test(v.reason), v.reason);
 });

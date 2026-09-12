@@ -189,6 +189,46 @@ export function makeOffSessionStallDoor(forgeRoot) {
  * a pre-existing dir that happens to be written during the wait is somebody
  * else's run, not evidence that this press started one.
  */
+/**
+ * Is this `_logs/` entry a dispatch dir? T1 ruling 751 (§15.430).
+ *
+ * TWO SHAPES, and the door knew one. Sessions are `_`-prefixed
+ * (`_architect-<ts>-<id>`, `_bridge-<ts>-<id>`); CYCLE dirs are
+ * `<ISO-ts>_INIT-<slug>` and carry NO leading underscore. `startsWith('_')`
+ * therefore skipped every cycle dir, so a press that started a real cycle could
+ * be doored `no-channel` — measured on run 12, where the daemon claimed within a
+ * second of beat 7's green, ran to ready-for-review, and the door reported the
+ * newest dispatch as an unrelated architect session 857 s older than the press.
+ *
+ * Both readers use this, deliberately. The scan line exists (664(ii)) so a
+ * reader can CHECK the door; a scan with the door's own blind spot confirms the
+ * door instead of testing it.
+ */
+export function isDispatchDir(name) {
+  if (typeof name !== 'string' || name === '') return false;
+  if (name.startsWith('_')) return true;
+  // `2026-09-11T15-19-39_INIT-exclude-author-flag` — timestamp, `_`, then the id.
+  return /^\d{4}-\d{2}-\d{2}T[\d-]+_/.test(name);
+}
+
+/**
+ * Is the agent-channel door worth running for a beat with this bound?
+ * T1 ruling 751 (§15.431).
+ *
+ * The door costs up to `ceilingMs` before it can say anything, so for a short
+ * bound it IS the bound and the verdict should simply be the bound. The skip
+ * test was `boundMs <= 2 * ceilingMs`, which made a bound of EXACTLY twice the
+ * ceiling skip — and beat 8's tightening from 20 min to 6 min landed exactly
+ * there, silently retiring the door that had saved 34 minutes the run before.
+ * Two correct decisions whose composition nobody measured.
+ *
+ * At exactly 2x the door still returns half the bound, which is the whole point
+ * of it, so the boundary belongs on the running side.
+ */
+export function doorWorthRunning(boundMs, ceilingMs) {
+  return Number.isFinite(boundMs) && Number.isFinite(ceilingMs) && boundMs >= 2 * ceilingMs;
+}
+
 export function newestChannelSince(logsDir, sinceMs) {
   let best = null;
   let bestAt = -1;
@@ -199,7 +239,7 @@ export function newestChannelSince(logsDir, sinceMs) {
     return null;
   }
   for (const e of entries) {
-    if (!e.isDirectory() || !e.name.startsWith('_')) continue;
+    if (!e.isDirectory() || !isDispatchDir(e.name)) continue;
     let born;
     try {
       born = statSync(join(logsDir, e.name)).birthtimeMs || statSync(join(logsDir, e.name)).ctimeMs;
@@ -254,10 +294,10 @@ export function newestChannelSince(logsDir, sinceMs) {
  * is judging. A reader can then tell "nothing was ever dispatched" from "the
  * dispatch is older than this press" without another run.
  */
-function scanSummary(logsDir, sinceMs) {
+export function scanSummary(logsDir, sinceMs) {
   let entries = [];
   try {
-    entries = readdirSync(logsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith('_'));
+    entries = readdirSync(logsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && isDispatchDir(e.name));
   } catch {
     return `${logsDir} (unreadable)`;
   }

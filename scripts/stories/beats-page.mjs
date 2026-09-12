@@ -25,7 +25,7 @@
 // The product's stall ceiling, single-sourced from the module that owns the
 // runner's other agent-evidence reads and bound to the TypeScript constant by
 // `beats-offsession-stall.test.ts` (T1 ruling 580).
-import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
 
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
 export const PLACEHOLDER = /^<([A-Za-z][A-Za-z0-9_]*)>$/;
@@ -516,7 +516,7 @@ async function waitOffSession(page, handle, timeoutMs, stallDoor) {
   const deadline = startedAt + timeoutMs;
   // 664(i), same rule as the consequence wait: a bound within twice the ceiling
   // would be consumed rather than cut short, so the door does not run at all.
-  const doored = stallDoor !== null && timeoutMs > 2 * STALL_CEILING_MS;
+  const doored = stallDoor !== null && doorWorthRunning(timeoutMs, STALL_CEILING_MS);
   const runId = doored ? await readRunId(page) : null;
   for (;;) {
     if ((await page.locator(handle).count()) > 0) return null;
@@ -654,7 +654,7 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // door is skipped entirely when the declared bound is within twice the
     // ceiling, and the verdict says so rather than staying silent about a check
     // that did not run. One ceiling, no scaling.
-    if (stallDoor !== null && sessionScope === null && timeoutMs > 2 * STALL_CEILING_MS) {
+    if (stallDoor !== null && sessionScope === null && doorWorthRunning(timeoutMs, STALL_CEILING_MS)) {
       // 718(1): the search window opens at the beat's declared ANCHOR when it
       // has one — the press whose work this beat is watching — and at this
       // wait's own start otherwise. The BOUND is unaffected either way: it is
