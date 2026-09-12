@@ -145,3 +145,14 @@ export type CommunityItemDetail = CommunitySkillDetail | CommunityHookDetail | C
  *  a decoration: a discovered row is installable by construction. */
 export type DiscoveredRow = { id: string; sourceUrl: string; path: string };
 
+/** What one declared hub did on a refresh. `reason`/`message` carry the
+ *  reader's OWN refusal rather than a second wording of it, so the chip says
+ *  what the reader said. */
+export type HubOutcomeRow = {
+  hubId: string;
+  discovered: number;
+  partial?: boolean;
+  reason?: string;
+  message?: string;
+};
+

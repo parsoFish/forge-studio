@@ -79,7 +79,19 @@ import {
 } from './studio/community-refresh-api.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from './studio/community-registry.ts';
 import { listCommunityHubs } from './studio/community-index.ts';
-import { indexerForHub, type DiscoveredItem } from './studio/community-hub-index.ts';
+import { indexerForHub, type DiscoveredItem, type HubIndexOutcome } from './studio/community-hub-index.ts';
+
+/** What one declared hub did on this refresh. `reason`/`message` are present
+ *  only when the hub could not be read — they are `HubIndexOutcome`'s own
+ *  refusal, carried rather than re-invented, so the chip says what the reader
+ *  said. */
+export type HubOutcome = {
+  hubId: string;
+  discovered: number;
+  partial?: boolean;
+  reason?: Extract<HubIndexOutcome, { ok: false }>['reason'];
+  message?: string;
+};
 import { communitySourceKey } from './studio/community-source-url.ts';
 import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
@@ -134,6 +146,11 @@ export type CommunityRefreshRunResult =
        *  own" survives — a discovery is a suggestion, not a change. Empty when
        *  every hub is already fully indexed, unreachable, or not GitHub-shaped. */
       discovered: readonly DiscoveredItem[];
+      /** What each declared hub did, so a chip can say WHY it is empty rather
+       *  than only that it is. A hub contributing nothing and a hub forge
+       *  cannot read are different states; rendering both as blank is what
+       *  made four declared sources indistinguishable. */
+      hubOutcomes: readonly HubOutcome[];
     }
   | {
       ok: false;
@@ -365,7 +382,7 @@ async function discoverFromHubs(
   opts: RunCommunityRefreshOptions,
   registry: CommunityRegistry,
   token: string | undefined,
-): Promise<readonly DiscoveredItem[]> {
+): Promise<{ discovered: readonly DiscoveredItem[]; hubs: readonly HubOutcome[] }> {
   const ctx = communityRequestCtx({
     token,
     ...(opts.fetchImpl !== undefined ? { fetchImpl: opts.fetchImpl } : {}),
@@ -373,17 +390,28 @@ async function discoverFromHubs(
   });
   const known = new Set(registry.items.map((i) => i.id));
   const out: DiscoveredItem[] = [];
+  const hubs: HubOutcome[] = [];
   for (const hub of listCommunityHubs(opts.forgeRoot)) {
     // By URL, not by `kinds` — design.md §"A second hub reader".
     const outcome = await indexerForHub(hub)(ctx, hub, known);
-    if (!outcome.ok) continue;
+    if (!outcome.ok) {
+      // THE REASON IS KEPT NOW. It was produced here and discarded on the next
+      // line, so every unreachable hub rendered as a silent blank and an
+      // operator could not tell "this source publishes nothing" from "forge
+      // could not read it". Those are different facts about their registry.
+      hubs.push({ hubId: outcome.hubId, discovered: 0, reason: outcome.reason, message: outcome.message });
+      continue;
+    }
+    let n = 0;
     for (const d of outcome.discovered) {
       if (known.has(d.id)) continue; // two hubs publishing the same id: first wins, deterministically
       known.add(d.id);
       out.push(d);
+      n += 1;
     }
+    hubs.push({ hubId: outcome.hubId, discovered: n, ...(outcome.partial === true ? { partial: true } : {}) });
   }
-  return out;
+  return { discovered: out, hubs };
 }
 
 export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Promise<CommunityRefreshRunResult> {
@@ -515,7 +543,7 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   // here rather than given its own button because the operator's question is
   // one question — "make this list reflect its sources" — and answering half of
   // it behind a second control is the shape S8 beat 5 exists to refuse.
-  const discovered = await discoverFromHubs(opts, registry, token);
+  const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);
 
   return {
     ok: true,
@@ -528,5 +556,6 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
     outcomes: result.outcomes,
     errors: result.errors,
     discovered,
+    hubOutcomes,
   };
 }

@@ -24,6 +24,7 @@
  */
 
 import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals, CommunityRefreshResult } from './community-client.ts';
+import type { HubOutcomeRow } from './community-types.ts';
 
 // ---------------------------------------------------------------------------
 // Filtering
@@ -232,6 +233,27 @@ export type CommunityEmptyState = { state: CommunityEmptyStateKind; message: str
 
 /** A real, registered hub that forge has indexed nothing from yet. Derived
  *  from the hub's own DERIVED-per-request count — never a declared flag. */
+/** The refusal reason the READER gave for this hub on the settled refresh, or
+ *  null when it gave none — it contributed rows, or no refresh has run. Pure,
+ *  so the page renders a decision made here rather than one inlined in JSX. */
+export function hubReason(outcomes: readonly HubOutcomeRow[], hubId: string): string | null {
+  const o = outcomes.find((x) => x.hubId === hubId);
+  return o?.reason ?? null;
+}
+
+/** What an empty chip SAYS. "declared — nothing indexed" is true of a source
+ *  forge read and found empty AND of one it could not read at all, and those
+ *  are different facts about an operator's registry — the second is forge's
+ *  limit, not the source's. When the reader gave a reason, the chip carries it.
+ *
+ *  The reason is the reader's own token (`blocked-origin`, `not-reachable`,
+ *  `fetch-failed`, `tree-truncated`) rather than a second wording of it: a
+ *  label that paraphrases drifts from what the code actually decided. */
+export function declaredOnlyLabel(outcomes: readonly HubOutcomeRow[], hubId: string): string {
+  const reason = hubReason(outcomes, hubId);
+  return reason === null ? 'declared — nothing indexed' : `declared — nothing indexed (fetch: ${reason})`;
+}
+
 export function isHubDeclaredOnly(hub: { itemCount: number }): boolean {
   return hub.itemCount === 0;
 }

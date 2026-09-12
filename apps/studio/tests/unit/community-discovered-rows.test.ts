@@ -37,6 +37,7 @@ const OK_WITH_ROWS: CommunityRefreshResult = {
   outcomes: [],
   errors: [],
   discovered: [ROW],
+  hubOutcomes: [],
 };
 
 /** The page's own expression, named once so the test drives the real rule
