@@ -33,11 +33,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { collectAgentRuns, decideReap, describeReap, descendantsOf, reapAgentRuns } from './reap.mjs';
+import { readPlantRecord, readLastBeat, plantDiedMessage } from './reap-plant.mjs';
 
 const ROOT = '/home/parso/forge-projects';
 
@@ -436,135 +437,6 @@ test('refusing the recorded pid refuses its whole subtree — nothing is signall
   assert.match(report.skipped[0].reason, /outside/);
 });
 
-// ------------------------------------------------- POSITIVE CONTROL (5.45)
-
-test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the S9 run-3 shape', async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'story-reap-tree-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-
-  // The dispatch shape, exactly: a detached turn (its own process group, as
-  // `spawnAgentTurn` spawns it) which itself spawns the agent. The turn then
-  // EXITS, so the agent re-parents and its parent's /proc/<pid>/cwd is gone —
-  // the run-3 conditions, reproduced.
-  const turn = spawn(
-    process.execPath,
-    [
-      '-e',
-      `const { spawn } = require('node:child_process');
-       const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: process.cwd(), stdio: 'ignore' });
-       console.log(String(c.pid));
-       setTimeout(() => process.exit(0), 400);`,
-    ],
-    { cwd: root, detached: true, stdio: ['ignore', 'pipe', 'ignore'] },
-  );
-  const grandchild = await new Promise((resolve) => {
-    let buf = '';
-    turn.stdout.on('data', (d) => {
-      buf += d;
-      if (buf.includes('\n')) resolve(Number.parseInt(buf.trim(), 10));
-    });
-  });
-  t.after(() => {
-    for (const pid of [turn.pid, grandchild]) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        /* already reaped, which is the point */
-      }
-    }
-  });
-
-  const dir = join(root, '_logs', '_authoring-planted');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'turn.pid'), String(turn.pid));
-
-  // Let the turn exit, so the reaper meets a DYING parent with an unreadable
-  // cwd — the exact condition that produced "unknown provenance" in run 3.
-  await new Promise((r) => setTimeout(r, 700));
-
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25 });
-
-  await new Promise((r) => setTimeout(r, 150));
-  let alive = true;
-  try {
-    process.kill(grandchild, 0);
-  } catch {
-    alive = false;
-  }
-  assert.equal(
-    alive,
-    false,
-    `the re-parented grandchild survived the reap — the S9 run-3 escape is still open: ${JSON.stringify(report)}`,
-  );
-  assert.ok(
-    report.reaped.some((r) => r.pid === grandchild),
-    `the grandchild must be REPORTED reaped, not killed silently: ${JSON.stringify(report)}`,
-  );
-});
-
-// ------------------------------------------------- NEGATIVE CONTROL (5.45)
-
-test('NEGATIVE CONTROL: a foreign process with the SAME NAME as a dispatched agent survives', async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'story-reap-foreign-'));
-  const elsewhere = mkdtempSync(join(tmpdir(), 'story-reap-foreign-tree-'));
-  t.after(() => {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(elsewhere, { recursive: true, force: true });
-  });
-
-  // Identical argv to the planted probe above, run by someone else, in someone
-  // else's tree, and never recorded by this run. Nothing about a NAME may
-  // admit it (COMMON §15.17), and it is not a descendant of anything we own.
-  const foreign = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    cwd: elsewhere,
-    stdio: 'ignore',
-    detached: true,
-  });
-  t.after(() => {
-    try {
-      process.kill(foreign.pid, 'SIGKILL');
-    } catch {
-      /* fine */
-    }
-  });
-
-  // A real, claimable dispatch alongside it, so the reaper actually runs.
-  const ours = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    cwd: root,
-    stdio: 'ignore',
-    detached: true,
-  });
-  t.after(() => {
-    try {
-      process.kill(ours.pid, 'SIGKILL');
-    } catch {
-      /* already reaped */
-    }
-  });
-  const dir = join(root, '_logs', '_authoring-ours');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'turn.pid'), String(ours.pid));
-
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 2000, pollMs: 25 });
-
-  await new Promise((r) => setTimeout(r, 150));
-  let foreignAlive = true;
-  try {
-    process.kill(foreign.pid, 0);
-  } catch {
-    foreignAlive = false;
-  }
-  assert.equal(foreignAlive, true, 'a same-named foreign process was killed — the reaper has become a pattern kill');
-  assert.ok(
-    report.reaped.some((r) => r.pid === ours.pid),
-    'our own dispatch must still be reaped',
-  );
-  assert.ok(
-    !report.reaped.some((r) => r.pid === foreign.pid),
-    'the foreign pid must not even appear in the reaped report',
-  );
-});
-
 test('a SECOND reap pass over the same runs is a clean no-op, not a reported failure', async () => {
   // `run.mjs` reaps twice — before the bridge teardown and again at the
   // verdict. Since 5.45 the second pass ADMITS the pid it already killed
@@ -716,67 +588,71 @@ test('the grace period is ONE window for the whole teardown, not one per dispatc
   assert.equal(sleeps, 4, 'three runs must still cost exactly one grace window of poll steps');
 });
 
-// ----- POSITIVE CONTROL: the DESCENDANT WALK specifically, not the group -----
+// ------------- 7.6.94: the plant's own instrumentation, as pure functions -----
 
-test('POSITIVE CONTROL: a grandchild that left the group via setsid is reaped by the ppid walk alone', async (t) => {
-  // The earlier grandchild control is reaped by the GROUP sweep, so it would
-  // still pass with the descendant walk deleted. This one can only be reached
-  // by ancestry: the grandchild leads its OWN group (detached) and its cwd is
-  // OUTSIDE the run root, so neither the group sweep nor any cwd rule finds
-  // it. Its parent stays alive, so the ppid chain holds.
-  const root = mkdtempSync(join(tmpdir(), 'story-reap-walk-'));
-  const elsewhere = mkdtempSync(join(tmpdir(), 'story-reap-walk-out-'));
-  t.after(() => {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(elsewhere, { recursive: true, force: true });
+/**
+ * These belong in THIS file rather than beside the control they serve, and the
+ * reason is the split's own rule: the controls file spawns, this one decides.
+ * `plantDiedMessage` decides what a reader is told, and it is the one part of
+ * 7.6.94 that can be driven straight at its inputs — the condition it reports
+ * (something killing a `setInterval` child) is not reproducible on demand, so
+ * without these the branch would ship unproven.
+ */
+test('7.6.94: the PLANT DIED message dates the death from the heartbeat', () => {
+  const now = Date.parse('2026-09-13T00:00:10.000Z');
+  const msg = plantDiedMessage({
+    pid: 4242,
+    plantedAtMs: now - 3000,
+    lastBeatMs: now - 1200,
+    nowMs: now,
+    artefactDir: '/tmp/story-reap-tree-abc',
   });
+  assert.match(msg, /PLANT DIED before the reap: pid 4242/);
+  assert.match(msg, /planted 3000 ms earlier/);
+  assert.match(msg, /last heartbeat 1200 ms ago, 1800 ms after planting/, 'both ages, so the death is placed against the run AND the plant');
+  assert.match(msg, /\/tmp\/story-reap-tree-abc/, 'the kept artefacts are where the post-mortem starts');
+});
 
-  const turn = spawn(
-    process.execPath,
-    [
-      '-e',
-      `const { spawn } = require('node:child_process');
-       const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-         cwd: ${JSON.stringify(elsewhere)}, stdio: 'ignore', detached: true });
-       c.unref();
-       console.log(String(c.pid));
-       setInterval(() => {}, 1000);`,
-    ],
-    { cwd: root, detached: true, stdio: ['ignore', 'pipe', 'ignore'] },
-  );
-  const grandchild = await new Promise((resolve) => {
-    let buf = '';
-    turn.stdout.on('data', (d) => {
-      buf += d;
-      if (buf.includes('\n')) resolve(Number.parseInt(buf.trim(), 10));
-    });
-  });
-  t.after(() => {
-    for (const pid of [turn.pid, grandchild]) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        /* already reaped, which is the point */
-      }
-    }
-  });
+test('7.6.94: a plant that never wrote a heartbeat says so, rather than printing a bare number', () => {
+  const now = Date.now();
+  const msg = plantDiedMessage({ pid: 7, plantedAtMs: now - 500, lastBeatMs: null, nowMs: now, artefactDir: '/tmp/x' });
+  assert.match(msg, /never wrote a heartbeat/);
+  assert.doesNotMatch(msg, /NaN|undefined|null/, 'an absent measurement must not render as a value');
+});
 
-  const dir = join(root, '_logs', '_authoring-walk');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'turn.pid'), String(turn.pid));
+test('7.6.94: an unrecorded plant time is reported as unknown, not as zero', () => {
+  const now = Date.now();
+  const msg = plantDiedMessage({ pid: 7, plantedAtMs: null, lastBeatMs: now - 10, nowMs: now, artefactDir: '/tmp/x' });
+  assert.match(msg, /planted an unknown time earlier/);
+  assert.doesNotMatch(msg, /planted 0 ms|NaN/, 'a missing record is not an instant plant');
+});
 
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25 });
-
-  const entry = report.reaped.find((r) => r.pid === grandchild);
-  assert.ok(entry, `the grandchild must be reaped: ${JSON.stringify(report)}`);
-  assert.equal(entry.via, 'descendant', 'and by ANCESTRY — the group sweep cannot reach its own group');
-
-  await new Promise((r) => setTimeout(r, 150));
-  let alive = true;
-  try {
-    process.kill(grandchild, 0);
-  } catch {
-    alive = false;
+/**
+ * THE DISCRIMINATOR, and the reason the bead exists. On D's run at `415f1be5`
+ * the control blamed the reaper for a kill it never performed. This message must
+ * be impossible to read that way — so it carries neither of the other two
+ * failures' words, and says outright that nothing was measured.
+ */
+test('7.6.94: the PLANT DIED message can never be read as the property failing', () => {
+  const now = Date.now();
+  const msg = plantDiedMessage({ pid: 7, plantedAtMs: now - 100, lastBeatMs: now - 50, nowMs: now, artefactDir: '/tmp/x' });
+  assert.match(msg, /MEASURED NOTHING about the reaper/);
+  assert.match(msg, /NOT evidence of a reaper defect/);
+  for (const claim of ['ESCAPE', 'REPORTING', 'survived the reap', 'must be REPORTED reaped', 'escape is still open']) {
+    assert.doesNotMatch(msg, new RegExp(claim), `a dead plant must not print the property's words: "${claim}"`);
   }
-  assert.equal(alive, false, 'a setsid grandchild survived — the descendant walk is not doing its job');
+});
+
+test('7.6.94: an unreadable or absent plant record reads as UNKNOWN, never as a plant time', () => {
+  assert.equal(readPlantRecord(join(tmpdir(), 'no-such-plant-record-7694.json')), null);
+  assert.equal(readLastBeat(join(tmpdir(), 'no-such-heartbeat-7694')), null);
+
+  const dir = mkdtempSync(join(tmpdir(), 'plant-record-'));
+  writeFileSync(join(dir, 'rec.json'), '{ not json');
+  assert.equal(readPlantRecord(join(dir, 'rec.json')), null, 'a corrupt record is absent, not a crash');
+  writeFileSync(join(dir, 'rec2.json'), JSON.stringify({ turnPid: 1, grandchildPid: 2 }));
+  assert.equal(readPlantRecord(join(dir, 'rec2.json')), null, 'a record with no plantedAtMs cannot date anything');
+  writeFileSync(join(dir, 'beat'), 'not-a-number');
+  assert.equal(readLastBeat(join(dir, 'beat')), null);
+  rmSync(dir, { recursive: true, force: true });
 });
