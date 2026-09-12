@@ -17,6 +17,7 @@
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -76,25 +77,180 @@ ${cards}
 `;
 }
 
-/** Write one story's data. */
+/** Write one story's data. Returns the id it wrote, so a caller can build the
+ *  set of entries THIS RUN produced from what was actually written rather than
+ *  from the stories it meant to run (T1 ruling 1009(c)). */
 export function writeStoryJson(result, root) {
   const dir = join(root, 'demos', 'stories', result.story.id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(result, null, 2)}\n`);
+  return result.story.id;
 }
 
-/** Read every story.json on disk and regenerate the index from all of them. */
-export function regenerateGallery(root) {
+/**
+ * Every gallery target that the repo does not TRACK — `forge-8vfn.7.6.81`,
+ * T1 ruling 1009(a).
+ *
+ * WHY: #703 committed an updated `demos/stories/index.html` whose new entry's
+ * `story.json` and frames were untracked. Main's gallery pointed at artifacts
+ * absent from the repo and every gate read rc=0, because an untracked file is
+ * invisible to `check-file-size`, to every pin, and to `sha256sum -c` — a file
+ * that is not listed cannot fail. Caught only by a post-merge porcelain read.
+ *
+ * THE SUBJECTS ARE `story.json` AND EACH BEAT'S `frame:`, AND THE CLIP IS
+ * EXEMPT — not by this function's judgement but by the operator's own words at
+ * `.gitignore:192-195`: "Frames, story.json and the generated doc ARE
+ * deterministic and stay tracked" against an ignore rule for
+ * `demos/stories/**\/*.webm` (ruling 2026-08-30). Every `href`/`src` in the
+ * rendered index is a webm, so a guard reading the HTML's links would red on
+ * all twelve BY DESIGN. This reads the same source `regenerateGallery` does.
+ *
+ * REFUSES RATHER THAN GUESSES, like `groundIgnoreFromGit`: a `git ls-files`
+ * that cannot run is not "everything is tracked". Treating a failed read as a
+ * clean one is how a guard reports the absence of evidence as evidence of
+ * absence, which is the exact shape this bead exists to close.
+ *
+ * @returns {ReadonlyArray<{entry: string, path: string}>} repo-relative paths
+ */
+/** A story id / frame segment that is safe to fold into a path. Charset
+ *  allowlist, length cap, and an explicit refusal of stringified nullish — the
+ *  guard shape `scripts/lib/journey-assertions.mjs` uses for session ids, and
+ *  the repo's rule for ANY value that becomes part of a filesystem path.
+ *
+ *  Today's ids come from `readdirSync`, which cannot return a name containing
+ *  `/`. That is an argument about the CALLER, and this function is exported:
+ *  the next caller is the one this exists for. `frame` is weaker still — it is
+ *  read out of story.json CONTENT, so it is only as trustworthy as whatever
+ *  wrote that file. */
+const SAFE_SEGMENT = /^[A-Za-z0-9._-]{1,128}$/;
+const NULLISH_AS_TEXT = new Set(['null', 'undefined', 'NaN', '.', '..']);
+
+function refuseUnsafe(kind, value) {
+  const text = String(value);
+  if (!SAFE_SEGMENT.test(text) || NULLISH_AS_TEXT.has(text)) {
+    throw new Error(
+      `untrackedGalleryTargets: refusing a ${kind} that is not a safe path segment: ${JSON.stringify(text)}. ` +
+      'Allowed: 1-128 chars of [A-Za-z0-9._-], and never "." / ".." / a stringified nullish. ' +
+      'A guard that folds an unchecked segment into a path answers a question about a file it was ' +
+      'never asked about.',
+    );
+  }
+  return text;
+}
+
+export function untrackedGalleryTargets(root, entryIds) {
+  const ids = [...entryIds].map((id) => refuseUnsafe('story id', id));
+  if (ids.length === 0) return Object.freeze([]);
+
+  const wanted = [];
+  for (const id of ids) {
+    const file = join(root, 'demos', 'stories', id, 'story.json');
+    if (!existsSync(file)) {
+      // An index entry whose story.json is not even on disk is a worse case
+      // than an untracked one, and it is reported through the same channel.
+      wanted.push({ entry: id, path: `demos/stories/${id}/story.json` });
+      continue;
+    }
+    wanted.push({ entry: id, path: `demos/stories/${id}/story.json` });
+    const data = JSON.parse(readFileSync(file, 'utf8'));
+    for (const beat of data.beats ?? []) {
+      if (typeof beat?.frame === 'string' && beat.frame !== '') {
+        // `frames/NN-slug.png` — each segment checked, so a story.json carrying
+        // `../../../etc/passwd` is refused rather than folded into a path and
+        // reported as an untracked "gallery target".
+        const segments = beat.frame.split('/').map((seg) => refuseUnsafe('frame segment', seg));
+        wanted.push({ entry: id, path: `demos/stories/${id}/${segments.join('/')}` });
+      }
+    }
+  }
+
+  const res = spawnSync('git', ['-C', root, 'ls-files', '-z', '--', 'demos/stories'], {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (res.error !== undefined) {
+    throw new Error(
+      `untrackedGalleryTargets: could not run git ls-files in ${root} — ${res.error.message}. ` +
+      'Refusing: a failed read is not a state, and treating it as "everything is tracked" would ' +
+      'report exactly the condition this guard exists to catch as clean.',
+    );
+  }
+  if (res.status !== 0) {
+    throw new Error(
+      `untrackedGalleryTargets: git ls-files exited ${res.status} in ${root} ` +
+      `(128 means it is not a git repository)${res.stderr ? ` — ${String(res.stderr).trim()}` : ''}. ` +
+      'Refusing rather than reporting an unchecked remainder as tracked.',
+    );
+  }
+  const tracked = new Set(String(res.stdout).split('\0').filter((p) => p !== ''));
+
+  const seen = new Set();
+  const out = [];
+  for (const w of wanted) {
+    if (seen.has(w.path)) continue;
+    seen.add(w.path);
+    if (!tracked.has(w.path)) out.push(Object.freeze(w));
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Read every story.json on disk and regenerate the index from all of them.
+ *
+ * `wroteThisRun` — the ids `writeStoryJson` RETURNED during this run — are
+ * EXEMPT from the tracked check (`forge-8vfn.7.6.81`, T1 ruling 1009(c)).
+ *
+ * WHY THE EXEMPTION EXISTS, because without it this guard is worse than the
+ * bug. A story that has never been committed has an untracked `story.json` and
+ * untracked frames BY CONSTRUCTION — the run created them seconds earlier —
+ * and this function is called at the END of a run. Refusing on them would
+ * throw after every beat had executed, so the first run of any new story would
+ * fail at its last step. On a costless story that is an annoyance; on a FUNDED
+ * one it means paying for a complete run and losing it at the final render.
+ * S1 run 11 cost $5.2497; that is the price tag. A guard that makes a funded
+ * run fail at its last step is the kind of fix that gets reverted the first
+ * time it fires.
+ *
+ * The set is MEASURED FROM WHAT THE RUN PRODUCED — the return values of
+ * `writeStoryJson` — never from "the ids this invocation meant to run". Those
+ * two agree right up until the moment they do not, and the failing case is a
+ * story that was requested and never written, which is precisely an entry that
+ * should NOT be exempt.
+ *
+ * What is left is the case #703 actually shipped: an entry this run did not
+ * produce, pointing at artifacts the repo does not track. The committed-tree
+ * check under `npm test` is the other half and the one that catches it after
+ * the fact.
+ */
+export function regenerateGallery(root, wroteThisRun = []) {
   const base = join(root, 'demos', 'stories');
   const rows = [];
+  const ids = [];
   if (existsSync(base)) {
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const file = join(base, entry.name, 'story.json');
       if (!existsSync(file)) continue;
       rows.push(storyRowFrom(JSON.parse(readFileSync(file, 'utf8'))));
+      ids.push(entry.name);
     }
   }
+
+  const exempt = new Set(wroteThisRun);
+  const stale = untrackedGalleryTargets(root, ids.filter((id) => !exempt.has(id)));
+  if (stale.length > 0) {
+    const named = stale.map((t) => `  ${t.entry} -> ${t.path}`).join('\n');
+    throw new Error(
+      `regenerateGallery: ${stale.length} gallery target(s) are not tracked by git, and this run did ` +
+      `not produce them:\n${named}\n` +
+      'Writing the index now would publish links to artifacts absent from the repo — the #703 state, ' +
+      'where main\'s gallery pointed at nothing and every gate read rc=0 because an untracked file is ' +
+      'invisible to check-file-size, to every pin, and to sha256sum -c.\n' +
+      `Commit the paths above, or remove the stale entry. (Clips are exempt by .gitignore's own rule; ` +
+      'the subjects here are story.json and each beat\'s frame.)',
+    );
+  }
+
   mkdirSync(base, { recursive: true });
   const html = renderGalleryIndex(rows);
   writeFileSync(join(base, 'index.html'), html);
