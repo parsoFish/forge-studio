@@ -493,7 +493,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
       // ran, which is `test-guard.mjs`'s own rule and the reason "host quiet"
       // was worth nothing without the numbers beside it.
       if (costs) {
-        const { spend: sofar, lines } = spendSoFar({
+        const { verdict: v, lines } = spendSoFar({
           root: ROOT,
           startedMs,
           realSpawn: story.ground?.realSpawn === true,

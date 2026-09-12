@@ -100,7 +100,15 @@ export function collectSpendDirs(root, sinceMs) {
  * log and a phase's own session disagree is never swallowed by the number that
  * won.
  *
- * @returns {{spend: ReturnType<typeof summariseRunSpend>, lines: string[]}}
+ * THE VERDICT IS RETURNED AS A VALUE, NEVER ONLY AS A LINE (bead `forge-91cr`).
+ * The first cut of this function rendered `spendCeilingVerdict` into `lines`
+ * and returned nothing else, and `run.mjs`'s `if (v.breached)` was left reading
+ * a name that no longer existed — every costed run threw `ReferenceError` at
+ * its first beat boundary, escaped the catch-less `try`, and skipped its own
+ * reap. §15.449 recurring inside the fix for itself: A CEILING IN A STRING IS A
+ * LABEL, and the caller that must decide cannot read a sentence.
+ *
+ * @returns {{spend: ReturnType<typeof summariseRunSpend>, verdict: ReturnType<typeof spendCeilingVerdict>, lines: string[]}}
  */
 export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   const spend = summariseRunSpend({
@@ -114,5 +122,5 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   const v = spendCeilingVerdict(spend, ceilingUsd);
   const lines = [`[stories] spend ${label}: ${v.reason}`];
   for (const n of spend.notes ?? []) lines.push(`[stories] spend: ${n}`);
-  return { spend, lines };
+  return { spend, verdict: v, lines };
 }
