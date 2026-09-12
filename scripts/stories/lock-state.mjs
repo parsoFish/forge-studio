@@ -38,10 +38,10 @@
  * machine contract, so a caller never parses prose to branch.
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readlinkSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { lockHolders, lockWaiters, lockOpeners } from './lock-guard.mjs';
 
-const USAGE = 'usage: lock-state who-holds|held|say <lockpath> [--twice] | lock-state who-runs <abs-path>';
+const USAGE = 'usage: lock-state who-holds|held|say <lockpath> [--twice[=SECONDS]] | lock-state who-runs <abs-path>';
 
 /** THE FACT. `flock -n` never queues, so it cannot become what it measures. */
 function isHeld(lockPath) {
@@ -49,8 +49,21 @@ function isHeld(lockPath) {
 }
 
 /** Facts about a pid that are not classification: the reader may observe these,
- *  and the CALLER draws the inference. `reparented` is the observable behind
- *  "nobody launched this" — a claim about intent the reader cannot make. */
+ *  and the CALLER draws the inference.
+ *
+ *  THE PARENT IS NAMED, NOT JUDGED — C's correction, and they found it by
+ *  putting their own incident's pid through my predicate rather than reading its
+ *  definition. I had `reparented = ppid === 1 || parent is gone`, which is right
+ *  for classic Unix and WRONG on this box: WSL2 reparents to a SUBREAPER, and
+ *  C's orphaned `flock` had **ppid 277**, which is alive, is not 1, and is
+ *  `/init`. Measured here: `/proc/277/cmdline` is `/init`, `/proc/1` is systemd.
+ *  So the flag computed FALSE for the one incident it existed to make legible.
+ *
+ *  The fix is not a cleverer predicate — "is this a subreaper" is another guess,
+ *  and the next box answers differently. The parent's IDENTITY is emitted as a
+ *  fact (`ppid 277 /init`) so a reader can SEE that the wrapper they launched is
+ *  no longer the parent. `reparented` survives only for the unambiguous `ppid 1`
+ *  case and is never the only signal. */
 function pidFacts(pid) {
   let ppid = null;
   try {
@@ -63,12 +76,17 @@ function pidFacts(pid) {
   let etime = '(gone)';
   const ps = spawnSync('ps', ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8' });
   if (ps.stdout && ps.stdout.trim() !== '') etime = ps.stdout.trim();
-  let cmd = '';
-  try { cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); } catch { /* gone */ }
-  const reparented = ppid === '1' || (ppid !== null && !aliveP(ppid));
-  return { ppid, etime, cmd, reparented };
+  return { ppid, parent: ppid === null ? '' : firstToken(ppid), etime, reparented: ppid === '1' };
 }
-function aliveP(pid) { try { readlinkSync(`/proc/${pid}/cwd`); return true; } catch { return false; } }
+/** The first token of a pid's cmdline, truncated — enough to recognise `/init`
+ *  or a wrapper by name, short enough to sit inside one line of output. */
+function firstToken(pid) {
+  try {
+    const raw = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+    const first = raw.split('\0').find((t) => t !== '') ?? '';
+    return first.length > 32 ? `${first.slice(0, 31)}…` : first;
+  } catch { return '(gone)'; }
+}
 
 /** `null` from the census means COULD NOT READ, which is not "nobody". Kept
  *  apart all the way to the output, because collapsing them is how an
@@ -83,10 +101,15 @@ function render(lockPath, twice) {
   const held = isHeld(lockPath);
   const first = occupants(lockPath);
   let stability = null;
-  if (twice) {
+  if (twice !== null) {
     // A's discriminator, in the walker so two callers cannot disagree about how
     // many scans make a stable. It costs a visible delay ON PURPOSE.
-    spawnSync('sleep', ['1']);
+    //
+    // THE DEFAULT IS A GUESS, NOT A MEASUREMENT, and says so: C's orphan was
+    // stable for minutes and A's self-match is a new shell every scan, so one
+    // second separates both with room — but nothing has measured where the
+    // boundary actually is, which is why it is an argument.
+    spawnSync('sleep', [String(twice)]);
     const second = occupants(lockPath);
     const seen = (set) => new Set([...(set.holders ?? []), ...(set.waiters ?? []), ...(set.openers ?? [])].map((r) => r.pid));
     const a = seen(first); const b = seen(second);
@@ -106,7 +129,8 @@ function line(lockPath, r) {
   const nameList = (rows) => (rows === null ? 'UNREADABLE' : rows.length === 0 ? 'none'
     : rows.map((x) => {
         const f = pidFacts(x.pid);
-        return `${x.pid}(cwd ${x.cwd ?? '?'}, ppid ${f.ppid ?? '?'}${f.reparented ? ', reparented' : ''}, ${f.etime})`;
+        const par = f.parent === '' ? '' : ` ${f.parent}`;
+        return `${x.pid}(cwd ${x.cwd ?? '?'}, ppid ${f.ppid ?? '?'}${par}${f.reparented ? ', reparented' : ''}, ${f.etime})`;
       }).join(' '));
   let head;
   if (!r.held) head = 'FREE';
@@ -126,7 +150,10 @@ function line(lockPath, r) {
 
 const [verb, target, ...rest] = process.argv.slice(2);
 if (verb === undefined || target === undefined) { console.error(USAGE); process.exit(2); }
-const twice = rest.includes('--twice');
+// `--twice` or `--twice=SECONDS`.
+const twiceArg = rest.find((a) => a === '--twice' || a.startsWith('--twice='));
+const twice = twiceArg === undefined ? null : (twiceArg.includes('=') ? Number(twiceArg.split('=')[1]) : 1);
+if (twice !== null && (!Number.isFinite(twice) || twice < 0)) { console.error('lock-state: --twice takes a non-negative number of seconds'); process.exit(2); }
 
 if (verb === 'who-runs') {
   // 7.6.93's mode. The FILTER is C's and is deliberately not guessed here: it

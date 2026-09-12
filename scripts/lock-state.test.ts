@@ -110,6 +110,23 @@ describe('lock-state — the probe is the fact, the census is the attribution', 
     assert.match(r.stdout, /HELD \(unnameable — inherited fd\)/);
   });
 
+  test('THE PARENT IS NAMED, not judged — the case a `ppid === 1` flag computes FALSE for', () => {
+    // C found this by putting their own orphan's pid through the predicate
+    // rather than reading its definition: WSL2 reparents to a SUBREAPER, so
+    // their orphaned `flock` had ppid 277 — alive, not 1, and `/init`. A
+    // `reparented` flag alone is silent for the exact incident it exists for.
+    const lock = lockFile();
+    const c = spawn('setsid', ['bash', '-c', `exec 9>"${lock}"; flock -n 9 || exit 7; sleep 30`], { stdio: 'ignore' });
+    children.push(c);
+    settle();
+    const r = run('say', lock);
+    assert.equal(r.status, 3, 'the lock is held whatever the census can name');
+    assert.match(
+      r.stdout, /ppid \d+ \S+/,
+      `every row must carry its parent's pid AND identity, so a reader can SEE a lost wrapper: ${r.stdout}`,
+    );
+  });
+
   test('--twice REPORTS transients rather than filtering them', () => {
     const lock = lockFile();
     holder(lock);
