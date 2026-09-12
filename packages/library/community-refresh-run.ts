@@ -468,6 +468,27 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   // failure — but there is nothing to stamp, so the file is left alone.
   const shouldWrite = verified > 0 && !dryRun;
 
+  // Ruling 478 — the second half of what "refresh" has to mean. Re-verifying
+  // rows that already exist never turns a declared hub into a browsable one, so
+  // four of the nine contributed nothing through every refresh this product has
+  // ever run. This asks each GitHub-shaped hub what it publishes and returns
+  // what the registry is missing.
+  //
+  // COST, STATED RATHER THAN HIDDEN: these fetches are serial like the source
+  // pass above, so they add to a refresh that is already 4 x 10 s worst case.
+  // Bead `forge-8vfn.7.6.16` (M7) owns making both concurrent. It is folded in
+  // here rather than given its own button because the operator's question is
+  // one question — "make this list reflect its sources" — and answering half of
+  // it behind a second control is the shape S8 beat 5 exists to refuse.
+  const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);
+
+  // MOVED ABOVE THE CRITICAL SECTION (7.6.84, T1 929). It used to run after the
+  // write, which made its outcomes unpersistable: the file was already closed.
+  // It is read-only and needs only the pre-write registry for `known`, so it
+  // runs here and its verdicts ride the SAME write as `sources` — one pass, one
+  // file state. The alternative, a second write after the lock, would leave a
+  // window where a reader saw this pass's sources beside the previous pass's
+  // hub outcomes.
   if (shouldWrite) {
     // ---- The critical section. Everything above ran WITHOUT the lock (the
     // network phase is the whole point); everything below re-derives from the
@@ -511,6 +532,9 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
           // them. Only `sources` and `lastRefresh` below are this pass's.
           schemaVersion: current.schemaVersion,
           lastRefresh: result.nextRegistry.lastRefresh,
+          // What each hub did on THIS pass, so the chip that renders it
+          // survives a reload and a second tab.
+          hubs: hubOutcomes.map((h) => ({ hubId: h.hubId, discovered: h.discovered, ...(h.reason === undefined ? {} : { reason: h.reason }) })),
           sources: mergeVerifiedSources(current, verifiedSourcesOf(result.outcomes, result.nextRegistry.sources)),
           items: current.items,
           leadingComments: current.leadingComments,
@@ -531,19 +555,7 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
     }
   }
 
-  // Ruling 478 — the second half of what "refresh" has to mean. Re-verifying
-  // rows that already exist never turns a declared hub into a browsable one, so
-  // four of the nine contributed nothing through every refresh this product has
-  // ever run. This asks each GitHub-shaped hub what it publishes and returns
-  // what the registry is missing.
-  //
-  // COST, STATED RATHER THAN HIDDEN: these fetches are serial like the source
-  // pass above, so they add to a refresh that is already 4 x 10 s worst case.
-  // Bead `forge-8vfn.7.6.16` (M7) owns making both concurrent. It is folded in
-  // here rather than given its own button because the operator's question is
-  // one question — "make this list reflect its sources" — and answering half of
-  // it behind a second control is the shape S8 beat 5 exists to refuse.
-  const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);
+
 
   return {
     ok: true,

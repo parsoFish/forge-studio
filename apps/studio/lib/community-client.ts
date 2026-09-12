@@ -69,7 +69,15 @@ export function parseCommunityHub(raw: unknown): CommunityHub {
 export function parseCommunityHubWithCount(raw: unknown): CommunityHubWithCount {
   const r = asRecord(raw);
   const hub = parseCommunityHub(r);
-  return { ...hub, itemCount: requireNumber(r, 'itemCount') };
+  // `reason` is the LAST refresh's verdict for this hub, served from disk. It
+  // is absent for a hub that was read, and for a registry never refreshed —
+  // both of which mean "nothing to explain" rather than "no failure recorded".
+  const reason = r['reason'];
+  return {
+    ...hub,
+    itemCount: requireNumber(r, 'itemCount'),
+    ...(typeof reason === 'string' && reason !== '' ? { reason } : {}),
+  };
 }
 
 function parseCommunityKind(raw: unknown): CommunityKind {
