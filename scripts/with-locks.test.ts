@@ -16,7 +16,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -135,4 +135,69 @@ describe('with-locks.sh — one ratified order, bounded, and the lock it lost is
       assert.equal(run('/nope/not/a/campaign', 'both', '--', 'true').status, 2);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
+});
+
+// ------------------------------------------------------------ 7.6.95
+/**
+ * REFUSING A COMBINATION THAT CANNOT SUCCEED, BEFORE TAKING ANYTHING.
+ *
+ * `with-locks.sh <camp> run -- gate.sh` can never succeed, and the old header
+ * RECOMMENDED it. `gate.sh` never takes `.run-lock`, so the rule "name only the
+ * locks the command does not take" pointed straight at the one choice that is
+ * always fatal: the gate runs `npm test`, whose guard refuses when the run-lock
+ * is held, awaited, or merely OPEN. The wrapper's own hold guarantees the
+ * child's refusal.
+ *
+ * The rule is now "neither TAKES nor REFUSES UNDER", and the second property is
+ * enforced rather than documented. These doors pin the three cases the bead
+ * names plus the one it does not: a launcher whose FILENAME contains `gate` must
+ * still run, because refusing it for its name would be this defect pointing the
+ * other way.
+ */
+const GUARANTEED = 73;
+
+test('7.6.95: run -- gate.sh is REFUSED at launch, and NOTHING is taken', () => {
+  const d = camp();
+  const before = [statSync(join(d, '.suite-lock')).mtimeMs, statSync(join(d, '.run-lock')).mtimeMs];
+  const r = run(d, 'run', '--', 'bash', '/nowhere/gate.sh', 'a', 'b');
+  assert.equal(r.status, GUARANTEED, `expected the guaranteed-failure refusal: ${r.stderr}`);
+  assert.match(r.stderr, /REFUSING 'run'/);
+  assert.match(r.stderr, /held, awaited or merely OPEN/, 'the reason names WHY the guard refuses');
+  assert.match(r.stderr, /run it unheld/, 'and what to do instead');
+  // The whole point of refusing AT LAUNCH: no lock was touched on the way out.
+  assert.deepEqual(
+    [statSync(join(d, '.suite-lock')).mtimeMs, statSync(join(d, '.run-lock')).mtimeMs], before,
+    'a refusal must not have taken, opened or timestamped either lock',
+  );
+  assert.ok(takeable(d, '.run-lock') && takeable(d, '.suite-lock'), 'both locks remain free');
+});
+
+test('7.6.95: suite -- gate.sh is REFUSED too, with the OTHER reason', () => {
+  // Different fact, different remedy: the gate TAKES the suite-lock itself, so
+  // it would wait on a lock its own caller holds (#694). A single refusal
+  // message for both cases would send a reader to the wrong fix.
+  const d = camp();
+  const r = run(d, 'suite', '--', 'bash', '/nowhere/gate.sh', 'a', 'b');
+  assert.equal(r.status, GUARANTEED);
+  assert.match(r.stderr, /TAKES \.suite-lock itself/);
+  assert.match(r.stderr, /invoke it unwrapped/);
+  assert.ok(takeable(d, '.suite-lock'), 'the suite-lock remains free');
+});
+
+test('7.6.95: run -- a plain launcher PROCEEDS and takes the run-lock', () => {
+  const d = camp();
+  const r = run(d, 'run', '--', 'true');
+  assert.equal(r.status, 0, `a launcher is exactly what this wrapper is for: ${r.stderr}`);
+  assert.match(r.stdout, /\.run-lock taken/);
+});
+
+test('7.6.95: a launcher whose NAME contains "gate" is NOT refused', () => {
+  // The over-match negative. `my-gate-launcher.sh` is a launcher, not a gate,
+  // and refusing it for its filename would be this bead's own defect pointing
+  // the other way. It fails 127 because the path does not exist — which proves
+  // it got PAST the refusal and was executed.
+  const d = camp();
+  const r = run(d, 'run', '--', 'bash', '/nowhere/my-gate-launcher.sh');
+  assert.notEqual(r.status, GUARANTEED, `a launcher must not be refused for its name: ${r.stderr}`);
+  assert.doesNotMatch(r.stderr, /REFUSING/);
 });
