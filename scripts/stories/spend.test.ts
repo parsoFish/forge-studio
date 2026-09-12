@@ -287,3 +287,39 @@ test('7.6.52: run.mjs refuses a given-but-unusable --ceiling instead of falling 
   assert.ok(refuseAt !== -1 && bootAt !== -1 && refuseAt < bootAt,
     'the refusal must come before the bridge boots');
 });
+
+/**
+ * The UNMEASURED verdict names BOTH causes — bead `forge-8vfn.7.6.56`.
+ *
+ * The first version named only the mid-hang cause, as though it were the only
+ * one. D's S7 run 4 priced UNMEASURED for the OTHER reason: the SDK child
+ * exited 1 a second in on a terms gate, leaving one `start` line and the reason
+ * in stderr. Same symptom, opposite diagnosis, and **completely different
+ * operator actions** — investigate a hang, versus accept terms once.
+ *
+ * The verdict is the last word a reader gets, so naming one cause sends them to
+ * the wrong place: D burned S7 beat 5's full 300 s timeout on a page that could
+ * never render, having correctly-but-shallowly concluded "state never reached".
+ *
+ * The banner is NOT the discriminator and the text says so. Run 14's healthy
+ * spawn carried it in its advisory form ("WILL take effect … Run `claude` to
+ * review") with 126 event lines and a clean exit; D's dead turn carried
+ * "HAS taken effect … you MUST run" with one line and `exited with code 1`.
+ * One verb apart, opposite consequence — and it persists AFTER acceptance, so
+ * it is noise in both directions (§15.466).
+ */
+test('7.6.56: UNMEASURED names both causes and the discriminator, not just the hang', () => {
+  const v = summariseRunSpend({ realSpawn: true, events: [[{ kind: 'start' }]] });
+  assert.equal(v.measured, false);
+  // BOTH causes, not one.
+  assert.match(v.label, /reaped mid-hang/, 'the hang cause');
+  assert.match(v.label, /NEVER STARTED/, 'the never-started cause');
+  assert.match(v.label, /opposite responses/, 'and that they differ');
+  // The discriminator a reader can actually run.
+  assert.match(v.label, /events\.jsonl/);
+  assert.match(v.label, /stderr/);
+  // And the trap: the banner must be explicitly disqualified, or a reader
+  // greps for it and concludes from noise.
+  assert.match(v.label, /banner .*proves NOTHING/i);
+  assert.match(v.label, /NOT \$0\.00/, 'and it still is not zero');
+});

@@ -83,7 +83,14 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
     usd: null,
     label:
       'UNMEASURED — this run dispatched a real agent and no priced event reached its log. ' +
-      'A turn reaped mid-hang writes no terminal event, so there is nothing to price (bead forge-8vfn.6.11.17). ' +
+      'TWO causes produce this, and they need opposite responses — read the first spawn before choosing ' +
+      '(§15.458): (a) the turn RAN and was reaped mid-hang, writing no terminal event ' +
+      '(forge-8vfn.6.11.17) — its events.jsonl carries many lines and its pid was alive; ' +
+      '(b) the turn NEVER STARTED — the SDK child exited non-zero within seconds, leaving ONE `start` ' +
+      'line in events.jsonl and the reason in the session\'s stderr.log. ' +
+      'DISCRIMINATOR: `wc -l <session>/events.jsonl` (one line = start-and-nothing) and stderr\'s exit ' +
+      'code. A terms banner in stderr proves NOTHING either way — it appears in its advisory form on ' +
+      'healthy runs and its blocking form on dead ones, one verb apart. ' +
       'This is NOT $0.00.',
     priced: 0,
   });
