@@ -368,7 +368,13 @@ test('7.6.30(c): creating a .counts with no owner= REFUSES, and names the path a
   const out = r.stdout + r.stderr;
   assert.match(out, /owner=/, 'the refusal names the missing field');
   assert.match(out, /M-T\.counts/, 'and the path the lane must write');
-  assert.match(out, new RegExp(digest16(join(f.G, 'M-T.sha256'))), 'and the manifest digest, so the lane need not recompute it');
+  // AMENDED by 992: this line used to assert the digest of `M-T.sha256` was
+  // printed "so the lane need not recompute it" — but the digest it printed was
+  // of a file the tool had ALREADY rehashed without an owner, and once the
+  // refusal moved ahead of the rehash the file's digest is the one about to
+  // change. A digest of bytes the owner's own run will replace is not what the
+  // lane needs; the message now says manifest= is recomputed by that run.
+  assert.match(out, /manifest= is recomputed/, 'and says the digest comes from the owner\'s own run');
   assert.ok(!existsSync(join(f.G, 'M-T.counts')), 'and it writes no ownerless file');
 });
 
@@ -706,4 +712,48 @@ test('7.6.87: .txt is REGENERATED from .sha256, not edited beside it', () => {
     .split('\n').filter(Boolean).map((l) => l.split(/\s+/)[1]).join('\n') + '\n';
   assert.equal(readFileSync(join(f.G, 'M-T.txt'), 'utf8'), expected,
     'byte-for-byte the paths column of .sha256, same order');
+});
+
+// ── 992 — the owner check runs BEFORE the first byte is written ──────────────
+
+test('992: a manifest owned by ANOTHER lane is not REHASHED either — .sha256 byte-identical, no .pre- taken', () => {
+  // 7.6.49's door above asserts `.counts` is untouched and never asked about
+  // `.sha256`. Measured on M6-T1 after M6-D's #745 (glob `'M*'`, FORGE_LANE=M6-D):
+  // the tool backed up and rewrote T1's two rows, THEN printed
+  // `REFUSED — … Would have written … manifest=6f199368e1cb2fe6` — and that was
+  // the file's ACTUAL fingerprint, a hypothetical describing a write already
+  // performed. The owner's `.counts` then certified a `.sha256` that no longer
+  // existed. A refusal that still wrote is not a refusal, for either file.
+  const f = plantTwoOwners();
+  const theirsBefore = readFileSync(join(f.G, 'M-OTHER.sha256'), 'utf8');
+  const r = runAs(f, 'M-T');
+  assert.notEqual(r.status, 0, 'the run still exits non-zero');
+  assert.equal(readFileSync(join(f.G, 'M-OTHER.sha256'), 'utf8'), theirsBefore,
+    'the stranger\'s .sha256 is byte-identical — the rehash never ran on it');
+  assert.equal(readdirSync(f.G).filter((n) => n.startsWith('M-OTHER.sha256.pre-')).length, 0,
+    'and no pre-image was taken — nothing to back up when nothing is written');
+  assert.match(r.stderr, /M-OTHER: REFUSED/, 'the refusal is named');
+  assert.match(r.stderr, /M-OTHER: nothing written[^\n]*pinned\.txt/, 'and it names the rows it left alone');
+  // Positive control: the caller's OWN manifest is rehashed exactly as before.
+  assert.match(readFileSync(join(f.G, 'M-T.sha256'), 'utf8'), new RegExp(sha256('after\n')),
+    'my own manifest carries the merged bytes');
+  assert.match(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), new RegExp(`head=${f.to.slice(0, 8)}`));
+});
+
+test('992: an ABSENT .counts refuses BEFORE the rehash — the .sha256 it cannot own is left byte-identical', () => {
+  // 7.6.30(c) refused to CREATE the ownerless `.counts` but had already rehashed
+  // the rows above it: the same half-write, one file over. No owner, no write.
+  const { root, repo, camp, g, first, second } = plant();
+  try {
+    rmSync(join(g, 'M5-B.counts'));
+    const before = readFileSync(join(g, 'M5-B.sha256'), 'utf8');
+    const r = reconcile(repo, camp, first, second);
+    assert.notEqual(r.code, 0, `expected a refusal, got rc 0:\n${r.out}`);
+    assert.equal(readFileSync(join(g, 'M5-B.sha256'), 'utf8'), before, 'the .sha256 is untouched');
+    assert.equal(readdirSync(g).filter((n) => n.startsWith('M5-B.sha256.pre-')).length, 0, 'no pre-image');
+    assert.match(r.out, /REFUSING to rehash M5-B/, 'the refusal says what it declined to do');
+    assert.match(r.out, /pinned\.txt/, 'and names the rows it left alone');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
