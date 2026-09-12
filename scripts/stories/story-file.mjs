@@ -17,6 +17,20 @@ function fail(field, why) {
   throw new Error(`story is invalid — ${field}: ${why}`);
 }
 
+/**
+ * A validator finding that is NOT fatal — 7.6.54 (ruling 795).
+ *
+ * Used for the one shape that is legal JavaScript, passes every structural
+ * rule, and is almost certainly wrong: a literal `press` carrying `<name>`
+ * where `name` is a declared binding. Refusing it outright would be wrong —
+ * a press may legitimately contain angle brackets — so it warns and names the
+ * form that works. It prints on stderr rather than returning quietly, because
+ * a finding nobody sees is the defect this campaign keeps meeting.
+ */
+function warn(field, why) {
+  console.warn(`[stories] story warning — ${field}: ${why}`);
+}
+
 function requireNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     fail(field, `expected a non-empty string, got ${JSON.stringify(value)}`);
@@ -66,8 +80,9 @@ function validateDoSteps(raw, at) {
       // draft, and too many press a control that exists only while the session
       // awaits answers.
       const isRepeat = Object.hasOwn(step, 'repeat');
-      if ([isFill, isFillAll, isPress, isRepeat].filter(Boolean).length !== 1) {
-        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press} or {repeat}, got ${JSON.stringify(step)}`);
+      const isPressBound = Object.hasOwn(step, 'pressBound');
+      if ([isFill, isFillAll, isPress, isRepeat, isPressBound].filter(Boolean).length !== 1) {
+        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press}, {pressBound} or {repeat}, got ${JSON.stringify(step)}`);
       }
       if (isRepeat) {
         if (!Array.isArray(step.repeat) || step.repeat.length === 0) {
@@ -90,6 +105,18 @@ function validateDoSteps(raw, at) {
           fail(`${where}.repeat`, 'a repeat cannot nest another repeat');
         }
         return Object.freeze({ repeat: validateDoSteps(step.repeat, where), until: Object.freeze({ ...step.until }) });
+      }
+      // 7.6.54 (ruling 795): `pressBound` names a handle whose id is minted at
+      // run time — `open-initiative-<initiativeId>` cannot be written literally
+      // because the id does not exist until the run mints it. `press` stays
+      // literal, so routes-only substitution stays true by construction and the
+      // `<pattern>`-is-CLI-syntax property needs no exemption.
+      if (Object.hasOwn(step, 'pressBound')) {
+        const pb = step.pressBound;
+        if (pb === null || typeof pb !== 'object') fail(`${where}.pressBound`, 'expected an object { action, bind }');
+        requireNonEmptyString(pb.action, `${where}.pressBound.action`);
+        requireNonEmptyString(pb.bind, `${where}.pressBound.bind`);
+        return Object.freeze({ pressBound: Object.freeze({ action: pb.action, bind: pb.bind }) });
       }
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);
@@ -299,6 +326,44 @@ export function validateStory(raw) {
             'route needs, because the route is resolved before the beat runs. Either bind it on an ' +
             'earlier beat, or name the surface that publishes it.',
         );
+      }
+    }
+    // 7.6.54 (ruling 795), DUTY 1 — a `pressBound` whose `bind` no EARLIER beat
+    // declares is refused at LOAD, not discovered at run time. An unresolved
+    // bind would press a half-built handle, match nothing, and red as "no such
+    // control" — which reads as a product defect and is why the shape was
+    // parked rather than built.
+    const pressBindsIn = (steps) => (steps ?? []).flatMap((st) =>
+      Object.hasOwn(st, 'pressBound') ? [st.pressBound.bind]
+        : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
+    for (const bind of pressBindsIn(b.do)) {
+      if (!boundNames.has(bind)) {
+        fail(
+          `beats[${i}]`,
+          `pressBound names <${bind}>, which no EARLIER beat binds. The handle is built at run time from ` +
+            'that binding, so a beat cannot press one its own expectations would publish.',
+        );
+      }
+    }
+    // DUTY 2 — a literal `press` carrying <name> that matches a DECLARED
+    // binding is almost certainly the parked mistake: it would resolve the
+    // literal string, match nothing, and blame the product. Warn and name the
+    // form that does work. Only declared names warn, so `--exclude-author
+    // <pattern>` in a `with` stays untouched, which is the property this
+    // validator already protects.
+    const pressTextsIn = (steps) => (steps ?? []).flatMap((st) =>
+      Object.hasOwn(st, 'press') ? [st.press]
+        : Object.hasOwn(st, 'repeat') ? pressTextsIn(st.repeat) : []);
+    for (const text of pressTextsIn(b.do)) {
+      for (const name of namesIn(text)) {
+        if (boundNames.has(name)) {
+          warn(
+            `beats[${i}].do`,
+            `press '${text}' contains <${name}>, which IS a declared binding — but a press is never ` +
+              `substituted (routes only). It would resolve the literal string and match no element. ` +
+              `Use pressBound: { action: '${text.split('<')[0]}', bind: '${name}' }.`,
+          );
+        }
       }
     }
     // Only NOW does this beat's own binding become available to later beats.

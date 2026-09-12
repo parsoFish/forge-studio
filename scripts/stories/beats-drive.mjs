@@ -34,8 +34,7 @@ import {
 // re-exports for the modules and tests that already name it here.
 export { routeMatches };
 import {
-  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute,
-} from './beats.mjs';
+  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute, resolveBoundPresses } from './beats.mjs';
 // `performSteps` moved to `beats-steps.mjs` at the 800-line cap (ruling 492).
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
@@ -191,10 +190,23 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // Last write wins: a handle pressed in several beats (`project-tab-roadmap`)
   // should anchor on its most recent press, not its first.
   const pressStartedMs = Date.now();
-  for (const step of steps) {
+  // 7.6.54 (ruling 795): `pressBound` becomes a literal press HERE, where the
+  // bindings exist. Downstream — `performSteps`, `beats-repeat`, the anchor map
+  // — sees only `press` and is unchanged. An unresolved bind REFUSES rather
+  // than pressing a half-built handle, because that reds as "no such control"
+  // and reads as a product defect.
+  const boundSteps = resolveBoundPresses(steps, bindings);
+  if (boundSteps.unbound !== null) {
+    return withAgentProc(stuckVerdict(beat, await readObserved(page, beat),
+      `pressBound names <${boundSteps.unbound}>, which is not bound at this beat. The handle is built ` +
+      'from that binding at run time, so nothing was pressed — this is a story-authoring gap, not a ' +
+      'missing control.'), agentProcProbe);
+  }
+  const runSteps = boundSteps.steps;
+  for (const step of runSteps) {
     if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
   }
-  const steps_ = await performSteps(page, steps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor);
+  const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
