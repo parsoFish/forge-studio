@@ -89,7 +89,10 @@ export type HubOutcome = {
   hubId: string;
   discovered: number;
   partial?: boolean;
-  reason?: Extract<HubIndexOutcome, { ok: false }>['reason'];
+  reason?: Extract<HubIndexOutcome, { ok: false }>['reason'] | 'no-installable-kind';
+  /** The hub's own declared kinds, present only beside `no-installable-kind` —
+   *  what the label renders around the token (7.6.91). */
+  kinds?: string;
   message?: string;
 };
 import { communitySourceKey } from './studio/community-source-url.ts';
@@ -409,7 +412,15 @@ async function discoverFromHubs(
       out.push(d);
       n += 1;
     }
-    hubs.push({ hubId: outcome.hubId, discovered: n, ...(outcome.partial === true ? { partial: true } : {}) });
+    hubs.push({
+      hubId: outcome.hubId,
+      discovered: n,
+      ...(outcome.partial === true ? { partial: true } : {}),
+      // An OK read can carry a reason too, and it must survive to the registry:
+      // the whole defect is a chip that says "nothing indexed" when the truth is
+      // "nothing forge can install" (7.6.91).
+      ...(outcome.reason !== undefined ? { reason: outcome.reason, kinds: outcome.kinds } : {}),
+    });
   }
   return { discovered: out, hubs };
 }
