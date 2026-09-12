@@ -60,7 +60,7 @@ import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './s
 import {
   snapshotSiblingGrounds, siblingGroundEscapes, describeGroundEscapes,
   ownGroundManifest, mintedSessionPaths, mintedSessionWrites, classifyOwnGroundDrift, groundChanges,
-  groundIgnoreFromGit,
+  groundIgnoreFromGit, seedIgnoredBorn,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { decideStoryBridge, readProcCwd, refusalError, bootOwnBridge, bridgeSpawnOptions } from './bridge.mjs';
@@ -413,6 +413,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // the agent COMMITTED its writes so the ground's own `git status` reported
   // nothing at all (§15.327). Hence a hash, never a status.
   const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
+  const seeded = story.ground?.seedIgnoredBorn ? seedIgnoredBorn(join(ROOT, 'projects', story.ground.project), story.ground.seedIgnoredBorn) : []; // 7.6.52 — after the pre-run hash, deliberately
   const logsDir = join(ROOT, '_logs');
   const logsBefore = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
   const outDir = join(ROOT, 'demos', 'stories', story.id);
@@ -693,6 +694,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
     for (const line of split.undeclared) {
       console.error(`[stories] own ground: UNDECLARED ${line}`);
     }
+    for (const rel of seeded) rmSync(join(ROOT, 'projects', story.ground.project, rel), { force: true }); // 7.6.52 — next run seeds fresh
   }
 
   // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be

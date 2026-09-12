@@ -31,9 +31,9 @@
  * files.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
 /**
  * Method C, verbatim: the pipeline the launcher runs and the ledger quotes.
@@ -417,6 +417,62 @@ export function mintedSessionWrites(mintedPaths, logsDir, groundDir) {
  * @param {string} groundDir absolute path to the ground
  * @returns {{isIgnored: (rel: string) => boolean, source: string, check: (paths: readonly string[]) => Set<string>}}
  */
+/**
+ * Create the ground's own toolchain output, on purpose — `forge-8vfn.7.6.52`.
+ *
+ * WHY A HARNESS STEP AND NOT AN AGENT. `IGNORED-BY-GROUND` has only ever
+ * rendered a TRUE ZERO over an EMPTY case: S1 run 9 printed `0 path(s)` because
+ * that run's demo builder happened not to invoke pytest, and whether an agent
+ * runs a toolchain is the agent's choice. Waiting for a costed run to produce
+ * the non-empty case is a coin flip, so a costless story declares it instead.
+ *
+ * IT REFUSES A PATH THE GROUND DOES NOT ACTUALLY IGNORE, and that refusal is
+ * the load-bearing half rather than a convenience. A story free to seed any
+ * path could assert against ignore rules it invented and pass by construction —
+ * the vacuous-door shape. Worse, an unignored seed lands in UNDECLARED, which
+ * makes the run RED (`run.mjs`'s containment branch) for a reason that is the
+ * story's own doing. So the rules are consulted BEFORE anything is written, and
+ * a mismatch stops the run with the path named.
+ *
+ * ORDER IS LOAD-BEARING AT BOTH ENDS, and `run.mjs` has no room to say so: the
+ * caller seeds AFTER the pre-run hash, so these read as drift born during the
+ * run, and deletes them AFTER the classification has read them. Left in place
+ * they would sit in the NEXT run's pre-run hash, no longer be born during it,
+ * and the story would report 0 again — green, and proving nothing, which is the
+ * exact failure this whole path exists to end.
+ *
+ * Returns the paths created, so the caller can report them rather than assume.
+ */
+export function seedIgnoredBorn(groundDir, relPaths) {
+  if (relPaths.length === 0) return [];
+  // EVERY PATH IS CHECKED BEFORE ANY IS WRITTEN, and that ordering is
+  // load-bearing rather than tidy. A seed is a `writeFileSync` over whatever is
+  // at that path, so checking per-path inside the write loop would clobber a
+  // real tracked file before reaching the one that fails — measured: seeding
+  // `README.md` refuses with rc 1 and leaves `README.md` intact. Someone
+  // optimising this into a single pass would silently make a bad story
+  // destructive (C, on 7.6.52's review).
+  const ignore = groundIgnoreFromGit(groundDir);
+  const notIgnored = relPaths.filter((p) => !ignore.isIgnored(p));
+  if (notIgnored.length > 0) {
+    throw new Error(
+      `seedIgnoredBorn: ${notIgnored.join(', ')} ${notIgnored.length === 1 ? 'is' : 'are'} NOT ignored by ` +
+      `${ignore.source}. Refusing to seed: an unignored path is classified UNDECLARED, which reds the run ` +
+      'as a containment failure the story caused itself — and a story that may seed any path can assert ' +
+      'against rules it invented.',
+    );
+  }
+  for (const rel of relPaths) {
+    const abs = join(groundDir, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, `seeded by the costless ignored-born story (forge-8vfn.7.6.52)\n`);
+  }
+  // Logged HERE rather than at the call site: `run.mjs` sits on the 800-line cap
+  // and this is the module that knows what it did.
+  console.log(`[stories] own ground: seeded ${relPaths.length} ignored-born path(s) — ${relPaths.join(', ')}`);
+  return [...relPaths];
+}
+
 export function groundIgnoreFromGit(groundDir) {
   const check = (paths) => {
     if (paths.length === 0) return new Set();
