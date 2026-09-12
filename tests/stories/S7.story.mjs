@@ -670,6 +670,40 @@ export default {
       say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the only way back to a worker is the pillar the operator started from.',
     },
     {
+      // THE HOP BEAT, added after S7 run 4 (T1 ruling 799(1)).
+      //
+      // Run 4 red beats 22 and 23 identically — *"standing on the wrong page:
+      // `/agents` is not `/agents/brain-ingest`"*. The beat below declared that
+      // route as where it ENDS and was read as where it STOOD, but **a `do`
+      // acts where the browser stands**, and beat 20 leaves it on `/agents`
+      // (`:667`). A route in an `expect` is a post-condition, never a hop.
+      //
+      // A NAVIGATE, NOT A PRESS, measured: `handleFor`
+      // (`beats-repeat.mjs:41-45`) resolves `press` to exactly
+      // `[data-action="<key>"]`, and the card that links here
+      // (`LibraryCard.tsx:179-186`) is a `Link` carrying `data-card-type` and
+      // `data-card-id` and NO `data-action`. Reported, not fixed here: a handle
+      // is a DOM-contract change and this is a story amendment.
+      //
+      // AND WHY IT SUCCEEDS WHERE AMEND-4'S DID NOT. A no-`do` beat never
+      // `page.goto`s — `beats-drive.mjs:372-386` needs `[data-nav][href]` or
+      // `a[href]` for the target ON THIS PAGE and refuses otherwise. Run 2 hit
+      // that refusal for this same target from the SESSION page (recorded
+      // above). From `/agents` the roster renders one `<a href="/agents/<id>">`
+      // per agent, so the runner arrives by CLICKING THE CARD. Amend-4 made the
+      // link reachable and stopped one hop short of using it.
+      //
+      // 504: no `do` skips the step phase and navigates. Assertions are the
+      // three the detail page stamps (`app/agents/[id]/page.tsx:591-593`), read
+      // from source: `data-page="agents"`, `page-ready`, `agent-id`.
+      act: 'Open brain-ingest from the roster',
+      expect: {
+        route: '/agents/brain-ingest',
+        data: { page: 'agents', 'page-ready': 'true', 'agent-id': 'brain-ingest' },
+      },
+      say: 'The roster is a list of workers; binding happens on one worker\u2019s own page. This is the hop the operator makes without thinking about it, and the one the story forgot to write down.',
+    },
+    {
       // THIS COMMENT USED TO SAY "NOT expressible — no `data-action`, so no
       // `do` verb can name it". **It became false on 2026-09-04 and stayed in
       // the file.** `CatalogPalette.tsx:111` has carried
@@ -718,7 +752,7 @@ export default {
       // parsed-and-surfaced value enforced nowhere. Asserting `count: '1'` off
       // unsaved state would have been this story telling itself the truth about
       // a screen and a lie about the system.
-      act: 'Open an agent from the Agents pillar and bind the hook to it',
+      act: 'Bind the hook to the agent, and save it',
       do: [{ press: 'add-hook-story-s7-hook' }, { press: 'save-agent' }],
       expect: {
         route: '/agents/brain-ingest',
