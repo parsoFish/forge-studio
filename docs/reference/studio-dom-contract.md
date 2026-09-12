@@ -78,13 +78,32 @@ same invariant as above, stated as the contract-wide rule rather than per-kind: 
 generic kickoff, the authoring launcher, the instructions kickoff, and the
 architect launcher.
 
-**BOTH demo surfaces publish it, and which one a beat reads depends on the PAGE
-it stands on** — `components/studio/project-builder/DemoTimeline.tsx` on the
-project page, `components/studio/session/DemoStageHandoff.tsx` on a session
-page. S1 beat 7 stands on the onboarding SESSION page, so the first fix (#490)
-closed a real gap in the wrong component for that beat and the beat kept reding
-on a key its page never rendered (T1 ruling 332). When a surface exists in two
-places, publishing the key on one of them is not publishing it.
+**ALL THREE demo surfaces publish it, and which one a beat reads depends on the
+PAGE it stands on** — `components/studio/project-builder/DemoTimeline.tsx` on
+the project page, `components/studio/session/DemoStageHandoff.tsx` on a session
+page, and `components/studio/project-builder/ContractResolutionPanel.tsx` when a
+DEMO-tier clause mints from contract resolution. S1 beat 7 stands on the
+onboarding SESSION page, so the first fix (#490) closed a real gap in the wrong
+component for that beat and the beat kept reding on a key its page never
+rendered (T1 ruling 332). When a surface exists in several places, publishing
+the key on some of them is not publishing it.
+
+This line read "BOTH demo surfaces" until `forge-8vfn.7.6.46` (T1 ruling 832):
+`ContractResolutionPanel` renders `<SessionMinted kind="demo">` and published
+only its generic `data-session-id`, which the rule above makes unbindable. No
+story went red, because no story reaches demo-minting through contract
+resolution — **absence of a red there was absence of coverage, not evidence the
+site was correct**, so the fix ships with its own door
+(`tests/regression/contract-resolution-mint.test.ts`).
+
+**The ratified shape is `''` before the mint, the id after, NEVER absent**
+(rulings 409/422/436/438; `NewIdeaBox.tsx:131` and the new panel key ship it).
+`6.11.5` had made the key absent-when-null, and 438 reversed that on the record:
+absent is the same race one step earlier, since an observer collecting nested
+`data-*` in one read cannot tell "no key" from "not yet" — what changed was the
+READER. `DemoTimeline` and `DemoStageHandoff` still render the absent form, with
+doors pinning it (ruling 332, which predates the reversal); migrating those two
+is outstanding, and until it happens this key has two shapes in the tree.
 
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like

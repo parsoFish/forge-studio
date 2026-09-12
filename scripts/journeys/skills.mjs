@@ -597,15 +597,18 @@ export const journey = defineJourney({
               await caption(page, 'A real contract gap — the project declares a demoProcess but has no generated demo-design skill. One click opens the demo builder to brief the agent.');
               await frame(page, 'sk-4-clause', 'Part 2 (skills) — a real preflight gap offered for agentic resolution', { key: true });
 
-              // The REAL click: fix-agent dispatch → demo-builder session → navigation.
+              // The REAL click: fix-agent dispatch → a demo session minted in place.
               await page.locator(resolveBtn).click().catch(() => {});
               // W6-B10 (R1-03-F2 reversed): the demo builder is the DEDICATED
               // session screen, not an inline panel — but resolving no longer
-              // OPENS it. PUBLISH AND STAY (bead 5.5): the `demo-builder` branch
-              // of `resolveAgent` does not navigate, and `<SessionMinted>` renders
-              // nothing without an id, so the anchor's presence IS the assertion.
+              // OPENS it. PUBLISH AND STAY (bead 5.5): `resolveAgent`'s
+              // demo-builder branch does not navigate, and `<SessionMinted>`
+              // renders nothing without an id, so the anchor's presence IS the
+              // assertion. The id comes off the PANEL'S OWN ROOT, never the
+              // anchor's generic `data-session-id` — ruling 307: this panel
+              // renders inside another session's page whose root shadows it.
               const MINTED = 'a[data-action="view-demo-session"][data-session-kind="demo"]';
-              const sid = await readPublishedSid(page, MINTED, 'data-session-id');
+              const sid = await readPublishedSid(page, '[data-section="contract-resolution"]', 'data-demo-session-id');
               ctx.seeded.demoSid = sid; // recorded BEFORE the asserts — crash-safe sweep
               await assertPublishAndStay(page, check, { sid, label: 'SK-4', anchor: MINTED,
                 stay: `/projects/${PROJECT}`, hrefFor: (s) => `/sessions/demo/${s}` });
