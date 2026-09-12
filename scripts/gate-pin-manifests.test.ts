@@ -122,3 +122,107 @@ jobs:
     }
   });
 });
+
+describe('gate.sh — a pin declaration that names nothing REFUSES (forge-8vfn.7.6.43)', () => {
+  // C's case, relayed at ruling 773: `--expect-pin-fail M6-C:tests/stories/S7.story.mjs`
+  // was accepted without a diagnostic although only `M1-C-S7` pins that path. It
+  // surfaced at all only because a REAL undeclared failure happened to sit beside
+  // it. A declaration is the PR's claim about ITSELF, so one matching nothing is
+  // today indistinguishable from one that matched — and `--expect-pin-fail` is
+  // the flag that makes a red gate green.
+  //
+  // C's taxonomy is the reason the message must say WHICH: a refusal that catches
+  // only the third leaves two ways to write a declaration that looks like cover.
+  const DECL_CI = `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trivial
+        run: echo decl-fixture
+`;
+
+  /** Two manifests: A pins one path, B pins another. */
+  function campaign() {
+    const camp = mkdtempSync(join(tmpdir(), 'gate-decl-'));
+    mkdirSync(join(camp, 'gate-manifests'), { recursive: true });
+    writeFileSync(join(camp, 'gate-manifests', 'M-A.sha256'), `${'0'.repeat(64)}  alpha.txt\n`);
+    writeFileSync(join(camp, 'gate-manifests', 'M-A.counts'), 'paths=1 head=deadbeef owner=M-A\n');
+    writeFileSync(join(camp, 'gate-manifests', 'M-B.sha256'), `${'1'.repeat(64)}  beta.txt\n`);
+    writeFileSync(join(camp, 'gate-manifests', 'M-B.counts'), 'paths=1 head=deadbeef owner=M-B\n');
+    return camp;
+  }
+  const run = (decl: string) => {
+    const d = tree(DECL_CI);
+    installedInPlace(d);
+    const camp = campaign();
+    try {
+      return { ...gate(d, camp, '--expect-pin-fail', decl), camp };
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  };
+
+  test('class 1 — the MANIFEST does not exist: refused, and says so', () => {
+    const r = run('M-NOPE:alpha.txt');
+    assert.notEqual(r.status, 0, `expected a refusal, got rc 0:\n${r.out}${r.err}`);
+    assert.match(r.out + r.err, /declaration names nothing: M-NOPE:alpha\.txt/);
+    assert.match(r.out + r.err, /no manifest/i, 'and names WHICH of the three it is');
+  });
+
+  test('class 2 — the PATH is in no manifest at all: refused, and says so', () => {
+    const r = run('M-A:typo.txt');
+    assert.notEqual(r.status, 0, `expected a refusal, got rc 0:\n${r.out}${r.err}`);
+    assert.match(r.out + r.err, /declaration names nothing: M-A:typo\.txt/);
+    assert.match(r.out + r.err, /no manifest pins/i, 'distinguished from the wrong-pair case');
+  });
+
+  test('class 3 — real manifest, real path, WRONG PAIR: refused, and names the right owner', () => {
+    // C's actual case. The most dangerous of the three, because both halves are
+    // real and a reader checking either one in isolation finds it.
+    const r = run('M-A:beta.txt');
+    assert.notEqual(r.status, 0, `expected a refusal, got rc 0:\n${r.out}${r.err}`);
+    // SCOPED TO THE DECLARATION LINE, not the whole output. The first draft
+    // asserted `/M-B/` against everything the gate printed — and the pin block
+    // lists every manifest by name, so `M-B` was always present and the
+    // assertion passed against a gate that had collapsed the wrong-pair case
+    // into the typo message. Mutation found it; §15.400's question is "what else
+    // could make this pass", and the answer was "the listing above it".
+    const line = (r.out + r.err).split('\n').find((l) => l.includes('declaration names nothing')) ?? '';
+    assert.match(line, /declaration names nothing: M-A:beta\.txt/, `${r.out}${r.err}`);
+    assert.match(line, /M-B/, 'the LINE names the manifest that DOES pin it, so the fix is one edit');
+    assert.doesNotMatch(line, /at all|typo/, 'and is not the typo wording — these are different findings');
+  });
+
+  test('a manifest-level declaration naming a real manifest is ACCEPTED', () => {
+    // The positive control. Without it every assertion above passes equally well
+    // against a gate that refuses every declaration ever written.
+    const d = tree(DECL_CI);
+    installedInPlace(d);
+    const camp = campaign();
+    try {
+      const r = gate(d, camp, '--expect-pin-fail', 'M-A');
+      assert.doesNotMatch(r.out + r.err, /declaration names nothing/,
+        `a real manifest must not be refused:\n${r.out}${r.err}`);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+
+  test('a path-level declaration that DOES match a pinned row is ACCEPTED', () => {
+    const d = tree(DECL_CI);
+    installedInPlace(d);
+    const camp = campaign();
+    try {
+      const r = gate(d, camp, '--expect-pin-fail', 'M-A:alpha.txt');
+      assert.doesNotMatch(r.out + r.err, /declaration names nothing/,
+        `a real pair must not be refused:\n${r.out}${r.err}`);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+});
