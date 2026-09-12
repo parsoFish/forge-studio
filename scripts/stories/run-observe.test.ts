@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { collectSpendDirs } from './run-observe.mjs';
+import { collectSpendDirs, spendSoFar } from './run-observe.mjs';
 import { collectAgentRuns } from './reap.mjs';
 
 function root() {
@@ -91,5 +91,69 @@ describe('collectSpendDirs — a dispatch that SPENT is one that wrote an event 
 
   test('forge-rzrs: a missing _logs is [] and not a throw — an absent log is UNMEASURED upstream, never a crash here', () => {
     assert.deepEqual(collectSpendDirs(mkdtempSync(join(tmpdir(), 'nologs-')), 0), []);
+  });
+});
+
+/**
+ * `spendSoFar` — the seam the beat boundary decides on (bead `forge-91cr`).
+ *
+ * THE VERDICT MUST COME BACK AS A VALUE. When this function was split out of
+ * `run.mjs`, `spendCeilingVerdict`'s result was rendered into `lines` and
+ * returned nowhere else; the caller's `if (v.breached)` kept reading a name
+ * that no longer existed, so every costed run threw `ReferenceError` at beat 1
+ * and skipped the reap that kills the agents it started. Both halves were
+ * right and the seam was tested by nothing (§15.500), so these read exactly
+ * what the caller destructures.
+ *
+ * The priced row below is COPIED from a real architect session's events.jsonl
+ * (S10 run 10, one `architect.turn-cost` end row, trimmed to nothing) rather
+ * than written from a description of one — §15.497, and the $5.0606 lesson.
+ */
+const CAPTURED_PRICED_ROW =
+  '{"event_id":"EV_mtwnijie_xmiyxnoc","cycle_id":"_architect-2026-09-11T07-44-18-503beae4",' +
+  '"started_at":"2026-09-11T07:45:11.750Z",' +
+  '"initiative_id":"architect-session-2026-09-11T07-44-18-503beae4","phase":"architect",' +
+  '"skill":"architect","event_type":"end","input_refs":[],"output_refs":[],' +
+  '"cost_usd":0.6000446500000001,"message":"architect.turn-cost"}';
+
+/** A worktree whose `_logs` holds one dispatch that priced itself. */
+function rootWithOnePricedDispatch(): string {
+  const root = mkdtempSync(join(tmpdir(), 'spend-so-far-'));
+  const dir = join(root, '_logs', '_architect-2026-09-11T07-44-18-503beae4');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'), `${CAPTURED_PRICED_ROW}\n`);
+  return root;
+}
+
+describe('spendSoFar: the beat boundary reads a verdict, not a sentence', () => {
+  test('forge-91cr: the caller\'s own destructure — { verdict, lines } — is satisfied, and breached is a boolean', () => {
+    const r = spendSoFar({
+      root: rootWithOnePricedDispatch(), startedMs: 0, realSpawn: true,
+      ceilingUsd: 35, label: 'after beat 1',
+    });
+    assert.ok(Object.hasOwn(r, 'verdict'), 'the halt decision must leave this function as a value');
+    assert.equal(typeof r.verdict.breached, 'boolean', 'a caller cannot branch on prose');
+    assert.equal(typeof r.verdict.known, 'boolean');
+    assert.ok(Array.isArray(r.lines) && r.lines.length > 0);
+  });
+
+  test('forge-91cr: over the ceiling, the returned verdict says BREACHED and the line agrees with it', () => {
+    const r = spendSoFar({
+      root: rootWithOnePricedDispatch(), startedMs: 0, realSpawn: true,
+      ceilingUsd: 0.5, label: 'after beat 1',
+    });
+    assert.equal(r.verdict.breached, true, `$0.6000 against a $0.50 ceiling: ${r.verdict.reason}`);
+    assert.equal(r.spend.measured, true);
+    assert.match(r.lines[0]!, /EXCEEDED/, 'the printed line and the returned value are the same verdict');
+  });
+
+  test('forge-91cr: under the ceiling it does not halt, and it still prints the running total', () => {
+    const r = spendSoFar({
+      root: rootWithOnePricedDispatch(), startedMs: 0, realSpawn: true,
+      ceilingUsd: 35, label: 'after beat 4',
+    });
+    assert.equal(r.verdict.breached, false);
+    assert.equal(r.verdict.known, true);
+    assert.match(r.lines[0]!, /after beat 4: \$0\.6000 of \$35\.00/);
   });
 });
