@@ -222,13 +222,33 @@ export default {
       say: 'forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.',
     },
     {
-      // NOT satisfiable today, and this is the beat that owns the operator's
-      // correction. A refresh re-verifies rows that already exist; it does not
-      // index a hub's contents. The one mechanism that could — the interactive
-      // community-refresh session kind — was RETIRED, so no path in the
-      // product turns a declared source into a browsable one. Owning package
-      // `library`.
-      act: 'Check that every declared source now contributes what it publishes',
+      // AMEND-3 (M6-D, T1 566/893/922) — this beat asserted `hub-declared-only:
+      // 'false'` for `skills-sh`, which is `itemCount === 0` on a hub CHIP, and
+      // no indexer can move it: discovery PROPOSES and never writes
+      // (`community-hub-index.ts`'s own first rule), while a chip counts
+      // `registry.yaml` rows. The beat encoded a product design the product does
+      // not have and forbids by rule, so it amends to the product's truth rather
+      // than the product bending to it — 566, with A's S9 amend-4 as precedent.
+      //
+      // WHAT IT ASSERTS NOW is the honest state of a source forge could not
+      // reach: the chip carries the READER'S OWN reason (7.6.84 PR C), and
+      // `skills.sh` is outside the fetch allowlist because adding an origin is a
+      // new external dependency — operator item 20 / M7. Measured on
+      // `20dbfd66`, authenticated the way beat 4 runs the refresh.
+      //
+      // ONE HUB'S CHIP, not nine, and that is the vocabulary rather than a
+      // weakening: `data` keys resolve to the element that answers them together
+      // (ruling 705), so a beat asserts one element's attribute set. The
+      // per-hub sentence lives in `say` and each hub's state is checkable on its
+      // own chip through the same attributes this beat reads.
+      //
+      // THE THREE HONEST STATES a declared source can be in, all of them true of
+      // this product today: it contributes proposals; or it could not be read
+      // and the chip says why; or it was read and published nothing forge can
+      // install. `cc-templates` is the third — its packages are HOOKS, and
+      // `community-fetch-package.ts` installs three `SKILL.md` layouts and no
+      // hook arm (bead `forge-8vfn.7.6.88`).
+      act: 'Check what every declared source contributes — and what the ones contributing nothing say',
       expect: {
         route: '/community',
         data: {
@@ -237,10 +257,10 @@ export default {
           'hub-count': '9',
           action: 'filter-hub',
           'hub-id': EMPTY_HUB,
-          'hub-declared-only': 'false',
+          'hub-reason': 'not-reachable',
         },
       },
-      say: 'This is what "browse the registry" has to mean: the list the operator browses is what the declared sources actually publish, not the subset somebody typed into a yaml file. A source that stays at zero after a refresh is a source forge has never really consumed.',
+      say: 'This is what "browse the registry" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.',
     },
     {
       // NOT satisfiable today — every card on this page reads
