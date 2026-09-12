@@ -331,7 +331,10 @@ test('parseCommunityRefreshResponse: a well-formed 200 body round-trips to state
   // `discovered` (ruling 478) defaults to [] when the body omits it — see
   // `parseDiscoveredRows`: "nothing left to discover" and "a server without
   // this field" both mean no proposals, and the page renders the same nothing.
-  expect(r).toEqual({ state: 'ok', ...WELL_FORMED_REFRESH_OK, discovered: [] });
+  // `hubOutcomes` (7.6.84 PR C) defaults the same way and for the same reason:
+  // a body that omits it and a pass where every hub was read are both "nothing
+  // to explain", and the strip renders the same plain label for each.
+  expect(r).toEqual({ state: 'ok', ...WELL_FORMED_REFRESH_OK, discovered: [], hubOutcomes: [] });
 });
 
 test('parseCommunityRefreshResponse: discovered rows round-trip, and a malformed one is a malformed RESPONSE rather than a dropped row', () => {
