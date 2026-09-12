@@ -2473,6 +2473,27 @@ is what this contract reads — but it cannot be the only distinguisher.
   page is DERIVED from the event log; nothing is stored** (ADR-008) — reading
   a run writes no file.
 
+  **THE PENDING GATE, `forge-8vfn.7.6.62`.** A gated run renders
+  `a[data-action="open-gate"][data-gate-type][data-gate-node]` whose `href` is
+  `/artifact?run=<runId>&type=<gate-type>&mode=gate`. **`data-gate-type` is the
+  KIND the parked node declares** — `plan` for `forge-architect`'s architect
+  node, `verdict` for `forge-develop`'s review node — and `data-gate-node` is
+  `run.gate`, the node id the run actually parked at. **The element renders ONLY
+  when the run is gated AND the kind is derivable, so its presence is itself an
+  assertion**: no element means no gate is pending here, never "the link is
+  missing". Before this the run page had NO link to its own pending gate — the
+  only two that existed (`RunRail.tsx`, `PhaseDrawer.tsx`) live on the flow
+  monitor, so an operator standing on the run they were being asked to decide
+  had no way to reach the decision. Both also hardcoded `type=verdict` for ANY
+  gated run, which sent a plan-gated architect run to a review verdict that does
+  not exist for it; `lib/artifact-mode.ts` then declines to render a gate it
+  cannot justify, so the operator landed somewhere that looked broken. Assert
+  `data-gate-type` BY VALUE: reading the query string works today and breaks the
+  moment its order changes, and a beat that asserts only the action greens on
+  the wrong gate. `lib/gate-artifact-href.ts` returns **null** rather than
+  guessing when the flow definition is unavailable — a missing link is honest, a
+  wrong one is not.
+
   The route has **THREE** resolved states, not two, and each renders a
   `main[data-page="flow-run"]` landmark (the element type is load-bearing —
   journey selectors key on `main`, and the render tests assert attributes

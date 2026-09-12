@@ -745,9 +745,9 @@ function ArtifactChip({
 
   // Both gate + view chips open the in-UI artifact viewer (a gate chip lands on
   // the verdict gate; a view chip renders the artifact). Never the raw file route.
-  const href = isGate
-    ? `/artifact?run=${encodeURIComponent(cycleId)}&type=verdict&mode=gate`
-    : `/artifact?run=${encodeURIComponent(cycleId)}&type=${pageType}&mode=view`;
+  // 7.6.62 — the gate branch hardcoded `type=verdict` and threw away the
+  // `pageType` it was handed, sending a plan-gated run to a verdict it has not.
+  const href = `/artifact?run=${encodeURIComponent(cycleId)}&type=${pageType}&mode=${isGate ? 'gate' : 'view'}`;
 
   const sharedStyle: React.CSSProperties = {
     display: 'inline-flex',

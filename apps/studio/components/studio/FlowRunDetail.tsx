@@ -59,6 +59,7 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 
 import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import { gateArtifactHref } from '@/lib/gate-artifact-href';
 import { RunLog } from '@/components/studio/RunLog';
 import { RunControls } from '@/components/studio/RunControls';
 import type { Flow, Run } from '@/lib/studio-client';
@@ -205,6 +206,13 @@ export function FlowRunDetail({
       ) : (
         <>
           <RunTrigger run={run} />
+          {/* 7.6.62 — the run page had NO link to its own pending gate. The two
+              surfaces that did (RunRail, PhaseDrawer) live on the flow monitor,
+              so an operator standing on the run they are being asked to decide
+              had no way to reach the decision. Rendered only when the run is
+              gated and the kind is derivable, so its PRESENCE is an assertion:
+              no element means no gate is pending here. */}
+          <GateLink run={run} flow={flow} />
           {/* W8-A3 (flows-28/49/23): the run's own recovery controls, from the
               SAME derivation the flow monitor renders — a failed run offers
               resume/requeue/abandon with what each does spelled out, a queued
@@ -224,6 +232,27 @@ export function FlowRunDetail({
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * The gate this run is actually waiting on. `gateArtifactHref` returns null
+ * when it cannot derive the kind from facts — a missing link is honest, a
+ * wrong one sends the operator to an artifact their run does not have.
+ */
+function GateLink({ run, flow }: { run: Run | null; flow: Flow | null }) {
+  const target = gateArtifactHref(run, flow);
+  if (target === null) return null;
+  return (
+    <Link
+      data-action="open-gate"
+      data-gate-type={target.gateType}
+      data-gate-node={target.gateNode}
+      href={target.href}
+      style={{ alignSelf: 'flex-start', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textDecoration: 'none', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 11px' }}
+    >
+      Decide the {target.gateType} gate →
+    </Link>
   );
 }
 

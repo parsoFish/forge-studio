@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-import type { Run } from '@/lib/studio-client';
+import type { Flow, Run } from '@/lib/studio-client';
+import { gateArtifactHref } from '@/lib/gate-artifact-href';
 import { initialCollapsed, railStorageKey, serializeCollapsed, visibleGroupRuns, type RailCollapsed } from '@/lib/run-rail-collapse';
 import { describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
 
@@ -22,6 +23,13 @@ interface RunRailProps {
   /** W7-A3 (flows-31): the flow id keys the persisted group-collapse state
    *  (`forge-run-groups:<flowId>`, next to the run selection's own key). */
   flowId?: string;
+  /** 7.6.62 — the flow DEFINITION, not just its id. The gate KIND lives on the
+   *  parked node (`node.gate`), and `run.gate` is only the node ID, so a rail
+   *  holding `flowId` alone could not derive it and hardcoded `verdict` for any
+   *  gated run — sending a PLAN-gated architect run to a review verdict that
+   *  does not exist for it. Optional: a caller without the definition gets no
+   *  gate link rather than a wrong one. */
+  flow?: Flow | null;
 }
 
 const GROUPS: Array<{ label: string; status: Run['status'] }> = [
@@ -37,7 +45,7 @@ function statusDotStatus(status: Run['status']): string {
   return status;
 }
 
-export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailProps) {
+export function RunRail({ runs, activeRunId, onSelect, flowId = '', flow = null }: RunRailProps) {
   // Per-group collapse state. W7-A3 (flows-31): persisted per flow in
   // sessionStorage (the run SELECTION already was) and, absent a stored
   // choice, COMPLETE starts collapsed once it outgrows the threshold — the
@@ -165,6 +173,7 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
                 pile, never the selection. */}
             {visibleGroupRuns(group, isCollapsed, activeRunId).map((run) => (
               <RunCard
+                flow={flow}
                 key={run.id}
                 run={run}
                 isSelected={run.id === activeRunId}
@@ -188,14 +197,19 @@ function RunCard({
   isSelected,
   pinned = false,
   onSelect,
+  flow = null,
 }: {
   run: Run;
   isSelected: boolean;
   /** Rendered inside a COLLAPSED group because it is the selection. */
   pinned?: boolean;
   onSelect: (id: string) => void;
+  /** 7.6.62 — the flow DEFINITION, the only place the parked node's gate KIND
+   *  lives. Null means no gate link rather than a guessed one. */
+  flow?: Flow | null;
 }) {
   const isGated   = run.status === 'gated';
+  const gateTarget = gateArtifactHref(run, flow);
   const isFailed  = run.status === 'failed';
   // W8-A2 (ON-7 defect 2) — see the failure-note render below.
   const failureNoteKind = runFailureNoteKind(run);
@@ -288,9 +302,12 @@ function RunCard({
         </div>
       )}
 
-      {isGated && (
+      {isGated && gateTarget !== null && (
         <Link
-          href={`/artifact?run=${encodeURIComponent(run.id)}&type=verdict&mode=gate`}
+          href={gateTarget.href}
+          data-action="open-gate"
+          data-gate-type={gateTarget.gateType}
+          data-gate-node={gateTarget.gateNode}
           onClick={(e) => e.stopPropagation()}
           style={{
             marginTop: 5,
