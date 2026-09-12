@@ -26,6 +26,7 @@ import { collectAgentRuns, reapAgentRuns } from './reap.mjs';
 import {
   readPlantRecord, readLastBeat, plantDiedMessage,
   everyPlantedPidVanished, plantVanishedInWindowMessage,
+  memAvailableMiB,
 } from './reap-plant.mjs';
 
 // ------------------------------------------------- POSITIVE CONTROL (5.45)
@@ -76,6 +77,10 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
   });
   const beatPath = join(root, 'plant-heartbeat');
   const recordPath = join(root, 'plant-record.json');
+  // Read BEFORE the plant and again at any failure — D's ask. A flat reading
+  // ELIMINATES OOM rather than leaving it the untested comfortable explanation;
+  // "no evidence" was a fact about our instruments, not about the box.
+  const memAtPlantMiB = memAvailableMiB();
 
   // The dispatch shape, exactly: a detached turn (its own process group, as
   // `spawnAgentTurn` spawns it) which itself spawns the agent. The turn then
@@ -148,6 +153,8 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
       lastBeatMs: readLastBeat(beatPath),
       nowMs: Date.now(),
       artefactDir: root,
+      memAtPlantMiB,
+      memNowMiB: memAvailableMiB(),
     }));
   }
 
@@ -186,6 +193,8 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
       lastBeatMs: readLastBeat(beatPath),
       nowMs: Date.now(),
       artefactDir: root,
+      memAtPlantMiB,
+      memNowMiB: memAvailableMiB(),
     }));
   }
   assert.ok(

@@ -47,8 +47,18 @@ describe('build-guard: a build does not start beside a funded story run', () => 
   test('7.6.100: no FORGE_RUN_LOCK — proceeds, and SAYS it is not enforcing', () => {
     const r = runGuard({ FORGE_RUN_LOCK: '' });
     assert.equal(r.status, 0);
-    assert.match(r.out, /NOT excluded|not configured/i,
+    assert.match(r.out, /not configured/i,
       `a guard silent when it is not enforcing cannot be told from one that checked:\n${r.out}`);
+    // T1 985(1): the sentence must name THIS job. The first cut called
+    // `runLockVerdict`, whose `thisKind` is hardcoded to the suite, so the
+    // guard's first real line in a merged-main verify said "the test suite is
+    // NOT excluded from a story run" — about a BUILD. Correct about the lock and
+    // wrong about the subject, which is why review passes it: the logic checks
+    // out. The door now reads the noun.
+    assert.match(r.out, /\ba build is NOT excluded from a story run\b/,
+      `the guard must name the job it is guarding, not the one its helper was written for:\n${r.out}`);
+    assert.doesNotMatch(r.out, /the test suite is NOT excluded/,
+      'the suite\'s wording belongs to test-guard');
   });
 
   test('7.6.100: the lock exists and is FREE — proceeds', () => {
