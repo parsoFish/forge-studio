@@ -60,7 +60,7 @@
   "scripts/journeys/home.mjs": 909,
   "scripts/journeys/hooks.mjs": 843,
   "scripts/journeys/stand-up-create.mjs": 1043,
-  "scripts/lib/journey-fixtures.mjs": 1939,
+  "scripts/lib/journey-fixtures.mjs": 1935,
   "scripts/ui-walkthrough/crawl.test.ts": 1038,
   "scripts/verify-cycle.mjs": 1239
 }

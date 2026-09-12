@@ -9,10 +9,10 @@ import {
   DEMO_DESIGN_SKILL_DIR, writeDemoDesignSkill,
   demoEvent, demoBurst, cleanDemoBuilderSession,
   SK_INSTALL_ID, SK_INSTALL_DIR, cleanSkillInstallArtifacts,
-  AUTH_SKILL_ID, AUTH_SKILL_DIR, authoringDir, authoringSidFromUrl,
+  AUTH_SKILL_ID, AUTH_SKILL_DIR, authoringDir,
   seedAuthoringSkillDraft, cleanAuthoringSkillArtifacts,
 } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, readPublishedSid, assertPublishAndStay, assertLauncherPublishAndStay } from '../lib/journey-assertions.mjs';
 import { loadCommunityRegistryDoc, communitySourceRowFor } from '../lib/journey-community-registry.mjs';
 
 // ── R3-01-F3/F4 helpers: real, disk-derived cross-checks ────────────────────
@@ -81,15 +81,8 @@ async function waitForEditMarker(ms = 8000) {
   return false;
 }
 
-/** Parse the demo-builder session id out of the dedicated session screen's
- * own URL, `/sessions/demo/<sid>` (W6-B10 — the builder is that screen, not
- * an inline panel; matches on the `/demo/<sid>` path segment shared by both
- * `/sessions/demo/<sid>` and the legacy `/demo/<sid>` wire-redirect source,
- * so either form resolves). */
-function demoSidFromUrl(url) {
-  const m = /\/demo\/([^/?#]+)/.exec(url);
-  return m ? decodeURIComponent(m[1]) : null;
-}
+/* `demoSidFromUrl` DELETED with 7.6.46: `<SessionMinted>` publishes the id and
+ * the page stays put, so both callers read the handle instead of the URL. */
 
 const CLIP_SK_DESC = 'Flag contract-breaking API changes before merge.';
 const CLIP_SK_BODY = '1. Diff the public surface.\n2. Flag removed/renamed exports.\n3. Require a migration note.';
@@ -606,16 +599,21 @@ export const journey = defineJourney({
 
               // The REAL click: fix-agent dispatch → demo-builder session → navigation.
               await page.locator(resolveBtn).click().catch(() => {});
-              // W6-B10 (R1-03-F2 reversed): the resolution opens the DEDICATED
-              // session screen (/sessions/demo/<sid>), not an inline panel.
+              // W6-B10 (R1-03-F2 reversed): the demo builder is the DEDICATED
+              // session screen, not an inline panel — but resolving no longer
+              // OPENS it. PUBLISH AND STAY (bead 5.5): the `demo-builder` branch
+              // of `resolveAgent` does not navigate, and `<SessionMinted>` renders
+              // nothing without an id, so the anchor's presence IS the assertion.
+              const MINTED = 'a[data-action="view-demo-session"][data-session-kind="demo"]';
+              const sid = await readPublishedSid(page, MINTED, 'data-session-id');
+              ctx.seeded.demoSid = sid; // recorded BEFORE the asserts — crash-safe sweep
+              await assertPublishAndStay(page, check, { sid, label: 'SK-4', anchor: MINTED,
+                stay: `/projects/${PROJECT}`, hrefFor: (s) => `/sessions/demo/${s}` });
               const kickoffReady = await page.waitForFunction(
                 () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 15000 },
+                null, { timeout: 20000 },
               ).then(() => true).catch(() => false);
-              check(kickoffReady, `SK-4: the agent route opens the dedicated demo-builder session screen (${page.url()})`);
-              const sid = demoSidFromUrl(page.url());
-              check(!!sid, `SK-4: a real session id is in the URL (${page.url()})`);
-              ctx.seeded.demoSid = sid; // crash-safe sweep via the runner's finally
+              check(kickoffReady, `SK-4: following it opens the dedicated demo-builder session screen (${page.url()})`);
 
               // Brief the agent for real, through the GENERIC question-form
               // affordance (the bridge flips briefing → generating; the spawn is
@@ -659,7 +657,11 @@ export const journey = defineJourney({
                   () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                clipSid = demoSidFromUrl(p.url());
+                // THE FOURTH SID READ — invisible to a `page.url()` grep (this page is
+                // `p`), and a null here stages no events, so the clip records a session
+                // that appears to do nothing.
+                clipSid = await readPublishedSid(p, 'a[data-action="view-demo-session"]', 'data-session-id');
+                await p.locator('a[data-action="view-demo-session"]').click().catch(() => {});
                 await p.waitForSelector('[data-field="session-answer"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-field="session-answer"]').fill(AGENTIC_BRIEF).catch(() => {});
                 await p.locator('[data-action="submit-answers"]').click().catch(() => {});
@@ -718,9 +720,12 @@ export const journey = defineJourney({
               await frame(page, 'sk-10-authoring-launcher', 'Part 2 (skills) — the authoring launcher: describe it to the creation agent', { key: true });
 
               await page.locator('[data-action="start-authoring"]').click().catch(() => {});
-              await page.waitForURL(/\/sessions\/authoring\//, { timeout: 15000 }).catch(() => {});
-              const sid = authoringSidFromUrl(page.url());
-              check(!!sid, `SK-6: starting opens a real session at /sessions/authoring/<sid> (${page.url()})`);
+              // PUBLISH AND STAY (ruling 396). The publisher is the LAUNCHER, not
+              // #674's `main[data-page="session-kickoff"]` — three minting components,
+              // three handles. A null sid also silently no-ops the end-of-beat
+              // cleanup, which is how a dead URL read left this run's session on disk.
+              const sid = await readPublishedSid(page, '[data-section="authoring-launcher"]');
+              await assertLauncherPublishAndStay(page, check, { sid, label: 'SK-6', stay: '/skills/new' });
 
               check(await page.locator('main[data-page="session"][data-session-kind="authoring"]').count() > 0,
                 'SK-6: the shared session shell renders for the authoring kind');
