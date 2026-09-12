@@ -193,6 +193,7 @@ async function mutateCommunityRegistry(
       : {
           schemaVersion: COMMUNITY_REGISTRY_SCHEMA_VERSION as number,
           lastRefresh: null as string | null,
+          hubs: [] as { hubId: string; discovered: number; reason?: string }[],
           sources: {} as Record<string, CommunityRegistrySource>,
           items: [] as CommunityRegistryItem[],
           leadingComments: '',
@@ -209,6 +210,10 @@ async function mutateCommunityRegistry(
     const serialized = serializeCommunityRegistry({
       schemaVersion: existing.schemaVersion,
       lastRefresh: existing.lastRefresh,
+      // CRUD owns `items` and nothing else — the hub outcomes belong to the
+      // refresh that wrote them and are carried through untouched, exactly as
+      // `sources` and `lastRefresh` are.
+      hubs: existing.hubs,
       sources: existing.sources,
       items: nextItems,
       leadingComments: existing.leadingComments,
