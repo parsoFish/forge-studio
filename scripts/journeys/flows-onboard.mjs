@@ -42,10 +42,21 @@ import { join } from 'node:path';
 // leading sweep: the sid is server-minted (not deterministic like the old
 // flow-shaped fixture ids), so as soon as it is known the beat records it in
 // a fixed marker file; the next run's leading sweep reads the marker and
-// removes a PRIOR interrupted run's residue. The one honest gap: a crash in
-// the window between the Start POST and the sid landing in the URL leaves
-// one staged session dir unrecorded (visible under the project's sessions,
-// harmless, manually removable).
+// removes a PRIOR interrupted run's residue.
+//
+// THIS COMMENT USED TO CALL THE GAP "a crash in the window between the Start
+// POST and the sid landing in the URL". That was not a rare crash window — it
+// was the NORMAL PATH, every run, from the moment ruling 396 stopped the press
+// navigating: the sid never landed in the URL at all, so the marker was never
+// written and `cleanOnboardSession()` returned early on a null id. The residue
+// was not hypothetical; it is the three `tree-dirtied` violations run 6's
+// post-run boundary reported, all from this beat's own mint.
+//
+// `forge-8vfn.7.6.25` closes it by reading the id from
+// `[data-minted-session-id]` — the handle 396 created so an observer could read
+// the mint WITHOUT navigating — and recording the marker before asserting
+// anything. The remaining gap is a genuine one and much narrower: a crash
+// between the POST returning and the attribute being read.
 const FOB_MARKER = join(tmpdir(), 'forge-journey-flows-onboard-marker.json');
 let FOB_SESSION_ID = null;
 
@@ -238,7 +249,7 @@ export const journey = defineJourney({
     {
       id: 'flows-onboard-gate',
       title: 'Start closes the loop — a real staged session on the generic panel',
-      narration: 'Start genuinely POSTs /api/studio/onboarding/start: the session dir, status.json and prompt.md land on disk for real — only the agent dispatch itself is suppressed by the same dry-bridge seam every kickoff beat in this harness relies on. The operator lands on the generic session panel (data-session-kind="onboarding") — the same shell that carries onboarding\'s multi-stage contract build-out in a live run. The platform gate the old flow wrapper carried (the REAL runPreflight behind gate: contract) stays proven in orchestrator/onboard-flow-gate.test.ts against an authored flow fixture.',
+      narration: 'Start genuinely POSTs /api/studio/onboarding/start: the session dir, status.json and prompt.md land on disk for real — only the agent dispatch itself is suppressed by the same dry-bridge seam every kickoff beat in this harness relies on. The press PUBLISHES and STAYS (operator ruling 396): the minted id appears on the page that minted it, and a real link — not a redirect — carries the operator on to the generic session panel (data-session-kind="onboarding"), the same shell that carries onboarding\'s multi-stage contract build-out in a live run. The platform gate the old flow wrapper carried (the REAL runPreflight behind gate: contract) stays proven in orchestrator/onboard-flow-gate.test.ts against an authored flow fixture.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.3] Start → a real staged onboarding session');
@@ -250,18 +261,62 @@ export const journey = defineJourney({
           await page.locator('select[data-field="kickoff-project"]').selectOption(PROJECT).catch(() => {});
           await page.locator('[data-action="start-session"]').click().catch(() => {});
           // Duplicate-session guard (W7-A2): a live session on the same
-          // kind+target arms the button first — confirm through it.
+          // kind+target arms the button first — confirm through it. The second
+          // press is keyed on the MINT not having happened, because nothing
+          // navigates any more (see below) and the URL can no longer say.
           await page.waitForTimeout(1200);
-          if (!page.url().includes('/sessions/onboarding/')) {
+          const mintedOnce = await page.evaluate(() =>
+            document.querySelector('main[data-page="session-kickoff"]')?.getAttribute('data-minted-session-id') || '');
+          if (mintedOnce === '') {
             await page.locator('[data-action="start-session"]').click().catch(() => {});
           }
-          await page.waitForURL(/\/sessions\/onboarding\/(?!new)[^/?]+/, { timeout: 20000 }).catch(() => {});
-          const url = page.url();
-          const m = url.match(/\/sessions\/onboarding\/([^/?]+)/);
-          FOB_SESSION_ID = m && m[1] !== 'new' ? decodeURIComponent(m[1]) : null;
+
+          // PUBLISH AND STAY (operator ruling 396). This beat used to wait for
+          // `/sessions/onboarding/<sid>` and assert the navigation. THE PRODUCT
+          // DELETED THAT NAVIGATION ON PURPOSE: `app/sessions/[kind]/new/page.tsx:341`
+          // — "the press used to `router.push` into the session, which left
+          // nobody a page to read the mint off ... S9 run 4's beat 6 died on
+          // exactly that". So the beat asserted a behaviour whose only green was
+          // a regression, and it had been red every run since.
+          //
+          // The id is read from the handle 5.10/396 created FOR this caller —
+          // `page.tsx:116` says so in as many words: "the id appeared nowhere an
+          // observer could read: not to a story, not to a journey, not to an
+          // operator whose navigation failed". The handle existed for a year of
+          // campaign time and this journey kept reading the URL.
+          await page.waitForFunction(
+            () => (document.querySelector('main[data-page="session-kickoff"]')
+              ?.getAttribute('data-minted-session-id') || '') !== '',
+            null, { timeout: 20000 },
+          ).catch(() => {});
+          FOB_SESSION_ID = await page.evaluate(() =>
+            document.querySelector('main[data-page="session-kickoff"]')?.getAttribute('data-minted-session-id') || null)
+            || null;
+          // RECORD BEFORE ASSERTING. The old order learned the id from the URL,
+          // so when the product stopped navigating the id was null, the marker
+          // was never written, and `cleanOnboardSession()` returned early —
+          // leaving the session the run really minted on disk. One read doing
+          // two jobs: assert, and clean up after. Measured: three `tree-dirtied`
+          // violations in the post-run boundary, all from the beat's own mint.
           if (FOB_SESSION_ID !== null) recordOnboardMarker(FOB_SESSION_ID);
+
           check(FOB_SESSION_ID !== null,
-            `FOB.3: Start navigates onto the session page (/sessions/onboarding/<sid>, got ${url})`);
+            `FOB.3: Start publishes the minted id on the page that minted it (data-minted-session-id)`);
+          check(new URL(page.url()).pathname === '/sessions/onboarding/new',
+            `FOB.3: and STAYS — ruling 396's publish-and-stay, not a navigation (got ${new URL(page.url()).pathname})`);
+
+          // The route is reachable by a REAL anchor, which is what 396 replaced
+          // the navigation with — a button would satisfy no nav resolution.
+          const openHref = await page.evaluate(() =>
+            document.querySelector('a[data-action="open-minted-session"]')?.getAttribute('href') ?? null);
+          check(openHref === `/sessions/onboarding/${FOB_SESSION_ID}`,
+            `FOB.3: a real anchor points at the minted session (a[data-action="open-minted-session"] href="${openHref}")`);
+
+          // NOW follow it, as the operator does. The session-panel and
+          // on-disk assertions below are good assertions about the right thing;
+          // they were only ever reached the wrong way.
+          await page.locator('a[data-action="open-minted-session"]').click().catch(() => {});
+          await page.waitForURL(/\/sessions\/onboarding\/(?!new)[^/?]+/, { timeout: 20000 }).catch(() => {});
 
           await page.waitForFunction(
             () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-kind') === 'onboarding',
