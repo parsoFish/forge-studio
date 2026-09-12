@@ -45,7 +45,11 @@ export type HubIndexOutcome =
    *  at its own bound — the list is a FLOOR, not a total. Absent/false means
    *  the source was read to the end. A reader that returns a floor with no way
    *  to say so hands its caller a number that looks like an answer. */
-  | { ok: true; hubId: string; discovered: DiscoveredItem[]; partial?: boolean; readCap?: string }
+  /** `reason` on an OK read is the narrower truth about an empty list: the hub
+   *  was read fine and publishes nothing this reader can propose. `kinds` is the
+   *  hub's own declared string, carried separately so the chip's attribute stays
+   *  a bare token like every other reason (7.6.91, T1 973). */
+  | { ok: true; hubId: string; discovered: DiscoveredItem[]; partial?: boolean; readCap?: string; reason?: 'no-installable-kind'; kinds?: string }
   | { ok: false; hubId: string; reason: 'not-reachable'; message: string }
   | { ok: false; hubId: string; reason: 'tree-truncated'; message: string }
   | { ok: false; hubId: string; reason: 'fetch-failed'; kind: CommunityRefreshErrorKind; message: string };
@@ -57,6 +61,14 @@ function idForSkillPath(path: string, repo: string): string | null {
   if (path === 'SKILL.md') return repo; // a repo that IS one skill
   const m = /^(?:skills\/)?([^/]+)\/SKILL\.md$/.exec(path);
   return m ? m[1] : null;
+}
+
+/** The GitHub reader proposes `SKILL.md` shapes and nothing else, so `skills`
+ *  is the only kind it can contribute. A hub declaring anything else reads
+ *  perfectly and yields nothing — "nothing forge can install", which is a
+ *  different fact from "read and empty" and the one an operator can act on. */
+function hasNoInstallableKind(kinds: string): boolean {
+  return !kinds.split(',').some((k) => k.trim().toLowerCase() === 'skills');
 }
 
 /** Dispatch is by URL, never by `kinds` — design.md §"A second hub reader". ONE
@@ -164,7 +176,9 @@ export function indexerForHub(hub: { url: string }): typeof indexGithubHub {
 
 export async function indexGithubHub(
   ctx: RequestCtx,
-  hub: { id: string; url: string },
+  // `kinds` is the hub's own declared string, needed to say WHY an ok read was
+  // empty. Structural, so every caller already passes a `CommunityHub`.
+  hub: { id: string; url: string; kinds: string },
   knownIds: ReadonlySet<string>,
 ): Promise<HubIndexOutcome> {
   const upstream = parseCommunityUpstream(hub.url);
@@ -207,7 +221,11 @@ export async function indexGithubHub(
       seen.add(id);
       discovered.push({ id, sourceUrl: hub.url, path: entry.path });
     }
-    return { ok: true, hubId: hub.id, discovered: discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) };
+    const sorted = discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    // Only when the read SUCCEEDED and found nothing: a hub that contributed
+    // rows has no explaining to do, and a refusal already carries its own reason.
+    const empty = sorted.length === 0 && hasNoInstallableKind(hub.kinds);
+    return { ok: true, hubId: hub.id, discovered: sorted, ...(empty ? { reason: 'no-installable-kind' as const, kinds: hub.kinds } : {}) };
   } catch (err) {
     if (err instanceof CommunityRefreshError) {
       return { ok: false, hubId: hub.id, reason: 'fetch-failed', kind: err.kind, message: err.message };

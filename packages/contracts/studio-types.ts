@@ -607,7 +607,7 @@ export type CommunityRegistry = {
   schemaVersion: number;
   lastRefresh: string | null;
   /** Per-hub verdicts as of `lastRefresh` (`reason` = the indexer's own token, absent when it read the hub) — `library/design.md` §"A second hub reader". */
-  hubs: { hubId: string; discovered: number; reason?: string }[];
+  hubs: { hubId: string; discovered: number; reason?: string; kinds?: string }[];
   /** Repo-level facts, keyed by normalized source key. Two items sharing a
    *  `sourceUrl` resolve to the SAME entry — by construction they cannot carry
    *  different star counts (exit row E5). */
