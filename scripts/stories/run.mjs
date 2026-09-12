@@ -34,7 +34,7 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
-import { readRunEvents, hostState } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar } from './run-observe.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
@@ -492,12 +492,14 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
       // ran, which is `test-guard.mjs`'s own rule and the reason "host quiet"
       // was worth nothing without the numbers beside it.
       if (costs) {
-        const sofar = summariseRunSpend({
+        const { spend: sofar, lines } = spendSoFar({
+          root: ROOT,
+          startedMs,
           realSpawn: story.ground?.realSpawn === true,
-          events: collectAgentRuns(ROOT, startedMs).map((r) => readRunEvents(r.dir)),
+          ceilingUsd: ceiling?.usd,
+          label: `after beat ${i + 1}`,
         });
-        const v = spendCeilingVerdict(sofar, ceiling?.usd);
-        console.log(`[stories] spend after beat ${i + 1}: ${v.reason}`);
+        for (const l of lines) console.log(l);
         if (v.breached) {
           console.error(`[stories] CEILING BREACHED — ${v.reason} (${ceiling.reason}). Tearing down what this run started.`);
           spendBreach = v;
@@ -579,9 +581,12 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // "nobody looked" printing the same is what four H6 runs cost to learn.
   const spend = summariseRunSpend({
     realSpawn: story.ground?.realSpawn === true,
-    events: dispatchedRuns.map((r) => readRunEvents(r.dir)),
+    // `dispatchedRuns` above is the REAP set and stays that way; the spend set
+    // is a different question with a different answer (`forge-rzrs`).
+    events: collectSpendDirs(ROOT, startedMs).map(readRunEvents),
   });
   console.log(`[stories] spend: ${spend.label}`);
+  for (const n of spend.notes ?? []) console.log(`[stories] spend: ${n}`);
 
   // §3.1's trailing duty: the fixtures this story CREATED in the product. Not
   // its own output — `demos/stories/<id>` IS the artifact. The comment that
