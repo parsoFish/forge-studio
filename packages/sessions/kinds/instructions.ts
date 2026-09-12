@@ -26,7 +26,8 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 
-import { runStructuredTurn } from '../interactive-session.ts';
+import { runStructuredTurn, type UnpricedTurnInfo } from '../interactive-session.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import { writeQuestions, readAnswerRounds, type InterviewQuestion, type InterviewAnswer } from '../session-status-io.ts';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import { parsePendingQuestions } from '../bridge-studio-sessions.ts';
@@ -312,7 +313,8 @@ async function runInterviewStep(args: {
     priorQa,
   ].join('\n');
 
-  const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
+  const { output, costUsd } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
+    ...instructionsTurnRows(plumbing, 'interview'),
     queryFn: plumbing.queryFn, prompt, schema: INTERVIEW_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
@@ -322,8 +324,35 @@ async function runInterviewStep(args: {
     onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
     onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });
+  emitInstructionsCost(plumbing, 'interview', costUsd);
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
   return { done: output?.done === true, questions };
+}
+
+/**
+ * The two spend rows an instructions turn leaves — `forge-8vfn.7.6.73`.
+ *
+ * Both steps discarded the cost, so an instructions session's spend never
+ * reached its log. LATENT rather than live (ruling 993(e)): the kind did not
+ * spawn on S1 run 11, so unlike the completeness critic there is no measured
+ * under-count to point at — the same defect in an unexercised path. One pair
+ * of helpers for both steps, so the two rows cannot drift apart.
+ */
+function instructionsTurnRows(plumbing: KindTurnPlumbing, step: 'interview' | 'draft') {
+  return {
+    onTurnEndedUnpriced: (info: UnpricedTurnInfo) => emitTurnEndedUnpricedRow(plumbing.logger, {
+      initiativeId: plumbing.initiativeId, phase: 'instructions', skill: 'instructions',
+      message: `instructions.${step}.turn-ended-unpriced`,
+    }, info),
+  };
+}
+
+function emitInstructionsCost(plumbing: KindTurnPlumbing, step: 'interview' | 'draft', costUsd: number | null): void {
+  if (costUsd === null) return; // the unpriced row above already fired
+  emitTurnCostRow(plumbing.logger, {
+    initiativeId: plumbing.initiativeId, phase: 'instructions', skill: 'instructions',
+    message: `instructions.${step}.turn-cost`,
+  }, costUsd);
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +411,8 @@ async function runDraftStep(args: {
     ...(feedback ? ['', 'Revision feedback from the operator (apply it):', feedback] : []),
   ].join('\n');
 
-  const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
+  const { output, costUsd } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
+    ...instructionsTurnRows(plumbing, 'draft'),
     queryFn: plumbing.queryFn, prompt, schema: DRAFT_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
@@ -390,6 +420,7 @@ async function runDraftStep(args: {
     onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat,
     onText: plumbing.onText, onThinking: plumbing.onThinking, label: 'instructions-structured',
   });
+  emitInstructionsCost(plumbing, 'draft', costUsd);
 
   // Strip any prior composed-seeds footer the LLM echoed back (edit-mode
   // revisions include the existing file verbatim) so re-appending is idempotent.

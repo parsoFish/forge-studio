@@ -304,6 +304,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 294 |
 | packages/sessions/interactive-agent-step.ts | sessions | rewritten | 621 |
 | packages/sessions/interactive-session.ts | sessions | verbatim | 799 |
+| packages/sessions/turn-cost-rows.ts | sessions | verbatim | 94 |
 | packages/sessions/session-status-io.ts | sessions | rewritten | 224 |
 | packages/knowledge/kb-backend.ts | knowledge | verbatim | 142 |
 | packages/knowledge/kb-graph.ts | knowledge | verbatim | 683 |

@@ -25,7 +25,7 @@ import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
-import { runAgentTurn, type QueryFn } from './interactive-session.ts';
+import { runAgentTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
 import type { BashFenceMode } from './session-write-fence.ts';
 import { guardedWriteSessionStatus, statusWriteRefusalReason, CANCELLED_PHASE } from './session-status-io.ts';
@@ -194,12 +194,11 @@ export async function runAgentStyleStep(args: {
   /** S9 beat 8 — called with the turn's own spend once it completes. The
    *  emission belongs to the runner, which owns the log's identity. */
   onTurnCost?: (costUsd: number) => void;
-  /** 7.6.55 — threaded to `runAgentTurn`; the runner emits the row. */
-  onTurnEndedUnpriced?: (info: {
-    reason: 'abort' | 'died';
-    tokensIn?: number; tokensOut?: number;
-    cacheReadTokens?: number; cacheCreationTokens?: number;
-  }) => void;
+  /** 7.6.55 — threaded to `runAgentTurn`; the runner emits the row. The shape
+   *  is IMPORTED rather than restated (7.6.73): this file's own copy said
+   *  `'abort' | 'died'`, so the primitive gaining a third reason would have
+   *  been a type error here instead of a silently narrower relay. */
+  onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
 }): Promise<RunInteractiveTurnResult> {
   const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
   // The pinned SDK default lives with the code that SPAWNS, not with the
