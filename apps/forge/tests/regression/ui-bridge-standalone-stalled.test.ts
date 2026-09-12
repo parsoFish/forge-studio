@@ -108,8 +108,22 @@ test('WI-1a-4: the stall ceiling used is bridge-studio-lifecycle.ts\'s DEFAULT_S
   // coincidentally-similar independent number.
   const atCeiling = `_agent-at-ceiling-agent-2026-08-23T00-00-02`;
   const pastCeiling = `_agent-past-ceiling-agent-2026-08-23T00-00-03`;
-  writeRunDir(atCeiling, { 'events.jsonl': '{"event_type":"start","message":"agent-run.dispatched"}\n' }, NOW - DEFAULT_STALL_CEILING_MS + 500);
-  writeRunDir(pastCeiling, { 'events.jsonl': '{"event_type":"start","message":"agent-run.dispatched"}\n' }, NOW - DEFAULT_STALL_CEILING_MS - 500);
+  // THE CLOCK IS READ HERE, NOT AT MODULE LOAD (T1 896). The 500 ms margin is
+  // the whole assertion — one side must read `running`, the other `stalled` —
+  // and anchoring it to the file-scope `NOW` charged that budget for
+  // EVERYTHING since import: `before()`'s full `startBridge` boot and the
+  // three fetching tests above. The boot alone clears 500 ms on a loaded box,
+  // so this red four times in one evening across two lanes, always with the
+  // suite 40-50% slower than its quiet-box baseline (143 s against ~97 s).
+  //
+  // Re-anchoring shrinks the exposed window from `module load -> fetch` to
+  // `write -> fetch`. It is not the margin that was wrong: it was measured
+  // from the wrong instant, and widening it would have been sized against the
+  // fetches while the boot went on growing. `NOW`'s other uses here carry
+  // minute-scale margins and are deliberately left alone.
+  const now = Date.now();
+  writeRunDir(atCeiling, { 'events.jsonl': '{"event_type":"start","message":"agent-run.dispatched"}\n' }, now - DEFAULT_STALL_CEILING_MS + 500);
+  writeRunDir(pastCeiling, { 'events.jsonl': '{"event_type":"start","message":"agent-run.dispatched"}\n' }, now - DEFAULT_STALL_CEILING_MS - 500);
   const atBody = await expectJson<{ state: string }>(await fetch(`${bridgeUrl}/api/agents/runs/${encodeURIComponent(atCeiling)}`));
   const pastBody = await expectJson<{ state: string }>(await fetch(`${bridgeUrl}/api/agents/runs/${encodeURIComponent(pastCeiling)}`));
   assert.equal(atBody.state, 'running', 'inside the ceiling must still read running');
