@@ -385,6 +385,23 @@ else
   # grows a `pin-glob-check` call, `.globs` reaches the log and this line must
   # widen with it.
   echo "PIN_MANIFESTS=$(sha256sum "$CAMP"/gate-manifests/*.sha256 "$CAMP"/gate-manifests/*.counts 2>/dev/null | sha256sum | cut -c1-16)"
+  # 7.6.80 (T1 879) — AND ONE PER MANIFEST, over the same two files each.
+  #
+  # The aggregate answers "did anything move", which is the right question for
+  # a log and the wrong one for a merge: any lane's reconcile moves it, so
+  # `pin-precheck` refuses every merge whose gate finished first. Measured on
+  # three consecutive merges in one evening, and in all of them the refusing
+  # lane's OWN manifest was untouched. A merge's pin precondition is about the
+  # manifests it declares and touches; the precheck cannot compare that subset
+  # against a single number, so the subset has to be printed.
+  #
+  # The aggregate STAYS. It is still the one-line answer, and a log carrying
+  # only it must stay readable until every lane's gate emits these.
+  for pin_m in "$CAMP"/gate-manifests/*.sha256; do
+    [ -e "$pin_m" ] || continue
+    pin_name="$(basename "$pin_m" .sha256)"
+    echo "PIN_MANIFEST $pin_name=$(sha256sum "$pin_m" "${pin_m%.sha256}.counts" 2>/dev/null | sha256sum | cut -c1-16)"
+  done
   # SKEW MAKES A **FAILED** COUNT AMBIGUOUS -- IT DOES NOT INVALIDATE A CLEAN ONE
   # (T1 ruling 684, correcting this block's first draft; §15.381 credited to M6-C).
   # `sha256sum -c` verifies HASHES, so `0 FAILED` from a tree AHEAD of the pin is a
