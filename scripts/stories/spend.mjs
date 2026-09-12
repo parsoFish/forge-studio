@@ -140,3 +140,53 @@ export function spendCeilingVerdict(spend, ceilingUsd) {
     reason: `$${spend.usd.toFixed(4)} of $${ceilingUsd.toFixed(2)}`,
   });
 }
+
+/**
+ * The ceiling actually in force — bead `forge-8vfn.7.6.52`, T1 ruling 791.
+ *
+ * TWO NUMBERS CAN DISAGREE AND ONLY ONE IS AUTHORISED. A story declares
+ * `budget_usd` in its own file; the operator funds a run through the launcher.
+ * D's S7 run 4 declared **$25** and was funded **$5**. With 7.6.51's
+ * enforcement and nothing else, that run would have been stopped at $25 —
+ * five times what anyone authorised — and the log would have called it
+ * compliant, because the only number it knew was the story's.
+ *
+ * So the runner takes both and enforces the LOWER. The declared figure is a
+ * property of the story; the funded figure is a decision about this run, and a
+ * decision cannot be overridden by a file.
+ *
+ * BOTH PRINT AT START, always. A run whose two numbers differ must say so
+ * before it spends, not afterwards in a post-mortem — and a run whose numbers
+ * agree must say THAT, because a guard that speaks only when they differ is
+ * indistinguishable from one that never compared them.
+ *
+ * @param {number} declaredUsd  the story's own `ground.budget_usd`
+ * @param {number|null} fundedUsd  `--ceiling`, or null when the launcher named none
+ * @returns {{usd: number, source: string, reason: string}}
+ */
+export function effectiveCeiling(declaredUsd, fundedUsd) {
+  const dOk = typeof declaredUsd === 'number' && Number.isFinite(declaredUsd) && declaredUsd >= 0;
+  const fOk = typeof fundedUsd === 'number' && Number.isFinite(fundedUsd) && fundedUsd >= 0;
+  if (!fOk) {
+    return Object.freeze({
+      usd: dOk ? declaredUsd : NaN,
+      source: 'declared',
+      reason: dOk
+        ? `ceiling $${declaredUsd.toFixed(2)} (declared by the story; the launcher named no --ceiling)`
+        : `NO USABLE CEILING: the story declares ${JSON.stringify(declaredUsd)} and the launcher named none — this run is UNBOUNDED`,
+    });
+  }
+  if (!dOk) {
+    return Object.freeze({
+      usd: fundedUsd, source: 'funded',
+      reason: `ceiling $${fundedUsd.toFixed(2)} (funded; the story declares ${JSON.stringify(declaredUsd)}, which is unusable)`,
+    });
+  }
+  const usd = Math.min(declaredUsd, fundedUsd);
+  const source = fundedUsd < declaredUsd ? 'funded' : (declaredUsd < fundedUsd ? 'declared' : 'both agree');
+  return Object.freeze({
+    usd, source,
+    reason: `ceiling $${usd.toFixed(2)} — funded $${fundedUsd.toFixed(2)}, declared $${declaredUsd.toFixed(2)}`
+      + (fundedUsd === declaredUsd ? ' (they agree)' : `; enforcing the LOWER (${source})`),
+  });
+}

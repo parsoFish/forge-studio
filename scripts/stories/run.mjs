@@ -33,7 +33,7 @@ import { chromium } from 'playwright-core';
 
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
-import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
@@ -95,6 +95,17 @@ function parseArgs(argv) {
   return {
     story: storyIdx === -1 ? null : argv[storyIdx + 1],
     approveSpend: argv.includes('--approve-spend'),
+    // 7.6.52 (ruling 791): what the OPERATOR funded for this run, which is a
+    // different fact from what the story declares. D's S7 run 4 declared $25
+    // and was funded $5; enforcing the story's figure alone would have allowed
+    // five times what anyone authorised and called it compliant.
+    // Present-but-unusable REFUSES rather than falling back. A first draft
+    // returned NaN here, and `effectiveCeiling` then reported "the launcher
+    // named no --ceiling" — FALSE, and it silently restored the higher declared
+    // figure. An operator who typed `--ceiling` and fat-fingered the value
+    // would have been told a number they did not choose was in force.
+    ceilingUsd: at('--ceiling') === -1 ? null : Number(argv[at('--ceiling') + 1]),
+    ceilingGiven: at('--ceiling') !== -1,
     costlessOnly: argv.includes('--costless-only'),
     list: argv.includes('--list'),
   };
@@ -214,6 +225,15 @@ async function main() {
   //     BEFORE the money, and it refuses for costless runs too: the beat fails
   //     either way, and a red that says "the product is wrong" when the product
   //     was never asked is the expensive kind.
+  // 7.6.52: a `--ceiling` that was GIVEN but does not parse is a malformed
+  // authorisation, not an absent one. Refusing is the only safe reading — the
+  // alternative restores the story's own, higher figure under a message that
+  // says the launcher named nothing.
+  if (args.ceilingGiven && !(Number.isFinite(args.ceilingUsd) && args.ceilingUsd >= 0)) {
+    console.error(`[stories] REFUSING: --ceiling was given as ${JSON.stringify(process.argv[process.argv.indexOf('--ceiling') + 1])}, which is not a usable dollar amount. Nothing was run.`);
+    return 1;
+  }
+
   const remote = remoteSwitchVerdict(ROOT, stories.map((s) => s.id));
   if (!remote.ok) {
     console.error(`[stories] REFUSING: ${remote.reason}`);
@@ -303,7 +323,7 @@ async function main() {
     }
 
     for (const story of stories) {
-      exitCode = (await runStory(story, uiUrl, startedMs)) || exitCode;
+      exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
     }
   } finally {
     // THE SWEEP'S PAIRED RESTORE. `demos/stories/<id>/` was deleted before the
@@ -377,7 +397,7 @@ async function main() {
   return exitCode;
 }
 
-async function runStory(story, uiUrl, startedMs) {
+async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // This run's own stamp for its red evidence (`6.11.50`) — one value for the
   // whole run, so the DOM captured at a beat and the ground read before the
   // sweep land in the SAME directory and no previous run's files sit beside
@@ -444,6 +464,13 @@ async function runStory(story, uiUrl, startedMs) {
   // there and the verdict below is RED for that reason rather than for a beat.
   let spendBreach = null;
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
+  // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
+  // whose funded and declared ceilings differ must say so up front rather than
+  // in a post-mortem; a run whose numbers agree must say THAT, because a guard
+  // that speaks only on disagreement is indistinguishable from one that never
+  // compared them.
+  const ceiling = costs ? effectiveCeiling(story.ground?.budget_usd, fundedCeilingUsd) : null;
+  if (ceiling !== null) console.log(`[stories] ${ceiling.reason}`);
   try {
     for (const [i, beat] of story.beats.entries()) {
       // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
@@ -480,11 +507,11 @@ async function runStory(story, uiUrl, startedMs) {
           realSpawn: story.ground?.realSpawn === true,
           events: collectAgentRuns(ROOT, startedMs).map((r) => readRunEvents(r.dir)),
         });
-        const ceiling = spendCeilingVerdict(sofar, story.ground?.budget_usd);
-        console.log(`[stories] spend after beat ${i + 1}: ${ceiling.reason}`);
-        if (ceiling.breached) {
-          console.error(`[stories] CEILING BREACHED — ${ceiling.reason}. Tearing down what this run started.`);
-          spendBreach = ceiling;
+        const v = spendCeilingVerdict(sofar, ceiling?.usd);
+        console.log(`[stories] spend after beat ${i + 1}: ${v.reason}`);
+        if (v.breached) {
+          console.error(`[stories] CEILING BREACHED — ${v.reason} (${ceiling.reason}). Tearing down what this run started.`);
+          spendBreach = v;
           break;
         }
       }
