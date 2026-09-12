@@ -84,28 +84,77 @@ describe('7.6.73(d) — a structured unpriced row reaches the halt', () => {
     });
   }
 
-  test('THE MUTATION THAT WOULD PASS A WEAKER DOOR: drop `priced: false` and the halt goes silent', () => {
-    // Hand-built to be exactly the emitter's row MINUS the metadata marker —
-    // the shape the code would have if someone "tidied" the metadata or if a
-    // caller emitted its own row without going through the shared renderer.
-    // Nothing errors. The run simply continues, under-counted.
+  // C's finding on 7.6.73's own consequence, and the door that keeps it fixed.
+  //
+  // `endedUnpricedTurns` carries TWO markers so either alone suffices (§15.504).
+  // Its message arm was exact equality against `interactive.turn-ended-unpriced`
+  // — one literal — and 7.6.73 added three emitters that each name themselves
+  // correctly and match none of it. The belt became the braces' shadow: three of
+  // four emitters held by `priced === false` alone, and a future emitter written
+  // to the obvious convention without the marker would be invisible while
+  // looking right. The arm now matches the SUFFIX, so the convention enforces
+  // itself.
+  //
+  // These cases assert each arm ALONE, because an arm that is only ever
+  // exercised alongside the other is not independent, it is decorative.
+  for (const message of [
+    'interactive.turn-ended-unpriced',                       // the runner
+    'architect.turn-ended-unpriced',                          // 7.6.73
+    'architect.completeness-critic.turn-ended-unpriced',      // 7.6.73
+    'instructions.draft.turn-ended-unpriced',                 // 7.6.73
+  ]) {
+    test(`MESSAGE ARM ALONE: "${message}" with NO priced key is still caught`, () => {
+      const rows = roundTrip((logger) => {
+        logger.emit({
+          initiative_id: CRITIC.initiativeId, phase: CRITIC.phase, skill: CRITIC.skill,
+          event_type: 'end', input_refs: [], output_refs: [],
+          tokens_in: 1100, tokens_out: 75,
+          message,
+          metadata: { unpriced_reason: 'died' },
+        });
+      });
+      assert.equal(endedUnpricedTurns([rows]).length, 1,
+        `before the suffix form this passed for the runner's literal and FAILED for the other three — ` +
+        `each named correctly for its caller and matching none of one hardcoded string`);
+      const spend = summariseRunSpend({ realSpawn: true, events: [rows] });
+      assert.equal(ceilingHaltVerdict({ spend, ceilingUsd: 9, unpriced: endedUnpricedTurns([rows]) }).halt, true);
+    });
+  }
+
+  test('METADATA ARM ALONE: an unconventional message with `priced: false` is caught', () => {
+    // The complement. Neither arm may depend on the other.
+    const rows = roundTrip((logger) => {
+      logger.emit({
+        initiative_id: CRITIC.initiativeId, phase: CRITIC.phase, skill: CRITIC.skill,
+        event_type: 'end', input_refs: [], output_refs: [],
+        message: 'some.future.caller.gave-up',
+        metadata: { unpriced_reason: 'died', priced: false },
+      });
+    });
+    assert.equal(endedUnpricedTurns([rows]).length, 1);
+  });
+
+  test('NEITHER MARKER: the row is invisible, and that is still the trap', () => {
+    // The failure is SILENT — nothing errors, the run simply continues
+    // under-counted. The suffix form shrinks this hole to rows that are neither
+    // named by the convention nor marked; it does not remove it, and a row that
+    // says "unpriced" only in PROSE is exactly such a row.
     const rows = roundTrip((logger) => {
       logger.emit({
         initiative_id: CRITIC.initiativeId, phase: CRITIC.phase, skill: CRITIC.skill,
         event_type: 'end', input_refs: [], output_refs: [],
         tokens_in: 1100, tokens_out: 75,
-        message: CRITIC.message,
+        message: 'the turn ended unpriced, sadly',
         metadata: { unpriced_reason: 'died' },
       });
     });
-    const unpriced = endedUnpricedTurns([rows]);
-    assert.deepEqual(unpriced, [],
-      'proving the TRAP, not the desired behaviour: without `priced: false` this row is invisible to the ' +
-      'halt even though its message says "unpriced" in plain English. That is why emitTurnEndedUnpricedRow ' +
-      'sets the marker itself rather than trusting four callers to remember it.');
+    assert.deepEqual(endedUnpricedTurns([rows]), [],
+      'proving the TRAP, not the desired behaviour: prose is not a marker. This is why ' +
+      'emitTurnEndedUnpricedRow sets `priced: false` itself rather than trusting four callers, ' +
+      'and why the message arm matches a SUFFIX rather than reading English.');
     const spend = summariseRunSpend({ realSpawn: true, events: [rows] });
-    assert.equal(ceilingHaltVerdict({ spend, ceilingUsd: 9, unpriced }).halt, false,
-      'and the run sails on — the failure is SILENT, which is why this had to be doored through the verdict');
+    assert.equal(ceilingHaltVerdict({ spend, ceilingUsd: 9, unpriced: [] }).halt, false,
+      'and the run sails on — which is why this had to be doored through the verdict, not the emitter');
   });
 
   test('a PRICED row never halts — the two rows stay distinguishable through the whole chain', () => {
