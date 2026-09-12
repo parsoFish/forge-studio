@@ -34,6 +34,7 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
+import { readRunEvents, hostState } from './run-observe.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
@@ -72,32 +73,6 @@ import { quiesceWriters, describeQuiesce, reappeared } from './quiesce.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-/** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
- *  never a silent zero (bead `forge-8vfn.6.11.8`). */
-function readRunEvents(dir) {
-  try {
-    return readFileSync(join(dir, 'events.jsonl'), 'utf8')
-      .split('\n')
-      .filter((l) => l.trim() !== '')
-      .map((l) => { try { return JSON.parse(l); } catch { return {}; } });
-  } catch {
-    return [];
-  }
-}
-/** Host state for §15.439's per-beat record. Never throws: an unreadable
- *  /proc is reported as `unknown`, because a missing measurement must not
- *  render as a good one. */
-function hostState() {
-  let load = 'unknown';
-  let memGiB = 'unknown';
-  try { load = readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).join(' '); } catch { /* unknown */ }
-  try {
-    const m = /MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'));
-    if (m !== null) memGiB = (Number(m[1]) / 1048576).toFixed(1);
-  } catch { /* unknown */ }
-  return { load, memGiB };
-}
 
 const STORY_DIR = join(ROOT, 'tests', 'stories');
 const BRIDGE_HEALTH = 'http://localhost:4123/api/health';
