@@ -122,7 +122,13 @@ secrets.env
 # committed — and so are the two skills tiered-orchestration's "See also" sends its
 # readers to. Those two were ignored until 2026-09-04, so no lane worktree since M0
 # had them: a brief citing `immutable-gates` named a skill the lane could not open.
-# Other .claude/skills stay local.
+# .claude/skills/security-review/ is the repo's OWN change review and IS committed
+# (`forge-8vfn.7.6.69`, T1 ruling 926): the bundled skill of that name shells
+# `git diff origin/HEAD...` and this repo's remote is `parsoFish`, so it aborted for
+# every lane — and the literal is compiled into the Claude Code binary, so it was
+# never ours to fix. A review that lived in one worktree would be the same defect
+# as the `immutable-gates` gap above: a rule everyone is told to follow and nobody
+# can open. Other .claude/skills stay local.
 .claude/*
 !.claude/commands/
 !.claude/skills/
@@ -131,6 +137,7 @@ secrets.env
 !.claude/skills/tiered-orchestration/
 !.claude/skills/immutable-gates/
 !.claude/skills/adversarial-containment-review/
+!.claude/skills/security-review/
 *.swp
 *.swo
 *~
