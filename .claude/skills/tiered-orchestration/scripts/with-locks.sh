@@ -36,12 +36,29 @@
 # invisible: `gate.sh` reported "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the
 # inherited-fd shape" and waited on a lock its own caller held.
 #
-# The two properties are in genuine tension and both are wanted, so the rule is
-# at the call site instead: name only the locks the command does NOT take. For a
-# gate that is `run` — the lock `npm test` refuses under and `gate.sh` never
-# takes — and the suite-lock stays gate.sh's own. Deliberately NOT enforced here:
-# this script cannot know what its command locks, and a test for "do not do
-# this" would have to deadlock to prove it.
+# THE RULE, RESTATED (`forge-8vfn.7.6.95`): name only the locks the command
+# neither TAKES nor REFUSES UNDER.
+#
+# The old rule said "does NOT take", and that was true and insufficient. The
+# second property is not deducible from the first: `gate.sh` never takes
+# `.run-lock`, so the old rule positively RECOMMENDED `run` for a gate — and
+# that is the one choice that cannot ever succeed. `gate.sh` runs `npm test`,
+# whose guard (`lock-guard.mjs` `overlapVerdict`) refuses when the run-lock is
+# held, awaited, or MERELY OPEN. Deliberately merely-open: an open-not-locked
+# process is inside the pre-flock window, which is a real race rather than a
+# theoretical one. So this wrapper's own hold guarantees its child's refusal —
+# `pid <n> has it open but NOT locked` — and the old header sent callers
+# straight at it.
+#
+# IT IS NOW ENFORCED AT LAUNCH, which the previous version called impossible
+# ("this script cannot know what its command locks"). It cannot know in general;
+# it CAN know the handful of commands the campaign actually wraps, and refusing
+# a guaranteed failure before taking anything is worth more than being right
+# about the general case. An exemption marker — an env var telling the guard
+# "this is the campaign's serialiser, not a story run" — was REFUSED by ruling
+# 940: it teaches the guard to trust a claim about intent over an observation of
+# state, and the pre-flock window is exactly when a process legitimately IS
+# about to hold the lock.
 #
 # ON THE FIRST ARGUMENT. The bead writes `<worktree>`; this takes the CAMPAIGN
 # dir, because that is where `.suite-lock` and `.run-lock` live and a tool given
@@ -54,6 +71,7 @@ set -u
 EX_USAGE=2
 EX_NO_SUITE=71     # could not take .suite-lock within the bound
 EX_NO_RUN=72       # could not take .run-lock within the bound
+EX_GUARANTEED=73   # the combination cannot succeed; refused before taking anything
 
 usage() {
   echo "usage: with-locks.sh <campaign-dir> <suite|run|both> [--wait-secs N] -- <cmd...>" >&2
@@ -82,6 +100,54 @@ done
 [ $# -ge 1 ] || { echo "with-locks.sh: no command after --" >&2; usage; }
 
 ts() { date -u +%H:%M:%S; }
+
+# ---------------------------------------------------------------------------
+# REFUSE A COMBINATION THAT CANNOT SUCCEED, BEFORE TAKING ANYTHING (7.6.95).
+#
+# Two facts about the campaign's own commands, neither deducible from the other:
+#
+#   REFUSES UNDER .run-lock    gate.sh · npm test · the story runner · builds
+#                              and tsc (7.6.100's guard, `bf019f23`)
+#   TAKES .suite-lock ITSELF   gate.sh (#694)
+#
+# So `run`/`both` around any of the first group is a guaranteed refusal, and
+# `suite`/`both` around a gate is a guaranteed wait on a lock its own caller
+# holds. Both are refused here with the reason on ONE line, because a caller
+# reading a wall of prose at 3am reads the first line and retries.
+#
+# WHAT THIS CANNOT SEE, said rather than implied: it matches the COMMAND WORDS
+# it was handed. A wrapper script that invokes `gate.sh` internally is opaque to
+# it, and always will be. This catches the combinations the campaign actually
+# writes, which is the whole of its claim — it is not a proof that the command
+# is safe, only a refusal of the ones known to be fatal.
+refuse_guaranteed_failure() {
+  local words=" $* " why="" fix=""
+  # REFUSES UNDER .run-lock — `overlapVerdict`, and since `bf019f23` the build
+  # guard too. Matched as whole words where a bare name would over-match: `tsc`
+  # appears inside plenty of paths, and refusing a launcher for its filename
+  # would be this bead's own defect pointing the other way.
+  case "$words" in
+    *" gate.sh "*|*"/gate.sh "*|*" npm test "*|*" npm run stories "*|*" --story "*|*" npm run build "*|*" tsc "*|*"/tsc "*)
+      case "$MODE" in
+        run|both)
+          why="holding .run-lock guarantees this command's refusal — its guard refuses when the run-lock is held, awaited or merely OPEN"
+          fix="run it unheld and retry on the guard's own refusal" ;;
+      esac ;;
+  esac
+  # TAKES .suite-lock itself. Only `gate.sh`, and the remedy is different.
+  case "$words" in
+    *" gate.sh "*|*"/gate.sh "*)
+      case "$MODE" in
+        suite|both)
+          why="gate.sh TAKES .suite-lock itself (#694), and this wrapper closes the child's descriptors, so the gate would wait on a lock its own caller holds"
+          fix="a gate takes NEITHER lock (900) — invoke it unwrapped" ;;
+      esac ;;
+  esac
+  [ -z "$why" ] && return 0
+  echo "$(ts) with-locks: REFUSING '$MODE' for this command — $why; $fix" >&2
+  exit "$EX_GUARANTEED"
+}
+refuse_guaranteed_failure "$@"
 
 # §15.516 (was §15.483) — ONE READER, and it is not this file's. `lock-state.sh`
 # answers all three questions at once: the `flock -n` probe says whether the lock
