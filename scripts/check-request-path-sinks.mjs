@@ -280,15 +280,23 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
  *  single `\\S+` field, no spaces). */
 const CALLER_SINK_SUFFIX = '@caller';
 
-/** Per designated function: `callRe` matches an UNQUALIFIED call (same shape as
- *  the sink matcher); `defRe` matches its DEFINITION (`function F(` / `function
- *  F<` — covers `export function F`). A file that matches `defRe` is that fn's
- *  own def file and is SKIPPED for that fn, because the definition line itself
- *  matches `callRe` and would otherwise self-count. Detection is per-file so a
- *  synthetic fixture whose def module differs from the real repo works too. */
+/** Per designated function: `defRe` matches its DEFINITION (`function F(` /
+ *  `function F<` — covers `export function F`). A file that matches `defRe` is
+ *  that fn's own def file and is SKIPPED for that fn, because the definition
+ *  line itself matches the call patterns and would otherwise self-count.
+ *  Detection is per-file so a synthetic fixture whose def module differs from
+ *  the real repo works too.
+ *
+ *  THERE IS NO PRECOMPILED CALL REGEX HERE, deliberately. It used to carry a
+ *  `callRe` for the bare name; 7.6.68 moved call matching into
+ *  `callRegexesFor` below, which must be built PER FILE because the set of
+ *  names a call site may use — aliases, namespace imports — is a property of
+ *  that file's imports, not of the designated function. Leaving a dead
+ *  `callRe` here would be §15.534's own shape one level along: a live-looking
+ *  regex with an explanatory comment, describing matching that no longer
+ *  happens (C's review of 7.6.68). */
 const DESIGNATED_MATCHERS = Object.keys(DESIGNATED_UNGUARDED_FUNCTIONS).map((name) => ({
   name,
-  callRe: new RegExp(`(?<![.\\w$])${name}\\s*\\(`, 'g'),
   defRe: new RegExp(`(?<![.\\w$])function\\s+${name}\\s*[<(]`),
 }));
 
