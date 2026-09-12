@@ -88,3 +88,55 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
     priced: 0,
   });
 }
+
+/**
+ * Is a run over its declared ceiling? Bead `forge-8vfn.7.6.51`, T1 ruling 788.
+ *
+ * §15.449 — A CEILING IN A STRING IS A LABEL. Until this existed, `budget_usd`
+ * appeared in exactly five places and not one of them compared it to anything
+ * spent: `spendGateVerdict` interpolated it into its reason text, `run.mjs`
+ * printed it in the `--list` label, and the rest tested `> 0` to ask "does this
+ * story cost anything at all". `--approve-spend` authorised an UNBOUNDED run.
+ * Runs 12 and 13 came in at $2.91 and $2.81 against a declared $35 because
+ * S10's shape bounds them, not because anything watched the number — and the
+ * product agrees: `developer-loop.ts:573` sets
+ * `costBudgetUsd: Number.POSITIVE_INFINITY`. A betterado initiative declaring
+ * $12 spent $84.
+ *
+ * THE UNMEASURED CASE IS NOT UNDER THE CEILING. `summariseRunSpend` returns
+ * `measured: false` when a real agent was dispatched and no priced event
+ * reached its log — a turn reaped mid-hang writes no terminal event. That is
+ * "nobody could look", and it must not render as "under budget", which is the
+ * same defect this campaign has met as `ls 2>/dev/null | wc -l`, as `idle`
+ * standing in for a discarded manifest, and as a filtered listing read as an
+ * empty one. It cannot BREACH either — there is no number to compare — so it
+ * gets its own verdict and says so.
+ *
+ * @param {{measured: boolean, usd: number|null, label: string}} spend
+ * @param {number} ceilingUsd
+ * @returns {{breached: boolean, known: boolean, reason: string}}
+ */
+export function spendCeilingVerdict(spend, ceilingUsd) {
+  if (typeof ceilingUsd !== 'number' || !Number.isFinite(ceilingUsd) || ceilingUsd < 0) {
+    return Object.freeze({
+      breached: false, known: false,
+      reason: `no usable ceiling to enforce (got ${JSON.stringify(ceilingUsd)}) — the run is UNBOUNDED and this is not "within budget"`,
+    });
+  }
+  if (spend?.measured !== true || typeof spend.usd !== 'number') {
+    return Object.freeze({
+      breached: false, known: false,
+      reason: `spend UNMEASURED against ceiling $${ceilingUsd.toFixed(2)} — nothing was priced, so this run is neither under nor over it. ${spend?.label ?? ''}`.trim(),
+    });
+  }
+  if (spend.usd > ceilingUsd) {
+    return Object.freeze({
+      breached: true, known: true,
+      reason: `ceiling $${ceilingUsd.toFixed(2)} EXCEEDED at $${spend.usd.toFixed(4)}`,
+    });
+  }
+  return Object.freeze({
+    breached: false, known: true,
+    reason: `$${spend.usd.toFixed(4)} of $${ceilingUsd.toFixed(2)}`,
+  });
+}
