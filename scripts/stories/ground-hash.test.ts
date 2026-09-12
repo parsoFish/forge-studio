@@ -466,12 +466,55 @@ test('7.6.38: groundIgnoreFromGit REFUSES outside a git repo — a failed read i
   }
   assert.notEqual(probe, 'true', `premise broken: ${notARepo} is inside a git work tree`);
   const ig = groundIgnoreFromGit(notARepo);
+  // THE PROPERTY IS "IT REFUSED AND SAID WHY", NOT "IT REFUSED WITH AN EXIT STATUS".
+  //
+  // The first draft asserted the rc-shaped wording and went red on a loaded CI
+  // runner at 8071/8072 — on main, so it could have refused any lane's PR. C
+  // found the mechanism: outside a work tree `git check-ignore` exits 128
+  // IMMEDIATELY, so the parent's `--stdin` write races the child's exit. Write
+  // lands first → `status 128`; child exits first → the write hits a closed pipe
+  // → `spawnSync git EPIPE`, which is this function's OTHER refusal branch. Both
+  // refuse, which is the behaviour that matters; only the wording differs.
+  //
+  // OVER-SPECIFIED IS THE MIRROR OF VACUOUS. A vacuous door asserts less than
+  // the property and mutation finds it. This one asserted MORE than the
+  // property, and mutation cannot find it — a door that fails when it should
+  // pass needs real environmental variation to expose, which is what a loaded
+  // runner supplied. Assert the property; name the cause without pinning which.
   assert.throws(() => ig.isIgnored('anything'), (e: unknown) => {
-    assert.match((e as Error).message, /Refusing rather than reporting an unchecked remainder as clean/);
-    assert.match((e as Error).message, /exited 128|not a git repository/i, 'and it names the status it got');
+    assert.match((e as Error).message, /Refusing/);
+    assert.match(
+      (e as Error).message,
+      /exited 128|not a git repository|EPIPE|spawnSync/i,
+      'and it names what went wrong',
+    );
     return true;
   });
   rmSync(notARepo, { recursive: true, force: true });
+});
+
+test('7.6.38: BOTH refusal branches satisfy the door — the exit-status one and the EPIPE one', () => {
+  // The positive control the original door lacked. This machine produces the
+  // rc-128 branch essentially always, so a door pinned to it passes here and
+  // fails on a loaded runner — which is exactly what happened, on main, at
+  // 8071/8072. Asserting against both message shapes as LITERALS means the
+  // door's coverage no longer depends on which branch the host happens to take.
+  const REFUSALS = [
+    // res.status !== 0 && !== 1
+    `groundIgnoreFromGit: git check-ignore exited 128 in /tmp/x (rc 128 means it is not a git repository). ` +
+      `Refusing rather than reporting an unchecked remainder as clean.`,
+    // res.error — the branch the race produces
+    `groundIgnoreFromGit: could not run git check-ignore in /tmp/x — spawnSync git EPIPE. ` +
+      `Refusing: a failed read is not a state, and treating it as "nothing is ignored" would ` +
+      `convert every unattributed path into a clean one.`,
+  ];
+  for (const msg of REFUSALS) {
+    assert.match(msg, /Refusing/, msg);
+    assert.match(msg, /exited 128|not a git repository|EPIPE|spawnSync/i, msg);
+  }
+  // And the control that stops this passing on any string at all: a message
+  // that does NOT refuse must fail the first assertion.
+  assert.doesNotMatch('groundIgnoreFromGit: nothing is ignored', /Refusing/);
 });
 
 test('7.6.38: an empty path list asks git nothing and returns nothing', () => {
