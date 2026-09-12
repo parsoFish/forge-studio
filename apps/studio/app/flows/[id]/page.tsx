@@ -744,7 +744,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               runs={view.runs}
               activeRunId={view.activeRun?.id ?? null}
               onSelect={handleSelectRun}
-              flowId={id}
+              flowId={id} flow={view.flow ?? null}
             />
 
             {/* Center: Monitor main */}
