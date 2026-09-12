@@ -267,6 +267,29 @@ export async function runInteractiveTurn(
             });
           } catch { /* never fail a completed turn on a logging failure */ }
         },
+        // 7.6.55 (ruling 849) — the turn ENDED and was never priced. Without
+        // this row the log has no terminal event at all and spend reads
+        // UNMEASURED. `cost_usd` is ABSENT, not zero: 849 refused a pricing
+        // table, and `deriveSessionCostUsd` still returns null for a log of
+        // only these rows — "cost nothing" and "never priced" stay distinct.
+        onTurnEndedUnpriced: (info) => {
+          try {
+            logger.emit({
+              initiative_id: initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
+              event_type: 'end', input_refs: [], output_refs: [],
+              ...(info.tokensIn !== undefined ? { tokens_in: info.tokensIn } : {}),
+              ...(info.tokensOut !== undefined ? { tokens_out: info.tokensOut } : {}),
+              ...(info.cacheReadTokens !== undefined ? { cache_read_tokens: info.cacheReadTokens } : {}),
+              ...(info.cacheCreationTokens !== undefined ? { cache_creation_tokens: info.cacheCreationTokens } : {}),
+              message: 'interactive.turn-ended-unpriced',
+              metadata: {
+                session_id: ctx.sessionId, session_kind: descriptor.id,
+                unpriced_reason: info.reason,
+                priced: false,
+              },
+            });
+          } catch { /* never replace the turn's own error with a logging one */ }
+        },
       });
       break;
 
