@@ -101,9 +101,20 @@ site was correct**, so the fix ships with its own door
 `6.11.5` had made the key absent-when-null, and 438 reversed that on the record:
 absent is the same race one step earlier, since an observer collecting nested
 `data-*` in one read cannot tell "no key" from "not yet" — what changed was the
-READER. `DemoTimeline` and `DemoStageHandoff` still render the absent form, with
-doors pinning it (ruling 332, which predates the reversal); migrating those two
-is outstanding, and until it happens this key has two shapes in the tree.
+READER. **All three demo-minting surfaces now ship it** — `ContractResolutionPanel`,
+`DemoTimeline` and `DemoStageHandoff` (`forge-8vfn.7.6.64`), with their doors
+pinning `''` rather than `hasAttribute === false` (ruling 332 predated the
+reversal). The key has one shape in the tree.
+
+What the migration bought is worth stating exactly, because it is smaller than
+it looks and the bead nearly claimed more: **not an early answer.**
+`beats-page.mjs:610` asks `Object.hasOwn(seen, attr) && answers(seen[attr],
+want)`, so an absent key and `''` are both "not satisfied yet" on identical
+terms and the story runner polls to its bound either way (M6-C's 835, by reading
+the resolver rather than the rulings). They differ only in the VERDICT TEXT once
+the bound expires — `beats.mjs:41-44`'s "absent from the page" against 438's
+bound-naming branch — and in one key having had two shapes across three sibling
+surfaces, which is the thing a contract exists to prevent.
 
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
