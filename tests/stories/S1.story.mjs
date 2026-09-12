@@ -92,6 +92,8 @@ const IDEA =
 
 /** This run's ceiling, in dollars — the same figure the ground declares. */
 const CEILING = '25';
+/** C1b is operator-tier and only OPEN when the onboarding agent left it so. */
+const C1B_DECISION = "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command.";
 
 /**
  * What the operator tells the architect when it interviews. It names a scope
@@ -526,7 +528,7 @@ export default {
       // expressible only when the navigation is a step too —
       // `[data-action="back-to-project"]` renders on every session shell in
       // every phase (W7-A2), so it is.
-      act: 'Return to the project and record a decision on the clause that needs the operator\'s judgement',
+      act: 'Return to the project and close whatever the agent could not',
       // AMENDED 2026-09-05 (operator ruling 214 (a)+(b), T1 ruling 217), and
       // BOTH halves were defects no run could see until run 3 reached this
       // beat for the first time.
@@ -631,13 +633,14 @@ export default {
       // so `clause-id: 'C1b'` already says the panel is up — and it keeps
       // §15.175's trap shut for the reason the count used to: at zero failing
       // clauses `:180` returns null, no row renders, and this beat reds.
+      // AMENDED 2026-09-12 (M1-C-S1, 855) — §15.459: assert the OUTCOME, not the
+      // path. `until` runs ZERO rounds when converged (312, beats-repeat.test.ts:126).
       do: [
         { press: 'back-to-project' },
         {
-          fill: 'clause-decision-C1b',
-          with: "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command.",
+          repeat: [{ fill: 'clause-decision-C1b', with: C1B_DECISION }, { press: 'apply-clause-decision' }],
+          until: { 'preflight-status': 'ok', 'flow-ready': 'true' },
         },
-        { press: 'apply-clause-decision' },
       ],
       // AMENDED 2026-09-05 (T1 ruling 230; ruling 200's mechanical class as
       // extended by 222). A `wait` field changes no expectation and no act —
@@ -661,6 +664,7 @@ export default {
       // bound would buy nothing, so the beat waits exactly as long as the
       // product is still able to answer, plus a margin for the re-render.
       wait: { for: 'agent', upTo: 200_000 },
+      // `clause-id`/`clause-resolution` REMOVED: both asserted the path.
       expect: {
         route: '/projects/gitweave',
         data: {
@@ -668,8 +672,6 @@ export default {
           'project-id': 'gitweave',
           'preflight-status': 'ok',
           'flow-ready': 'true',
-          'clause-id': 'C1b',
-          'clause-resolution': 'user',
         },
       },
       say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
