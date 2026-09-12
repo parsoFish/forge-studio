@@ -55,25 +55,72 @@ export function spendGateVerdict(ground, { approveSpend = false } = {}) {
  * `usd` is `null` rather than `0` when unmeasured, so a caller cannot add it to
  * a total by accident.
  *
- * @param {{realSpawn: boolean, events: {event_type?: string, cost_usd?: unknown}[][]}} run
+ * @param {{realSpawn: boolean, events: {event_id?: unknown, event_type?: string, cost_usd?: unknown}[][]}} run
  * @returns {Readonly<{measured: boolean, usd: number|null, label: string, priced: number}>}
  */
 export function summariseRunSpend({ realSpawn, events = [] }) {
-  let priced = 0;
-  let total = 0;
-  for (const log of events) {
-    for (const e of log ?? []) {
+  // ONE PHASE IS COUNTED ONCE, AT THE HIGHER OF ITS TWO ACCOUNTS (bead
+  // `forge-rzrs`, T1 867). A cycle channel records one ROLLED-UP row per phase
+  // while that phase's own session directory records each turn — so the two
+  // logs carry the same money under DIFFERENT `event_id`s. Measured on S10 run
+  // 15: four architect turn rows summing $2.1916 in the session dir, one
+  // $2.1916 rollup in the cycle log, and the project-manager's $0.6774 which
+  // exists ONLY in the cycle log. Counting both logs gives $5.0606 for a run
+  // that spent $2.8690; counting one gives $2.1916 and hides the PM.
+  //
+  // MAX, NOT "PREFER THE SESSION DIR": a session directory that logged only
+  // some of a phase's turns would under-report, and a ceiling must over-report
+  // before it under-reports. When the two accounts disagree, that disagreement
+  // is a PRODUCT finding and is returned in `notes` rather than swallowed.
+  //
+  // A DIRECTORY IS A CYCLE LOG WHEN IT CARRIES MORE THAN ONE PHASE — measured,
+  // not assumed: run 15's session dir held 98 rows all `architect`, its cycle
+  // log held `orchestrator` + `architect` + `project-manager`. Rows with no
+  // `phase` at all (the `_agent-*` shape) are keyed by their own log, because
+  // nothing links them to a phase and collapsing them would under-report.
+  const groups = new Map();
+  events.forEach((log, logIndex) => {
+    const rows = log ?? [];
+    const phases = new Set(rows.map((e) => e?.phase).filter((p) => typeof p === 'string' && p !== ''));
+    const isCycleLog = phases.size > 1;
+    for (const e of rows) {
       const c = e?.cost_usd;
       // Only genuine, non-negative numbers. A string "0.50" is a shape the
       // event contract does not promise, and a negative is never a real spend.
-      if (typeof c === 'number' && Number.isFinite(c) && c >= 0) {
-        total += c;
-        priced += 1;
+      if (typeof c !== 'number' || !Number.isFinite(c) || c < 0) continue;
+      const phase = typeof e?.phase === 'string' && e.phase !== '' ? e.phase : null;
+      const key = phase ?? `log:${logIndex}`;
+      let g = groups.get(key);
+      if (g === undefined) {
+        g = { phase, parts: 0, partsCount: 0, rollup: 0, rollupCount: 0 };
+        groups.set(key, g);
       }
+      if (phase !== null && isCycleLog) {
+        g.rollup += c;
+        g.rollupCount += 1;
+      } else {
+        g.parts += c;
+        g.partsCount += 1;
+      }
+    }
+  });
+
+  let priced = 0;
+  let total = 0;
+  const notes = [];
+  for (const g of groups.values()) {
+    const takeRollup = g.rollup > g.parts;
+    total += takeRollup ? g.rollup : g.parts;
+    priced += takeRollup ? g.rollupCount : g.partsCount;
+    if (g.partsCount > 0 && g.rollupCount > 0 && g.parts !== g.rollup) {
+      notes.push(
+        `${g.phase}: aggregate $${g.rollup.toFixed(4)} \u2260 parts $${g.parts.toFixed(4)} — ` +
+          'the cycle log and the phase\u2019s own session disagree about what it spent; the HIGHER is counted',
+      );
     }
   }
   if (priced > 0) {
-    return Object.freeze({ measured: true, usd: total, label: `$${total.toFixed(4)}`, priced });
+    return Object.freeze({ measured: true, usd: total, label: `$${total.toFixed(4)}`, priced, notes: Object.freeze(notes) });
   }
   if (realSpawn !== true) {
     return Object.freeze({ measured: true, usd: 0, label: '$0.0000 (costless story — nothing was dispatched)', priced: 0 });
