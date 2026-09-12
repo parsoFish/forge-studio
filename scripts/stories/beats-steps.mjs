@@ -33,7 +33,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null) {
+export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null, progress = null, readProgressNow = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -80,6 +80,10 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     if (Object.hasOwn(step, 'repeat')) {
       const r = await runRepeatStep({
         page, step, left, matches, timeoutMs, sessionScope, probe,
+        // 7.6.77's repeat half. A beat's progress bound belongs to the wait that
+        // actually spends the beat's time, and for S1 beat 11 that is this loop
+        // (T1 ruling 930) — not the consequence wait the first half shipped on.
+        progress, readProgressNow,
         // `declaredRoute` is NOT passed down — T1 ruling 569, P1, bought by
         // A's S1 run 2. A beat's declared route is where the beat ENDS; a
         // repeat runs where the beat PUT it. S1 beat 11 is declared at

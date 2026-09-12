@@ -197,7 +197,7 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
     const took = Date.now() - began;
 
     assert.notEqual(stall, null, 'a frozen progress key must end the beat');
-    assert.match(stall!.why, /^stalled-no-transition:/, `it names WHICH expiry: ${stall!.why}`);
+    assert.match(stall!.why, /^stalled-no-transition \(consequence\):/, `it names WHICH expiry: ${stall!.why}`);
     assert.match(stall!.why, /architect-turns/, 'and which key');
     assert.match(stall!.why, /"2"/, 'and the value it froze at, quoted so an empty string is visible');
     assert.ok(took < 2_000, `it stops at the progress bound, not at the 4 s ceiling — took ${took} ms`);
@@ -218,7 +218,7 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
 
     assert.notEqual(stall, null, 'the bound must still fire: a progress bound that silently does nothing when ' +
       'its key is missing is protection that reads as present and is not');
-    assert.match(stall!.why, /^no-progress-key:/, `a DIFFERENT prefix from the stall: ${stall!.why}`);
+    assert.match(stall!.why, /^no-progress-key \(consequence\):/, `a DIFFERENT prefix from the stall: ${stall!.why}`);
     assert.doesNotMatch(stall!.why, /stalled-no-transition/, 'the two findings must never be confusable');
     assert.match(stall!.why, /never present on the page/, 'it says what was actually observed');
     assert.match(stall!.why, /NOT a measurement\s+of the agent|NOT a measurement of the agent/,
@@ -309,7 +309,7 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
     );
 
     assert.notEqual(stall, null);
-    assert.match(stall!.why, /^progress-key-vanished:/, `its own prefix: ${stall!.why}`);
+    assert.match(stall!.why, /^progress-key-vanished \(consequence\):/, `its own prefix: ${stall!.why}`);
     assert.doesNotMatch(stall!.why, /stalled-no-transition/, 'never the stall message');
     assert.doesNotMatch(stall!.why, /The key renders and is still rendering/,
       'and never the claim that the key is still rendering');
@@ -332,7 +332,7 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
     );
 
     assert.notEqual(stall, null, 'a key it cannot read must still end the beat — silence here is the fallback species');
-    assert.match(stall!.why, /^ambiguous-progress-key:/, `its own prefix: ${stall!.why}`);
+    assert.match(stall!.why, /^ambiguous-progress-key \(consequence\):/, `its own prefix: ${stall!.why}`);
     assert.match(stall!.why, /3 elements/, 'and it says how many carry it');
     assert.match(stall!.why, /NOTHING about the agent/, 'and refuses to be read as a stall');
   });

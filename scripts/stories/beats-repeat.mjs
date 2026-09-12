@@ -46,6 +46,8 @@ export function handleFor(step) {
 }
 
 /** How long to wait between polls while the agent turn between rounds runs. */
+import { progressTracker } from './beats-progress.mjs';
+
 const POLL_MS = 500;
 
 /**
@@ -98,11 +100,30 @@ const PAGE_MOVED_RE = /detach|no element carries that handle/i;
  * @param {() => number} input.left        ms remaining of the beat's ONE declared bound
  * @param {((spec: Record<string,string>) => Promise<boolean>)|null} input.matches  reads the live page against a data spec
  * @param {number} input.timeoutMs         that bound, for the failure text
+ * @param {{perTransition: number, progressKey: string}|null} input.progress  the beat's progress bound, if it declared one
+ * @param {(() => Promise<{value: string|undefined, source: string, carriers: number}>)|null} input.readProgressNow  reads `progressKey` from the live page, by SOURCE
  * @param {(steps: object[], ms: number) => Promise<{waitedForHandle: boolean, error: string|null}>} input.run
  * @returns {Promise<{waitedForHandle: boolean, error: string|null}>}
  */
-export async function runRepeatStep({ page, step, left, matches, timeoutMs, run }) {
+export async function runRepeatStep({ page, step, left, matches, timeoutMs, run, progress = null, readProgressNow = null }) {
   let waitedForHandle = false;
+  // 7.6.77's REPEAT HALF, and the half that matters for S1 beat 11.
+  //
+  // `perTransition` shipped first on the CONSEQUENCE wait, which beat 11 barely
+  // uses: its interview rounds AND its 327-392 s drafting turn are spent HERE,
+  // inside this loop, and `beats-repeat.mjs:201`'s "ran out" line below is
+  // verbatim what runs 8 and 10 printed. A bound proved correct in isolation,
+  // attached to the wrong wait (T1 ruling 930) — the same shape as 640, in this
+  // same pair of files.
+  //
+  // `timeoutMs` has exactly the property that made `upTo` useless on beat 11: it
+  // bounds "how long may this repeat take in TOTAL", over a variable number of
+  // variable-length turns. `session-phase` changes on every interview round and
+  // freezes for one drafting turn, so a bound on PROGRESS only has to exceed one
+  // turn rather than a whole run.
+  const tracker = progress === null || readProgressNow === null
+    ? null
+    : progressTracker(progress, 'repeat', Date.now());
 
   const until = step.until ?? null;
   if (until === null || matches === null) {
@@ -126,6 +147,16 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run 
 
   while (left() > 0) {
     if (await isSatisfied()) break;
+    // Checked BEFORE the gate test, unlike the consequence wait's, and for the
+    // opposite reason: there the product's own verdict is a better explanation
+    // than silence, while here the two branches below (poll and round) each
+    // continue the loop, so a check placed after either is skipped on the other.
+    // The `until` above still wins — a repeat that has met its condition is not
+    // stalled however long the key sat still.
+    if (tracker !== null) {
+      const why = tracker.observe(await readProgressNow());
+      if (why !== null) return { waitedForHandle, error: why };
+    }
 
     // Nothing to act on yet — the agent turn between rounds is still running.
     // Poll rather than spend the bound inside a handle wait, which cannot tell
