@@ -112,6 +112,31 @@ export function writeStoryJson(result, root) {
  *
  * @returns {ReadonlyArray<{entry: string, path: string}>} repo-relative paths
  */
+/**
+ * Parse one story.json, naming the file when it will not parse — C's review of
+ * 7.6.81.
+ *
+ * A bare `JSON.parse` throws a `SyntaxError` that names no path, so a single
+ * malformed artifact reds a run with a message that does not say which of
+ * twelve files is at fault. And `??` guards UNDEFINED, not null: a story.json
+ * containing literal `null` parses fine and then makes `data.beats ?? []` a
+ * TypeError on `null.beats`. These are generated artifacts, which is exactly
+ * the argument for guarding them — this bead exists because a generated
+ * artifact went wrong.
+ */
+function readStoryJson(file) {
+  let data;
+  try {
+    data = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    throw new Error(`gallery: ${file} is not readable JSON — ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (data === null || typeof data !== 'object') {
+    throw new Error(`gallery: ${file} parsed to ${data === null ? 'null' : typeof data}, not an object`);
+  }
+  return data;
+}
+
 /** A story id / frame segment that is safe to fold into a path. Charset
  *  allowlist, length cap, and an explicit refusal of stringified nullish — the
  *  guard shape `scripts/lib/journey-assertions.mjs` uses for session ids, and
@@ -122,6 +147,13 @@ export function writeStoryJson(result, root) {
  *  the next caller is the one this exists for. `frame` is weaker still — it is
  *  read out of story.json CONTENT, so it is only as trustworthy as whatever
  *  wrote that file. */
+//  THE `1` IN `{1,128}` IS LOAD-BEARING AND NOT FOR THE REASON IT LOOKS.
+//  `/etc/passwd` splits to `['', 'etc', 'passwd']`, and the ABSOLUTE case is
+//  refused only because the leading EMPTY segment fails the minimum length —
+//  nothing here reasons about absolute paths at all. `frames//x.png` and a
+//  trailing `frames/` are caught the same accidental way. Relax it to `{0,128}`
+//  as a tidy and all three open SILENTLY, with every other case still passing.
+//  (C's probe, 11 cases against e777669f.)
 const SAFE_SEGMENT = /^[A-Za-z0-9._-]{1,128}$/;
 const NULLISH_AS_TEXT = new Set(['null', 'undefined', 'NaN', '.', '..']);
 
@@ -145,14 +177,12 @@ export function untrackedGalleryTargets(root, entryIds) {
   const wanted = [];
   for (const id of ids) {
     const file = join(root, 'demos', 'stories', id, 'story.json');
-    if (!existsSync(file)) {
-      // An index entry whose story.json is not even on disk is a worse case
-      // than an untracked one, and it is reported through the same channel.
-      wanted.push({ entry: id, path: `demos/stories/${id}/story.json` });
-      continue;
-    }
+    // An entry whose story.json is not even on disk is a worse case than an
+    // untracked one and is reported through the same channel — so it is the
+    // SAME push, not a second one that happens to say the same thing.
     wanted.push({ entry: id, path: `demos/stories/${id}/story.json` });
-    const data = JSON.parse(readFileSync(file, 'utf8'));
+    if (!existsSync(file)) continue;
+    const data = readStoryJson(file);
     for (const beat of data.beats ?? []) {
       if (typeof beat?.frame === 'string' && beat.frame !== '') {
         // `frames/NN-slug.png` — each segment checked, so a story.json carrying
@@ -231,7 +261,7 @@ export function regenerateGallery(root, wroteThisRun = []) {
       if (!entry.isDirectory()) continue;
       const file = join(base, entry.name, 'story.json');
       if (!existsSync(file)) continue;
-      rows.push(storyRowFrom(JSON.parse(readFileSync(file, 'utf8'))));
+      rows.push(storyRowFrom(readStoryJson(file)));
       ids.push(entry.name);
     }
   }

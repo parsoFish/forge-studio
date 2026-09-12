@@ -184,6 +184,85 @@ describe('7.6.81 — the gallery verifies its own links', () => {
     }
   });
 
+  // C's 11-case probe, the six that assert a REFUSAL. Two of these are the
+  // reason the length bound is now commented as load-bearing: `/etc/passwd`
+  // and `frames//x.png` are caught by the EMPTY leading/middle segment failing
+  // `{1,128}`, not by anything here reasoning about absolute paths.
+  for (const frame of [
+    '/etc/passwd',            // absolute — leading empty segment
+    'frames//x.png',          // double slash — empty middle segment
+    'frames/',                // trailing slash — empty final segment
+    '..\\..\\x.png',            // windows backslash
+    'frames/../../x.png',     // traversal MID-path, not merely leading
+    `frames/${'a'.repeat(129)}.png`, // over the cap
+  ]) {
+    test(`a frame of ${JSON.stringify(frame)} is REFUSED`, () => {
+      const root = mkdtempSync(join(tmpdir(), 'gallery-guard-frame-'));
+      try {
+        execFileSync('git', ['-C', root, 'init', '-q']);
+        const d = join(root, 'demos', 'stories', 'x');
+        mkdirSync(d, { recursive: true });
+        writeFileSync(join(d, 'story.json'), JSON.stringify({
+          story: { id: 'x', docs: { title: 'X' } }, beats: [{ status: 'green', frame }],
+        }));
+        assert.throws(() => untrackedGalleryTargets(root, ['x']), /refusing a frame segment/);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  // ...and the two C accepts deliberately, asserted so a later tightening that
+  // breaks real frames reds here rather than in a run. `...` is a legal
+  // filename, and a leading `-` is only dangerous where a segment reaches argv
+  // — it does not here: the git call is a fixed arg array terminated by `--`,
+  // and guarded segments are only ever compared against the tracked set.
+  for (const frame of ['frames/01-open-studio-on-the-projects-pillar.png', 'frames/...png', 'frames/-rf.png']) {
+    test(`a frame of ${JSON.stringify(frame)} is ACCEPTED`, () => {
+      const root = mkdtempSync(join(tmpdir(), 'gallery-guard-ok-'));
+      try {
+        execFileSync('git', ['-C', root, 'init', '-q']);
+        const d = join(root, 'demos', 'stories', 'x');
+        mkdirSync(d, { recursive: true });
+        writeFileSync(join(d, 'story.json'), JSON.stringify({
+          story: { id: 'x', docs: { title: 'X' } }, beats: [{ status: 'green', frame }],
+        }));
+        const out = untrackedGalleryTargets(root, ['x']);
+        assert.equal(out.length, 2, 'story.json plus the frame, both untracked in this scratch repo');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test('a malformed story.json names the FILE, not just a SyntaxError', () => {
+    const root = mkdtempSync(join(tmpdir(), 'gallery-guard-badjson-'));
+    try {
+      execFileSync('git', ['-C', root, 'init', '-q']);
+      const d = join(root, 'demos', 'stories', 'broken');
+      mkdirSync(d, { recursive: true });
+      writeFileSync(join(d, 'story.json'), '{ not json');
+      assert.throws(() => untrackedGalleryTargets(root, ['broken']), /broken\/story\.json is not readable JSON/,
+        'a bare SyntaxError names no path, so one bad artifact reds a run without saying which of twelve');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('a story.json of literal `null` is refused, not a TypeError on null.beats', () => {
+    // `??` guards undefined, not null — C's finding. `null` parses fine.
+    const root = mkdtempSync(join(tmpdir(), 'gallery-guard-null-'));
+    try {
+      execFileSync('git', ['-C', root, 'init', '-q']);
+      const d = join(root, 'demos', 'stories', 'nul');
+      mkdirSync(d, { recursive: true });
+      writeFileSync(join(d, 'story.json'), 'null');
+      assert.throws(() => untrackedGalleryTargets(root, ['nul']), /parsed to null, not an object/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test('a git failure REFUSES rather than reporting everything as tracked', () => {
     // §15.504. The failure direction matters: "could not check" resolving to
     // "all clear" is how a guard reports absence of evidence as evidence of
