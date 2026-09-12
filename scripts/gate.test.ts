@@ -787,6 +787,43 @@ test('699: a step REFUSED by the lock guard is not recorded as FAIL', () => {
   // would be 1 for reasons unrelated to the refusal. The line IS the contract.
 });
 
+/**
+ * 7.6.100: THE SECOND GUARD'S MARKER, and the reason this door exists at all.
+ *
+ * The reason-extraction above matched the literal `[test-guard]` — the only
+ * guard that existed when it was written. `build-guard` writes `[build-guard]`,
+ * so the REFUSED line would have carried an EMPTY reason for it: exactly the
+ * defect recorded three paragraphs up ("the first draft read LINE 1 and printed
+ * an empty reason"), recurring one guard later, in the file whose subject is not
+ * being silent.
+ *
+ * The property was never "the test guard's line" — it is "the line the guard
+ * wrote". Matching the marker SHAPE `[<name>-guard]` is what makes that general,
+ * and this door is what stops the third guard rediscovering it.
+ */
+test('7.6.100: a BUILD refused by its lock guard carries its reason onto the line too', () => {
+  const { dir, head } = gitTreeWithHistory(REFUSING_CI);
+  installedInPlace(dir);
+  writeFileSync(join(dir, 'refuse.mjs'), [
+    "console.error('> forge@0.9.0 prebuild');",
+    "console.error('> node scripts/build-guard.mjs');",
+    "console.error('');",
+    "console.error('[build-guard] WAITED-OUT .run-lock 1800s — pid 4242 (cwd /elsewhere). Nothing was held while waiting; this build did not run and this is NOT a red.');",
+    'process.exit(75);',
+  ].join('\n'));
+  const camp = campWithPin(mkdtempSync(join(tmpdir(), 'refused-build-')), dir, `paths=1 head=${head}\n`);
+
+  const out = gate(dir, camp).out;
+
+  assert.match(out, /^REFUSED {2}node refuse\.mjs/m, 'a build that never started is REFUSED, not FAIL');
+  assert.doesNotMatch(out, /^FAIL {2}node refuse\.mjs/m);
+  assert.match(
+    out, /^REFUSED {2}node refuse\.mjs {2}\(\d+s\) — WAITED-OUT \.run-lock/m,
+    'the SECOND guard\'s reason must reach the line as well — a literal [test-guard] match prints nothing here',
+  );
+  assert.match(out, /pid 4242 \(cwd \/elsewhere\)/, 'including the holder, so the reader knows who to wait for');
+});
+
 test('699: an ordinary failing step is still FAIL with rc 1 — the distinction only helps if it is one', () => {
   const { dir, head } = gitTreeWithHistory(FAILING_CI);
   installedInPlace(dir);

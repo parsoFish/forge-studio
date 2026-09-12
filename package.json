@@ -16,6 +16,7 @@
     "apps/*"
   ],
   "scripts": {
+    "prebuild": "node scripts/build-guard.mjs",
     "build": "tsc && npm run build --workspace=forge-ui",
     "build:orchestrator": "tsc",
     "build:ui": "npm run build --workspace=forge-ui",
