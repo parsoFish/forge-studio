@@ -2834,6 +2834,20 @@ is what this contract reads — but it cannot be the only distinguisher.
   `data-dep-edge-`; the edge count lives on `[data-roadmap-edge-count]` — a
   `\bdata-dep-edge\b` matcher must remember a hyphen is a word boundary.)
 
+  **THE NODE IS PRESSABLE (`forge-8vfn.7.6.39`).** Each node carries
+  `data-action="open-initiative-<initiativeId>"` — the id is IN THE NAME, 5.15's
+  rule for the catalog chip, because a beat must say WHICH node it presses on a
+  widget rendering many. `data-roadmap-node` and `data-initiative-id` are CSS
+  identity, not handles: a story `press` resolves `[data-action=…]` and nothing
+  else, so before this the drawer — and the `[data-run-link]` inside it — was
+  unreachable to a beat, and S10 beats 9–21 all failed on "no real-nav path to
+  the run page". Pressing it opens the drawer for that initiative; the drawer's
+  run links are `[data-run-link][data-run-cycle-id][data-run-active]` with
+  `href="/flows/forge-develop/run/<cycleId>"`. **`data-run-active="true"` means
+  NEWEST, not running** (`cycle-grouping.ts:48-62` sorts by cycle id and takes
+  the head; it is not a liveness check) — and the route is keyed by CYCLE id,
+  never by initiative id.
+
   **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
   subscribes to the bridge socket and re-reads on `cycle-list-changed` (every
   `data-initiative-status` transition — `watchQueue` watches all six `_queue/`
@@ -2848,7 +2862,8 @@ is what this contract reads — but it cannot be the only distinguisher.
 
   Per
   initiative,
-  `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
+  `[data-roadmap-node][data-initiative-id][data-action="open-initiative-<id>"]
+  [data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
   [data-initiative-collapsed="true"][data-completed-at]` — the last only when
   derivable). **Every card is now PERMANENTLY collapsed** — canvas geometry
