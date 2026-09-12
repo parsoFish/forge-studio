@@ -39,6 +39,7 @@ import {
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
+import { readProgress } from './beats-progress.mjs';
 import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
 
 
@@ -164,6 +165,29 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // loop invents nothing to reach and nothing to bound itself by (§3.1,
   // rulings 312/317). Built here because this is where `beat` lives; only the
   // repeat branch ever calls it, so a beat without one pays no DOM read.
+  // 7.6.77's repeat half. Built HERE for the same reason `matchesData` is: this
+  // is where `beat` lives, and `beats-repeat.mjs` must not learn to read a page.
+  // `alsoWanted` is the progress key ALONE — `readObserved` collects only what
+  // it is asked for, and a key the beat does not itself expect would otherwise
+  // be absent on every poll however the page reads (`6.11.45`).
+  const declaredProgress = rawBeat.wait?.perTransition !== undefined ? rawBeat.wait : null;
+  // Built as `null` when the beat declared no progress bound, rather than as a
+  // closure that would throw on `declaredProgress.progressKey`. A closure like
+  // that would be caught by the `try` below and returned as "unreadable", so a
+  // wiring mistake would arrive disguised as a page that could not be read.
+  const readProgressNow = declaredProgress === null ? null : async () => {
+    try {
+      return readProgress(await readObserved(page, beat, [declaredProgress.progressKey]), declaredProgress.progressKey);
+    } catch {
+      // A read that could not happen is not a reading of ABSENT: `readObserved`
+      // throws when the page navigates under it, which a repeat meets by design
+      // between rounds. Reporting that as "the key is gone" would turn a
+      // re-render into `progress-key-vanished`. Treated as no new information —
+      // the budget keeps running, so a page that never comes back still expires.
+      return { value: undefined, source: 'unreadable', carriers: 0 };
+    }
+  };
+
   const matchesData = async (spec) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
     // under it ("Execution context was destroyed"). A repeat polls this between
@@ -214,7 +238,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   for (const step of runSteps) {
     if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
   }
-  const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor);
+  const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
+    declaredProgress, readProgressNow);
   const stepError = steps_.error;
   if (steps_.waitedForHandle) agentWaitConsumed = true;
   if (stepError !== null) {
