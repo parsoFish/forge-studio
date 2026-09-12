@@ -373,3 +373,97 @@ export function runLockVerdict(env = process.env, procRoot = '/proc') {
     procRoot,
   });
 }
+
+/*
+ * 7.6.93's two pure halves live HERE, not in `lock-state.mjs`, for the reason
+ * `test-guard.mjs` records at the top of itself: **importing a CLI runs it.**
+ * `lock-state.mjs` evaluates `process.argv` at module scope, so a door that
+ * imported it to reach one function printed the usage line and exited 2 —
+ * taking the whole test file with it. This module is pure and already imported
+ * everywhere, which is exactly why A moved `EXIT_LOCK_REFUSED` here when the
+ * same hazard bit them.
+ */
+/**
+ * Every pid from this process up to init — `save-instrument.sh`'s `self_chain`,
+ * ported, and the exclusion `who-runs` needs.
+ *
+ * `process.pid` ALONE IS NOT ENOUGH, and the reason is this tool's own shape. A
+ * caller runs `lock-state who-runs /abs/path/x.sh`, so **the absolute path being
+ * searched for sits in the invoker's own argv**. The shim `exec`s, which removes
+ * one hop — but `save-instrument.sh`, or any wrapper that passed the path along,
+ * is still an ancestor carrying the needle. Excluding only this process reports
+ * the caller as a process executing the target.
+ *
+ * That is the sixth costume of one error in this campaign and the first found
+ * BEFORE the code: five `/proc` censuses matched their own command line, one
+ * orphan-kill under-matched, and each time the cause was guessing what a command
+ * line looks like instead of reading one.
+ *
+ * `PPid:` from `/proc/<pid>/status`, never field 4 of `stat` split from the left
+ * — a `comm` can contain spaces and parentheses, and that parse returned the
+ * literal `S` when this lane first wrote it. The 64-hop bound is not decoration:
+ * a walk that trusts the chain to terminate wedges on a cycle it should never
+ * see.
+ */
+export function ancestorPids(startPid = process.pid) {
+  const out = new Set();
+  let p = String(startPid);
+  for (let guard = 0; guard < 64; guard += 1) {
+    if (p === '' || p === '0') break;
+    out.add(p);
+    if (p === '1') break;
+    let next = null;
+    try {
+      const m = /^PPid:\s+(\d+)/m.exec(readFileSync(`/proc/${p}/status`, 'utf8'));
+      next = m === null ? null : m[1];
+    } catch { /* vanished mid-walk: the chain ends here, honestly */ }
+    if (next === null) break;
+    p = next;
+  }
+  return out;
+}
+
+/**
+ * Who is EXECUTING `absPath` — 7.6.93's mode, delegating its per-pid facts to
+ * the same helpers `who-holds` uses so there is one reader and one walker.
+ *
+ * THE FILTER IS THE ABSOLUTE PATH (7.6.90). A bare name matches a sibling's copy
+ * in another worktree, and resolving a RELATIVE argument against the caller's
+ * cwd is a guess about which tree was meant — so a relative argument is refused
+ * rather than resolved.
+ *
+ * VANISHED AND UNREADABLE ARE KEPT APART. A pid whose directory is gone between
+ * the listing and the read is correct to skip; one that EXISTS and cannot be
+ * read is UNKNOWN and is reported, because a census that silently drops what it
+ * could not see reports a clean box (§15.504).
+ */
+export function whoRuns(absPath, { procRoot = '/proc', self = ancestorPids() } = {}) {
+  const rows = [];
+  const unknown = [];
+  let pids;
+  try {
+    pids = readdirSync(procRoot).filter((n) => /^[0-9]+$/.test(n));
+  } catch (err) {
+    return { ok: false, rows, unknown, reason: `${procRoot} could not be read (${err?.code ?? err}) — refusing rather than reporting nobody` };
+  }
+  for (const pid of pids) {
+    if (self.has(pid)) continue;
+    let cmd;
+    try {
+      cmd = readFileSync(`${procRoot}/${pid}/cmdline`, 'utf8');
+    } catch {
+      // Vanished vs unreadable, kept apart exactly as `save-instrument.sh` does.
+      try {
+        readFileSync(`${procRoot}/${pid}/status`, 'utf8');
+        unknown.push(pid);
+      } catch { /* genuinely gone — correct to skip */ }
+      continue;
+    }
+    if (!cmd.split('\0').some((tok) => tok === absPath) && !cmd.replace(/\0/g, ' ').includes(absPath)) continue;
+    let cwd = null;
+    try { cwd = readlinkSync(`${procRoot}/${pid}/cwd`); } catch { /* unreadable cwd is not a reason to drop the row */ }
+    rows.push({ pid, cwd, cmd: cmd.replace(/\0/g, ' ').trim() });
+  }
+  return { ok: true, rows, unknown, reason: '' };
+}
+
