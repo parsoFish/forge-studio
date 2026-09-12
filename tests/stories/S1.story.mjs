@@ -733,7 +733,40 @@ export default {
         { press: 'open-plan' },
         { press: 'approve-plan' },
       ],
-      wait: { for: 'agent', upTo: 600_000 },
+      // AMENDED 2026-09-13 (`forge-8vfn.7.6.77`, T1 930/931/957). THE BOUND IS
+      // ON PROGRESS: this beat's work is a VARIABLE NUMBER of VARIABLE-LENGTH
+      // turns, so no wall-clock figure is both safe and meaningful. Four funded
+      // runs, architect `events.jsonl` first event -> last:
+      //
+      //   run  7 PASS 466s  r1 68s | DRAFT 392s | verdict@463s
+      //   run  8 FAIL 597s  r1 81s r2 71s | DRAFT >437s, SIGTERMed at the bound
+      //   run  9 PASS 465s  r1 75s r2 57s | DRAFT 327s | verdict@462s
+      //   run 10 FAIL 595s  r1 55s r2 28s r3 126s | DRAFT >378s, SIGTERMed
+      //
+      // ROUND COUNT DOES NOT PREDICT THE OUTCOME — 8 and 9 both answered two
+      // rounds and only 9 passed — so a bound derived from it would still red
+      // run 8. The cost is the single final DRAFTING turn (327 s, 392 s on the
+      // runs that completed one); rounds are 28-126 s each. `session-phase`
+      // changes every round and freezes for exactly one drafting turn, so the
+      // bound must exceed ONE turn, not a whole run: 480 000 ms is 22% over the
+      // longest COMPLETED turn observed. `upTo` is unchanged and still the
+      // ceiling — this is a second, stricter bound, never a replacement. THE
+      // LIMIT, STATED: runs 8 and 10 were SIGTERMed AT the bound, so `>437 s`
+      // and `>378 s` are lower bounds, not measurements; run 11 is the first
+      // that can widen the base, because a per-transition bound lets the
+      // drafting turn finish instead of being cut off at the ceiling.
+      //
+      // ONE WRINKLE, WRITTEN DOWN RATHER THAN LEFT TO A RUN RECORD: this bound
+      // reaches BOTH waits, and the consequence wait stands on `/artifact`,
+      // which renders no `data-session-phase` — so a failure there reports
+      // `no-progress-key (consequence)` at 480 s: true, and pointed at the
+      // wrong place. Contract fix: `forge-8vfn.7.6.98`.
+      wait: {
+        for: 'agent',
+        upTo: 600_000,
+        perTransition: 480_000,
+        progressKey: 'session-phase',
+      },
       expect: {
         route: '/artifact',
         data: {
