@@ -26,6 +26,117 @@ die() { echo "gate.sh: $*" >&2; exit 2; }
 
 LIST=0
 if [ "${1:-}" = "--list" ]; then LIST=1; shift; fi
+
+# `--lock-state <lockfile>` — classify one lock and exit, running no step.
+# It exists so `suite_lock_state`'s three-way verdict is REACHABLE from a door:
+# the bug this answers (`forge-s9g1`) lives in the two-row case, and a door
+# cannot put a chosen holder and a chosen waiter into the real `/proc/locks`.
+# Paired with `FORGE_PROC_LOCKS` it makes the classifier testable without
+# running a suite.
+#
+# ONLY THE FLAG IS READ HERE. My first draft inlined copies of
+# `lock_holder_pids` and `is_ancestor` so the verb could exit before they are
+# defined — a SECOND implementation of the classification this whole bead is
+# about, which would have drifted from the real one the first time either
+# changed. The verb is answered after the one definition instead, a hundred and
+# fifty lines below. Read only as `$1`, exactly as `--list` is, so
+# `forge-8vfn.6.9`'s refusal still covers it.
+LOCK_STATE_F=""
+if [ "${1:-}" = "--lock-state" ]; then
+  shift
+  LOCK_STATE_F="${1:?usage: gate.sh --lock-state <lockfile>}"
+  shift
+  set -- "${PWD}" "" "$@"          # keep the positional contract below intact
+fi
+
+# ---- THE SUITE LOCK IS THIS TOOL'S TO HOLD (bead forge-8vfn.7.6.48, T1 841) ----
+#
+# Until now this script only EXPORTED the lock's name, twenty lines above, so
+# the repo's `npm test` guard could read it — and every caller was trusted to
+# TAKE it. Twenty campaign wrappers did. One lane had no wrapper at all and
+# invoked this script directly, so its gates ran every heavy step
+# unserialised; ruling 778 measured the result at 3.2x with nine timeouts,
+# with BOTH runs believing they held the lock. A guarantee that depends on
+# each caller remembering is not a guarantee, and this tool is the one place
+# that knows a gate is about to run.
+#
+# THREE STATES, because "just take it" would deadlock the twenty wrappers that
+# already hold it: `flock` in a child opens its OWN fd, so an inner acquire
+# under an outer holder blocks until its `-w` expires. A tool that hung every
+# correct caller in order to fix the incorrect ones would be a worse bug than
+# the one it fixes.
+# HOLDERS ONLY, AND NEVER BY POSITION (`forge-s9g1`). Shipped in 7.6.48 as
+#
+#     awk -v ino=":$ino " '$0 ~ ino {print $5}' /proc/locks
+#
+# and it printed garbage in production twice:
+#
+#     suite-lock: WAITING on stranger pid(s) 3048432 WRITE — another lane's suite holds it
+#
+# A HOLDER row is `6: FLOCK ADVISORY WRITE 784079 08:30:2025251 0 EOF`, where $5
+# IS the pid. A BLOCKED WAITER is a CONTINUATION row — `2: -> FLOCK ADVISORY
+# WRITE 1677053 …` — and the `->` shifts every field by one, so $5 there is the
+# literal string `WRITE` and the pid sits at $6. Cosmetic while `is_ancestor`
+# compares `WRITE` against numeric pids and never matches; NOT cosmetic the
+# moment anything downstream reads the list as pids, and not cosmetic even now
+# once the pids are right — a blocked WAITER that happens to be this gate's own
+# ancestor would classify as ANCESTOR for a lock nobody holds.
+#
+# So: skip continuation rows, because a waiter is not a holder and this function
+# is named for what it returns; and find the pid as the field BEFORE the
+# MAJ:MIN:INODE token rather than counting from the left, so no future field can
+# shift it again. POSITION WAS NEVER THE PROPERTY — the same lesson this file
+# already states 120 lines above, about reading the guard's refusal line BY NAME
+# and never by position.
+#
+# `FORGE_PROC_LOCKS` is a TEST SEAM and says so: `/proc/locks` cannot be made to
+# hold a chosen row, so the two-row case this bug lives in is unreachable without
+# one. It defaults to the real file and no caller in the campaign sets it —
+# `lock-guard.mjs` earned its twelve doors the same way, with `procRoot`.
+lock_holder_pids() {
+  local f="$1" ino
+  ino="$(stat -c '%i' "$f" 2>/dev/null)" || return 0
+  awk -v ino="$ino" '
+    $2 == "->" { next }                 # a blocked waiter is not a holder
+    {
+      for (i = 2; i <= NF; i++) {
+        n = split($i, a, ":")
+        if (n == 3 && a[3] == ino) { print $(i - 1); next }
+      }
+    }' "${FORGE_PROC_LOCKS:-/proc/locks}"
+}
+# PPid FROM `status`, NOT FIELD 4 OF `stat` (§15.480). `/proc/<pid>/stat` is
+# `pid (comm) state ppid …` and `comm` may contain SPACES and PARENS, so field
+# 4 is the ppid only when it does not. Measured while writing this: the walk
+# returned the literal `S` — the state field — and the comparison died with
+# "integer expression expected". A misread ppid reclassifies an ANCESTOR as a
+# STRANGER, which is this gate waiting out its full bound on a lock its own
+# caller holds: exactly the deadlock the three states exist to avoid.
+is_ancestor() {
+  local want="$1" p=$$ guard=0
+  while [ "$p" -gt 1 ] && [ "$guard" -lt 64 ]; do
+    [ "$p" = "$want" ] && return 0
+    p="$(awk '/^PPid:/{print $2}' /proc/$p/status 2>/dev/null)"
+    [ -n "$p" ] || return 1
+    guard=$((guard+1))
+  done
+  return 1
+}
+suite_lock_state() {
+  local f="$1" pids pid
+  pids="$(lock_holder_pids "$f")"
+  [ -z "$pids" ] && { echo FREE; return; }
+  for pid in $pids; do
+    is_ancestor "$pid" && { echo "ANCESTOR:$pid"; return; }
+  done
+  echo "STRANGER:$(echo $pids | tr '\n' ' ' | sed 's/ $//')"
+}
+
+# `--lock-state`, answered by the ONE classifier above rather than a copy of it.
+if [ -n "$LOCK_STATE_F" ]; then
+  suite_lock_state "$LOCK_STATE_F"
+  exit 0
+fi
 R="${1:?usage: gate.sh <worktree> [campaign-dir] | gate.sh --list <worktree>}"
 CAMP="${2:-}"
 # REFUSE what it does not understand (bead `forge-8vfn.6.9`). `--list` is read
@@ -177,53 +288,6 @@ if [ -n "$CAMP" ]; then
   export FORGE_RUN_LOCK="$CAMP/.run-lock"
 fi
 
-# ---- THE SUITE LOCK IS THIS TOOL'S TO HOLD (bead forge-8vfn.7.6.48, T1 841) ----
-#
-# Until now this script only EXPORTED the lock's name, twenty lines above, so
-# the repo's `npm test` guard could read it — and every caller was trusted to
-# TAKE it. Twenty campaign wrappers did. One lane had no wrapper at all and
-# invoked this script directly, so its gates ran every heavy step
-# unserialised; ruling 778 measured the result at 3.2x with nine timeouts,
-# with BOTH runs believing they held the lock. A guarantee that depends on
-# each caller remembering is not a guarantee, and this tool is the one place
-# that knows a gate is about to run.
-#
-# THREE STATES, because "just take it" would deadlock the twenty wrappers that
-# already hold it: `flock` in a child opens its OWN fd, so an inner acquire
-# under an outer holder blocks until its `-w` expires. A tool that hung every
-# correct caller in order to fix the incorrect ones would be a worse bug than
-# the one it fixes.
-lock_holder_pids() {
-  local f="$1" ino
-  ino="$(stat -c '%i' "$f" 2>/dev/null)" || return 0
-  awk -v ino=":$ino " '$0 ~ ino {print $5}' /proc/locks
-}
-# PPid FROM `status`, NOT FIELD 4 OF `stat` (§15.480). `/proc/<pid>/stat` is
-# `pid (comm) state ppid …` and `comm` may contain SPACES and PARENS, so field
-# 4 is the ppid only when it does not. Measured while writing this: the walk
-# returned the literal `S` — the state field — and the comparison died with
-# "integer expression expected". A misread ppid reclassifies an ANCESTOR as a
-# STRANGER, which is this gate waiting out its full bound on a lock its own
-# caller holds: exactly the deadlock the three states exist to avoid.
-is_ancestor() {
-  local want="$1" p=$$ guard=0
-  while [ "$p" -gt 1 ] && [ "$guard" -lt 64 ]; do
-    [ "$p" = "$want" ] && return 0
-    p="$(awk '/^PPid:/{print $2}' /proc/$p/status 2>/dev/null)"
-    [ -n "$p" ] || return 1
-    guard=$((guard+1))
-  done
-  return 1
-}
-suite_lock_state() {
-  local f="$1" pids pid
-  pids="$(lock_holder_pids "$f")"
-  [ -z "$pids" ] && { echo FREE; return; }
-  for pid in $pids; do
-    is_ancestor "$pid" && { echo "ANCESTOR:$pid"; return; }
-  done
-  echo "STRANGER:$(echo $pids | tr '\n' ' ' | sed 's/ $//')"
-}
 wait_for_suite_lock() {
   if flock -w "$SUITE_LOCK_WAIT" 9; then
     echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
