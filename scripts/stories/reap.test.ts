@@ -41,6 +41,7 @@ import { collectAgentRuns, decideReap, describeReap, descendantsOf, reapAgentRun
 import {
   readPlantRecord, readLastBeat, plantDiedMessage,
   everyPlantedPidVanished, plantVanishedInWindowMessage,
+  memAvailableMiB, memoryClause,
 } from './reap-plant.mjs';
 
 const ROOT = '/home/parso/forge-projects';
@@ -744,4 +745,37 @@ test('7.6.94: the controls file raises keepArtifacts BEFORE the reap, not only o
   // fix as the defect.
   const lower = src.indexOf('keepArtifacts = false;', raise);
   assert.notEqual(lower, -1, 'and lowered after the assertions, so a clean pass still cleans up');
+});
+
+/**
+ * 7.6.94's memory reading — D's ask, and the reason it is worth two lines: a
+ * reading at BOTH ends eliminates OOM if memory is flat, rather than leaving it
+ * the comfortable explanation nobody tested. "No evidence" was a fact about our
+ * instruments, not about the box.
+ */
+test('7.6.94: the memory clause reports both ends and the DELTA, because direction is the finding', () => {
+  assert.match(memoryClause(5089, 4210), /5089 MiB at the plant -> 4210 MiB now \(-879 MiB\)/);
+  assert.match(memoryClause(4000, 4600), /\(\+600 MiB\)/, 'a rise is as much a finding as a fall');
+});
+
+test('7.6.94: an unreadable meminfo is UNREADABLE, never zero', () => {
+  assert.match(memoryClause(null, 4210), /UNREADABLE at the plant/);
+  assert.match(memoryClause(4210, null), /UNREADABLE now/);
+  assert.match(memoryClause(null, null), /UNREADABLE at both ends/);
+  for (const c of [memoryClause(null, 4210), memoryClause(4210, null), memoryClause(null, null)]) {
+    assert.doesNotMatch(c, /\b0 MiB\b/, 'a machine that could not be read is not a machine with no memory free');
+  }
+  assert.equal(memAvailableMiB('/proc/no-such-root-7694'), null, 'an absent procfs reads null, not 0');
+
+  // TWO WAYS TO FAIL, AND ONLY ONE WAS DOORED. The line above exercises the
+  // THROW (no such file); a mutation returning 0 for a meminfo that exists and
+  // carries no `MemAvailable:` line survived it, because nothing reached that
+  // branch. A readable file without the field is a real shape — a container's
+  // procfs, an older kernel — and it must read UNKNOWN like the absent one.
+  const proc = mkdtempSync(join(tmpdir(), 'meminfo-'));
+  writeFileSync(join(proc, 'meminfo'), 'MemTotal:       16332188 kB\nSwapFree:        11710412 kB\n');
+  assert.equal(memAvailableMiB(proc), null, 'a meminfo with no MemAvailable line is UNKNOWN, never 0');
+  writeFileSync(join(proc, 'meminfo'), 'MemAvailable:    5242880 kB\n');
+  assert.equal(memAvailableMiB(proc), 5120, 'and a real one is read in MiB');
+  rmSync(proc, { recursive: true, force: true });
 });
