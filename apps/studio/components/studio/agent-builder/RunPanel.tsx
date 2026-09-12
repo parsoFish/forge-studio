@@ -211,6 +211,14 @@ type Props = {
    *  Optional so the pinned `lib/run-panel-render.test.ts` can keep mounting
    *  this component without it. */
   onRunDispatched?: (runId: string) => void;
+  /** `forge-8vfn.7.6.19` — fired ONCE when this panel's own poll observes the
+   *  run reach a terminal state. `onRunDispatched` fires at DISPATCH, when the
+   *  run is necessarily `running` with no cost, so a page that re-reads its
+   *  ledger only on that callback reads it at the one moment it is guaranteed
+   *  not to hold the answer. This panel already polls to terminal
+   *  (`pollAgentRun` below) and kept the fact to itself; S5 beat 13 waited
+   *  300 s for a cost that was on disk within 36 s. */
+  onRunSettled?: (runId: string) => void;
 };
 
 export function RunPanel({
@@ -227,6 +235,7 @@ export function RunPanel({
   unreadyConnectionIds = [],
   standingTriggers = [],
   onRunDispatched,
+  onRunSettled,
 }: Props) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
@@ -321,9 +330,25 @@ export function RunPanel({
   // ceiling is hit (agent-dispatch.ts's explicit 'timed-out' state).
   // `pollNonce` lets the "Re-check" button restart a bounded poll for the
   // SAME runId after a watch timeout, without needing runId itself to change.
+  // 7.6.19: ONE settle report per run, however many terminal updates arrive —
+  // the page's `historyNonce` is a trigger, not a counter, and a bump per poll
+  // would re-read the ledger on every tick while changing nothing.
+  const settledFor = useRef<string | null>(null);
   useEffect(() => {
     if (!runId) return;
-    return pollAgentRun(runId, { onUpdate: setStatus });
+    return pollAgentRun(runId, {
+      onUpdate: (s) => {
+        setStatus(s);
+        // Terminal is "not running": done, failed, suppressed, cancelled,
+        // budget-exceeded, stalled. Deliberately NOT a list of terminal names —
+        // a new state added to AgentRunStatus would otherwise silently stop
+        // reporting, which is how this class of defect got here.
+        if (s.state !== 'running' && s.state !== 'unknown' && settledFor.current !== runId) {
+          settledFor.current = runId;
+          onRunSettled?.(runId);
+        }
+      },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, pollNonce]);
 
