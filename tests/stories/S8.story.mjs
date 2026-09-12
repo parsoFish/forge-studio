@@ -223,6 +223,23 @@ export default {
           'refresh-state': 'refreshed',
         },
       },
+      // 7.6.91 / run 11. THE BOUND WAS THE DOM DEFAULT AND THIS IS NOT A DOM
+      // UPDATE. `READY_TIMEOUT_MS` is 15 s, right for a page settling and wrong
+      // for nine live outbound calls — `6.11.10`'s family exactly: the wait
+      // existed, the bound was wrong for what it was waiting on.
+      //
+      // MEASURED, beat 3's stamp to beat 4's, across every run on record:
+      //   run  8  11.12 s      run  9  13.43 s
+      //   run 10  13.07 s      run 11  15.25 s  <- red, by 0.25 s
+      // Three greens with 1.6-3.9 s of headroom is a coin-flip dressed as a
+      // pass, and run 11 lost it while the product was working perfectly.
+      //
+      // `settle` rather than a bigger clock (621(ii)): it sits through exactly
+      // `in-flight` and stops the moment the key holds anything else, so a
+      // refresh that settles into `refused` still fails FAST and reports what it
+      // saw. Patience for the transient, none for a wrong value. 60 s is ~4x the
+      // observed maximum and far under the 180 s stall ceiling.
+      wait: { for: 'settle', upTo: 60_000, key: 'refresh-state', while: 'in-flight' },
       say: 'forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.',
     },
     {
