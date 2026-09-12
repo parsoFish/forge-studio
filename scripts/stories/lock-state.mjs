@@ -44,10 +44,20 @@
  *
  * EXIT: 0 the lock is FREE · 3 the lock is HELD · 2 usage. The code is the
  * machine contract, so a caller never parses prose to branch.
+ *
+ * `who-runs` ANSWERS A THREE-STATE QUESTION AND SO HAS A THIRD CODE: 0 nobody
+ * runs it · 3 someone does · **4 the census could not tell** · 2 usage. 4 exists
+ * because the sentence above is the whole trap: this file printed
+ * `N pid(s) UNREADABLE` under a comment reading "UNKNOWN is reported, never
+ * folded into 'nobody'" — and then exited 0, which IS "nobody" to the only
+ * consumer the contract admits. Reported in prose and folded in the code is not
+ * a weaker version of §15.504, it is the violation with a comment denying it.
+ * green · red · UNKNOWN are three states and UNKNOWN never resolves toward
+ * proceeding.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { lockHolders, lockWaiters, lockOpeners } from './lock-guard.mjs';
+import { lockHolders, lockWaiters, lockOpeners, ancestorPids, whoRuns, whoRunsExit } from './lock-guard.mjs';
 
 const USAGE = 'usage: lock-state who-holds|held|say <lockpath> [--twice[=SECONDS]] | lock-state who-runs <abs-path>';
 
@@ -95,6 +105,7 @@ function firstToken(pid) {
     return first.length > 32 ? `${first.slice(0, 31)}…` : first;
   } catch { return '(gone)'; }
 }
+
 
 /** `null` from the census means COULD NOT READ, which is not "nobody". Kept
  *  apart all the way to the output, because collapsing them is how an
@@ -164,14 +175,47 @@ const twice = twiceArg === undefined ? null : (twiceArg.includes('=') ? Number(t
 if (twice !== null && (!Number.isFinite(twice) || twice < 0)) { console.error('lock-state: --twice takes a non-negative number of seconds'); process.exit(2); }
 
 if (verb === 'who-runs') {
-  // 7.6.93's mode. The FILTER is C's and is deliberately not guessed here: it
-  // matches the ABSOLUTE target path in a cmdline (7.6.90 — a bare name matches
-  // a sibling's copy in another worktree) and refuses a relative argument rather
-  // than resolving one against the caller's cwd. Declared so the verb exists at
-  // one address; refusing rather than approximating, because a census that
-  // half-works is the failure this whole reconciliation is about.
-  console.error('lock-state: who-runs is 7.6.93\'s mode and is not implemented here yet — use save-instrument.sh\'s own scan until C lands it');
-  process.exit(2);
+  if (!target.startsWith('/')) {
+    console.error(`lock-state: who-runs needs an ABSOLUTE path; got '${target}'. A bare name matches a sibling's copy in another worktree (7.6.90), and resolving this against the caller's cwd would be a guess about which tree was meant.`);
+    process.exit(2);
+  }
+  const first = whoRuns(target);
+  if (!first.ok) { console.error(`lock-state: ${first.reason}`); process.exit(2); }
+  let stable = null;
+  if (twice !== null) {
+    // A's discriminator, in the walker so two callers cannot disagree: a
+    // SELF-MATCH's pid changes every scan (a new shell each time) while a real
+    // orphan's is stable with a climbing elapsed. Transients are REPORTED, never
+    // filtered — a row that vanishes between scans is the self-match announcing
+    // itself, and suppressing it turns the tell back into silence.
+    spawnSync('sleep', [String(twice)]);
+    const second = whoRuns(target);
+    const seen = new Set(second.rows.map((r) => r.pid));
+    stable = {
+      stable: first.rows.filter((r) => seen.has(r.pid)).map((r) => r.pid),
+      transient: first.rows.filter((r) => !seen.has(r.pid)).map((r) => r.pid),
+    };
+  }
+  const name = target.split('/').pop();
+  if (first.rows.length === 0 && first.unknown.length === 0) {
+    console.log(`who-runs ${name}: nobody`);
+  } else {
+    for (const r of first.rows) {
+      // The WALK and the FILTER are `lock-guard.mjs`'s (pure, importable); the
+      // per-pid presentation facts are this CLI's, through the same `pidFacts`
+      // `who-holds` uses — one reader, one set of facts, one spelling of them.
+      const f = pidFacts(r.pid);
+      const mark = stable === null ? '' : (stable.stable.includes(r.pid) ? ` stable across 2 scans (${twice}s apart)` : ' transient — present in scan 1 only, likely the scanner or its shell');
+      console.log(`who-runs ${name}: ${r.pid}(cwd ${r.cwd ?? '?'}, ppid ${f.ppid ?? '?'}${f.parent ? ` ${f.parent}` : ''}${f.reparented ? ', reparented' : ''}, ${f.etime})${mark}`);
+    }
+    // UNKNOWN is reported, never folded into "nobody" (§15.504).
+    if (first.unknown.length > 0) console.log(`who-runs ${name}: ${first.unknown.length} pid(s) UNREADABLE — ${first.unknown.join(',')}`);
+  }
+  // 3 someone runs it · 4 the census could not read every pid, so "nobody" is
+  // not a claim this run is entitled to make · 0 only when it read everything
+  // and found no one. The mapping is `whoRunsExit`, in the pure module, because
+  // written inline here it was untestable and wrong.
+  process.exit(whoRunsExit(first));
 }
 if (!['who-holds', 'held', 'say'].includes(verb)) { console.error(`lock-state: unknown verb '${verb}'\n${USAGE}`); process.exit(2); }
 
