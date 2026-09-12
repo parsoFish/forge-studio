@@ -620,3 +620,90 @@ test('7.6.85: HEAD that is not the <to> sha refuses, naming both', () => {
   assert.match(r.stderr, new RegExp(f.to.slice(0, 8)), 'names the HEAD it found');
   assert.match(r.stderr, new RegExp(f.from.slice(0, 8)), 'and the to-sha it was given');
 });
+
+// ── 7.6.87 — a rehash is not an adoption (§15.502) ───────────────────────────
+
+/** Its own repo rather than `plantPair`'s, because commit ORDER matters here:
+ *  `pin-glob-check` expands globs over TRACKED files, so an extra file must be
+ *  committed to be seen — and committing it after `to` would move HEAD past the
+ *  to-sha and trip §15.169's refusal instead of the drift under test. My first
+ *  cut wrote the file untracked and the door failed for that reason, which is
+ *  the same fixture-carries-an-unintended-property shape as 7.6.85's. */
+function plantWithGlobs(opts: { extraInGlobFile?: boolean } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'pin-glob-'));
+  const repo = join(root, 'repo');
+  const camp = join(root, 'camp');
+  const G = join(camp, 'gate-manifests');
+  mkdirSync(join(repo, 'src'), { recursive: true });
+  mkdirSync(G, { recursive: true });
+  const git = (...a: string[]) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
+  git('init', '-q', '.');
+  git('config', 'user.email', 'a@b');
+  git('config', 'user.name', 'c');
+  writeFileSync(join(repo, 'pinned.txt'), 'before\n');
+  writeFileSync(join(repo, 'src', 'listed.ts'), 'export const a = 1;\n');
+  // The in-glob file NO manifest lists — committed HERE, before `to`, so it is
+  // tracked (visible to the glob expansion) without moving HEAD past the to-sha.
+  if (opts.extraInGlobFile === true) writeFileSync(join(repo, 'src', 'never-pinned.ts'), 'export const b = 2;\n');
+  git('add', '-A');
+  git('commit', '-qm', 'one');
+  const from = git('rev-parse', 'HEAD');
+  writeFileSync(join(repo, 'pinned.txt'), 'after\n');
+  git('add', 'pinned.txt');
+  git('commit', '-qm', 'two');
+  const to = git('rev-parse', 'HEAD');
+
+  writeFileSync(join(G, 'M-T.globs'), 'src/**/*.ts\n');
+  writeFileSync(join(G, 'M-T.sha256'),
+    `${sha256('before\n')}  pinned.txt\n${sha256('export const a = 1;\n')}  src/listed.ts\n`);
+  writeFileSync(join(G, 'M-T.txt'), 'pinned.txt\nsrc/listed.ts\n');
+  writeFileSync(join(G, 'M-T.counts'), `paths=2 manifest=0000000000000000 head=00000000 tree=${repo} owner=M-T\n`);
+  return { root, repo, camp, G, from, to };
+}
+
+const runGlobs = (f: ReturnType<typeof plantWithGlobs>) =>
+  spawnSync('bash', [RECONCILE, f.repo, f.camp, 'M-T', f.from.slice(0, 8), f.to.slice(0, 8), 'test label'],
+    { encoding: 'utf8', env: { ...process.env, FORGE_LANE: 'M-T' } });
+
+test('7.6.87: an unlisted in-glob file DRIFTS after the rehash, and the rehash still stands', () => {
+  // Measured before this existed: four in-glob test files sat unpinned under
+  // M6-C's globs for hours (three of them mine), plus one under M6-A's. Every
+  // reconcile in between reported `0 FAILED`, and that was TRUE — an unlisted
+  // file cannot fail. The pair of facts is what made it invisible.
+  const f = plantWithGlobs({ extraInGlobFile: true });
+  const r = runGlobs(f);
+
+  assert.notEqual(r.status, 0, `drift must not exit 0:\n${r.stdout}${r.stderr}`);
+  assert.match(r.stdout + r.stderr, /never-pinned\.ts/, 'the unlisted path is NAMED, not merely counted');
+  assert.match(r.stderr, /INCOMPLETE/, 'and the verdict says incomplete, not wrong');
+  // THE REHASH STANDS. The hashes are right about the paths they cover; only the
+  // coverage is short. A door that let the rehash be discarded would trade one
+  // silent wrong state for another.
+  assert.match(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), new RegExp(`head=${f.to.slice(0, 8)}`),
+    'head= still advanced — the rehash is not undone by the drift');
+});
+
+test('7.6.87: a manifest whose globs are fully listed PASSES and exits 0', () => {
+  // The positive control. Without it, the door above would pass against a tool
+  // that always exits non-zero — and "refuses everything" is not a guard.
+  const f = plantWithGlobs();
+  const r = runGlobs(f);
+  assert.equal(r.status, 0, `a fully-listed manifest must reconcile cleanly:\n${r.stdout}${r.stderr}`);
+  assert.match(r.stdout, /every one listed|PASS/, `the check's own line is printed:\n${r.stdout}`);
+});
+
+test('7.6.87: .txt is REGENERATED from .sha256, not edited beside it', () => {
+  // M6-C.txt sat at 190 rows against a 193-row .sha256: amendments updated the
+  // machine listing and backed the human one up without editing it. No live
+  // consumer reads .txt, which is exactly why it drifted unnoticed — and a
+  // human listing that disagrees with the machine one is worse than none,
+  // because it is the half a person checks.
+  const f = plantWithGlobs();
+  writeFileSync(join(f.G, 'M-T.txt'), 'STALE — not what .sha256 says\n');
+  const r = runGlobs(f);
+  assert.equal(r.status, 0, r.stderr);
+  const expected = readFileSync(join(f.G, 'M-T.sha256'), 'utf8')
+    .split('\n').filter(Boolean).map((l) => l.split(/\s+/)[1]).join('\n') + '\n';
+  assert.equal(readFileSync(join(f.G, 'M-T.txt'), 'utf8'), expected,
+    'byte-for-byte the paths column of .sha256, same order');
+});
