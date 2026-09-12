@@ -41,6 +41,7 @@ import assert from 'node:assert/strict';
 
 import { validateStory } from './story-file.mjs';
 import { runRepeatStep } from './beats-repeat.mjs';
+import { performSteps } from './beats-steps.mjs';
 import S1 from '../../tests/stories/S1.story.mjs';
 
 /** The wait the S1 amend will declare. `session-phase` changes on every
@@ -66,8 +67,27 @@ function realBeat11() {
   return { beat, step: repeats[0]! };
 }
 
-/** Enough page for the repeat: the act is present, and nothing else is asked. */
-const gatePresent = { locator: () => ({ count: async () => 1 }), url: () => 'http://localhost:4124/sessions/architect/x' };
+/**
+ * Enough page for the repeat AND for `performSteps` to act through it. The
+ * thinner version — `{ locator: () => ({ count }) }` — was enough while every
+ * door called `runRepeatStep` directly and handed it a stub `run`, and that is
+ * exactly why the `performSteps` seam went untested: the fixture could not
+ * reach it. A door's fixture quietly decides which seams are reachable.
+ */
+function livePage() {
+  const locator = (): any => ({
+    first: () => locator(), nth: () => locator(), count: async () => 1,
+    evaluateAll: async (fn: any, a: any) => fn([], a), waitFor: async () => {},
+    click: async () => {}, fill: async () => {},
+  });
+  return {
+    locator,
+    url: () => 'http://localhost:4124/sessions/architect/x',
+    waitForSelector: async () => {},
+    evaluate: async () => ({ data: {}, nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null }),
+  };
+}
+const gatePresent = livePage();
 
 describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bound', () => {
   test('the architect stops emitting: the repeat ends on PROGRESS, naming its wait', async () => {
@@ -101,26 +121,43 @@ describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bou
     // THE CONTROL, and the one that would catch a bound that reds a healthy run.
     // The phase changes on every read — an architect answering rounds — and the
     // repeat must run to its `until` untouched.
+    // THE EXIT CONDITION MUST NOT COME FROM THE THING UNDER TEST, and the first
+    // version of this door is why the rule is written here. It had
+    // `left: () => 4_000` — a CONSTANT, so the loop's own bound never expired —
+    // and `matches: async () => reads > 6`, where `reads` was incremented only
+    // inside `readProgressNow`. Under the R1 mutation (`tracker` disabled) the
+    // reader is never called, `reads` never moves, `until` is never met and the
+    // bound never expires: the door HUNG rather than failing. Measured at 405 s
+    // and 915 s, 0.0% CPU, which reads exactly like a slow suite.
+    //
+    // A door that hangs under a mutation is worse than one that passes: a
+    // failure announces itself, a hang is indistinguishable from contention on
+    // a box four sessions share. So `left` decays on the real clock and the
+    // counter that ends the loop is incremented by `run` — the ROUNDS, which is
+    // what "the architect is still working" actually means — leaving
+    // `readProgressNow` free to be disabled by any mutation without changing
+    // whether this terminates.
     const { beat, step } = realBeat11();
+    let rounds = 0;
     let reads = 0;
-    let phase = 'interviewing';
+    const startedAt = Date.now();
 
     const r = await runRepeatStep({
       page: gatePresent as never,
       step: step as never,
-      left: () => 4_000,
-      matches: async () => reads > 6,          // the architect reaches awaiting-verdict eventually
+      left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+      matches: async () => rounds >= 3,        // the architect reaches awaiting-verdict after three rounds
       timeoutMs: 4_000,
-      run: async () => ({ waitedForHandle: false, error: null }),
+      run: async () => { rounds += 1; return { waitedForHandle: false, error: null }; },
       progress: beat.wait as never,
       readProgressNow: async () => {
         reads += 1;
-        phase = `round-${reads}`;              // every poll is a transition
-        return { value: phase, source: 'root', carriers: 1 };
+        return { value: `round-${reads}`, source: 'root', carriers: 1 };  // every poll is a transition
       },
     });
 
     assert.equal(r.error, null, `a repeat making progress must finish on its own \`until\`: ${r.error}`);
+    assert.ok(reads > 0, 'fixture check: the progress reader was actually consulted, or this proves nothing');
   });
 
   test('`until` beats the progress bound: a met condition is never a stall', async () => {
@@ -140,6 +177,76 @@ describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bou
       readProgressNow: async () => ({ value: 'frozen', source: 'root', carriers: 1 }),
     });
     assert.equal(r.error, null, 'a satisfied repeat is not stalled, however still the key is');
+  });
+
+  test('the bound REACHES the repeat through performSteps — the seam the mutation pass found open', async () => {
+    // R3 SURVIVED THE FIRST MUTATION PASS: setting `progress: null,
+    // readProgressNow: null` at the `runRepeatStep` call site inside
+    // `performSteps` left all seventeen doors green. Every door above drives
+    // `runRepeatStep` DIRECTLY and hands it the bound itself, so nothing
+    // anywhere proved that the bound a beat declares actually arrives there.
+    //
+    // That is this bead's own defect one layer up. 7.6.77 shipped a bound
+    // attached to the wrong wait; this would have shipped a bound attached to
+    // the right wait and never delivered to it, with a green suite either way.
+    // "A door that constructs its own input proves the function; only a door
+    // that takes its input from the real producer proves the seam" — and
+    // `performSteps` is the producer for this one.
+    const { beat, step } = realBeat11();
+    const startedAt = Date.now();
+
+    const r = await performSteps(
+      livePage() as never,
+      [step] as never,
+      4_000,                                   // the beat's declared bound
+      null, null,
+      async () => false,                       // `until` never met
+      null, null, null,
+      beat.wait as never,                      // progress, as driveBeat passes it
+      async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+    ) as { error: string | null };
+    const took = Date.now() - startedAt;
+
+    assert.notEqual(r.error, null, 'the repeat must end');
+    assert.match(r.error!, /^stalled-no-transition \(repeat\):/,
+      `the declared bound must REACH the repeat through performSteps: ${r.error}`);
+    assert.ok(took < 2_000, `and stop at the progress bound, not the 4 s ceiling — took ${took} ms`);
+  });
+
+  test('a page that cannot be READ is its own finding, never a stall', async () => {
+    // R4 SURVIVED TOO: collapsing the `unreadable` branch into the stall message
+    // changed nothing, because no door ever produced that source. §15.504 — a
+    // read that could not happen is not a reading of ABSENT — and the repeat's
+    // reader throws by design when the page navigates under it between rounds.
+    // Without its own sentence, a beat whose page never came back would be told
+    // the key "renders and is still rendering", which is false and sends the
+    // reader to the agent instead of to the page.
+    const { beat, step } = realBeat11();
+    let reads = 0;
+    const startedAt = Date.now();
+
+    const r = await runRepeatStep({
+      page: gatePresent as never,
+      step: step as never,
+      left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+      matches: async () => false,
+      timeoutMs: 4_000,
+      run: async () => ({ waitedForHandle: false, error: null }),
+      progress: beat.wait as never,
+      readProgressNow: async () => {
+        reads += 1;
+        // Seen once, then the page stops being readable — the real sequence.
+        return reads === 1
+          ? { value: 'drafting', source: 'root', carriers: 1 }
+          : { value: undefined, source: 'unreadable', carriers: 0 };
+      },
+    });
+
+    assert.notEqual(r.error, null);
+    assert.match(r.error!, /^progress-key-unreadable \(repeat\):/, `its own prefix: ${r.error}`);
+    assert.doesNotMatch(r.error!, /stalled-no-transition/, 'never the stall message');
+    assert.doesNotMatch(r.error!, /renders and is still rendering/, 'and never the claim that the key renders');
+    assert.match(r.error!, /the read itself failed/, 'it names WHAT failed');
   });
 
   test('a beat with no progress bound keeps the wall-clock line it has always had', async () => {
