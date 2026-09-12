@@ -11,12 +11,20 @@
  * this file classifies NOTHING. It calls `lockHolders` / `lockWaiters` /
  * `lockOpeners` and adds the one instrument they cannot have.
  *
- * WHY THIS EXISTS AT ALL — the one thing the kernel's list cannot see. A lock
- * taken on an inherited descriptor (`exec 9>lock; flock -n 9`) produces NO
- * `/proc/locks` row, so `lockHolders` returns empty for a lock that is plainly
- * held. Measured 2026-09-13 15:22:06Z: probe HELD, zero rows, three openers.
- * `flock -n` is the only instrument that answers "is it held" rather than "who
- * can I name", so the probe is the FACT and the census is the ATTRIBUTION.
+ * WHY THIS EXISTS AT ALL — the one thing the kernel's list cannot ALWAYS see. A
+ * lock taken on an inherited descriptor (`exec 9>lock; flock -n 9`) produced NO
+ * `/proc/locks` row on this box: measured 2026-09-13 15:22:06Z, probe HELD, zero
+ * rows, three openers. `lockHolders` returned empty for a lock that was plainly
+ * held, and every wait in the campaign would have walked into it.
+ *
+ * AND THAT BLINDNESS IS THE BOX'S, NOT LINUX'S — CI proved it by red-ing the
+ * door that asserted otherwise. The identical shape in GitHub Actions DOES name
+ * its holder (`/proc/locks` row, pid 25484). So the census is blind here and
+ * sighted there, which makes the probe MORE necessary rather than less: it is
+ * the only instrument that answers "is it held" correctly in both, while the
+ * census answers "who can I name" and is environment-dependent about it.
+ *
+ * The probe is the FACT; the census is the ATTRIBUTION, when it can.
  *
  * WHEN THEY DISAGREE, THE DISAGREEMENT IS THE OUTPUT. Held with no nameable
  * holder prints `HELD (unnameable — inherited fd)`. It is never resolved by

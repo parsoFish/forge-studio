@@ -97,17 +97,35 @@ describe('lock-state — the probe is the fact, the census is the attribution', 
     assert.match(r.stdout, /WAITING:[1-9]/, `the queue must be counted: ${r.stdout}`);
   });
 
-  test('AN INHERITED-FD HOLD: the kernel names nobody, and the lock is STILL held', () => {
+  test('AN INHERITED-FD HOLD: the reader never says FREE, whatever the kernel can name', () => {
     const lock = lockFile();
     inheritedFdHolder(lock);
-    // The premise, asserted rather than assumed: this is the case where
-    // `/proc/locks` has nothing to say. Without this the door could pass while
-    // silently testing an ordinary hold.
-    assert.deepEqual(procLocksRows(lock), [], 'this shape must produce no /proc/locks row');
 
+    // THE PREMISE IS ENVIRONMENT-DEPENDENT AND THIS DOOR NO LONGER PRETENDS
+    // OTHERWISE. The first version asserted `procLocksRows(lock)` is empty —
+    // "this shape must produce no /proc/locks row" — which is true on WSL2,
+    // where the campaign runs and where the blind spot was measured, and FALSE
+    // in CI, which named the holder as pid 25484 and red-ed the build. I had
+    // encoded one box's kernel behaviour as a property of Linux, in the very
+    // door meant to prove I was not guessing.
+    //
+    // What is true EVERYWHERE is the behaviour under test: a lock held on an
+    // inherited descriptor is HELD, and this reader says so. Where the census
+    // can name the holder it names it; where it cannot it says `unnameable`.
+    // Either way it never reports FREE, which is the failure that matters —
+    // a caller acting on FREE starts work beside a funded run.
+    const rows = procLocksRows(lock);
     const r = run('say', lock);
-    assert.equal(r.status, 3, 'a census-only reader would exit 0 here, and be wrong');
-    assert.match(r.stdout, /HELD \(unnameable — inherited fd\)/);
+    assert.equal(r.status, 3, 'held is held; a reader that exits 0 here sends a caller into a live lock');
+    if (rows.length === 0) {
+      // The WSL2 shape, and the one the probe exists for: the census is blind
+      // and only `flock -n` can see the hold.
+      assert.match(r.stdout, /HELD \(unnameable — inherited fd\)/);
+    } else {
+      // The CI shape: the census CAN name it, so the reader must — reporting
+      // `unnameable` here would be the opposite lie.
+      assert.match(r.stdout, new RegExp(`HELD ${rows[0]}\\(cwd `));
+    }
   });
 
   test('THE PARENT IS NAMED, not judged — the case a `ppid === 1` flag computes FALSE for', () => {
