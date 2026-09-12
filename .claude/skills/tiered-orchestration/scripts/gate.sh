@@ -177,6 +177,109 @@ if [ -n "$CAMP" ]; then
   export FORGE_RUN_LOCK="$CAMP/.run-lock"
 fi
 
+# ---- THE SUITE LOCK IS THIS TOOL'S TO HOLD (bead forge-8vfn.7.6.48, T1 841) ----
+#
+# Until now this script only EXPORTED the lock's name, twenty lines above, so
+# the repo's `npm test` guard could read it — and every caller was trusted to
+# TAKE it. Twenty campaign wrappers did. One lane had no wrapper at all and
+# invoked this script directly, so its gates ran every heavy step
+# unserialised; ruling 778 measured the result at 3.2x with nine timeouts,
+# with BOTH runs believing they held the lock. A guarantee that depends on
+# each caller remembering is not a guarantee, and this tool is the one place
+# that knows a gate is about to run.
+#
+# THREE STATES, because "just take it" would deadlock the twenty wrappers that
+# already hold it: `flock` in a child opens its OWN fd, so an inner acquire
+# under an outer holder blocks until its `-w` expires. A tool that hung every
+# correct caller in order to fix the incorrect ones would be a worse bug than
+# the one it fixes.
+lock_holder_pids() {
+  local f="$1" ino
+  ino="$(stat -c '%i' "$f" 2>/dev/null)" || return 0
+  awk -v ino=":$ino " '$0 ~ ino {print $5}' /proc/locks
+}
+# PPid FROM `status`, NOT FIELD 4 OF `stat` (§15.480). `/proc/<pid>/stat` is
+# `pid (comm) state ppid …` and `comm` may contain SPACES and PARENS, so field
+# 4 is the ppid only when it does not. Measured while writing this: the walk
+# returned the literal `S` — the state field — and the comparison died with
+# "integer expression expected". A misread ppid reclassifies an ANCESTOR as a
+# STRANGER, which is this gate waiting out its full bound on a lock its own
+# caller holds: exactly the deadlock the three states exist to avoid.
+is_ancestor() {
+  local want="$1" p=$$ guard=0
+  while [ "$p" -gt 1 ] && [ "$guard" -lt 64 ]; do
+    [ "$p" = "$want" ] && return 0
+    p="$(awk '/^PPid:/{print $2}' /proc/$p/status 2>/dev/null)"
+    [ -n "$p" ] || return 1
+    guard=$((guard+1))
+  done
+  return 1
+}
+suite_lock_state() {
+  local f="$1" pids pid
+  pids="$(lock_holder_pids "$f")"
+  [ -z "$pids" ] && { echo FREE; return; }
+  for pid in $pids; do
+    is_ancestor "$pid" && { echo "ANCESTOR:$pid"; return; }
+  done
+  echo "STRANGER:$(echo $pids | tr '\n' ' ' | sed 's/ $//')"
+}
+wait_for_suite_lock() {
+  if flock -w "$SUITE_LOCK_WAIT" 9; then
+    echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+  else
+    echo "suite-lock: NOT TAKEN after ${SUITE_LOCK_WAIT}s — refusing rather than running a suite beside another one (the 3.2x case, ruling 778)"
+    exit 75
+  fi
+}
+SUITE_LOCK_WAIT="${FORGE_SUITE_LOCK_WAIT:-2400}"
+if [ -z "${FORGE_SUITE_LOCK:-}" ]; then
+  # §15.92: a gate outside a campaign is legitimate and genuinely unserialised.
+  # What must never happen is that state looking like "nothing to report".
+  echo "suite-lock: NOT CONFIGURED — no campaign was named, so these steps are NOT serialised against other suites"
+else
+  # TRY FIRST, CLASSIFY ONLY IF REFUSED. The order matters and the reason is a
+  # measured property of `/proc/locks` rather than a preference:
+  #
+  #   a lock held through an INHERITED fd — the `( flock 9; … ) 9>file` idiom,
+  #   where `flock(1)` locks and exits while the caller's fd keeps the hold —
+  #   IS STILL HELD and is INVISIBLE in /proc/locks.
+  #
+  # Measured both ways while writing this: another opener is blocked (so the
+  # hold is real) and the inode has ZERO rows (so the listing cannot see it).
+  # /proc/locks lists a lock against the process that created it; once that
+  # `flock` has exited there is no such process. A design that consulted the
+  # listing FIRST would read "FREE" for a held lock and then block on it.
+  #
+  # So the non-blocking acquire is the authority on WHETHER it is held, and
+  # the listing is consulted only to say WHO — which is exactly the question
+  # the listing can still answer for the wrapper form every campaign wrapper
+  # uses.
+  exec 9>"$FORGE_SUITE_LOCK"
+  if flock -n 9; then
+    echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+  else
+    SUITE_LOCK_STATE="$(suite_lock_state "$FORGE_SUITE_LOCK")"
+    case "$SUITE_LOCK_STATE" in
+      ANCESTOR:*)
+        echo "suite-lock: held by ancestor pid ${SUITE_LOCK_STATE#ANCESTOR:} — not re-taken, because an inner flock would block on our own caller"
+        ;;
+      STRANGER:*)
+        echo "suite-lock: WAITING on stranger pid(s) ${SUITE_LOCK_STATE#STRANGER:} — another lane's suite holds it"
+        wait_for_suite_lock
+        ;;
+      *)
+        # HELD, BY SOMEONE THE LISTING CANNOT NAME — the inherited-fd shape
+        # above. Named rather than guessed: if this is an ancestor we will sit
+        # out the bound and refuse, which is a bounded, explained failure
+        # instead of a hang.
+        echo "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the lock is taken but /proc/locks has no row for it, which is the inherited-fd shape; waiting, and refusing at the bound rather than guessing whether it is our own caller"
+        wait_for_suite_lock
+        ;;
+    esac
+  fi
+fi
+
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
