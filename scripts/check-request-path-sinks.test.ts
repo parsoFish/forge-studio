@@ -32,6 +32,85 @@ import {
 } from './check-request-path-sinks.mjs';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// =============================================================================
+// 7.6.68 — the designated-caller ratchet and the three ways to name a call
+// =============================================================================
+//
+// MEASURED AGAINST THE REAL CHECK BEFORE ANY OF THIS WAS WRITTEN, by adding a
+// caller to a real reachable module and running it:
+//
+//     writeSessionStatus(dir, …)                       FAIL rc=1   caught
+//     import { writeSessionStatus as X }; X(dir, …)     rc=0        EVADED
+//     import * as NS; NS.writeSessionStatus(dir, …)     rc=0        EVADED
+//
+// The matcher matched the CALL-SITE NAME, and an import renames the call site.
+// `(?<![.\w$])` excludes dotted calls by design, so the namespace form was
+// doubly invisible. Neither evasion needs intent — `import { X as Y }` is what
+// people write for a name collision (§15.534).
+
+/** One reachable file whose body is `body`, in a throwaway tree. */
+function callerFixture(body: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'sinks-caller-'));
+  mkdirSync(join(root, 'cli'), { recursive: true });
+  mkdirSync(join(root, 'orchestrator'), { recursive: true });
+  writeFileSync(join(root, 'orchestrator/interactive-session.ts'),
+    'export function writeSessionStatus(d: string, s: object) { return d + JSON.stringify(s); }\n');
+  writeFileSync(join(root, 'cli/ui-bridge.ts'), body);
+  return root;
+}
+
+function callerCountFor(body: string): number {
+  const root = callerFixture(body);
+  try {
+    const rows = ratchet.countDesignatedCallers(root, ['cli/ui-bridge.ts']);
+    return rows.filter((r: { sink: string }) => r.sink.startsWith('writeSessionStatus')).reduce(
+      (n: number, r: { count: number }) => n + r.count, 0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+test('7.6.68: a DIRECT call is counted (the case that already worked)', () => {
+  assert.equal(callerCountFor(
+    "import { writeSessionStatus } from '../orchestrator/interactive-session.ts';\n" +
+    'export function h(d: string) { return writeSessionStatus(d, {}); }\n'), 1);
+});
+
+test('7.6.68: an ALIASED import is counted — the rename that evaded it', () => {
+  // `import { X as Y }` is what someone writes to resolve a collision, not to
+  // hide. Before this, the call site read `writeStatus(` and the matcher — which
+  // looks for the literal designated name — never saw it. rc=0, silent.
+  assert.equal(callerCountFor(
+    "import { writeSessionStatus as writeStatus } from '../orchestrator/interactive-session.ts';\n" +
+    'export function h(d: string) { return writeStatus(d, {}); }\n'), 1);
+});
+
+test('7.6.68: a NAMESPACE import is counted — doubly invisible before', () => {
+  // `(?<![.\w$])` excludes dotted calls BY DESIGN, so `NS.writeSessionStatus(`
+  // could not match even by accident.
+  assert.equal(callerCountFor(
+    "import * as S from '../orchestrator/interactive-session.ts';\n" +
+    'export function h(d: string) { return S.writeSessionStatus(d, {}); }\n'), 1);
+});
+
+test('7.6.68: a file that calls nothing designated stays at zero', () => {
+  // THE NEGATIVE CONTROL, and it is not ceremony: the widened matcher now
+  // builds regexes from every import in the file, so a file importing an
+  // UNRELATED symbol — or a namespace whose module declares no designated
+  // function — must still count zero. Without this, "counts everything" would
+  // pass all three doors above.
+  //
+  // IT CARRIES AN ALIASED IMPORT OF AN UNRELATED SYMBOL ON PURPOSE, and the
+  // mutation pass is why. Dropping the `imported === name` test — so every
+  // aliased import binds to every designated name — left this door GREEN when
+  // its body had no alias to mis-bind; only the real-repository baseline door
+  // caught it. A negative control that cannot see the over-match direction is
+  // not a control for it.
+  assert.equal(callerCountFor(
+    "import * as Other from '../orchestrator/interactive-session.ts';\n" +
+    "import { readFileSync as rf } from 'node:fs';\n" +
+    "export function h(d: string) { return Other.somethingElse(d) + rf(d); }\n"), 0);
+});
+
+
 // Namespace import (NOT a named import) so probing a not-yet-built export
 // yields `undefined` rather than an ESM link-time SyntaxError that would take
 // the whole file down — see the SEC-04 caller-count group at the bottom.

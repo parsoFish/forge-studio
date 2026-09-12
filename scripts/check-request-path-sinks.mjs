@@ -304,6 +304,54 @@ const DESIGNATED_MATCHERS = Object.keys(DESIGNATED_UNGUARDED_FUNCTIONS).map((nam
  *  raw-sink `rows` must stay caller-free so a new pure-caller file emits no
  *  per-file raw-sink row. They are combined with the sink rows only inside
  *  runCheck, for the baseline write and the compareBaseline comparison. */
+/**
+ * Every NAME a file can call `fn` by — `forge-8vfn.7.6.68`, T1 ruling 987.
+ *
+ * THE MATCHER MATCHES THE CALL SITE, AND AN IMPORT RENAMES THE CALL SITE.
+ * Measured, all three forms, against this very check:
+ *
+ *     writeSessionStatus(dir, …)                        FAIL rc=1   caught
+ *     import { writeSessionStatus as X }; X(dir, …)      rc=0        EVADED
+ *     import * as NS; NS.writeSessionStatus(dir, …)      rc=0        EVADED
+ *
+ * Neither evasion needs intent. `import { X as Y }` is what people write to
+ * resolve a name collision, and a namespace import is an ordinary style — and
+ * `(?<![.\w$])` excludes dotted calls BY DESIGN, so the namespace form is
+ * doubly invisible. §15.534: a guard that matches a call-site name is evaded by
+ * a rename, and renames happen for unrelated reasons.
+ *
+ * OVER-MATCHING IS THE SAFE DIRECTION AND IS DELIBERATE. Any import binding the
+ * designated name counts, without checking the specifier resolves to the
+ * declaring module: a same-named export from elsewhere would raise a row that a
+ * human then dismisses. For a containment ratchet a false positive is a
+ * conversation and a false negative is a hole.
+ */
+function localNamesFor(text, name) {
+  const locals = new Set([name]);
+  // `import { a, writeSessionStatus as w } from '…'` / `export { … } from '…'`
+  for (const m of text.matchAll(/(?:^|\n)\s*(?:import|export)\s*\{([^}]*)\}\s*from/g)) {
+    for (const part of m[1].split(',')) {
+      const [imported, local] = part.split(/\s+as\s+/).map((x) => x.trim());
+      if (imported === name && local) locals.add(local);
+    }
+  }
+  return [...locals];
+}
+
+function namespaceLocals(text) {
+  return [...text.matchAll(/(?:^|\n)\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from/g)].map((m) => m[1]);
+}
+
+/** Call-site regexes for one designated name in one file: the bare name, every
+ *  alias it was imported under, and `<ns>.<name>` for every namespace import. */
+function callRegexesFor(text, name) {
+  const res = localNamesFor(text, name).map((local) => new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g'));
+  for (const ns of namespaceLocals(text)) {
+    res.push(new RegExp(`(?<![.\\w$])${ns}\\.${name}\\s*\\(`, 'g'));
+  }
+  return res;
+}
+
 export function countDesignatedCallers(root, reachableFiles) {
   const rows = [];
   for (const relFile of reachableFiles) {
@@ -311,13 +359,16 @@ export function countDesignatedCallers(root, reachableFiles) {
     if (!existsSync(absFile)) continue;
     const text = readFileSync(absFile, 'utf8');
     const lines = text.split('\n');
-    for (const { name, callRe, defRe } of DESIGNATED_MATCHERS) {
+    for (const { name, defRe } of DESIGNATED_MATCHERS) {
       if (defRe.test(text)) continue; // this fn's own def file — skip (self-match guard)
+      const regexes = callRegexesFor(text, name);
       let n = 0;
       for (const line of lines) {
         if (isCommentLine(line)) continue;
-        callRe.lastIndex = 0;
-        while (callRe.exec(line)) n += 1;
+        for (const re of regexes) {
+          re.lastIndex = 0;
+          while (re.exec(line)) n += 1;
+        }
       }
       if (n > 0) rows.push({ file: relFile, sink: `${name}${CALLER_SINK_SUFFIX}`, count: n });
     }
