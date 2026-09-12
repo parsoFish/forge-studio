@@ -268,3 +268,39 @@ test('m86d POSITIVE CONTROL: a listed-check that cannot RUN aborts with its own 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ── 7.6.102 (T1 1000) — a glob that matches NOTHING is its own named state ────
+
+test('7.6.102: a glob matching NO file is DEAD — named per glob, exit 6, distinct from DRIFT and no-scope', () => {
+  // A (1000): three M6-A globs named files directly under apps/forge/ that had
+  // moved to apps/forge/tests/{integration,regression}/; six rows were held only
+  // by their literal names ever since, and one in-class test sat in no manifest.
+  // A dead glob cannot DRIFT and cannot FAIL, and read identically to a glob
+  // doing its job — nothing asked "does this still match anything".
+  const { root, repo, camp } = plant({
+    files: ['a/x.test.ts'], listed: ['a/x.test.ts'], globs: ['a/*.test.ts', 'apps/forge/architect-*.test.ts'],
+  });
+  try {
+    const r = run(repo, camp);
+    assert.equal(r.code, 6, r.out);
+    assert.match(r.out, /M5-B: DEAD — 1 glob\(s\) match no file/, r.out);
+    assert.match(r.out, /apps\/forge\/architect-\*\.test\.ts/, 'the glob itself is named, verbatim');
+    assert.doesNotMatch(r.out, /PASS/, 'and there is no PASS line beside it');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.102: DRIFT outranks DEAD — both are printed, the exit is 1', () => {
+  const { root, repo, camp } = plant({
+    files: ['a/x.test.ts', 'a/y.test.ts'], listed: ['a/x.test.ts'], globs: ['a/*.test.ts', 'b/*.test.ts'],
+  });
+  try {
+    const r = run(repo, camp);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /DRIFT/); assert.match(r.out, /a\/y\.test\.ts/);
+    assert.match(r.out, /DEAD/); assert.match(r.out, /b\/\*\.test\.ts/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
