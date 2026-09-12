@@ -37,7 +37,14 @@ LANE="${FORGE_LANE:-}"
 SWEEP=0
 if [ "${4:-}" = "--sweep" ] || [ "${7:-}" = "--sweep" ]; then SWEEP=1; fi
 R="${1:?repo root}"; CAMP="${2:?campaign dir}"; GLOB="${3:?manifest glob, e.g. 'M5-*'}"
-FROM="${4:?from sha}"; TO="${5:?to sha}"; LABEL="${6:?label}"
+FROM="${4:?from sha, or the word head}"; TO="${5:?to sha}"; LABEL="${6:?label}"
+# 7.6.102 (C, T1 997) — THE BASE IS THE MANIFEST'S OWN `head=`, NOT THE MERGE'S FIRST PARENT.
+# A FROM of `<merge>^1` bounds the diff at THIS merge and cannot reach a stranding an EARLIER
+# merge created and nobody reconciled: C's first run returned `FAILED 5 → 2`, the two survivors
+# last touched by a commit that was an ANCESTOR of the base — and both cases print identically
+# as a rehash count. `head=` is "the sha this manifest was last verified 0-FAILED against", i.e.
+# the oldest unreconciled point by definition, so `FROM=head` reads it per manifest below.
+FROM_MODE=literal; [ "$FROM" = head ] && FROM_MODE=head
 G="$CAMP/gate-manifests"
 # 7.6.87 — `pin-glob-check.sh` is a sibling SKILL's script, resolved from this
 # file's own location rather than a hard path, so a lane running from any
@@ -132,9 +139,35 @@ may_write() {
   return 0
 }
 
+# 7.6.102 — ONE WRITER FOR THE DERIVED FIELDS TOO. `manifest=`, `paths=` and `<name>.txt` are
+# functions of the `.sha256` beside them and nothing else; they are rewritten whenever that file
+# is, whether or not `head=` moves. Before this they were written only by `set_counts_fields`,
+# which ran only on the ADVANCING path — so a not-advanced rehash (a pinned path the merge
+# deleted) rewrote `.sha256` and left `manifest=` fingerprinting the pre-rehash file, `paths=`
+# stale and `.txt` short. Measured on M6-C: `.counts` said `manifest=46d44c25…` while the file
+# hashed `60f18625…`, silently, for twenty minutes. The 7.6.57/7.6.87 comments below promised
+# the pair "cannot disagree, derived in the same edit" — true on the path that called it.
+set_derived_fields() {
+  local counts="$1" manifest_file="$2"
+  local d; d=$(sha256sum "$manifest_file" | cut -c1-16)
+  if grep -q 'manifest=[0-9a-f]\{16\}' "$counts"; then
+    sed -i "s/manifest=[0-9a-f]\{16\}/manifest=${d}/" "$counts"
+  else
+    printf '%s manifest=%s\n' "$(head -1 "$counts")" "$d" > "$counts.tmp"
+    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+  fi
+  awk '{ q=$2; sub(/^\*/,"",q); print q }' "$manifest_file" > "${manifest_file%.sha256}.txt"
+  local np; np=$(grep -c . "$manifest_file")
+  if grep -q 'paths=[0-9]\{1,\}' "$counts"; then
+    sed -i "s/paths=[0-9]\{1,\}/paths=${np}/" "$counts"
+  else
+    printf '%s paths=%s\n' "$(head -1 "$counts")" "$np" > "$counts.tmp"
+    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+  fi
+}
+
 set_counts_fields() {
   local counts="$1" manifest_file="$2" to8="$3"
-  local d; d=$(sha256sum "$manifest_file" | cut -c1-16)
   # D (796): the script has always backed up `<manifest>.sha256` and never the
   # `.counts`, so "what did this field say before" was a RECONSTRUCTION — two
   # lanes rebuilt a prior `head=` from a stale gate log and a command's stdout,
@@ -160,35 +193,17 @@ set_counts_fields() {
     printf '%s head=%s\n' "$(head -1 "$counts")" "$to8" > "$counts.tmp"
     tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
   fi
-  # WRITTEN WHEN ABSENT, not only refreshed when present: six of the campaign's
-  # fourteen manifests carried no `manifest=` at all, and a fix that only
-  # refreshed an existing field would have left them unprovable.
-  if grep -q 'manifest=[0-9a-f]\{16\}' "$counts"; then
-    sed -i "s/manifest=[0-9a-f]\{16\}/manifest=${d}/" "$counts"
-  else
-    printf '%s manifest=%s\n' "$(head -1 "$counts")" "$d" > "$counts.tmp"
-    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
-  fi
-  # 7.6.57 (T1 824) — `paths=` IS RECOMPUTED, not carried. The tool never
-  # touched it, so after T1 added two rows to a `.sha256` by hand the field read
-  # `paths=23` against 25 real rows — a count describing an earlier version of
-  # the file it sits beside, and nothing failed. It is derived here from the
-  # same file `manifest=` hashes, in the same edit, so the two cannot disagree.
-  # 7.6.87 (T1 901) — `<name>.txt` IS REGENERATED, never edited alongside.
-  # Amendments updated `.sha256`/`.globs`/`.counts` and BACKED `.txt` UP without
-  # editing it, so M6-C.txt sat at 190 rows against a 193-row `.sha256`. No live
-  # consumer reads it, which is exactly why it drifted unnoticed — a human
-  # listing that disagrees with the machine one is worse than no listing,
-  # because it is the half a person checks. Derived here from the same file
-  # `manifest=` hashes, in the same edit, so the two cannot disagree.
-  awk '{ q=$2; sub(/^\*/,"",q); print q }' "$manifest_file" > "${manifest_file%.sha256}.txt"
-  local np; np=$(grep -c . "$manifest_file")
-  if grep -q 'paths=[0-9]\{1,\}' "$counts"; then
-    sed -i "s/paths=[0-9]\{1,\}/paths=${np}/" "$counts"
-  else
-    printf '%s paths=%s\n' "$(head -1 "$counts")" "$np" > "$counts.tmp"
-    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
-  fi
+  # 7.6.57 (T1 824) — `paths=` IS RECOMPUTED, not carried. 7.6.87 (T1 901) — `<name>.txt` IS
+  # REGENERATED, never edited alongside. Both, with `manifest=`, in `set_derived_fields`
+  # (7.6.102), derived from the same file in the same edit, so the pair cannot disagree — on
+  # EVERY path that rewrites the file, not only this one.
+  set_derived_fields "$counts" "$manifest_file"
+  # 7.6.102 (C, T1 997) — THE NOT-ADVANCED NOTE IS REMOVED WHEN head= ADVANCES. It was appended
+  # under a `grep -q … ||` guard and never touched again, so a later advancing run left
+  # `head=a09b2392` two lines above `# head= NOT advanced to 35d50989` — two records in one file,
+  # contradicting each other, measured live in campaign state. A record that no longer describes
+  # the file is deleted, not kept for history; the amend log is the history.
+  sed -i '/^# head= NOT advanced to /d; /head-not-advanced=/d' "$counts"
 }
 
 # 7.6.85 (T1 891, from C's hazard report) — REFUSE A DIRTY PATH THIS RUN WILL READ.
@@ -230,14 +245,26 @@ T=$(mktemp); trap 'rm -f "$T"' EXIT
 ownerless=""
 refused=""
 written=""
-git -C "$R" diff --name-only "$FROM" "$TO" > "$T"
+[ "$FROM_MODE" = head ] || git -C "$R" diff --name-only "$FROM" "$TO" > "$T"
 found=0
 for f in "$G"/$GLOB.sha256; do
   [ -f "$f" ] || continue
   found=1
   n=$(basename "$f" .sha256)
-  touched=$(awk '{print $2}' "$f" | sed 's#^\*##' | grep -Fxf "$T" || true)
   counts="${f%.sha256}.counts"
+  from_n="$FROM"
+  if [ "$FROM_MODE" = head ]; then
+    # Each manifest's own base. No `head=` means no base: REFUSED by name, nothing written —
+    # a guessed base is the defect this mode exists to remove.
+    from_n=$( { [ -f "$counts" ] && head -1 "$counts" | grep -oE 'head=[0-9a-f]{7,40}' | cut -d= -f2; } || true)
+    if [ -z "$from_n" ]; then
+      echo "  $n: REFUSED — FROM=head but $counts records no head= to diff from; pass a sha for this manifest. Nothing written." >&2
+      refused="$refused $n"
+      continue
+    fi
+    git -C "$R" diff --name-only "$from_n" "$TO" > "$T"
+  fi
+  touched=$(awk '{print $2}' "$f" | sed 's#^\*##' | grep -Fxf "$T" || true)
   if [ -z "$touched" ]; then
     # T1 ruling 762. A manifest this merge did not touch was previously SKIPPED
     # ENTIRELY — never verified, never advanced — so "nothing to rewrite" and
@@ -321,9 +348,13 @@ for f in "$G"/$GLOB.sha256; do
     set_counts_fields "$counts" "$f" "${TO:0:8}"
     echo "  $n: head= -> ${TO:0:8} (rehashed to 0 FAILED against this tree)"
   else
-    grep -q 'head-not-advanced' "$counts" || \
-      printf '# head= NOT advanced to %s: still FAILED %s after the rehash (a pinned path the merge\n# deleted, or bytes this tree does not hold). head-not-advanced=%s\n' \
-        "${TO:0:8}" "$after" "${TO:0:8}" >> "$counts"
+    # 7.6.102: the file WAS rewritten above, so its derived fields are rewritten with it —
+    # `head=` alone stays, because nothing was verified. The note is REPLACED, not skipped: one
+    # record, current.
+    set_derived_fields "$counts" "$f"
+    sed -i '/^# head= NOT advanced to /d; /head-not-advanced=/d' "$counts"
+    printf '# head= NOT advanced to %s: still FAILED %s after the rehash (a pinned path the merge\n# deleted, or bytes this tree does not hold). head-not-advanced=%s\n' \
+      "${TO:0:8}" "$after" "${TO:0:8}" >> "$counts"
     echo "  $n: head= NOT advanced — still FAILED $after after the rehash"
   fi
   # `sort -V`, never `ls | tail -1`. Lexically `amend-9.md` beats `amend-18.md`,
@@ -333,8 +364,8 @@ for f in "$G"/$GLOB.sha256; do
   # only because none had yet reached ten files, which is why it stayed
   # invisible for twenty-three amendments.
   log=$(ls "$G"/"$n".amend-*.md 2>/dev/null | sort -V | tail -1 || true); [ -n "$log" ] || log="$G/$n.amend-1.md"
-  printf '\n## Amendment (at `%s`, §15.105, pin-reconcile.sh) after %s: %s rehashed — FAILED %s → %s.\n' \
-    "${TO:0:8}" "$LABEL" "$(echo "$touched" | tr '\n' ' ')" "$before" "$after" >> "$log"
+  printf '\n## Amendment (at `%s`, from `%s`, §15.105, pin-reconcile.sh) after %s: %s rehashed — FAILED %s → %s.\n' \
+    "${TO:0:8}" "${from_n:0:8}" "$LABEL" "$(echo "$touched" | tr '\n' ' ')" "$before" "$after" >> "$log"
   written="$written $n"
   echo "$n: [$(echo "$touched" | tr '\n' ' ')] FAILED $before → $after"
 done
@@ -374,14 +405,18 @@ if [ -n "$written" ] && [ -x "$GLOB_CHECK" ]; then
     case "$gc" in
       0) ;;
       1) drift=1 ;;
-      *) echo "  $n: pin-glob-check exited $gc — neither PASS nor DRIFT; the adoption half is UNCHECKED for this manifest" >&2 ;;
+      # 7.6.102 (T1 1000): a DEAD glob — one that matches no file — is INCOMPLETE like DRIFT.
+      # It cannot drift and cannot fail, and until this it read like a glob doing its job.
+      6) drift=1 ;;
+      *) echo "  $n: pin-glob-check exited $gc — neither PASS, DRIFT nor DEAD; the adoption half is UNCHECKED for this manifest" >&2 ;;
     esac
   done
   if [ "$drift" = 1 ]; then
     echo "pin-reconcile.sh: the rehash above STANDS — every listed path was hashed correctly." >&2
-    echo "  But a manifest is missing files its OWN globs claim, so this reconcile is INCOMPLETE," >&2
-    echo "  not wrong: an unlisted file cannot fail, so it would keep reporting 0 FAILED while" >&2
-    echo "  guarding nothing (§15.502). Adopt each path above with an amendment and re-run." >&2
+    echo "  But a manifest is missing files its OWN globs claim, or declares a glob that matches" >&2
+    echo "  nothing, so this reconcile is INCOMPLETE, not wrong: an unlisted file cannot fail and a" >&2
+    echo "  dead glob cannot drift, so it would keep reporting 0 FAILED while guarding nothing" >&2
+    echo "  (§15.502, §15.539). Adopt or repoint each item above with an amendment and re-run." >&2
     exit 5
   fi
 fi

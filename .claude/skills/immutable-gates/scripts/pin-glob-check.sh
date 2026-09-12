@@ -30,6 +30,13 @@
 #   3  at least one matched manifest declares no globs (nothing to check for it)
 #   4  the listed-check could not be RUN (grep neither matched nor failed to match) — a
 #      failure of the tool, never a finding about the repo (bead `forge-m86d`)
+#   6  DEAD — at least one declared glob matches NO file (each named); only when nothing
+#      drifted, since DRIFT outranks it. Bought by A (T1 1000, `forge-8vfn.7.6.102`): three
+#      M6-A globs named files directly under `apps/forge/` that had moved into
+#      `apps/forge/tests/…`; six rows were held only by their literal names ever since, and one
+#      in-class test sat in no manifest at all. A glob that matches nothing cannot DRIFT and
+#      cannot FAIL, and it read identically to a glob doing its job — nothing asked "does this
+#      still match anything". T1's sweep found a fourth on M6-D the same hour.
 #
 # Every path is an argument. A tool that resolves its inputs from its own location answers a
 # different question in each checkout (§15.148).
@@ -44,7 +51,7 @@ G="$CAMP/gate-manifests"
 [ -d "$G" ] || { echo "pin-glob-check.sh: no gate-manifests dir: $G" >&2; exit 2; }
 [ -d "$R" ] || { echo "pin-glob-check.sh: no repo: $R" >&2; exit 2; }
 
-found=0; drift=0; undeclared=0; checked=0
+found=0; drift=0; undeclared=0; checked=0; dead=0
 for f in "$G"/$GLOB.sha256; do
   [ -f "$f" ] || continue
   found=1
@@ -73,11 +80,14 @@ for f in "$G"/$GLOB.sha256; do
   # accumulated `$unlisted` for the DRIFT line — so an unlisted file matching two
   # globs would have been reported as two unlisted files, and listed twice.
   matched=""
+  deadglobs=""
   while IFS= read -r pattern; do
     case "$pattern" in ''|'#'*) continue;; esac
     # Expand in the repo, not here: the glob is repo-relative by contract.
+    hits_for_pattern=0
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
+      hits_for_pattern=1
       # Seen through THIS manifest's globs already? Then it is the same file,
       # not a second one. Checked with grep's own status for the same reason the
       # listed-check below is: `printf | grep -q` under `pipefail` can report a
@@ -110,6 +120,9 @@ for f in "$G"/$GLOB.sha256; do
     done <<EOF
 $(cd "$R" && eval "ls -1 -d -- $pattern" 2>/dev/null || true)
 EOF
+    # A glob that expanded to nothing describes nothing. Recorded per PATTERN,
+    # verbatim, so the amendment that repoints or drops it can quote the line.
+    [ "$hits_for_pattern" = 1 ] || deadglobs="$deadglobs$pattern"$'\n'
   done < "$gl"
   # Counted from the DEDUPED set, never from the loop's iteration count.
   count="$(printf '%s' "$matched" | grep -c . || true)"
@@ -122,10 +135,18 @@ EOF
   else
     echo "$n: OK — $count file(s) match its declared globs, every one listed"
   fi
+  if [ -n "$deadglobs" ]; then
+    dead=1
+    echo "$n: DEAD — $(printf '%s' "$deadglobs" | grep -c .) glob(s) match no file:"
+    printf '%s' "$deadglobs" | sed 's/^/    /'
+    echo "    A glob that matches nothing cannot drift and cannot fail. Repoint it to where the files"
+    echo "    moved (and adopt what it then exposes, by name) or drop it — by amendment, either way."
+  fi
 done
 
 [ "$found" = 1 ] || { echo "pin-glob-check.sh: no manifest matched $G/$GLOB.sha256" >&2; exit 2; }
 [ "$drift" = 0 ] || exit 1
 [ "$undeclared" = 0 ] || exit 3
+[ "$dead" = 0 ] || exit 6
 echo "pin-glob-check: PASS — $checked file(s) across every matched manifest, no unlisted match"
 exit 0
