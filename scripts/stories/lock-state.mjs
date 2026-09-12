@@ -44,10 +44,20 @@
  *
  * EXIT: 0 the lock is FREE · 3 the lock is HELD · 2 usage. The code is the
  * machine contract, so a caller never parses prose to branch.
+ *
+ * `who-runs` ANSWERS A THREE-STATE QUESTION AND SO HAS A THIRD CODE: 0 nobody
+ * runs it · 3 someone does · **4 the census could not tell** · 2 usage. 4 exists
+ * because the sentence above is the whole trap: this file printed
+ * `N pid(s) UNREADABLE` under a comment reading "UNKNOWN is reported, never
+ * folded into 'nobody'" — and then exited 0, which IS "nobody" to the only
+ * consumer the contract admits. Reported in prose and folded in the code is not
+ * a weaker version of §15.504, it is the violation with a comment denying it.
+ * green · red · UNKNOWN are three states and UNKNOWN never resolves toward
+ * proceeding.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { lockHolders, lockWaiters, lockOpeners, ancestorPids, whoRuns } from './lock-guard.mjs';
+import { lockHolders, lockWaiters, lockOpeners, ancestorPids, whoRuns, whoRunsExit } from './lock-guard.mjs';
 
 const USAGE = 'usage: lock-state who-holds|held|say <lockpath> [--twice[=SECONDS]] | lock-state who-runs <abs-path>';
 
@@ -201,7 +211,11 @@ if (verb === 'who-runs') {
     // UNKNOWN is reported, never folded into "nobody" (§15.504).
     if (first.unknown.length > 0) console.log(`who-runs ${name}: ${first.unknown.length} pid(s) UNREADABLE — ${first.unknown.join(',')}`);
   }
-  process.exit(first.rows.length > 0 ? 3 : 0);
+  // 3 someone runs it · 4 the census could not read every pid, so "nobody" is
+  // not a claim this run is entitled to make · 0 only when it read everything
+  // and found no one. The mapping is `whoRunsExit`, in the pure module, because
+  // written inline here it was untestable and wrong.
+  process.exit(whoRunsExit(first));
 }
 if (!['who-holds', 'held', 'say'].includes(verb)) { console.error(`lock-state: unknown verb '${verb}'\n${USAGE}`); process.exit(2); }
 

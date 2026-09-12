@@ -399,13 +399,21 @@ export function runLockVerdict(env = process.env, procRoot = '/proc') {
  * orphan-kill under-matched, and each time the cause was guessing what a command
  * line looks like instead of reading one.
  *
+ * `procRoot` IS A PARAMETER, and not for symmetry: this walk ALWAYS adds `'1'`
+ * before it terminates, so a fixture `/proc` tree with a `1/` row would have that
+ * row silently excluded by a real ancestor chain. `whoRuns` therefore derives its
+ * default `self` from the SAME `procRoot` it scans — the exclusion set and the
+ * census must read one tree, or the seam that makes this module doorable quietly
+ * eats a fixture's rows (A's R3: a thin fixture fences off a seam while every
+ * door around it stays green).
+ *
  * `PPid:` from `/proc/<pid>/status`, never field 4 of `stat` split from the left
  * — a `comm` can contain spaces and parentheses, and that parse returned the
  * literal `S` when this lane first wrote it. The 64-hop bound is not decoration:
  * a walk that trusts the chain to terminate wedges on a cycle it should never
  * see.
  */
-export function ancestorPids(startPid = process.pid) {
+export function ancestorPids(startPid = process.pid, { procRoot = '/proc' } = {}) {
   const out = new Set();
   let p = String(startPid);
   for (let guard = 0; guard < 64; guard += 1) {
@@ -414,7 +422,7 @@ export function ancestorPids(startPid = process.pid) {
     if (p === '1') break;
     let next = null;
     try {
-      const m = /^PPid:\s+(\d+)/m.exec(readFileSync(`/proc/${p}/status`, 'utf8'));
+      const m = /^PPid:\s+(\d+)/m.exec(readFileSync(`${procRoot}/${p}/status`, 'utf8'));
       next = m === null ? null : m[1];
     } catch { /* vanished mid-walk: the chain ends here, honestly */ }
     if (next === null) break;
@@ -437,7 +445,7 @@ export function ancestorPids(startPid = process.pid) {
  * read is UNKNOWN and is reported, because a census that silently drops what it
  * could not see reports a clean box (§15.504).
  */
-export function whoRuns(absPath, { procRoot = '/proc', self = ancestorPids() } = {}) {
+export function whoRuns(absPath, { procRoot = '/proc', self = ancestorPids(process.pid, { procRoot }) } = {}) {
   const rows = [];
   const unknown = [];
   let pids;
@@ -467,3 +475,16 @@ export function whoRuns(absPath, { procRoot = '/proc', self = ancestorPids() } =
   return { ok: true, rows, unknown, reason: '' };
 }
 
+/**
+ * `who-runs`'s THREE-STATE exit, pure and here rather than inline in the CLI so
+ * it can be doored without a real `/proc`.
+ *
+ * It was written inline as `rows.length > 0 ? 3 : 0`, which spells UNKNOWN as 0
+ * — "nobody runs it" — directly under a comment promising the opposite. A
+ * mapping that lives in the branch it decides is a mapping nothing can test, and
+ * this one was wrong for as long as it was untestable.
+ */
+export function whoRunsExit({ rows = [], unknown = [] } = {}) {
+  if (rows.length > 0) return 3;
+  return unknown.length > 0 ? 4 : 0;
+}

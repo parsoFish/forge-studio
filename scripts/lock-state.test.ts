@@ -19,7 +19,7 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -269,5 +269,57 @@ describe('lock-state who-runs (forge-8vfn.7.6.93)', () => {
     const chain = ancestorPids();
     assert.ok(chain.has(String(process.pid)), 'itself');
     assert.ok(chain.size > 1, `and its parents — a one-element chain is the bug this exists to prevent: ${[...chain].join(',')}`);
+  });
+});
+
+/*
+ * 7.6.93's THREE-STATE half, doored against a FIXTURE `/proc` rather than the
+ * real one. These cases cannot be produced on a live box: "a pid that exists and
+ * whose cmdline cannot be read" is a race against the kernel, and a door that
+ * waits for one measures luck.
+ */
+describe('lock-state who-runs: UNKNOWN is a third state, not a quiet zero', () => {
+  const made: string[] = [];
+  after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+
+  /** A fake `/proc`: each entry is [pid, cmdline | null, hasStatus]. */
+  function procTree(entries: Array<[string, string | null, boolean]>): string {
+    const root = mkdtempSync(join(tmpdir(), 'who-runs-proc-'));
+    made.push(root);
+    for (const [pid, cmdline, hasStatus] of entries) {
+      mkdirSync(join(root, pid));
+      // NUL-separated, exactly as the kernel writes it — the parser splits on it.
+      if (cmdline !== null) writeFileSync(join(root, pid, 'cmdline'), cmdline.replace(/ /g, '\0'));
+      if (hasStatus) writeFileSync(join(root, pid, 'status'), `Name:\tsh\nPPid:\t1\n`);
+    }
+    return root;
+  }
+
+  test('a pid that EXISTS but cannot be read is UNKNOWN — not skipped, not a row', async () => {
+    const { whoRuns } = await import('./stories/lock-guard.mjs');
+    // 4242 has a status (it exists) and NO cmdline (it cannot be read).
+    // 4243 has neither: genuinely gone between the listing and the read.
+    const root = procTree([['4242', null, true], ['4243', null, false]]);
+    const r = whoRuns('/some/abs/target.sh', { procRoot: root, self: new Set() });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.rows, [], 'nothing matched');
+    assert.deepEqual(r.unknown, ['4242'], 'the readable-but-unreadable pid is UNKNOWN; the vanished one is correctly silent');
+  });
+
+  test('UNKNOWN exits 4, never 0 — the mapping that was written inline and wrong', async () => {
+    const { whoRunsExit } = await import('./stories/lock-guard.mjs');
+    assert.equal(whoRunsExit({ rows: [{ pid: '7' }], unknown: [] }), 3, 'someone runs it');
+    assert.equal(whoRunsExit({ rows: [], unknown: ['9'] }), 4, 'the census could not tell — this is the case `rows.length > 0 ? 3 : 0` spelled 0');
+    assert.equal(whoRunsExit({ rows: [], unknown: [] }), 0, 'read everything, found nobody');
+  });
+
+  test('the exclusion set is read from the SAME procRoot — a fixture pid 1 is not eaten by the real chain', async () => {
+    const { whoRuns } = await import('./stories/lock-guard.mjs');
+    // `ancestorPids` ALWAYS contains '1'. Before `procRoot` was threaded through
+    // to the default `self`, this row was excluded by the REAL ancestor chain and
+    // the door below read as "no match" — a fixture silently fenced off.
+    const root = procTree([['1', '/bin/sh /some/abs/target.sh', true]]);
+    const r = whoRuns('/some/abs/target.sh', { procRoot: root });
+    assert.deepEqual(r.rows.map((x: { pid: string }) => x.pid), ['1'], 'the fixture row survives the ancestor exclusion');
   });
 });
