@@ -226,3 +226,88 @@ jobs:
     }
   });
 });
+
+/**
+ * Per-manifest fingerprints — bead `forge-8vfn.7.6.80`, T1 ruling 879.
+ *
+ * WHY. `PIN_MANIFESTS` is one number over EVERY manifest, so any lane's
+ * reconcile moves it and `pin-precheck` refuses every merge whose gate finished
+ * before that reconcile. Measured on three consecutive merges in one evening —
+ * #701 (`9cfcb49c…` → `2ee2401b…`), #705 (`5718043768091866` → `0c3fbf11…`) and
+ * one of lane A's — and in all of them the refusing lane's OWN manifest was
+ * untouched. The refusal is correct by its own rule and the rule is too wide:
+ * a merge's pin precondition is about the manifests it declares and touches,
+ * not about every manifest on the box. With three lanes merging, a four-minute
+ * gate almost always lands into a changed aggregate, and the retry starves.
+ *
+ * A per-manifest line is what makes the narrower comparison possible at all —
+ * the precheck cannot compare a relevant SUBSET against a single aggregate
+ * number. The aggregate stays: it is still the honest one-line answer to "did
+ * anything move", and a log carrying only the aggregate must remain readable
+ * until every lane's gate emits the new lines.
+ */
+describe('gate.sh — the pin block fingerprints EACH manifest, not only the set (forge-8vfn.7.6.80)', () => {
+  const PIN_CI = `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trivial
+        run: echo per-manifest-fixture
+`;
+  /** Two manifests, so "only the edited one moves" is observable at all. */
+  function campaignWithTwo() {
+    const camp = mkdtempSync(join(tmpdir(), 'gate-permanifest-'));
+    mkdirSync(join(camp, 'gate-manifests'), { recursive: true });
+    for (const n of ['ALPHA', 'BETA']) {
+      writeFileSync(join(camp, 'gate-manifests', `${n}.sha256`), `${'0'.repeat(64)}  README.md\n`);
+      writeFileSync(join(camp, 'gate-manifests', `${n}.counts`), `paths=1 head=deadbeef owner=${n}\n`);
+    }
+    return camp;
+  }
+  const lineFor = (out: string, name: string) =>
+    out.match(new RegExp(`^PIN_MANIFEST ${name}=([0-9a-f]{16})$`, 'm'))?.[1] ?? null;
+
+  test('7.6.80: one PIN_MANIFEST line per manifest, beside the aggregate', () => {
+    const d = tree(PIN_CI);
+    installedInPlace(d);
+    const camp = campaignWithTwo();
+    try {
+      const r = gate(d, camp);
+      assert.match(r.out, /^PIN_MANIFESTS=[0-9a-f]{16}$/m, 'the aggregate stays — a log with only it must remain readable');
+      assert.notEqual(lineFor(r.out, 'ALPHA'), null, `expected PIN_MANIFEST ALPHA=<16 hex>; got:\n${r.out}`);
+      assert.notEqual(lineFor(r.out, 'BETA'), null, 'and one for every other manifest');
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+
+  test('7.6.80: editing ONE manifest moves ONLY its line — the property the narrower comparison rests on', () => {
+    const d = tree(PIN_CI);
+    installedInPlace(d);
+    const camp = campaignWithTwo();
+    try {
+      const before = gate(d, camp).out;
+      const alphaBefore = lineFor(before, 'ALPHA');
+      const betaBefore = lineFor(before, 'BETA');
+      assert.notEqual(alphaBefore, null);
+      assert.notEqual(betaBefore, null);
+
+      // A sibling reconciles: exactly what refused #701 and #705.
+      writeFileSync(join(camp, 'gate-manifests', 'BETA.counts'), 'paths=1 head=cafe1234 owner=BETA\n');
+      const after = gate(d, camp).out;
+
+      assert.notEqual(lineFor(after, 'BETA'), betaBefore, "the reconciled manifest's fingerprint must move");
+      assert.equal(
+        lineFor(after, 'ALPHA'), alphaBefore,
+        'and the untouched one must NOT — without this, a per-manifest line is just the aggregate written N times ' +
+          'and the relevant-set comparison it exists to enable is impossible',
+      );
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+});
