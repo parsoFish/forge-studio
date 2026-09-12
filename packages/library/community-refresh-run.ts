@@ -79,7 +79,7 @@ import {
 } from './studio/community-refresh-api.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from './studio/community-registry.ts';
 import { listCommunityHubs } from './studio/community-index.ts';
-import { indexGithubHub, type DiscoveredItem } from './studio/community-hub-index.ts';
+import { indexerForHub, type DiscoveredItem } from './studio/community-hub-index.ts';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
@@ -374,7 +374,8 @@ async function discoverFromHubs(
   const known = new Set(registry.items.map((i) => i.id));
   const out: DiscoveredItem[] = [];
   for (const hub of listCommunityHubs(opts.forgeRoot)) {
-    const outcome = await indexGithubHub(ctx, hub, known);
+    // By URL, not by `kinds` — design.md §"A second hub reader".
+    const outcome = await indexerForHub(hub)(ctx, hub, known);
     if (!outcome.ok) continue;
     for (const d of outcome.discovered) {
       if (known.has(d.id)) continue; // two hubs publishing the same id: first wins, deterministically
