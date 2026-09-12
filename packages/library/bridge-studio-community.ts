@@ -657,6 +657,8 @@ export async function handleCommunityRefresh(req: IncomingMessage, res: ServerRe
           // lacks. PROPOSALS: the page offers them, the operator adds one
           // through the CRUD door, and nothing here writes the registry.
           discovered: result.discovered,
+          // …and what each hub DID, so a chip can say why it is empty.
+          hubOutcomes: result.hubOutcomes,
         },
         origin,
       );

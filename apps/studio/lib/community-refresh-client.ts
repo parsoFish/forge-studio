@@ -12,7 +12,7 @@
 
 import { bridgeFetch } from './bridge-client.ts';
 import { asRecord, requireString, requireBoolean, requireNumber, parseNullableField } from './community-parse.ts';
-import type { DiscoveredRow } from './community-types.ts';
+import type { DiscoveredRow, HubOutcomeRow } from './community-types.ts';
 
 // ---------------------------------------------------------------------------
 // W8-B5b — POST /api/studio/community/refresh, the DETERMINISTIC (LLM-free)
@@ -123,6 +123,10 @@ export type CommunityRefreshResult =
       /** Ruling 478 — rows the declared hubs publish that this registry lacks;
        *  see `community-types.ts`. */
       discovered: readonly DiscoveredRow[];
+      /** What each declared hub DID. A hub that published nothing and a hub
+       *  forge could not read are different facts, and the strip rendered both
+       *  as the same blank until this carried the reader's own reason. */
+      hubOutcomes: readonly HubOutcomeRow[];
     }
   | { state: 'refused-dry-bridge'; route: string; method: string; action: string }
   | {
@@ -211,6 +215,23 @@ function parseCommunityRefreshRunReason(raw: unknown): CommunityRefreshRunReason
  *  refuse an absent key: "nothing left to discover" and "a server without this
  *  field" both mean no proposals, and the page renders the same nothing for
  *  each. Anything PRESENT is parsed strictly. */
+function parseHubOutcomes(raw: unknown): HubOutcomeRow[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error(`expected "hubOutcomes" to be an array when present, got ${JSON.stringify(raw)}`);
+  return raw.map((row) => {
+    const d = asRecord(row);
+    const reason = d['reason'];
+    const message = d['message'];
+    return {
+      hubId: requireString(d, 'hubId'),
+      discovered: requireNumber(d, 'discovered'),
+      ...(d['partial'] === true ? { partial: true as const } : {}),
+      ...(typeof reason === 'string' ? { reason } : {}),
+      ...(typeof message === 'string' ? { message } : {}),
+    };
+  });
+}
+
 function parseDiscoveredRows(raw: unknown): DiscoveredRow[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error(`expected "discovered" to be an array when present, got ${JSON.stringify(raw)}`);
@@ -236,6 +257,7 @@ export function parseCommunityRefreshResponse(status: number, raw: unknown): Com
       outcomes: parseCommunityRefreshOutcomes(r['outcomes']),
       errors: parseCommunityRefreshFailures(r['errors']),
       discovered: parseDiscoveredRows(r['discovered']),
+      hubOutcomes: parseHubOutcomes(r['hubOutcomes']),
     };
   }
 
