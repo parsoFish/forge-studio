@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
 
 test('a costless story runs without --approve-spend', () => {
   const v = spendGateVerdict({ realSpawn: false, budget_usd: 0 }, { approveSpend: false });
@@ -202,7 +202,88 @@ test('7.6.51: run.mjs enforces the ceiling at a beat boundary and exits non-zero
   const loopBody = loop.slice(0, loop.indexOf('\n  const docPath'));
   assert.match(loopBody, /spendCeilingVerdict\(/, 'the ceiling must be consulted inside the beat loop');
   assert.match(loopBody, /spend after beat/, 'the running total must print every beat, not only on breach');
-  assert.match(loopBody, /ceiling\.breached/, 'a breach must stop the loop');
+  // Asserting the BEHAVIOUR, not a variable name. The first draft of this door
+  // matched /ceiling\.breached/ and broke the moment 7.6.52 renamed the local —
+  // an over-specified door, pinning an identifier the property does not depend
+  // on. The property is that a breach ends the loop.
+  assert.match(loopBody, /\.breached\b/, 'a breach must stop the loop');
+  assert.match(loopBody, /\bbreak\b/, 'and it must actually break out of it');
   assert.match(src, /row\.status === 'green' && spendBreach === null\) \? 0 : 1/,
     'a breach must make the exit code non-zero whatever the beats did');
+});
+
+/**
+ * Funded vs declared — bead `forge-8vfn.7.6.52`, ruling 791.
+ *
+ * D's S7 run 4 declared `budget_usd: 25` and was funded $5. With 7.6.51's
+ * enforcement alone the run would have stopped at $25 — five times what anyone
+ * authorised — and called itself compliant, because the only number it knew
+ * was the story's own. A decision about this run cannot be overridden by a file.
+ */
+test('the LOWER of funded and declared is enforced, and the reason names both', () => {
+  const c = effectiveCeiling(25, 5);
+  assert.equal(c.usd, 5);
+  assert.equal(c.source, 'funded');
+  assert.match(c.reason, /funded \$5\.00/);
+  assert.match(c.reason, /declared \$25\.00/);
+  assert.match(c.reason, /LOWER/);
+});
+
+test('a declared figure below the funded one still wins — lower, not "funded always"', () => {
+  const c = effectiveCeiling(3, 35);
+  assert.equal(c.usd, 3);
+  assert.equal(c.source, 'declared');
+});
+
+test('agreement is stated, not silent — a guard that speaks only on disagreement never compared them', () => {
+  const c = effectiveCeiling(25, 25);
+  assert.equal(c.usd, 25);
+  assert.match(c.reason, /they agree/);
+});
+
+test('no --ceiling falls back to the declared figure and says which it used', () => {
+  const c = effectiveCeiling(35, null);
+  assert.equal(c.usd, 35);
+  assert.equal(c.source, 'declared');
+  assert.match(c.reason, /launcher named no --ceiling/);
+});
+
+test('neither usable is UNBOUNDED and refuses to look like a ceiling', () => {
+  const c = effectiveCeiling(undefined as unknown as number, null);
+  assert.ok(Number.isNaN(c.usd));
+  assert.match(c.reason, /UNBOUNDED/);
+});
+
+test('7.6.52: run.mjs parses --ceiling and enforces the effective one', () => {
+  const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
+  assert.match(src, /--ceiling/, 'the launcher must be able to name a funded ceiling');
+  assert.match(src, /effectiveCeiling\(/, 'the runner must combine funded and declared');
+  const loop = src.slice(src.indexOf('for (const [i, beat] of story.beats.entries())'));
+  assert.match(loop.slice(0, loop.indexOf('\n  const docPath')), /spendCeilingVerdict\(/);
+});
+
+/**
+ * A `--ceiling` that was GIVEN but does not parse is a malformed
+ * authorisation, not an absent one — bead `forge-8vfn.7.6.52`.
+ *
+ * The first draft returned `NaN` and let `effectiveCeiling` fall back, which
+ * printed "the launcher named no --ceiling" — FALSE, and it silently restored
+ * the story's own higher figure. An operator who typed `--ceiling` and
+ * fat-fingered the value would have been told a number they never chose was in
+ * force. Refusing is the only safe reading.
+ *
+ * Exercised live at 03:12 on all four paths: `--ceiling` (no value), `abc`,
+ * `-3` each exit 1 naming the token; `--ceiling 5` runs (positive control, so
+ * the refusal is known to be discriminating rather than universal).
+ */
+test('7.6.52: run.mjs refuses a given-but-unusable --ceiling instead of falling back', () => {
+  const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
+  assert.match(src, /ceilingGiven/, 'presence must be tracked separately from value');
+  assert.match(src, /REFUSING: --ceiling was given as/, 'and a malformed one must refuse, naming what it got');
+  // The refusal must precede anything that spends or binds: it sits with the
+  // other preflight refusals, before the bridge boots.
+  const refuseAt = src.indexOf('REFUSING: --ceiling was given as');
+  const bootAt = src.indexOf('booting our own bridge from this tree');
+  assert.ok(refuseAt !== -1 && bootAt !== -1 && refuseAt < bootAt,
+    'the refusal must come before the bridge boots');
 });
