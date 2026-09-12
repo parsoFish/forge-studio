@@ -143,6 +143,25 @@ function validateDoSteps(raw, at) {
  *  a second is a deliberate edit here — the friction is the point. */
 const WAIT_KINDS = ['agent', 'settle'];
 
+/**
+ * The shape a `progressKey` may take — IDENTICAL to `beats-page.mjs`'s
+ * `SAFE_KEY`, and bound to it by a door rather than by a comment.
+ *
+ * WHY THE VALIDATOR CARES, found in this bead's own hand security review
+ * (§15.333; the `security-review` skill still aborts on `origin/HEAD`, bead
+ * `forge-8vfn.7.6.69`). `readObserved` reads the ROOT's attributes by name —
+ * `getAttribute` takes any string — but builds its DESCENDANT selector from
+ * `SAFE_KEY`-passing keys only. So a key like `foo:bar` would be read on the
+ * page root and invisible on every child, and the per-transition bound would
+ * then report "the key never appeared" about a key a descendant is rendering.
+ * That is the conflation species re-entering by a side door: absent-because-
+ * uncollected and absent-because-unrendered arriving as one answer.
+ *
+ * Refused at the boundary instead, where the author is told which character is
+ * the problem, rather than half-honoured at run time.
+ */
+export const PROGRESS_KEY_SHAPE = /^[A-Za-z][A-Za-z0-9-]*$/;
+
 /** The widest bound a beat may declare, in ms. A declared wait is a licence to
  *  sit still; an unbounded or absurd one turns a red run into a hung host,
  *  which is worse than the defect it was added to fix. */
@@ -175,6 +194,77 @@ function validateWait(raw, at) {
       `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
     );
   }
+  // PLACED ABOVE THE `settle` BRANCH DELIBERATELY, and my own door is why. The
+  // first cut of this sat below it — and that branch RETURNS, so a settle wait
+  // carrying `perTransition` had both fields dropped SILENTLY: the exact defect
+  // 7.6.82 was minted for, reproduced inside the fix that cites it. Every kind
+  // must reach these checks, and the `for !== 'agent'` refusal below is then
+  // what makes a settle wait say so out loud.
+  // 7.6.77 (T1 881, C's 612 ack) — PROGRESS, not wall-clock.
+  //
+  // S1 beat 11's `upTo` has to cover a VARIABLE NUMBER of VARIABLE-LENGTH turns:
+  // measured across four runs the interview rounds cost 28-126 s each while the
+  // single drafting turn costs 327-392 s, and round count alone does not predict
+  // the outcome (runs 8 and 9 both answered 2 rounds; only 9 passed). So no
+  // single figure is both safe and meaningful — raise it enough to survive three
+  // rounds plus a slow draft and it no longer catches a genuine stall.
+  //
+  // `perTransition` resets its budget every time `progressKey` CHANGES, so
+  // expiry means no progress rather than no completion. `upTo` is untouched and
+  // still the absolute ceiling: this is a second, stricter bound, never a
+  // replacement.
+  //
+  // BOTH OR NEITHER, refused by name (C's condition 1). `progressKey` alone is a
+  // key nobody reads. `perTransition` alone is a budget that can never reset —
+  // a shorter wall-clock bound wearing a progress-bound's name, which is
+  // strictly worse than today because it reds EARLIER while claiming to measure
+  // progress.
+  const hasPer = raw.perTransition !== undefined;
+  const hasKey = raw.progressKey !== undefined;
+  if (hasPer !== hasKey) {
+    fail(
+      `${at}.wait.${hasPer ? 'progressKey' : 'perTransition'}`,
+      `\`perTransition\` and \`progressKey\` are both-or-neither: ${hasPer
+        ? '`perTransition` without `progressKey` is a budget nothing can ever reset — a shorter wall-clock bound wearing a progress bound\'s name'
+        : '`progressKey` without `perTransition` is a key nothing reads'}`,
+    );
+  }
+  if (hasPer) {
+    if (raw.for !== 'agent') {
+      fail(`${at}.wait.perTransition`, `only an agent wait takes \`perTransition\`; on for: '${raw.for}' it would be dropped silently`);
+    }
+    if (!Number.isInteger(raw.perTransition) || raw.perTransition <= 0) {
+      fail(`${at}.wait.perTransition`, `expected a positive integer in ms, got ${JSON.stringify(raw.perTransition)}`);
+    }
+    // C's condition 2, tightened to `>=` on C's read of `4fb31a26`. A bound
+    // ABOVE the ceiling can never fire. A bound EQUAL to it cannot fire either
+    // in any case that matters: after a transition at `t` it would expire at
+    // `t + upTo`, which is past the ceiling, and with no transition at all it
+    // expires at exactly `upTo`, where the ceiling fires anyway. The one thing
+    // equality buys is a better MESSAGE in that last case — an accident of the
+    // order the waiter checks its two bounds in, not a bound. Refused, because
+    // condition 2's own sentence applies: it would read as protection and
+    // provide none.
+    if (raw.perTransition >= raw.upTo) {
+      fail(
+        `${at}.wait.perTransition`,
+        `expected < upTo (${raw.upTo} ms), got ${raw.perTransition} — a per-transition bound at or above the ceiling can never fire earlier than the ceiling, so it would read as protection and provide none`,
+      );
+    }
+    if (typeof raw.progressKey !== 'string' || raw.progressKey === '') {
+      fail(`${at}.wait.progressKey`, `expected the data-* key whose CHANGE counts as progress, got ${JSON.stringify(raw.progressKey)}`);
+    }
+    if (!PROGRESS_KEY_SHAPE.test(raw.progressKey)) {
+      fail(
+        `${at}.wait.progressKey`,
+        `expected a plain data-* key (letter, then letters/digits/hyphens), got ${JSON.stringify(raw.progressKey)} — ` +
+        'the runner builds its descendant selector from keys of that shape only, so this one would be read on the ' +
+        'page root and invisible on every child, and the bound would then report "the key never appeared" about a ' +
+        'key a descendant is rendering',
+      );
+    }
+  }
+
   // `settle` — T1 ruling 621(ii), bought by A's S1 beat 3. It waits for a NAMED
   // key to leave a DECLARED transient value, and both halves are required
   // because the alternative is a blanket longer wait, which sits through a
@@ -226,6 +316,7 @@ function validateWait(raw, at) {
   return Object.freeze({
     for: raw.for, upTo: raw.upTo,
     ...(raw.anchor !== undefined ? { anchor: raw.anchor } : {}),
+    ...(hasPer ? { perTransition: raw.perTransition, progressKey: raw.progressKey } : {}),
   });
 }
 

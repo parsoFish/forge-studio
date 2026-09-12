@@ -26,6 +26,7 @@
 // runner's other agent-evidence reads and bound to the TypeScript constant by
 // `beats-offsession-stall.test.ts` (T1 ruling 580).
 import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
+import { readProgress, progressExpiry } from './beats-progress.mjs';
 
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
 export const PLACEHOLDER = /^<([A-Za-z][A-Za-z0-9_]*)>$/;
@@ -312,8 +313,11 @@ export function resolveExpectations(expected, observed) {
   return best === null ? { ...solo, ...root } : { ...best, ...solo, ...root };
 }
 
-/** A `data-*` key safe to interpolate into a selector — story files are external input. */
-const SAFE_KEY = /^[A-Za-z][A-Za-z0-9-]*$/;
+/** A `data-*` key safe to interpolate into a selector — story files are external input.
+ *  EXPORTED so `story-file.mjs` can refuse at the boundary what this would silently
+ *  drop from the selector, and so a door can prove the two patterns identical
+ *  (the `STALL_CEILING_MS` arrangement, T1 ruling 580). */
+export const SAFE_KEY = /^[A-Za-z][A-Za-z0-9-]*$/;
 
 /**
  * Read the route, the page root's own `data-*` for the keys this beat asked
@@ -585,11 +589,34 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
+  // THE KEYS THIS WAIT NEEDS COLLECTED, DECLARED — bead `forge-8vfn.6.11.45`'s
+  // rule, applied to the two waits that read a key the BEAT need not mention.
+  //
+  // `readObserved` collects `expect.data`'s keys and nothing else, so a key
+  // only this function cares about is never read at all and every check of it
+  // answers the same way HOWEVER THE PAGE READ. 6.11.45 measured that on a
+  // repeat's `until` — S1 run 9 spent 2 m 24 s waiting for a condition the page
+  // had already satisfied — and `settle.key` has carried the identical hole
+  // since 621(ii): no shipped story declares a settle wait yet, so it has never
+  // fired, which is the only reason it has not cost a run. `progressKey` would
+  // arrive with the same hole and a worse failure: an uncollected progress key
+  // reads as ABSENT forever, so the per-transition bound below would report
+  // "the key never appeared" on a perfectly healthy run.
+  const alsoWanted = [settle?.key, progress?.progressKey].filter((k) => typeof k === 'string' && k !== '');
+  // 7.6.77's state: what `progressKey` last read, and when it last CHANGED.
+  // `undefined` is the one value that means ABSENT — `''` is a present-but-empty
+  // attribute (the always-present form 6.11.5 ratified) and counts as a sighting.
+  let lastProgress;
+  let lastSeenSource = 'absent';
+  let lastSeenCarriers = 0;
+  let firstSeenAt = null;
+  let transitions = 0;
+  let lastChangeAt = startedAt;
   // T1 ruling 640. THE DOOR WAS ON THE WRONG WAIT. `forge-8vfn.7.5.8` put the
   // channel door in `waitForHandleOrStall` — the PRE-act wait, which returns
   // the moment the control appears — and an off-session beat spends its bound
@@ -605,7 +632,7 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
   // measurement named (§15.356).
   const runId = stallDoor === null ? null : await readRunId(page);
   for (;;) {
-    const observed = await readObserved(page, beat);
+    const observed = await readObserved(page, beat, alsoWanted);
     const seen = resolveExpectations(beat.expect.data, observed);
     if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
     // `wait: { for: 'settle', key, while }` — T1 ruling 621(ii), bought by A's
@@ -662,9 +689,16 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
       // step may take and nothing about where its evidence begins.
       const stop = stallDoor(runId, anchorMs ?? startedAt);
       if (stop !== null) {
+        // `stoppedBy: 'runner'` for the same reason the progress bound sets it,
+        // and C is right that this is not a widened diff but the identical
+        // defect: `no-channel` is OUR measurement of an absent dispatch
+        // directory, and the verdict has been announcing it as something "the
+        // product had already said about this session" — a false sentence
+        // inside a red, which is worse than a larger diff.
         return Object.freeze({
           afterMs: Date.now() - startedAt,
           why: `${stop.reason}: ${stop.detail} The beat's expectations never held.`,
+          stoppedBy: 'runner',
         });
       }
     }
@@ -672,6 +706,56 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     const why = stopReasonFor(observed, sessionScope);
     if (why !== null) {
       return Object.freeze({ afterMs: Date.now() - startedAt, why });
+    }
+    // 7.6.77 (T1 ruling 881, C's conditions 1-3) — THE PROGRESS BOUND, checked
+    // LAST on purpose: every reason above is a better explanation than "nothing
+    // changed", and a beat killed by a crash must be reported as a crash. This
+    // fires only when nothing better accounts for the silence.
+    //
+    // WHY A SECOND BOUND AT ALL. S1 beat 11's `upTo` has to cover a VARIABLE
+    // NUMBER of VARIABLE-LENGTH turns: measured over four funded runs the
+    // interview rounds cost 28-126 s each and the single drafting turn costs
+    // 327-392 s, and round count does not predict the outcome (runs 8 and 9
+    // both answered two rounds; only 9 passed). So no wall-clock figure is both
+    // safe and meaningful — raise it enough to survive three rounds plus a slow
+    // draft and it no longer catches a genuine stall. `perTransition` bounds
+    // PROGRESS instead: expiry means no transition, which is what beat 11
+    // actually cares about. `upTo` is untouched and still the ceiling.
+    //
+    // MEASURED FROM THIS WAIT'S START, never from the anchor — 718(1)'s split,
+    // unchanged: an anchor moves where EVIDENCE begins; a bound says how long
+    // THIS step may take.
+    if (progress !== null) {
+      // READ BY SOURCE, never through `resolveExpectations` — that function is
+      // scoped to `expected` at every tier, so a `progressKey` the beat does not
+      // itself expect is collected into `nested` and then discarded, and the
+      // bound reports "never present" about a key the page renders every poll.
+      // C measured it on this branch before `beats-progress.mjs` existed.
+      const read = readProgress(observed, progress.progressKey);
+      if (read.value !== undefined && read.value !== lastProgress) {
+        if (firstSeenAt === null) firstSeenAt = Date.now();
+        else transitions += 1;
+        lastProgress = read.value;
+        lastSeenSource = read.source;
+        lastSeenCarriers = read.carriers;
+        lastChangeAt = Date.now();
+      } else if (Date.now() - lastChangeAt >= progress.perTransition) {
+        // C's condition 3, in four sentences rather than two. Each prefix is a
+        // different instruction to the reader — check the story file / check the
+        // markup / look at the agent — and collapsing any two of them sends a
+        // reader to investigate the wrong thing.
+        const why = progressExpiry({
+          key: progress.progressKey, perTransition: progress.perTransition,
+          source: read.source, carriers: read.carriers,
+          firstSeenAt, transitions, lastValue: lastProgress,
+          lastSeenSource, lastSeenCarriers,
+          startedAt, lastChangeAt, now: Date.now(),
+        });
+        // `stoppedBy` names WHO stopped the beat, so the verdict cannot append
+        // "the product had already said so about this session" to a finding the
+        // product never made (`beats-drive.mjs`'s `named`).
+        return Object.freeze({ afterMs: Date.now() - startedAt, why, stoppedBy: 'runner' });
+      }
     }
     if (Date.now() >= deadline) return null;
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
