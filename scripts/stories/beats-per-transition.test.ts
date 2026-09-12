@@ -62,6 +62,12 @@ function sessionPage(spec: {
   progressKey?: string;
   valueAt?: (elapsedMs: number) => string | undefined;
   respectWanted?: boolean;
+  /** WHERE the key renders. `root` is the page root; `descendant` puts it on
+   *  `carriers` child elements and NEVER on the root, which is the shape C's P1
+   *  was measured on and the shape no door here used before. */
+  progressOn?: 'root' | 'descendant';
+  carriers?: number;
+  route?: string;
 }) {
   const startedAt = Date.now();
   const locator = (): any => ({
@@ -70,21 +76,28 @@ function sessionPage(spec: {
     click: async () => {}, fill: async () => {},
   });
   return {
-    url: () => `http://localhost:4124${ROUTE}`,
+    url: () => `http://localhost:4124${spec.route ?? ROUTE}`,
     locator,
     goto: async () => {},
     waitForSelector: async () => {},
     evaluate: async (_fn: unknown, arg?: { wanted?: string[] }) => {
       const all: Record<string, string> = { page: 'session', 'page-ready': 'true', 'session-phase': 'drafting' };
+      const nested: Record<string, string>[] = [];
       if (spec.progressKey !== undefined && spec.valueAt !== undefined) {
         const v = spec.valueAt(Date.now() - startedAt);
-        if (v !== undefined) all[spec.progressKey] = v;
+        if (v !== undefined) {
+          if ((spec.progressOn ?? 'root') === 'root') all[spec.progressKey] = v;
+          else for (let i = 0; i < (spec.carriers ?? 1); i += 1) nested.push({ [spec.progressKey]: v });
+        }
       }
       const wanted = arg?.wanted ?? null;
-      const data = wanted === null || spec.respectWanted === false
-        ? all
-        : Object.fromEntries(Object.entries(all).filter(([k]) => wanted.includes(k)));
-      return { data, nested: [], lifecycle: null, lifecycleError: null, sessionPhase: 'drafting' };
+      const keep = (o: Record<string, string>) => wanted === null || spec.respectWanted === false
+        ? o
+        : Object.fromEntries(Object.entries(o).filter(([k]) => wanted.includes(k)));
+      return {
+        data: keep(all), nested: nested.map(keep),
+        lifecycle: null, lifecycleError: null, sessionPhase: 'drafting',
+      };
     },
   };
 }
@@ -140,7 +153,32 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
     assert.ok(took >= 1_200,
       `each transition must push the deadline out: expiry at ${took} ms means the budget was measured from the ` +
       "wait's start, so `perTransition` is just a shorter `upTo` and the bead's whole fix is absent");
-    assert.match(stall!.why, /changed 3 time\(s\)/, `and the count is reported honestly: ${stall!.why}`);
+  });
+
+  test('the transition COUNT is reported honestly — one door per axis', async () => {
+    // SPLIT OUT OF THE DOOR ABOVE, and the reason is a measurement. That door
+    // asserted the count as well as the timing, and it red twice while six
+    // other `tsx` suites were running: at 100 ms polls against 300 ms steps a
+    // contended poll can skip a value entirely, so the count it observed was
+    // 2 where 3 was declared. The TIMING assertion is safe under load in one
+    // direction only — a late poll pushes expiry later, never earlier — but the
+    // COUNT is not, and a door carrying two nondeterministic axes reds for
+    // whichever one slipped. 7.6.50's family, in a door I wrote tonight.
+    //
+    // So this fixture advances on every READ rather than on the clock: three
+    // changes, then frozen, whatever the poll timing does.
+    let reads = 0;
+    const beat = beatWith(WAIT);
+    const page = sessionPage({ progressKey: 'architect-turns', valueAt: () => String(Math.min(3, reads++)) });
+
+    const stall = await waitForConsequence(
+      page as never, beat as never, 4_000, null, null, null, null, null, beat.wait,
+    );
+
+    assert.notEqual(stall, null);
+    assert.match(stall!.why, /changed 3 time\(s\)/,
+      `the first sighting is not a transition and every later change is exactly one: ${stall!.why}`);
+    assert.match(stall!.why, /read "3" for the last/, 'and the frozen value is quoted');
   });
 
   test('a key that appears and then FREEZES stops the beat at the per-transition bound', async () => {
@@ -220,6 +258,106 @@ describe('7.6.77 — the bound is on PROGRESS, not on the wall clock', () => {
 
     assert.equal(stall, null, 'no progress bound declared, so nothing new can stop this beat');
     assert.ok(Date.now() - began >= 800, 'it sits out its bound exactly as it did before');
+  });
+
+  test('a key rendered on a DESCENDANT is tracked — not reported as never present', async () => {
+    // C's P1, reproduced against this branch before the fix and measured: a key
+    // changing every 100 ms on a child element red-ed `no-progress-key`.
+    //
+    // WHY IT HAPPENED. `alsoWanted` got the key into `readObserved`, and
+    // `SAFE_KEY` put it into the descendant selector, so `observed.nested`
+    // really did carry it every poll. The READ threw it away:
+    // `resolveExpectations` is scoped to `expected` at every tier — `missing`
+    // comes from `Object.keys(expected)`, `solo` fills only `missing`, and the
+    // early return hands back the ROOT alone — so a key the beat does not
+    // itself expect is never looked for among the descendants.
+    //
+    // It is the same species as the `foo:bar` finding one layer along:
+    // absent-because-never-asked-about, reported as absent-because-not-
+    // rendered. And it defeats condition 3 exactly — the two expiries stay two
+    // and the WRONG one fires, sending the reader to the story file while a
+    // funded beat 11 dies at 480 s.
+    const beat = beatWith(WAIT);
+    const page = sessionPage({
+      progressKey: 'architect-turns', progressOn: 'descendant',
+      valueAt: (ms) => String(Math.floor(ms / 100)),
+    });
+
+    const stall = await waitForConsequence(
+      page as never, beat as never, 1_200, null, null, null, null, null, beat.wait,
+    );
+
+    assert.equal(stall, null,
+      'the key is on a child element and changes every 100 ms: the only way this reds is by reading only the root');
+  });
+
+  test('a key that is SEEN and then STOPS RENDERING is its own finding, not a stall', async () => {
+    // C's P2. `got === undefined` after a sighting used to fall into the same
+    // branch as a frozen value, so the expiry said "The key renders, so this is
+    // the agent" about a key that had stopped rendering. A page that unmounts
+    // the element is not an agent that stopped emitting, and the sentence told
+    // the reader it was — two causes, one answer, which is the species this
+    // whole bead exists to stop.
+    const beat = beatWith(WAIT);
+    const page = sessionPage({
+      progressKey: 'architect-turns',
+      valueAt: (ms) => (ms < 300 ? String(Math.floor(ms / 100)) : undefined),
+    });
+
+    const stall = await waitForConsequence(
+      page as never, beat as never, 4_000, null, null, null, null, null, beat.wait,
+    );
+
+    assert.notEqual(stall, null);
+    assert.match(stall!.why, /^progress-key-vanished:/, `its own prefix: ${stall!.why}`);
+    assert.doesNotMatch(stall!.why, /stalled-no-transition/, 'never the stall message');
+    assert.doesNotMatch(stall!.why, /The key renders and is still rendering/,
+      'and never the claim that the key is still rendering');
+    assert.match(stall!.why, /look at the markup/, 'it sends the reader to the right place');
+  });
+
+  test('a key carried by SEVERAL elements refuses to guess which one it means', async () => {
+    // The third gradation. Picking a carrier would be a measurement of
+    // whichever element sorted first — a true reading of the wrong thing, which
+    // is the proxy species — so the bound expires and says it could not read
+    // the key, rather than reporting a stall it never measured.
+    const beat = beatWith(WAIT);
+    const page = sessionPage({
+      progressKey: 'architect-turns', progressOn: 'descendant', carriers: 3,
+      valueAt: (ms) => String(Math.floor(ms / 100)),
+    });
+
+    const stall = await waitForConsequence(
+      page as never, beat as never, 4_000, null, null, null, null, null, beat.wait,
+    );
+
+    assert.notEqual(stall, null, 'a key it cannot read must still end the beat — silence here is the fallback species');
+    assert.match(stall!.why, /^ambiguous-progress-key:/, `its own prefix: ${stall!.why}`);
+    assert.match(stall!.why, /3 elements/, 'and it says how many carry it');
+    assert.match(stall!.why, /NOTHING about the agent/, 'and refuses to be read as a stall');
+  });
+
+  test('the channel door\'s stop is the RUNNER\'s too — C\'s one-line finding', async () => {
+    // `no-channel` is our measurement of an absent dispatch directory; the
+    // product said nothing. The verdict has been announcing it as something
+    // "the product had already said so about this session" — a false sentence
+    // inside a red. C's call: fix it here rather than bead it, because a bead
+    // means the next reader is told something untrue in the meantime.
+    const beat = beatWith({ for: 'agent', upTo: 400_000, perTransition: 399_000, progressKey: 'architect-turns' });
+    const page = sessionPage({ route: '/projects/gitweave' });
+
+    // Off-session (no `/sessions/` route) and a bound well past twice the
+    // ceiling, which is what `doorWorthRunning` requires before the door runs.
+    const stall = await waitForConsequence(
+      page as never, beat as never, 400_000, null, null, null,
+      () => ({ reason: 'no-channel', detail: 'no dispatch directory was born after the press.' }),
+      null, beat.wait,
+    );
+
+    assert.notEqual(stall, null);
+    assert.match(stall!.why, /no-channel/);
+    assert.equal((stall as { stoppedBy?: string }).stoppedBy, 'runner',
+      'the door is the runner measuring silence, and the verdict must not attribute it to the product');
   });
 
   test('a progressKey the SELECTOR could not use is refused at the boundary, not half-honoured', async () => {

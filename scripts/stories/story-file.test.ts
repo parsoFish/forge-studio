@@ -288,9 +288,18 @@ test('7.6.77 (C condition 2): a per-transition bound ABOVE the ceiling is refuse
     () => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 600_001, progressKey: 'k' })),
     /wait\.perTransition/,
   );
+  // EQUALITY IS REFUSED TOO — C's read. After a transition at `t` the budget
+  // would expire at `t + upTo`, past the ceiling; with no transition it expires
+  // at exactly `upTo`, where the ceiling fires anyway. The only thing equality
+  // buys is a better message in that one case, which is an accident of the
+  // order the waiter checks its bounds in and not a bound.
+  assert.throws(
+    () => validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 600_000, progressKey: 'k' })),
+    /wait\.perTransition/,
+  );
   assert.equal(
-    validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 600_000, progressKey: 'k' })).beats[0].wait.perTransition,
-    600_000,
+    validateStory(withWait({ for: 'agent', upTo: 600_000, perTransition: 599_999, progressKey: 'k' })).beats[0].wait.perTransition,
+    599_999,
   );
 });
 

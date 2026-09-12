@@ -236,12 +236,19 @@ function validateWait(raw, at) {
     if (!Number.isInteger(raw.perTransition) || raw.perTransition <= 0) {
       fail(`${at}.wait.perTransition`, `expected a positive integer in ms, got ${JSON.stringify(raw.perTransition)}`);
     }
-    // C's condition 2: a per-transition bound above the ceiling can never fire,
-    // so the declaration would read as protection and provide none.
-    if (raw.perTransition > raw.upTo) {
+    // C's condition 2, tightened to `>=` on C's read of `4fb31a26`. A bound
+    // ABOVE the ceiling can never fire. A bound EQUAL to it cannot fire either
+    // in any case that matters: after a transition at `t` it would expire at
+    // `t + upTo`, which is past the ceiling, and with no transition at all it
+    // expires at exactly `upTo`, where the ceiling fires anyway. The one thing
+    // equality buys is a better MESSAGE in that last case — an accident of the
+    // order the waiter checks its two bounds in, not a bound. Refused, because
+    // condition 2's own sentence applies: it would read as protection and
+    // provide none.
+    if (raw.perTransition >= raw.upTo) {
       fail(
         `${at}.wait.perTransition`,
-        `expected <= upTo (${raw.upTo} ms), got ${raw.perTransition} — a per-transition bound above the ceiling can never fire, so it would read as protection and provide none`,
+        `expected < upTo (${raw.upTo} ms), got ${raw.perTransition} — a per-transition bound at or above the ceiling can never fire earlier than the ceiling, so it would read as protection and provide none`,
       );
     }
     if (typeof raw.progressKey !== 'string' || raw.progressKey === '') {

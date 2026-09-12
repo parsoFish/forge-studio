@@ -26,6 +26,7 @@
 // runner's other agent-evidence reads and bound to the TypeScript constant by
 // `beats-offsession-stall.test.ts` (T1 ruling 580).
 import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
+import { readProgress, progressExpiry } from './beats-progress.mjs';
 
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
 export const PLACEHOLDER = /^<([A-Za-z][A-Za-z0-9_]*)>$/;
@@ -611,6 +612,8 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
   // `undefined` is the one value that means ABSENT — `''` is a present-but-empty
   // attribute (the always-present form 6.11.5 ratified) and counts as a sighting.
   let lastProgress;
+  let lastSeenSource = 'absent';
+  let lastSeenCarriers = 0;
   let firstSeenAt = null;
   let transitions = 0;
   let lastChangeAt = startedAt;
@@ -686,9 +689,16 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
       // step may take and nothing about where its evidence begins.
       const stop = stallDoor(runId, anchorMs ?? startedAt);
       if (stop !== null) {
+        // `stoppedBy: 'runner'` for the same reason the progress bound sets it,
+        // and C is right that this is not a widened diff but the identical
+        // defect: `no-channel` is OUR measurement of an absent dispatch
+        // directory, and the verdict has been announcing it as something "the
+        // product had already said about this session" — a false sentence
+        // inside a red, which is worse than a larger diff.
         return Object.freeze({
           afterMs: Date.now() - startedAt,
           why: `${stop.reason}: ${stop.detail} The beat's expectations never held.`,
+          stoppedBy: 'runner',
         });
       }
     }
@@ -716,36 +726,35 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // unchanged: an anchor moves where EVIDENCE begins; a bound says how long
     // THIS step may take.
     if (progress !== null) {
-      const got = seen[progress.progressKey] ?? observed.data?.[progress.progressKey];
-      if (got !== undefined && got !== lastProgress) {
+      // READ BY SOURCE, never through `resolveExpectations` — that function is
+      // scoped to `expected` at every tier, so a `progressKey` the beat does not
+      // itself expect is collected into `nested` and then discarded, and the
+      // bound reports "never present" about a key the page renders every poll.
+      // C measured it on this branch before `beats-progress.mjs` existed.
+      const read = readProgress(observed, progress.progressKey);
+      if (read.value !== undefined && read.value !== lastProgress) {
         if (firstSeenAt === null) firstSeenAt = Date.now();
         else transitions += 1;
-        lastProgress = got;
+        lastProgress = read.value;
+        lastSeenSource = read.source;
+        lastSeenCarriers = read.carriers;
         lastChangeAt = Date.now();
       } else if (Date.now() - lastChangeAt >= progress.perTransition) {
-        // C's condition 3. TWO EXPIRIES, NEVER ONE MESSAGE. A bound that fired
-        // because the key never existed is not evidence about the agent at all
-        // — a key that never appears cannot stop changing — and reporting that
-        // as a stall sends a reader to look at an agent that may be working
-        // perfectly. The loop already holds the fact that separates them:
-        // whether the key was EVER sighted.
-        const expiry = firstSeenAt === null
-          ? `no-progress-key: this beat declared \`perTransition: ${progress.perTransition}\` against ` +
-            `\`${progress.progressKey}\`, and that key was never present on the page — not once, at any ` +
-            `value, in ${Math.round((Date.now() - startedAt) / 1000)}s of waiting. This is NOT a measurement ` +
-            'of the agent: a key that never appears cannot stop changing. Either the beat names a key this ' +
-            'page does not render, or this is not the page the beat thinks it is. Read it as a story-authoring ' +
-            'gap until the key is shown to render.'
-          : `stalled-no-transition: \`${progress.progressKey}\` first appeared ` +
-            `${Math.round((firstSeenAt - startedAt) / 1000)}s into this wait and changed ${transitions} time(s) ` +
-            `after that; it has read ${JSON.stringify(lastProgress)} for the last ` +
-            `${Math.round((Date.now() - lastChangeAt) / 1000)}s, past the declared ` +
-            `${progress.perTransition} ms per-transition bound. The key renders, so this is the agent: it has ` +
-            'stopped emitting transitions, and the beat stopped here rather than sitting out its ceiling.';
+        // C's condition 3, in four sentences rather than two. Each prefix is a
+        // different instruction to the reader — check the story file / check the
+        // markup / look at the agent — and collapsing any two of them sends a
+        // reader to investigate the wrong thing.
+        const why = progressExpiry({
+          key: progress.progressKey, perTransition: progress.perTransition,
+          source: read.source, carriers: read.carriers,
+          firstSeenAt, transitions, lastValue: lastProgress,
+          lastSeenSource, lastSeenCarriers,
+          startedAt, lastChangeAt, now: Date.now(),
+        });
         // `stoppedBy` names WHO stopped the beat, so the verdict cannot append
         // "the product had already said so about this session" to a finding the
         // product never made (`beats-drive.mjs`'s `named`).
-        return Object.freeze({ afterMs: Date.now() - startedAt, why: expiry, stoppedBy: 'runner' });
+        return Object.freeze({ afterMs: Date.now() - startedAt, why, stoppedBy: 'runner' });
       }
     }
     if (Date.now() >= deadline) return null;
