@@ -136,6 +136,10 @@ const HOOK_ID = 'block-protected-branch-push';
 /** A hub that is DECLARED and contributes nothing — the completeness claim's own subject. */
 const EMPTY_HUB = 'skills-sh';
 
+/** The OTHER way a declared hub contributes nothing: forge reads it perfectly
+ *  and it publishes nothing this installer accepts (`forge-8vfn.7.6.91`). */
+const NO_INSTALLABLE_HUB = 'cc-templates';
+
 /** The agent whose palette the installed part must appear in — a real one off the shipped roster. */
 const AGENT_ID = 'brain-ingest';
 
@@ -261,6 +265,38 @@ export default {
         },
       },
       say: 'This is what "browse the registry" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.',
+    },
+    {
+      // 7.6.91 (T1 975). THE THIRD STATE, ASSERTED RATHER THAN NARRATED. Beat 5
+      // above says in prose that a hub can be read perfectly and still publish
+      // nothing forge can install; until this beat, nothing checked it, and an
+      // unasserted honest chip can regress in silence while its neighbour has
+      // three green runs behind it.
+      //
+      // IT IS A SEPARATE BEAT BECAUSE OF RULING 705, not for convenience: a
+      // beat's `data` keys must be answered TOGETHER by ONE element, and these
+      // are a different chip's attributes. Folding them into beat 5 would ask
+      // one element to answer for two hubs, which is exactly the fail-open the
+      // together-rule exists to stop. The alternative considered and REFUSED was
+      // re-pointing beat 5 at `cc-templates`, which would have deleted the
+      // `not-reachable` coverage that three green runs just bought.
+      //
+      // `no-installable-kind` is the reader's OWN token, bare like its three
+      // siblings; the hub's `kinds` ride beside it as a separate field, so this
+      // assertion does not move when somebody edits a yaml string.
+      act: 'Check the source forge could read and still had nothing to offer',
+      expect: {
+        route: '/community',
+        data: {
+          page: 'community-browser',
+          'page-ready': 'true',
+          action: 'filter-hub',
+          'hub-id': NO_INSTALLABLE_HUB,
+          'hub-declared-only': 'true',
+          'hub-reason': 'no-installable-kind',
+        },
+      },
+      say: 'The third ending, on its own chip. claude-code-templates is not unreachable and it is not empty — forge read it, and everything on it is a HOOK. Install-by-URL knows three SKILL.md layouts and no hook arm, so a proposal from here would be a row nothing could install. The chip says "nothing forge can install" rather than "nothing indexed", because those send an operator to two different places: one to check their network, one to check what the source actually publishes.',
     },
     {
       // NOT satisfiable today — every card on this page reads
