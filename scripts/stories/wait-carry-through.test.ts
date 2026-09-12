@@ -34,6 +34,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { validateStory } from './story-file.mjs';
 import { resolveAnchorMs } from './beats-anchor.mjs';
@@ -56,14 +57,19 @@ function storyWithWait(wait: Record<string, unknown>) {
   };
 }
 
+/** Every wait shape a story may validly declare. The meta-door below proves
+ *  this list covers every field `validateWait` inspects, so it cannot silently
+ *  fall behind the validator. */
+const VALID_SHAPES: Record<string, unknown>[] = [
+  { for: 'agent', upTo: 1_000 },
+  { for: 'agent', upTo: 1_000, anchor: 'scheduler-start' },
+  { for: 'settle', upTo: 1_000, key: 'preflight-status', while: 'pending' },
+];
+
 describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
   // THE GENERALISING DOOR. No field names on the assertion side: whatever a
   // story may validly declare must come back identical.
-  for (const wait of [
-    { for: 'agent', upTo: 1_000 },
-    { for: 'agent', upTo: 1_000, anchor: 'scheduler-start' },
-    { for: 'settle', upTo: 1_000, key: 'preflight-status', while: 'pending' },
-  ] as Record<string, unknown>[]) {
+  for (const wait of VALID_SHAPES) {
     test(`every field of ${JSON.stringify(wait)} survives validateStory`, () => {
       const v = validateStory(storyWithWait(wait)) as { beats: { wait: unknown }[] };
       assert.deepEqual(
@@ -106,5 +112,32 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
       /never-pressed/,
       'a story naming a press no beat performs must fail loudly, not degrade to the old behaviour',
     );
+  });
+
+  // THE LIST IS ITSELF A POPULATION, AND THAT IS THE GAP C NAMED ON REVIEW.
+  // The doors above generalise over FIELDS — deep-equal, no field named on the
+  // assertion side — but they iterate a hand-written array of SHAPES. So a new
+  // field arriving on a shape nobody added sits outside the very door built to
+  // catch it, which is tonight's recurring failure exactly: the population did
+  // not include the thing that was wrong.
+  //
+  // So the array is checked against the validator's own source. Every `raw.<f>`
+  // that `validateWait` inspects must appear in at least one shape above. It
+  // reds the moment someone validates a field no shape exercises — including
+  // 7.6.77's `perTransition`/`progressKey` — and it refuses rather than passes
+  // if it cannot find the function to read.
+  test('the shape list covers every field validateWait inspects', () => {
+    const src = readFileSync(new URL('./story-file.mjs', import.meta.url), 'utf8');
+    const body = /^function validateWait\([\s\S]*?^}/m.exec(src)?.[0];
+    assert.ok(body, 'could not locate validateWait in story-file.mjs — refusing rather than reporting a vacuous pass');
+
+    const inspected = new Set([...body.matchAll(/raw\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]!));
+    const covered = new Set(VALID_SHAPES.flatMap((w) => Object.keys(w)));
+    const missing = [...inspected].filter((f) => !covered.has(f)).sort();
+
+    assert.deepEqual(missing, [],
+      `validateWait inspects ${missing.join(', ')}, which no shape in VALID_SHAPES declares — so the ` +
+      'carry-through doors never exercise it. Add a shape that uses it (that is what keeps the doors ' +
+      'honest), or the field can be validated and dropped exactly as `anchor` was.');
   });
 });
