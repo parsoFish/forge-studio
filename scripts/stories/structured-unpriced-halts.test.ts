@@ -121,6 +121,39 @@ describe('7.6.73(d) — a structured unpriced row reaches the halt', () => {
     });
   }
 
+  // C's adversarial forms, added after they probed the regex against cases I
+  // had not: these are exactly where a SUFFIX match degrades into a SUBSTRING
+  // match, and both directions are wrong. Over-matching would make the halt
+  // fire on any log line that happened to discuss it.
+  for (const message of [
+    'foo.not-a-turn-ended-unpriced',   // a hyphen is not a boundary
+    'turn-ended-unpriced-later',       // the end anchor must hold
+    'interactive.turn-ended',          // a sibling message, not this one
+  ]) {
+    test(`NOT a marker: "${message}" must not match the message arm`, () => {
+      const rows = roundTrip((logger) => {
+        logger.emit({
+          initiative_id: CRITIC.initiativeId, phase: CRITIC.phase, skill: CRITIC.skill,
+          event_type: 'end', input_refs: [], output_refs: [],
+          message, metadata: { unpriced_reason: 'died' },
+        });
+      });
+      assert.deepEqual(endedUnpricedTurns([rows]), [],
+        'a suffix match must not become a substring match — a marker contract reads a name, not English');
+    });
+  }
+
+  test('the BARE name is a marker — an emitter with no prefix still counts', () => {
+    const rows = roundTrip((logger) => {
+      logger.emit({
+        initiative_id: CRITIC.initiativeId, phase: CRITIC.phase, skill: CRITIC.skill,
+        event_type: 'end', input_refs: [], output_refs: [],
+        message: 'turn-ended-unpriced', metadata: { unpriced_reason: 'died' },
+      });
+    });
+    assert.equal(endedUnpricedTurns([rows]).length, 1, 'the `(^|\\.)` alternation covers a bare name');
+  });
+
   test('METADATA ARM ALONE: an unconventional message with `priced: false` is caught', () => {
     // The complement. Neither arm may depend on the other.
     const rows = roundTrip((logger) => {
