@@ -120,6 +120,28 @@ function parseCommunityRegistrySources(raw: unknown, file: string): Record<strin
   return out;
 }
 
+/** What one declared hub did on the LAST refresh, as persisted. `reason` is the
+ *  indexer's own token and is present only when the hub could not be read. */
+export type RegistryHubOutcome = { hubId: string; discovered: number; reason?: string };
+
+/** Absent is EMPTY, never an error (a registry written before this field, or
+ *  never refreshed). Anything PRESENT is parsed strictly — a malformed row is a
+ *  malformed registry, not a row quietly dropped. */
+function parseRegistryHubOutcomes(raw: unknown, file: string): RegistryHubOutcome[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new Error(`${file}: meta.hubs must be an array when present`);
+  return raw.map((row, i) => {
+    const r = reqObject({ r: row }, 'r', file) as Record<string, unknown>;
+    const hubId = r['hubId'];
+    const discovered = r['discovered'];
+    if (typeof hubId !== 'string' || hubId === '') throw new Error(`${file}: meta.hubs[${i}].hubId must be a non-empty string`);
+    if (typeof discovered !== 'number' || !Number.isInteger(discovered)) throw new Error(`${file}: meta.hubs[${i}].discovered must be an integer`);
+    const reason = r['reason'];
+    if (reason !== undefined && typeof reason !== 'string') throw new Error(`${file}: meta.hubs[${i}].reason must be a string when present`);
+    return { hubId, discovered, ...(typeof reason === 'string' ? { reason } : {}) };
+  });
+}
+
 function parseNullableString(raw: unknown, file: string, field: string): string | null {
   if (raw !== null && typeof raw !== 'string') {
     throw new Error(`${file}: field "${field}" must be a string or null`);
@@ -173,6 +195,12 @@ export function loadCommunityRegistry(registryYamlPath: string): CommunityRegist
     );
   }
   const lastRefresh = parseNullableString(meta['lastRefresh'], registryYamlPath, 'meta.lastRefresh');
+  // `meta.hubs` — what each declared hub did AS OF THE LAST REFRESH. Absent is
+  // empty, not an error: a registry written before this field existed, or one
+  // never refreshed, has nothing to say and must not fail to load over it.
+  // No schemaVersion bump: v2's shape is unchanged for every reader that
+  // ignores it, and a bump with no incompatibility trains people to ignore bumps.
+  const hubs = parseRegistryHubOutcomes(meta['hubs'], registryYamlPath);
   const rawItems = d['items'];
   if (!Array.isArray(rawItems)) {
     throw new Error(`${registryYamlPath}: "items" must be an array`);
@@ -180,6 +208,7 @@ export function loadCommunityRegistry(registryYamlPath: string): CommunityRegist
   return {
     schemaVersion,
     lastRefresh,
+    hubs,
     sources: parseCommunityRegistrySources(d['sources'], registryYamlPath),
     items: rawItems.map((item, i) => parseCommunityRegistryItem(item, i, registryYamlPath)),
     leadingComments: extractLeadingCommentBlock(raw),
@@ -231,6 +260,7 @@ function serializeCommunityRegistrySource(src: CommunityRegistrySource): Record<
 export function serializeCommunityRegistry(doc: {
   schemaVersion: number;
   lastRefresh: string | null;
+  hubs: readonly RegistryHubOutcome[];
   sources: Readonly<Record<string, CommunityRegistrySource>>;
   items: readonly CommunityRegistryItem[];
   leadingComments: string;
@@ -243,7 +273,13 @@ export function serializeCommunityRegistry(doc: {
   }
   const body = yaml.dump(
     {
-      meta: { schemaVersion: doc.schemaVersion, lastRefresh: doc.lastRefresh },
+      meta: {
+        schemaVersion: doc.schemaVersion,
+        lastRefresh: doc.lastRefresh,
+        // Omitted entirely when empty, so a registry that has never refreshed
+        // does not carry an empty key claiming it has.
+        ...(doc.hubs.length === 0 ? {} : { hubs: doc.hubs.map((h) => ({ ...h })) }),
+      },
       sources,
       items: doc.items.map(serializeCommunityRegistryItem),
     },

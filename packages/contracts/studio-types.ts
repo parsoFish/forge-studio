@@ -606,6 +606,11 @@ export type CommunityRegistrySource = {
 export type CommunityRegistry = {
   schemaVersion: number;
   lastRefresh: string | null;
+  /** What each declared hub did AS OF `lastRefresh` — the indexer's own token
+   *  for one it could not read, absent for one it read. Persisted because the
+   *  chip that renders it must survive a reload: the refresh's in-memory result
+   *  dies with the page, and every other chip attribute is server data. */
+  hubs: { hubId: string; discovered: number; reason?: string }[];
   /** Repo-level facts, keyed by normalized source key. Two items sharing a
    *  `sourceUrl` resolve to the SAME entry — by construction they cannot carry
    *  different star counts (exit row E5). */
