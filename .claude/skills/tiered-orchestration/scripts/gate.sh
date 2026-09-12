@@ -329,7 +329,14 @@ while IFS= read -r cmd; do
       # `head -3 <gate log>` recipe M6-C shipped an hour earlier, in the change
       # whose whole subject is not being silent — position was never the
       # property; "the line the guard wrote" is.
-      echo "REFUSED  $cmd  ($(secs "$t0")) — $(grep -m1 -F '[test-guard]' "$log" 2>/dev/null | sed 's/^\[[^]]*\] *//')"
+      # 7.6.100: ANY guard's marker, not `[test-guard]` alone. The build guard
+      # writes `[build-guard]`, and a literal match on the one guard that
+      # existed when this line was written would print an EMPTY reason for the
+      # second — which is the defect the paragraph above records ("the first
+      # draft read LINE 1 and printed an empty reason"), recurring one guard
+      # later. The property is "the line the guard wrote"; the marker shape is
+      # `[<name>-guard]` and matching it is what makes that property general.
+      echo "REFUSED  $cmd  ($(secs "$t0")) — $(grep -m1 -E '^\[[a-z][a-z-]*-guard\]' "$log" 2>/dev/null | sed 's/^\[[^]]*\] *//')"
       refused=1
     else
       echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
