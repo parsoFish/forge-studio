@@ -20,6 +20,7 @@
  */
 import { rmSync, existsSync, readdirSync, statSync, readFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { claimQueueWrites } from './queue-claim.mjs';
 import { join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -109,8 +110,28 @@ export function sweepStoryResidue(storyId, root) {
  * The trailing half of §3.1's duty: the product fixtures this story minted, and
  * never its own artifact. Same removal, a narrower list.
  */
-export function sweepProductFixtures(storyId, root) {
-  return removeAll(productFixturePathsFor(storyId, root));
+export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir }) {
+  // FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
+  // capture to, and a default that quietly skipped it would print a clean
+  // trailing sweep for a run that never looked at `_queue` — §15.507, a green
+  // for a case that did not run, which is the shape of the defect this bead
+  // exists to close.
+  if (typeof sinceMs !== 'number' || typeof evidenceDir !== 'string' || evidenceDir === '') {
+    throw new Error('sweepProductFixtures needs { sinceMs, evidenceDir } to claim this run\'s queue writes (forge-8vfn.7.6.74)');
+  }
+  const r = removeAll(productFixturePathsFor(storyId, root));
+  // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`).
+  // `productFixturePathsFor` finds `_queue/in-flight|failed/STORY-<id>.md` — two
+  // states of six, both named after the STORY. A ground cycle mints its work
+  // under the INITIATIVE's name into whatever state it reached, so run 14's
+  // initiative sat in `ready-for-review` for thirteen hours while
+  // `git status --porcelain` read 0 (`.gitignore:42`).
+  const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir });
+  return {
+    ...r,
+    claim,
+    lines: [...r.removed.map((p) => `[stories] trailing sweep removed ${p}`), ...claim.lines],
+  };
 }
 
 /**

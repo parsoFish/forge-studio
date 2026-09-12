@@ -623,8 +623,8 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   const quiesce = await quiesceWriters({ root: ROOT, pids: reap.reaped.map((r) => r.pid) });
   for (const line of describeQuiesce(quiesce)) console.log(line);
 
-  const sweep = sweepProductFixtures(story.id, ROOT);
-  for (const p of sweep.removed) console.log(`[stories] trailing sweep removed ${p}`);
+  const sweep = sweepProductFixtures(story.id, ROOT, { sinceMs: startedMs, groundProject: story.ground?.project, evidenceDir: join(outDir, 'queue-claim') });
+  for (const l of sweep.lines) console.log(l); // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
   // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
   // GitHub remotes this run minted. Unreached until now, so every run that
   // minted one leaked it.

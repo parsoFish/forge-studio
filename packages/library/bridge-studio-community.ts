@@ -531,7 +531,7 @@ export async function handleCommunityList(req: IncomingMessage, res: ServerRespo
       // hubsWithCounts()/listCommunityIndex() call re-entering the same
       // probes a second (and third) time.
       const rawItems = listCommunityIndex(ctx.forgeRoot, kindParam === null ? undefined : [kindParam as CommunityKind]);
-      const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
+      const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot), ctx.forgeRoot);
       const wctx = buildWireCtx(ctx.forgeRoot, communitySkillsFromRegistry(ctx.forgeRoot), sanitizeError);
       const items = rawItems.map((item) => toWireItemSafe(item, wctx));
       sendJson(res, 200, { hubs, items, meta: communityIndexMeta(ctx.forgeRoot) }, origin);
