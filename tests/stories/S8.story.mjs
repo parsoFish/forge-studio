@@ -136,6 +136,10 @@ const HOOK_ID = 'block-protected-branch-push';
 /** A hub that is DECLARED and contributes nothing — the completeness claim's own subject. */
 const EMPTY_HUB = 'skills-sh';
 
+/** The OTHER way a declared hub contributes nothing: forge reads it perfectly
+ *  and it publishes nothing this installer accepts (`forge-8vfn.7.6.91`). */
+const NO_INSTALLABLE_HUB = 'cc-templates';
+
 /** The agent whose palette the installed part must appear in — a real one off the shipped roster. */
 const AGENT_ID = 'brain-ingest';
 
@@ -219,6 +223,23 @@ export default {
           'refresh-state': 'refreshed',
         },
       },
+      // 7.6.91 / run 11. THE BOUND WAS THE DOM DEFAULT AND THIS IS NOT A DOM
+      // UPDATE. `READY_TIMEOUT_MS` is 15 s, right for a page settling and wrong
+      // for nine live outbound calls — `6.11.10`'s family exactly: the wait
+      // existed, the bound was wrong for what it was waiting on.
+      //
+      // MEASURED, beat 3's stamp to beat 4's, across every run on record:
+      //   run  8  11.12 s      run  9  13.43 s
+      //   run 10  13.07 s      run 11  15.25 s  <- red, by 0.25 s
+      // Three greens with 1.6-3.9 s of headroom is a coin-flip dressed as a
+      // pass, and run 11 lost it while the product was working perfectly.
+      //
+      // `settle` rather than a bigger clock (621(ii)): it sits through exactly
+      // `in-flight` and stops the moment the key holds anything else, so a
+      // refresh that settles into `refused` still fails FAST and reports what it
+      // saw. Patience for the transient, none for a wrong value. 60 s is ~4x the
+      // observed maximum and far under the 180 s stall ceiling.
+      wait: { for: 'settle', upTo: 60_000, key: 'refresh-state', while: 'in-flight' },
       say: 'forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.',
     },
     {
@@ -261,6 +282,38 @@ export default {
         },
       },
       say: 'This is what "browse the registry" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.',
+    },
+    {
+      // 7.6.91 (T1 975). THE THIRD STATE, ASSERTED RATHER THAN NARRATED. Beat 5
+      // above says in prose that a hub can be read perfectly and still publish
+      // nothing forge can install; until this beat, nothing checked it, and an
+      // unasserted honest chip can regress in silence while its neighbour has
+      // three green runs behind it.
+      //
+      // IT IS A SEPARATE BEAT BECAUSE OF RULING 705, not for convenience: a
+      // beat's `data` keys must be answered TOGETHER by ONE element, and these
+      // are a different chip's attributes. Folding them into beat 5 would ask
+      // one element to answer for two hubs, which is exactly the fail-open the
+      // together-rule exists to stop. The alternative considered and REFUSED was
+      // re-pointing beat 5 at `cc-templates`, which would have deleted the
+      // `not-reachable` coverage that three green runs just bought.
+      //
+      // `no-installable-kind` is the reader's OWN token, bare like its three
+      // siblings; the hub's `kinds` ride beside it as a separate field, so this
+      // assertion does not move when somebody edits a yaml string.
+      act: 'Check the source forge could read and still had nothing to offer',
+      expect: {
+        route: '/community',
+        data: {
+          page: 'community-browser',
+          'page-ready': 'true',
+          action: 'filter-hub',
+          'hub-id': NO_INSTALLABLE_HUB,
+          'hub-declared-only': 'true',
+          'hub-reason': 'no-installable-kind',
+        },
+      },
+      say: 'The third ending, on its own chip. claude-code-templates is not unreachable and it is not empty — forge read it, and everything on it is a HOOK. Install-by-URL knows three SKILL.md layouts and no hook arm, so a proposal from here would be a row nothing could install. The chip says "nothing forge can install" rather than "nothing indexed", because those send an operator to two different places: one to check their network, one to check what the source actually publishes.',
     },
     {
       // NOT satisfiable today — every card on this page reads

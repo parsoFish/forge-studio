@@ -38,7 +38,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { collectAgentRuns, decideReap, describeReap, descendantsOf, reapAgentRuns } from './reap.mjs';
-import { readPlantRecord, readLastBeat, plantDiedMessage } from './reap-plant.mjs';
+import {
+  readPlantRecord, readLastBeat, plantDiedMessage,
+  everyPlantedPidVanished, plantVanishedInWindowMessage,
+} from './reap-plant.mjs';
 
 const ROOT = '/home/parso/forge-projects';
 
@@ -655,4 +658,90 @@ test('7.6.94: an unreadable or absent plant record reads as UNKNOWN, never as a 
   writeFileSync(join(dir, 'beat'), 'not-a-number');
   assert.equal(readLastBeat(join(dir, 'beat')), null);
   rmSync(dir, { recursive: true, force: true });
+});
+
+/**
+ * THE THIRD CASE — bead `forge-8vfn.7.6.94`, found by D on their own gate after
+ * the first cut merged.
+ *
+ * The split shipped two states: the plant dead BEFORE the liveness check
+ * (`PLANT DIED`) and the reaper genuinely failing (`REPORTING`). D's red was
+ * neither — `plantAlive` true, `alive === false` after so nothing escaped, and the
+ * reaper reporting `kill ESRCH` for BOTH planted pids. The plant vanished inside
+ * one `reapAgentRuns` call, and the control accused the reaper of losing a kill it
+ * never made: this bead's own defect, in a narrower window.
+ *
+ * Doored here rather than in the controls file for the same reason the rest of
+ * `reap-plant.mjs` is: the condition cannot be produced on demand, and a pure
+ * function can be driven straight at its inputs.
+ */
+test('7.6.94: every planted pid ESRCH at the signal is the VANISHED case, not a reaper failure', () => {
+  const report = {
+    reaped: [],
+    skipped: [
+      { pid: 1388950, reason: 'pid 1388950: SIGTERM failed: kill ESRCH — the process was already gone' },
+      { pid: 1388927, reason: 'pid 1388927: SIGTERM failed: kill ESRCH — the process was already gone' },
+    ],
+  };
+  assert.equal(everyPlantedPidVanished({ pids: [1388927, 1388950], report }), true, 'D\'s exact report');
+});
+
+test('7.6.94: ONE surviving signalable pid is NOT the vanished case — that is the reaper\'s to answer', () => {
+  const report = {
+    reaped: [{ pid: 1388950 }],
+    skipped: [{ pid: 1388927, reason: 'pid 1388927: SIGTERM failed: kill ESRCH — the process was already gone' }],
+  };
+  assert.equal(
+    everyPlantedPidVanished({ pids: [1388927, 1388950], report }), false,
+    'if the reaper could signal one of them, the run measured something and the reporting assertion stands',
+  );
+});
+
+test('7.6.94: a skip for a reason OTHER than ESRCH is not a vanishing', () => {
+  const report = { reaped: [], skipped: [{ pid: 7, reason: 'pid 7: outside this run\'s tree — not ours to kill' }] };
+  assert.equal(everyPlantedPidVanished({ pids: [7], report }), false, 'refused-to-kill and could-not-find are different facts');
+});
+
+test('7.6.94: an empty skip list is not a vanishing', () => {
+  assert.equal(everyPlantedPidVanished({ pids: [7], report: { reaped: [], skipped: [] } }), false);
+  assert.equal(everyPlantedPidVanished({ pids: [7], report: {} }), false, 'a report with no skipped field cannot say anything vanished');
+});
+
+test('7.6.94: the VANISHED message blames nothing and keeps the artefacts', () => {
+  const now = Date.now();
+  const msg = plantVanishedInWindowMessage({ pids: [11, 22], lastBeatMs: now - 340, nowMs: now, artefactDir: '/tmp/story-reap-tree-X' });
+  assert.match(msg, /PLANT VANISHED IN THE WINDOW: every planted pid \(11, 22\)/);
+  assert.match(msg, /last heartbeat was 340 ms before this line/);
+  assert.match(msg, /MEASURED NOTHING about the reaper's reporting/);
+  assert.match(msg, /\/tmp\/story-reap-tree-X/);
+  for (const claim of ['killed but not REPORTED reaped', 'escape is still open', 'so this is the reaper']) {
+    assert.doesNotMatch(msg, new RegExp(claim), `a vanished plant must not print the reaper's words: "${claim}"`);
+  }
+});
+
+/**
+ * THE RETENTION FLAG IS RAISED BEFORE THE ASSERTIONS, and this door exists
+ * because a mutation proved nothing else checks it.
+ *
+ * D lost the heartbeat on the run that most needed it: `keepArtifacts` was set
+ * only on the dead-plant path, so a failure in the third case deleted the tree in
+ * `t.after`. The fix raises the flag before the assertions and lowers it only by
+ * reaching the end of them — but **no door can exercise it**, because no test can
+ * make the positive control fail on demand. Deleting the line left all 45 green.
+ *
+ * So this reads the source, in the same wiring-door pattern as the trailing
+ * sweep's delivery seam. It catches DELETION — someone removing or reordering the
+ * raise — and not corruption, which is the whole of what M4 showed.
+ */
+test('7.6.94: the controls file raises keepArtifacts BEFORE the reap, not only on the dead-plant path', () => {
+  const src = readFileSync(join(import.meta.dirname, 'reap-controls.test.ts'), 'utf8');
+  const raise = src.indexOf('keepArtifacts = true;\n\n  const report = await reapAgentRuns');
+  assert.notEqual(raise, -1, 'the flag must be raised immediately before the reap, so any later failure keeps the tree');
+  // SEARCHED FROM THE RAISE, because `indexOf` from 0 finds the DECLARATION
+  // (`let keepArtifacts = false;`) and that sits above everything — the first
+  // draft of this door asserted `lower > raise` against it and failed on correct
+  // code. A door that matches the wrong occurrence of its own needle reports the
+  // fix as the defect.
+  const lower = src.indexOf('keepArtifacts = false;', raise);
+  assert.notEqual(lower, -1, 'and lowered after the assertions, so a clean pass still cleans up');
 });

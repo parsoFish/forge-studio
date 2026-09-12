@@ -42,6 +42,7 @@ import assert from 'node:assert/strict';
 import { validateStory } from './story-file.mjs';
 import { runRepeatStep } from './beats-repeat.mjs';
 import { performSteps } from './beats-steps.mjs';
+import { driveBeat } from './beats-drive.mjs';
 import S1 from '../../tests/stories/S1.story.mjs';
 
 /** The wait the S1 amend will declare. `session-phase` changes on every
@@ -50,13 +51,18 @@ import S1 from '../../tests/stories/S1.story.mjs';
  *  a whole variable-length run. Scaled down here so the door runs in ms. */
 const AMEND_WAIT = { for: 'agent', upTo: 4_000, perTransition: 400, progressKey: 'session-phase' };
 
+/** 7.6.98's form: the bound on the STEP, the wait carrying only a backstop. */
+const BACKSTOP_WAIT = { for: 'agent', upTo: 4_000 };
+
 /** S1's real beat 11, validated, with only its wait supplied. */
-function realBeat11() {
+function realBeat11(wait: Record<string, unknown> = AMEND_WAIT, stepExtra: Record<string, unknown> = {}) {
   const story = S1 as unknown as { beats: Record<string, unknown>[] };
   const last = story.beats[story.beats.length - 1]!;
   assert.match(String(last['act']), /Approve/,
     'fixture check: S1\'s last beat must still be the approve beat, or this door is testing something else');
-  const validated = validateStory({ ...story, beats: [{ ...last, wait: AMEND_WAIT }] }) as {
+  const rawDo = ((last['do'] as Record<string, unknown>[]) ?? []).map((st) =>
+    st !== null && typeof st === 'object' && st['repeat'] !== undefined ? { ...st, ...stepExtra } : st);
+  const validated = validateStory({ ...story, beats: [{ ...last, do: rawDo, wait }] }) as {
     beats: { do: Record<string, unknown>[]; wait: Record<string, unknown> }[];
   };
   const beat = validated.beats[0]!;
@@ -89,7 +95,120 @@ function livePage() {
 }
 const gatePresent = livePage();
 
+/**
+ * A page whose `readObserved` answers with `data`, then with `after` once the
+ * beat has pressed its way onward. Enough for `driveBeat` end to end, which the
+ * thinner `livePage` is not — and that difference is exactly what fenced off
+ * the routing seam until the mutation pass asked for it.
+ */
+function routedPage(data: Record<string, string>, after: Record<string, string> | null = null) {
+  let reads = 0;
+  const locator = (): any => ({
+    first: () => locator(), nth: () => locator(), count: async () => 1,
+    evaluateAll: async (fn: any, a: any) => fn([], a), waitFor: async () => {},
+    click: async () => {}, fill: async () => {},
+  });
+  return {
+    locator,
+    // S1 beat 11's DECLARED route. `driveBeat` waits for the URL to match it
+    // before reading the consequence, so the fake must already be there.
+    url: () => 'http://localhost:4124/artifact',
+    goto: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => {
+      reads += 1;
+      const d = after !== null && reads > 3 ? after : data;
+      return { data: { ...d }, nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null };
+    },
+  };
+}
+
 describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bound', () => {
+  // THE TWO DOORS THE MUTATION PASS DEMANDED, and they are R3's lesson a THIRD
+  // time. Every door below drives `runRepeatStep` or `performSteps` and hands
+  // the bound in by hand, so two mutations survived: making `driveBeat` ignore
+  // the step entirely (M2), and handing the step's bound to the consequence
+  // wait as well (M3 — the very defect 7.6.98 is named for). Both are about
+  // ROUTING, and routing is `driveBeat`'s job, so only a door that goes through
+  // `driveBeat` can see either. A door that constructs its own input proves the
+  // function; only one taking its input from the real producer proves the seam.
+  test('7.6.98 SEAM: driveBeat routes the STEP\'s bound to the repeat (M2)', async () => {
+    const { beat } = realBeat11(BACKSTOP_WAIT, { perTransition: 300, progressKey: 'session-phase' });
+    const page = routedPage({ 'session-phase': 'drafting' });   // frozen: never reaches awaiting-verdict
+
+    const v = await driveBeat(page as never, beat as never, 1, 'http://localhost:4124', {}, 4_000) as {
+      status: string; failures: string[];
+    };
+    const joined = v.failures.join('\n');
+
+    assert.equal(v.status, 'red', 'the repeat never meets its until, so the beat is red');
+    assert.match(joined, /stalled-no-transition \(repeat\)/,
+      `the step's bound must REACH the repeat through driveBeat: ${joined}`);
+    assert.doesNotMatch(joined, /declared bound \(4000 ms\) ran out/,
+      'and must not fall back to the wall-clock line, which is what an ignored step produces');
+  });
+
+  test('7.6.98 SEAM: driveBeat withholds it from the consequence wait (M3)', async () => {
+    // The repeat SUCCEEDS immediately, so the beat proceeds to its consequence
+    // wait — which here stands on a page carrying no `session-phase` at all,
+    // exactly as `/artifact` does. Handing the step's bound along produces
+    // `no-progress-key (consequence)`; withholding it produces an honest
+    // mismatch instead.
+    const { beat } = realBeat11(BACKSTOP_WAIT, { perTransition: 300, progressKey: 'session-phase' });
+    const page = routedPage({ 'session-phase': 'awaiting-verdict' }, { 'page': 'artifact' });
+
+    const v = await driveBeat(page as never, beat as never, 1, 'http://localhost:4124', {}, 2_000) as {
+      status: string; failures: string[];
+    };
+    const joined = v.failures.join('\n');
+
+    assert.doesNotMatch(joined, /\(consequence\)/,
+      `a bound declared on the repeat must never reach the consequence wait: ${joined}`);
+    assert.doesNotMatch(joined, /no-progress-key/,
+      'and a page that legitimately lacks the key must not be accused of a story-authoring gap');
+  });
+
+  test('7.6.98: the bound declared on the STEP reaches the repeat, and NOT the consequence wait', () => {
+    // THE FIX, read off S1 as it now ships. Two things at once: the repeat
+    // carries the live bound bound to its own `until` key, and the WAIT carries
+    // none — because that wait stands on `/artifact`, which renders
+    // `session-phase` zero times and reported `no-progress-key (consequence)`
+    // for it.
+    const story = S1 as unknown as { beats: Record<string, unknown>[] };
+    const last = story.beats[story.beats.length - 1]!;
+    const v = validateStory({ ...story, beats: [last] }) as {
+      beats: { do: Record<string, unknown>[]; wait: Record<string, unknown> }[];
+    };
+    const beat = v.beats[0]!;
+    const step = beat.do.find((x) => x['repeat'] !== undefined)!;
+
+    assert.equal(step['perTransition'], 480_000, 'the repeat carries the live bound');
+    assert.equal(step['progressKey'], 'session-phase', 'and the key its own `until` names');
+    assert.equal((step['until'] as Record<string, string>)['session-phase'], 'awaiting-verdict',
+      'the binding that makes a key-on-the-wrong-page impossible by construction');
+    assert.equal(beat.wait['perTransition'], undefined,
+      'the WAIT carries no progress bound — handing one to the consequence wait is the defect 7.6.98 names');
+    assert.equal(beat.wait['upTo'], 1_200_000,
+      'and `upTo` is the backstop: a runaway stop, not a bound this beat expects to reach');
+  });
+
+  test('7.6.98: a step-declared bound actually ENDS the repeat on a stall', async () => {
+    // Carried is not spent. Same shape as the 7.6.77 door below, but the bound
+    // arrives from the STEP rather than from the wait.
+    const { step } = realBeat11(BACKSTOP_WAIT, { perTransition: 400, progressKey: 'session-phase' });
+    const startedAt = Date.now();
+    const r = await performSteps(
+      livePage() as never, [step] as never, 4_000, null, null,
+      async () => false, null, null, null,
+      step as never,
+      async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+    ) as { error: string | null };
+    const took = Date.now() - startedAt;
+
+    assert.match(r.error!, /^stalled-no-transition \(repeat\):/, `the step's bound fired: ${r.error}`);
+    assert.ok(took < 2_000, `at the progress bound, not the 4 s backstop — took ${took} ms`);
+  });
+
   test('the architect stops emitting: the repeat ends on PROGRESS, naming its wait', async () => {
     // The failing runs' condition: rounds get answered, the phase never reaches
     // `awaiting-verdict`, and the key stops changing. Before this half, the only

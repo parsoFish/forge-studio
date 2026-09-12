@@ -23,7 +23,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { collectAgentRuns, reapAgentRuns } from './reap.mjs';
-import { readPlantRecord, readLastBeat, plantDiedMessage } from './reap-plant.mjs';
+import {
+  readPlantRecord, readLastBeat, plantDiedMessage,
+  everyPlantedPidVanished, plantVanishedInWindowMessage,
+} from './reap-plant.mjs';
 
 // ------------------------------------------------- POSITIVE CONTROL (5.45)
 
@@ -148,6 +151,14 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
     }));
   }
 
+  // FROM HERE, ANY FAILURE KEEPS THE TREE — D's finding. `keepArtifacts` was set
+  // only on the dead-plant path, so the run that most needed the 100 ms heartbeat
+  // (the plant alive at the check and gone at the SIGTERM) deleted it in
+  // `t.after`. D went looking for it and it was already gone. The evidentiary
+  // need is identical in every failing case, so the flag is raised before the
+  // assertions and lowered only by reaching the end of them.
+  keepArtifacts = true;
+
   const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25 });
 
   await new Promise((r) => setTimeout(r, 150));
@@ -165,10 +176,24 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
     false,
     `ESCAPE: the re-parented grandchild survived the reap — the S9 run-3 escape is still open (the plant was verified ALIVE immediately before the reap, so this is the reaper): ${JSON.stringify(report)}`,
   );
+  // THE THIRD CASE, BEFORE THE REPORTING ASSERTION (D, on their gate). Alive at
+  // the check, `ESRCH` for every planted pid at the signal: the plant vanished
+  // inside one `reapAgentRuns` call. Blaming the reaper for a kill it did not
+  // make is this bead's own defect in a narrower window.
+  if (everyPlantedPidVanished({ pids: [turn.pid, grandchild], report })) {
+    assert.fail(plantVanishedInWindowMessage({
+      pids: [turn.pid, grandchild],
+      lastBeatMs: readLastBeat(beatPath),
+      nowMs: Date.now(),
+      artefactDir: root,
+    }));
+  }
   assert.ok(
     report.reaped.some((r) => r.pid === grandchild),
-    `REPORTING: the grandchild was killed but not REPORTED reaped (the plant was verified ALIVE immediately before the reap, so this is not a dead plant): ${JSON.stringify(report)}`,
+    `REPORTING: the grandchild was killed but not REPORTED reaped (the plant was verified ALIVE immediately before the reap, and at least one planted pid was still signalable, so this is the reaper): ${JSON.stringify(report)}`,
   );
+  // Every assertion passed, so the tree is residue rather than evidence.
+  keepArtifacts = false;
 });
 
 // ------------------------------------------------- NEGATIVE CONTROL (5.45)
