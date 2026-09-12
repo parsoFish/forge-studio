@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mintedSessionPaths, mintedSessionWrites, sessionWriteTargets, classifyOwnGroundDrift } from './ground-hash.mjs';
+import { mintedSessionPaths, mintedSessionWrites, sessionWriteTargets, classifyOwnGroundDrift, groundIgnoreNoneForTests } from './ground-hash.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, 'fixtures');
@@ -81,6 +81,7 @@ test('663 DOOR: S1 run 5 — the four paths its own sessions wrote are PRODUCED,
       RUN_FIVE_CHANGES,
       minted,
       mintedSessionWrites(minted, logs, GROUND),
+      groundIgnoreNoneForTests(),
     );
     assert.deepEqual(produced, [
       'A .forge/project.json — written by _agent/onboarding-agent-2026-09-11T05-14-09-130-k7bw',
@@ -114,7 +115,7 @@ test('663 DOOR, the red half: with no session writes read, all NINE go undeclare
   const logs = runFiveLogs();
   try {
     const minted = mintedSessionPaths([], readdirSync(logs), logs);
-    const { produced, undeclared } = classifyOwnGroundDrift(RUN_FIVE_CHANGES, minted, new Map());
+    const { produced, undeclared } = classifyOwnGroundDrift(RUN_FIVE_CHANGES, minted, new Map(), groundIgnoreNoneForTests());
     assert.deepEqual(produced, [], 'the narrow rule licensed nothing outside a minted session dir');
     assert.equal(undeclared.length, 9, 'and so reported all nine changes as a containment failure');
   } finally {
@@ -265,6 +266,7 @@ test('673(iii): a BRIDGE run the run minted attributes its ground writes — no 
       { added: ['.gitignore', 'roadmap.md', 'brain/profile.md'], removed: [], modified: [] },
       minted,
       mintedSessionWrites(minted, logs, ground),
+      groundIgnoreNoneForTests(),
     );
     assert.deepEqual(undeclared, [], `the bridge's own writes are the product working: ${undeclared.join(' | ')}`);
     assert.equal(produced.length, 3);
@@ -296,6 +298,7 @@ test('673(iii): a bridge dir that PREDATES the run is not this run\'s, and stays
       { added: ['.gitignore'], removed: [], modified: [] },
       minted,
       mintedSessionWrites(minted, logs, ground),
+      groundIgnoreNoneForTests(),
     );
     assert.equal(undeclared.length, 1, 'so its write is undeclared, and the run is right to say so');
   } finally {

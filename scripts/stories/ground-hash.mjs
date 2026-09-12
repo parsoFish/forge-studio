@@ -30,7 +30,7 @@
  * walk of every ground in every tree. The measured gitweave ground is 139
  * files.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, relative } from 'node:path';
@@ -376,15 +376,134 @@ export function mintedSessionWrites(mintedPaths, logsDir, groundDir) {
  *   default, because a caller that silently skipped attribution would report a
  *   working run as a containment failure and look exactly like a passing one.
  */
-export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession) {
+/**
+ * THE GROUND'S OWN IGNORE RULES — `forge-8vfn.7.6.38`, T1 ruling 756/758.
+ *
+ * S1 run 8 went red on 4500 undeclared paths and every one of them was
+ * gitweave's own toolchain: `.venv/` 4442, `__pycache__/` 49, `.pytest_cache/`
+ * 5, `infra/.terraform*` 4, built by the demo builder running `pytest` to learn
+ * what to demo. All 4500 checked against the ground's `.gitignore`, none
+ * sampled: 4500 ignored, 0 not, zero forge writes among them. Method C excludes
+ * `node_modules` and `.git` — a JavaScript-shaped exclusion list judging a
+ * Python-and-Terraform ground. A developer running that project's own test
+ * command leaves the same 4500 files and its `git status` stays clean.
+ *
+ * WHAT AN IGNORE RULE ACTUALLY CLAIMS, because this decides the ordering below:
+ * it says who is EXPECTED to have written a path — `.venv/` being ignored means
+ * "a human's toolchain writes here" — which is NOT the claim "forge did not
+ * write here". The two coincide for gitweave's 4500 and come apart the instant
+ * a forge writer touches an ignored path. So attribution runs FIRST and wins,
+ * and this classifies only the unattributed remainder.
+ *
+ * `git check-ignore`, NOT `git ls-files -co --exclude-standard`, and the
+ * difference is a containment hole rather than a preference: `ls-files` lists
+ * the not-ignored set of files that EXIST, so a path in `removed` is absent
+ * from it for the same reason an ignored path is. A run that DELETED a real,
+ * tracked, non-ignored file would have that deletion classified as ignored and
+ * dropped out of the undeclared count. `check-ignore` answers the pattern
+ * question per path and keeps answering after the file is gone.
+ *
+ * INDEX-AWARE, never `--no-index`: a TRACKED file matching an ignore pattern is
+ * part of the project's state, and plain `check-ignore` says so (`--no-index`
+ * calls it ignored). One flag, and it would quietly reclassify tracked files as
+ * toolchain noise.
+ *
+ * IT REFUSES RATHER THAN FAILING OPEN. rc 0 means some path matched, rc 1 means
+ * none did; anything else — 128 outside a repo, or a command error — THROWS.
+ * "The command failed" must never become "nothing is ignored", because that
+ * direction silently converts every unattributed path into a clean one, which
+ * is the one move this whole change must not make.
+ *
+ * @param {string} groundDir absolute path to the ground
+ * @returns {{isIgnored: (rel: string) => boolean, source: string, check: (paths: readonly string[]) => Set<string>}}
+ */
+export function groundIgnoreFromGit(groundDir) {
+  const check = (paths) => {
+    if (paths.length === 0) return new Set();
+    const res = spawnSync('git', ['-C', groundDir, 'check-ignore', '--stdin', '-z'], {
+      input: paths.join('\0') + '\0',
+      encoding: 'utf8',
+      maxBuffer: MAX_BUFFER,
+    });
+    if (res.error !== undefined) {
+      throw new Error(
+        `groundIgnoreFromGit: could not run git check-ignore in ${groundDir} — ${res.error.message}. ` +
+        'Refusing: a failed read is not a state, and treating it as "nothing is ignored" would ' +
+        'convert every unattributed path into a clean one.',
+      );
+    }
+    if (res.status !== 0 && res.status !== 1) {
+      throw new Error(
+        `groundIgnoreFromGit: git check-ignore exited ${res.status} in ${groundDir} ` +
+        `(rc 128 means it is not a git repository)${res.stderr ? ` — ${String(res.stderr).trim()}` : ''}. ` +
+        'Refusing rather than reporting an unchecked remainder as clean.',
+      );
+    }
+    return new Set(String(res.stdout).split('\0').filter((p) => p !== ''));
+  };
+  let cache = null;
+  return {
+    source: `${groundDir}/.gitignore (git check-ignore)`,
+    check,
+    isIgnored(rel) {
+      cache ??= new Map();
+      let hit = cache.get(rel);
+      if (hit === undefined) {
+        hit = check([rel]).has(rel);
+        cache.set(rel, hit);
+      }
+      return hit;
+    },
+  };
+}
+
+/**
+ * An explicit "this ground ignores nothing" — FOR TESTS AND FIXTURES ONLY.
+ *
+ * NAMED `ForTests` ON PURPOSE, and there is a door below the story scripts
+ * that fails if a production module calls it. C's objection is the reason and
+ * it is a good one: in a real call site this would be a one-word way to turn
+ * the IGNORED-BY-GROUND class off while every door still passed — constraint 3
+ * defeated by the very export written to enforce it. A rename alone can be
+ * undone by the next author; the door is what survives them.
+ *
+ * It exists so that skipping the check is a THING YOU SAY rather than an
+ * argument you omit. `classifyOwnGroundDrift` refuses without an ignore
+ * classifier for the same reason it refuses without a writes-by-session map: a
+ * caller that silently skipped would look exactly like one that ran and found
+ * nothing (`forge-e8dn`).
+ *
+ * @returns {{isIgnored: () => boolean, source: string}}
+ */
+export function groundIgnoreNoneForTests() {
+  return { isIgnored: () => false, source: 'none (no ignore rules applied)' };
+}
+
+export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore) {
+  if (groundIgnore === undefined || typeof groundIgnore.isIgnored !== 'function') {
+    throw new Error(
+      'classifyOwnGroundDrift: a ground-ignore classifier is REQUIRED — pass ' +
+      '`groundIgnoreFromGit(groundDir)`, or `groundIgnoreNoneForTests()` to say explicitly that no ' +
+      'ignore rules apply. There is no default: a caller that silently skipped the check would ' +
+      'report a ground\'s own toolchain as a containment failure and look exactly like one that ' +
+      'ran the check and found nothing.',
+    );
+  }
   const homeOf = (p) => mintedPaths.find((m) => p === m || p.startsWith(`${m}/`)) ?? null;
   const writersOf = (p) =>
     [...writesBySession].filter(([, paths]) => paths.includes(p)).map(([s]) => s).sort();
   const produced = [];
   const undeclared = [];
+  const ignored = [];
   for (const kind of ['added', 'removed', 'modified']) {
     for (const p of changes[kind]) {
       const k = `${kind[0].toUpperCase()} ${p}`;
+      // ATTRIBUTION FIRST, AND IT WINS. A path a session demonstrably wrote is
+      // the run's product whether or not the ground ignores it — otherwise a
+      // project's `.gitignore` could launder a real containment breach into
+      // silence. T1's "an attributed write into an ignored path is still shown"
+      // falls out of this ordering rather than needing its own branch, which is
+      // why it cannot be lost by a later edit that forgets the rule.
       const home = homeOf(p);
       if (home !== null) {
         produced.push(`${k} — inside ${home}, a session this run minted`);
@@ -395,8 +514,20 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession) {
         produced.push(`${k} — written by ${writers.join(', ')}`);
         continue;
       }
+      // Only the UNATTRIBUTED remainder reaches the ground's ignore rules.
+      if (groundIgnore.isIgnored(p)) {
+        ignored.push(`${k} — ignored by the ground (${groundIgnore.source})`);
+        continue;
+      }
       undeclared.push(`${k} — nothing this run minted accounts for it`);
     }
   }
-  return { produced: produced.sort(), undeclared: undeclared.sort() };
+  return {
+    produced: produced.sort(),
+    undeclared: undeclared.sort(),
+    // ALWAYS PRESENT, EVEN EMPTY, and always carrying the rule that produced it:
+    // `0 ignored` and "no ignore check ran" must never render the same line.
+    ignored: ignored.sort(),
+    ignoreSource: groundIgnore.source,
+  };
 }
