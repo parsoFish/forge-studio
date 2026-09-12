@@ -19,9 +19,37 @@
 # different question in each checkout (§15.148).
 set -euo pipefail
 
+# 7.6.49 (745/781/792). THE GLOB IS A DETECTION SCOPE; `FORGE_LANE` IS THE
+# WRITE SCOPE. When 7.6.30 taught this script to write `head=` and `manifest=`
+# on every manifest it verifies, the glob argument silently stopped meaning
+# "which manifests do I look at" and started meaning "which manifests do I
+# rewrite" — and three lanes each reached for a habitual `M6-*` without anyone
+# re-deriving it. A's post-merge sweep wrote all fourteen; C's `M6-*` advanced
+# `head=` on M6-D and M6-T1. Every one of those claims happened to be true,
+# which is exactly why nothing caught it.
+#
+# So: detection stays wide (§15.105 — a pin goes stale at a SIBLING's merge, and
+# a lane must still LEARN that), and writes are bounded to the manifests whose
+# `owner=` is the invoking lane. Everything else is printed with the path and the
+# sha it WOULD have written, and the run exits 3 so a refusal cannot pass for a
+# clean sweep.
+LANE="${FORGE_LANE:-}"
+SWEEP=0
+if [ "${4:-}" = "--sweep" ] || [ "${7:-}" = "--sweep" ]; then SWEEP=1; fi
 R="${1:?repo root}"; CAMP="${2:?campaign dir}"; GLOB="${3:?manifest glob, e.g. 'M5-*'}"
 FROM="${4:?from sha}"; TO="${5:?to sha}"; LABEL="${6:?label}"
 G="$CAMP/gate-manifests"
+if [ -z "$LANE" ]; then
+  echo "pin-reconcile.sh: REFUSING — FORGE_LANE is not set." >&2
+  echo "  This script WRITES .counts, and a caller that has not said who it is cannot be" >&2
+  echo "  checked against owner=. Set FORGE_LANE to your lane's manifest owner (e.g." >&2
+  echo "  FORGE_LANE=M6-A). An unchecked write is the defect this refusal exists for." >&2
+  exit 2
+fi
+if [ "$SWEEP" = 1 ] && [ "$LANE" != "T1" ]; then
+  echo "pin-reconcile.sh: REFUSING — --sweep writes every owner's manifest and is T1's only (FORGE_LANE=$LANE)." >&2
+  exit 2
+fi
 [ -d "$G" ] || { echo "pin-reconcile.sh: no gate-manifests dir: $G" >&2; exit 2; }
 
 # Bead forge-8vfn.6.9.2 (ruling 258). §15.169 says to reconcile only from a tree asserted AT the
@@ -50,9 +78,57 @@ esac
 # certify a file that no longer existed, or both — and `.counts` is an input to
 # the `PIN_MANIFESTS` fingerprint, so each stale field hands the next lane a
 # mismatch caused by the reconcile itself.
+# OWNERSHIP AND TREE IDENTITY, CHECKED BEFORE ANY WRITE.
+#
+# `owner=`: 745's narrow-write rule. `--sweep` (T1 only) bypasses it.
+#
+# `tree=`: ruling 793, from D's case. The tool writes `head=` from the repo it
+# RUNS IN and left `tree=` as it was, so a cross-lane reconcile produced
+# `tree=/home/parso/forge-m6-d head=da33ac5b` — asserting D's tree was clean at a
+# sha it never held. A's M6-A read TRUE under the identical broken step, because
+# the named checkout happened to sit at that sha. THE DEFECT PRODUCES TRUE AND
+# FALSE RECORDS INDISTINGUISHABLY, so this refuses rather than warns: a record
+# that is accidentally right is not a record anyone can rely on.
+#
+# Echoes the reason; the caller decides whether to skip or to stop.
+may_write() {
+  local counts="$1" n="$2" f="$3"
+  local owner tree
+  owner=$(head -1 "$counts" | grep -oE 'owner=[^ ]+' | cut -d= -f2)
+  tree=$(head -1 "$counts" | grep -oE 'tree=[^ ]+' | cut -d= -f2)
+  if [ "$SWEEP" != 1 ] && [ "$owner" != "$LANE" ]; then
+    echo "  $n: REFUSED — owner=${owner:-<none>}, not $LANE. Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
+    return 1
+  fi
+  if [ -n "$tree" ] && [ "$tree" != "$R" ]; then
+    echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
+    return 1
+  fi
+  return 0
+}
+
 set_counts_fields() {
   local counts="$1" manifest_file="$2" to8="$3"
   local d; d=$(sha256sum "$manifest_file" | cut -c1-16)
+  # D (796): the script has always backed up `<manifest>.sha256` and never the
+  # `.counts`, so "what did this field say before" was a RECONSTRUCTION — two
+  # lanes rebuilt a prior `head=` from a stale gate log and a command's stdout,
+  # and one got it wrong. Now it is a read.
+  cp "$counts" "$counts.pre-${to8}"
+  # 793: `tree=` is set in the SAME edit as `head=`, from the repo doing the
+  # rehash, so the pair is right by construction instead of by coincidence.
+  # WRITTEN WHEN ABSENT, not only rewritten when present — and that is the half
+  # that carries weight. While the 793 refusal stands, a `.counts` that HAS a
+  # `tree=` can only be written when it already equals `$R`, so rewriting it is
+  # a no-op (mutation-tested: removing the rewrite changes nothing). A `.counts`
+  # with NO `tree=` passes the refusal — there is nothing to contradict — and
+  # would otherwise keep a `head=` with no record of which checkout verified it.
+  if grep -q 'tree=[^ ]*' "$counts"; then
+    sed -i "s#tree=[^ ]*#tree=${R}#" "$counts"
+  else
+    printf '%s tree=%s\n' "$(head -1 "$counts")" "$R" > "$counts.tmp"
+    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+  fi
   if grep -q 'head=[0-9a-f]\{7,40\}' "$counts"; then
     sed -i "s/head=[0-9a-f]\{7,40\}/head=${to8}/" "$counts"
   else
@@ -72,6 +148,7 @@ set_counts_fields() {
 
 T=$(mktemp); trap 'rm -f "$T"' EXIT
 ownerless=""
+refused=""
 git -C "$R" diff --name-only "$FROM" "$TO" > "$T"
 found=0
 for f in "$G"/$GLOB.sha256; do
@@ -89,6 +166,7 @@ for f in "$G"/$GLOB.sha256; do
     if [ -f "$counts" ]; then
       untouched_fail=$(cd "$R" && sha256sum -c --quiet "$f" 2>&1 | grep -c FAILED || true)
       if [ "$untouched_fail" = "0" ]; then
+        if ! may_write "$counts" "$n" "$f"; then refused="$refused $n"; continue; fi
         set_counts_fields "$counts" "$f" "${TO:0:8}"
         echo "  $n: head= -> ${TO:0:8} (untouched by this merge, verified 0 FAILED against this tree)"
       else
@@ -123,6 +201,7 @@ for f in "$G"/$GLOB.sha256; do
   # merge DELETED, left in place above) records why instead.
   if [ "$after" = "0" ]; then
     if [ -f "$counts" ]; then
+      if ! may_write "$counts" "$n" "$f"; then refused="$refused $n"; continue; fi
       set_counts_fields "$counts" "$f" "${TO:0:8}"
     else
       # REFUSES rather than creating one. The old branch wrote an OWNERLESS
@@ -166,6 +245,12 @@ done
 # A run that matched no manifest is a distinct outcome, not silence (§15.92).
 [ "$found" = 1 ] || { echo "pin-reconcile.sh: no manifest matched $G/$GLOB.sha256" >&2; exit 2; }
 # Every other manifest was reconciled; these are the ones a lane must claim.
+if [ -n "$refused" ]; then
+  echo "pin-reconcile.sh: $(echo $refused | wc -w) manifest(s) NOT written (owner= is not $LANE, or tree= names another checkout):$refused" >&2
+  echo "  Each is named above with the head= and manifest= it would have carried. Detection was wide;" >&2
+  echo "  writing is bounded to $LANE's own manifests (745/781/793). Their owners reconcile them." >&2
+  exit 3
+fi
 if [ -n "$ownerless" ]; then
   echo "pin-reconcile.sh: $(echo $ownerless | wc -w) manifest(s) have no .counts and were NOT created:$ownerless" >&2
   echo "  Everything else in this run reconciled. Write each .counts with its owner= and re-run." >&2
