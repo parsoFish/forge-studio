@@ -106,6 +106,46 @@ export async function fetchFlowRunDetail(
  * uses — null on any failure (no bridge, non-2xx, thrown fetch/parse),
  * matching that helper's own degrade-to-null convention exactly.
  */
+/**
+ * The review findings AND whether the read failed — `forge-8vfn.7.6.63`.
+ *
+ * `fetchReviewFindings` below collapses a 404, a 500 and a thrown fetch into
+ * one `null`, which is correct for a caller that only wants the doc and wrong
+ * for one that must SAY something when it has none. The run page rendered
+ * nothing for all three, so "the review has not run", "the review ran and the
+ * fetch failed" and "the review ran clean" were indistinguishable on screen.
+ *
+ * `ReviewFindingsPanel` has had the vocabulary all along — `absentNote` and
+ * `errorNote`, its own comment reading *"error beats absence — a failed fetch
+ * says NOTHING about whether the artifact exists"* — and the page could not
+ * pass either because this module could not tell them apart.
+ *
+ * The derivation matches `app/artifact/page.tsx:775-776` exactly:
+ * `absent = doc === null && !failed`, `error = doc === null && failed`. That
+ * page's comment already claims *"the same derivation the run page uses"*; it
+ * calls its OWN local `fetchJsonArtifactChecked` (`:324`, unexported), so the
+ * parity it asserted did not exist until now.
+ *
+ * ADDED BESIDE the old function rather than replacing it:
+ * `app/projects/[id]/showcase/page.tsx:107` passes `fetchReviewFindings` as a
+ * port and must keep its shape.
+ */
+export async function fetchReviewFindingsChecked(
+  runId: string,
+  fetchImpl: (path: string) => Promise<Pick<Response, 'status' | 'ok' | 'json'>> = bridgeFetch,
+): Promise<{ doc: ReviewFindingsDoc | null; failed: boolean }> {
+  try {
+    const res = await fetchImpl(`/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);
+    // A 404 is the artifact ANSWERING: it is not there. Anything else non-ok
+    // is the read failing, which says nothing about whether it exists.
+    if (res.status === 404) return { doc: null, failed: false };
+    if (!res.ok) return { doc: null, failed: true };
+    return { doc: (await res.json()) as ReviewFindingsDoc, failed: false };
+  } catch {
+    return { doc: null, failed: true };
+  }
+}
+
 export async function fetchReviewFindings(runId: string): Promise<ReviewFindingsDoc | null> {
   try {
     const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);

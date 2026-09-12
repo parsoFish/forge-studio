@@ -73,7 +73,11 @@ export type FlowRunDetailProps = {
   flow: Flow | null;
   run: Run | null;
   rows: FlowRunTimelineRow[];
-  findings: ReviewFindingsDoc | null;
+  /** 7.6.63 — the doc AND whether the read failed. `null` alone could not
+   *  distinguish "the review has not run" from "the fetch failed", so the page
+   *  rendered nothing for both and the panel's own `absent`/`error` vocabulary
+   *  went unused. Derivation matches `app/artifact/page.tsx:775-776`. */
+  findings: { doc: ReviewFindingsDoc | null; failed: boolean };
   /** R6-01 WI-3 / F5 — which row (if any) is expanded. Optional/defaulted so
    *  every existing caller (WI-2's own pinned render tests) that never sets
    *  it keeps rendering exactly as before: fully collapsed. */
@@ -228,7 +232,11 @@ export function FlowRunDetail({
             nodeLogLines={nodeLogLines}
             onNodeClick={onNodeClick}
           />
-          <ReviewFindingsPanel doc={findings} />
+          <ReviewFindingsPanel
+            doc={findings.doc}
+            absentNote={findings.doc === null && !findings.failed}
+            errorNote={findings.doc === null && findings.failed}
+          />
         </>
       )}
     </main>

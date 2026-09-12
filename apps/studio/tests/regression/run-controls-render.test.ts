@@ -148,7 +148,7 @@ test('a run with neither recovery controls nor a scheduler dependency renders no
 // ---- flows-23: composed into the run detail page ---------------------------
 
 function detail(r: Run | null, found = true): string {
-  return markup(FlowRunDetail, { runId: r?.id ?? 'x', found, flow: FLOW, run: r, rows: [], findings: null });
+  return markup(FlowRunDetail, { runId: r?.id ?? 'x', found, flow: FLOW, run: r, rows: [], findings: { doc: null, failed: false } });
 }
 
 test('flows-23: the run detail page shows the run\'s status in the body, not only as an attribute', () => {
