@@ -243,7 +243,7 @@ const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const digest16 = (file: string) => sha256(readFileSync(file, 'utf8')).slice(0, 16);
 
 /** A repo with two commits, and a campaign dir whose manifest pins one file. */
-function plantPair(opts: { counts?: string; extraManifest?: boolean } = {}) {
+function plantPair(opts: { counts?: string; extraManifest?: boolean; staleTree?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'pin-rec-'));
   const repo = join(root, 'repo');
   const camp = join(root, 'camp');
@@ -270,7 +270,12 @@ function plantPair(opts: { counts?: string; extraManifest?: boolean } = {}) {
   // 793: whatever the test asks for, `tree=` names the repo that will verify it —
   // otherwise every fixture trips the cross-checkout refusal rather than the
   // behaviour under test.
-  if (opts.counts !== undefined) writeFileSync(join(G, 'M-T.counts'), opts.counts.replace(/tree=\S+/, `tree=${repo}`));
+  // `staleTree` opts OUT of that normalisation — 7.6.57's whole subject is a
+  // `.counts` whose `tree=` names a checkout that is not the one rehashing.
+  if (opts.counts !== undefined) {
+    writeFileSync(join(G, 'M-T.counts'),
+      opts.staleTree === true ? opts.counts : opts.counts.replace(/tree=\S+/, `tree=${repo}`));
+  }
 
   // UNTOUCHED: names only a file the merge did not change. Today the script
   // skips it entirely, so its `head=` never advances and "nothing to rewrite"
@@ -427,21 +432,42 @@ test('7.6.49: FORGE_LANE is REQUIRED — no lane, no writes at all', () => {
   assert.match(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), /head=00000000/, 'and nothing is written');
 });
 
-test('7.6.49/793: a .counts whose tree= is NOT the running repo is refused', () => {
-  // D's case: the tool writes `head=` from the repo it runs in and leaves
-  // `tree=` as it was, so a cross-lane reconcile produced
-  // `tree=/home/parso/forge-m6-d head=da33ac5b` — asserting D's tree was clean
-  // at a sha it never held. My own M6-A read TRUE under the same broken step,
-  // because the named checkout happened to be at that sha: the defect produces
-  // true and false records indistinguishably, which is why this refuses rather
-  // than warns.
+test('7.6.57 (AMENDS 7.6.49/793): the OWNER repairs its own stale tree= — it is no longer refused', () => {
+  // WHAT 793 ESTABLISHED, unchanged: the tool writes `head=` from the repo it
+  // runs in and used to leave `tree=` as it was, so a cross-lane reconcile
+  // produced `tree=/home/parso/forge-m6-d head=da33ac5b` — asserting D's tree
+  // was clean at a sha it never held. My own M6-A read TRUE under the same
+  // broken step because the named checkout happened to be at that sha: the
+  // defect produces true and false records indistinguishably.
+  //
+  // WHAT 806 CHANGED, and why this door's assertion INVERTED. 793's refusal is
+  // right about a stranger's tree and wrong about your own. Dogfooding 7.6.49 a
+  // minute after it went live, `M6-A.counts` still carried
+  // `tree=/home/parso/forge` from the wrapper era (730), so A's own reconcile
+  // from A's own worktree was blocked and the only route left was a hand edit of
+  // the field this tool exists to own. Every `.counts` written in that era
+  // carries the same latent block.
+  //
+  // Repairing is safe HERE precisely because the rehash happened in this repo:
+  // the owner records the verification it just performed rather than asserting
+  // someone else's. The cross-lane half of 793 is untouched and has its own
+  // door below.
   const f = plantTwoOwners();
   writeFileSync(join(f.G, 'M-T.counts'),
     `paths=1 manifest=0000000000000000 head=00000000 tree=/somewhere/else owner=M-T\n`);
   const r = runAs(f, 'M-T');
-  assert.notEqual(r.status, 0);
-  assert.match(r.stdout + r.stderr, /tree=/, 'the refusal names the field');
-  assert.match(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), /head=00000000/, 'and does not write');
+  // NOT `status === 0`: `plantTwoOwners` also plants `M-OTHER`, which this run
+  // correctly refuses, so the exit code is a fact about THAT manifest and not
+  // about the one under test. Asserting it here would bind this door to the
+  // fixture's other half — the refusal named below is the precise claim.
+  assert.match(r.stdout, /tree= REPAIRED/, `the owner's own repair must proceed:\n${r.stdout}${r.stderr}`);
+  assert.doesNotMatch(r.stderr, /M-T: REFUSED/, `M-T's own manifest must not be among the refusals:\n${r.stderr}`);
+  assert.match(r.stderr, /M-OTHER: REFUSED/, 'while the foreign one still is');
+  assert.match(r.stdout, /\/somewhere\/else/, 'naming the tree it replaced');
+  const counts = readFileSync(join(f.G, 'M-T.counts'), 'utf8');
+  assert.match(counts, new RegExp(`tree=${f.repo}(\\s|$)`), `tree= now names the repo that rehashed:\n${counts}`);
+  assert.doesNotMatch(counts, /somewhere\/else/, 'the stale value is gone, not appended beside it');
+  assert.match(counts, new RegExp(`head=${f.to.slice(0, 8)}`), 'and the write it was blocking went through');
 });
 
 test('7.6.49/793: when it DOES write, tree= and head= are set together from the same checkout', () => {
@@ -505,4 +531,33 @@ test('7.6.49: --sweep AS T1 writes another owner\'s manifest — the gate opens 
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(readFileSync(join(f.G, 'M-OTHER.counts'), 'utf8'),
     new RegExp(`head=${f.to.slice(0, 8)}`), 'T1 may write an owner it is not');
+});
+
+// ── 7.6.57 — the owner repairs its own stale tree=, and paths= is recomputed ──
+
+test('7.6.57: a stale tree= belonging to ANOTHER lane is still REFUSED (793 untouched)', () => {
+  // The repair is safe only because the rehash happened in THIS repo. A
+  // non-owner reaching the same branch is asserting a verification someone
+  // else's checkout performed, which is exactly what 793 exists to stop — and
+  // that includes T1's `--sweep`, where `owner != LANE` by construction.
+  const f = plantPair({ staleTree: true, counts: 'paths=1 manifest=0000000000000000 head=00000000 tree=/somewhere/else owner=M-OTHER\n' });
+  const r = runPair(f);
+  assert.notEqual(r.status, 0, `a stranger's manifest must not be written:\n${r.stdout}`);
+  assert.match(r.stderr, /REFUSED/, r.stderr);
+  const counts = readFileSync(join(f.G, 'M-T.counts'), 'utf8');
+  assert.match(counts, /tree=\/somewhere\/else/, 'and the field is untouched — a refusal that still wrote is not a refusal');
+  assert.match(counts, /head=00000000/, 'head= unchanged too');
+});
+
+test('7.6.57: paths= is RECOMPUTED from the .sha256, not carried', () => {
+  // T1 (824): the tool never touched `paths=`, so after two rows were added to a
+  // `.sha256` by hand the field read `paths=23` against 25 real rows — a count
+  // describing an earlier version of the file it sits beside, and nothing
+  // failed. The fixture's manifest has ONE row while the field claims 99.
+  const f = plantPair({ counts: 'paths=99 manifest=0000000000000000 head=00000000 tree=/x owner=M-T\n' });
+  const r = runPair(f);
+  assert.equal(r.status, 0, r.stderr);
+  const counts = readFileSync(join(f.G, 'M-T.counts'), 'utf8');
+  assert.match(counts, /paths=1(\s|$)/, `one row in the .sha256 means paths=1:\n${counts}`);
+  assert.doesNotMatch(counts, /paths=99/, 'the stale count is replaced, not left beside the new one');
 });
