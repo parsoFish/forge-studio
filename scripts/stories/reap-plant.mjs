@@ -65,3 +65,48 @@ export function plantDiedMessage({ pid, plantedAtMs, lastBeatMs, nowMs, artefact
     `forge-8vfn.7.6.94. Artefacts kept for the post-mortem at ${artefactDir}`
   );
 }
+
+/**
+ * THE THIRD CASE: the plant was alive at the check and gone by the SIGTERM —
+ * bead `forge-8vfn.7.6.94`, found by D on their gate.
+ *
+ * The first cut split two states: the plant dead BEFORE the liveness check
+ * (`PLANT DIED`, unmeasured) and the reaper genuinely failing (`REPORTING`).
+ * D's red was neither. `plantAlive` was true, `alive === false` afterwards so
+ * nothing escaped, and the reaper reported `kill ESRCH` for BOTH planted pids:
+ * the turn and the grandchild vanished inside one `reapAgentRuns` call, a window
+ * of milliseconds.
+ *
+ * Calling that "the grandchild was killed but not REPORTED reaped" accuses the
+ * reaper of losing a kill it never made, which is the exact accusation this bead
+ * was minted to stop — the same conflation, moved into a narrower window. The
+ * evidentiary need is identical to the dead-plant case: something killed a
+ * `setInterval` that cannot exit on its own.
+ *
+ * @param {{pids: number[], report: {skipped?: {pid?: number, reason?: string}[]}}} a
+ */
+export function everyPlantedPidVanished({ pids, report }) {
+  const skipped = report?.skipped ?? [];
+  if (skipped.length === 0) return false;
+  const gone = new Set(
+    skipped
+      .filter((s) => typeof s?.reason === 'string' && /ESRCH|already gone/.test(s.reason))
+      .map((s) => s?.pid),
+  );
+  return pids.every((pid) => gone.has(pid));
+}
+
+/** The third case's own sentence — never the reaper's. */
+export function plantVanishedInWindowMessage({ pids, lastBeatMs, nowMs, artefactDir }) {
+  const beat = lastBeatMs === null
+    ? 'no heartbeat survived'
+    : `the last heartbeat was ${nowMs - lastBeatMs} ms before this line`;
+  return (
+    `PLANT VANISHED IN THE WINDOW: every planted pid (${pids.join(', ')}) was ALIVE at the check ` +
+    'and already gone when the reap signalled — the reaper reported `kill ESRCH` for all of them and ' +
+    `nothing escaped. ${beat}. This run MEASURED NOTHING about the reaper's reporting: it cannot report ` +
+    'a kill it did not make. A `setInterval` child cannot exit on its own, so something else killed ' +
+    'them inside one reapAgentRuns call; the mechanism is open on forge-8vfn.7.6.94. Artefacts kept ' +
+    `for the post-mortem at ${artefactDir}`
+  );
+}
