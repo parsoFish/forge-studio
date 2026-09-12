@@ -80,6 +80,59 @@ export async function checkHonestPillarRead(page, check, pageId, label) {
 }
 
 /**
+ * A session id on its way into a filesystem path segment — `forge-8vfn.7.6.47`.
+ *
+ * The journeys read these ids off a live page, so the value is only as good as
+ * the read. When publish-and-stay stopped filling the URL SK-6/HK-5 parsed, the
+ * read returned nothing and the seeders below `mkdirSync`'d
+ * `projects/<p>/_authoring/null/staging` — a session directory named `null`
+ * that no surface can see and no operator can clear through the product.
+ *
+ * The PRODUCT is not where this was fixable: every `/start` route generates the
+ * id server-side and realpath-verifies before writing, and the generic
+ * affordance route refuses a bad id three layers deep (measured in
+ * `apps/forge/tests/contract/session-id-path-segment.test.ts`). The unguarded
+ * writers were the fixtures' own `*Dir(sid)` helpers — five of them, identical.
+ *
+ * THROWS rather than returning null. A fixture that silently seeds nothing does
+ * not fail where the mistake is; it fails three beats later on a missing
+ * artifact, which is how this cost a journey run to find in the first place.
+ *
+ * ONE CALLER CLASS SWALLOWS THAT THROW ON PURPOSE. The `clean*Session` helpers
+ * wrap their `rmSync` in `try {} catch {}` to stay best-effort, so a refusal
+ * there becomes a silent no-op rather than a loud failure. That is the SAFE
+ * direction for those four and the reason they were routed through here at all:
+ * they are the destructive callers, and `rmSync(<bad segment>, {recursive,
+ * force})` deletes rather than creates. Not deleting is the failure you want.
+ * A seeding caller must NOT be wrapped this way.
+ */
+/** Real ids are ~28 chars (`2026-09-12T04-00-00-aaaabbbb`). The cap is not a
+ *  security boundary on its own — the character class already excludes every
+ *  separator — but an unbounded segment is accepted by that class and only
+ *  fails much later, deep in an fs call, as ENAMETOOLONG from a helper that
+ *  cannot say which id was wrong. */
+const MAX_SESSION_ID_CHARS = 128;
+
+const NULLISH_SEGMENTS = new Set(['null', 'undefined', 'NaN', 'false', '[object Object]']);
+
+export function sessionIdSegment(sid, who) {
+  if (typeof sid !== 'string' || sid.length > MAX_SESSION_ID_CHARS || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(sid)) {
+    throw new Error(`${who}: refusing a non-session-id path segment: ${JSON.stringify(sid)} — the sid read returned nothing usable`);
+  }
+  // THE CHARACTER CLASS ALONE PASSES THE ACTUAL BUG. `null` is a perfectly
+  // well-formed path segment, and `_authoring/null/` is what was on disk — the
+  // value had already been stringified before it ever reached a path, so by
+  // then it is indistinguishable from a real id by shape. The first draft of
+  // this guard accepted it, which is a guard that refuses everything except the
+  // thing it was written for. These are the renderings a nullish takes on the
+  // way through template interpolation and `String()`.
+  if (NULLISH_SEGMENTS.has(sid)) {
+    throw new Error(`${who}: refusing ${JSON.stringify(sid)} as a session id — this is a stringified nullish, not an id; the read that produced it returned nothing`);
+  }
+  return sid;
+}
+
+/**
  * PUBLISH AND STAY — read the id a surface just MINTED, off the handle it
  * renders. TWO FAMILIES of handle exist, which is why both the selector and the
  * attribute are arguments rather than constants

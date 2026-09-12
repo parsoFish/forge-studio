@@ -19,7 +19,7 @@ import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, renameS
 import { basename, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
-import { sleep } from './journey-assertions.mjs';
+import { sleep, sessionIdSegment } from './journey-assertions.mjs';
 import { PACE } from './journey-runtime.mjs';
 
 // journey-fixtures.mjs lives one level deeper than e2e-journey.mjs
@@ -49,7 +49,7 @@ export function cleanProjectDir() {
  *  _archived/ or other sessions). No-op for a synthetic project (whole dir goes). */
 export function cleanSeededSession(sid) {
   if (IS_SYNTHETIC || !sid) return;
-  try { rmSync(join(projectRoot, '_architect', sid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(archDir(sid), { recursive: true, force: true }); } catch { /* */ }
 }
 
 export const OUT = join(FORGE_ROOT, 'demos/e2e');
@@ -342,7 +342,7 @@ export async function runningTimer(page, on, baseMs = 0) {
 
 // ── EMULATION HELPERS ──────────────────────────────────────────────────────────
 
-export function archDir(sid) { return join(projectRoot, '_architect', sid); }
+export function archDir(sid) { return join(projectRoot, '_architect', sessionIdSegment(sid, 'archDir')); }
 export function writeStatus(sid, status) {
   const dir = archDir(sid);
   mkdirSync(dir, { recursive: true });
@@ -1156,7 +1156,7 @@ export function writeReleaseArtifact(version = '0.2.0') {
 // emulation). Cleaned up in the finally block.
 
 // instructions-creator (AGENTS.md). Session dir: projects/<p>/_instructions/<sid>/.
-export function instrDir(sid) { return join(projectRoot, '_instructions', sid); }
+export function instrDir(sid) { return join(projectRoot, '_instructions', sessionIdSegment(sid, 'instrDir')); }
 export function writeInstrStatus(sid, patch) {
   const dir = instrDir(sid);
   mkdirSync(dir, { recursive: true });
@@ -1214,7 +1214,7 @@ export function writeInstrDraft(sid) {
 }
 export function cleanInstructionsSession(sid) {
   if (!sid) return;
-  try { rmSync(join(projectRoot, '_instructions', sid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(instrDir(sid), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(join(FORGE_ROOT, '_logs', `_instructions-${sid}`), { recursive: true, force: true }); } catch { /* */ }
 }
 
@@ -1253,7 +1253,7 @@ export function writeCrashedInstrSession(sid) {
 // projects/<p>/_project-brain/<sid>/ (status.json + themes/). The commit step is
 // flip-only (the UI reads phase from status.json; it never verifies the central
 // brain) so nothing is written under brain/ — safe on the real mdtoc project.
-export function pbDir(sid) { return join(projectRoot, '_project-brain', sid); }
+export function pbDir(sid) { return join(projectRoot, '_project-brain', sessionIdSegment(sid, 'pbDir')); }
 export function writePbStatus(sid, phase, prompt = '') {
   const dir = pbDir(sid);
   mkdirSync(dir, { recursive: true });
@@ -1280,7 +1280,7 @@ export function seedStagedBrain(sid) {
 }
 export function cleanSeededBrain(bsid) {
   if (!bsid) return;
-  try { rmSync(join(projectRoot, '_project-brain', bsid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(pbDir(bsid), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(join(FORGE_ROOT, '_logs', `_project-brain-${bsid}`), { recursive: true, force: true }); } catch { /* */ }
 }
 
@@ -1293,7 +1293,7 @@ export function cleanSeededBrain(bsid) {
 // DEMO_FRAGMENTS_REL_DIR = .forge/demo/fragments. Spawn is guarded the same way
 // (FORGE_ARCHITECT_NO_SPAWN=1) — clicking a real action button only flips
 // status.json.phase server-side; the harness hand-writes every artifact.
-export function demoDir(sid) { return join(projectRoot, '_demo', sid); }
+export function demoDir(sid) { return join(projectRoot, '_demo', sessionIdSegment(sid, 'demoDir')); }
 /** W7-C2 T1 review (A14) — read the verdicts.json / feedback.md the REAL
  *  bridge wrote when the demo journey sent a `revise`. The revise SEND path
  *  had no end-to-end coverage at all: the DOM contract gained
@@ -1455,7 +1455,7 @@ export function writeDemoLock(sid, prompt, generation = null) {
 
 export function cleanDemoBuilderSession(sid) {
   if (!sid) return;
-  try { rmSync(join(projectRoot, '_demo', sid), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(demoDir(sid), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(join(FORGE_ROOT, '_logs', `_demo-${sid}`), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(DEMO_FORGE_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
@@ -1794,7 +1794,7 @@ export const AUTH_HOOK_DIR = join(FORGE_ROOT, 'studio', 'hooks', AUTH_HOOK_ID);
 const AUTH_LANDED_SKILL_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_SKILL_ID);
 const AUTH_LANDED_HOOK_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_HOOK_ID);
 
-export function authoringDir(sid) { return join(projectRoot, '_authoring', sid); }
+export function authoringDir(sid) { return join(projectRoot, '_authoring', sessionIdSegment(sid, 'authoringDir')); }
 
 /* `authoringSidFromUrl` DELETED with 7.6.46 along with its last two callers:
  * `AuthoringLauncher` publishes the minted id and STAYS, so there is no
