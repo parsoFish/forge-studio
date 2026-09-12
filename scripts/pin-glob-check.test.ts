@@ -56,6 +56,50 @@ function run(repo: string, camp: string, glob = 'M5-B') {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
+test('7.6.99: a file matched by TWO globs is counted ONCE (the OK branch)', () => {
+  // MEASURED ON M1-C-S1, which pins the story file by name AND carries
+  // `tests/stories/S1.*.mjs` since T1 961 — so `S1.story.mjs` matched both and
+  // the check reported `OK — 3 file(s)` for a manifest listing 2. The verdict
+  // was right and the NUMBER was not, which is the worse half: a reader
+  // comparing "3 file(s) match" against `paths=2` concludes something is
+  // unlisted — exactly the drift this tool exists to report, in a manifest that
+  // has none.
+  const { root, repo, camp } = plant({
+    files: ['tests/stories/S1.story.mjs', 'tests/stories/S1.constants.mjs'],
+    listed: ['tests/stories/S1.story.mjs', 'tests/stories/S1.constants.mjs'],
+    globs: ['tests/stories/S1.story.mjs', 'tests/stories/S1.*.mjs'],
+  });
+  try {
+    const { code, out } = run(repo, camp);
+    assert.equal(code, 0, `both files are listed, so this is clean. Output: ${out}`);
+    assert.match(out, /OK — 2 file\(s\)/,
+      `two files, one matched twice — the count is of FILES, not of (glob, file) pairs. Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('7.6.99: an UNLISTED file matched by two globs is reported once (the DRIFT branch)', () => {
+  // The same defect on the branch that matters more. Before the dedupe the
+  // unlisted list was accumulated per (glob, file) pair, so a drifting file
+  // matching two globs was counted twice AND printed twice — inflating the
+  // count a lane acts on and making one file look like two problems.
+  const { root, repo, camp } = plant({
+    files: ['tests/stories/S1.story.mjs', 'tests/stories/S1.act3.mjs'],
+    listed: ['tests/stories/S1.story.mjs'],
+    globs: ['tests/stories/S1.act3.mjs', 'tests/stories/S1.*.mjs'],
+  });
+  try {
+    const { code, out } = run(repo, camp);
+    assert.notEqual(code, 0, `the unlisted file must still drift. Output: ${out}`);
+    assert.match(out, /DRIFT — 1 file\(s\)/, `ONE file drifts, not two. Output: ${out}`);
+    const named = out.split('\n').filter((l) => l.includes('S1.act3.mjs')).length;
+    assert.equal(named, 1, `and it is named exactly once, not once per matching glob. Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AT-6.9.1-1 (RED) a file matching the manifest\'s own glob that the manifest does not list FAILS, naming it', () => {
   const { root, repo, camp } = plant({
     files: ['scripts/stories/beats.mjs', 'scripts/stories/beats-page.mjs', 'scripts/stories/sweep.mjs'],
