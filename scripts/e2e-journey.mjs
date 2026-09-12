@@ -97,7 +97,8 @@
  * `node scripts/e2e-journey.mjs --list` prints the journey/beat shape and
  * exits without booting Studio.
  */
-import { spawn, execSync, execFileSync } from 'node:child_process';
+import { spawn, execSync, execFileSync, spawnSync } from 'node:child_process';
+import { parseJourneyArgs, USAGE } from './journeys/args.mjs';
 import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, renameSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -288,6 +289,61 @@ const { failures, check, countAtLeast, expectPhaseCost, expectHexOpensDrawer } =
   createAssertions({ frame, dwellMs: READ, actMs: ACT, onCheck: tracker.onCheck });
 
 // ── THE JOURNEY ────────────────────────────────────────────────────────────────
+
+// Beads `forge-8vfn.7.6.40`/`.41`/`.42`. THREE REFUSALS BEFORE ANY SIDE EFFECT,
+// in this order, because the cheapest question must never cost the most.
+//
+// `--help` and `--list` answer WITHOUT taking the lock: asking a tool what it
+// does must not queue behind another lane, and an operator who types `--help`
+// has not asked to run anything. Only the run path takes the lock.
+//
+// §15.443 — THE LOCK IS THE TOOL'S, NOT THE CALLER'S. The journeys are a
+// run-lock job by the campaign's own rule (they need 4123/4124 free and they
+// write into `projects/`), and relying on every caller to remember `flock` is
+// how `--help` reached the shared ports unlocked. Node has no `flock(2)`, so
+// the script re-execs itself UNDER the system `flock` it would otherwise ask a
+// caller to use — the lock is held by a real process holding a real fd, which
+// is the only thing that is actually a lock (§15.383: exporting a lock path is
+// not taking the lock).
+//
+// `-w`, never `-n`: a journey run that loses a race should QUEUE, not score the
+// loss as a finished attempt (715).
+const RELOCK_ENV = 'FORGE_JOURNEY_HELD_RUN_LOCK';
+const RUN_LOCK_WAIT_S = 1800;
+
+function refuseOrRelock() {
+  const parsed = parseJourneyArgs(process.argv.slice(2));
+  if (parsed.kind === 'help') { console.log(USAGE); process.exit(0); }
+  if (parsed.error !== null) {
+    console.error(`[e2e] REFUSING: ${parsed.error}`);
+    console.error(USAGE);
+    process.exit(2);
+  }
+  if (parsed.kind === 'list') return;                    // reads nothing, binds nothing
+  if (process.env[RELOCK_ENV] === '1') return;           // this process already holds it
+
+  const lockPath = process.env.FORGE_RUN_LOCK;
+  if (!lockPath) {
+    console.error('[e2e] REFUSING: FORGE_RUN_LOCK is not set, so this run cannot take the lock it needs. '
+      + 'The journeys bind host-global 4123/4124 and write into projects/; running unlocked is how a '
+      + 'sibling lane\'s costed run gets a collision it cannot attribute. Set it to the campaign .run-lock.');
+    process.exit(2);
+  }
+  const r = spawnSync('flock', ['-w', String(RUN_LOCK_WAIT_S), lockPath,
+    process.execPath, process.argv[1], ...process.argv.slice(2)],
+    { stdio: 'inherit', env: { ...process.env, [RELOCK_ENV]: '1' } });
+  if (r.error) {
+    console.error(`[e2e] REFUSING: could not run flock on ${lockPath}: ${r.error.message}`);
+    process.exit(2);
+  }
+  if (r.status === 1) {
+    console.error(`[e2e] REFUSING: ${lockPath} was still held after ${RUN_LOCK_WAIT_S}s — another lane's `
+      + 'costed run or gate has it. Nothing was run.');
+    process.exit(2);
+  }
+  process.exit(r.status === null ? 1 : r.status);
+}
+refuseOrRelock();
 
 async function main() {
   // journeys-as-data: JOURNEYS (imported from ./journeys/index.mjs) declares
