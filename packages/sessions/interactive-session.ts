@@ -69,7 +69,7 @@ export function writeSessionStatus<S extends Record<string, unknown>>(
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { withIdleDeadline } from '@forge/agents/stream-deadline.ts';
+import { withIdleDeadline, StreamDeadlineError } from '@forge/agents/stream-deadline.ts';
 import type { SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
 import { extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { toolFenceOptions } from '@forge/kernel';
@@ -425,6 +425,43 @@ export async function runStructuredTurn<T>(args: {
  * and — when `writeRoots` is supplied — enforced for real against the filesystem
  * by the `canUseTool` fence above (bead forge-eip, W6-CR-3).
  */
+/**
+ * What a turn is known to have consumed when it ends WITHOUT the SDK's priced
+ * `result` — `forge-8vfn.7.6.55`, T1 ruling 849. TOKENS, never a derived dollar
+ * figure: `total_cost_usd` arrives only on the terminal `result`, forge has no
+ * pricing table by design, and 849 refused to add one.
+ *
+ * THE TWO FIELDS DO NOT ACCUMULATE ALIKE. Each assistant message carries its
+ * OWN call's usage: `output_tokens` is what that call generated, so it sums;
+ * `input_tokens` is the whole conversation re-sent, so summing multiplies the
+ * context by the turn count. Last value for input, sum for output.
+ */
+type SeenUsage = {
+  sawAny: boolean;
+  tokensOutSum: number;
+  tokensInLast: number;
+  cacheReadLast: number;
+  cacheCreateLast: number;
+};
+
+function recordUsage(seen: SeenUsage, usage: unknown): void {
+  if (typeof usage !== 'object' || usage === null) return;
+  const u = usage as {
+    input_tokens?: number; output_tokens?: number;
+    cache_read_input_tokens?: number; cache_creation_input_tokens?: number;
+  };
+  if (typeof u.output_tokens === 'number') { seen.tokensOutSum += u.output_tokens; seen.sawAny = true; }
+  if (typeof u.input_tokens === 'number') { seen.tokensInLast = u.input_tokens; seen.sawAny = true; }
+  if (typeof u.cache_read_input_tokens === 'number') seen.cacheReadLast = u.cache_read_input_tokens;
+  if (typeof u.cache_creation_input_tokens === 'number') seen.cacheCreateLast = u.cache_creation_input_tokens;
+}
+
+/** `abort` = our own idle deadline; `died` = anything else. `reaped` is NOT
+ *  producible here: a SIGKILLed process runs no code (see 7.6.71). */
+function unpricedReason(err: unknown): 'abort' | 'died' {
+  return err instanceof StreamDeadlineError ? 'abort' : 'died';
+}
+
 export async function runAgentTurn(args: {
   queryFn: QueryFn;
   prompt: string;
@@ -466,6 +503,15 @@ export async function runAgentTurn(args: {
   label?: string;
   /** W8-B6 — the agent's bound library hooks (see `runStructuredTurn`'s field). */
   hooks?: SdkHooksOption;
+  /** 7.6.55 — fired once before the error is re-thrown, so a failed turn leaves
+   *  a terminal row rather than nothing. Carries no `cost_usd`. */
+  onTurnEndedUnpriced?: (info: {
+    reason: 'abort' | 'died';
+    tokensIn?: number;
+    tokensOut?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+  }) => void;
 }): Promise<{ costUsd: number | null }> {
   const abortController = new AbortController();
   const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
@@ -534,9 +580,12 @@ export async function runAgentTurn(args: {
   // omitted-never-zeroed discipline (`HistoryLedger`'s own rule). Collapsing
   // them here is what made a reaped turn report `$0.00` instead of UNMEASURED.
   let costUsd: number | null = null;
+  // 7.6.55 — read from the assistant messages this loop used to walk past.
+  const seen: SeenUsage = { sawAny: false, tokensOutSum: 0, tokensInLast: 0, cacheReadLast: 0, cacheCreateLast: 0 };
   let toolSeq = 0;
   let lastHeartbeatMs = 0;
 
+  try {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: args.label ?? 'agent-turn',
     abortController,
@@ -557,6 +606,7 @@ export async function runAgentTurn(args: {
       };
     };
     if (m.type === 'assistant') {
+      recordUsage(seen, (m.message as { usage?: unknown } | undefined)?.usage);
       if (args.onToolUse) {
         const details = extractLiveToolDetails(m.message, toolSeq);
         for (const d of details) args.onToolUse(d);
@@ -582,6 +632,24 @@ export async function runAgentTurn(args: {
     if (m.type !== 'result') continue;
     if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
     break;
+  }
+  } catch (err) {
+    // Before the rethrow, never instead of it: the turn still fails and every
+    // caller's error handling is unchanged.
+    try {
+      args.onTurnEndedUnpriced?.({
+        reason: unpricedReason(err),
+        ...(seen.sawAny
+          ? {
+              tokensIn: seen.tokensInLast,
+              tokensOut: seen.tokensOutSum,
+              ...(seen.cacheReadLast > 0 ? { cacheReadTokens: seen.cacheReadLast } : {}),
+              ...(seen.cacheCreateLast > 0 ? { cacheCreationTokens: seen.cacheCreateLast } : {}),
+            }
+          : {}),
+      });
+    } catch { /* never let the unpriced report mask the turn's own error */ }
+    throw err;
   }
   return { costUsd };
 }
