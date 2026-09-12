@@ -81,8 +81,8 @@
         }
       },
       {
-        "act": "Check that every declared source now contributes what it publishes",
-        "say": "This is what \"browse the registry\" has to mean: the list the operator browses is what the declared sources actually publish, not the subset somebody typed into a yaml file. A source that stays at zero after a refresh is a source forge has never really consumed.",
+        "act": "Check what every declared source contributes — and what the ones contributing nothing say",
+        "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.",
         "do": [],
         "expect": {
           "route": "/community",
@@ -92,7 +92,7 @@
             "hub-count": "9",
             "action": "filter-hub",
             "hub-id": "skills-sh",
-            "hub-declared-only": "false"
+            "hub-reason": "not-reachable"
           }
         }
       },
@@ -180,7 +180,7 @@
       },
       {
         "act": "Install the thing that URL names",
-        "say": "This is where §3’s two paths turn out to be one. forge can install what it has already vendored into its own repo; for everything else the answer is a link to somebody else’s website. Adding a row by URL makes an item browsable and never makes it installable.",
+        "say": "This is §3’s second door, and it was a wall until ruling 477 built it. Adding a row by URL used to make an item browsable and never installable — forge could only install what it had already vendored into its own repo. Now the address is enough: press Install and forge fetches the package, vendors it here, and stops — scanned, unapproved, and waiting for you, exactly like every other install.",
         "do": [],
         "expect": {
           "route": "/community/skill/story-s8-skill",
@@ -402,50 +402,44 @@
     {
       "act": "Refresh the registry against those sources",
       "say": "forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.",
-      "status": "red",
-      "failures": [
-        "data-refresh-state: expected \"refreshed\", got \"refused\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "community-browser",
         "page-ready": "true",
         "section": "refresh-result",
-        "refresh-state": "refused"
+        "refresh-state": "refreshed"
       },
       "frame": "frames/04-refresh-the-registry-against-those-sourc.png"
     },
     {
-      "act": "Check that every declared source now contributes what it publishes",
-      "say": "This is what \"browse the registry\" has to mean: the list the operator browses is what the declared sources actually publish, not the subset somebody typed into a yaml file. A source that stays at zero after a refresh is a source forge has never really consumed.",
-      "status": "red",
-      "failures": [
-        "data-hub-id: expected \"skills-sh\", got \"superpowers\""
-      ],
+      "act": "Check what every declared source contributes — and what the ones contributing nothing say",
+      "say": "This is what \"browse the registry\" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.",
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "community-browser",
         "page-ready": "true",
         "hub-count": "9",
         "action": "filter-hub",
-        "hub-id": "superpowers",
-        "hub-declared-only": "false"
+        "hub-id": "skills-sh",
+        "hub-reason": "not-reachable"
       },
-      "frame": "frames/05-check-that-every-declared-source-now-con.png"
+      "frame": "frames/05-check-what-every-declared-source-contrib.png"
     },
     {
       "act": "Check that no row is still a hand-curated seed",
       "say": "Every row currently reads \"seed — never verified\", which is the truth and is exactly the problem. A registry the operator is about to install executable code from should be able to say when it last checked.",
-      "status": "red",
-      "failures": [
-        "data-freshness: expected \"fresh\", got \"seed\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "community-browser",
         "page-ready": "true",
         "component": "freshness-badge",
-        "freshness": "seed"
+        "freshness": "fresh"
       },
       "frame": "frames/06-check-that-no-row-is-still-a-hand-curate.png"
     },
@@ -479,18 +473,16 @@
     },
     {
       "act": "Install the thing that URL names",
-      "say": "This is where §3’s two paths turn out to be one. forge can install what it has already vendored into its own repo; for everything else the answer is a link to somebody else’s website. Adding a row by URL makes an item browsable and never makes it installable.",
-      "status": "red",
-      "failures": [
-        "data-install-action: expected \"install\", got \"browse-upstream\""
-      ],
+      "say": "This is §3’s second door, and it was a wall until ruling 477 built it. Adding a row by URL used to make an item browsable and never installable — forge could only install what it had already vendored into its own repo. Now the address is enough: press Install and forge fetches the package, vendors it here, and stops — scanned, unapproved, and waiting for you, exactly like every other install.",
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "community-detail",
         "item-id": "story-s8-skill",
         "page-ready": "true",
         "section": "install",
-        "install-action": "browse-upstream"
+        "install-action": "install"
       },
       "frame": "frames/09-install-the-thing-that-url-names.png"
     },
@@ -562,19 +554,16 @@
     {
       "act": "Take the second door in — install it by id",
       "say": "Installed, and trusted by nobody. The browser hands the operator straight to the page that owns the decision it deliberately cannot make here.",
-      "status": "red",
-      "failures": [
-        "data-install-state: expected \"needs-review\", got \"not-installed\"",
-        "data-install-action: expected \"open-owning\", got \"install\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "community-detail",
         "item-id": "block-protected-branch-push",
         "page-ready": "true",
-        "install-state": "not-installed",
+        "install-state": "needs-review",
         "section": "install",
-        "install-action": "install"
+        "install-action": "open-owning"
       },
       "frame": "frames/14-take-the-second-door-in-install-it-by-id.png"
     },
@@ -597,18 +586,15 @@
     {
       "act": "Approve it",
       "say": "One press, and a file somebody else wrote becomes something forge will execute. That is the whole reason every beat since the search box was about reading rather than clicking.",
-      "status": "red",
-      "failures": [
-        "data-hook-trust: expected \"approved\", got \"needs-review\"",
-        "data-hook-runnable: expected \"true\", got \"false\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "hook-detail",
         "hook-id": "block-protected-branch-push",
         "page-ready": "true",
-        "hook-trust": "needs-review",
-        "hook-runnable": "false"
+        "hook-trust": "approved",
+        "hook-runnable": "true"
       },
       "frame": "frames/16-approve-it.png"
     },
@@ -640,5 +626,67 @@
       },
       "frame": "frames/18-find-the-installed-hook-in-the-palette-a.png"
     }
-  ]
+  ],
+  "reap": {
+    "reaped": [],
+    "skipped": [],
+    "cancelled": []
+  },
+  "sweep": {
+    "removed": [],
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
+  },
+  "fence": {
+    "restored": [
+      "studio/community/registry.yaml",
+      "studio/hook-approvals.yaml"
+    ],
+    "removed": [
+      "studio/hooks/block-protected-branch-push/"
+    ],
+    "removedContents": [
+      {
+        "path": "studio/hooks/block-protected-branch-push/",
+        "entries": [
+          {
+            "path": "hook.yaml",
+            "bytes": 273
+          },
+          {
+            "path": "scripts/run.sh",
+            "bytes": 1273
+          }
+        ],
+        "truncated": false,
+        "total": 2
+      }
+    ],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
+  }
 }
