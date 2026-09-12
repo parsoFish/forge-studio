@@ -91,7 +91,16 @@ count_of --cached || die "\`git diff --cached --name-only\` failed — a diff th
 staged="$REPLY"
 count_of || die "\`git diff --name-only\` failed — a diff that could not run is not an empty diff"
 unstaged="$REPLY"
-files=$(( committed + staged + unstaged ))
+# THE FOURTH PLACE A CHANGE HIDES (A, T1 1003 — `forge-8vfn.7.6.104`): a NEW file not yet
+# `git add`ed is in NONE of the three diffs above. Measured on 7.6.73: `FILES=8` for a change
+# touching 12; the four absentees were the new files — and a brand-new file is exactly where a
+# new sink most likely lives. Counted AND NAMED, because no diff will ever show them and the
+# reviewer has to open each one. Ignored files are excluded on purpose: they will never be
+# committed, and a review item that cannot ship is noise wearing a finding's clothes.
+untracked_list="$(git ls-files --others --exclude-standard)" \
+  || die "\`git ls-files --others --exclude-standard\` failed — a listing that could not run is not an empty listing"
+untracked="$(printf '%s\n' "$untracked_list" | grep -c . || true)"
+files=$(( committed + staged + unstaged + untracked ))
 
 echo "REMOTE=$remote"
 echo "BRANCH=$branch"
@@ -101,4 +110,6 @@ echo "RANGE=$base..HEAD"
 echo "COMMITTED=$committed"
 echo "STAGED=$staged"
 echo "UNSTAGED=$unstaged"
+echo "UNTRACKED=$untracked"
+[ -z "$untracked_list" ] || printf '%s\n' "$untracked_list" | while IFS= read -r u; do [ -n "$u" ] && echo "UNTRACKED_FILE=$u"; done
 echo "FILES=$files"
