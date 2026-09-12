@@ -70,6 +70,12 @@
             "press": "refresh-community-registry"
           }
         ],
+        "wait": {
+          "for": "settle",
+          "upTo": 60000,
+          "key": "refresh-state",
+          "while": "in-flight"
+        },
         "expect": {
           "route": "/community",
           "data": {
@@ -93,6 +99,22 @@
             "action": "filter-hub",
             "hub-id": "skills-sh",
             "hub-reason": "not-reachable"
+          }
+        }
+      },
+      {
+        "act": "Check the source forge could read and still had nothing to offer",
+        "say": "The third ending, on its own chip. claude-code-templates is not unreachable and it is not empty — forge read it, and everything on it is a HOOK. Install-by-URL knows three SKILL.md layouts and no hook arm, so a proposal from here would be a row nothing could install. The chip says \"nothing forge can install\" rather than \"nothing indexed\", because those send an operator to two different places: one to check their network, one to check what the source actually publishes.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "action": "filter-hub",
+            "hub-id": "cc-templates",
+            "hub-declared-only": "true",
+            "hub-reason": "no-installable-kind"
           }
         }
       },
@@ -430,6 +452,22 @@
       "frame": "frames/05-check-what-every-declared-source-contrib.png"
     },
     {
+      "act": "Check the source forge could read and still had nothing to offer",
+      "say": "The third ending, on its own chip. claude-code-templates is not unreachable and it is not empty — forge read it, and everything on it is a HOOK. Install-by-URL knows three SKILL.md layouts and no hook arm, so a proposal from here would be a row nothing could install. The chip says \"nothing forge can install\" rather than \"nothing indexed\", because those send an operator to two different places: one to check their network, one to check what the source actually publishes.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "action": "filter-hub",
+        "hub-id": "cc-templates",
+        "hub-declared-only": "true",
+        "hub-reason": "no-installable-kind"
+      },
+      "frame": "frames/06-check-the-source-forge-could-read-and-st.png"
+    },
+    {
       "act": "Check that no row is still a hand-curated seed",
       "say": "Every row currently reads \"seed — never verified\", which is the truth and is exactly the problem. A registry the operator is about to install executable code from should be able to say when it last checked.",
       "status": "green",
@@ -441,7 +479,7 @@
         "component": "freshness-badge",
         "freshness": "fresh"
       },
-      "frame": "frames/06-check-that-no-row-is-still-a-hand-curate.png"
+      "frame": "frames/07-check-that-no-row-is-still-a-hand-curate.png"
     },
     {
       "act": "Take the first door in — press \"+ Add item\" to install by URL",
@@ -454,7 +492,7 @@
         "form-mode": "add",
         "page-ready": "true"
       },
-      "frame": "frames/07-take-the-first-door-in-press-add-item-to.png"
+      "frame": "frames/08-take-the-first-door-in-press-add-item-to.png"
     },
     {
       "act": "Give forge nothing but the upstream URL and what to call it",
@@ -469,7 +507,7 @@
         "item-kind": "skill",
         "install-state": "not-installed"
       },
-      "frame": "frames/08-give-forge-nothing-but-the-upstream-url-.png"
+      "frame": "frames/09-give-forge-nothing-but-the-upstream-url-.png"
     },
     {
       "act": "Install the thing that URL names",
@@ -484,7 +522,7 @@
         "section": "install",
         "install-action": "install"
       },
-      "frame": "frames/09-install-the-thing-that-url-names.png"
+      "frame": "frames/10-install-the-thing-that-url-names.png"
     },
     {
       "act": "Go back to the browser",
@@ -496,7 +534,7 @@
         "page": "community-browser",
         "page-ready": "true"
       },
-      "frame": "frames/10-go-back-to-the-browser.png"
+      "frame": "frames/11-go-back-to-the-browser.png"
     },
     {
       "act": "Find the one item in the registry that is executable code",
@@ -514,7 +552,7 @@
         "item-hub": "forge-seed",
         "install-state": "not-installed"
       },
-      "frame": "frames/11-find-the-one-item-in-the-registry-that-i.png"
+      "frame": "frames/12-find-the-one-item-in-the-registry-that-i.png"
     },
     {
       "act": "Open it and read every file in the package before trusting any of it",
@@ -532,7 +570,7 @@
         "file-count": "2",
         "active-file": "hook.yaml"
       },
-      "frame": "frames/12-open-it-and-read-every-file-in-the-packa.png"
+      "frame": "frames/13-open-it-and-read-every-file-in-the-packa.png"
     },
     {
       "act": "Read the security scan that runs before the install exists",
@@ -549,7 +587,7 @@
         "finding-count": "0",
         "critical-count": "0"
       },
-      "frame": "frames/13-read-the-security-scan-that-runs-before-.png"
+      "frame": "frames/14-read-the-security-scan-that-runs-before-.png"
     },
     {
       "act": "Take the second door in — install it by id",
@@ -565,7 +603,7 @@
         "section": "install",
         "install-action": "open-owning"
       },
-      "frame": "frames/14-take-the-second-door-in-install-it-by-id.png"
+      "frame": "frames/15-take-the-second-door-in-install-it-by-id.png"
     },
     {
       "act": "Follow it to the page that owns the trust decision",
@@ -581,7 +619,7 @@
         "hook-trust": "needs-review",
         "hook-runnable": "false"
       },
-      "frame": "frames/15-follow-it-to-the-page-that-owns-the-trus.png"
+      "frame": "frames/16-follow-it-to-the-page-that-owns-the-trus.png"
     },
     {
       "act": "Approve it",
@@ -596,7 +634,7 @@
         "hook-trust": "approved",
         "hook-runnable": "true"
       },
-      "frame": "frames/16-approve-it.png"
+      "frame": "frames/17-approve-it.png"
     },
     {
       "act": "Open the Agents pillar",
@@ -609,7 +647,7 @@
         "page-ready": "true",
         "fetch-status": "ok"
       },
-      "frame": "frames/17-open-the-agents-pillar.png"
+      "frame": "frames/18-open-the-agents-pillar.png"
     },
     {
       "act": "Find the installed hook in the palette an agent composes from",
@@ -624,7 +662,7 @@
         "id": "block-protected-branch-push",
         "kind": "hook"
       },
-      "frame": "frames/18-find-the-installed-hook-in-the-palette-a.png"
+      "frame": "frames/19-find-the-installed-hook-in-the-palette-a.png"
     }
   ],
   "reap": {
