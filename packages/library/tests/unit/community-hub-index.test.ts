@@ -22,7 +22,7 @@ import {
 } from '../../studio/community-hub-index.ts';
 import type { RequestCtx } from '../../studio/community-refresh-api.ts';
 
-const HUB = { id: 'superpowers', url: 'https://github.com/obra/superpowers' };
+const HUB = { id: 'superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' };
 const REPO_URL = 'https://api.github.com/repos/obra/superpowers';
 const treeUrl = (ref: string) => `https://api.github.com/repos/obra/superpowers/git/trees/${ref}?recursive=1`;
 
@@ -108,7 +108,7 @@ test('a directory name that is not a valid slug is SKIPPED, never sanitised into
 test('a NON-GitHub hub is not-reachable, and no request is made', async () => {
   const { ctx, asked } = stub([]);
 
-  const out = await indexGithubHub(ctx, { id: 'skills-sh', url: 'https://skills.sh' }, new Set());
+  const out = await indexGithubHub(ctx, { id: 'skills-sh', url: 'https://skills.sh', kinds: 'skills' }, new Set());
 
   assert.equal(out.ok, false);
   assert.equal(out.ok === false ? out.reason : null, 'not-reachable');
@@ -295,4 +295,74 @@ test('MCP: a list read to the end is NOT marked partial', async () => {
   const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
   assert.equal(out.ok, true);
   assert.equal(out.ok === true ? out.partial : 'unset', undefined);
+});
+
+// ---------------------------------------------------------------- 7.6.91
+// AN OK-BUT-EMPTY READ IS TWO DIFFERENT FACTS, and the chip showed one label.
+//
+// `cc-templates` is read perfectly — authenticated, allowlisted, tree returned —
+// and yields nothing, because it publishes HOOKS and `community-fetch-package`
+// installs three `SKILL.md` layouts and no hook arm. The operator saw "declared
+// — nothing indexed", which is what an empty SKILLS hub also says. "Nothing
+// forge can install" is the narrower truth and the one they can act on.
+//
+// THESE DOORS EXIST BECAUSE THE LAST FIELD I ADDED HAD NONE (7.6.96): a
+// predicate that was false on every machine in this campaign passed six green
+// doors, because nothing asserted it. The negative cases below are the half
+// that makes the positive one mean something.
+
+const HOOKS_HUB = { id: 'cc-templates', url: 'https://github.com/obra/superpowers', kinds: 'hooks' };
+
+test('7.6.91: an OK read that finds nothing, from a hub with no installable kind, SAYS SO', async () => {
+  const { ctx } = stub(['hooks/some-hook/hook.yaml', 'README.md']);
+
+  const out = ok(await indexGithubHub(ctx, HOOKS_HUB, new Set()));
+
+  assert.deepEqual(out.discovered, [], 'the read succeeded and proposed nothing');
+  assert.equal(out.reason, 'no-installable-kind');
+  assert.equal(out.kinds, 'hooks', "the hub's OWN declared string, carried for the label to render");
+});
+
+test('7.6.91: an OK read that finds nothing in a SKILLS hub carries NO reason', async () => {
+  // The negative that stops the reason becoming "empty" by another name: this
+  // hub publishes the kind forge installs and simply has none today, which is
+  // "nothing indexed" and nothing more.
+  const { ctx } = stub(['README.md']);
+
+  const out = ok(await indexGithubHub(ctx, HUB, new Set()));
+
+  assert.deepEqual(out.discovered, []);
+  assert.equal(out.reason, undefined, 'an empty SKILLS hub has nothing to explain');
+  assert.equal(out.kinds, undefined);
+});
+
+test('7.6.91: a hub that DISCOVERED rows never carries the reason, EVEN declaring no installable kind', async () => {
+  // THE EMPTINESS IS LOAD-BEARING AND THIS DOOR PROVES IT. The hub declares
+  // `hooks` — no installable kind — and its tree nonetheless contains a
+  // `SKILL.md` the reader can propose. So `hasNoInstallableKind` is TRUE here
+  // and the row count is what must stop the reason being emitted.
+  //
+  // The first version of this door declared `hooks, skills`, which made
+  // `hasNoInstallableKind` false and the door unable to fail: dropping the
+  // emptiness check from the reader left all 23 tests green. It is the
+  // together-rule's lesson in a unit test — a door has to be able to observe
+  // the thing it claims to pin, and only the MUTATION said that it could not.
+  const { ctx } = stub(['skills/one/SKILL.md', 'hooks/h/hook.yaml']);
+
+  const out = ok(await indexGithubHub(ctx, HOOKS_HUB, new Set()));
+
+  assert.equal(out.discovered.length, 1, 'the reader proposes from the layout, not from the declaration');
+  assert.equal(out.reason, undefined, 'rows were proposed, so there is nothing to explain');
+  assert.equal(out.kinds, undefined);
+});
+
+test('7.6.91: a REFUSAL keeps its own reason — the OK branch never overwrites it', async () => {
+  // `smithery` is the live case: it refuses with `not-reachable` before any of
+  // this can apply, and a refusal already carries the reason it earned.
+  const { ctx } = stub([]);
+
+  const out = await indexGithubHub(ctx, { id: 'smithery', url: 'https://smithery.ai', kinds: 'MCPs' }, new Set());
+
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false ? out.reason : null, 'not-reachable');
 });
