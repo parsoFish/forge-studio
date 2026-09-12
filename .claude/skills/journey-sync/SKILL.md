@@ -61,6 +61,13 @@ against; if the text no longer describes the surface, update BOTH.
    After EVERY run verify: `git log -1` unchanged, `git status` clean,
    no `release-finalize` events in fresh `_logs/`, and the PR state untouched
    (the 2026-07-16 incident self-merged a PR with the operator's token).
+   **And the lane running the suite HOLDS STILL: `gh` mutations go before it
+   or after it, never beside it (§15.441).** The run-lock protects the ports
+   and the ground; it does not protect the PR namespace, and the post-run
+   boundary compares PR state across the whole run. Measured 2026-09-12: a
+   `gh pr create` fired 27 s after the suite took the run-lock, and the lane's
+   own new PR came back as a boundary violation against its own run —
+   "I hold the lock" is not "I may do anything else in parallel".
 7. **Grounding:** seeded cycle data mirrors the real corpus
    (`brain/cycles/_raw/`, archived `_logs/` cycles) with provenance comments.
    New seeds copy a real cycle's shapes, not invented values.
