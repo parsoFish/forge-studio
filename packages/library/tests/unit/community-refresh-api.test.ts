@@ -32,6 +32,7 @@ function registry(over: Partial<CommunityRegistry> = {}): CommunityRegistry {
   return {
     schemaVersion: 2,
     lastRefresh: null,
+    hubs: [],
     sources: {
       'github:obra/superpowers': {
         stars: 228000,

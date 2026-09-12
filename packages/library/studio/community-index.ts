@@ -64,7 +64,7 @@ import { listCatalogConnections } from './connection-library.ts';
 import type { CatalogConnection } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
-import { communityRegistryPath, communitySkillsFromRegistry } from './community-registry.ts';
+import { communityRegistryPath, communitySkillsFromRegistry, loadCommunityRegistry } from './community-registry.ts';
 import { reqString, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
@@ -103,7 +103,7 @@ export interface CommunityHub {
   kinds: string; // raw curated string, never parsed into an array (D10)
 }
 
-export type CommunityHubCount = CommunityHub & { itemCount: number };
+export type CommunityHubCount = CommunityHub & { itemCount: number; reason?: string };
 
 export interface CommunitySignals {
   stars: string;
@@ -671,7 +671,26 @@ export function hubCountsFrom(items: readonly CommunityItem[], hubs: readonly Co
 }
 
 export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
-  return hubCountsFrom(listCommunityIndex(forgeRoot), listCommunityHubs(forgeRoot));
+  const counted = hubCountsFrom(listCommunityIndex(forgeRoot), listCommunityHubs(forgeRoot));
+  // …and what the LAST refresh found, read from disk (`meta.hubs`). The chip's
+  // "why" is server data like every other attribute on it: the refresh result
+  // that used to carry it died with the page, so the reason survived neither a
+  // reload nor a second tab. A registry that has never refreshed says nothing
+  // here, which is the honest state rather than a fabricated reason.
+  let reasons = new Map<string, string>();
+  try {
+    const reg = loadCommunityRegistry(communityRegistryPath(forgeRoot));
+    reasons = new Map(
+      reg.hubs.filter((h: { reason?: string }) => h.reason !== undefined).map((h: { hubId: string; reason?: string }) => [h.hubId, h.reason as string]),
+    );
+  } catch {
+    // A registry that will not load is already reported by its own loader to
+    // every caller that needs it; a hub strip is not the place to raise it.
+  }
+  return counted.map((h) => {
+    const reason = reasons.get(h.id);
+    return reason === undefined ? h : { ...h, reason };
+  });
 }
 
 // ---------------------------------------------------------------------------
