@@ -666,31 +666,41 @@ export function communityItem(forgeRoot: string, kind: CommunityKind, id: string
  *  entry point, each connection re-probed). `hubsWithCounts` below is the
  *  thin convenience wrapper for a caller that has not already computed
  *  either input. */
-export function hubCountsFrom(items: readonly CommunityItem[], hubs: readonly CommunityHub[]): CommunityHubCount[] {
-  return hubs.map((hub) => ({ ...hub, itemCount: items.filter((i) => i.hub?.id === hub.id).length }));
+export function hubCountsFrom(
+  items: readonly CommunityItem[],
+  hubs: readonly CommunityHub[],
+  forgeRoot?: string,
+): CommunityHubCount[] {
+  // The LAST refresh's verdict per hub, read from `meta.hubs` on disk. It lives
+  // here rather than in `hubsWithCounts` because the route calls THIS function
+  // directly — the page's data never passes through the other one, which is why
+  // the first version of this change served nothing to the page it was for.
+  const reasons = forgeRoot === undefined ? new Map<string, string>() : persistedHubReasons(forgeRoot);
+  return hubs.map((hub) => {
+    const counted = { ...hub, itemCount: items.filter((i) => i.hub?.id === hub.id).length };
+    const reason = reasons.get(hub.id);
+    return reason === undefined ? counted : { ...counted, reason };
+  });
+}
+
+/** `meta.hubs` as a lookup, or empty when the registry will not load — a hub
+ *  strip is not the place to raise a registry fault its own loader already
+ *  reports to every caller that needs it. */
+function persistedHubReasons(forgeRoot: string): Map<string, string> {
+  try {
+    const reg = loadCommunityRegistry(communityRegistryPath(forgeRoot));
+    return new Map(
+      reg.hubs
+        .filter((h: { reason?: string }) => h.reason !== undefined)
+        .map((h: { hubId: string; reason?: string }) => [h.hubId, h.reason as string]),
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
-  const counted = hubCountsFrom(listCommunityIndex(forgeRoot), listCommunityHubs(forgeRoot));
-  // …and what the LAST refresh found, read from disk (`meta.hubs`). The chip's
-  // "why" is server data like every other attribute on it: the refresh result
-  // that used to carry it died with the page, so the reason survived neither a
-  // reload nor a second tab. A registry that has never refreshed says nothing
-  // here, which is the honest state rather than a fabricated reason.
-  let reasons = new Map<string, string>();
-  try {
-    const reg = loadCommunityRegistry(communityRegistryPath(forgeRoot));
-    reasons = new Map(
-      reg.hubs.filter((h: { reason?: string }) => h.reason !== undefined).map((h: { hubId: string; reason?: string }) => [h.hubId, h.reason as string]),
-    );
-  } catch {
-    // A registry that will not load is already reported by its own loader to
-    // every caller that needs it; a hub strip is not the place to raise it.
-  }
-  return counted.map((h) => {
-    const reason = reasons.get(h.id);
-    return reason === undefined ? h : { ...h, reason };
-  });
+  return hubCountsFrom(listCommunityIndex(forgeRoot), listCommunityHubs(forgeRoot), forgeRoot);
 }
 
 // ---------------------------------------------------------------------------
