@@ -175,9 +175,9 @@ export default function AgentBuilderPage() {
   // same idiom as the connections effect above (own useEffect, own cancelled
   // flag), but keyed on the ROUTE's slug (see the effect below) rather than
   // fired once, since the ledger is per-agent and must refetch on every
-  // agent switch. `null` means "not yet resolved" — kept DISTINCT from all
-  // three of fetchAgentHistory's own resolution kinds (found/not-found/
-  // unresolved) so a still-in-flight fetch never renders as any of them.
+  // agent switch. 7.6.19: bumped on BOTH edges — dispatch alone read it at the
+  // one moment it cannot hold a cost. `null` is kept DISTINCT from
+  // fetchAgentHistory's found/not-found/unresolved: an in-flight fetch is none.
   const [historyResolution, setHistoryResolution] = useState<AgentHistoryResolution | null>(null);
   const [historyNonce, setHistoryNonce] = useState(0);
   // For a new agent: the user first picks a starter (or "blank"); only then is
@@ -858,7 +858,7 @@ export default function AgentBuilderPage() {
             unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
-            onRunDispatched={() => setHistoryNonce((n) => n + 1)}
+            onRunDispatched={() => setHistoryNonce((n) => n + 1)} onRunSettled={() => setHistoryNonce((n) => n + 1)}
           />
 
           <YamlPreview

@@ -87,10 +87,23 @@ vi.mock('@/lib/studio-client', () => ({
   cancelAgentRun: vi.fn(async () => ({ ok: true })),
 }));
 
+let lastPollUpdate: ((s: unknown) => void) | null = null;
+
+// The REAL `AgentRunStatus` shape (`lib/studio-client.ts:1896`), not a stand-in:
+// a fake `{status, costUsd}` threw on `costUsd.toFixed` in the panel's own
+// render, which is the panel telling me the stub was not the thing.
+const DONE_STATUS = { ok: true, state: 'done' as const, costUsd: 0.1905, events: 12 };
+
 vi.mock('@/lib/agent-dispatch', () => ({
   // The poller would otherwise keep a timer alive past the test's own
   // lifetime; the unsubscribe it returns is what `useEffect` cleans up with.
-  pollAgentRun: vi.fn(() => () => {}),
+  // 7.6.19: the tests below need to DRIVE the poll, because the defect is what
+  // the panel does when the poll reports a TERMINAL status. The mock captures
+  // `onUpdate` so a test can deliver `done` the way the real poller would.
+  pollAgentRun: vi.fn((runId: string, opts: { onUpdate: (s: unknown) => void }) => {
+    lastPollUpdate = opts.onUpdate;
+    return () => {};
+  }),
   pollDisplayState: vi.fn(() => 'running'),
 }));
 
@@ -111,6 +124,7 @@ beforeEach(() => {
   if (typeof Element.prototype.scrollIntoView !== 'function') {
     Element.prototype.scrollIntoView = () => {};
   }
+  lastPollUpdate = null;
   dispatchAgentRun.mockClear();
   dispatchAgentRun.mockImplementation(async () => ({ ok: true, runId: RUN_ID }));
   container = document.createElement('div');
@@ -172,3 +186,95 @@ test('401: a REFUSED dispatch reports nothing — a re-read would find no row, a
   expect(dispatchAgentRun).toHaveBeenCalledTimes(1);
   expect(dispatched, 'nothing was dispatched, so there is nothing to re-read').toEqual([]);
 });
+
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.19` — A STANDALONE RUN REACHES `done` ON DISK WITH ITS COST
+// AND `/agents/:slug` SHOWS NEITHER FOR 300 s.
+//
+// S5 run 4 decided the fork the bead left open, from its own bytes: the bridge
+// broadcast the run's terminal event 145 ms after it was written, to TWO
+// subscribers, and beat 13 was still blank 4 m 25 s later. So the delivery
+// happened and the page did not reflect it.
+//
+// THE MECHANISM IS A MISSING EDGE, not a missing subscription.
+//   `app/agents/[id]/page.tsx:410` refetches the ledger on `historyNonce`;
+//   `:861` bumps it from `onRunDispatched` and NOTHING ELSE.
+// `onRunDispatched` fires at DISPATCH, when the run is necessarily `running`
+// with no cost — so the ledger is read once, at the only moment it is
+// guaranteed not to hold the answer, and nothing asks again.
+//
+// And the panel ALREADY KNOWS: `RunPanel.tsx:326` polls to terminal and reports
+// it to its own local state. The page it sits on is never told. These tests pin
+// the edge that closes it.
+// ---------------------------------------------------------------------------
+
+test('7.6.19: the panel reports the run SETTLED, so the page can re-read a ledger that now holds a cost', async () => {
+  const settled: string[] = [];
+  await mountRunPanelWithSettled(() => {}, (runId) => settled.push(runId));
+
+  const run = container.querySelector('[data-action="run-agent"]');
+  await act(async () => { (run as HTMLButtonElement).click(); });
+  await act(async () => { await Promise.resolve(); });
+
+  expect(settled, 'a dispatch is not a settlement — nothing has finished yet').toEqual([]);
+
+  // The poll reports what the bridge already broadcast: done, with a cost.
+  await act(async () => { lastPollUpdate?.(DONE_STATUS); });
+  await act(async () => { await Promise.resolve(); });
+
+  expect(settled, 'S5 beat 13: the page must be told the run ENDED, not only that it started').toEqual([RUN_ID]);
+});
+
+test('7.6.19: a non-terminal poll update reports NOTHING — a refetch per poll would hammer the bridge and still not be the fix', async () => {
+  const settled: string[] = [];
+  await mountRunPanelWithSettled(() => {}, (runId) => settled.push(runId));
+
+  const run = container.querySelector('[data-action="run-agent"]');
+  await act(async () => { (run as HTMLButtonElement).click(); });
+  await act(async () => { await Promise.resolve(); });
+
+  await act(async () => { lastPollUpdate?.({ ...DONE_STATUS, state: 'running', costUsd: 0, events: 3 }); });
+  await act(async () => { lastPollUpdate?.({ ...DONE_STATUS, state: 'running', costUsd: 0, events: 3 }); });
+  await act(async () => { await Promise.resolve(); });
+
+  expect(settled, 'still running — there is no new ledger fact to read').toEqual([]);
+});
+
+test('7.6.19: settling reports ONCE, however many terminal updates arrive — the nonce is a trigger, not a counter', async () => {
+  const settled: string[] = [];
+  await mountRunPanelWithSettled(() => {}, (runId) => settled.push(runId));
+
+  const run = container.querySelector('[data-action="run-agent"]');
+  await act(async () => { (run as HTMLButtonElement).click(); });
+  await act(async () => { await Promise.resolve(); });
+
+  await act(async () => { lastPollUpdate?.(DONE_STATUS); });
+  await act(async () => { lastPollUpdate?.(DONE_STATUS); });
+  await act(async () => { await Promise.resolve(); });
+
+  expect(settled, 'one settlement, one re-read').toEqual([RUN_ID]);
+});
+
+async function mountRunPanelWithSettled(
+  onRunDispatched: (runId: string) => void,
+  onRunSettled: (runId: string) => void,
+): Promise<void> {
+  await act(async () => {
+    root.render(
+      React.createElement(RunPanel, {
+        slug: 'story-s5',
+        interactive: false,
+        canRun: true,
+        blockedMessage: '',
+        projects: [{ id: 'mdtoc', name: 'mdtoc' }] as never,
+        declaredMaterialKinds: [],
+        defaultCostCeilingUsd: 2,
+        costCeilingEnforceable: true,
+        onRunDispatched,
+        onRunSettled,
+      } as never),
+    );
+  });
+  await act(async () => { await Promise.resolve(); });
+}
