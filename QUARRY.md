@@ -70,6 +70,7 @@ operator-ratified new cap — never a silent raise.
 |---|---|---|---|
 | ~~`cli/bridge-studio-affordances.ts`~~ | `sessions` | 1,313 | **CARVED (M4-sessions s5, ruling 87).** The dispatch is `packages/sessions/bridge-studio-sessions-affordances.ts`; the per-kind arms it inlined went to their own kinds (`kinds/{instructions,demo-builder,kb-cleanup,authoring}.ts`, the last two minted identity-only by ruling 87) and the shared shell to `bridge-studio-sessions-affordance-shell.ts`. The route is table entry 37 in `packages/sessions/routes.ts`, after cancel. |
 | `apps/forge/bridge-studio-writes.ts` | `projects` | 2,482 | one route file writing agent SKILL.md, community entries, project scaffolding and flow.yaml |
+| `apps/forge/bridge-broadcast-log.ts` | `apps/forge` | 84 | `forge-8vfn.7.6.35` — the bridge's record of its own socket broadcasts (type, cycleId, timestamp, subscriber count). It is a FILE rather than eight lines inside `ui-bridge.ts` because folding it there grew that file 2,276 → 2,310 and `check-file-size` refused it ("an exemption is a ceiling, not a licence"); extracted, `makeRecordingBroadcast` replaces the inline function and `ui-bridge.ts` lands at 2,259 — 17 BELOW its baseline. §15.412: shrink the addition, not the cap. |
 | `apps/forge/bridge-studio.ts` | `apps/forge` | 1,750 | generic CSRF/origin/JSON plumbing interleaved with flows and library GET routes |
 | `cli/dry-bridge.ts` | `kernel` | 453 | one static table classifying routes owned by flows, agents and library alike |
 | `apps/forge/studio-lint.ts` | `apps/forge` | 805 | validates agent, flow, catalog and community definitions in a single pass. **Owner corrected `kernel` → `apps/forge` (ruling 55, M4-knowledge s5): the `kernel` cell was unsatisfiable.** This file imports `@forge/flows` (rank 5), `@forge/sessions` (4), `@forge/agents` (3), five `@forge/library` modules — and `orchestrator/studio/{registry,validate}.ts` directly. Rule 1 ("packages never import legacy") has no rank exception, so no package at ANY rank can host it, kernel least of all; and it is a live CLI entry point (`apps/forge/cli.ts:471` backs `forge studio lint`). `apps/forge` is the one tree `classify()` gives no rule. Cell only — the two knowledge rows into it go to the host carve. |
@@ -226,6 +227,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
+| apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 84 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
 | packages/agents/_adapters/claude/index.ts | agents | verbatim | 29 |
 | packages/agents/_adapters/conformance.ts | agents | verbatim | 203 |
