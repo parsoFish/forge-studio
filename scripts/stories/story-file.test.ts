@@ -255,6 +255,79 @@ test('a wait with no upTo, a non-integer, or an out-of-range bound is REFUSED', 
 });
 
 /**
+ * 7.6.98 — the progress bound declared on the repeat STEP, where the progress is.
+ *
+ * It shipped on the beat's `wait` and that reached BOTH of a beat's waits, which
+ * stand on different pages: S1 beat 11's repeat runs on the session page where
+ * `session-phase` changes every round, its consequence wait on `/artifact`,
+ * which renders that key zero times. The fix is not a better message — it is
+ * declaring the bound where the loop's own `until` already names a key it can
+ * see.
+ */
+test('7.6.98: a repeat carries its own progress bound, and it survives validation', () => {
+  const story = validateStory({
+    ...ok,
+    beats: [{
+      act: 'answer until the interview ends',
+      do: [{
+        repeat: [{ fillAll: 'question-freetext', with: 'a' }, { press: 'submit-answers' }],
+        until: { 'session-phase': 'awaiting-verdict' },
+        perTransition: 480_000,
+        progressKey: 'session-phase',
+      }],
+      expect: { route: '/x', data: { page: 'x' } },
+      say: 's',
+    }],
+  });
+  assert.deepEqual(story.beats[0].do[0], {
+    repeat: [{ fillAll: 'question-freetext', with: 'a' }, { press: 'submit-answers' }],
+    until: { 'session-phase': 'awaiting-verdict' },
+    perTransition: 480_000,
+    progressKey: 'session-phase',
+  });
+});
+
+test('7.6.98: `progressKey` MUST be a key `until` names — the binding is the fix', () => {
+  // THE WHOLE POINT OF MOVING IT. A repeat's `until` already names a key the
+  // loop can observe on the page it stands on; binding the progress key to that
+  // set makes a key-on-the-wrong-page impossible by construction rather than by
+  // a reviewer noticing. `session-phase` is exactly what `/artifact` does not
+  // render, and that is how the first version went wrong.
+  const bad = (progressKey: unknown) => () => validateStory({
+    ...ok,
+    beats: [{
+      act: 'a',
+      do: [{
+        repeat: [{ press: 'submit-answers' }],
+        until: { 'session-phase': 'awaiting-verdict' },
+        perTransition: 1_000,
+        progressKey,
+      }],
+      expect: { route: '/x', data: { page: 'x' } },
+      say: 's',
+    }],
+  });
+  assert.throws(bad('architect-phase'), /progressKey/, 'a key `until` does not name is refused');
+  assert.throws(bad(''), /progressKey/);
+  assert.throws(bad(7), /progressKey/);
+});
+
+test('7.6.98: both-or-neither on the step too', () => {
+  const step = (extra: Record<string, unknown>) => () => validateStory({
+    ...ok,
+    beats: [{
+      act: 'a',
+      do: [{ repeat: [{ press: 'p' }], until: { k: 'v' }, ...extra }],
+      expect: { route: '/x', data: { page: 'x' } },
+      say: 's',
+    }],
+  });
+  assert.throws(step({ perTransition: 1_000 }), /progressKey/);
+  assert.throws(step({ progressKey: 'k' }), /perTransition/);
+  assert.throws(step({ perTransition: 0, progressKey: 'k' }), /perTransition/);
+});
+
+/**
  * `perTransition` / `progressKey` — bead `forge-8vfn.7.6.77`, T1 ruling 881,
  * C's conditions 1 and 2.
  *

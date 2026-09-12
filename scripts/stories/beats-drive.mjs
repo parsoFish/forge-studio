@@ -170,7 +170,15 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // `alsoWanted` is the progress key ALONE — `readObserved` collects only what
   // it is asked for, and a key the beat does not itself expect would otherwise
   // be absent on every poll however the page reads (`6.11.45`).
-  const declaredProgress = rawBeat.wait?.perTransition !== undefined ? rawBeat.wait : null;
+  // 7.6.98 — read from the repeat STEP, falling back to the beat's `wait` for
+  // any story still declaring it there (7.6.77's form, still valid). The step
+  // form wins when both exist: it is the one whose key `until` guarantees is on
+  // the page the loop stands on.
+  const repeatWithProgress = (steps ?? []).find(
+    (st) => st !== null && typeof st === 'object' && st.perTransition !== undefined,
+  ) ?? null;
+  const declaredProgress = repeatWithProgress
+    ?? (rawBeat.wait?.perTransition !== undefined ? rawBeat.wait : null);
   // Built as `null` when the beat declared no progress bound, rather than as a
   // closure that would throw on `declaredProgress.progressKey`. A closure like
   // that would be caught by the `try` below and returned as "unreadable", so a
@@ -328,9 +336,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           page, beat, left, sessionScope, agentProcProbe,
           beat.wait?.for === 'settle' ? beat.wait : null, stallDoor,
           resolveAnchorMs(beat.wait ?? null, pressedAt, Date.now()),
-          // 7.6.77. Both fields or neither — `validateWait` refuses a wait
-          // carrying one alone, so a wait that has `perTransition` has
-          // `progressKey` too and this needs no second test.
+          // 7.6.77, narrowed by 7.6.98: ONLY a bound declared on the beat's
+          // `wait` reaches the consequence wait. A bound declared on a repeat
+          // STEP belongs to that loop and to the page it stands on — handing it
+          // here is what made S1 beat 11 report `no-progress-key (consequence)`
+          // against `/artifact`, which renders the key zero times.
           beat.wait?.perTransition !== undefined ? beat.wait : null,
         );
         agentWaitConsumed = true;
