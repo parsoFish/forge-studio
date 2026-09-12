@@ -178,6 +178,41 @@ set_counts_fields() {
   fi
 }
 
+# 7.6.85 (T1 891, from C's hazard report) — REFUSE A DIRTY PATH THIS RUN WILL READ.
+#
+# Everything below reads the WORKING TREE: `sha256sum -c` for a manifest this
+# merge did not touch, `sha256sum` for the entries it did. So a path that is both
+# PINNED and DIRTY records a hash for bytes main does not hold — a wrong pin that
+# READS CLEAN. Nothing downstream catches it: `sha256sum -c` passes against the
+# same dirty tree and fails only in a clean checkout, where it reads as a
+# sibling lane's drift rather than as this run's error.
+#
+# C ran A's #703 reconcile at porcelain 11 and nothing wrong was written — but
+# only because none of the eleven dirty paths happened to be among the rehashed
+# ones. That is luck, and luck is not a precondition (891).
+#
+# SCOPE IS THE PINNED PATHS, NOT THE REPO. Residue elsewhere is not this tool's
+# business and refusing on it would make the tool unusable in a working lane —
+# every gate leaves story artifacts behind. Checked ONCE, up front, before any
+# `.counts` is touched, so a refusal leaves every manifest byte-identical.
+dirty_check=$(mktemp); trap 'rm -f "$T" "$dirty_check"' EXIT
+for f in "$G"/$GLOB.sha256; do
+  [ -f "$f" ] || continue
+  awk '{print $2}' "$f" | sed 's#^\*##' >> "$dirty_check"
+done
+if [ -s "$dirty_check" ]; then
+  dirty=$(cd "$R" && sort -u "$dirty_check" | tr '\n' '\0' | xargs -0 --no-run-if-empty git status --porcelain -- 2>/dev/null || true)
+  if [ -n "$dirty" ]; then
+    echo "pin-reconcile.sh: REFUSING — these PINNED paths are dirty in $R, and this run would hash them:" >&2
+    printf '%s\n' "$dirty" | sed 's/^/    /' >&2
+    echo "  A path that is both pinned and dirty records a hash for bytes main does not hold — a wrong" >&2
+    echo "  pin that reads CLEAN, because sha256sum -c passes against this same dirty tree and fails" >&2
+    echo "  only in a clean checkout, where it reads as a sibling's drift (7.6.85)." >&2
+    echo "  Commit, restore or stash them and re-run. Nothing has been written." >&2
+    exit 4
+  fi
+fi
+
 T=$(mktemp); trap 'rm -f "$T"' EXIT
 ownerless=""
 refused=""

@@ -38,7 +38,15 @@ function plant() {
   git(repo, 'config', 'user.email', 't@t');
   git(repo, 'config', 'user.name', 'T');
   writeFileSync(join(repo, 'pinned.txt'), 'one\n', 'utf8');
-  git(repo, 'add', 'pinned.txt');
+  // `untouched.txt` is TRACKED from the first commit as of 7.6.85. It used to be
+  // written by one test and never added, so it was `??` — and 7.6.85 refuses a
+  // pinned path that is dirty, untracked included, because hashing one records a
+  // hash for bytes NO COMMIT holds. Tracking it here keeps that test's subject
+  // (does an untouched manifest that fails verification keep its `head=`?)
+  // isolated from a tracking question it never meant to ask, and keeps HEAD at
+  // `second` so the §15.169 refusal is not tripped either.
+  writeFileSync(join(repo, 'untouched.txt'), 'stable\n', 'utf8');
+  git(repo, 'add', 'pinned.txt', 'untouched.txt');
   git(repo, 'commit', '-qm', 'one');
   const first = git(repo, 'rev-parse', 'HEAD').stdout.trim();
   // Hash commit ONE's bytes HERE, while they are still on disk. Taking it after
@@ -183,6 +191,7 @@ test('707 as amended by 7.6.30(b): an untouched manifest that does NOT verify is
     // verified, not about the 7.6.49 ownership bound, which has its own doors.
     writeFileSync(join(g, 'M5-C.counts'), `paths=1 head=deadbeef tree=${repo} owner=M5-B\n`, 'utf8');
     writeFileSync(join(repo, 'untouched.txt'), 'stable\n', 'utf8');
+    // Same bytes `plant()` committed, so the path is clean (7.6.85's refusal).
     const r = spawnSync('bash', [RECONCILE, repo, camp, 'M5-*', first, second, 'a label'],
       { encoding: 'utf8', env: { ...process.env, FORGE_LANE: 'M5-B' } });
     assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
@@ -560,4 +569,54 @@ test('7.6.57: paths= is RECOMPUTED from the .sha256, not carried', () => {
   const counts = readFileSync(join(f.G, 'M-T.counts'), 'utf8');
   assert.match(counts, /paths=1(\s|$)/, `one row in the .sha256 means paths=1:\n${counts}`);
   assert.doesNotMatch(counts, /paths=99/, 'the stale count is replaced, not left beside the new one');
+});
+
+// ── 7.6.85 — a dirty PINNED path is refused before anything is written ───────
+
+test('7.6.85: a pinned path that is DIRTY refuses, and the manifest is byte-identical after', () => {
+  // C ran A's #703 reconcile at porcelain 11. Nothing wrong was written — but
+  // only because none of the eleven dirty paths was among the rehashed ones.
+  // Had one been, the manifest would carry a hash for bytes main does not hold:
+  // a wrong pin that reads CLEAN, because `sha256sum -c` passes against the
+  // same dirty tree and fails only in a clean checkout, where it reads as a
+  // SIBLING's drift rather than as this run's error.
+  const f = plantPair({ counts: 'paths=1 manifest=0000000000000000 head=00000000 tree=/x owner=M-T\n' });
+  const before = readFileSync(join(f.G, 'M-T.sha256'), 'utf8');
+  const countsBefore = readFileSync(join(f.G, 'M-T.counts'), 'utf8');
+  writeFileSync(join(f.repo, 'pinned.txt'), 'DIRTY — uncommitted\n');
+
+  const r = runPair(f);
+  assert.notEqual(r.status, 0, `a dirty pinned path must refuse:\n${r.stdout}${r.stderr}`);
+  assert.match(r.stderr, /REFUSING/, r.stderr);
+  assert.match(r.stderr, /pinned\.txt/, 'the offending path is named, not just counted');
+  // The refusal runs BEFORE any write, so both files are untouched — bytes, not
+  // a field check: a refusal that still wrote is not a refusal.
+  assert.equal(readFileSync(join(f.G, 'M-T.sha256'), 'utf8'), before, 'the .sha256 is byte-identical');
+  assert.equal(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), countsBefore, 'and so is the .counts');
+});
+
+test('7.6.85: a dirty UNRELATED path is NOT this tool\'s business — the run proceeds', () => {
+  // Scope is the PINNED paths, not the repo. Every gate leaves story artifacts
+  // behind, so refusing on any dirty file would make the tool unusable in a
+  // working lane — which is the failure mode where a guard gets routed around.
+  const f = plantPair({ counts: 'paths=1 manifest=0000000000000000 head=00000000 tree=/x owner=M-T\n' });
+  writeFileSync(join(f.repo, 'not-pinned-by-anything.txt'), 'residue from a gate\n');
+
+  const r = runPair(f);
+  assert.equal(r.status, 0, `residue outside the manifests must not block a reconcile:\n${r.stdout}${r.stderr}`);
+  assert.match(readFileSync(join(f.G, 'M-T.counts'), 'utf8'), new RegExp(`head=${f.to.slice(0, 8)}`),
+    'and the reconcile actually happened');
+});
+
+test('7.6.85: HEAD that is not the <to> sha refuses, naming both', () => {
+  // Already enforced before this bead (§15.169) — doored here because 7.6.85
+  // names it as half the fix, and a rule with no door is a rule that can be
+  // deleted by someone who does not know it was load-bearing.
+  const f = plantPair({ counts: 'paths=1 manifest=0000000000000000 head=00000000 tree=/x owner=M-T\n' });
+  const r = spawnSync('bash', [RECONCILE, f.repo, f.camp, 'M-*', f.from.slice(0, 8), f.from.slice(0, 8), 'wrong to'],
+    { encoding: 'utf8', env: { ...process.env, FORGE_LANE: 'M-T' } });
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /REFUSING/, r.stderr);
+  assert.match(r.stderr, new RegExp(f.to.slice(0, 8)), 'names the HEAD it found');
+  assert.match(r.stderr, new RegExp(f.from.slice(0, 8)), 'and the to-sha it was given');
 });
