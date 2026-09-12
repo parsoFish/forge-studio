@@ -257,6 +257,41 @@ for f in "$G"/$GLOB.sha256; do
     fi
     continue
   fi
+  # T1 ruling 992 — THE OWNER CHECK RUNS BEFORE THE FIRST BYTE IS WRITTEN.
+  #
+  # Until this, the branch below backed up `.sha256`, REWROTE its rows, and only
+  # then asked `may_write` about `.counts`. So a lane running with a wide glob
+  # (`'M*'`, the post-merge family's shape all campaign) rewrote every OTHER
+  # owner's touched rows and printed `REFUSED — … Would have written …
+  # manifest=<fp>` afterwards — in the conditional, about a write it had already
+  # performed: the fingerprint it "would have written" was the file's actual
+  # fingerprint. Measured on M6-T1 after M6-D's #745 (05:12:08, pre-image taken,
+  # rows 32–33 rewritten, `.counts` left at the previous head). The bytes were
+  # right because D's tree was clean at the merge sha; the ownership was not, and
+  # the owner's `.counts` then certified a `.sha256` that no longer existed.
+  # 7.6.85's promise above — "a refusal leaves every manifest byte-identical" —
+  # held for the dirty check and not for this one. The 7.6.57 door asserted that
+  # a refusal leaves `.counts` untouched and never asked about `.sha256`.
+  #
+  # A manifest with no `.counts` has no `owner=` to check, so it is refused here
+  # too, before the rehash rather than after it (7.6.30(c) refused the CREATE
+  # but had already rehashed the rows — the same half-write, one file over).
+  if [ ! -f "$counts" ]; then
+    echo "pin-reconcile.sh: REFUSING to rehash $n — $counts does not exist, so it has no owner=." >&2
+    echo "  Nothing was written to $n: no .pre- taken, rows this merge touched left as they were:" >&2
+    echo "    $(echo "$touched" | tr '\n' ' ')" >&2
+    echo "  A .counts with no owner is a record no lane is accountable for, and it reads" >&2
+    echo "  exactly like a complete one. The lane that owns this manifest writes it" >&2
+    echo "  (paths=<rows> manifest=<sha256 of $n.sha256, 16 hex> head=<sha> tree=<its repo> owner=<LANE>)" >&2
+    echo "  and re-runs; manifest= is recomputed by that run." >&2
+    ownerless="$ownerless $n"
+    continue
+  fi
+  if ! may_write "$counts" "$n" "$f"; then
+    echo "  $n: nothing written — no .pre- taken, rows this merge touched left as they were: $(echo "$touched" | tr '\n' ' ')" >&2
+    refused="$refused $n"
+    continue
+  fi
   cp "$f" "$f.pre-${TO:0:8}"
   # Count FAILED lines, never `grep -vc ': OK$'` — that also counts the WARNING line (§15.105).
   before=$(cd "$R" && sha256sum -c --quiet "$f" 2>&1 | grep -c FAILED || true)
@@ -282,32 +317,10 @@ for f in "$G"/$GLOB.sha256; do
   # the rehash actually reached zero. A manifest still failing (a pinned path the
   # merge DELETED, left in place above) records why instead.
   if [ "$after" = "0" ]; then
-    if [ -f "$counts" ]; then
-      if ! may_write "$counts" "$n" "$f"; then refused="$refused $n"; continue; fi
-      set_counts_fields "$counts" "$f" "${TO:0:8}"
-    else
-      # REFUSES rather than creating one. The old branch wrote an OWNERLESS
-      # `.counts` and said so in its own comment — "`owner` is not knowable from
-      # this script and is left to the lane" — which made a record nobody is
-      # accountable for, indistinguishable from a complete one. Everything the
-      # lane needs is printed so it need not recompute anything.
-      # REFUSES PER MANIFEST, NOT PER RUN. The first draft did `exit 2` here,
-      # which the pre-existing suite caught: it abandons the manifests already
-      # reconciled in this loop and never reaches the ones after it, so one
-      # ownerless `.counts` would silently leave the rest of the campaign
-      # unreconciled. The refusal is recorded, this manifest is skipped, and the
-      # run still exits non-zero at the end — so the operator sees EVERY
-      # manifest that needs an owner, in one pass.
-      echo "pin-reconcile.sh: REFUSING to create $counts — it would have no owner=." >&2
-      echo "  A .counts with no owner is a record no lane is accountable for, and it reads" >&2
-      echo "  exactly like a complete one. The lane that owns this manifest writes it:" >&2
-      echo "    paths=$(grep -c . "$f") manifest=$(sha256sum "$f" | cut -c1-16) head=${TO:0:8} tree=$R owner=<LANE>" >&2
-      ownerless="$ownerless $n"
-      continue
-    fi
+    # Owner and tree were checked BEFORE the rehash (992); this only records it.
+    set_counts_fields "$counts" "$f" "${TO:0:8}"
     echo "  $n: head= -> ${TO:0:8} (rehashed to 0 FAILED against this tree)"
   else
-    [ -f "$counts" ] || printf 'paths=%s tree=%s\n' "$(grep -c . "$f")" "$R" > "$counts"
     grep -q 'head-not-advanced' "$counts" || \
       printf '# head= NOT advanced to %s: still FAILED %s after the rehash (a pinned path the merge\n# deleted, or bytes this tree does not hold). head-not-advanced=%s\n' \
         "${TO:0:8}" "$after" "${TO:0:8}" >> "$counts"
