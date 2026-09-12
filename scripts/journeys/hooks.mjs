@@ -763,7 +763,7 @@ export const journey = defineJourney({
 
               check(await page.locator('main[data-page="session"][data-session-kind="authoring"]').count() > 0,
                 'HK-5: the shared session shell renders for the authoring kind');
-              const statusPath = join(authoringDir(sid ?? ''), 'status.json');
+              const statusPath = sid ? join(authoringDir(sid), 'status.json') : null;
               const startedReal = sid ? await waitForFile(statusPath, 8000) : false;
               check(startedReal, `HK-5: the real POST /start route wrote projects/${PROJECT}/_authoring/${sid}/status.json`);
               const preSeedPhase = startedReal ? JSON.parse(readFileSync(statusPath, 'utf8')).phase : null;
