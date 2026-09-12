@@ -215,6 +215,55 @@ function validateWait(raw, at) {
       fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
     }
   }
+  // 7.6.77 (T1 881, C's 612 ack) — PROGRESS, not wall-clock.
+  //
+  // S1 beat 11's `upTo` has to cover a VARIABLE NUMBER of VARIABLE-LENGTH turns:
+  // measured across four runs the interview rounds cost 28-126 s each while the
+  // single drafting turn costs 327-392 s, and round count alone does not predict
+  // the outcome (runs 8 and 9 both answered 2 rounds; only 9 passed). So no
+  // single figure is both safe and meaningful — raise it enough to survive three
+  // rounds plus a slow draft and it no longer catches a genuine stall.
+  //
+  // `perTransition` resets its budget every time `progressKey` CHANGES, so
+  // expiry means no progress rather than no completion. `upTo` is untouched and
+  // still the absolute ceiling: this is a second, stricter bound, never a
+  // replacement.
+  //
+  // BOTH OR NEITHER, refused by name (C's condition 1). `progressKey` alone is a
+  // key nobody reads. `perTransition` alone is a budget that can never reset —
+  // a shorter wall-clock bound wearing a progress-bound's name, which is
+  // strictly worse than today because it reds EARLIER while claiming to measure
+  // progress.
+  const hasPer = raw.perTransition !== undefined;
+  const hasKey = raw.progressKey !== undefined;
+  if (hasPer !== hasKey) {
+    fail(
+      `${at}.wait.${hasPer ? 'progressKey' : 'perTransition'}`,
+      `\`perTransition\` and \`progressKey\` are both-or-neither: ${hasPer
+        ? '`perTransition` without `progressKey` is a budget nothing can ever reset — a shorter wall-clock bound wearing a progress bound\'s name'
+        : '`progressKey` without `perTransition` is a key nothing reads'}`,
+    );
+  }
+  if (hasPer) {
+    if (raw.for !== 'agent') {
+      fail(`${at}.wait.perTransition`, `only an agent wait takes \`perTransition\`; on for: '${raw.for}' it would be dropped silently`);
+    }
+    if (!Number.isInteger(raw.perTransition) || raw.perTransition <= 0) {
+      fail(`${at}.wait.perTransition`, `expected a positive integer in ms, got ${JSON.stringify(raw.perTransition)}`);
+    }
+    // C's condition 2: a per-transition bound above the ceiling can never fire,
+    // so the declaration would read as protection and provide none.
+    if (raw.perTransition > raw.upTo) {
+      fail(
+        `${at}.wait.perTransition`,
+        `expected <= upTo (${raw.upTo} ms), got ${raw.perTransition} — a per-transition bound above the ceiling can never fire, so it would read as protection and provide none`,
+      );
+    }
+    if (typeof raw.progressKey !== 'string' || raw.progressKey === '') {
+      fail(`${at}.wait.progressKey`, `expected the data-* key whose CHANGE counts as progress, got ${JSON.stringify(raw.progressKey)}`);
+    }
+  }
+
   // 7.6.82 (T1 883) — `anchor` IS CARRIED. It was validated eleven lines above
   // and then dropped by this rebuild, so `S10.story.mjs:398`'s
   // `anchor: 'scheduler-start'` never reached `resolveAnchorMs` and beat 8 took
@@ -226,6 +275,7 @@ function validateWait(raw, at) {
   return Object.freeze({
     for: raw.for, upTo: raw.upTo,
     ...(raw.anchor !== undefined ? { anchor: raw.anchor } : {}),
+    ...(hasPer ? { perTransition: raw.perTransition, progressKey: raw.progressKey } : {}),
   });
 }
 
