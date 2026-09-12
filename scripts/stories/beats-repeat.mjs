@@ -153,7 +153,7 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run,
     // continue the loop, so a check placed after either is skipped on the other.
     // The `until` above still wins — a repeat that has met its condition is not
     // stalled however long the key sat still.
-    if (false && tracker !== null) {
+    if (tracker !== null) {
       const why = tracker.observe(await readProgressNow());
       if (why !== null) return { waitedForHandle, error: why };
     }
