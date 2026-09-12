@@ -432,6 +432,17 @@ function CommunityBrowserInner() {
                     data-hub-kinds={hub.kinds}
                     data-hub-item-count={hub.itemCount}
                     data-hub-declared-only={declaredOnly ? 'true' : 'false'}
+                    // ON THE CHIP ITSELF, beside the id it explains. It sat on
+                    // the count span below, and S8 beat 5 could not read it
+                    // there through two rounds of server-side fixes that were
+                    // never the problem. `resolveExpectations` reads a key from
+                    // its own element ONLY when exactly one element on the page
+                    // carries it (`beats-page.mjs:293`); `data-hub-reason` is
+                    // present on every hub that HAS a reason — two of nine here
+                    // — so it is under the together-rule, and the beat asks for
+                    // it alongside `action`/`hub-id`, which no span carries.
+                    // Every other fact about a hub is already on this button.
+                    data-hub-reason={hubReason(hubOutcomes, hub.id, hub.reason) ?? undefined}
                     className="badge"
                     onClick={() => writeState({ ...baseRef.current, hub: active ? null : hub.id }, 'push')}
                     style={{
@@ -445,7 +456,7 @@ function CommunityBrowserInner() {
                     }
                   >
                     {hub.name}{' '}
-                    <span style={{ color: 'var(--faint)' }} data-hub-reason={hubReason(hubOutcomes, hub.id, hub.reason) ?? undefined}>
+                    <span style={{ color: 'var(--faint)' }}>
                       {declaredOnly ? `· ${declaredOnlyLabel(hubOutcomes, hub.id, hub.reason)}` : `· ${hub.itemCount}`}
                     </span>
                   </button>

@@ -1736,8 +1736,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   indexed from it yet keeps `data-hub-item-count="0"` and reads "declared —
   nothing indexed" (`data-hub-declared-only="true"`) — never dropped, and
   never presented as a browsable source. **7.6.84 PR C: an empty chip says WHY
-  when the reader gave a reason** — `[data-hub-reason]` on the chip's count
-  span carries the indexer's OWN token (`not-reachable`, `fetch-failed`,
+  when the reader gave a reason** — `[data-hub-reason]` on the chip button
+  itself, beside `data-hub-id`, carries the indexer's OWN token (`not-reachable`, `fetch-failed`,
   `tree-truncated`), never a paraphrase, and the label reads "declared —
   nothing indexed (fetch: <reason>)". The attribute is ABSENT in the two cases
   where there is nothing to explain: before a refresh has settled, and for a
@@ -1756,6 +1756,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   nor installable here, and `/skills` + `/community` now agree on it. W8-B5
   adds `data-item-category` — ABSENT (never `""`) for an item with no
   registry row, the same discipline `data-item-hub`/`data-fetched-at` hold.
+
+  **The NODE is part of this contract, not a detail of the markup.** A beat that
+  asks for `hub-reason` alongside `action`/`hub-id` needs one element to answer
+  all three: `resolveExpectations` reads a key from its own element only when
+  exactly one element on the page carries it, and this key is present on every
+  hub that has a reason. On the count span inside the chip it was unreadable no
+  matter how correct the served value was — measured on `77935c33`, where the
+  route's payload carried `reason: "not-reachable"` for `skills-sh` and S8 beat
+  5 still reported it absent.
 
   **`/community/new` (W7-B3, community-23)** — the registry item form,
   `main[data-page="community-registry-form"][data-form-mode="add"|"edit"]
