@@ -69,7 +69,7 @@ const PROPS = {
 /** The component's own root — the element the DOM contract names. */
 const panel = () => container.querySelector('section[data-step-count]');
 
-test('307: before the launch, DemoTimeline publishes NO demo session id — not an empty one', async () => {
+test('7.6.64: before the launch, DemoTimeline publishes the key EMPTY — present, never absent', async () => {
   const { DemoTimeline } = await import('@/components/studio/project-builder/DemoTimeline');
 
   await act(async () => {
@@ -77,10 +77,16 @@ test('307: before the launch, DemoTimeline publishes NO demo session id — not 
   });
 
   expect(panel(), 'the timeline must render').not.toBeNull();
-  // "No id, no key" (forge-8vfn.6.11.5): a key rendered present-and-empty is
-  // indistinguishable from one about to be filled, so a consumer waiting for
-  // it to appear is answered by a value that names nothing.
-  expect(panel()!.hasAttribute('data-demo-session-id')).toBe(false);
+  // PRESENT AND EMPTY BEFORE THE MINT — `forge-8vfn.7.6.64`, rulings
+  // 409/422/436/438. This door pinned `hasAttribute === false` under 6.11.5
+  // (ruling 332), and 438 reversed that on the record: absent is the same race
+  // one step earlier, because an observer collecting nested `data-*` in ONE
+  // read cannot tell "no key" from "not yet". What changed was the READER.
+  //
+  // THE ASSERTION IS `''`, NOT "absent OR empty". A door that accepted either
+  // would pass against both shapes and pin neither, which is how one key came
+  // to have two shapes across three sibling surfaces in the first place.
+  expect(panel()!.getAttribute('data-demo-session-id')).toBe('');
   expect(container.querySelector('[data-action="view-demo-session"]')).toBeNull();
 });
 
