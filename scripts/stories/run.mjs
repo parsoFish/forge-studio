@@ -413,10 +413,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // the agent COMMITTED its writes so the ground's own `git status` reported
   // nothing at all (§15.327). Hence a hash, never a status.
   const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
-  // 7.6.52 — AFTER the pre-run hash so the seeds read as born during the run.
-  const seeded = story.ground?.seedIgnoredBorn
-    ? seedIgnoredBorn(join(ROOT, 'projects', story.ground.project), story.ground.seedIgnoredBorn) : [];
-  if (seeded.length > 0) console.log(`[stories] own ground: seeded ${seeded.length} ignored-born path(s) — ${seeded.join(', ')}`);
+  const seeded = story.ground?.seedIgnoredBorn ? seedIgnoredBorn(join(ROOT, 'projects', story.ground.project), story.ground.seedIgnoredBorn) : []; // 7.6.52 — after the pre-run hash, deliberately
   const logsDir = join(ROOT, '_logs');
   const logsBefore = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
   const outDir = join(ROOT, 'demos', 'stories', story.id);
@@ -697,10 +694,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
     for (const line of split.undeclared) {
       console.error(`[stories] own ground: UNDECLARED ${line}`);
     }
-    // Removed AFTER classification: left in place they sit in the NEXT run's
-    // pre-hash, are not born during it, and the story reports 0 again — green,
-    // proving nothing, which is the failure this story exists to end.
-    for (const rel of seeded) rmSync(join(ROOT, 'projects', story.ground.project, rel), { force: true });
+    for (const rel of seeded) rmSync(join(ROOT, 'projects', story.ground.project, rel), { force: true }); // 7.6.52 — next run seeds fresh
   }
 
   // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be

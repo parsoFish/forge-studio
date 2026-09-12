@@ -434,6 +434,13 @@ export function mintedSessionWrites(mintedPaths, logsDir, groundDir) {
  * story's own doing. So the rules are consulted BEFORE anything is written, and
  * a mismatch stops the run with the path named.
  *
+ * ORDER IS LOAD-BEARING AT BOTH ENDS, and `run.mjs` has no room to say so: the
+ * caller seeds AFTER the pre-run hash, so these read as drift born during the
+ * run, and deletes them AFTER the classification has read them. Left in place
+ * they would sit in the NEXT run's pre-run hash, no longer be born during it,
+ * and the story would report 0 again — green, and proving nothing, which is the
+ * exact failure this whole path exists to end.
+ *
  * Returns the paths created, so the caller can report them rather than assume.
  */
 export function seedIgnoredBorn(groundDir, relPaths) {
@@ -453,6 +460,9 @@ export function seedIgnoredBorn(groundDir, relPaths) {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, `seeded by the costless ignored-born story (forge-8vfn.7.6.52)\n`);
   }
+  // Logged HERE rather than at the call site: `run.mjs` sits on the 800-line cap
+  // and this is the module that knows what it did.
+  console.log(`[stories] own ground: seeded ${relPaths.length} ignored-born path(s) — ${relPaths.join(', ')}`);
   return [...relPaths];
 }
 
