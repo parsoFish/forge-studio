@@ -39,6 +39,11 @@ if [ "${4:-}" = "--sweep" ] || [ "${7:-}" = "--sweep" ]; then SWEEP=1; fi
 R="${1:?repo root}"; CAMP="${2:?campaign dir}"; GLOB="${3:?manifest glob, e.g. 'M5-*'}"
 FROM="${4:?from sha}"; TO="${5:?to sha}"; LABEL="${6:?label}"
 G="$CAMP/gate-manifests"
+# 7.6.87 — `pin-glob-check.sh` is a sibling SKILL's script, resolved from this
+# file's own location rather than a hard path, so a lane running from any
+# worktree finds its own copy. Absent (an older checkout) means the glob half is
+# SKIPPED and said so below, never silently passed.
+GLOB_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../immutable-gates/scripts" 2>/dev/null && pwd || true)/pin-glob-check.sh"
 if [ -z "$LANE" ]; then
   echo "pin-reconcile.sh: REFUSING — FORGE_LANE is not set." >&2
   echo "  This script WRITES .counts, and a caller that has not said who it is cannot be" >&2
@@ -101,8 +106,28 @@ may_write() {
     return 1
   fi
   if [ -n "$tree" ] && [ "$tree" != "$R" ]; then
-    echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
-    return 1
+    # 7.6.57 (ruling 806) — THE OWNER MAY REPAIR ITS OWN STALE `tree=`.
+    #
+    # 793's refusal is right about a stranger's tree and wrong about your own.
+    # Dogfooding 7.6.49 a minute after it went live: `M6-A.counts` still carried
+    # `tree=/home/parso/forge` from the wrapper era (730), so A's own reconcile
+    # from A's own worktree was blocked and the ONLY route left was a hand edit
+    # of the field the tool exists to own — which is the class of fix this whole
+    # instrument removes. Every `.counts` written in that era carries the same
+    # latent block.
+    #
+    # Rewriting is safe HERE and nowhere else, because the rehash this run
+    # performed happened in `$R`: the owner is not asserting a verification
+    # someone else's checkout did, it is recording the one it just did. A
+    # non-owner reaching here is the 793 case untouched — including T1's
+    # `--sweep`, where `owner != LANE` by construction and the tree genuinely is
+    # not the owner's.
+    if [ "$owner" = "$LANE" ]; then
+      echo "  $n: tree= REPAIRED — $tree -> $R (owner=$LANE rehashing in its own repo, 7.6.57)"
+    else
+      echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
+      return 1
+    fi
   fi
   return 0
 }
@@ -144,11 +169,67 @@ set_counts_fields() {
     printf '%s manifest=%s\n' "$(head -1 "$counts")" "$d" > "$counts.tmp"
     tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
   fi
+  # 7.6.57 (T1 824) — `paths=` IS RECOMPUTED, not carried. The tool never
+  # touched it, so after T1 added two rows to a `.sha256` by hand the field read
+  # `paths=23` against 25 real rows — a count describing an earlier version of
+  # the file it sits beside, and nothing failed. It is derived here from the
+  # same file `manifest=` hashes, in the same edit, so the two cannot disagree.
+  # 7.6.87 (T1 901) — `<name>.txt` IS REGENERATED, never edited alongside.
+  # Amendments updated `.sha256`/`.globs`/`.counts` and BACKED `.txt` UP without
+  # editing it, so M6-C.txt sat at 190 rows against a 193-row `.sha256`. No live
+  # consumer reads it, which is exactly why it drifted unnoticed — a human
+  # listing that disagrees with the machine one is worse than no listing,
+  # because it is the half a person checks. Derived here from the same file
+  # `manifest=` hashes, in the same edit, so the two cannot disagree.
+  awk '{ q=$2; sub(/^\*/,"",q); print q }' "$manifest_file" > "${manifest_file%.sha256}.txt"
+  local np; np=$(grep -c . "$manifest_file")
+  if grep -q 'paths=[0-9]\{1,\}' "$counts"; then
+    sed -i "s/paths=[0-9]\{1,\}/paths=${np}/" "$counts"
+  else
+    printf '%s paths=%s\n' "$(head -1 "$counts")" "$np" > "$counts.tmp"
+    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+  fi
 }
+
+# 7.6.85 (T1 891, from C's hazard report) — REFUSE A DIRTY PATH THIS RUN WILL READ.
+#
+# Everything below reads the WORKING TREE: `sha256sum -c` for a manifest this
+# merge did not touch, `sha256sum` for the entries it did. So a path that is both
+# PINNED and DIRTY records a hash for bytes main does not hold — a wrong pin that
+# READS CLEAN. Nothing downstream catches it: `sha256sum -c` passes against the
+# same dirty tree and fails only in a clean checkout, where it reads as a
+# sibling lane's drift rather than as this run's error.
+#
+# C ran A's #703 reconcile at porcelain 11 and nothing wrong was written — but
+# only because none of the eleven dirty paths happened to be among the rehashed
+# ones. That is luck, and luck is not a precondition (891).
+#
+# SCOPE IS THE PINNED PATHS, NOT THE REPO. Residue elsewhere is not this tool's
+# business and refusing on it would make the tool unusable in a working lane —
+# every gate leaves story artifacts behind. Checked ONCE, up front, before any
+# `.counts` is touched, so a refusal leaves every manifest byte-identical.
+dirty_check=$(mktemp); trap 'rm -f "$T" "$dirty_check"' EXIT
+for f in "$G"/$GLOB.sha256; do
+  [ -f "$f" ] || continue
+  awk '{print $2}' "$f" | sed 's#^\*##' >> "$dirty_check"
+done
+if [ -s "$dirty_check" ]; then
+  dirty=$(cd "$R" && sort -u "$dirty_check" | tr '\n' '\0' | xargs -0 --no-run-if-empty git status --porcelain -- 2>/dev/null || true)
+  if [ -n "$dirty" ]; then
+    echo "pin-reconcile.sh: REFUSING — these PINNED paths are dirty in $R, and this run would hash them:" >&2
+    printf '%s\n' "$dirty" | sed 's/^/    /' >&2
+    echo "  A path that is both pinned and dirty records a hash for bytes main does not hold — a wrong" >&2
+    echo "  pin that reads CLEAN, because sha256sum -c passes against this same dirty tree and fails" >&2
+    echo "  only in a clean checkout, where it reads as a sibling's drift (7.6.85)." >&2
+    echo "  Commit, restore or stash them and re-run. Nothing has been written." >&2
+    exit 4
+  fi
+fi
 
 T=$(mktemp); trap 'rm -f "$T"' EXIT
 ownerless=""
 refused=""
+written=""
 git -C "$R" diff --name-only "$FROM" "$TO" > "$T"
 found=0
 for f in "$G"/$GLOB.sha256; do
@@ -168,6 +249,7 @@ for f in "$G"/$GLOB.sha256; do
       if [ "$untouched_fail" = "0" ]; then
         if ! may_write "$counts" "$n" "$f"; then refused="$refused $n"; continue; fi
         set_counts_fields "$counts" "$f" "${TO:0:8}"
+        written="$written $n"
         echo "  $n: head= -> ${TO:0:8} (untouched by this merge, verified 0 FAILED against this tree)"
       else
         echo "  $n: head= NOT advanced — untouched by this merge but FAILED $untouched_fail against this tree"
@@ -240,8 +322,57 @@ for f in "$G"/$GLOB.sha256; do
   log=$(ls "$G"/"$n".amend-*.md 2>/dev/null | sort -V | tail -1 || true); [ -n "$log" ] || log="$G/$n.amend-1.md"
   printf '\n## Amendment (at `%s`, §15.105, pin-reconcile.sh) after %s: %s rehashed — FAILED %s → %s.\n' \
     "${TO:0:8}" "$LABEL" "$(echo "$touched" | tr '\n' ' ')" "$before" "$after" >> "$log"
+  written="$written $n"
   echo "$n: [$(echo "$touched" | tr '\n' ' ')] FAILED $before → $after"
 done
+# 7.6.87 (T1 901) — A REHASH IS NOT AN ADOPTION (§15.502).
+#
+# This tool rehashes the entries a merge TOUCHED and never LISTS a new one, so a
+# merge that adds a file under a manifest's own globs leaves that manifest one
+# short while every reconcile afterwards reports `0 FAILED`. Both facts are true
+# and the pair is useless: A FILE THAT IS NOT LISTED CANNOT FAIL, so the clean
+# verdict is honest and uninformative.
+#
+# Measured before this existed: FOUR in-glob test files sat unpinned under
+# M6-C's globs for hours (three of them mine, from #703/#708 and 7.6.46), plus
+# one under M6-A's — `interactive-runner-unpriced-turn.test.ts` from #698, which
+# I adopted by hand as amendment 17 only because T1's sweep went looking.
+# `pin-glob-check` named it the instant it was asked; nothing asked it.
+#
+# THE REHASH STANDS. A drift here does not mean the hashes are wrong — they are
+# right about the paths they cover. It means the reconcile is INCOMPLETE, so the
+# exit is its own code and the message says which of the two it is.
+if [ -n "$written" ] && [ ! -x "$GLOB_CHECK" ]; then
+  echo "pin-reconcile.sh: pin-glob-check NOT RUN — no executable at $GLOB_CHECK." >&2
+  echo "  The rehash above stands; the adoption half was not checked. Said rather than skipped:" >&2
+  echo "  a silent skip and a clean check read identically, which is the defect this pair fixes." >&2
+fi
+if [ -n "$written" ] && [ -x "$GLOB_CHECK" ]; then
+  # ONLY exit 1 IS DRIFT. `pin-glob-check` also exits 3 for a manifest that
+  # declares no `.globs` at all, and 2 for a bad path — and my first cut here
+  # treated every non-zero alike, which turned "this manifest states no scope"
+  # into a reconcile failure and red-ed six existing doors. Two different facts
+  # behind one non-zero is the same conflation this whole bead is about, so the
+  # code is read rather than the truthiness.
+  drift=0
+  for n in $written; do
+    out=$("$GLOB_CHECK" "$R" "$CAMP" "$n" 2>&1) && gc=0 || gc=$?
+    printf '%s\n' "$out" | sed 's/^/  /'
+    case "$gc" in
+      0) ;;
+      1) drift=1 ;;
+      *) echo "  $n: pin-glob-check exited $gc — neither PASS nor DRIFT; the adoption half is UNCHECKED for this manifest" >&2 ;;
+    esac
+  done
+  if [ "$drift" = 1 ]; then
+    echo "pin-reconcile.sh: the rehash above STANDS — every listed path was hashed correctly." >&2
+    echo "  But a manifest is missing files its OWN globs claim, so this reconcile is INCOMPLETE," >&2
+    echo "  not wrong: an unlisted file cannot fail, so it would keep reporting 0 FAILED while" >&2
+    echo "  guarding nothing (§15.502). Adopt each path above with an amendment and re-run." >&2
+    exit 5
+  fi
+fi
+
 # A run that matched no manifest is a distinct outcome, not silence (§15.92).
 [ "$found" = 1 ] || { echo "pin-reconcile.sh: no manifest matched $G/$GLOB.sha256" >&2; exit 2; }
 # Every other manifest was reconciled; these are the ones a lane must claim.

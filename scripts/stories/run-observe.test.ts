@@ -17,6 +17,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { collectSpendDirs } from './run-observe.mjs';
+import { collectAgentRuns } from './reap.mjs';
 
 function root() {
   const d = mkdtempSync(join(tmpdir(), 'spenddirs-'));
@@ -49,6 +50,26 @@ describe('collectSpendDirs — a dispatch that SPENT is one that wrote an event 
       got.includes('2026-09-12T07-28-42_INIT-2026-09-12-exclude-author-flag'),
       'the cycle dir carries no turn.pid and is exactly what the reaper-shaped collector skipped',
     );
+  });
+
+  test('forge-rzrs: a `_bridge-*` dir with a PRICED row and no pid is collected — A\u2019s S1 run 10 shape', () => {
+    // SECOND INSTANCE, non-cycle (T1 872). A measured seven `_bridge-*` dirs in
+    // an S1 run with no `turn.pid`, no marker, 1\u2013321 event lines and ZERO
+    // priced rows — `reap.mjs:190` skipped every one, in a story that spawns no
+    // cycle at all. The honest statement about that run is "every dir the
+    // collector could not see happened to carry no spend", which is a fact
+    // about those runs and not a property of the collector. This door pins the
+    // case that would have cost money: the same shape, with a price on it.
+    const r = root();
+    const bridge = dispatch(r, '_bridge-2026-09-12T07-21-09-567-nmlci52h');
+
+    // THE DOOR DISCRIMINATES, checked rather than assumed — it passed the
+    // moment it was written, which is exactly when a door is most likely to be
+    // vacuous. Measured on this fixture: `collectAgentRuns` returns 0 dirs and
+    // `collectSpendDirs` returns 1, so a revert to the reaper-shaped collector
+    // reds this test rather than sliding past it.
+    assert.deepEqual(collectSpendDirs(r, 0), [bridge], 'no pid and no marker is not a reason to ignore a spend');
+    assert.deepEqual(collectAgentRuns(r, 0), [], 'and the reaper-shaped collector is blind to it — that is the bug');
   });
 
   test('forge-rzrs: a directory with no event log is NOT collected — nothing there can have been priced', () => {

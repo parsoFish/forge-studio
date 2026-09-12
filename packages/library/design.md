@@ -261,3 +261,34 @@ propose rows that cannot be installed.
 so it passes `assertSkillSlug` like every other id in this package; a name that fails is
 **skipped, never sanitised into** something that looks valid.
 
+
+### A second hub reader, chosen by URL, and why a name is selected rather than cleaned
+
+`indexGithubHub` was the only reader, so `discoverFromHubs` called it directly
+and `DiscoveredItem.path` was documented as "where the SKILL.md sits". Both were
+true of the only producer there was and false the moment a second one existed.
+
+**The reader is chosen from the hub's URL, never from its `kinds`.**
+`mcp-servers` is a GitHub repository that declares `kinds: MCPs`; keying the
+dispatch on the kind would hand it to the registry reader and ask the wrong host
+about it. `indexerForHub` reads the origin and falls back to the GitHub reader,
+whose refusal already names the limit for a host forge does not reach.
+
+**The MCP registry opens no new external surface.**
+`registry.modelcontextprotocol.io` is already on
+`COMMUNITY_REFRESH_ALLOWED_ORIGINS` and `fetchMcpServer` already reads it. The
+indexer asks that same API a different question — the whole list rather than one
+server by name — so nothing new had to be allowed, which matters because adding
+an origin is a new external dependency and belongs to the operator.
+
+**A published MCP name is SELECTED from, never cleaned up.** Names are
+reverse-DNS with a path (`io.github.owner/server-name`) and cannot pass
+`SLUG_RE` as they stand. `idForMcpServerName` takes the segment after the final
+slash and then requires *that segment* to pass `assertSkillSlug` **unchanged** —
+the same two steps `idForSkillPath` performs on a GitHub path: select, then
+validate. It never lowercases, strips or substitutes. A segment carrying a dot,
+an underscore or a capital is skipped, and skipping is the point: this module's
+rule is that a stranger's string passes the guard or it is not used, and
+"sanitise until it passes" is precisely what that rule exists to forbid. The
+honest cost is that an unknown fraction of published servers yield no id, and the
+run reports the yield it measured rather than the coverage the code implies.
