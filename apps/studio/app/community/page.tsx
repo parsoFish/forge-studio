@@ -31,6 +31,8 @@ import {
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
   type CommunitySortKey,
+  hubReason,
+  declaredOnlyLabel,
 } from '@/lib/community-view';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import {
@@ -254,6 +256,12 @@ function CommunityBrowserInner() {
   // has nothing to show, and a stale list from the previous pass would be the
   // same lie the in-flight state exists to refuse.
   const discovered = !refreshing && refreshResult?.state === 'ok' ? refreshResult.discovered : [];
+  // What each hub DID on that same pass. A chip reading "declared — nothing
+  // indexed" says a source contributed nothing and leaves the operator to guess
+  // whether forge even tried; these carry the reader's own reason so it can say
+  // which. Empty before a refresh has settled — an old pass's reason beside a
+  // fresh count would be the stale-view lie the region above already refuses.
+  const hubOutcomes = !refreshing && refreshResult?.state === 'ok' ? refreshResult.hubOutcomes : [];
 
   // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
   // (every failure — transport, dry-bridge, a typed refusal, a bare 500 — is
@@ -437,7 +445,9 @@ function CommunityBrowserInner() {
                     }
                   >
                     {hub.name}{' '}
-                    <span style={{ color: 'var(--faint)' }}>{declaredOnly ? '· declared — nothing indexed' : `· ${hub.itemCount}`}</span>
+                    <span style={{ color: 'var(--faint)' }} data-hub-reason={hubReason(hubOutcomes, hub.id) ?? undefined}>
+                      {declaredOnly ? `· ${declaredOnlyLabel(hubOutcomes, hub.id)}` : `· ${hub.itemCount}`}
+                    </span>
                   </button>
                   <a
                     href={hub.url}

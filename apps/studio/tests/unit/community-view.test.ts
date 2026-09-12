@@ -59,6 +59,8 @@ import {
   refreshOutcomeView,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
+  hubReason,
+  declaredOnlyLabel,
 } from '../../lib/community-view.ts';
 import type { CommunityItem, CommunityHub, CommunityRefreshResult } from '../../lib/community-client.ts';
 
@@ -689,7 +691,7 @@ test('refreshOutcomeView: a clean 200 with no errors renders "refreshed", never 
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: OK_COUNTS,
     outcomes: [],
-    errors: [], discovered: [],
+    errors: [], discovered: [], hubOutcomes: [],
   };
   const view = refreshOutcomeView(result);
   expect(view.state).toBe('refreshed');
@@ -707,7 +709,7 @@ test('refreshOutcomeView: a 200 with a non-empty "errors" array is a PARTIAL out
     dryRun: false,
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
-    outcomes: [], discovered: [],
+    outcomes: [], discovered: [], hubOutcomes: [],
     errors: [
       { source: 'github.com/obra/superpowers', kind: 'timeout', message: 'request timed out after 10000ms' },
       { source: 'github.com/example/thing', kind: 'not-found', message: '404' },
@@ -730,7 +732,7 @@ test('refreshOutcomeView: a 200 that verified nothing and wrote nothing renders 
     lastRefresh: null,
     counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
     outcomes: [],
-    errors: [], discovered: [],
+    errors: [], discovered: [], hubOutcomes: [],
   };
   const view = refreshOutcomeView(result);
   expect(view.state).toBe('no-op');
@@ -800,7 +802,7 @@ const OK_RESULT: CommunityRefreshResult = {
   lastRefresh: '2026-08-24T10:00:00.000Z',
   counts: OK_COUNTS,
   outcomes: [],
-  errors: [], discovered: [],
+  errors: [], discovered: [], hubOutcomes: [],
 };
 
 test('refreshOutcomeView: postWriteReloadFailed on a clean refresh keeps the ORIGINAL success headline verbatim and adds an honest staleness notice — never retracted, never a fabricated reassurance', () => {
@@ -823,7 +825,7 @@ test('refreshOutcomeView: postWriteReloadFailed on a PARTIAL outcome (wrote:true
     lastRefresh: '2026-08-24T10:00:00.000Z',
     counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
     outcomes: [],
-    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }], discovered: [],
+    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }], discovered: [], hubOutcomes: [],
   };
   const clean = refreshOutcomeView(partialResult);
   const stale = refreshOutcomeView(partialResult, { postWriteReloadFailed: true });
@@ -837,7 +839,7 @@ test('refreshOutcomeView: postWriteReloadFailed is IGNORED when the result never
   const noOpResult: CommunityRefreshResult = {
     state: 'ok', wrote: false, dryRun: false, lastRefresh: null,
     counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
-    outcomes: [], errors: [], discovered: [],
+    outcomes: [], errors: [], discovered: [], hubOutcomes: [],
   };
   expect(refreshOutcomeView(noOpResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(noOpResult));
 });
@@ -858,10 +860,54 @@ test('refreshOutcomeView: a dryRun no-op (unreachable from the UI today — see 
   const dryRunResult: CommunityRefreshResult = {
     state: 'ok', wrote: false, dryRun: true, lastRefresh: null,
     counts: { total: 7, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
-    outcomes: [], errors: [], discovered: [],
+    outcomes: [], errors: [], discovered: [], hubOutcomes: [],
   };
   const view = refreshOutcomeView(dryRunResult);
   expect(view.state).toBe('no-op');
   expect(view.headline).toBe('Dry run — computed 7 row(s), wrote nothing.');
   expect(view.detail).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// 7.6.84 PR C — an empty chip says WHY. T1 890(2)/893(2).
+//
+// "declared — nothing indexed" is true of a source forge read and found empty
+// AND of one it could not read at all, and those are different facts about an
+// operator's registry: the second is forge's limit, not the source's. The
+// reasons already existed on the reader's outcome and were discarded one line
+// after they were produced.
+// ---------------------------------------------------------------------------
+
+test('declaredOnlyLabel: a hub forge could not read says so, with the READER’S OWN reason', () => {
+  const label = declaredOnlyLabel([{ hubId: 'skills-sh', discovered: 0, reason: 'blocked-origin' }], 'skills-sh');
+  // The reason is the reader's token, not a paraphrase of it: a label that
+  // re-words the decision drifts from what the code actually decided.
+  expect(label).toBe('declared — nothing indexed (fetch: blocked-origin)');
+});
+
+test('declaredOnlyLabel: a hub that was READ and published nothing keeps the plain label', () => {
+  // No reason means the reader reached it and it had nothing — the source's
+  // own emptiness, which is not a failure and must not read as one.
+  expect(declaredOnlyLabel([{ hubId: 'forge-seed', discovered: 0 }], 'forge-seed')).toBe('declared — nothing indexed');
+});
+
+test('declaredOnlyLabel: before any refresh has settled, the chip claims nothing about why', () => {
+  // An outcome list is empty until a pass settles. Inventing a reason here —
+  // or carrying the previous pass's — is the stale-view lie the refresh region
+  // already refuses.
+  expect(declaredOnlyLabel([], 'skills-sh')).toBe('declared — nothing indexed');
+});
+
+test('hubReason: only this hub’s outcome answers for this hub', () => {
+  const outcomes = [
+    { hubId: 'skills-sh', discovered: 0, reason: 'blocked-origin' },
+    { hubId: 'cc-templates', discovered: 0, reason: 'not-reachable' },
+    { hubId: 'mcp-registry', discovered: 206, partial: true },
+  ];
+  expect(hubReason(outcomes, 'skills-sh')).toBe('blocked-origin');
+  expect(hubReason(outcomes, 'cc-templates')).toBe('not-reachable');
+  // A hub that contributed rows has no reason to give, even when its read was
+  // partial — `partial` is about how much was read, not about a failure.
+  expect(hubReason(outcomes, 'mcp-registry')).toBeNull();
+  expect(hubReason(outcomes, 'a-hub-not-in-this-pass')).toBeNull();
 });
