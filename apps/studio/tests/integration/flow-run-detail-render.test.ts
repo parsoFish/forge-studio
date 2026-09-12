@@ -147,7 +147,7 @@ function baseProps(over: Partial<FlowRunDetailProps> = {}): FlowRunDetailProps {
     flow: developFlow(),
     run: archivedRun(),
     rows: rows(),
-    findings: null,
+    findings: { doc: null, failed: false },
     ...over,
   };
 }
@@ -408,7 +408,7 @@ test('findings render through the EXISTING ReviewFindingsPanel contract, not a f
   // components/ReviewFindingsPanel.tsx already ships this exact vocabulary
   // and is already the renderer on /artifact (page.tsx:712, :890); forking
   // it would mean two surfaces drifting apart on the same artifact.
-  const html = render({ findings: FINDINGS_DOC });
+  const html = render({ findings: { doc: FINDINGS_DOC, failed: false } });
 
   expect(html).toContain('data-section="review-findings"');
   expect(html).toContain('data-findings-count="1"');
@@ -422,7 +422,7 @@ test('finding EVIDENCE is rendered, since every finding claim is pointer-backed'
   // file:line evidence. `validateReviewFindings` REQUIRES ≥1 evidence
   // pointer per finding precisely so no claim is unbacked
   // (flow-artifacts.ts:367); a surface that hides it discards the guarantee.
-  const html = render({ findings: FINDINGS_DOC });
+  const html = render({ findings: { doc: FINDINGS_DOC, failed: false } });
 
   expect(html).toContain('forge-ui/lib/studio-client.ts');
   expect(html).toContain('42');
@@ -437,7 +437,7 @@ test('NO per-finding `state` is rendered — there is no producer for one', () =
   // accepts nor emits one; a repo-wide grep finds no producer anywhere.
   // Rendering "open" would be the UI asserting a fact the system cannot
   // know — this test is the guard that keeps the surface honest.
-  const html = render({ findings: FINDINGS_DOC });
+  const html = render({ findings: { doc: FINDINGS_DOC, failed: false } });
 
   expect(html).not.toContain('data-finding-state');
   expect(html).not.toContain('>open<');
@@ -447,14 +447,30 @@ test('NO per-finding `state` is rendered — there is no producer for one', () =
 test('an explicit CLEAN PASS renders as such, and is not confused with no review at all', () => {
   // KILLS: treating `findings: []` (an explicit clean pass — the artifact
   // was written and said "nothing found", flow-artifacts.ts:297) the same as
-  // `findings: null` (no artifact; the review never ran). The panel already
-  // distinguishes these: `doc === null` renders nothing.
-  const clean = render({ findings: { ...FINDINGS_DOC, findings: [] } });
-  const absent = render({ findings: null });
+  // `doc: null, failed: false` (no artifact; the review never ran). 7.6.63:
+  // the panel now NAMES that state — `data-findings-state="absent"` — where it
+  // used to render nothing, which was indistinguishable from a failed fetch.
+  const clean = render({ findings: { doc: { ...FINDINGS_DOC, findings: [] }, failed: false } });
+  const absent = render({ findings: { doc: null, failed: false } });
 
   expect(clean).toContain('data-section="review-findings"');
   expect(clean).toContain('data-findings-count="0"');
-  expect(absent).not.toContain('data-section="review-findings"');
+
+  // 7.6.63 INVERTS THE LAST ASSERTION, and it is worth saying why rather than
+  // quietly flipping it: this line used to read `.not.toContain(...)` and it
+  // PINNED THE DEFECT. Rendering nothing for an absent artifact is exactly what
+  // made "the review has not run" indistinguishable from "the fetch failed" and
+  // from "the run page is still loading". The panel has named both states all
+  // along (`absentNote`/`errorNote`); the run page passed neither.
+  expect(absent).toContain('data-section="review-findings"');
+  expect(absent).toContain('data-findings-state="absent"');
+  expect(absent).not.toContain('data-findings-count=');
+
+  // And the third state stays distinct from both: a FAILED read never claims
+  // the review did not run.
+  const failed = render({ findings: { doc: null, failed: true } });
+  expect(failed).toContain('data-findings-state="error"');
+  expect(failed).not.toContain('data-findings-state="absent"');
 });
 
 // ---------------------------------------------------------------------------
