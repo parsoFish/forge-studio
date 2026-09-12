@@ -34,6 +34,7 @@ import { chromium } from 'playwright-core';
 import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { stampEveryLine } from './log-stamp.mjs';
 import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
+import { readRunEvents, hostState } from './run-observe.mjs';
 import { spawnSync } from 'node:child_process';
 import {
   memoryVerdict, readAvailableMb, acquireHostLock, foreignSessionVerdict, remoteSwitchVerdict,
@@ -73,18 +74,6 @@ import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
- *  never a silent zero (bead `forge-8vfn.6.11.8`). */
-function readRunEvents(dir) {
-  try {
-    return readFileSync(join(dir, 'events.jsonl'), 'utf8')
-      .split('\n')
-      .filter((l) => l.trim() !== '')
-      .map((l) => { try { return JSON.parse(l); } catch { return {}; } });
-  } catch {
-    return [];
-  }
-}
 const STORY_DIR = join(ROOT, 'tests', 'stories');
 const BRIDGE_HEALTH = 'http://localhost:4123/api/health';
 const VIEWPORT = { width: 1600, height: 1000 };
@@ -515,6 +504,22 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
           break;
         }
       }
+      // §15.439 (ruling 769) — HOST STATE AT EVERY BEAT BOUNDARY, printed
+      // whether or not anything looks wrong.
+      //
+      // Beat 4's nine measurements run 7m37s to 13m05s, and nobody can say why
+      // the tail happens because no run ever recorded what else was on the box.
+      // Three launchers checked ground hash, memory and ports and none checked
+      // load; this lane wrote "host quiet" from free locks and MemAvailable
+      // having never read /proc/loadavg once. A LOCK CENSUS ANSWERS "is a lane
+      // between its precheck and its merge", NOT "is the box busy" — a sibling's
+      // vitest holds neither campaign lock.
+      //
+      // Printed on every beat, not only slow ones: a number recorded only when
+      // it looks bad cannot establish a baseline, and the whole difficulty with
+      // the tail is that there is nothing to compare a slow beat against.
+      const host = hostState();
+      console.log(`[stories] host after beat ${i + 1}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
       const mark = verdict.status === 'green' ? '✓' : '✗';
       // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
       // `do` navigates and then asserts — which is right for a navigation beat

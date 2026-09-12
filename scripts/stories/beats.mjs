@@ -160,6 +160,50 @@ export function stuckVerdict(beat, observed, failure) {
  * An unbound placeholder is NOT navigated to as a literal — that would 404 and
  * blame the product for a story-authoring gap.
  */
+/**
+ * Resolve `pressBound` steps into literal presses — bead `forge-8vfn.7.6.54`,
+ * T1 ruling 795.
+ *
+ * WHY A NEW FORM RATHER THAN SUBSTITUTING INTO `press`. `<name>` is substituted
+ * in exactly ONE place, `resolveBeatRoute` below, over `beat.expect.route`, and
+ * `story-file.mjs` documents that on purpose: a `do` step's `with` value is
+ * passed VERBATIM, so `<pattern>` inside one is CLI syntax the operator types,
+ * not a reference. The validator's first version refused S10 over
+ * `--exclude-author <pattern>` for exactly that reason.
+ *
+ * So `press: 'open-initiative-<runId>'` would resolve the LITERAL string, match
+ * nothing, and red the beat as a missing control — blaming the product for a
+ * story-authoring gap, which is the failure `resolveBeatRoute` exists to
+ * prevent for routes. Worse, the validator would pass it, because its
+ * placeholder scan covers routes only.
+ *
+ * `pressBound: { action, bind }` ADDS a form instead of changing what `press`
+ * means. `press` stays literal, routes-only stays true by construction, and the
+ * `<pattern>`-is-CLI-syntax property needs no exemption.
+ *
+ * An unresolved `bind` is REFUSED here rather than pressed as a literal: a beat
+ * that presses a half-built handle reds as "no such control", which reads as a
+ * product defect.
+ *
+ * @param {ReadonlyArray<object>} steps
+ * @param {Record<string,string>} bindings
+ * @returns {{steps: object[], unbound: string|null}}
+ */
+export function resolveBoundPresses(steps, bindings) {
+  let unbound = null;
+  const out = (steps ?? []).map((step) => {
+    if (step?.pressBound === undefined) return step;
+    const { action, bind } = step.pressBound;
+    if (!Object.hasOwn(bindings ?? {}, bind)) {
+      unbound ??= bind;
+      return step;
+    }
+    const { pressBound, ...rest } = step;
+    return { ...rest, press: `${action}${bindings[bind]}` };
+  });
+  return { steps: out, unbound };
+}
+
 export function resolveBeatRoute(beat, bindings) {
   let unbound = null;
   const route = beat.expect.route.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) => {

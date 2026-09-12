@@ -497,6 +497,44 @@ export default {
       say: 'Starting the scheduler was the operator\'s last act for a while. The factory claims the initiative, decomposes it into work items, builds them and stops at the review gate — unattended, and faster than the operator could have driven it. What the operator does next is not start the work; it is READ it.',
     },
     {
+      // 7.6.54 / ruling 795 — THE BEAT THAT MAKES THE RUN REACHABLE.
+      //
+      // Beats 10-21 used to route to `/flows/forge-develop/run/<runId>` from
+      // `/projects/gitpulse` and every one of them reded with "no real-nav path
+      // to the run page". TWO separate defects, both measured on run 13:
+      //
+      //   1. the roadmap node had no `data-action`, so a `press` could not open
+      //      the drawer where the run link lives (D's 7.6.39 added
+      //      `open-initiative-<initiativeId>`);
+      //   2. the run route is keyed by CYCLE id, never by initiative id
+      //      (`studio-dom-contract.md:2845`), so `<runId>` named a route that
+      //      does not exist.
+      //
+      // This beat fixes both: it presses the node's handle — built at run time
+      // from `<runId>`, which is why `pressBound` had to exist at all — and
+      // binds `<cycleId>` off the drawer's own link. A beat cannot bind the
+      // placeholder its own route needs, so the binding happens HERE and the
+      // routing happens in the beats that follow.
+      //
+      // `data-run-active="true"` means NEWEST, NOT RUNNING
+      // (`cycle-grouping.ts:48-62` sorts by cycle id and takes the head; it is
+      // not a liveness check). It is declared ALONGSIDE `run-cycle-id` because
+      // the drawer renders one link per cycle: the two keys together pick the
+      // single record to bind from, where `run-cycle-id` alone would be
+      // ambiguous the moment a second cycle exists.
+      act: 'Open the initiative to find the run it produced',
+      do: [{ pressBound: { action: 'open-initiative-', bind: 'runId' } }],
+      expect: {
+        route: '/projects/gitpulse',
+        data: {
+          page: 'projects', 'project-id': 'gitpulse',
+          'run-active': 'true',
+          'run-cycle-id': '<cycleId>',
+        },
+      },
+      say: 'The card says the work is ready for review. The operator opens it to reach the run itself — and the drawer names the cycle that produced it, which is the handle everything downstream is keyed by. The initiative is what was asked for; the cycle is what actually ran.',
+    },
+    {
       // SOURCE-DERIVED. `FlowRunDetail.tsx:121-127` (page/run-id/run-found/
       // run-status/flow-id/page-ready), corroborated by
       // `lib/flow-run-detail-render.test.ts:180-191`. The node id `dev` and the
@@ -535,7 +573,7 @@ export default {
       // poll, which is what beat 10 has always done and what these three now
       // are: readers of history, not waiters on it.
       expect: {
-        route: '/flows/forge-develop/run/<runId>',
+        route: '/flows/forge-develop/run/<cycleId>',
         data: {
           page: 'flow-run',
           'run-found': 'true',
@@ -559,7 +597,7 @@ export default {
       // 383 PR amends it in the same PR that renames the band (§15.183/204).
       act: 'The built work is assembled for review',
       expect: {
-        route: '/flows/forge-develop/run/<runId>',
+        route: '/flows/forge-develop/run/<cycleId>',
         data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'demo' },
       },
       say: 'Between building and judging there is a step that puts the change together with the evidence for it — the diff, the acceptance criteria and what was actually demonstrated. The reviewer reads that, not a pile of commits.',
@@ -574,7 +612,7 @@ export default {
       // through, so this reads the findings it left rather than waiting 20
       // minutes for them.
       expect: {
-        route: '/flows/forge-develop/run/<runId>',
+        route: '/flows/forge-develop/run/<cycleId>',
         data: {
           page: 'flow-run',
           'timeline-row': 'true',
@@ -599,7 +637,7 @@ export default {
       // how a beat says WHICH destination it means (ruling 514).
       act: 'Open the review verdict at its gate',
       expect: {
-        route: '/artifact?run=<runId>&type=verdict&mode=gate',
+        route: '/artifact?run=<cycleId>&type=verdict&mode=gate',
         data: { page: 'artifact', 'page-ready': 'true' },
       },
       say: 'The review has an opinion and the operator goes to read it where the decision is made.',
@@ -667,7 +705,7 @@ export default {
       // `architect=828m` is not.
       wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
-        route: '/flows/forge-develop/run/<runId>',
+        route: '/flows/forge-develop/run/<cycleId>',
         data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'review' },
       },
       say: 'No restart, no second cycle, no lost work. The send-back became one more thing to satisfy on the branch that already exists, which is the difference between a review loop and a do-over.',
@@ -683,7 +721,7 @@ export default {
       // run page, and the verdict is read at the gate again.
       act: 'Open the re-reviewed verdict at its gate',
       expect: {
-        route: '/artifact?run=<runId>&type=verdict&mode=gate',
+        route: '/artifact?run=<cycleId>&type=verdict&mode=gate',
         data: { page: 'artifact', 'page-ready': 'true' },
       },
       say: 'The fix came back. The operator reads the verdict again before deciding.',
