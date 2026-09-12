@@ -202,7 +202,7 @@ function newEventId(): string {
  */
 
 /** A run id for writes that belong to no session: the bridge's own. */
-function bridgeCycleId(): string {
+export function bridgeCycleId(): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
   return `_bridge-${stamp}-${Math.random().toString(36).slice(2, 10)}`;
 }

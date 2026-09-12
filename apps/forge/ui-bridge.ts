@@ -88,6 +88,7 @@ import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import type { EventLogEntry } from '@forge/kernel';
+import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
@@ -267,14 +268,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   const instructionsWatchers: FSWatcher[] = [];
   const demoWatchers: FSWatcher[] = [];
 
-  const broadcast = (msg: WsOutbound): void => {
-    const payload = JSON.stringify(msg);
-    for (const ws of clients) {
-      if (ws.readyState === ws.OPEN) {
-        try { ws.send(payload); } catch { /* dropped client */ }
-      }
-    }
-  };
+  // 7.6.35 — sends AND records (type, cycleId, timestamp, subscriber count) so
+  // "did `cycle-list-changed` fire, and was anyone listening?" is answerable
+  // from bytes. See `bridge-broadcast-log.ts` for why it opens at boot.
+  const broadcast = makeRecordingBroadcast<WsOutbound>(clients, forgeRoot);
 
   const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
     // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
