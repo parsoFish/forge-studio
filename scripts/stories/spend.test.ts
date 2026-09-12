@@ -11,7 +11,7 @@
  *
  * Pinned before implementation (`_1.0/gate-manifests/M1-B.txt`).
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
@@ -200,8 +200,21 @@ test('7.6.51: run.mjs enforces the ceiling at a beat boundary and exits non-zero
   const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
   const loop = src.slice(src.indexOf('for (const [i, beat] of story.beats.entries())'));
   const loopBody = loop.slice(0, loop.indexOf('\n  const docPath'));
-  assert.match(loopBody, /spendCeilingVerdict\(/, 'the ceiling must be consulted inside the beat loop');
-  assert.match(loopBody, /spend after beat/, 'the running total must print every beat, not only on breach');
+  // THE PROPERTY FOLLOWED ACROSS A SPLIT, NOT A CALL SITE PINNED IN PLACE.
+  // `forge-rzrs` took `run.mjs` past the 800-line cap, so the per-beat spend
+  // block moved into `run-observe.mjs`'s `spendSoFar`. The first version of
+  // this door matched `spendCeilingVerdict(` in the loop body and went red on a
+  // refactor that changed no behaviour — the same over-specification this file
+  // already records one paragraph down. What must hold is the CHAIN: the loop
+  // asks for the spend and hands it the ceiling, and the thing it asks consults
+  // the verdict and prints a per-beat line.
+  assert.match(loopBody, /spendSoFar\(/, 'the beat loop must ask for the spend at a beat boundary');
+  assert.match(loopBody, /ceilingUsd:/, 'and it must hand that ask the ceiling — an ask without one enforces nothing');
+  const observe = readFileSync(new URL('./run-observe.mjs', import.meta.url), 'utf8');
+  const spendSoFarBody = observe.slice(observe.indexOf('export function spendSoFar'));
+  assert.match(spendSoFarBody, /spendCeilingVerdict\(/, 'the ceiling must be consulted where the spend is computed');
+  assert.match(loopBody, /after beat \$\{i \+ 1\}/, 'the running total must be labelled per beat, not only on breach');
+  assert.match(spendSoFarBody, /\[stories\] spend \$\{label\}/, 'and that label must actually reach a printed line');
   // Asserting the BEHAVIOUR, not a variable name. The first draft of this door
   // matched /ceiling\.breached/ and broke the moment 7.6.52 renamed the local —
   // an over-specified door, pinning an identifier the property does not depend
@@ -259,7 +272,13 @@ test('7.6.52: run.mjs parses --ceiling and enforces the effective one', () => {
   assert.match(src, /--ceiling/, 'the launcher must be able to name a funded ceiling');
   assert.match(src, /effectiveCeiling\(/, 'the runner must combine funded and declared');
   const loop = src.slice(src.indexOf('for (const [i, beat] of story.beats.entries())'));
-  assert.match(loop.slice(0, loop.indexOf('\n  const docPath')), /spendCeilingVerdict\(/);
+  const loopBody = loop.slice(0, loop.indexOf('\n  const docPath'));
+  // The effective ceiling must reach the beat loop's spend ask. `forge-rzrs`
+  // moved the verdict call into `run-observe.mjs`'s `spendSoFar`, so this
+  // follows the ceiling along the chain rather than pinning the old call site
+  // — the same correction as the 7.6.51 door above.
+  assert.match(loopBody, /spendSoFar\(/, 'the loop must ask for the spend');
+  assert.match(loopBody, /ceilingUsd: ceiling\?\.usd/, 'and hand it the EFFECTIVE ceiling, not some other number');
 });
 
 /**
@@ -322,4 +341,84 @@ test('7.6.56: UNMEASURED names both causes and the discriminator, not just the h
   // greps for it and concludes from noise.
   assert.match(v.label, /banner .*proves NOTHING/i);
   assert.match(v.label, /NOT \$0\.00/, 'and it still is not zero');
+});
+
+/**
+ * Bead `forge-rzrs` — an ENFORCED ceiling that cannot see a cycle's spend.
+ *
+ * MEASURED on S10 run 15 ($35 enforced, head `e1b72897`): reported $2.1916,
+ * real $2.8690 — 23.6% invisible. The architect dir carried `turn.pid` and was
+ * collected; the cycle dir carried none and was skipped, taking the
+ * project-manager's $0.6774 with it.
+ *
+ * EVERY FIXTURE BELOW IS COPIED OUT OF THE CAPTURED LOGS, ids and all
+ * (§15.497). The first version of this suite was written from a SENTENCE —
+ * "the cycle log duplicates the architect row" — and encoded the model twice:
+ * the test passed and the real logs produced $5.0606, because the rollup
+ * carries its own `event_id` and the session dir holds four turn rows, not
+ * one. A fixture invented from a description can only ever agree with the
+ * description.
+ *
+ * Provenance: `_1.0/evidence/m6-c-S10-run15/{architect-session,cycle-channel}/events.jsonl`.
+ */
+const RUN15_ARCHITECT_DIR = [
+  { event_id: 'EV_mty24xo8_5ohrgfq9', phase: 'architect', event_type: 'end', cost_usd: 0.6016058 },
+  { event_id: 'EV_mty269q8_lfvl4ddg', phase: 'architect', event_type: 'end', cost_usd: 0.40530105 },
+  { event_id: 'EV_mty28uun_17y27b72', phase: 'architect', event_type: 'end', cost_usd: 0.5572269000000001 },
+  { event_id: 'EV_mty2cy8n_ben3odtb', phase: 'architect', event_type: 'end', cost_usd: 0.62746895 },
+];
+/** Multi-phase, which is what makes it a CYCLE log rather than a session dir. */
+const RUN15_CYCLE_LOG = [
+  { event_id: 'EV_orch_1', phase: 'orchestrator', event_type: 'log' },
+  { event_id: 'EV_mty2d91k_6gjmufk8', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002 },
+  { event_id: 'EV_mty2gi4v_k7jeu7dh', phase: 'project-manager', event_type: 'error', cost_usd: 0.6774190500000001 },
+];
+
+describe('summariseRunSpend — one phase counts once, at the higher of its two accounts', () => {
+  test('forge-rzrs (1): run 15\u2019s six real rows total $2.8690, not $5.0606', () => {
+    const s = summariseRunSpend({ realSpawn: true, events: [RUN15_ARCHITECT_DIR, RUN15_CYCLE_LOG] });
+
+    assert.equal(s.measured, true);
+    assert.equal(
+      s.usd?.toFixed(4),
+      '2.8690',
+      'the architect is counted once (its four turns OR the one rollup, not both) and the PM is counted at all',
+    );
+    assert.deepEqual(s.notes, [], 'rollup equals parts here, so there is nothing to report');
+  });
+
+  test('forge-rzrs (2): TWO architect sessions both count — the group is not collapsed to one dir', () => {
+    const second = [
+      { event_id: 'EV_second_a', phase: 'architect', event_type: 'end', cost_usd: 1 },
+      { event_id: 'EV_second_b', phase: 'architect', event_type: 'end', cost_usd: 0.5 },
+    ];
+    const rollups = [
+      { event_id: 'EV_o', phase: 'orchestrator', event_type: 'log' },
+      { event_id: 'EV_r1', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002 },
+      { event_id: 'EV_r2', phase: 'architect', event_type: 'end', cost_usd: 1.5 },
+    ];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [RUN15_ARCHITECT_DIR, second, rollups] });
+
+    assert.equal(s.usd?.toFixed(4), '3.6916', 'both sessions sum into the architect group, against the summed rollups');
+  });
+
+  test('forge-rzrs (3): when the rollup EXCEEDS the parts, the rollup wins and the disagreement is NAMED', () => {
+    const partial = [{ event_id: 'EV_one_turn', phase: 'architect', event_type: 'end', cost_usd: 0.6016058 }];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [partial, RUN15_CYCLE_LOG] });
+
+    assert.equal(s.usd?.toFixed(4), '2.8690', 'a session dir that logged one of four turns must not shrink the bill');
+    assert.equal(s.notes.length, 1, 'the two accounts disagree, and a ceiling never hides that');
+    assert.match(s.notes[0], /architect: aggregate \$2\.1916 \u2260 parts \$0\.6016/);
+  });
+
+  test('forge-rzrs (4): rows with NO phase are summed per log — nothing links them, so nothing collapses them', () => {
+    const agentA = [{ event_id: 'EV_a', event_type: 'end', cost_usd: 1 }];
+    const agentB = [{ event_id: 'EV_b', event_type: 'end', cost_usd: 1 }];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [agentA, agentB] });
+
+    assert.equal(s.usd, 2, 'two unphased dispatches are two spends; collapsing them would UNDER-report');
+  });
 });

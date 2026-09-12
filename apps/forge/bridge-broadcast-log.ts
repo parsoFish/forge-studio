@@ -44,7 +44,7 @@ import { join } from 'node:path';
 import { createLogger, bridgeCycleId, type EventLogger } from '@forge/kernel';
 
 /** The shape `broadcast` is called with — structural, so this file never imports back into `ui-bridge.ts`. */
-type Broadcastable = { type: string; cycleId?: string };
+type Broadcastable = { type: string; cycleId?: string; event?: { event_type?: string } };
 
 /**
  * Build the bridge's `broadcast`: send to every open client, then record what
@@ -76,6 +76,14 @@ export function makeRecordingBroadcast<T extends Broadcastable>(
           broadcast: true,
           type: msg.type,
           ...(msg.cycleId === undefined ? {} : { cycleId: msg.cycleId }),
+          // 7.6.19 / T1 858 — the INNER event's own type, so a reader can say
+          // WHICH event was pushed rather than inferring it. Deciding 7.6.19's
+          // fork needed "the last push was the terminal one", and the log could
+          // only show one push per event plus a 145 ms gap: true, and inferred.
+          // `event` broadcasts carry an `EventLogEntry`; the others carry none.
+          ...(typeof (msg as { event?: { event_type?: unknown } }).event?.event_type === 'string'
+            ? { eventType: (msg as { event: { event_type: string } }).event.event_type }
+            : {}),
           subscribers: clients.size,
         },
       });
