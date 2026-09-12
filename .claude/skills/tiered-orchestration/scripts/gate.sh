@@ -424,15 +424,87 @@ else
   # D's gate was rc=0, 20/20, with `M6-T1.sha256: 2 FAILED of 14` in the same
   # log. Declarations are matched by MANIFEST or by `MANIFEST:path`, so a lane
   # can account for one amended file without blanketing the whole manifest.
+  # 7.6.97 — A SIBLING'S STALE PIN IS NOT THIS GATE'S RED.
+  #
+  # `gate.sh` verifies EVERY manifest against the checkout, and §15.105 makes a
+  # pin stale the moment a SIBLING merges. With three lanes merging every few
+  # minutes the window in which all manifests agree with newest main is shorter
+  # than one gate run, so a lane's gate goes red on another lane's pin while
+  # every one of its own steps passes — D twice in six minutes (953: C's
+  # `reap.test.ts`; 954: A's #726 six files, four minutes after C reconciled).
+  # The merge slot already separates this case (7.6.80's `PIN_SIBLING_MOVED` —
+  # reported, not refused); the gate did not.
+  #
+  # THREE CONDITIONS, ALL REQUIRED, and each is there to keep a different thing
+  # red:
+  #   owner != this lane   — my own stale pin is mine to reconcile, not to excuse
+  #   path not in the diff — a path this PR touches must be DECLARED (7.6.43)
+  #   bytes == main's      — the change is a merge on main, NOT tampering here
+  # A row failing any one of them stays a red UNDECLARED. The third is the one
+  # that makes this safe: "a sibling owns it" alone would excuse an edit made in
+  # this tree to a file this lane does not own.
+  #
+  # THIS IS THE BACKSTOP, NEVER THE CHANNEL (T1 956). 954's rule is that a
+  # merging lane forwards `pin-reconcile`'s own `REFUSED — owner=X …` line to
+  # each owner at merge time; this classification covers the window between that
+  # merge and that message, and a reported row is not a reason to stop sending.
+  #
+  # UNSET `FORGE_LANE` TURNS THE CLASSIFICATION OFF AND SAYS SO. Without a lane
+  # identity there is no `owner != mine` to test, and a feature that quietly
+  # stopped classifying would print exactly the same clean pin block as one that
+  # found no stale siblings (§15.504). `pin-reconcile.sh` refuses outright for
+  # the same reason; a gate cannot refuse, so it announces.
+  sibling_stale_n=0
+  pr_diff_paths="|"
+  pr_diff_ok=0
+  if [ -n "${gate_main:-}" ] && git -C "$R" rev-parse --verify --quiet parsoFish/main >/dev/null 2>&1; then
+    if pr_diff_list="$(git -C "$R" diff --name-only parsoFish/main..HEAD 2>/dev/null)"; then
+      pr_diff_ok=1
+      while IFS= read -r pr_f; do
+        [ -n "$pr_f" ] && pr_diff_paths="$pr_diff_paths$pr_f|"
+      done <<< "$pr_diff_list"
+    fi
+  fi
+  if [ -z "${FORGE_LANE:-}" ]; then
+    echo "  PIN_SIBLING_STALE classification OFF: FORGE_LANE is unset, so this gate cannot tell a sibling's stale pin from drift in this tree — every FAILED row below stays UNDECLARED"
+  elif [ "$pr_diff_ok" -eq 0 ]; then
+    echo "  PIN_SIBLING_STALE classification OFF: this PR's diff against parsoFish/main could not be computed, and a row cannot be excused without knowing whether this PR touched it"
+  fi
+
+  manifest_owner() {
+    local c="$CAMP/gate-manifests/$1.counts"
+    [ -f "$c" ] || return 1
+    grep -o 'owner=[^ ]*' "$c" | head -1 | cut -d= -f2
+  }
+
+  # True only when all three hold. Every `return 1` here is a row that stays red.
+  sibling_stale() {
+    local man="$1" p="$2" owner main_blob here_blob
+    [ -n "${FORGE_LANE:-}" ] || return 1
+    [ "$pr_diff_ok" -eq 1 ] || return 1
+    owner="$(manifest_owner "$man")" || return 1
+    [ -n "$owner" ] || return 1
+    [ "$owner" != "$FORGE_LANE" ] || return 1
+    case "$pr_diff_paths" in *"|$p|"*) return 1 ;; esac
+    main_blob="$(git -C "$R" rev-parse --verify --quiet "parsoFish/main:$p" 2>/dev/null)" || return 1
+    here_blob="$(cd "$R" && git hash-object -- "$p" 2>/dev/null)" || return 1
+    [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
+  }
+
   pin_fail() {
     local man="$1" manifest="$2" undeclared=0 p
     case " $EXPECTED_PIN_FAILS " in *" $man "*) echo "  declared: every failure in $man is accounted for by this PR"; return 0 ;; esac
     while IFS= read -r p; do
       [ -n "$p" ] || continue
       case " $EXPECTED_PIN_FAILS " in
-        *" $man:$p "*) echo "  declared: $man:$p" ;;
-        *) echo "  UNDECLARED: $man:$p"; undeclared=1 ;;
+        *" $man:$p "*) echo "  declared: $man:$p"; continue ;;
       esac
+      if sibling_stale "$man" "$p"; then
+        echo "  PIN_SIBLING_STALE $man:$p — matches main ${gate_main:-unknown}; owner $(manifest_owner "$man") owes a reconcile"
+        sibling_stale_n=$((sibling_stale_n + 1))
+      else
+        echo "  UNDECLARED: $man:$p"; undeclared=1
+      fi
     done < <(cd "$R" && sha256sum -c "$manifest" 2>/dev/null | sed -n 's/^\(.*\): FAILED$/\1/p')
     [ "$undeclared" -eq 0 ] || fail=1
   }
@@ -503,6 +575,12 @@ else
       [ "$n" -gt 0 ] && pin_fail "$man" "$m" || true
     fi
   done
+fi
+# 7.6.97: COUNTED SEPARATELY so a reader sees how many siblings are stale rather
+# than inferring it from the absence of reds. Zero prints too — a count that
+# appears only when non-zero cannot be told from one nobody took.
+if [ -n "${sibling_stale_n:-}" ]; then
+  echo "PIN_SIBLING_STALE_COUNT=$sibling_stale_n"
 fi
 # A real failure outranks a refusal: a gate that both lost a step AND was
 # refused another is red, not "try again later".
