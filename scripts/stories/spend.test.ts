@@ -189,12 +189,16 @@ test('an unusable ceiling is reported as UNBOUNDED, not as compliance', () => {
  * the exit code. Driving that needs a costed run, which is the thing the bead
  * exists to bound — so the properties are pinned here rather than bought.
  *
- * Three things must not rot:
+ * Four things must not rot:
  *   - the ceiling is checked INSIDE the beat loop, not only in teardown (the
  *     teardown report is what existed before and enforced nothing);
  *   - the running total prints EVERY beat, not only on breach — a guard that
  *     speaks only when it fires is indistinguishable from one that never ran;
- *   - a breach makes the process exit non-zero regardless of the beat score.
+ *   - a halt makes the process exit non-zero regardless of the beat score;
+ *   - 7.6.71: the decision the loop branches on covers BOTH ways money ends a
+ *     run — the ceiling exceeded, and the ceiling gone blind because a turn
+ *     ended unpriced. A loop that consults only the breach is back to printing
+ *     `UNMEASURED` twenty-three times while an unknown amount is spent.
  */
 test('7.6.51: run.mjs enforces the ceiling at a beat boundary and exits non-zero on breach', () => {
   const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
@@ -219,10 +223,22 @@ test('7.6.51: run.mjs enforces the ceiling at a beat boundary and exits non-zero
   // matched /ceiling\.breached/ and broke the moment 7.6.52 renamed the local —
   // an over-specified door, pinning an identifier the property does not depend
   // on. The property is that a breach ends the loop.
-  assert.match(loopBody, /\.breached\b/, 'a breach must stop the loop');
+  assert.match(loopBody, /\.halt\b/, 'the loop must branch on the halt decision');
   assert.match(loopBody, /\bbreak\b/, 'and it must actually break out of it');
-  assert.match(src, /row\.status === 'green' && spendBreach === null\) \? 0 : 1/,
-    'a breach must make the exit code non-zero whatever the beats did');
+  // 7.6.71: the decision must be the one that knows about BOTH endings, and it
+  // must be made where the rows are read — a loop that re-derived a breach from
+  // the verdict alone would pass every assertion above and still be blind to a
+  // turn that ended unpriced.
+  assert.match(spendSoFarBody, /ceilingHaltVerdict\(/, 'the halt must come from the verdict that covers breach AND unenforceable');
+  assert.match(spendSoFarBody, /endedUnpricedTurns\(/, 'and the unpriced turns must be read from the same rows as the money');
+  // NAME-AGNOSTIC ON PURPOSE, and this door has now been broken twice by its
+  // own over-specification: once matching `ceiling.breached` before 7.6.52
+  // renamed the local, once matching `spendBreach` before 7.6.71 renamed it to
+  // `spendHalt`. Neither rename changed a behaviour. The property is that the
+  // exit code is non-zero whenever the money verdict ended the run, whatever
+  // the variable holding it is called.
+  assert.match(src, /row\.status === 'green' && \w+ === null\) \? 0 : 1/,
+    'a halt must make the exit code non-zero whatever the beats did');
 });
 
 /**
