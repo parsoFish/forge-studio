@@ -445,3 +445,53 @@ test('[7.6.21] a DONE initiative with work items reads `planned` — a terminal 
 
   expect(planStateOf(html, id)).toBe('planned');
 });
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.39` (T1 769) — THE NODE HAS A HANDLE.
+//
+// The roadmap node is a `<button data-roadmap-node>` whose only affordance was
+// `onClick={() => onSelect(initiativeId)}`. A story `press` verb resolves
+// `[data-action=…]` AND NOTHING ELSE, so the drawer was unreachable to a beat —
+// and the drawer is where `[data-run-link]` lives (`InitiativeDetail.tsx:205-220`).
+// S10 beats 9-21 all died on one cause: `no real-nav path to
+// "/flows/forge-develop/run/<id>" from "/projects/gitpulse"`. The card was
+// correct and there was no way to click from it to the run.
+//
+// This is S7 beat 21's shape exactly — a beat asserting the post-condition of a
+// click it cannot make, because the element carries CSS identity (`data-id`,
+// `data-kind`) and no handle. 5.15 answered that for the catalog chip with
+// `data-action={`add-${kind}-${id}`}`; the kind is in the NAME on purpose, so a
+// beat can tell "open this initiative" from "open this flow" on one widget.
+//
+// WHAT fetchCycles DOES, since it was the open question and the answer changes
+// the bead's scope: a ready-for-review initiative with a preserved worktree DOES
+// get a run link. `ui-bridge.ts:279-382` keys `scanCycles` on the `_logs/<ts>_
+// <INIT-…>` dir EXISTING, not on liveness, and `:378` puts `ready-for-review`
+// in `live` explicitly; `page.tsx:248` consumes `[...live, ...recent]`. So the
+// link renders and only the handle was missing — this bead is the handle alone.
+test('[7.6.39] every roadmap node carries a pressable handle naming its initiative', () => {
+  const html = render();
+  for (const id of ['INIT-A', 'INIT-B', 'INIT-C', 'INIT-D']) {
+    expect(html, `node ${id} must carry data-action="open-initiative-${id}"`)
+      .toContain(`data-action="open-initiative-${id}"`);
+  }
+});
+
+test('[7.6.39] the handle is on the NODE itself, beside its identity attributes', () => {
+  // Not on a wrapper and not on a child: a beat presses the thing it then reads
+  // `data-initiative-id` from, or the two can drift apart.
+  const html = render();
+  const node = html.match(/<button[^>]*data-roadmap-node[^>]*>/)?.[0] ?? '';
+  expect(node, 'the roadmap node element must exist').not.toBe('');
+  expect(node).toMatch(/data-initiative-id="INIT-[A-D]"/);
+  expect(node).toMatch(/data-action="open-initiative-INIT-[A-D]"/);
+});
+
+test('[7.6.39] the handle is unique per node — one press, one initiative', () => {
+  // A shared handle would make `press` ambiguous and the beat would open
+  // whichever node the matcher reached first, which is S7 beat 21's other half.
+  const html = render();
+  const handles = [...html.matchAll(/data-action="(open-initiative-[^"]+)"/g)].map((m) => m[1]);
+  expect(handles.length, 'one handle per rendered node').toBeGreaterThanOrEqual(4);
+  expect(new Set(handles).size, 'handles must be unique').toBe(handles.length);
+});

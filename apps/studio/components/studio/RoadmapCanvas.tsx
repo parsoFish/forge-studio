@@ -572,7 +572,7 @@ function RoadmapCanvasNode({
     <button
       type="button"
       data-roadmap-node
-      data-initiative-id={initiativeId}
+      data-initiative-id={initiativeId} data-action={`open-initiative-${initiativeId}`}
       data-initiative-status={status}
       data-develop-state={develop.status}
       data-plan-state={planStateAttr(planPhase, plan)}
