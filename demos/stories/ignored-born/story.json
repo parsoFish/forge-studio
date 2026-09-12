@@ -1,0 +1,64 @@
+{
+  "story": {
+    "id": "ignored-born",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": false,
+      "budget_usd": 0,
+      "seedIgnoredBorn": [
+        "dist/bundle.js",
+        "coverage/lcov.info",
+        "build.tsbuildinfo"
+      ]
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Read a ground's own toolchain output in a run report"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Projects pillar",
+        "say": "A run reports what changed in the project it stood on. Some of that is the project's OWN build output — a bundle, a coverage file, a TypeScript build stamp — which the project's .gitignore already calls disposable. Forge names those separately from a real containment failure, and names the rule that made the call, so an operator can tell \"the toolchain ran\" from \"something wrote where it should not have\".",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "A run reports what changed in the project it stood on. Some of that is the project's OWN build output — a bundle, a coverage file, a TypeScript build stamp — which the project's .gitignore already calls disposable. Forge names those separately from a real containment failure, and names the rule that made the call, so an operator can tell \"the toolchain ran\" from \"something wrote where it should not have\".",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/01-open-studio-on-the-projects-pillar.png"
+    }
+  ],
+  "reap": {
+    "reaped": [],
+    "skipped": [],
+    "cancelled": []
+  },
+  "sweep": {
+    "removed": [],
+    "failed": []
+  },
+  "fence": {
+    "restored": [],
+    "removed": [],
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
+  }
+}
