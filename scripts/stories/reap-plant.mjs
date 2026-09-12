@@ -52,7 +52,7 @@ export function readLastBeat(path) {
  *
  * @param {{pid: number, plantedAtMs: number|null, lastBeatMs: number|null, nowMs: number, artefactDir: string}} a
  */
-export function plantDiedMessage({ pid, plantedAtMs, lastBeatMs, nowMs, artefactDir }) {
+export function plantDiedMessage({ pid, plantedAtMs, lastBeatMs, nowMs, artefactDir, memAtPlantMiB = null, memNowMiB = null }) {
   const age = plantedAtMs === null ? 'an unknown time' : `${nowMs - plantedAtMs} ms`;
   const beat = lastBeatMs === null
     ? 'it never wrote a heartbeat, so it died before its first 100 ms stamp or never started'
@@ -62,7 +62,8 @@ export function plantDiedMessage({ pid, plantedAtMs, lastBeatMs, nowMs, artefact
     `PLANT DIED before the reap: pid ${pid} (planted ${age} earlier; ${beat}). ` +
     'This run MEASURED NOTHING about the reaper and is NOT evidence of a reaper defect: a `setInterval` ' +
     'child cannot exit on its own, so something else killed it, and the mechanism is open on ' +
-    `forge-8vfn.7.6.94. Artefacts kept for the post-mortem at ${artefactDir}`
+    `forge-8vfn.7.6.94. ${memoryClause(memAtPlantMiB, memNowMiB)}. ` +
+    `Artefacts kept for the post-mortem at ${artefactDir}`
   );
 }
 
@@ -97,7 +98,7 @@ export function everyPlantedPidVanished({ pids, report }) {
 }
 
 /** The third case's own sentence — never the reaper's. */
-export function plantVanishedInWindowMessage({ pids, lastBeatMs, nowMs, artefactDir }) {
+export function plantVanishedInWindowMessage({ pids, lastBeatMs, nowMs, artefactDir, memAtPlantMiB = null, memNowMiB = null }) {
   const beat = lastBeatMs === null
     ? 'no heartbeat survived'
     : `the last heartbeat was ${nowMs - lastBeatMs} ms before this line`;
@@ -106,7 +107,37 @@ export function plantVanishedInWindowMessage({ pids, lastBeatMs, nowMs, artefact
     'and already gone when the reap signalled — the reaper reported `kill ESRCH` for all of them and ' +
     `nothing escaped. ${beat}. This run MEASURED NOTHING about the reaper's reporting: it cannot report ` +
     'a kill it did not make. A `setInterval` child cannot exit on its own, so something else killed ' +
-    'them inside one reapAgentRuns call; the mechanism is open on forge-8vfn.7.6.94. Artefacts kept ' +
-    `for the post-mortem at ${artefactDir}`
+    'them inside one reapAgentRuns call; the mechanism is open on forge-8vfn.7.6.94. ' +
+    `${memoryClause(memAtPlantMiB, memNowMiB)}. Artefacts kept for the post-mortem at ${artefactDir}`
   );
+}
+
+/**
+ * `MemAvailable` in MiB, or `null` when it cannot be read — D's ask, and the
+ * reason it is worth the two lines: **a reading at both ends ELIMINATES OOM if
+ * memory is flat**, rather than leaving it the comfortable explanation nobody
+ * tested. Who kills the plant is open on 7.6.94; OOM under three concurrent
+ * suites is a candidate with no evidence, and "no evidence" is a fact about our
+ * instruments rather than about the box.
+ *
+ * `null`, never 0: an unreadable `/proc/meminfo` must not render as a machine
+ * with no memory free (§15.504, the shape this campaign keeps meeting).
+ */
+export function memAvailableMiB(procRoot = '/proc') {
+  try {
+    const m = /MemAvailable:\s+(\d+)/.exec(readFileSync(`${procRoot}/meminfo`, 'utf8'));
+    return m === null ? null : Math.round(Number(m[1]) / 1024);
+  } catch {
+    return null;
+  }
+}
+
+/** The memory clause both plant messages carry. Says UNREADABLE rather than
+ *  guessing, and reports the DELTA because the direction is the finding. */
+export function memoryClause(atPlantMiB, nowMiB) {
+  if (atPlantMiB === null && nowMiB === null) return 'MemAvailable UNREADABLE at both ends';
+  if (atPlantMiB === null) return `MemAvailable ${nowMiB} MiB now, UNREADABLE at the plant`;
+  if (nowMiB === null) return `MemAvailable ${atPlantMiB} MiB at the plant, UNREADABLE now`;
+  const delta = nowMiB - atPlantMiB;
+  return `MemAvailable ${atPlantMiB} MiB at the plant -> ${nowMiB} MiB now (${delta >= 0 ? '+' : ''}${delta} MiB)`;
 }
