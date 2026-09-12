@@ -14,7 +14,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { indexGithubHub, type HubIndexOutcome } from '../../studio/community-hub-index.ts';
+import {
+  indexGithubHub,
+  indexMcpRegistryHub,
+  indexerForHub,
+  type HubIndexOutcome,
+} from '../../studio/community-hub-index.ts';
 import type { RequestCtx } from '../../studio/community-refresh-api.ts';
 
 const HUB = { id: 'superpowers', url: 'https://github.com/obra/superpowers' };
@@ -143,4 +148,151 @@ test('DISCOVERY AND INSTALL COMPOSE: every id proposed is one the package fetche
     );
   }
   assert.deepEqual(out.discovered.map((d) => d.id).sort(), ['alpha', 'beta', 'superpowers']);
+});
+
+// ---------------------------------------------------------------------------
+// The MCP registry reader — `forge-8vfn.7.6.84` PR A, T1 890/893.
+//
+// Same rule as above: NO NETWORK. Every case drives the injected `RequestCtx`.
+//
+// The test that matters is the name one. A published MCP name is reverse-DNS
+// with a path and cannot pass `SLUG_RE` as it stands, so the reader SELECTS the
+// final segment and requires THAT to pass unchanged. A reader that cleaned the
+// name up instead would propose ids nobody published, which is the failure this
+// module's "a stranger's string is never sanitised" rule exists to prevent.
+// ---------------------------------------------------------------------------
+
+const MCP_HUB = { id: 'mcp-registry', url: 'https://registry.modelcontextprotocol.io' };
+const serversUrl = (cursor?: string) =>
+  `https://registry.modelcontextprotocol.io/v0/servers?version=latest&limit=50${cursor === undefined ? '' : `&cursor=${cursor}`}`;
+
+/** Pages of server names, keyed by the cursor that asks for them. */
+function mcpStub(pages: ReadonlyArray<{ names: readonly string[]; next?: string }>, opts: { status?: number; body?: string } = {}) {
+  const asked: string[] = [];
+  let page = 0;
+  const ctx = {
+    timeoutMs: 5000,
+    token: 'gho_TEST',
+    fetchImpl: async (url: string | URL) => {
+      asked.push(String(url));
+      if (opts.status !== undefined) return new Response('{}', { status: opts.status });
+      if (opts.body !== undefined) return new Response(opts.body, { status: 200 });
+      const p = pages[page];
+      page += 1;
+      return new Response(
+        JSON.stringify({
+          servers: (p?.names ?? []).map((name) => ({ server: { name, version: '1.0.0' } })),
+          metadata: p?.next === undefined ? {} : { nextCursor: p.next },
+        }),
+        { status: 200 },
+      );
+    },
+  } as unknown as RequestCtx;
+  return { ctx, asked };
+}
+const ids = (o: HubIndexOutcome) => (o.ok ? o.discovered.map((d) => d.id) : []);
+
+test('MCP: the final segment is SELECTED and must pass the slug guard unchanged', async () => {
+  const { ctx } = mcpStub([
+    {
+      names: [
+        'io.github.acme/weather-server', // → weather-server
+        'io.github.acme/Weather_Server', // capital + underscore: skipped, NOT cleaned
+        'io.github.acme/db.tools', // a dot: skipped
+        'plain-name', // no slash at all: the whole name, and it passes
+        'io.github.acme/', // empty final segment: skipped
+      ],
+    },
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.deepEqual(ids(out), ['plain-name', 'weather-server']);
+});
+
+test('MCP: a name already in the registry is not proposed again', async () => {
+  const { ctx } = mcpStub([{ names: ['io.github.acme/weather-server', 'io.github.acme/other-server'] }]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set(['weather-server']));
+  assert.deepEqual(ids(out), ['other-server']);
+});
+
+test('MCP: two published names collapsing to one id propose it once', async () => {
+  // `a/tools` and `b/tools` both select `tools`. First wins, deterministically —
+  // the same rule the GitHub reader applies across hubs.
+  const { ctx } = mcpStub([{ names: ['io.github.a/tools', 'io.github.b/tools'] }]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.deepEqual(ids(out), ['tools']);
+});
+
+test('MCP: it follows the cursor, and `path` records the name that was matched', async () => {
+  const { ctx, asked } = mcpStub([
+    { names: ['io.github.acme/one-server'], next: 'CUR2' },
+    { names: ['io.github.acme/two-server'] },
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.deepEqual(ids(out), ['one-server', 'two-server']);
+  assert.deepEqual(asked, [serversUrl(), serversUrl('CUR2')]);
+  assert.equal(out.ok ? out.discovered[0]?.path : null, 'io.github.acme/one-server');
+});
+
+test('MCP: a bad status is a fetch-failed OUTCOME, never a throw', async () => {
+  const { ctx } = mcpStub([], { status: 503 });
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false ? out.reason : null, 'fetch-failed');
+});
+
+test('MCP: a listing with no `servers` array is malformed, not empty', async () => {
+  // "the API answered something I cannot read" and "the API published nothing"
+  // are different states; reporting the first as the second is how a broken
+  // source reads as an empty one.
+  const { ctx } = mcpStub([], { body: JSON.stringify({ metadata: {} }) });
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false ? out.reason : null, 'fetch-failed');
+});
+
+test('MCP: it reads no other host, and says so', async () => {
+  const { ctx, asked } = mcpStub([{ names: [] }]);
+  const out = await indexMcpRegistryHub(ctx, { id: 'smithery', url: 'https://smithery.ai' }, new Set());
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false ? out.reason : null, 'not-reachable');
+  assert.deepEqual(asked, [], 'a host it does not read must not be fetched');
+});
+
+test('the reader is chosen by URL, never by the hub’s declared kinds', () => {
+  // `mcp-servers` declares `kinds: MCPs` and is a GitHub REPO. Keying the
+  // dispatch on the kind would ask the registry about a GitHub repository.
+  assert.equal(indexerForHub({ url: 'https://registry.modelcontextprotocol.io' }), indexMcpRegistryHub);
+  assert.equal(indexerForHub({ url: 'https://github.com/modelcontextprotocol/servers' }), indexGithubHub);
+  assert.equal(indexerForHub({ url: 'https://skills.sh' }), indexGithubHub, 'a host with no reader falls to the one whose refusal names the limit');
+  assert.equal(indexerForHub({ url: 'not a url' }), indexGithubHub);
+});
+
+test('MCP: a list cut short by the reader’s own bound is marked a FLOOR', async () => {
+  // MEASURED against the live registry: it holds at least 2000 servers and this
+  // reader takes 5 pages of 50. Returning 250 with no way to say "there is more"
+  // is a floor presented as a total — the shape this field exists to refuse.
+  const { ctx } = mcpStub([
+    { names: ['io.github.a/one-server'], next: 'C2' },
+    { names: ['io.github.a/two-server'], next: 'C3' },
+    { names: ['io.github.a/three-server'], next: 'C4' },
+    { names: ['io.github.a/four-server'], next: 'C5' },
+    { names: ['io.github.a/five-server'], next: 'C6' }, // still more, and we stop
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, true);
+  assert.equal(out.ok === true ? out.partial : null, true);
+  assert.equal(out.ok === true ? out.readCap : null, '5 pages of 50');
+  assert.equal(ids(out).length, 5);
+});
+
+test('MCP: a list read to the end is NOT marked partial', async () => {
+  // The other half, and the one that keeps the flag meaningful: a source that
+  // ended is not reported as truncated, so `partial` says something when set.
+  const { ctx } = mcpStub([
+    { names: ['io.github.a/one-server'], next: 'C2' },
+    { names: ['io.github.a/two-server'] }, // no cursor: the registry is done
+  ]);
+  const out = await indexMcpRegistryHub(ctx, MCP_HUB, new Set());
+  assert.equal(out.ok, true);
+  assert.equal(out.ok === true ? out.partial : 'unset', undefined);
 });
