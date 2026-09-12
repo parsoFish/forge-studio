@@ -239,6 +239,23 @@ export function validateStory(raw) {
   if (typeof g.budget_usd !== 'number' || !Number.isFinite(g.budget_usd) || g.budget_usd < 0) {
     fail('ground.budget_usd', `expected a finite number >= 0, got ${JSON.stringify(g.budget_usd)}`);
   }
+  // 7.6.52 — paths the RUNNER creates in the ground after the pre-run hash, so
+  // the ignore classification renders against a non-empty case without waiting
+  // for an agent to choose to run a toolchain. Relative, no traversal; whether
+  // the ground actually ignores them is `seedIgnoredBorn`'s refusal, not this
+  // one's — validation here would need the ground on disk, which is a different
+  // moment and a different failure.
+  if (g.seedIgnoredBorn !== undefined) {
+    if (!Array.isArray(g.seedIgnoredBorn) || g.seedIgnoredBorn.length === 0) {
+      fail('ground.seedIgnoredBorn', `expected a non-empty array of relative paths, got ${JSON.stringify(g.seedIgnoredBorn)}`);
+    }
+    for (const [i, rel] of g.seedIgnoredBorn.entries()) {
+      requireNonEmptyString(rel, `ground.seedIgnoredBorn[${i}]`);
+      if (rel.startsWith('/') || rel.split('/').includes('..')) {
+        fail(`ground.seedIgnoredBorn[${i}]`, `expected a relative path inside the ground, got ${JSON.stringify(rel)}`);
+      }
+    }
+  }
 
   const d = raw.docs;
   if (d === null || typeof d !== 'object') fail('docs', 'expected an object');
@@ -375,7 +392,10 @@ export function validateStory(raw) {
 
   return Object.freeze({
     id: raw.id,
-    ground: Object.freeze({ project: g.project, realSpawn: g.realSpawn, budget_usd: g.budget_usd }),
+    ground: Object.freeze({
+      project: g.project, realSpawn: g.realSpawn, budget_usd: g.budget_usd,
+      ...(g.seedIgnoredBorn ? { seedIgnoredBorn: Object.freeze([...g.seedIgnoredBorn]) } : {}),
+    }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),
     beats: Object.freeze(beats),
   });
