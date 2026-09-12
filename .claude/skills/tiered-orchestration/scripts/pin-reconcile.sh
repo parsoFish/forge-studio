@@ -101,8 +101,28 @@ may_write() {
     return 1
   fi
   if [ -n "$tree" ] && [ "$tree" != "$R" ]; then
-    echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
-    return 1
+    # 7.6.57 (ruling 806) — THE OWNER MAY REPAIR ITS OWN STALE `tree=`.
+    #
+    # 793's refusal is right about a stranger's tree and wrong about your own.
+    # Dogfooding 7.6.49 a minute after it went live: `M6-A.counts` still carried
+    # `tree=/home/parso/forge` from the wrapper era (730), so A's own reconcile
+    # from A's own worktree was blocked and the ONLY route left was a hand edit
+    # of the field the tool exists to own — which is the class of fix this whole
+    # instrument removes. Every `.counts` written in that era carries the same
+    # latent block.
+    #
+    # Rewriting is safe HERE and nowhere else, because the rehash this run
+    # performed happened in `$R`: the owner is not asserting a verification
+    # someone else's checkout did, it is recording the one it just did. A
+    # non-owner reaching here is the 793 case untouched — including T1's
+    # `--sweep`, where `owner != LANE` by construction and the tree genuinely is
+    # not the owner's.
+    if [ "$owner" = "$LANE" ]; then
+      echo "  $n: tree= REPAIRED — $tree -> $R (owner=$LANE rehashing in its own repo, 7.6.57)"
+    else
+      echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
+      return 1
+    fi
   fi
   return 0
 }
@@ -142,6 +162,18 @@ set_counts_fields() {
     sed -i "s/manifest=[0-9a-f]\{16\}/manifest=${d}/" "$counts"
   else
     printf '%s manifest=%s\n' "$(head -1 "$counts")" "$d" > "$counts.tmp"
+    tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
+  fi
+  # 7.6.57 (T1 824) — `paths=` IS RECOMPUTED, not carried. The tool never
+  # touched it, so after T1 added two rows to a `.sha256` by hand the field read
+  # `paths=23` against 25 real rows — a count describing an earlier version of
+  # the file it sits beside, and nothing failed. It is derived here from the
+  # same file `manifest=` hashes, in the same edit, so the two cannot disagree.
+  local np; np=$(grep -c . "$manifest_file")
+  if grep -q 'paths=[0-9]\{1,\}' "$counts"; then
+    sed -i "s/paths=[0-9]\{1,\}/paths=${np}/" "$counts"
+  else
+    printf '%s paths=%s\n' "$(head -1 "$counts")" "$np" > "$counts.tmp"
     tail -n +2 "$counts" >> "$counts.tmp"; mv "$counts.tmp" "$counts"
   fi
 }
