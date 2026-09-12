@@ -450,9 +450,9 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
-  // 7.6.51: set when a beat boundary finds the ceiling breached; the run stops
-  // there and the verdict below is RED for that reason rather than for a beat.
-  let spendBreach = null;
+  // 7.6.51/7.6.71: set when a beat boundary ends the run on money — breached, or
+  // gone blind — and the verdict below is RED in the halt's own words, not a beat's.
+  let spendHalt = null;
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
   // whose funded and declared ceilings differ must say so up front rather than
@@ -493,7 +493,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
       // ran, which is `test-guard.mjs`'s own rule and the reason "host quiet"
       // was worth nothing without the numbers beside it.
       if (costs) {
-        const { verdict: v, lines } = spendSoFar({
+        const { stop, lines } = spendSoFar({
           root: ROOT,
           startedMs,
           realSpawn: story.ground?.realSpawn === true,
@@ -501,9 +501,9 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
           label: `after beat ${i + 1}`,
         });
         for (const l of lines) console.log(l);
-        if (v.breached) {
-          console.error(`[stories] CEILING BREACHED — ${v.reason} (${ceiling.reason}). Tearing down what this run started.`);
-          spendBreach = v;
+        if (stop.halt) { // 7.6.71 (849(d)): a BREACH stops on a number; a turn that ENDED unpriced stops because the ceiling above it went blind
+          console.error(`[stories] ${stop.headline} — ${stop.reason} (${ceiling.reason}). Tearing down what this run started.`);
+          spendHalt = stop;
           break;
         }
       }
@@ -740,8 +740,8 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   // one says the product failed, the other says we stopped paying. The line
   // below is printed AFTER the score so both are on the record, and the exit
   // code is non-zero whatever the beats did.
-  if (spendBreach !== null) {
-    console.error(`[stories] ${story.id}: RED — ${spendBreach.reason}. The run was stopped at the ceiling, so the beat score above is a partial run, not a verdict on the product.`);
+  if (spendHalt !== null) {
+    console.error(`[stories] ${story.id}: RED — ${spendHalt.reason}. ${spendHalt.note}`);
   }
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
@@ -785,7 +785,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
     return 1;
   }
 
-  return (row.status === 'green' && spendBreach === null) ? 0 : 1;
+  return (row.status === 'green' && spendHalt === null) ? 0 : 1;
 }
 
 const slug = (s) =>
