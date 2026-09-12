@@ -85,6 +85,20 @@ function readRunEvents(dir) {
     return [];
   }
 }
+/** Host state for §15.439's per-beat record. Never throws: an unreadable
+ *  /proc is reported as `unknown`, because a missing measurement must not
+ *  render as a good one. */
+function hostState() {
+  let load = 'unknown';
+  let memGiB = 'unknown';
+  try { load = readFileSync('/proc/loadavg', 'utf8').split(' ').slice(0, 3).join(' '); } catch { /* unknown */ }
+  try {
+    const m = /MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'));
+    if (m !== null) memGiB = (Number(m[1]) / 1048576).toFixed(1);
+  } catch { /* unknown */ }
+  return { load, memGiB };
+}
+
 const STORY_DIR = join(ROOT, 'tests', 'stories');
 const BRIDGE_HEALTH = 'http://localhost:4123/api/health';
 const VIEWPORT = { width: 1600, height: 1000 };
@@ -515,6 +529,22 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
           break;
         }
       }
+      // §15.439 (ruling 769) — HOST STATE AT EVERY BEAT BOUNDARY, printed
+      // whether or not anything looks wrong.
+      //
+      // Beat 4's nine measurements run 7m37s to 13m05s, and nobody can say why
+      // the tail happens because no run ever recorded what else was on the box.
+      // Three launchers checked ground hash, memory and ports and none checked
+      // load; this lane wrote "host quiet" from free locks and MemAvailable
+      // having never read /proc/loadavg once. A LOCK CENSUS ANSWERS "is a lane
+      // between its precheck and its merge", NOT "is the box busy" — a sibling's
+      // vitest holds neither campaign lock.
+      //
+      // Printed on every beat, not only slow ones: a number recorded only when
+      // it looks bad cannot establish a baseline, and the whole difficulty with
+      // the tail is that there is nothing to compare a slow beat against.
+      const host = hostState();
+      console.log(`[stories] host after beat ${i + 1}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
       const mark = verdict.status === 'green' ? '✓' : '✗';
       // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
       // `do` navigates and then asserts — which is right for a navigation beat
