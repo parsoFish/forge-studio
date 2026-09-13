@@ -40,6 +40,25 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** `docs/roadmaps/1.0.md` §0. The only place this number is written. */
 export const HARD_CAP_LINES = 800;
 
+/**
+ * How close to the cap is close enough to say so — `forge-8vfn.7.6.107`.
+ *
+ * 800 IS SILENT AND 801 IS RED, which makes this guard a trap primed for the
+ * next author rather than a warning to the current one. Measured by C at
+ * `9f7d624a`: two files at EXACTLY 800, seven within three lines, 36 within
+ * sixty. Nothing in the output said so.
+ *
+ * It is not hypothetical. `gate.test.ts` sat at 741 and four doors took it to
+ * 813 — the gate refused, correctly, AFTER the work was written; a notice at
+ * 741 would have said "59 left" before it was. `run.mjs` measures 799 on this
+ * tree with ONE line left, and A's next merge takes it to the cap exactly.
+ *
+ * Twenty is C's number and it is a judgement, not a measurement: wide enough
+ * that a normal addition lands inside the warning, narrow enough that the
+ * notice stays short. It changes no verdict — nothing here can fail a run.
+ */
+export const HEADROOM_LINES = 20;
+
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.cjs'];
 const NOT_CODE = new Set(['package-lock.json']);
 
@@ -128,7 +147,27 @@ export function audit(root, baseline) {
     else if (lines <= HARD_CAP_LINES) stale.push({ path: rel, reason: `now ${lines} lines, at or under the cap` });
   }
 
-  return { cap: HARD_CAP_LINES, checked: sizes.size, baselined: Object.keys(baseline).length, newOversize, grown, stale };
+  // NEAR THE CAP AND UNDER IT. A file already over is reported as a violation
+  // above; repeating it here would read as two findings about one file. Sorted
+  // tightest-first because the row that matters is the one with no room left.
+  const nearCap = [];
+  for (const [rel, lines] of sizes) {
+    if (lines > HARD_CAP_LINES) continue;
+    const headroom = HARD_CAP_LINES - lines;
+    if (headroom <= HEADROOM_LINES) nearCap.push({ path: rel, lines, headroom });
+  }
+  nearCap.sort((a, b) => (a.headroom - b.headroom) || (a.path < b.path ? -1 : 1));
+
+  return {
+    cap: HARD_CAP_LINES,
+    headroomWindow: HEADROOM_LINES,
+    checked: sizes.size,
+    baselined: Object.keys(baseline).length,
+    newOversize,
+    grown,
+    stale,
+    nearCap,
+  };
 }
 
 function main(argv) {
@@ -139,6 +178,20 @@ function main(argv) {
   const result = audit(ROOT, readBaseline(baselinePath));
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  }
+
+  // THE NOTICE IS NOT A VERDICT. It prints before either outcome and touches
+  // neither `failed` nor the return code — a file at 790 has broken no rule and
+  // must never read as though it had.
+  if (!json && result.nearCap.length > 0) {
+    process.stdout.write(
+      `check-file-size: HEADROOM — ${result.nearCap.length} file(s) within ${HEADROOM_LINES} lines of the ` +
+      `${HARD_CAP_LINES}-line cap. Nothing here is a violation; the next edit to one of them may be.\n`,
+    );
+    for (const f of result.nearCap) {
+      const room = f.headroom === 0 ? 'NO room left — the next line added breaks the cap' : `${f.headroom} line(s) left`;
+      process.stdout.write(`  ${f.path}: ${f.lines} lines — ${room}\n`);
+    }
   }
 
   const failed = result.newOversize.length + result.grown.length + result.stale.length;
