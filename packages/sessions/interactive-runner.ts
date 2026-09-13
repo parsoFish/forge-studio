@@ -88,6 +88,7 @@ import { join, resolve } from 'node:path';
 
 import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
@@ -257,39 +258,27 @@ export async function runInteractiveTurn(
         // reads the figure back through the session route's own reader.
         // Best-effort, like the architect's: a logging failure must not fail a
         // turn that already ran and already cost money.
-        onTurnCost: (costUsd) => {
-          try {
-            logger.emit({
-              initiative_id: initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
-              event_type: 'end', input_refs: [], output_refs: [],
-              cost_usd: costUsd, message: 'interactive.turn-cost',
-              metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
-            });
-          } catch { /* never fail a completed turn on a logging failure */ }
-        },
+        //
+        // 7.6.73: rendered by the shared emitter rather than inline here. This
+        // was the ONE call site that got both rows right, and three others got
+        // them wrong in three different ways — that is one absent renderer, not
+        // three bugs, so the correct copy moved out to where the others could
+        // use it.
+        onTurnCost: (costUsd) => emitTurnCostRow(logger, {
+          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
+          message: 'interactive.turn-cost',
+          metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
+        }, costUsd),
         // 7.6.55 (ruling 849) — the turn ENDED and was never priced. Without
         // this row the log has no terminal event at all and spend reads
         // UNMEASURED. `cost_usd` is ABSENT, not zero: 849 refused a pricing
         // table, and `deriveSessionCostUsd` still returns null for a log of
         // only these rows — "cost nothing" and "never priced" stay distinct.
-        onTurnEndedUnpriced: (info) => {
-          try {
-            logger.emit({
-              initiative_id: initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
-              event_type: 'end', input_refs: [], output_refs: [],
-              ...(info.tokensIn !== undefined ? { tokens_in: info.tokensIn } : {}),
-              ...(info.tokensOut !== undefined ? { tokens_out: info.tokensOut } : {}),
-              ...(info.cacheReadTokens !== undefined ? { cache_read_tokens: info.cacheReadTokens } : {}),
-              ...(info.cacheCreationTokens !== undefined ? { cache_creation_tokens: info.cacheCreationTokens } : {}),
-              message: 'interactive.turn-ended-unpriced',
-              metadata: {
-                session_id: ctx.sessionId, session_kind: descriptor.id,
-                unpriced_reason: info.reason,
-                priced: false,
-              },
-            });
-          } catch { /* never replace the turn's own error with a logging one */ }
-        },
+        onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(logger, {
+          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
+          message: 'interactive.turn-ended-unpriced',
+          metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
+        }, info),
       });
       break;
 
