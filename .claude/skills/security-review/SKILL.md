@@ -26,7 +26,8 @@ bash .claude/skills/security-review/scripts/review-base.sh
 ```
 
 It prints `REMOTE`, `BRANCH`, `VIA`, `BASE`, `RANGE`, then `COMMITTED`,
-`STAGED`, `UNSTAGED` and their total `FILES`; it exits 2 with `REFUSING:` when
+`STAGED`, `UNSTAGED`, `UNTRACKED` (with one `UNTRACKED_FILE=<path>` line per new
+file) and their total `FILES`; it exits 2 with `REFUSING:` when
 it cannot derive the range. **A refusal is not a pass.** If it refuses, say so
 and stop; do not substitute a range you picked yourself.
 
@@ -36,14 +37,20 @@ when several remotes are configured and nothing says which. It never hardcodes a
 remote name — that would be this bead's own defect with a different string in
 it.
 
-Then read **all three**, because this review runs BEFORE the commit and the
+Then read **all four**, because this review runs BEFORE the commit and the
 change is usually not in the range yet:
 
 ```bash
-git diff "$BASE..HEAD"    # commits on this branch   (COMMITTED)
-git diff --cached         # staged, not yet committed (STAGED)
-git diff                  # not yet staged           (UNSTAGED)
+git diff "$BASE..HEAD"                    # commits on this branch      (COMMITTED)
+git diff --cached                         # staged, not yet committed   (STAGED)
+git diff                                  # not yet staged              (UNSTAGED)
+git ls-files --others --exclude-standard  # NEW, not yet added          (UNTRACKED)
 ```
+
+The fourth has no diff at all — a brand-new file appears in none of the three
+above, and it is exactly where a new sink most likely lives (measured: `FILES=8`
+for a change touching 12, the four absentees all new files). Open every
+`UNTRACKED_FILE=` by name and read it whole.
 
 Reading only the first is how this skill nearly shipped its own vacuous pass:
 run on a freshly branched worktree it reported `FILES=0` over a change that was
