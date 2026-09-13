@@ -171,6 +171,9 @@ proc_start_epoch() {
   ticks="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')"
   btime="$(awk '/^btime /{print $2}' /proc/stat)"
   hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+  # A zero or non-numeric CLK_TCK would make the division fail, the helper return non-zero and
+  # the census SKIP the pid — a skip is fail-open for the census's purpose (1023). Default it.
+  case "$hz" in ''|*[!0-9]*|0) hz=100 ;; esac
   [ -n "$ticks" ] && [ -n "$btime" ] || return 1
   echo $(( btime + ticks / hz ))
 }
@@ -325,13 +328,16 @@ undo_created() {
 # missed.
 die_launch() {
   local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p found=0 quiet=0 waited=0
-  local seen=" "
+  local seen=" " recensus="${LANES_RECENSUS_S:-5}"
+  # 1023: a non-numeric bound would make the loop's test error and exit after ONE census —
+  # silently the one-shot shape this function stopped having. Said, then defaulted.
+  case "$recensus" in ''|*[!0-9]*) echo "census: LANES_RECENSUS_S='$recensus' is not a whole number of seconds — using 5" >&2; recensus=5 ;; esac
   for p in $(pids_claude_in "$cwd" "$t0"); do
     seen="$seen$p "; found=$((found + 1)); retire_pid "$p" "half-launched lane $lane" >&2 || true
   done
   echo "census: $found claude pid(s) in $cwd started at/after $t0 before the kill" >&2
   tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s (undoing a launch that was never confirmed)" >&2
-  while [ "$quiet" -lt 2 ] && [ "$waited" -lt "${LANES_RECENSUS_S:-5}0" ]; do
+  while [ "$quiet" -lt 2 ] && [ "$waited" -lt "${recensus}0" ]; do
     local new=0
     for p in $(pids_claude_in "$cwd" "$t0"); do
       case "$seen" in *" $p "*) continue ;; esac
@@ -341,7 +347,7 @@ die_launch() {
     if [ "$new" = 0 ]; then quiet=$((quiet + 1)); else quiet=0; fi
     sleep 0.5; waited=$((waited + 5))
   done
-  echo "census: $found claude pid(s) retired in total; quiet for 1 s after the kill (re-census bounded at ${LANES_RECENSUS_S:-5} s)" >&2
+  echo "census: $found claude pid(s) retired in total; quiet for 1 s after the kill (re-census bounded at ${recensus} s)" >&2
   undo_created
   die "$msg"
 }
@@ -632,6 +638,9 @@ case "${1:-}" in
   # 7.6.105 — the honest start time the census uses, exposed so it can be doored and so a
   # human can check a pid's age without trusting a directory timestamp.
   proc-start) shift; [ -n "${1:-}" ] || die "usage: lanes.sh proc-start <pid>"
+    # 1023: the argument becomes a path segment under /proc — digits only, refused otherwise
+    # (a value like `1/../2` would read another pid's stat and report it as this one's).
+    case "$1" in *[!0-9]*) die "proc-start: '$1' is not a pid (digits only)" ;; esac
     st="$(proc_start_epoch "$1")" || die "proc-start: no such pid $1 (not running, or /proc/$1/stat cannot read)"
     echo "$st" ;;
   *) sed -n '2,42p' "$0"; exit 1 ;;

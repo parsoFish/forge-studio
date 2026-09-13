@@ -146,6 +146,18 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     spawnSync('kill', ['-KILL', String(pid)]);
   });
 
+  test('1023: a pid argument that is not digits is refused before it becomes a path segment', () => {
+    // `1/../2` would resolve to /proc/2/stat and report pid 2's start as pid 1's —
+    // a read-only sink, but §2's path-segment rule is an allowlist, not a judgement
+    // about the sink. Refused with the value quoted.
+    for (const bad of ['1/../2', 'abc', '12x', '../1']) {
+      const r = lanes(['proc-start', bad]);
+      assert.notEqual(r.status, 0, `'${bad}' must refuse`);
+      assert.equal(r.stdout.trim(), '');
+      assert.match(r.stderr, /not a pid \(digits only\)/, r.stderr);
+    }
+  });
+
   test('a missing pid is a refusal with its own code, never 0 and never an empty number', () => {
     const r = lanes(['proc-start', '4194304']);   // beyond pid_max on this box, so never live
     assert.notEqual(r.status, 0);
@@ -166,6 +178,27 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
       assert.ok(waitGone(stray, 3000), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
       assert.match(r.stderr, /census:/, 'and the census reports what it saw, so a red carries evidence');
+    } finally {
+      spawnSync('kill', ['-KILL', String(self)]);
+    }
+  });
+
+  test('1023: a non-numeric LANES_RECENSUS_S is reported and defaulted — the re-census still runs', () => {
+    // Before this, the loop's `-lt` test errored on 'soon0' and the function fell out after
+    // ONE census: exactly the one-shot shape it stopped having, silently. The late-spawn
+    // fixture is the proof: with the loop gone, the stray survives.
+    const bin = laneBin('lane-late2', { lateSpawnS: 1.5 });
+    const laneCwd = join(dir, 'cwd-late2');
+    mkdirSync(laneCwd, { recursive: true });
+    const prompt = join(dir, 'prompt-late2.md');
+    writeFileSync(prompt, `never consumed\nSuites: flock ${camp}/.suite-lock npm test\n`);
+    sessions.add(`${PREFIX}late2`);
+    const r = lanes(['launch', camp, 'late2', prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, LANES_RECENSUS_S: 'soon' });
+    const self = pidFrom('lane-late2.selfpid', 8000);
+    const stray = pidFrom('lane-late2.detachedpid', 12000);
+    try {
+      assert.match(r.stderr, /LANES_RECENSUS_S='soon' is not a whole number of seconds — using 5/, r.stderr);
+      assert.ok(waitGone(stray, 3000), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
