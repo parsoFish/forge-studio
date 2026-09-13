@@ -714,7 +714,7 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   }
 
   const result = { story, beats, reap, sweep, fence };
-  writeStoryJson(result, ROOT);
+  const wroteThisRun = [writeStoryJson(result, ROOT)];
 
   // Ruling 308's second half — the ground's Brain 3 was HELD through the fence
   // so preflight clause C4 can pass while the verdict is being read (removing
@@ -730,7 +730,8 @@ async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
   mkdirSync(dirname(docPath), { recursive: true });
   writeFileSync(docPath, renderDocFragment(result));
 
-  regenerateGallery(ROOT);
+  // 7.6.81 — exempt set = what writeStoryJson RETURNED (see its doc for why).
+  regenerateGallery(ROOT, wroteThisRun);
 
   const row = storyRowFrom(result);
   console.log(`[stories] ${story.id}: ${row.status} — ${row.greenBeats}/${row.beats} beats green`);
