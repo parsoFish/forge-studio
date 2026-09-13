@@ -436,6 +436,11 @@ jobs:
       run('commit', '-qm', 'this PR changes the sibling-owned path');
       const r = gateAs('M6-C', d, camp);
       assert.match(r.out, /UNDECLARED: M6-OTHER:OWNED\.md/, r.out);
+      // 7.6.110 (T1 1036): the red names its remedy VERBATIM — the flag to add, with the
+      // path — and says the rule is owner-independent. A spent a twenty-step gate learning
+      // that its own manifest's rows need declaring too; the line now says so.
+      assert.match(r.out, /declare it with --expect-pin-fail M6-OTHER:OWNED\.md/, 'the remedy is the exact flag, copy-pasteable');
+      assert.match(r.out, /your own lane's rows included/, 'and the owner-independence is stated where the reader is');
       assert.doesNotMatch(r.out, /PIN_SIBLING_STALE M6-OTHER/, 'in the diff means declare it, never excuse it');
       assert.match(r.out, /^PIN_SIBLING_STALE_COUNT=0$/m);
     } finally {
