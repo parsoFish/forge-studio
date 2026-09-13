@@ -292,7 +292,33 @@ export function endedUnpricedTurns(eventLists) {
   for (const rows of eventLists ?? []) {
     for (const r of rows ?? []) {
       const meta = (r?.metadata ?? {});
-      const marked = r?.message === 'interactive.turn-ended-unpriced' || meta['priced'] === false;
+      // TWO INDEPENDENT MARKERS, and the first one stopped being independent —
+      // `forge-8vfn.7.6.73`, found by C reading this line rather than taking my
+      // word for what it did.
+      //
+      // It used to be `r?.message === 'interactive.turn-ended-unpriced'`: exact
+      // equality against ONE literal, written as belt-and-braces so either
+      // marker alone would suffice (§15.504 — the halt must not rest on a single
+      // field). 7.6.73 added three more emitters, each correctly named for its
+      // own caller (`architect.turn-ended-unpriced`,
+      // `architect.completeness-critic.turn-ended-unpriced`,
+      // `instructions.draft.turn-ended-unpriced`), and NONE of them matches a
+      // literal spelled `interactive.…`. So the belt quietly became the braces'
+      // shadow: three of the four emitters were held by `priced === false`
+      // alone.
+      //
+      // The failure that sets up is not cosmetic. A future emitter written to
+      // the obvious convention — `somephase.turn-ended-unpriced` — and missing
+      // `priced: false` is INVISIBLE to the halt while looking correct to
+      // whoever wrote it, because its message says "unpriced" in plain English
+      // and matches every sibling. §15.534 one level along: a guard keyed on a
+      // literal name, evaded by ordinary growth rather than by an attacker —
+      // and the growth had already happened, in the bead that found this.
+      //
+      // Matching the SUFFIX makes the convention enforce itself: a new emitter
+      // earns the second marker by naming alone, and the two arms are genuinely
+      // independent again.
+      const marked = /(^|\.)turn-ended-unpriced$/.test(String(r?.message ?? '')) || meta['priced'] === false;
       if (!marked) continue;
       if (typeof r?.cost_usd === 'number') continue;
       const id = typeof r?.event_id === 'string' ? r.event_id : null;

@@ -42,12 +42,36 @@ test('the turn returns the SDK result message\'s total_cost_usd', async () => {
     'the cost is on the same result message the structured output is read from — dropping it is why two funded runs are unpriced');
 });
 
-test('a result message with NO cost yields 0, not undefined — a missing figure must not poison a sum', async () => {
+/**
+ * AMENDED BY `forge-8vfn.7.6.73`, T1 ruling 993(c) — in place, with the reason,
+ * rather than deleted.
+ *
+ * THIS DOOR USED TO ASSERT `costUsd === 0` here, reasoning: "a missing figure
+ * must not poison a sum". The reasoning was right and the remedy was wrong. A
+ * numeric zero does not protect the sum; it JOINS it. Both consumers read a
+ * number as a measurement:
+ *
+ *   spend.mjs `endedUnpricedTurns`      skips any row carrying a numeric
+ *                                       `cost_usd`, so a turn reported as 0 can
+ *                                       never reach 7.6.71's halt
+ *   event-cost.ts `deriveSessionCostUsd` returns null only when NO row carries a
+ *                                       number, so ONE zero row turns "never
+ *                                       priced" into "$0.00"
+ *
+ * So the old assertion pinned the conflation it was written to prevent: the
+ * ceiling under-counts in silence instead of going blind, which is strictly
+ * worse than the failure it was guarding against. Ruling 849 settled the
+ * remedy — cost is OMITTED, never zeroed — and `runAgentTurn` has returned
+ * `number | null` since 7.6.55. The structured side simply never got it.
+ */
+test('a result message with NO cost yields NULL, not 0 — "cost nothing" and "never priced" must not render alike', async () => {
   const r = await runStructuredTurn<{ ok: boolean }>({
     ...BASE,
     queryFn: replay([{ type: 'result', structured_output: { ok: true } }]) as never,
   });
-  assert.equal(r.costUsd, 0);
+  assert.equal(r.costUsd, null,
+    'a zero here is read as a MEASURED zero by both consumers: endedUnpricedTurns skips numeric ' +
+    'cost_usd rows and deriveSessionCostUsd treats one as "this session cost $0.00"');
 });
 
 test('a non-numeric total_cost_usd is ignored rather than propagated', async () => {
@@ -55,7 +79,9 @@ test('a non-numeric total_cost_usd is ignored rather than propagated', async () 
     ...BASE,
     queryFn: replay([{ type: 'result', structured_output: { ok: true }, total_cost_usd: 'lots' }]) as never,
   });
-  assert.equal(r.costUsd, 0, 'a string cost must not reach a ceiling comparison');
+  assert.equal(r.costUsd, null,
+    'a string cost must not reach a ceiling comparison — and the turn is UNPRICED, not free: the ' +
+    'SDK sent a price this code could not read, which is exactly the case a 0 would have buried');
 });
 
 test('the cost survives a stream that also carries assistant blocks before the result', async () => {
