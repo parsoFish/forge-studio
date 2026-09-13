@@ -44,6 +44,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeManifest, type InitiativeManifest } from '../../packages/flows/manifest.ts';
 import { claimQueueWrites } from './queue-claim.mjs';
+import { runnerSourceContaining } from './runner-source.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const QUEUE_STATES = ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed'];
@@ -264,9 +265,17 @@ test('7.6.74: an UNQUOTED created_at (a Date after YAML parsing) still attribute
  * beside it.
  */
 test('7.6.74: the trailing sweep call NAMES the window and the evidence dir', () => {
-  const src = readFileSync(join(REPO, 'scripts', 'stories', 'run.mjs'), 'utf8');
+  // forge-0fli: the trailing sweep moved to `run-story.mjs` with the rest of
+  // one story's work, and this door went red without a behaviour changing. It
+  // resolves the module from the anchor now — the property is that THE RUNNER
+  // makes this call with these arguments, not that a particular file does.
+  // The anchor is the CALL, not the name: `sweepProductFixtures(` also matches
+  // its own definition in `sweep.mjs`, and the resolver refused the ambiguity
+  // rather than slicing from whichever file sorted first. That refusal firing
+  // on its first use is the reason it refuses in both directions.
+  const { source: src } = runnerSourceContaining('sweepProductFixtures(story.id');
   const call = /sweepProductFixtures\(([^;]*?)\);/s.exec(src);
-  assert.notEqual(call, null, 'run.mjs must call sweepProductFixtures at all');
+  assert.notEqual(call, null, 'the runner must call sweepProductFixtures at all');
 
   const args = call![1];
   assert.match(args, /\bsinceMs:/, 'without a window every INIT is either all ours or none');

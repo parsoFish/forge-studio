@@ -15,6 +15,11 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
+import { runnerSourceContaining } from './runner-source.mjs';
+
+/** The beat loop, wherever it lives. A door names the property and the anchor;
+ *  `runner-source.mjs` says which module holds it today (forge-0fli). */
+const BEAT_LOOP = 'for (const [i, beat] of story.beats.entries())';
 
 test('a costless story runs without --approve-spend', () => {
   const v = spendGateVerdict({ realSpawn: false, budget_usd: 0 }, { approveSpend: false });
@@ -200,9 +205,13 @@ test('an unusable ceiling is reported as UNBOUNDED, not as compliance', () => {
  *     ended unpriced. A loop that consults only the breach is back to printing
  *     `UNMEASURED` twenty-three times while an unknown amount is spent.
  */
-test('7.6.51: run.mjs enforces the ceiling at a beat boundary and exits non-zero on breach', () => {
-  const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
-  const loop = src.slice(src.indexOf('for (const [i, beat] of story.beats.entries())'));
+test('7.6.51: the runner enforces the ceiling at a beat boundary and exits non-zero on breach', () => {
+  // forge-0fli: the beat loop moved to `run-story.mjs` when `run.mjs` hit the
+  // 800-line cap, and this door went red without a behaviour changing — the
+  // SECOND time (see the note below on `forge-rzrs`). The filename was the one
+  // location still pinned, so it is resolved from the anchor now.
+  const { source: src } = runnerSourceContaining(BEAT_LOOP);
+  const loop = src.slice(src.indexOf(BEAT_LOOP));
   const loopBody = loop.slice(0, loop.indexOf('\n  const docPath'));
   // THE PROPERTY FOLLOWED ACROSS A SPLIT, NOT A CALL SITE PINNED IN PLACE.
   // `forge-rzrs` took `run.mjs` past the 800-line cap, so the per-beat spend
@@ -283,11 +292,16 @@ test('neither usable is UNBOUNDED and refuses to look like a ceiling', () => {
   assert.match(c.reason, /UNBOUNDED/);
 });
 
-test('7.6.52: run.mjs parses --ceiling and enforces the effective one', () => {
-  const src = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
-  assert.match(src, /--ceiling/, 'the launcher must be able to name a funded ceiling');
+test('7.6.52: the runner parses --ceiling and enforces the effective one', () => {
+  // forge-0fli: this property now SPANS the split — the flag is parsed in
+  // `run.mjs`, which keeps argument handling, and combined and enforced in
+  // `run-story.mjs`, which has the loop. Asserting both against one file was
+  // what made it look like one property of one file.
+  const cli = readFileSync(new URL('./run.mjs', import.meta.url), 'utf8');
+  assert.match(cli, /--ceiling/, 'the launcher must be able to name a funded ceiling');
+  const { source: src } = runnerSourceContaining(BEAT_LOOP);
   assert.match(src, /effectiveCeiling\(/, 'the runner must combine funded and declared');
-  const loop = src.slice(src.indexOf('for (const [i, beat] of story.beats.entries())'));
+  const loop = src.slice(src.indexOf(BEAT_LOOP));
   const loopBody = loop.slice(0, loop.indexOf('\n  const docPath'));
   // The effective ceiling must reach the beat loop's spend ask. `forge-rzrs`
   // moved the verdict call into `run-observe.mjs`'s `spendSoFar`, so this
