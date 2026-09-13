@@ -19,7 +19,7 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -155,12 +155,171 @@ describe('lock-state — the probe is the fact, the census is the attribution', 
     assert.ok(!/transient[^:]*: *$/.test(r.stdout), 'a transient list, when present, must not be empty-but-printed');
   });
 
-  test('REFUSES rather than defaulting: no args, bad verb, and who-runs until C lands it', () => {
+  test('REFUSES rather than defaulting: no args, a bad verb, and a relative who-runs path', () => {
     assert.equal(run().status, 2);
     assert.equal(run('held').status, 2, 'a verb with no lock file is usage, not a free lock');
     assert.equal(run('hold', lockFile()).status, 2, 'a near-miss verb refuses rather than guessing');
-    const wr = run('who-runs', '/some/abs/path');
-    assert.equal(wr.status, 2, 'who-runs is 7.6.93 and must refuse rather than approximate');
-    assert.match(wr.stderr, /not implemented here yet/);
+    // D's version of this asserted that `who-runs` refused "until C lands it",
+    // which was the right door for a declared-and-unimplemented verb and is
+    // false now that 7.6.93 is implemented here. Updated rather than deleted:
+    // the property worth keeping is that the verb REFUSES rather than
+    // approximating, and what it refuses is now a RELATIVE path — resolving one
+    // against the caller's cwd would be a guess about which tree was meant
+    // (7.6.90). The absolute-path behaviour has its own doors below.
+    const wr = run('who-runs', 'some/relative/path');
+    assert.equal(wr.status, 2, 'who-runs refuses rather than approximating');
+    assert.match(wr.stderr, /needs an ABSOLUTE path/);
+  });
+});
+
+/**
+ * `who-runs` — 7.6.93's mode, reconciled into this reader under T1 970 so the
+ * campaign has ONE `/proc` walker.
+ *
+ * THE DOOR THAT MATTERS INVOKES THROUGH THE SHIM. A caller runs
+ * `lock-state who-runs /abs/path`, so **the path being searched for sits in the
+ * invoker's own argv** — and a door calling the JS directly cannot see that,
+ * because the process carrying the needle is the one it skipped. That is A's R3
+ * (a fixture quietly decides which seams are reachable) applied to the bug this
+ * very tool exists to end: five `/proc` censuses in this campaign matched their
+ * own command line, and one orphan-kill under-matched, all from guessing what a
+ * command line looks like instead of reading one.
+ */
+describe('lock-state who-runs (forge-8vfn.7.6.93)', () => {
+  const SHIM = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'lock-state.sh');
+  const shim = (...args: string[]) =>
+    spawnSync('bash', [SHIM, ...args], { encoding: 'utf8', timeout: 30_000 });
+
+  /** A script that sleeps, at an absolute path nothing else names. */
+  function plantedScript(): string {
+    const d = mkdtempSync(join(tmpdir(), 'who-runs-'));
+    const p = join(d, 'planted-runner.sh');
+    writeFileSync(p, '#!/usr/bin/env bash\nsleep 30\n');
+    return p;
+  }
+
+  test('7.6.93: THROUGH THE SHIM, the caller carrying the path in its own argv is NOT reported', () => {
+    const path = plantedScript();
+    const r = shim('who-runs', path);
+    assert.equal(r.status, 0, `nobody is executing it, so exit 0:\n${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /who-runs planted-runner\.sh: nobody/);
+    // The invocation itself carried `path` in argv. Excluding only `process.pid`
+    // would have reported the shim or its parent here.
+    assert.doesNotMatch(r.stdout, /\(cwd /, 'no row at all — the scanner must not find itself');
+  });
+
+  test('7.6.93: a REAL runner is found, with its parent named', async () => {
+    const path = plantedScript();
+    spawnSync('chmod', ['+x', path]);
+    const child = spawn('bash', [path], { detached: true, stdio: 'ignore' });
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      const r = shim('who-runs', path);
+      assert.equal(r.status, 3, `3 = somebody is running it:\n${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, new RegExp(`who-runs planted-runner\\.sh: ${child.pid}\\(cwd `));
+      assert.match(r.stdout, /ppid \d+/, 'the parent is named, so "nobody launched it" is the caller\'s inference and not the tool\'s claim');
+    } finally {
+      try { process.kill(child.pid!, 'SIGKILL'); } catch { /* gone */ }
+    }
+  });
+
+  test('7.6.93: a RELATIVE path is refused, never resolved', () => {
+    const r = shim('who-runs', 'planted-runner.sh');
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /needs an ABSOLUTE path/);
+    assert.match(r.stderr, /sibling's copy in another worktree/, 'and says why, so the refusal teaches the rule');
+  });
+
+  /**
+   * 7.6.90's ACTUAL hazard: a sibling's copy of the same script in another
+   * worktree. Matching the bare name finds it; matching the absolute path does
+   * not, and the difference is the whole reason the filter is a path.
+   *
+   * THE FIRST FIXTURE HERE COULD NOT REACH THIS. It spawned
+   * `bash -c 'sleep 30 # planted-runner.sh'` to put the NAME in a cmdline
+   * without the path — but bash execs the simple command directly, so the
+   * comment never appears in `/proc` and a mutation matching the bare name
+   * survived untouched. A fixture that cannot produce the state it describes
+   * proves nothing and does not announce it (A's R3, third time tonight).
+   */
+  test('7.6.93: a SAME-NAMED script at a different absolute path is not a match', async () => {
+    const mine = plantedScript();
+    const sibling = plantedScript();          // same basename, different dir
+    assert.notEqual(mine, sibling);
+    spawnSync('chmod', ['+x', sibling]);
+    const child = spawn('bash', [sibling], { detached: true, stdio: 'ignore' });
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      const r = shim('who-runs', mine);
+      assert.equal(r.status, 0, `a sibling worktree's copy is not this file:\n${r.stdout}`);
+      assert.match(r.stdout, /nobody/);
+      // and the sibling IS found when asked about by its own path, so the
+      // negative above is a discrimination rather than a blind spot.
+      const s = shim('who-runs', sibling);
+      assert.equal(s.status, 3, `the sibling runs under its own path:\n${s.stdout}`);
+    } finally {
+      try { process.kill(child.pid!, 'SIGKILL'); } catch { /* gone */ }
+    }
+  });
+
+  test('7.6.93: ancestorPids walks the CHAIN, not just this process', async () => {
+    // From lock-guard.mjs, NOT lock-state.mjs: importing the CLI runs it, prints
+    // its usage line and exits 2 — the hazard test-guard.mjs records, met here.
+    const { ancestorPids } = await import('./stories/lock-guard.mjs');
+    const chain = ancestorPids();
+    assert.ok(chain.has(String(process.pid)), 'itself');
+    assert.ok(chain.size > 1, `and its parents — a one-element chain is the bug this exists to prevent: ${[...chain].join(',')}`);
+  });
+});
+
+/*
+ * 7.6.93's THREE-STATE half, doored against a FIXTURE `/proc` rather than the
+ * real one. These cases cannot be produced on a live box: "a pid that exists and
+ * whose cmdline cannot be read" is a race against the kernel, and a door that
+ * waits for one measures luck.
+ */
+describe('lock-state who-runs: UNKNOWN is a third state, not a quiet zero', () => {
+  const made: string[] = [];
+  after(() => { for (const d of made) rmSync(d, { recursive: true, force: true }); });
+
+  /** A fake `/proc`: each entry is [pid, cmdline | null, hasStatus]. */
+  function procTree(entries: Array<[string, string | null, boolean]>): string {
+    const root = mkdtempSync(join(tmpdir(), 'who-runs-proc-'));
+    made.push(root);
+    for (const [pid, cmdline, hasStatus] of entries) {
+      mkdirSync(join(root, pid));
+      // NUL-separated, exactly as the kernel writes it — the parser splits on it.
+      if (cmdline !== null) writeFileSync(join(root, pid, 'cmdline'), cmdline.replace(/ /g, '\0'));
+      if (hasStatus) writeFileSync(join(root, pid, 'status'), `Name:\tsh\nPPid:\t1\n`);
+    }
+    return root;
+  }
+
+  test('a pid that EXISTS but cannot be read is UNKNOWN — not skipped, not a row', async () => {
+    const { whoRuns } = await import('./stories/lock-guard.mjs');
+    // 4242 has a status (it exists) and NO cmdline (it cannot be read).
+    // 4243 has neither: genuinely gone between the listing and the read.
+    const root = procTree([['4242', null, true], ['4243', null, false]]);
+    const r = whoRuns('/some/abs/target.sh', { procRoot: root, self: new Set() });
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.rows, [], 'nothing matched');
+    assert.deepEqual(r.unknown, ['4242'], 'the readable-but-unreadable pid is UNKNOWN; the vanished one is correctly silent');
+  });
+
+  test('UNKNOWN exits 4, never 0 — the mapping that was written inline and wrong', async () => {
+    const { whoRunsExit } = await import('./stories/lock-guard.mjs');
+    assert.equal(whoRunsExit({ rows: [{ pid: '7' }], unknown: [] }), 3, 'someone runs it');
+    assert.equal(whoRunsExit({ rows: [], unknown: ['9'] }), 4, 'the census could not tell — this is the case `rows.length > 0 ? 3 : 0` spelled 0');
+    assert.equal(whoRunsExit({ rows: [], unknown: [] }), 0, 'read everything, found nobody');
+  });
+
+  test('the exclusion set is read from the SAME procRoot — a fixture pid 1 is not eaten by the real chain', async () => {
+    const { whoRuns } = await import('./stories/lock-guard.mjs');
+    // `ancestorPids` ALWAYS contains '1'. Before `procRoot` was threaded through
+    // to the default `self`, this row was excluded by the REAL ancestor chain and
+    // the door below read as "no match" — a fixture silently fenced off.
+    const root = procTree([['1', '/bin/sh /some/abs/target.sh', true]]);
+    const r = whoRuns('/some/abs/target.sh', { procRoot: root });
+    assert.deepEqual(r.rows.map((x: { pid: string }) => x.pid), ['1'], 'the fixture row survives the ancestor exclusion');
   });
 });
