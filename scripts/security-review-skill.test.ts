@@ -243,4 +243,32 @@ describe('7.6.69 — the review range is derived, and a failure to derive it REF
       assert.match(out, /no remote/);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+  test('7.6.104: UNTRACKED new files are counted and NAMED — no diff can show them, so the reviewer opens each by name', () => {
+    // A (T1 1003): review-base derived FILES=8 for a change touching 12. The four
+    // missing were NEW files, not yet `git add`ed — invisible to `$BASE..HEAD`,
+    // `--cached` AND bare `git diff` alike. The header already warned about the
+    // staged-but-uncommitted hole; this is the same hole one step along, and
+    // worse, because a brand-new file is exactly where a new sink most likely
+    // lives. Ignored files are NOT counted: they will never be committed, and
+    // counting them would turn every build artefact into a review item.
+    const dir = repoWith({ solo: 'https://example.invalid/a.git' }, ['solo/main']);
+    try {
+      const git = (...a: string[]) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+      writeFileSync(join(dir, '.gitignore'), 'ignored.log\n');
+      git('add', '.gitignore');
+      git('commit', '-q', '-m', 'ignore rule');
+      writeFileSync(join(dir, 'new-sink.ts'), 'export const sink = 1;\n');   // untracked, reviewable
+      writeFileSync(join(dir, 'ignored.log'), 'noise\n');                    // untracked, ignored
+      const { rc, out } = runIn(dir);
+      assert.equal(rc, 0, out);
+      assert.match(out, /^UNTRACKED=1$/m, `one reviewable new file:\n${out}`);
+      assert.match(out, /^UNTRACKED_FILE=new-sink\.ts$/m, 'named, because no diff will show it');
+      assert.doesNotMatch(out, /ignored\.log/, 'an ignored file is not a review item');
+      // The fixture's own `.gitignore` commit is the one COMMITTED file (base is
+      // the planted solo/main, one commit back), so the total is 1 + 1 — asserted
+      // as both halves, not as a number that happens to come out right.
+      assert.match(out, /^COMMITTED=1$/m, out);
+      assert.match(out, /^FILES=2$/m, `and the total carries the untracked file — without it this read FILES=1:\n${out}`);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });
