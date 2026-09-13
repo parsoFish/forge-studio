@@ -314,6 +314,105 @@ export function scanSummary(logsDir, sinceMs) {
   return `${logsDir}: ${entries.length} dispatch dir(s), newest ${age}`;
 }
 
+/**
+ * THE CHANNEL'S OWN TERMINAL STATE, read BEFORE silence is interpreted
+ * (`forge-flvq`).
+ *
+ * MEASURED on S10 run 15 beat 8. The door said the channel
+ * `…_INIT-2026-09-12-exclude-author-flag` "has written nothing for 180s, past
+ * the product's own 180s stall ceiling", and stopped at 332s of a declared
+ * 360000 ms bound. TRUE, AND THE CONCLUSION WAS WRONG: the channel had
+ * TERMINATED three minutes earlier — `_queue/failed/` held the initiative, the
+ * last `events.jsonl` row was `event_type=error`, and a 12.5 KB `report.md`
+ * with `artifacts/` was on disk. The product had already said the cycle failed;
+ * the door waited out 180s of a dead channel and reported a stall.
+ *
+ * A FINISHED TURN AND A HUNG TURN ARE IDENTICAL TO A SILENCE DETECTOR. That is
+ * not a bug in the silence measurement — it is a question silence cannot
+ * answer. It masked the real blocker: the reader's first impression of run 15
+ * was "the dev agent stalled" when the truth was "the PM's work-item set was
+ * rejected and the cycle failed".
+ *
+ * THIS IS NOT A NEW MECHANISM. `stopReasonFor` already does exactly this for a
+ * SESSION — it believes the product's own published terminal phase rather than
+ * re-deriving one — and `beats-page.mjs` states the principle: *believing a
+ * terminal verdict the product published is the opposite of second-guessing
+ * it*. An off-session channel simply had no equivalent.
+ *
+ * THE STATES ARE READ FROM DISK, NOT FROM A LIST, for `queue-claim.mjs`'s
+ * reason in its own words: a constant cannot see a seventh state someone adds
+ * later, and the failure mode of missing one is silence. `journey-residue.mjs`
+ * exports a six-name `QUEUE_STATES`; this deliberately does not import it.
+ *
+ * AND AN UNREADABLE CHECK IS NOT AN OPEN CHANNEL. If neither the queue nor the
+ * event log can be read, this returns `unknown` rather than null — the caller
+ * must not report "still open, therefore stalled" on the strength of a check
+ * that did not happen. §15.430's rule, one layer up: an absent path is not an
+ * empty one.
+ *
+ * @returns {null | {state: string, detail: string, unknown?: true}}
+ */
+export function channelTerminalState(forgeRoot, dir) {
+  const name = dir.slice(dir.lastIndexOf('/') + 1);
+  // `_<kind>-<timestamp>_<INITIATIVE>` — the dispatch dir names what it ran.
+  // THE LEADING UNDERSCORE IS PART OF THE PREFIX, not a separator: a dispatch
+  // dir is `_`-prefixed by construction (`isDispatchDir`), so splitting on the
+  // FIRST `_` yields the whole name and matches nothing. My own doors caught
+  // that — `_dev-…_INIT-x` gave an "initiative" of `dev-…_INIT-x`, the queue
+  // lookup found no file, and the verdict fell through to the events branch,
+  // which was right for the wrong reason.
+  const body = name.startsWith('_') ? name.slice(1) : name;
+  const initiative = body.includes('_') ? body.slice(body.indexOf('_') + 1) : null;
+  let queueSaw = null;
+  let queueReadable = false;
+  if (initiative !== null) {
+    const queue = join(forgeRoot, '_queue');
+    let states = null;
+    try {
+      states = readdirSync(queue, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+      queueReadable = true;
+    } catch { /* absent or unreadable — NOT empty */ }
+    for (const state of states ?? []) {
+      let names = [];
+      try { names = readdirSync(join(queue, state)); } catch { queueReadable = false; continue; }
+      if (names.some((n) => n.includes(initiative))) { queueSaw = state; break; }
+    }
+  }
+
+  let lastEvent = null;
+  let eventsReadable = false;
+  try {
+    const raw = readFileSync(join(dir, 'events.jsonl'), 'utf8');
+    eventsReadable = true;
+    const rows = raw.split('\n').filter((l) => l.trim() !== '');
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      try { const ev = JSON.parse(rows[i]); if (typeof ev?.event_type === 'string') { lastEvent = ev.event_type; break; } } catch { /* a torn row is not a verdict */ }
+    }
+  } catch { /* unreadable */ }
+
+  // `pending` and `in-flight` are the states of a channel still doing something;
+  // anything else the product moved it INTO is the product's own terminal word.
+  const OPEN_STATES = new Set(['pending', 'in-flight']);
+  if (queueSaw !== null && !OPEN_STATES.has(queueSaw)) {
+    return {
+      state: queueSaw,
+      detail: `the product moved ${initiative} into _queue/${queueSaw}/` +
+        (lastEvent === null ? '' : ` and its last event is ${lastEvent}`),
+    };
+  }
+  if (lastEvent === 'error') {
+    return { state: 'error', detail: `its last events.jsonl row is event_type=error` };
+  }
+  if (!queueReadable && !eventsReadable) {
+    return {
+      state: 'unknown',
+      unknown: true,
+      detail: 'neither _queue/ nor events.jsonl could be read, so this channel\'s terminal state is UNKNOWN rather than open',
+    };
+  }
+  return null;
+}
+
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
@@ -340,11 +439,32 @@ export function makeAgentChannelDoor(forgeRoot) {
     }
     const idle = runLogIdleMs(dir);
     if (idle === null || idle <= STALL_CEILING_MS) return null;
+
+    // TERMINAL STATE FIRST (`forge-flvq`). Silence past the ceiling is the same
+    // observation whether the turn HUNG or FINISHED, so the question of which
+    // one has to be answered from something other than silence. Reading it here
+    // rather than at the top is deliberate: a channel still writing is not
+    // asked about, so the common path pays nothing.
+    const terminal = channelTerminalState(forgeRoot, dir);
+    const chan = dir.slice(dir.lastIndexOf('/') + 1);
+    const quiet = `${Math.round(idle / 1000)}s`;
+    if (terminal !== null && terminal.unknown !== true) {
+      return {
+        reason: 'channel-ended',
+        detail:
+          `the agent channel ${chan} ENDED — ${terminal.detail}. It has been quiet ${quiet}, which is ` +
+          `what a finished turn and a hung one look like alike; the product had already published its ` +
+          `verdict, so this beat stops on THAT rather than reporting a stall.`,
+      };
+    }
     return {
       reason: 'channel-quiet',
       detail:
-        `the agent channel ${dir.slice(dir.lastIndexOf('/') + 1)} has written nothing for ` +
-        `${Math.round(idle / 1000)}s, past the product's own ${Math.round(STALL_CEILING_MS / 1000)}s stall ceiling.`,
+        `the agent channel ${chan} has written nothing for ${quiet}, past the product's own ` +
+        `${Math.round(STALL_CEILING_MS / 1000)}s stall ceiling` +
+        (terminal === null
+          ? ', and its terminal state was READ and is open — it is still running and has stopped writing.'
+          : `. ${terminal.detail}, so "stalled" is this door's best reading and not a verdict the product published.`),
     };
   };
 }
