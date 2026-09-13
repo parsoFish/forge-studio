@@ -155,16 +155,44 @@ pids_under() {
     case "$c" in "$root"|"$root"/*) echo "$p" ;; esac
   done
 }
+# proc_start_epoch <pid> → the second the process STARTED, from /proc/<pid>/stat field 22
+# (clock ticks since boot) against /proc/stat btime. Empty when the pid is not running.
+#
+# 7.6.105 (T1 1011). The previous bound read `stat -c %Y /proc/<pid>` under the comment
+# "/proc/<pid> mtime is the process start time" — FALSE, measured: a `sleep` spawned at …042
+# had directory mtime …044 while field 22 decoded to …042.8. proc_pid_make_inode stamps the
+# inode at first LOOKUP, so the old bound was "when something first looked", which under
+# load is exactly the lag that drops the one pid the census exists to catch — and lets an
+# OLDER process in a shared cwd through if nothing had looked at it before t0.
+proc_start_epoch() {
+  local pid="$1" ticks hz up_ms now_ms
+  [ -r "/proc/$pid/stat" ] || return 1
+  # Strip "pid (comm) " first — comm may hold spaces or parens — then starttime is field 20.
+  ticks="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')"
+  hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+  # A zero or non-numeric CLK_TCK would make the division fail, the helper return non-zero and
+  # the census SKIP the pid — a skip is fail-open for the census's purpose (1023). Default it.
+  case "$hz" in ''|*[!0-9]*|0) hz=100 ;; esac
+  # NOT `btime + ticks/hz` (1030). /proc/stat's btime is the boot second FLOORED, so that sum
+  # runs up to a second EARLY: measured boot fraction .749 on this box, 11 of 15 processes
+  # spawned inside t0's own second computed to t0-1 and the census EXCLUDED them — CI red on
+  # two doors whose claude spawns immediately, green on the two that spawn 1.5 s later. Boot
+  # time is derived here with millisecond precision from /proc/uptime and the clock read
+  # together, so a process born after `date +%s` always floors to at least that second.
+  up_ms="$(awk 'NR==1{printf "%d", $1*1000}' /proc/uptime)"; now_ms="$(date +%s%3N)"
+  [ -n "$ticks" ] && [ -n "$up_ms" ] && [ -n "$now_ms" ] || return 1
+  echo $(( (now_ms - up_ms + ticks * 1000 / hz) / 1000 ))
+}
 # pids_claude_in <cwd> <since-epoch> → claude processes in exactly <cwd> started at/after <since>.
 # The start-time bound is what makes this safe in a SHARED cwd: an older session in the same
-# directory (T1's own, say) is not ours to kill. /proc/<pid> mtime is the process start time.
+# directory (T1's own, say) is not ours to kill.
 pids_claude_in() {
   local cwd="$1" since="$2" chain p st
   chain=" $(self_chain) "
   for p in $(pgrep -x claude 2>/dev/null || true); do
     case "$chain" in *" $p "*) continue ;; esac
     [ "$(proc_cwd "$p")" = "$cwd" ] || continue
-    st="$(stat -c %Y "/proc/$p" 2>/dev/null || echo 0)"
+    st="$(proc_start_epoch "$p" || true)"; [ -n "$st" ] || continue
     [ "$st" -ge "$since" ] || continue
     echo "$p"
   done
@@ -296,10 +324,36 @@ undo_created() {
   echo "removed the worktree $LAUNCH_WT and the branch ${LAUNCH_BRANCH:-<none>} this launch created" >&2
   LAUNCH_WT=""; LAUNCH_BRANCH=""
 }
+# 7.6.105 (T1 1010): the census runs BEFORE the tmux HUP and again, bounded, AFTER it. The
+# old shape was kill-session then ONE census, immediately — and under load the lane program
+# can still be executing its spawn line after HUP, so the grandchild appeared after the only
+# look and the launch reported "retired nothing" while a claude burned tokens unattended
+# (C's gate at loadavg 16.7, the door at lanes.test.ts:311). The re-census stops after a full
+# second in which nothing new started at/after t0 in that cwd, or at LANES_RECENSUS_S.
+# Every look is REPORTED, so a red carries what the census saw rather than only the pid it
+# missed.
 die_launch() {
-  local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p
+  local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p found=0 quiet=0 waited=0
+  local seen=" " recensus="${LANES_RECENSUS_S:-5}"
+  # 1023: a non-numeric bound would make the loop's test error and exit after ONE census —
+  # silently the one-shot shape this function stopped having. Said, then defaulted.
+  case "$recensus" in ''|*[!0-9]*) echo "census: LANES_RECENSUS_S='$recensus' is not a whole number of seconds — using 5" >&2; recensus=5 ;; esac
+  for p in $(pids_claude_in "$cwd" "$t0"); do
+    seen="$seen$p "; found=$((found + 1)); retire_pid "$p" "half-launched lane $lane" >&2 || true
+  done
+  echo "census: $found claude pid(s) in $cwd started at/after $t0 before the kill" >&2
   tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s (undoing a launch that was never confirmed)" >&2
-  for p in $(pids_claude_in "$cwd" "$t0"); do retire_pid "$p" "half-launched lane $lane" >&2 || true; done
+  while [ "$quiet" -lt 2 ] && [ "$waited" -lt "${recensus}0" ]; do
+    local new=0
+    for p in $(pids_claude_in "$cwd" "$t0"); do
+      case "$seen" in *" $p "*) continue ;; esac
+      seen="$seen$p "; found=$((found + 1)); new=$((new + 1))
+      retire_pid "$p" "half-launched lane $lane, appeared after the kill" >&2 || true
+    done
+    if [ "$new" = 0 ]; then quiet=$((quiet + 1)); else quiet=0; fi
+    sleep 0.5; waited=$((waited + 5))
+  done
+  echo "census: $found claude pid(s) retired in total; quiet for 1 s after the kill (re-census bounded at ${recensus} s)" >&2
   undo_created
   die "$msg"
 }
@@ -587,5 +641,13 @@ case "${1:-}" in
   kill)   shift; cmd_kill "$@" ;;
   reap)   shift; cmd_reap "$@" ;;
   events) shift; cmd_events "$@" ;;
+  # 7.6.105 — the honest start time the census uses, exposed so it can be doored and so a
+  # human can check a pid's age without trusting a directory timestamp.
+  proc-start) shift; [ -n "${1:-}" ] || die "usage: lanes.sh proc-start <pid>"
+    # 1023: the argument becomes a path segment under /proc — digits only, refused otherwise
+    # (a value like `1/../2` would read another pid's stat and report it as this one's).
+    case "$1" in *[!0-9]*) die "proc-start: '$1' is not a pid (digits only)" ;; esac
+    st="$(proc_start_epoch "$1")" || die "proc-start: no such pid $1 (not running, or /proc/$1/stat cannot read)"
+    echo "$st" ;;
   *) sed -n '2,42p' "$0"; exit 1 ;;
 esac
