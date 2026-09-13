@@ -111,6 +111,9 @@ acceptance_criteria:
 files_in_scope:
   - src/auth/middleware.ts
   - src/auth/middleware.test.ts
+creates:
+  - src/auth/middleware.ts
+  - src/auth/middleware.test.ts
 estimated_iterations: 3
 ---
 
@@ -119,6 +122,32 @@ estimated_iterations: 3
 Picks up where WI-1 left off (token-introspection client). Wraps it in a middleware mounted on the protected routes.
 
 Per `brain/cycles/themes/spec-driven-work-items.md`, criteria are state-shaped, not procedure-shaped. The developer loop writes the code; this spec defines done.
+```
+
+### Work-item file — the PURE-MODIFICATION shape
+
+This WI brings no new file into existence, so it takes the `creates:` escape instead. `verification_artifact` is ONE path, and it must also appear in `files_in_scope`. A WI shaped like this with BOTH fields omitted is what quarantined a whole set in S10 run 15.
+
+```yaml
+---
+work_item_id: WI-4
+initiative_id: INIT-2026-05-08-add-oauth
+status: pending
+depends_on:
+  - WI-3
+acceptance_criteria:
+  - given: "a token whose introspection response omits the scope claim"
+    when:  "the middleware evaluates authorisation"
+    then:  "the request is rejected 403 and the omission is logged once"
+files_in_scope:
+  - src/auth/middleware.ts
+verification_artifact: src/auth/middleware.ts
+estimated_iterations: 2
+---
+
+# WI-4: reject tokens with no scope claim
+
+Tightens the middleware WI-3 delivered. Creates nothing: the behaviour change lands in a file that already exists, so `verification_artifact` names the file whose diff proves the work.
 ```
 
 ### Dependency graph (`_graph.md`)
@@ -155,7 +184,7 @@ graph TD
 3. **Decompose the initiative body's GWT ACs directly into atomic outcome-sized work items.** The body is your single source of intent — no `features[]` list. **The initiative TITLE is a filing label, NOT the spec — if title and body disagree, the body wins** (a past cycle hallucinated off a "release-folder" title and built unrelated release-NOTES markdown). **Before drafting any WI, restate the target in one line** — the concrete resource/file/module the body asks for and where it lives in this project's source tree. Put that line in the first WI body. Every WI's `files_in_scope` must sit under that source tree. Each GWT block in the body MUST be exercised by ≥1 WI's `quality_gate_cmd`. Do not invent work outside the body's ACs. For each WI:
    - At least one **GWT** acceptance criterion: `given`/`when`/`then` strings. **Always double-quote values** — YAML reserves leading `` ` `` `?` `!` `&` `*` `@` `%` as indicators; unquoted strings starting with these fail to parse.
    - Declares `depends_on` and `files_in_scope` (worktree-relative, no leading `/`, no `..`). `files_in_scope` is **advisory for non-hotspot files**. **Exception — hotspot files** (listed in ≥2 WIs with no `depends_on` edge): a shared file with no ordering edge is a guaranteed merge conflict, hard-failed by `detectHiddenCoupling()` at PM close.
-   - **`creates:` is OPTIONAL — omit unless needed.** If set, every entry MUST also appear in this WI's own `files_in_scope` and list ONLY files THIS WI creates from scratch. The validator hard-fails on `creates entry <path> must appear in files_in_scope`.
+   - **EVERY WI MUST set at least one of `creates:` or `verification_artifact:`. This is ONE rule about the PAIR, not two optional fields.** `validateCompiledWorkItemSet` rejects a WI carrying neither — `WI-n: creates is required (ADR 037) unless verification_artifact is set` — and that rejection quarantines the **whole set**, so one malformed item costs every item beside it. A WI that brings new files into existence lists them in `creates:`. A **pure-modification** WI — one that touches only files that already exist — MUST declare `verification_artifact:`, the single file whose change proves the work. That is the `creates:` escape ADR 037 provides, not an optional extra: omitting both is the one shape the validator will not accept. Membership rules, both hard-failed: every `creates:` entry MUST also appear in this WI's own `files_in_scope` and list ONLY files THIS WI creates from scratch (`creates entry <path> must appear in files_in_scope`), and MUST NOT be a gitignored path (ADR 051 decision 5 — a file git never sees cannot appear in the diff the required-paths check reads, so that check would pass on its absence). `verification_artifact:` MUST likewise appear in this WI's `files_in_scope` (`verification_artifact <path> must appear in files_in_scope`). Measured cost of getting this wrong: S10 run 15 lost the PM turn ($0.6774), the entire cycle, and beats 8 and 10–24 of a funded run to a single WI-3 that declared neither.
    - **`quality_gate_cmd` MUST fail on a clean tree before the agent does any work** (post-2026-05-24 audit). The orchestrator runs the gate at iter 0; if it passes, the WI is HARD-FAILED with `gate-too-loose: passed before agent invocation`. Sharp gates: `['node', '--test', '--experimental-strip-types', 'tests/<NEW-FILE>.test.ts']` where `<NEW-FILE>.test.ts` doesn't exist yet. **NEVER wrap in a shell pipeline or chain: no `bash -c "… | grep/awk/jq/…"`, no `… && …`, no `… ; …`. The orchestrator HARD-REJECTS shell-wrapped pipeline/chain gates** (inspects `bash -c`/`sh -c` for `|`, `&&`, `;`): a pipe surfaces the wrong exit code, and `grep '--- PASS:…'` starts with `-` (parsed as grep options), always erroring — this exact bug cost a whole release_folder cycle. Scope with the runner's own `-run`/path flags, never a post-filter. **If one sharp command genuinely cannot express the gate, commit a gate script authored from the [Gate scripts](../../docs/reference/project-contract.md#gate-scripts) section of the project contract** (`set -euo pipefail`, explicit per-step `fail()` asserts — **never bare `! cmd` asserts**: errexit exempts `!`-negated commands, so their failures silently don't fail the gate) and set `quality_gate_cmd: ['bash', 'scripts/gates/<name>.sh']`.
 
    **Sharp-gate patterns (mirror these):**
@@ -165,7 +194,7 @@ graph TD
    - **bats**: `['bats', 'tests/<new-test>.bats']`
    - **go test**: `['go', 'test', '-run', '<NewTestName>', './...']`
    - Estimates `estimated_iterations` (calibrate from `brain/cycles/themes/work-item-completion-by-domain.md`).
-   - `non_goals`, `verification_artifact`, `creates` are **optional** — omit if undefined.
+   - `non_goals` is **optional** — omit if undefined. `verification_artifact` and `creates` are NOT in this category: see the joint rule above — a WI must carry at least one of them.
    - **`domain`** (R4-05-F7, optional) — SHOULD be set to a coarse subsystem/feature-area tag for this WI (e.g. `auth`, `ui`, `scheduler`) so project constraint clauses tagged `applies_to: wi.domain=<area>` (ADR 037) land only in matching WIs. Omit when a WI genuinely spans no single clear domain.
    - **`demo_hook` is NOT a WI field** — initiative-level only.
    - **Behaviour-preserving refactors are the ONE exception to the fail-on-clean-tree rule.** A pure rename / move / reformat keeps the project's existing tests green before AND after — there is NO test that can fail-first, so a sharp fail-first gate is impossible. For such a WI, set `behavior_preserving: true` and let `quality_gate_cmd` be the existing (already-green) suite scoped to the touched package; the dev-loop disables the iter-0 hollow-gate guard for it (the branch-diff + empty-delivery backstop still guard against a no-op). Set this flag ONLY when the change genuinely preserves behaviour — if any observable behaviour changes, a fail-first gate IS possible, so use it instead. A partial rename that breaks compilation still reddens the gate, so the gate remains meaningful.
