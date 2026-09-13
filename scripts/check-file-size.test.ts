@@ -151,3 +151,71 @@ test('a baselined file that is genuinely GONE still reports stale — the fix ch
   const json = JSON.parse(execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }));
   assert.deepEqual(json.stale, [], 'the live tree has no stale rows; the reporting path is unchanged by the ENOENT skip');
 });
+
+// ------------------------------------------------------- forge-8vfn.7.6.107
+/**
+ * 800 IS SILENT AND 801 IS RED, so the guard was a trap primed for the next
+ * author rather than a warning to the current one. Measured by C at `9f7d624a`:
+ * two files at EXACTLY 800, seven within three lines, 36 within sixty — and the
+ * output said none of it.
+ *
+ * It is not hypothetical. `gate.test.ts` sat at 741 and four doors took it to
+ * 813; the gate refused, correctly, AFTER the work was written. A notice at 741
+ * would have said "59 left" before it was. `run.mjs` sits at 799 and blocks its
+ * own next edit — which is why `forge-0fli` stopped being a tidy-up.
+ *
+ * The notice is NOT a verdict: nothing in it can fail a run, and these doors
+ * assert that as hard as they assert the listing.
+ */
+function planted(lines: number, body: (rel: string) => void): void {
+  const rel = 'scripts/__headroom_probe__.mjs';
+  const victim = join(ROOT, rel);
+  // `lineCount` counts newline-terminated lines, so N joined lines + a trailing
+  // newline is N lines on disk.
+  writeFileSync(victim, `${Array.from({ length: lines }, (_, i) => `// line ${i}`).join('\n')}\n`);
+  try { body(rel); } finally { rmSync(victim, { force: true }); }
+}
+
+test('7.6.107: a file 5 under the cap is NOTICED, with its headroom, and nothing fails', () => {
+  planted(795, (rel) => {
+    const { code, out } = run();
+    assert.equal(code, 0, `a file UNDER the cap has broken no rule — the notice must not fail a run:\n${out}`);
+    assert.match(out, /check-file-size: HEADROOM —/, out);
+    assert.match(out, new RegExp(`${rel.replace('/', '\\/')}: 795 lines — 5 line\\(s\\) left`), out);
+    // And it must not be reported as a violation by another name.
+    assert.doesNotMatch(out, new RegExp(`${rel.replace('/', '\\/')}.*over the 800-line cap`), out);
+  });
+});
+
+test('7.6.107: a file 25 under the cap is NOT noticed — the window is 20, not "nearly"', () => {
+  planted(775, (rel) => {
+    const { code, out } = run();
+    assert.equal(code, 0);
+    assert.doesNotMatch(out, new RegExp(rel.replace('/', '\\/')), `775 is outside the 20-line window:\n${out}`);
+  });
+});
+
+test('7.6.107: a file AT the cap says it has no room left, and still does not fail', () => {
+  // The row that matters most, and the one the campaign already has two of:
+  // exactly 800 is legal, silent before this, and one line from red.
+  planted(800, (rel) => {
+    const { code, out } = run();
+    assert.equal(code, 0, `800 is at the cap, not over it — it must not fail:\n${out}`);
+    assert.match(out, new RegExp(`${rel.replace('/', '\\/')}: 800 lines — NO room left`), out);
+  });
+});
+
+test('7.6.107: the notice reaches --json as data, and a file over the cap is NOT in it twice', () => {
+  planted(900, (rel) => {
+    const { code, out } = run(['--json']);
+    assert.equal(code, 1, 'a 900-line file is still a violation');
+    const json = JSON.parse(out) as {
+      headroomWindow: number;
+      nearCap: { path: string; lines: number; headroom: number }[];
+      newOversize: { path: string }[];
+    };
+    assert.equal(json.headroomWindow, 20);
+    assert.ok(json.newOversize.some((f) => f.path === rel), 'over the cap is a violation');
+    assert.ok(!json.nearCap.some((f) => f.path === rel), 'and must not ALSO be listed as near it — one file, one finding');
+  });
+});
