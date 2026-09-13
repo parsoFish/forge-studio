@@ -165,17 +165,23 @@ pids_under() {
 # load is exactly the lag that drops the one pid the census exists to catch — and lets an
 # OLDER process in a shared cwd through if nothing had looked at it before t0.
 proc_start_epoch() {
-  local pid="$1" ticks btime hz
+  local pid="$1" ticks hz up_ms now_ms
   [ -r "/proc/$pid/stat" ] || return 1
   # Strip "pid (comm) " first — comm may hold spaces or parens — then starttime is field 20.
   ticks="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')"
-  btime="$(awk '/^btime /{print $2}' /proc/stat)"
   hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
   # A zero or non-numeric CLK_TCK would make the division fail, the helper return non-zero and
   # the census SKIP the pid — a skip is fail-open for the census's purpose (1023). Default it.
   case "$hz" in ''|*[!0-9]*|0) hz=100 ;; esac
-  [ -n "$ticks" ] && [ -n "$btime" ] || return 1
-  echo $(( btime + ticks / hz ))
+  # NOT `btime + ticks/hz` (1030). /proc/stat's btime is the boot second FLOORED, so that sum
+  # runs up to a second EARLY: measured boot fraction .749 on this box, 11 of 15 processes
+  # spawned inside t0's own second computed to t0-1 and the census EXCLUDED them — CI red on
+  # two doors whose claude spawns immediately, green on the two that spawn 1.5 s later. Boot
+  # time is derived here with millisecond precision from /proc/uptime and the clock read
+  # together, so a process born after `date +%s` always floors to at least that second.
+  up_ms="$(awk 'NR==1{printf "%d", $1*1000}' /proc/uptime)"; now_ms="$(date +%s%3N)"
+  [ -n "$ticks" ] && [ -n "$up_ms" ] && [ -n "$now_ms" ] || return 1
+  echo $(( (now_ms - up_ms + ticks * 1000 / hz) / 1000 ))
 }
 # pids_claude_in <cwd> <since-epoch> → claude processes in exactly <cwd> started at/after <since>.
 # The start-time bound is what makes this safe in a SHARED cwd: an older session in the same

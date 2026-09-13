@@ -146,6 +146,25 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     spawnSync('kill', ['-KILL', String(pid)]);
   });
 
+  test('1030: a process spawned INSIDE the census second is never computed to the second before it', () => {
+    // CI red (run 34729635825) on the two doors whose claude spawns immediately, green on the
+    // two that spawn 1.5 s later: `btime + ticks/hz` uses a boot second FLOORED, so the sum runs
+    // up to a second early. Measured locally: boot fraction .749, 11 of 15 same-second spawns
+    // excluded. Fifteen spawns each taken right after `date +%s`; every start must be >= it.
+    const misses: string[] = [];
+    for (let i = 0; i < 15; i++) {
+      const t0 = Math.floor(Date.now() / 1000);
+      const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
+      const pid = Number(r0.stdout.trim());
+      planted.add(pid);
+      const got = Number(lanes(['proc-start', String(pid)]).stdout.trim());
+      if (!(got >= t0)) misses.push(`spawn ${i}: start ${got} < t0 ${t0}`);
+      spawnSync('kill', ['-KILL', String(pid)]);
+      spawnSync('sleep', ['0.07']);
+    }
+    assert.deepEqual(misses, [], `a start computed before its own t0 is a claude the census will not retire:\n${misses.join('\n')}`);
+  });
+
   test('1023: a pid argument that is not digits is refused before it becomes a path segment', () => {
     // `1/../2` would resolve to /proc/2/stat and report pid 2's start as pid 1's —
     // a read-only sink, but §2's path-segment rule is an allowlist, not a judgement
