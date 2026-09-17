@@ -103,6 +103,12 @@ function predicateFailure(target, err) {
 }
 
 export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map()) {
+  // `pressedAt` DEFAULTS BECAUSE MOST CALLERS DRIVE ONE BEAT. The door suite has
+  // ~90 single-beat calls for which a fresh map is exactly right. A MULTI-BEAT
+  // caller must thread ONE map across the loop, or every beat gets its own and
+  // `wait.anchor` can never resolve a press from an earlier beat — which is what
+  // `forge-8vfn.27` measured on S10 run 16. The default is a convenience for the
+  // single-beat case, never a substitute for the wiring in a run.
   const { route: target, unbound } = resolveBeatRoute(rawBeat, bindings);
   if (unbound !== null) {
     return Object.freeze({
