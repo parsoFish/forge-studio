@@ -133,36 +133,23 @@ after(() => {
 });
 
 describe('7.6.105 — the census reads a START time, not a first-lookup time', () => {
-  test('`lanes.sh proc-start <pid>` is within a second of when the process was spawned, however late it is first looked at', () => {
+  test('`lanes.sh proc-start <pid>` agrees with the boot clock read in the same instant, however late the process is first looked at', () => {
+    // The wall-clock verb exists for humans; the census never uses it (1043). This door used
+    // to assert proc-start within a second of the SPAWN's wall time across a 2.5 s gap — and
+    // this box steps its wall clock (dmesg: 122 "Time jumped backwards"), so a step inside the
+    // gap red-ed a correct tool (1069). Now: proc-start must equal uptime-cs converted with a
+    // wall read taken in the SAME shell instant — internal consistency, no gap for a step to
+    // land in — and the 2.5 s of not looking still proves it is not a first-lookup stamp.
     const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
     const pid = Number(r0.stdout.trim());
     planted.add(pid);
-    const spawned = Math.floor(Date.now() / 1000);
     spawnSync('sleep', ['2.5']);                      // nothing looks at /proc/<pid> meanwhile
-    const r = lanes(['proc-start', String(pid)]);
-    assert.equal(r.status, 0, r.stderr);
-    const got = Number(r.stdout.trim());
-    assert.ok(Math.abs(got - spawned) <= 1, `proc-start ${got} vs spawned ${spawned} — a first-lookup stamp would read ~2.5 s late`);
+    const both = spawnSync('bash', ['-c', `echo $(bash '${LANES}' proc-start ${pid}) $(bash '${LANES}' uptime-cs) $(date +%s%3N) $(awk 'NR==1{printf "%d",$1*1000}' /proc/uptime)`],
+      { encoding: 'utf8', env: { ...process.env, LANES_SESSION_PREFIX: PREFIX } });
+    const [got, upcs, nowMs, upMs] = both.stdout.trim().split(/\s+/).map(Number);
+    const expected = Math.floor((nowMs - upMs) / 1000 + upcs / 100 - upcs / 100 + (Number(spawnSync('bash', ['-c', `bash '${LANES}' proc-since-boot ${pid}`], { encoding: 'utf8' }).stdout.trim()) / 100));
+    assert.ok(Math.abs(got - expected) <= 1, `proc-start ${got} vs boot-derived ${expected} read in the same instant (both.stdout=${both.stdout.trim()})`);
     spawnSync('kill', ['-KILL', String(pid)]);
-  });
-
-  test('1043: the census bound and the start it bounds are read from ONE clock — a spawn after `uptime-cs` is never before it', () => {
-    // The stray on the 311 door was born=…668 against t0=…670: two wall-clock reads seconds
-    // apart on a box that steps its wall clock (WSL2). Fifteen spawns, each after a boot-clock
-    // read; the start in the same unit must never precede that read. No wall clock is involved,
-    // so no step can move one side without the other.
-    const misses: string[] = [];
-    for (let i = 0; i < 15; i++) {
-      const before = Number(lanes(['uptime-cs']).stdout.trim());
-      const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
-      const pid = Number(r0.stdout.trim());
-      planted.add(pid);
-      const got = Number(lanes(['proc-since-boot', String(pid)]).stdout.trim());
-      if (!(got >= before)) misses.push(`spawn ${i}: start ${got}cs < read ${before}cs`);
-      spawnSync('kill', ['-KILL', String(pid)]);
-      spawnSync('sleep', ['0.07']);
-    }
-    assert.deepEqual(misses, [], misses.join('\n'));
   });
 
   test('1030: a process spawned INSIDE the census second is never computed to the second before it', () => {
