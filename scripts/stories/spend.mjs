@@ -405,8 +405,26 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures }
   // read. BOTH halt: an unreadable sidecar is UNKNOWN, and UNKNOWN never
   // resolves toward proceeding (§15.504) — the signal may be sitting there
   // unreadable, which must not render as "nothing was recorded".
-  const wrote = emitFailures?.failures ?? [];
-  const unreadable = emitFailures?.unreadable ?? [];
+  // A MALFORMED `emitFailures` IS UNKNOWN, NOT EMPTY — C's review of this bead.
+  // `emitFailures?.failures ?? []` alone would synthesise ABSENCE from a SHAPE
+  // ERROR: if a later refactor made `readEmitFailures` return a bare array, or
+  // any object without these two keys, both arms would read `[]`, this would
+  // stop halting, and NOTHING would print a word. Every door here would still
+  // pass, because the doors construct the object themselves — a fixture
+  // deciding the experiment, which is the class this bead exists to prevent.
+  //
+  // `unpriced ?? []` one line below has the same property and has had it since
+  // 7.6.71. The reason the line is drawn here and not there: `unpriced` is
+  // FLAT, so a wrong-typed value fails loudly at `.length`, while
+  // `emitFailures` is NESTED and `?.failures` swallows one more class of
+  // mismatch silently. The nested shape is the bigger surface and it is the new
+  // one.
+  const shapeOk = emitFailures === undefined || emitFailures === null
+    || (Array.isArray(emitFailures.failures) && Array.isArray(emitFailures.unreadable));
+  const wrote = shapeOk ? (emitFailures?.failures ?? []) : [];
+  const unreadable = shapeOk
+    ? (emitFailures?.unreadable ?? [])
+    : [{ dir: '(caller)', error: `emitFailures is present but malformed (${Array.isArray(emitFailures) ? 'array' : typeof emitFailures}) — unreadable is UNKNOWN, not absent` }];
   if (enforceable && (wrote.length > 0 || unreadable.length > 0)) {
     const detail = wrote.length > 0
       ? `${wrote.length} ledger row(s) FAILED TO WRITE (first: message=${wrote[0]?.message ?? 'unrecorded'}, error=${wrote[0]?.error ?? 'unrecorded'})`

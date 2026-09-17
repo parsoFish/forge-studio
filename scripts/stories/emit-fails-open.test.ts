@@ -204,6 +204,32 @@ describe('7.6.103 — an unwritable ledger row stops the run', () => {
     } finally { chmodSync(dir, 0o700); rmSync(root, { recursive: true, force: true }); }
   });
 
+  // C's review: a malformed `emitFailures` must be UNKNOWN, not empty. The
+  // concrete failure is a later refactor returning a bare array — every door in
+  // this file would still pass, because they construct the object shape
+  // themselves, while production silently stopped halting.
+  for (const [label, shape] of [
+    ['a bare array (the refactor case)', []],
+    ['an empty object', {}],
+    ['wrong-typed members', { failures: 'x', unreadable: null }],
+  ] as [string, unknown][]) {
+    test(`SHAPE ERROR is UNKNOWN, not absence: ${label} halts`, () => {
+      const stop = verdict(shape, 9);
+      assert.equal(stop.halt, true,
+        'a shape that never reaches production must not be able to satisfy this — absence synthesised ' +
+        'from a malformed argument is the sentence this whole bead exists to prevent');
+      assert.equal(stop.kind, 'row-write-failed');
+      assert.match(stop.reason, /present but malformed/);
+    });
+  }
+
+  test('ABSENT is still absent — undefined and null do not halt', () => {
+    // The other direction, so the shape check cannot be "halt on everything".
+    assert.equal(verdict(undefined, 9).halt, false);
+    assert.equal(verdict(null, 9).halt, false);
+    assert.equal(verdict({ failures: [], unreadable: [] }, 9).halt, false);
+  });
+
   test('a successful emit writes NO sidecar — the happy path gains no side effect', () => {
     const root = mkdtempSync(join(tmpdir(), 'emit-ok-'));
     try {
