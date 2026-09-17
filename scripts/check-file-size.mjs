@@ -80,8 +80,17 @@ export class CorpusUnreadable extends Error {
  *
  * It is not hypothetical. `gate.test.ts` sat at 741 and four doors took it to
  * 813 — the gate refused, correctly, AFTER the work was written; a notice at
- * 741 would have said "59 left" before it was. `run.mjs` measures 799 on this
- * tree with ONE line left, and A's next merge takes it to the cap exactly.
+ * 741 would have said "59 left" before it was.
+ *
+ * AND THE PREDICTION CAME TRUE, WHICH IS WHY THIS SENTENCE CHANGED. When this
+ * was written `run.mjs` measured 799 with ONE line left and the next merge was
+ * expected to take it to the cap exactly. It did: `run.mjs` sat at 800 with
+ * zero headroom on main for about four days, during which no lane could add a
+ * line to it, and `forge-0fli` was re-rated from a tidy-up to a hard block on
+ * that basis. The split landed in #758 and it is 381 now, off the list
+ * entirely. The old sentence was TRUE when written and was falsified by a
+ * merge, which is a different thing from having been wrong — the record should
+ * be able to tell those apart, so this says which it was.
  *
  * Twenty is C's number and it is a judgement, not a measurement: wide enough
  * that a normal addition lands inside the warning, narrow enough that the

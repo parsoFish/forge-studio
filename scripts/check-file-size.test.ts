@@ -9,7 +9,7 @@
  *
  * RUN: node --test --experimental-strip-types scripts/check-file-size.test.ts
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -161,8 +161,14 @@ test('a baselined file that is genuinely GONE still reports stale — the fix ch
  *
  * It is not hypothetical. `gate.test.ts` sat at 741 and four doors took it to
  * 813; the gate refused, correctly, AFTER the work was written. A notice at 741
- * would have said "59 left" before it was. `run.mjs` sits at 799 and blocks its
- * own next edit — which is why `forge-0fli` stopped being a tidy-up.
+ * would have said "59 left" before it was.
+ *
+ * `run.mjs` was the live case when this was written: 799, blocking its own next
+ * edit, which is why `forge-0fli` stopped being a tidy-up. It then sat at
+ * exactly 800 on main for about four days before #758 split it to 381. Kept as
+ * history rather than deleted — the notice's whole argument is that a file
+ * approaching the cap is a trap for whoever touches it next, and this is the
+ * one case where that was measured end to end.
  *
  * The notice is NOT a verdict: nothing in it can fail a run, and these doors
  * assert that as hard as they assert the listing.
@@ -211,11 +217,77 @@ test('7.6.107: the notice reaches --json as data, and a file over the cap is NOT
     assert.equal(code, 1, 'a 900-line file is still a violation');
     const json = JSON.parse(out) as {
       headroomWindow: number;
+      // Nothing reads `nearCap` today — no import of audit(), and CI runs this
+      // file without --json. This door is the entire contract for that field's
+      // shape; it is not a redundant assertion you can drop.
       nearCap: { path: string; lines: number; headroom: number }[];
       newOversize: { path: string }[];
     };
     assert.equal(json.headroomWindow, 20);
     assert.ok(json.newOversize.some((f) => f.path === rel), 'over the cap is a violation');
     assert.ok(!json.nearCap.some((f) => f.path === rel), 'and must not ALSO be listed as near it — one file, one finding');
+  });
+});
+/*
+ * `forge-8vfn.7.6.108` — a fatal and a verdict must not share exit 1.
+ *
+ * Every guard in this tree exits 1 on a VIOLATION. This one also exited 1 when
+ * `git ls-files` failed, so a caller reading the exit code could not tell "this
+ * tree breaks the cap" from "I never read this tree". §15.504 at the process
+ * boundary: green, red and UNKNOWN are three states, and UNKNOWN was being
+ * spelled with red's number.
+ *
+ * The trigger is `ROOT` resolved from `import.meta.url` — a copy of the checker
+ * at another path enumerates whatever sits above it, which is how D met this:
+ * a scratch copy exited 1 on a `fatal:` and read as a violation. These doors
+ * reproduce that exactly, by running a COPY from a directory whose parent is
+ * not a git repository. That is the real mechanism rather than a mocked git.
+ */
+describe('7.6.108: "could not measure" has its own exit code', () => {
+  /** Run a COPY of the checker from a directory outside any git repository, so
+   *  its ROOT (dirname/..) is not a work tree and `git ls-files` genuinely fails. */
+  function runDetached(): { code: number; stdout: string; stderr: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'cfs-detached-'));
+    const copy = join(dir, 'check-file-size.mjs');
+    writeFileSync(copy, readFileSync(CHECKER, 'utf8'));
+    try {
+      const stdout = execFileSync('node', [copy], { cwd: dir, encoding: 'utf8' });
+      return { code: 0, stdout, stderr: '' };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test('a tree it cannot enumerate exits 75, not 1, and says which it is', () => {
+    const { code, stderr } = runDetached();
+    assert.equal(code, 75, `a corpus that cannot be enumerated is UNKNOWN, not a violation — got ${code}`);
+    assert.match(stderr, /REFUSED/, stderr);
+    assert.match(stderr, /NOT a cap violation/, 'the refusal must say what it is not — the whole defect is the two reading alike');
+    assert.match(stderr, /git ls-files could not enumerate/, stderr);
+  });
+
+  test('a real violation still exits 1 — the fix must not soften the cap', () => {
+    planted(900, () => {
+      const { code } = run();
+      assert.equal(code, 1, 'a 900-line file is a violation and keeps red\'s number');
+    });
+  });
+
+  test('the two are separable from the EXIT CODE ALONE, with no stdout parsing', () => {
+    // The point of the bead: a caller branches on the code, never on prose.
+    const cannotMeasure = runDetached().code;
+    let violation = 0;
+    planted(900, () => { violation = run().code; });
+    const clean = run().code;
+    assert.notEqual(cannotMeasure, violation, 'UNKNOWN must not share a code with a violation');
+    assert.notEqual(cannotMeasure, clean, 'UNKNOWN must not share a code with a pass');
+    assert.deepEqual(
+      [clean, violation, cannotMeasure],
+      [0, 1, 75],
+      'three states, three codes: 0 pass / 1 violation / 75 could-not-measure',
+    );
   });
 });
