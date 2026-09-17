@@ -146,6 +146,25 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     spawnSync('kill', ['-KILL', String(pid)]);
   });
 
+  test('1043: the census bound and the start it bounds are read from ONE clock — a spawn after `uptime-cs` is never before it', () => {
+    // The stray on the 311 door was born=…668 against t0=…670: two wall-clock reads seconds
+    // apart on a box that steps its wall clock (WSL2). Fifteen spawns, each after a boot-clock
+    // read; the start in the same unit must never precede that read. No wall clock is involved,
+    // so no step can move one side without the other.
+    const misses: string[] = [];
+    for (let i = 0; i < 15; i++) {
+      const before = Number(lanes(['uptime-cs']).stdout.trim());
+      const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
+      const pid = Number(r0.stdout.trim());
+      planted.add(pid);
+      const got = Number(lanes(['proc-since-boot', String(pid)]).stdout.trim());
+      if (!(got >= before)) misses.push(`spawn ${i}: start ${got}cs < read ${before}cs`);
+      spawnSync('kill', ['-KILL', String(pid)]);
+      spawnSync('sleep', ['0.07']);
+    }
+    assert.deepEqual(misses, [], misses.join('\n'));
+  });
+
   test('1030: a process spawned INSIDE the census second is never computed to the second before it', () => {
     // CI red (run 34729635825) on the two doors whose claude spawns immediately, green on the
     // two that spawn 1.5 s later: `btime + ticks/hz` uses a boot second FLOORED, so the sum runs
@@ -196,7 +215,7 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
       assert.match(r.stderr, /NOT CONFIRMED for late/);
       assert.ok(waitGone(stray, 3000), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
-      assert.match(r.stderr, /census:/, 'and the census reports what it saw, so a red carries evidence');
+      assert.match(r.stderr, /census: .* started at\/after uptime \d+cs \(wall ~\d+\)/, 'and the census reports what it saw, in its own clock, so a red carries evidence');
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
