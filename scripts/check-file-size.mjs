@@ -41,6 +41,36 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const HARD_CAP_LINES = 800;
 
 /**
+ * "I could not measure this tree" — `forge-8vfn.7.6.108`, found by D while
+ * working 7.6.107 on this file.
+ *
+ * Every guard in this tree exits 1 on a VIOLATION. This one also exited 1 when
+ * `git ls-files` failed, so a caller reading the exit code could not tell "this
+ * tree breaks the cap" from "I never read this tree". §15.504 at the process
+ * boundary: green, red and UNKNOWN are three states, and UNKNOWN was being
+ * spelled with red's number.
+ *
+ * 75 is the campaign's REFUSED code — the one `gate.sh` already turns into its
+ * own exit 3 — so a caller that already knows that vocabulary needs no new
+ * rule. The trigger D found is `ROOT` resolved from `import.meta.url`, which
+ * makes a copy of this file at another path enumerate a tree that is not a git
+ * repository; the conflated exit code is the defect, and it would still be one
+ * if the root were passed in.
+ */
+export const EXIT_CANNOT_MEASURE = 75;
+
+/** Thrown ONLY when the corpus cannot be enumerated. Tagged rather than caught
+ *  by shape: a blanket `catch` around `audit()` would spell an internal bug as
+ *  75 as well, which is this same defect one layer along. */
+export class CorpusUnreadable extends Error {
+  constructor(cause) {
+    super(`git ls-files could not enumerate this tree: ${cause?.message ?? cause}`);
+    this.name = 'CorpusUnreadable';
+    this.cause = cause;
+  }
+}
+
+/**
  * How close to the cap is close enough to say so — `forge-8vfn.7.6.107`.
  *
  * 800 IS SILENT AND 801 IS RED, which makes this guard a trap primed for the
@@ -50,8 +80,17 @@ export const HARD_CAP_LINES = 800;
  *
  * It is not hypothetical. `gate.test.ts` sat at 741 and four doors took it to
  * 813 — the gate refused, correctly, AFTER the work was written; a notice at
- * 741 would have said "59 left" before it was. `run.mjs` measures 799 on this
- * tree with ONE line left, and A's next merge takes it to the cap exactly.
+ * 741 would have said "59 left" before it was.
+ *
+ * AND THE PREDICTION CAME TRUE, WHICH IS WHY THIS SENTENCE CHANGED. When this
+ * was written `run.mjs` measured 799 with ONE line left and the next merge was
+ * expected to take it to the cap exactly. It did: `run.mjs` sat at 800 with
+ * zero headroom on main for about four days, during which no lane could add a
+ * line to it, and `forge-0fli` was re-rated from a tidy-up to a hard block on
+ * that basis. The split landed in #758 and it is 381 now, off the list
+ * entirely. The old sentence was TRUE when written and was falsified by a
+ * merge, which is a different thing from having been wrong — the record should
+ * be able to tell those apart, so this says which it was.
  *
  * Twenty is C's number and it is a judgement, not a measurement: wide enough
  * that a normal addition lands inside the warning, narrow enough that the
@@ -64,11 +103,19 @@ const NOT_CODE = new Set(['package-lock.json']);
 
 /** Every code file git can see, committed or not, ignoring ignored paths. */
 function codeFiles(root) {
-  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
-    cwd: root,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  let out;
+  try {
+    out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    // NOT a violation. The corpus is unknown, and an unknown corpus has no
+    // verdict to give — `main` turns this into EXIT_CANNOT_MEASURE.
+    throw new CorpusUnreadable(err);
+  }
   return out
     .split('\n')
     .filter(Boolean)
@@ -175,7 +222,19 @@ function main(argv) {
   const at = argv.indexOf('--baseline');
   const baselinePath = at === -1 ? join(ROOT, 'scripts/baselines/file-size.json') : resolve(argv[at + 1]);
 
-  const result = audit(ROOT, readBaseline(baselinePath));
+  let result;
+  try {
+    result = audit(ROOT, readBaseline(baselinePath));
+  } catch (err) {
+    if (!(err instanceof CorpusUnreadable)) throw err;   // a real bug is not a refusal
+    process.stderr.write(
+      `check-file-size: REFUSED — ${err.message}\n` +
+      `  This is NOT a cap violation. The corpus could not be enumerated, so there is no verdict\n` +
+      `  to give; exiting ${EXIT_CANNOT_MEASURE} (REFUSED) rather than 1, which means "this tree\n` +
+      `  breaks the cap". Root read as ${ROOT}.\n`,
+    );
+    return EXIT_CANNOT_MEASURE;
+  }
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   }
