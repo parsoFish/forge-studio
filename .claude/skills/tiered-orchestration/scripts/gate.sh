@@ -574,7 +574,9 @@ else
         echo "  PIN_SIBLING_STALE $man:$p — matches main ${gate_main:-unknown}; owner $(manifest_owner "$man") owes a reconcile"
         sibling_stale_n=$((sibling_stale_n + 1))
       else
-        echo "  UNDECLARED: $man:$p"; undeclared=1
+        # 7.6.110 (A, T1 1036): the line carries its REMEDY, as PIN_SIBLING_STALE carries its
+        # owner — A spent a full twenty-step gate learning that a declaration is owner-independent.
+        echo "  UNDECLARED: $man:$p — this PR changed a pinned path and did not say so; declare it with --expect-pin-fail $man:$p (a declaration is the PR's claim about its own diff — your own lane's rows included)"; undeclared=1
       fi
     done < <(cd "$R" && sha256sum -c "$manifest" 2>/dev/null | sed -n 's/^\(.*\): FAILED$/\1/p')
     [ "$undeclared" -eq 0 ] || fail=1
