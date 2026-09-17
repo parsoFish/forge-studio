@@ -17,6 +17,28 @@
  *      `<someProjectId>` from whatever the product discovered on disk, and
  *      beat 2 navigates to it. The story never writes that id.
  *
+ * WHY BEAT 1 SAYS `among: { 'card-id': 'tracked-projects' }` (`forge-8vfn.26`).
+ * Beat 1 used to take whichever card came first, and "first" is a property of
+ * the RUNNING CHECKOUT's `projects/` directory, not of the product: one lane
+ * holds `gitpulse` and `mdtoc`, CI holds `mdtoc` alone, and the committed
+ * `story.json` recorded `gitweave` from a third lane. Every lane that ran the
+ * mandatory costless step rewrote the artifact to its own listing, so the file
+ * never converged — whoever committed last won.
+ *
+ * The fix is a RULE, never an id. Naming the project here would converge the
+ * artifact and destroy mechanism 3 above: a placeholder is bind-or-assert, never
+ * both, so the moment this beat states which card it wants, `<someProjectId>`
+ * has nothing left to bind and this story stops proving the one thing only it
+ * proves. Sorting the cards would keep the binding and NOT converge — still
+ * `gitpulse` here and `mdtoc` in CI.
+ *
+ * Restricting the candidates to projects git TRACKS gets both: the product is
+ * still what answers, the story still writes no id, and the answer is identical
+ * in every checkout and in CI because that is what tracked means. The rule is
+ * resolved once at LOAD (`story-file.mjs`), so a tree where it cannot be
+ * answered refuses by name instead of reaching this beat and reding as though
+ * the product had rendered no cards.
+ *
  * COSTLESS BY CONSTRUCTION: no `realSpawn`, no budget, so CI runs it. That is
  * why it proves route binding on `/projects/<id>` rather than S1's
  * `/sessions/<kind>/<sessionId>` — minting a session means dispatching an
@@ -43,13 +65,17 @@ export default {
           'card-type': 'project',
           'card-id': '<someProjectId>',
         },
+        // The binding is answered by a card for a project this REPOSITORY
+        // carries, not by whichever card the running checkout happens to render
+        // first. See the header: a rule, never an id.
+        among: { 'card-id': 'tracked-projects' },
       },
       say: 'The Projects pillar lists every project forge manages. Each card carries the project it stands for, so the operator can pick one without reading the page.',
     },
     {
-      act: 'Click the first project card',
+      act: 'Click the card for a project this repository carries',
       expect: { route: '/projects/<someProjectId>', data: { page: 'projects', 'page-ready': 'true' } },
-      say: 'The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.',
+      say: 'The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance. The story names a rule for which card may answer, never the project itself.',
     },
     {
       act: 'Go back to the Projects pillar',

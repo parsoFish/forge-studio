@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { portableArtifact } from './artifact-paths.mjs';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -83,7 +84,14 @@ ${cards}
 export function writeStoryJson(result, root) {
   const dir = join(root, 'demos', 'stories', result.story.id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'story.json'), `${JSON.stringify(result, null, 2)}\n`);
+  // forge-8vfn.26: the artifact records the PRODUCT, never the checkout that ran
+  // it. `portableArtifact` relativises the whole object and THROWS if anything
+  // still names this machine — the write happens only on what it returns, so a
+  // path shape it did not recognise stops the run instead of reaching a
+  // committed file. One seam, because this is the only place the artifact is
+  // serialised; a guard on the three emitters that leak today would pass the
+  // fourth silently.
+  writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(result, root), null, 2)}\n`);
   return result.story.id;
 }
 
