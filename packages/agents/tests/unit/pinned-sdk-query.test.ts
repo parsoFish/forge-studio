@@ -13,6 +13,11 @@ import assert from 'node:assert/strict';
 
 import { createPinnedSdkQuery, pinnedSdkQuery } from '../../pinned-sdk-query.ts';
 
+/** These tests exercise the ENV-PINNING seam with a fake `queryImpl` and never
+ *  spawn, so they name a CLI rather than require one on disk (7.6.116). The
+ *  refusal when it is genuinely absent is pinned in `pinned-query-cli-path.test.ts`. */
+const STUB_CLI = () => '/stub/claude';
+
 type FakeCall = { prompt: unknown; options?: Record<string, unknown> };
 
 function makeFakeQuery(): { fakeQuery: (params: FakeCall) => unknown; calls: FakeCall[] } {
@@ -34,7 +39,7 @@ test('createPinnedSdkQuery: F1 AC — a deliberately polluted process.env (ANTHR
   process.env.ANTHROPIC_API_KEY = 'sk-real-key';
   try {
     const { fakeQuery, calls } = makeFakeQuery();
-    const wrapped = createPinnedSdkQuery(fakeQuery as never);
+    const wrapped = createPinnedSdkQuery(fakeQuery as never, STUB_CLI);
     wrapped({ prompt: 'hello' } as never);
 
     assert.equal(calls.length, 1);
@@ -54,7 +59,7 @@ test('createPinnedSdkQuery: options.env is treated as deliberate override deltas
   process.env.ANTHROPIC_BASE_URL = 'https://evil.example.com';
   try {
     const { fakeQuery, calls } = makeFakeQuery();
-    const wrapped = createPinnedSdkQuery(fakeQuery as never);
+    const wrapped = createPinnedSdkQuery(fakeQuery as never, STUB_CLI);
     wrapped({
       prompt: 'hello',
       options: { env: { GIT_AUTHOR_NAME: 'forge-ralph', GIT_AUTHOR_EMAIL: 'forge-ralph+WI-7@forge.local' }, model: 'claude-sonnet-4-6' },
@@ -74,7 +79,7 @@ test('createPinnedSdkQuery: options.env is treated as deliberate override deltas
 
 test('createPinnedSdkQuery: pins options.env even when the caller passes no options at all', () => {
   const { fakeQuery, calls } = makeFakeQuery();
-  const wrapped = createPinnedSdkQuery(fakeQuery as never);
+  const wrapped = createPinnedSdkQuery(fakeQuery as never, STUB_CLI);
   wrapped({ prompt: 'no options here' } as never);
 
   assert.equal(calls.length, 1);
@@ -84,7 +89,7 @@ test('createPinnedSdkQuery: pins options.env even when the caller passes no opti
 test('createPinnedSdkQuery: returns whatever the wrapped query returns (pass-through, not a new Query)', () => {
   const sentinel = Symbol('sentinel-query-result');
   const fakeQuery = () => sentinel as unknown as ReturnType<typeof pinnedSdkQuery>;
-  const wrapped = createPinnedSdkQuery(fakeQuery as never);
+  const wrapped = createPinnedSdkQuery(fakeQuery as never, STUB_CLI);
   const result = wrapped({ prompt: 'x' } as never);
   assert.equal(result as unknown as symbol, sentinel);
 });
@@ -134,7 +139,7 @@ function captureStderr(fn: () => void): string {
 
 test('6.11.40: every query is handed an `stderr` sink — without one the SDK sets stderrMode "ignore" and the child\'s output is discarded by the OS', () => {
   const { fakeQuery, calls } = makeFakeQuery();
-  createPinnedSdkQuery(fakeQuery as never)({ prompt: 'p', options: {} } as never);
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p', options: {} } as never);
 
   const opts = calls[0]!.options as Record<string, unknown>;
   assert.equal(typeof opts['stderr'], 'function', 'the SDK only pipes the child\'s stderr when this option is present');
@@ -142,7 +147,7 @@ test('6.11.40: every query is handed an `stderr` sink — without one the SDK se
 
 test('6.11.40: the sink writes the child\'s line to this process\'s stderr, which is the session\'s own stderr.log', () => {
   const { fakeQuery, calls } = makeFakeQuery();
-  createPinnedSdkQuery(fakeQuery as never)({ prompt: 'p', options: {} } as never);
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p', options: {} } as never);
   const sink = (calls[0]!.options as { stderr: (m: string) => void }).stderr;
 
   const seen = captureStderr(() => sink('Error: ENOENT: no such file or directory'));
@@ -153,7 +158,7 @@ test('6.11.40: the sink writes the child\'s line to this process\'s stderr, whic
 
 test('6.11.40: a multi-line chunk is marked line by line, and blank lines add no noise', () => {
   const { fakeQuery, calls } = makeFakeQuery();
-  createPinnedSdkQuery(fakeQuery as never)({ prompt: 'p', options: {} } as never);
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p', options: {} } as never);
   const sink = (calls[0]!.options as { stderr: (m: string) => void }).stderr;
 
   const seen = captureStderr(() => sink('first line\n\nsecond line\n'));
@@ -167,7 +172,7 @@ test('6.11.40: a multi-line chunk is marked line by line, and blank lines add no
 test('6.11.40: a caller\'s own stderr sink is COMPOSED, never silently dropped — symmetric with how options.env is merged', () => {
   const { fakeQuery, calls } = makeFakeQuery();
   const callerSaw: string[] = [];
-  createPinnedSdkQuery(fakeQuery as never)({
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({
     prompt: 'p',
     options: { stderr: (m: string) => callerSaw.push(m) },
   } as never);
@@ -181,7 +186,7 @@ test('6.11.40: a caller\'s own stderr sink is COMPOSED, never silently dropped �
 
 test('6.11.40: a sink that throws never takes the turn down — diagnosis is not load-bearing', () => {
   const { fakeQuery, calls } = makeFakeQuery();
-  createPinnedSdkQuery(fakeQuery as never)({
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({
     prompt: 'p',
     options: { stderr: () => { throw new Error('a bad caller sink'); } },
   } as never);
