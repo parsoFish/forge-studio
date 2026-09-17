@@ -650,3 +650,4 @@ packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
 packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
 packages/sessions/studio/session-artifact-derivers.ts realpathSync 6
 packages/sessions/studio/session-kinds.ts readFileSync 1
+packages/sessions/turn-cost-rows.ts appendFileSync 1
