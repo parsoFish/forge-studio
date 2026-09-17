@@ -34,6 +34,7 @@
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { buildChildEnv, sdkStderrSink } from '@forge/kernel/spawn-env.ts';
 import { markerEnvOverlay } from './spawn-marker.ts';
+import { resolveClaudeCliPath } from '@forge/kernel/claude-cli-path.ts';
 
 /** The exact shape of the SDK's `query` function. */
 export type SdkQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
@@ -64,11 +65,34 @@ export type StreamQueryFn = (params: {
  * (and must never) pre-merge process.env itself; it only needs to carry the
  * small delta it actually wants to override.
  */
-export function createPinnedSdkQuery(queryImpl: SdkQueryFn): SdkQueryFn {
+export function createPinnedSdkQuery(
+  queryImpl: SdkQueryFn,
+  /**
+   * WHICH CLI to name — `forge-8vfn.7.6.116`. Injectable on the SAME contract
+   * as `queryImpl`: TEST-ONLY, and the one production caller is the bound
+   * `pinnedSdkQuery` below, which takes the real resolver by default.
+   *
+   * It exists because the refusal is a PRODUCTION precondition and these tests
+   * are not production: every existing caller here passes a fake `queryImpl`
+   * and never spawns, so demanding a real Claude Code binary on disk would make
+   * eight unit tests about env-pinning and stderr sinks depend on an installed
+   * CLI. A test that does not spawn says so by passing a stub; a test about the
+   * refusal itself (`pinned-query-cli-path.test.ts`) uses the default.
+   */
+  resolveCli: () => string = resolveClaudeCliPath,
+): SdkQueryFn {
   return (params) =>
     queryImpl({
       ...params,
-      options: { ...params.options, env: buildChildEnv(process.env, params.options?.env ?? {}), stderr: sdkStderrSink(params.options) },
+      options: {
+        ...params.options,
+        env: buildChildEnv(process.env, params.options?.env ?? {}),
+        stderr: sdkStderrSink(params.options),
+        // `forge-8vfn.7.6.116` — NAME THE BINARY; never let the SDK pick its
+        // bundled one. `claude-cli-path.ts`'s header carries the why, including
+        // why there is no fallback and why the key is safe to pass undeclared.
+        pathToClaudeCodeExecutable: resolveCli(),
+      },
     });
 }
 

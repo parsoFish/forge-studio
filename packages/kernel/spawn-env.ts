@@ -56,6 +56,13 @@ export const AGENT_ENV_ALLOWLIST: readonly string[] = [
   'USER',
   'LOGNAME',
   'ANTHROPIC_API_KEY',
+  // `forge-8vfn.7.6.116`, T1 1066 — WHICH Claude Code binary an SDK spawn runs.
+  // Carried here for the same reason the lock variables are: a child that must
+  // obey a decision the parent made cannot be told it any other way. The value
+  // is derived and PRINTED by the launcher, never searched for by the product,
+  // and `resolveClaudeCliPath` REFUSES when it is absent rather than falling
+  // back to the SDK's bundled 2.0.77 CLI — that fallback IS the bug.
+  'FORGE_CLAUDE_CLI',
 ] as const;
 
 /**
