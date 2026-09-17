@@ -16,7 +16,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -794,6 +794,7 @@ describe('lanes.sh launch — the lane inherits the campaign\'s lock names (639)
     const env = envOf('lane-locks');
     assert.equal(env['FORGE_SUITE_LOCK'], join(camp, '.suite-lock'), 'the suite lock is derived from THIS campaign');
     assert.equal(env['FORGE_RUN_LOCK'], join(camp, '.run-lock'), 'and the run lock with it');
+    assert.equal(env['FORGE_CLAUDE_CLI'], realpathSync(bin), '7.6.116: the lane carries the resolved CLI path its story runs must spawn (the product refuses without it)');
     assert.equal(env['LANES_LANE'], lane, 'the existing LANES_* wiring is undisturbed');
   });
 });

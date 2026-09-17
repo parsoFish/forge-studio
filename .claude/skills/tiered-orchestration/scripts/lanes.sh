@@ -416,6 +416,16 @@ cmd_launch() {
   [ -n "$t1" ] || die "cannot tell which session is T1: run this from T1's own shell, or pass --t1 <name> (your name is on the first line of ListAgents)"
   local bin="${LANES_CLAUDE_BIN:-$(command -v claude || true)}"
   [ -n "$bin" ] || die "claude not on PATH (set LANES_CLAUDE_BIN)"
+  # 7.6.116 (T1 1067) — THE LANE'S STORY RUNS SPAWN THE CLI NAMED BY FORGE_CLAUDE_CLI, AND THE
+  # PRODUCT REFUSES WHEN IT IS UNSET. The Agent SDK spawned its BUNDLED Claude Code CLI (2.0.77,
+  # a year-old binary whose Oct-2025 terms gate blocked every real-spawn run on this box while
+  # the operator's 2.1.274 showed no prompt to accept). The product now takes the executable from
+  # this one explicit absolute path and never searches PATH; DERIVATION belongs here, in a
+  # launcher that prints what it derived. `readlink -f` because `claude` is a symlink to a native
+  # binary and the SDK spawns a native path directly.
+  local cli; cli="$(readlink -f "$bin" 2>/dev/null || true)"
+  [ -n "$cli" ] && [ -x "$cli" ] || die "FORGE_CLAUDE_CLI could not be derived: '$bin' does not resolve to an executable (readlink -f → '${cli:-<empty>}')"
+  echo "preflight: FORGE_CLAUDE_CLI=$cli (derived from '$bin'; the lane's story runs spawn THIS binary, never the SDK's bundled one)"
   local sid; sid="$(uuidgen)"
   mkdir -p "$camp/heartbeat" "$camp/prompts"
   local proto="$camp/prompts/$lane.protocol.md"
@@ -498,7 +508,7 @@ cmd_launch() {
   # directory. This launcher knows the campaign — both are derived from `$camp`,
   # never written literally — and a lane that never sees them gets the guard's
   # honest "not configured" line rather than a silent non-exclusion.
-  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' FORGE_SUITE_LOCK='$camp/.suite-lock' FORGE_RUN_LOCK='$camp/.run-lock' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
+  tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' FORGE_SUITE_LOCK='$camp/.suite-lock' FORGE_RUN_LOCK='$camp/.run-lock' FORGE_CLAUDE_CLI='$cli' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
   # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
   local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
   while [ "$(date +%s)" -lt "$deadline" ]; do
