@@ -34,6 +34,7 @@
 import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { buildChildEnv, sdkStderrSink } from '@forge/kernel/spawn-env.ts';
 import { markerEnvOverlay } from './spawn-marker.ts';
+import { resolveClaudeCliPath } from '@forge/kernel/claude-cli-path.ts';
 
 /** The exact shape of the SDK's `query` function. */
 export type SdkQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
@@ -68,7 +69,15 @@ export function createPinnedSdkQuery(queryImpl: SdkQueryFn): SdkQueryFn {
   return (params) =>
     queryImpl({
       ...params,
-      options: { ...params.options, env: buildChildEnv(process.env, params.options?.env ?? {}), stderr: sdkStderrSink(params.options) },
+      options: {
+        ...params.options,
+        env: buildChildEnv(process.env, params.options?.env ?? {}),
+        stderr: sdkStderrSink(params.options),
+        // `forge-8vfn.7.6.116` — NAME THE BINARY; never let the SDK pick its
+        // bundled one. `claude-cli-path.ts`'s header carries the why, including
+        // why there is no fallback and why the key is safe to pass undeclared.
+        pathToClaudeCodeExecutable: resolveClaudeCliPath(),
+      },
     });
 }
 
