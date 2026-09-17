@@ -361,10 +361,37 @@ export function endedUnpricedTurns(eventLists) {
  * reported by the spend column and not halted on. The run is in teardown by
  * then and the reap runs regardless; what is lost is the red, not the kill.
  *
- * @param {{spend: ReturnType<typeof summariseRunSpend>, ceilingUsd: number, unpriced: ReturnType<typeof endedUnpricedTurns>}} args
- * @returns {Readonly<{halt: boolean, kind: 'breach'|'unenforceable'|null, headline: string|null, reason: string, note: string}>}
+ * A THIRD WAY OF NOT BEING ABLE TO MEASURE — `forge-8vfn.7.6.103`, T1
+ * 1037/1039. A row that FAILED TO WRITE is not an unpriced turn: the turn may
+ * have been priced perfectly and the ledger simply could not record it. Either
+ * way the ledger is incomplete, and this function already halts on "cannot
+ * measure" as well as "exceeded".
+ *
+ * WHY IT DOES NOT CONSULT THE HEADROOM, which is the argument that settles it
+ * (C): a headroom test would be COMPUTED FROM THE VERY LEDGER whose
+ * completeness is in doubt. "Only $0.50 of $35, so blindness is fine" requires
+ * that $0.50 be a MEASUREMENT — and after a failed row it is a FLOOR. You would
+ * be reading the corrupted number to decide whether the corruption matters.
+ * That is not a wrong answer, it is a question that cannot be asked honestly.
+ *
+ * BUT IT IS GATED ON `enforceable`, EXACTLY LIKE ITS NEIGHBOUR, AND THAT IS
+ * DELIBERATE — said here because a reader will otherwise assume it either way.
+ * A run with NO declared ceiling has no bound to go blind about, and firing
+ * unconditionally would make this the first verdict in this function able to
+ * stop a run carrying no spend bound at all: every costless story run would
+ * halt the moment a logdir went read-only, and CI runs costless stories on
+ * every push. 1039 ruled the gated form.
+ *
+ * ORDER: breach -> row-write-failed -> unenforceable. Breach stays first for
+ * the reason above — a number beats an unknown. `row-write-failed` goes ahead
+ * of `unenforceable` as a judgement, not a derivation: it is an
+ * operator-actionable INFRASTRUCTURE fault, where `unenforceable` is a product
+ * behaviour, and a run can plausibly have both.
+ *
+ * @param {{spend: ReturnType<typeof summariseRunSpend>, ceilingUsd: number, unpriced: ReturnType<typeof endedUnpricedTurns>, emitFailures?: {failures: object[], unreadable: {dir: string, error: string}[]}}} args
+ * @returns {Readonly<{halt: boolean, kind: 'breach'|'row-write-failed'|'unenforceable'|null, headline: string|null, reason: string, note: string}>}
  */
-export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced }) {
+export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures }) {
   const v = spendCeilingVerdict(spend, ceilingUsd);
   if (v.breached) {
     return Object.freeze({
@@ -373,6 +400,44 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced }) {
     });
   }
   const enforceable = typeof ceilingUsd === 'number' && Number.isFinite(ceilingUsd) && ceilingUsd >= 0;
+
+  // 7.6.103 — a row that could not be written, or a sidecar that could not be
+  // read. BOTH halt: an unreadable sidecar is UNKNOWN, and UNKNOWN never
+  // resolves toward proceeding (§15.504) — the signal may be sitting there
+  // unreadable, which must not render as "nothing was recorded".
+  // A MALFORMED `emitFailures` IS UNKNOWN, NOT EMPTY — C's review of this bead.
+  // `emitFailures?.failures ?? []` alone would synthesise ABSENCE from a SHAPE
+  // ERROR: if a later refactor made `readEmitFailures` return a bare array, or
+  // any object without these two keys, both arms would read `[]`, this would
+  // stop halting, and NOTHING would print a word. Every door here would still
+  // pass, because the doors construct the object themselves — a fixture
+  // deciding the experiment, which is the class this bead exists to prevent.
+  //
+  // `unpriced ?? []` one line below has the same property and has had it since
+  // 7.6.71. The reason the line is drawn here and not there: `unpriced` is
+  // FLAT, so a wrong-typed value fails loudly at `.length`, while
+  // `emitFailures` is NESTED and `?.failures` swallows one more class of
+  // mismatch silently. The nested shape is the bigger surface and it is the new
+  // one.
+  const shapeOk = emitFailures === undefined || emitFailures === null
+    || (Array.isArray(emitFailures.failures) && Array.isArray(emitFailures.unreadable));
+  const wrote = shapeOk ? (emitFailures?.failures ?? []) : [];
+  const unreadable = shapeOk
+    ? (emitFailures?.unreadable ?? [])
+    : [{ dir: '(caller)', error: `emitFailures is present but malformed (${Array.isArray(emitFailures) ? 'array' : typeof emitFailures}) — unreadable is UNKNOWN, not absent` }];
+  if (enforceable && (wrote.length > 0 || unreadable.length > 0)) {
+    const detail = wrote.length > 0
+      ? `${wrote.length} ledger row(s) FAILED TO WRITE (first: message=${wrote[0]?.message ?? 'unrecorded'}, error=${wrote[0]?.error ?? 'unrecorded'})`
+      : `the emit-failure sidecar could not be READ (${unreadable[0]?.dir}: ${unreadable[0]?.error}) — unreadable is UNKNOWN, not absent`;
+    return Object.freeze({
+      halt: true, kind: 'row-write-failed', headline: 'LEDGER INCOMPLETE',
+      reason:
+        `ceiling $${ceilingUsd.toFixed(2)} cannot be trusted: ${detail}. The spend total is a FLOOR, not a ` +
+        'measurement, so the headroom that would justify continuing is computed from the very ledger in doubt',
+      note: 'The run was stopped because its ledger could not be written or read, NOT because a limit was exceeded — this is an infrastructure fault (disk, permissions, handle), and the spend total above is a lower bound.',
+    });
+  }
+
   const ended = unpriced ?? [];
   if (enforceable && ended.length > 0) {
     const t = ended[0];
