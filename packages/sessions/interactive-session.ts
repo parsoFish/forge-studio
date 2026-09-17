@@ -268,8 +268,25 @@ export type StructuredResult<T> = {
   output: T | null;
   /** Every `file_path` the agent Read this turn — callers filter (e.g. brain/). */
   reads: string[];
-  /** This turn's spend (SDK `total_cost_usd`; 0 when absent). Bead forge-8vfn.18. */
-  costUsd: number;
+  /**
+   * This turn's spend (SDK `total_cost_usd`), or `null` when the turn ENDED
+   * WITHOUT A PRICE — bead forge-8vfn.18, amended by `forge-8vfn.7.6.73`.
+   *
+   * IT USED TO BE `0 WHEN ABSENT`, AND THAT ZERO WAS THE QUIET HALF OF THE
+   * BUG. Both consumers read a numeric zero as a MEASURED zero:
+   * `spend.mjs`'s `endedUnpricedTurns` skips any row carrying a numeric
+   * `cost_usd`, so an unpriced turn reported as `0` never reaches 7.6.71's
+   * halt — the ceiling under-counts instead of going blind, which is strictly
+   * worse; and `event-cost.ts`'s `deriveSessionCostUsd` returns null only when
+   * NO row carries a number, so one zero row turns "never priced" into
+   * "$0.00". Ruling 849 said cost is OMITTED, never zeroed; `runAgentTurn`
+   * has returned `number | null` since 7.6.55 and this side never got it.
+   *
+   * A caller must emit a priced row only when this is non-null, and take the
+   * unpriced row from `onTurnEndedUnpriced` — the two are mutually exclusive
+   * by construction, so neither double-reports.
+   */
+  costUsd: number | null;
 };
 
 /**
@@ -334,6 +351,12 @@ export async function runStructuredTurn<T>(args: {
    *  write by that session lands in forge's own tree. Honest-absent: omitted
    *  leaves the options bag byte-identical for callers that pass none. */
   cwd?: string;
+  /** `forge-8vfn.7.6.73`, T1 ruling 993 — fired at most once when this turn
+   *  ends WITHOUT a price, so a turn that dies or ends resultless leaves a
+   *  terminal row rather than nothing. Carries no `cost_usd`, by design. The
+   *  same contract `runAgentTurn` has carried since 7.6.55; the structured
+   *  primitive never had it, and its callers are the ones spending. */
+  onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     model: args.model,
@@ -353,11 +376,17 @@ export async function runStructuredTurn<T>(args: {
 
   let structured: T | null = null;
   let rawText = '';
-  let turnCostUsd = 0;
+  let turnCostUsd: number | null = null;
   let toolSeq = 0;
   const reads: string[] = [];
   let lastHeartbeatMs = 0;
+  // `SeenUsage`/`recordUsage`/`unpricedReason`/`unpricedTokens` are declared
+  // below, between this function and `runAgentTurn`, because both primitives
+  // use them. 7.6.55 built them for the agent turn; 7.6.73 found the same
+  // twenty lines missing here.
+  const seen: SeenUsage = { sawAny: false, tokensOutSum: 0, tokensInLast: 0, cacheReadLast: 0, cacheCreateLast: 0 };
 
+  try {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: args.label ?? 'interactive-structured',
     abortController,
@@ -377,6 +406,7 @@ export async function runStructuredTurn<T>(args: {
       };
     };
     if (m.type === 'assistant') {
+      recordUsage(seen, (m.message as { usage?: unknown } | undefined)?.usage);
       if (args.onToolUse) {
         const details = extractLiveToolDetails(m.message, toolSeq);
         for (const d of details) args.onToolUse(d);
@@ -410,6 +440,23 @@ export async function runStructuredTurn<T>(args: {
     if (typeof c === 'number') turnCostUsd = c;
     break;
   }
+  } catch (err) {
+    // Before the rethrow, never instead of it: the turn still fails and every
+    // caller's error handling is unchanged. `runCompletenessCritic` makes this
+    // load-bearing — it CATCHES every error and returns `{crashed: true}` as
+    // advisory infra, so this callback is the only way a died critic turn's
+    // consumed tokens can ever be reported.
+    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
+    throw err;
+  }
+
+  // THE CLEAN END WITH NO PRICE — the case a throw never covers and the one
+  // the old `0` hid. The stream finished without a `result` carrying
+  // `total_cost_usd`, so nothing failed and nothing was measured. Reported
+  // here rather than left to the caller's null check, because a caller that
+  // simply omits the row leaves the log with no terminal event at all, which
+  // is the state 849 ruled against.
+  if (turnCostUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen);
 
   const output = structured ?? parseFencedJson<T>(rawText);
   return { output, reads, costUsd: turnCostUsd };
@@ -456,10 +503,60 @@ function recordUsage(seen: SeenUsage, usage: unknown): void {
   if (typeof u.cache_creation_input_tokens === 'number') seen.cacheCreateLast = u.cache_creation_input_tokens;
 }
 
-/** `abort` = our own idle deadline; `died` = anything else. `reaped` is NOT
- *  producible here: a SIGKILLed process runs no code (see 7.6.71). */
+/**
+ * What one unpriced turn reports — `forge-8vfn.7.6.55`, extended by
+ * `forge-8vfn.7.6.73` (T1 ruling 993).
+ *
+ * `abort` = our own idle deadline. `died` = the stream threw anything else.
+ * `no-result` = NOTHING FAILED AND NOTHING WAS PRICED: the stream ended
+ * without a `result` carrying `total_cost_usd`. That third case is additive —
+ * the runner forwards `reason` verbatim into `metadata.unpriced_reason` and
+ * `spend.mjs` reads it as an arbitrary string — and both primitives report it,
+ * because leaving one of them quiet is the shape 7.6.73 exists to close.
+ *
+ * `reaped` is NOT producible here: a SIGKILLed process runs no code (7.6.71).
+ */
+export type UnpricedTurnInfo = {
+  reason: 'abort' | 'died' | 'no-result';
+  tokensIn?: number;
+  tokensOut?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+};
+
 function unpricedReason(err: unknown): 'abort' | 'died' {
   return err instanceof StreamDeadlineError ? 'abort' : 'died';
+}
+
+/**
+ * Fire one unpriced report, best-effort. ONE builder for the token fields and
+ * ONE try/catch, used by every unpriced exit in both primitives — four call
+ * sites before this existed, which is how one of them quietly stops carrying
+ * cache tokens while the other three keep working.
+ *
+ * The callback's own failure is swallowed deliberately: an unpriced report
+ * must never mask the turn's error on the throw path, nor invent one on the
+ * clean path.
+ */
+function reportUnpriced(
+  cb: ((info: UnpricedTurnInfo) => void) | undefined,
+  reason: UnpricedTurnInfo['reason'],
+  seen: SeenUsage,
+): void {
+  if (!cb) return;
+  try {
+    cb({
+      reason,
+      ...(seen.sawAny
+        ? {
+            tokensIn: seen.tokensInLast,
+            tokensOut: seen.tokensOutSum,
+            ...(seen.cacheReadLast > 0 ? { cacheReadTokens: seen.cacheReadLast } : {}),
+            ...(seen.cacheCreateLast > 0 ? { cacheCreationTokens: seen.cacheCreateLast } : {}),
+          }
+        : {}),
+    });
+  } catch { /* never let the unpriced report mask, or manufacture, an error */ }
 }
 
 export async function runAgentTurn(args: {
@@ -503,15 +600,13 @@ export async function runAgentTurn(args: {
   label?: string;
   /** W8-B6 — the agent's bound library hooks (see `runStructuredTurn`'s field). */
   hooks?: SdkHooksOption;
-  /** 7.6.55 — fired once before the error is re-thrown, so a failed turn leaves
-   *  a terminal row rather than nothing. Carries no `cost_usd`. */
-  onTurnEndedUnpriced?: (info: {
-    reason: 'abort' | 'died';
-    tokensIn?: number;
-    tokensOut?: number;
-    cacheReadTokens?: number;
-    cacheCreationTokens?: number;
-  }) => void;
+  /** 7.6.55 — fired at most once when the turn ends WITHOUT a price, so a
+   *  failed turn leaves a terminal row rather than nothing. Carries no
+   *  `cost_usd`. 7.6.73 (ruling 993) extended it to the clean end that was
+   *  never reported: a stream that finishes with no priced `result` threw
+   *  nothing, so the throw path never saw it and the caller emitted no row at
+   *  all. Same contract on `runStructuredTurn`. */
+  onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
 }): Promise<{ costUsd: number | null }> {
   const abortController = new AbortController();
   const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
@@ -636,21 +731,17 @@ export async function runAgentTurn(args: {
   } catch (err) {
     // Before the rethrow, never instead of it: the turn still fails and every
     // caller's error handling is unchanged.
-    try {
-      args.onTurnEndedUnpriced?.({
-        reason: unpricedReason(err),
-        ...(seen.sawAny
-          ? {
-              tokensIn: seen.tokensInLast,
-              tokensOut: seen.tokensOutSum,
-              ...(seen.cacheReadLast > 0 ? { cacheReadTokens: seen.cacheReadLast } : {}),
-              ...(seen.cacheCreateLast > 0 ? { cacheCreationTokens: seen.cacheCreateLast } : {}),
-            }
-          : {}),
-      });
-    } catch { /* never let the unpriced report mask the turn's own error */ }
+    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
     throw err;
   }
+
+  // 7.6.73 — the clean end with no price. `interactive-agent-step` emits a
+  // cost row only when `costUsd !== null`, so before this a stream that ended
+  // resultless without throwing left the log with NO terminal row: not priced,
+  // not marked unpriced, invisible to `endedUnpricedTurns` and therefore to
+  // 7.6.71's halt. The throw path could never cover it, because nothing threw.
+  if (costUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen);
+
   return { costUsd };
 }
 

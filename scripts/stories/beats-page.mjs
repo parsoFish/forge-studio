@@ -328,6 +328,34 @@ export const SAFE_KEY = /^[A-Za-z][A-Za-z0-9-]*$/;
  * unit-testable — a reader that knew the answer is how a gate starts agreeing
  * with itself.
  */
+/**
+ * Drop the candidate elements a beat's `expect.among` rule excludes
+ * (`forge-8vfn.26`).
+ *
+ * WHY HERE. `resolveExpectations` is deliberately VALUE-BLIND — "a reader that
+ * knew the answer is how a gate starts agreeing with itself" — so the choice of
+ * WHICH elements are candidates belongs to the collector, not the judge. The
+ * rule is resolved to a set at LOAD by `story-file.mjs`, so this function asks
+ * nothing of git and stays as pure as the evaluate it filters.
+ *
+ * WHAT IT IS FOR. `proof.story.mjs` beat 1 binds `<someProjectId>` from a
+ * project card, and "the first card" is a property of the running checkout's
+ * `projects/` directory — `gitpulse` here, `mdtoc` in CI, `gitweave` in the
+ * committed sample. Restricting the candidates to TRACKED projects makes the
+ * answer identical in every checkout without the story naming an id, so the
+ * binding still proves what it exists to prove.
+ *
+ * A record missing the key entirely is KEPT: the restriction is about which
+ * element may answer that key, not about which elements exist, and dropping
+ * unrelated records would silently narrow every other key the beat asks about.
+ */
+export function restrictNested(records, beat) {
+  const ids = beat?.expect?.amongIds;
+  if (ids === undefined) return records;
+  return records.filter((r) =>
+    Object.entries(ids).every(([key, allowed]) => !Object.hasOwn(r, key) || allowed.includes(r[key])));
+}
+
 export async function readObserved(page, beat, alsoWanted = []) {
   // Always read the error sentinels alongside the beat's own keys — the
   // verdict cannot judge what was never collected.
@@ -388,7 +416,7 @@ export async function readObserved(page, beat, alsoWanted = []) {
   // the observation carries it and the comparison decides what matters.
   const seen = new URL(page.url(), 'http://forge.invalid');
   return {
-    route: seen.pathname + seen.search, data, nested,
+    route: seen.pathname + seen.search, data, nested: restrictNested(nested, beat),
     lifecycle: lifecycle ?? null, lifecycleError: lifecycleError ?? null, sessionPhase: sessionPhase ?? null,
   };
 }

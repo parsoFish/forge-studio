@@ -33,6 +33,7 @@ import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 import { hooksSpreadForAgent, type KindTurnPlumbing } from './kind-turn.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, type RunArchitectTurnInput, type RunArchitectTurnResult, architectAgentSpec, readInterview } from './architect-session.ts';
 import { buildManifest, slugify } from './architect-manifest.ts';
 
@@ -721,17 +722,29 @@ async function runStructured<T>(args: {
     onText: args.onText,
     onThinking: args.onThinking,
     label: 'architect-structured',
+    // `forge-8vfn.7.6.73` — a turn that ends without a price leaves THIS row
+    // instead of the cost row below. Before it, an unpriced architect turn
+    // emitted `cost_usd: 0`, which `endedUnpricedTurns` skips as priced: the
+    // ceiling under-counted rather than halting.
+    onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(args.logger, {
+      initiativeId: args.initiativeId, phase: 'architect', skill: 'architect',
+      message: 'architect.turn-ended-unpriced',
+    }, info),
   });
   // bead forge-8vfn.18 — emit the turn's spend so the ceiling can bound stage 1.
   // Authoritative because this phase emits no `iteration` events (trap pinned in
   // architect-turn-cost-event.test.ts). Best-effort: never fail a completed turn.
-  try {
-    args.logger.emit({
-      initiative_id: args.initiativeId, phase: 'architect', skill: 'architect',
-      event_type: 'end', input_refs: [], output_refs: [],
-      cost_usd: costUsd, message: 'architect.turn-cost',
-    });
-  } catch { /* a logging failure must not fail the turn */ }
+  //
+  // GUARDED ON NON-NULL (7.6.73): the priced row and the unpriced row above are
+  // mutually exclusive by the primitive's own construction, so this branch is
+  // what keeps a turn from leaving two terminal rows or, worse, a $0 row that
+  // reads as a measurement.
+  if (costUsd !== null) {
+    emitTurnCostRow(args.logger, {
+      initiativeId: args.initiativeId, phase: 'architect', skill: 'architect',
+      message: 'architect.turn-cost',
+    }, costUsd);
+  }
   return { output, brainReads: reads.filter((p) => p.includes('brain/')) };
 }
 

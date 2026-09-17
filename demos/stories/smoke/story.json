@@ -67,6 +67,43 @@
   ],
   "reap": {
     "reaped": [],
-    "skipped": []
+    "skipped": [],
+    "cancelled": []
+  },
+  "sweep": {
+    "removed": [],
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
+  },
+  "fence": {
+    "restored": [],
+    "removed": [],
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
   }
 }

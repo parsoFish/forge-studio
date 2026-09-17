@@ -35,6 +35,7 @@ import { join } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import type { EventLogger } from '@forge/kernel';
 import { hooksSpreadForAgent } from './kind-turn.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
@@ -258,8 +259,19 @@ export async function runCompletenessCritic(
   const skillPrompt = loadSkillPrompt(input.skillPromptPath);
   const prompt = buildPrompt(skillPrompt, input);
 
+  // `forge-8vfn.7.6.73` — THE ROWS THIS FUNCTION NEVER EMITTED; see
+  // `turn-cost-rows.ts` for the measurement that found it. What is specific to
+  // the critic: the catch below swallows every error and returns
+  // `{crashed: true}`, because this is advisory infra that must never strand a
+  // session. So a critic turn that dies raises nothing for anyone to notice,
+  // and the unpriced callback is the only path its consumed tokens have.
+  const rowIdentity = {
+    initiativeId: input.initiativeId,
+    phase: 'architect' as const,
+    skill: 'architect-completeness-critic',
+  };
   try {
-    const { output } = await runStructuredTurn<{ findings?: unknown }>({
+    const { output, costUsd } = await runStructuredTurn<{ findings?: unknown }>({
       queryFn,
       prompt,
       schema: FINDINGS_SCHEMA,
@@ -271,7 +283,15 @@ export async function runCompletenessCritic(
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,
       label: 'architect-completeness-critic',
+      onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(input.logger, {
+        ...rowIdentity, message: 'architect.completeness-critic.turn-ended-unpriced',
+      }, info),
     });
+    if (costUsd !== null) {
+      emitTurnCostRow(input.logger, {
+        ...rowIdentity, message: 'architect.completeness-critic.turn-cost',
+      }, costUsd);
+    }
     return { findings: sanitizeFindings(output), crashed: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

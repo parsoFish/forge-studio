@@ -327,7 +327,9 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     assert.match(r.stderr, new RegExp(`NOT CONFIRMED for ${lane}`), 'the failure names the lane');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8'), before, 'an unconfirmed lane is not registered');
     assert.notEqual(tmux('has-session', '-t', s).status, 0, 'the failure path ends the tmux session the success path created');
-    assert.ok(waitGone(stray), `the claude it started is retired by PID, not left burning tokens (pid ${stray})`);
+    // 1041: a red carries WHEN/WHERE the stray was born (lanes.sh's own `proc-start`) — three reds in a day said only that it survived.
+    const born = () => alive(stray) ? `born=${lanes(['proc-start', String(stray)]).stdout.trim()} since-boot=${lanes(['proc-since-boot', String(stray)]).stdout.trim()}cs ${spawnSync('bash', ['-c', `echo cwd=$(readlink /proc/${stray}/cwd) comm=$(cat /proc/${stray}/comm) ppid=$(awk '{print $4}' /proc/${stray}/stat)`], { encoding: 'utf8' }).stdout.trim()}` : 'gone';
+    assert.ok(waitGone(stray), `the claude it started is retired by PID, not left burning tokens (pid ${stray}, ${born()}); launch stderr:\n${r.stderr}`);
     assert.match(r.stderr, new RegExp(`\\b${stray}\\b`), 'and the pid it retired is printed, so a human can check it');
   });
 

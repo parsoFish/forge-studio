@@ -186,13 +186,36 @@ proc_start_epoch() {
 # pids_claude_in <cwd> <since-epoch> → claude processes in exactly <cwd> started at/after <since>.
 # The start-time bound is what makes this safe in a SHARED cwd: an older session in the same
 # directory (T1's own, say) is not ours to kill.
+# proc_start_cs <pid> → the process's start as CENTISECONDS SINCE BOOT (field 22 scaled by
+# CLK_TCK), the same clock /proc/uptime reads. No wall clock anywhere in it.
+#
+# 1043 (T1). The census compared proc_start_epoch — a wall-clock number assembled from a
+# fresh `date` read and /proc/uptime — against a `date +%s` taken at launch. Two reads of the
+# wall clock seconds apart, and this box (WSL2) STEPS its wall clock: the 311 door's stray
+# showed born=…668 against t0=…670, two seconds BEFORE a launch that demonstrably created it.
+# The step landed between t0 and the census, moved the boot estimate, and a process born
+# after t0 read as born before it — silently excluded, never retired. A bound and the values
+# it bounds are read from ONE clock, and the clock that cannot step is the boot clock.
+proc_start_cs() {
+  local pid="$1" ticks hz
+  [ -r "/proc/$pid/stat" ] || return 1
+  ticks="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')"
+  hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+  case "$hz" in ''|*[!0-9]*|0) hz=100 ;; esac
+  [ -n "$ticks" ] || return 1
+  echo $(( ticks * 100 / hz ))
+}
+# uptime_cs → now, as centiseconds since boot — the launch records THIS as its t0 bound.
+uptime_cs() { awk 'NR==1{printf "%d", $1*100}' /proc/uptime; }
+# pids_claude_in <cwd> <since-cs> → claude processes in exactly <cwd> whose start (centiseconds
+# since boot) is at/after <since-cs>. Both sides come from the boot clock (1043).
 pids_claude_in() {
   local cwd="$1" since="$2" chain p st
   chain=" $(self_chain) "
   for p in $(pgrep -x claude 2>/dev/null || true); do
     case "$chain" in *" $p "*) continue ;; esac
     [ "$(proc_cwd "$p")" = "$cwd" ] || continue
-    st="$(proc_start_epoch "$p" || true)"; [ -n "$st" ] || continue
+    st="$(proc_start_cs "$p" || true)"; [ -n "$st" ] || continue
     [ "$st" -ge "$since" ] || continue
     echo "$p"
   done
@@ -334,6 +357,7 @@ undo_created() {
 # missed.
 die_launch() {
   local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p found=0 quiet=0 waited=0
+  local t0_wall="${LANES_T0_WALL:-}"
   local seen=" " recensus="${LANES_RECENSUS_S:-5}"
   # 1023: a non-numeric bound would make the loop's test error and exit after ONE census —
   # silently the one-shot shape this function stopped having. Said, then defaulted.
@@ -341,7 +365,7 @@ die_launch() {
   for p in $(pids_claude_in "$cwd" "$t0"); do
     seen="$seen$p "; found=$((found + 1)); retire_pid "$p" "half-launched lane $lane" >&2 || true
   done
-  echo "census: $found claude pid(s) in $cwd started at/after $t0 before the kill" >&2
+  echo "census: $found claude pid(s) in $cwd started at/after uptime ${t0}cs (wall ~${t0_wall:-?}) before the kill" >&2
   tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s (undoing a launch that was never confirmed)" >&2
   while [ "$quiet" -lt 2 ] && [ "$waited" -lt "${recensus}0" ]; do
     local new=0
@@ -460,7 +484,9 @@ cmd_launch() {
 
   # ---- end preflight -------------------------------------------------------------------------
 
-  local t0; t0="$(date +%s)"
+  # t0 is recorded on the BOOT clock (centiseconds), the clock the census compares against
+  # (1043); the wall-clock second rides beside it for the human reading the log.
+  local t0 t0_wall; t0="$(uptime_cs)"; t0_wall="$(date +%s)"; LANES_T0_WALL="$t0_wall"
   tmux new-session -d -s "$s" -c "$cwd" -x 200 -y 50
   tmux pipe-pane -o -t "$s" "cat >> '$camp/heartbeat/$lane.tmux.log'"
   # LANES_* reach the hook; `; exit` ends the tmux session when the claude session ends.
@@ -643,6 +669,13 @@ case "${1:-}" in
   events) shift; cmd_events "$@" ;;
   # 7.6.105 — the honest start time the census uses, exposed so it can be doored and so a
   # human can check a pid's age without trusting a directory timestamp.
+  # 1043 — the census's own clock, exposed: centiseconds since boot for a pid, and `uptime`
+  # for "now" in the same unit, so a human can redo the comparison the census made.
+  proc-since-boot) shift; [ -n "${1:-}" ] || die "usage: lanes.sh proc-since-boot <pid>"
+    case "$1" in *[!0-9]*) die "proc-since-boot: '$1' is not a pid (digits only)" ;; esac
+    st="$(proc_start_cs "$1")" || die "proc-since-boot: no such pid $1"
+    echo "$st" ;;
+  uptime-cs) uptime_cs ;;
   proc-start) shift; [ -n "${1:-}" ] || die "usage: lanes.sh proc-start <pid>"
     # 1023: the argument becomes a path segment under /proc — digits only, refused otherwise
     # (a value like `1/../2` would read another pid's stat and report it as this one's).
