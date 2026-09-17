@@ -188,11 +188,29 @@ test('buildChildEnv: rejects an oversized overrides blob (allowlist stays closed
 // pin the set, so a name added or dropped in transit fails loudly.
 // ---------------------------------------------------------------------------
 
-test('MOVE PIN: AGENT_ENV_ALLOWLIST membership is byte-identical to its pre-move value', () => {
+/**
+ * AMENDED BY `forge-8vfn.7.6.116`, and the pin EARNED the amendment: it is the
+ * only test here that would notice a name arriving, and it noticed this one.
+ *
+ * `FORGE_CLAUDE_CLI` is NOT a name that drifted in during the move — it is a
+ * deliberate, later addition, so the expected set grows by exactly one entry
+ * and the pin keeps doing its job for everything else. The move's own question
+ * ("did the set change in transit?") is still answered by the other thirteen
+ * names being byte-identical.
+ *
+ * WHAT ADDING IT MEANS FOR HOOKS, stated because the next pin below derives
+ * from this one: `HOOK_ENV_BASE_ALLOWLIST` is this list minus
+ * `HOOK_ENV_CREDENTIAL_EXCLUSIONS`, so a hook child now inherits the CLI path
+ * too. That is deliberate — it is a filesystem path and not a credential, the
+ * exclusions exist for secrets, and a hook that itself spawns through the SDK
+ * needs the same binary named for the same reason. If it ever becomes
+ * sensitive, it belongs in the exclusions, not out of the allowlist.
+ */
+test('MOVE PIN: AGENT_ENV_ALLOWLIST membership is its pre-move value plus FORGE_CLAUDE_CLI', () => {
   assert.deepEqual(
     [...AGENT_ENV_ALLOWLIST],
-    ['PATH', 'HOME', 'SHELL', 'TERM', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LANGUAGE', 'TMPDIR', 'TMP', 'TEMP', 'USER', 'LOGNAME', 'ANTHROPIC_API_KEY'],
-    'the allowlist changed in the move from packages/agents/ to packages/kernel/',
+    ['PATH', 'HOME', 'SHELL', 'TERM', 'LANG', 'LC_ALL', 'LC_CTYPE', 'LANGUAGE', 'TMPDIR', 'TMP', 'TEMP', 'USER', 'LOGNAME', 'ANTHROPIC_API_KEY', 'FORGE_CLAUDE_CLI'],
+    'the allowlist changed beyond the one name 7.6.116 added',
   );
 });
 
