@@ -8,6 +8,7 @@
  * on this box at this beat — and `run.mjs` only orchestrates.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { EMIT_FAILED_SIDECAR } from '@forge/sessions/turn-cost-rows.ts';
 import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict } from './spend.mjs';
 import { join } from 'node:path';
 
@@ -22,6 +23,54 @@ export function readRunEvents(dir) {
   } catch {
     return [];
   }
+}
+
+/**
+ * One dispatched run's EMIT FAILURES — `forge-8vfn.7.6.103`, T1 1037/1039.
+ *
+ * THIS READ FAILS CLOSED, AND THAT IS THE WHOLE POINT OF THE BEAD (C's review).
+ * The defect being fixed is a `catch {}` around a write. A reader that wrapped
+ * this in `catch { return [] }` would reproduce that defect one layer out — and
+ * WORSE, because the failures are CORRELATED: a full disk or a revoked handle
+ * breaks the row write AND this read, so the case where the sidecar matters
+ * most is the case where reading it is most likely to fail. The obvious
+ * defensive shape is the wrong one here.
+ *
+ * THREE STATES, NOT TWO (§15.504), at the read this time:
+ *   ENOENT            no sidecar -> no failure was recorded. Genuine ABSENCE.
+ *   anything else     EACCES, EIO, EISDIR, a malformed line — UNKNOWN. The
+ *                     signal may exist and be unreadable, which must never be
+ *                     spelled as absence.
+ * Both non-absent states halt; the caller distinguishes them only to report.
+ *
+ * Note `readRunEvents` above DOES `catch { return [] }`. That is about
+ * `events.jsonl`, whose absence is already covered by the unpriced arm, and it
+ * is not a licence to do the same here — the sidecar exists precisely to be the
+ * thing that survives when the row could not be written.
+ *
+ * @returns {{failures: object[], unreadable: {dir: string, error: string}[]}}
+ */
+export function readEmitFailures(dir) {
+  const path = join(dir, EMIT_FAILED_SIDECAR);
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { failures: [], unreadable: [] };
+    return { failures: [], unreadable: [{ dir, error: `${err?.code ?? 'read failed'}: ${err?.message ?? String(err)}` }] };
+  }
+  const failures = [];
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue;
+    try {
+      failures.push(JSON.parse(line));
+    } catch {
+      // A line that will not parse is still EVIDENCE that a write failed —
+      // something wrote here. Counted, never discarded.
+      failures.push({ at: null, message: null, error: 'unparseable sidecar line' });
+    }
+  }
+  return { failures, unreadable: [] };
 }
 
 /** Host state for §15.439's per-beat record. Never throws: an unreadable
@@ -123,11 +172,18 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   // and shared: the money and the unpriced-turn question are two readings of
   // the same rows, and two collections could disagree about which run they are
   // describing.
-  const events = collectSpendDirs(root, startedMs).map(readRunEvents);
+  const dirs = collectSpendDirs(root, startedMs);
+  const events = dirs.map(readRunEvents);
   const spend = summariseRunSpend({ realSpawn, events });
   const v = spendCeilingVerdict(spend, ceilingUsd);
   const unpriced = endedUnpricedTurns(events);
-  const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced });
+  // 7.6.103 — read from the SAME dirs as the rows, so a run cannot have its
+  // spend read from one place and its emit failures from another.
+  const emitFailures = dirs.map(readEmitFailures).reduce(
+    (acc, r) => ({ failures: acc.failures.concat(r.failures), unreadable: acc.unreadable.concat(r.unreadable) }),
+    { failures: [], unreadable: [] },
+  );
+  const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures });
   const lines = [`[stories] spend ${label}: ${v.reason}`];
   for (const n of spend.notes ?? []) lines.push(`[stories] spend: ${n}`);
   // PRINTED EVERY BEAT once it is true, not only at the halt: the run that
@@ -136,5 +192,11 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   for (const t of unpriced) {
     lines.push(`[stories] spend ${label}: a turn ENDED UNPRICED — reason=${t.reason}, tokens_out=${t.tokensOut ?? 'unrecorded'}, tokens_in=${t.tokensIn ?? 'unrecorded'}, session=${t.sessionId}`);
   }
-  return { spend, verdict: v, unpriced, stop, lines };
+  for (const f of emitFailures.failures) {
+    lines.push(`[stories] spend ${label}: a ledger row FAILED TO WRITE — message=${f.message ?? 'unrecorded'}, error=${f.error ?? 'unrecorded'}`);
+  }
+  for (const u of emitFailures.unreadable) {
+    lines.push(`[stories] spend ${label}: the emit-failure sidecar could not be READ at ${u.dir} — ${u.error}`);
+  }
+  return { spend, verdict: v, unpriced, emitFailures, stop, lines };
 }
