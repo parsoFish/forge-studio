@@ -413,6 +413,75 @@ export function channelTerminalState(forgeRoot, dir) {
   return null;
 }
 
+/**
+ * THE CYCLE-TERMINAL DOOR — `forge-8vfn.7.6.118`, T1 ruling 1086, §15.559.
+ *
+ * A wait that ends on a WALL CLOCK asks "has my patience run out". This asks
+ * the only question that actually decides the beat: **has the product finished?**
+ *
+ * MEASURED ON S10 RUN 17. Beat 8 gave up at 22:44:59 on a declared 360000 ms
+ * bound with `data-initiative-status: expected "ready-for-review", got
+ * "in-flight"`. The cycle reached `ready-for-review`, ERRORS RECORDED 0, at
+ * 22:46:55 — 116 seconds later. Nothing was broken except the deadline.
+ *
+ * IN MONEY, which is the form that shows why a bigger literal is the wrong
+ * repair: at the measured burn of $3.99 over 476 s, 360000 ms afforded $3.02
+ * against a cycle that spent $3.99. The window funded a quarter less than the
+ * work. The number was chosen when no S10 run had ever completed a cycle, so it
+ * was derived from nothing — and it was the THIRD distinct beat-8 blocker in
+ * three runs, after the ADR 037 quarantine and the unwired wait anchor.
+ *
+ * WHY `makeAgentChannelDoor` BELOW CANNOT ANSWER THIS. It reads the very same
+ * terminal state, and on run 17 it correctly stayed silent: it asks only after
+ * `STALL_CEILING_MS` of SILENCE, and that channel was writing continuously
+ * until the moment it finished. **A door that waits for quiet cannot see a
+ * cycle that finishes while still talking.** That is not a flaw in it — silence
+ * is the question `forge-flvq` built it to answer — it is a DIFFERENT question,
+ * so it gets its own door rather than a new mode bolted onto that one.
+ *
+ * SO THIS DOOR NEVER WAITS FOR QUIET, and that is its entire reason to exist.
+ * `beats-cycle-terminal.test.ts` states that property as a door of its own,
+ * because every other test here would still pass on aged fixtures if it
+ * silently regained a silence requirement.
+ *
+ * IT REPORTS THE STATE, NOT A YES/NO. A door that answered only "is it
+ * ready-for-review" would turn "the cycle was abandoned" into "not
+ * ready-for-review yet" and let the beat sit out the rest of its bound waiting
+ * for something the product had already ruled out. `done:false` with the state
+ * beside it is what lets the verdict say what the cycle BECAME — 664(ii)'s
+ * rule, that a verdict a reader cannot check is a defect on its own terms.
+ *
+ * AN UNREADABLE CHECK IS NEVER `done` (§15.504). Green, red and UNKNOWN are
+ * three states and UNKNOWN never resolves toward proceeding: with no channel
+ * found, or a terminal state that could not be read, this returns null — keep
+ * waiting, the declared bound still governs — and never a verdict.
+ *
+ * THE DECLARED BOUND REMAINS A HARD MAXIMUM. Like 580's door, the only new exit
+ * is EARLIER. Nothing here extends a wait.
+ *
+ * @returns {null | {done: boolean, state: string, detail: string}}
+ */
+export function makeCycleTerminalDoor(forgeRoot) {
+  if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
+  const logsDir = join(forgeRoot, '_logs');
+  return (runId, sinceMs, wantState) => {
+    if (typeof wantState !== 'string' || wantState === '') return null;
+    // The SAME channel resolution the stall door uses: the page's own run id
+    // when it names a live one, else the newest dispatch born since the anchor.
+    // Shared deliberately — two doors reading two different directories would
+    // disagree about which cycle the beat is even watching.
+    const named = runLogDir(forgeRoot, runId);
+    const dir = named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs);
+    if (dir === null) return null;
+    const terminal = channelTerminalState(forgeRoot, dir);
+    // null = still open. `unknown` = the check could not be run. Neither is a
+    // finished cycle, and they are kept apart from each other only in
+    // `channelTerminalState`'s own reporting — here both mean "keep waiting".
+    if (terminal === null || terminal.unknown === true) return null;
+    return Object.freeze({ done: terminal.state === wantState, state: terminal.state, detail: terminal.detail });
+  };
+}
+
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
