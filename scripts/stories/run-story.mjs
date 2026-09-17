@@ -152,13 +152,25 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   const ceiling = costs ? effectiveCeiling(story.ground?.budget_usd, fundedCeilingUsd) : null;
   if (ceiling !== null) console.log(`[stories] ${ceiling.reason}`);
   try {
+    // `forge-8vfn.27` — ONE map for the whole run, declared HERE and threaded
+    // into every beat. `driveBeat`'s ninth parameter defaults to a fresh Map,
+    // which is correct for the ~90 single-beat callers in the door suite and
+    // WRONG for this one: a multi-beat run that lets the default fire gives each
+    // beat its own empty map, so a press recorded in beat 7 is discarded when
+    // that call returns and beat 8's `anchor` can never resolve it.
+    //
+    // MEASURED: S10 run 16 died at beat 8 with `pressed so far: none` after four
+    // beats had pressed, and `git log -S'pressedAt'` on this file returned
+    // nothing — the caller had never passed it in any commit. 718(1)'s anchor
+    // had not worked once since the commit that introduced it.
+    const pressedAt = new Map();
     for (const [i, beat] of story.beats.entries()) {
       // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
       // process as it polls, so an unsatisfied one says what that process was
       // doing instead of leaving it to be reconstructed afterwards by hand.
       // Built per beat from the route it is about; null for every other beat.
       const probe = makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, stallDoor);
+      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, stallDoor, pressedAt);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });

@@ -147,3 +147,61 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
       'honest), or the field can be validated and dropped exactly as `anchor` was.');
   });
 });
+
+/*
+ * `forge-8vfn.27` — the wiring, not the function.
+ *
+ * S10 run 16 died at beat 8 with `wait anchor "scheduler-start": no beat pressed
+ * it before this wait (pressed so far: none)` after four beats had pressed. The
+ * cause was not `resolveAnchorMs`, which the doors above prove correct: it was
+ * that the RUNNER never threaded a map into `driveBeat`. The ninth parameter
+ * defaults to a fresh `new Map()`, so every beat got its own, the write was
+ * discarded when the call returned, and the read could never find anything.
+ * `git log -S'pressedAt'` on the runner returned NOTHING — it had never been
+ * passed in any commit, so 718(1)'s anchor had not worked once since the commit
+ * that introduced it.
+ *
+ * WHY THE DOORS ABOVE COULD NOT CATCH IT, and it is the species this campaign
+ * keeps meeting: they build their own map — `new Map([['scheduler-start', 1000]])`
+ * — and call `resolveAnchorMs` directly. A fixture that constructs the shape
+ * itself cannot fail on a producer that never fills it.
+ *
+ * WHY THIS IS A SOURCE DOOR AND WHAT THAT COSTS, stated rather than hidden:
+ * `driveBeat` needs a live Playwright page, so a two-beat behavioural door would
+ * need a browser and this file has none. This asserts the WIRING'S TEXT, which is
+ * weaker than asserting its behaviour — it would not catch a thread that passes
+ * the wrong map. It anchors through `runnerSourceContaining` rather than on a
+ * filename, because three doors in this suite broke when `forge-0fli` moved the
+ * beat loop to `run-story.mjs` and the filename was the one location still
+ * pinned. The behavioural proof is a run whose beat 8 resolves its anchor.
+ */
+describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop', () => {
+  test('the runner module that drives beats passes a ninth argument to driveBeat', async () => {
+    const { runnerSourceContaining } = await import('./runner-source.mjs');
+    const { source, path } = runnerSourceContaining('await driveBeat(');
+    const call = /await driveBeat\(([^;]*?)\);/s.exec(source);
+    assert.ok(call, `no driveBeat call found in ${path}`);
+    const args = call[1]!.split(',').map((a) => a.trim());
+    assert.equal(
+      args.length,
+      9,
+      `driveBeat takes nine parameters and the runner passed ${args.length} — the ninth defaults to a ` +
+        `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16). Got: ${call[1]}`,
+    );
+    assert.equal(args[8], 'pressedAt', `the ninth argument must be the shared map, got ${args[8]}`);
+  });
+
+  test('that map is declared OUTSIDE the loop — one per run, not one per beat', async () => {
+    const { runnerSourceContaining } = await import('./runner-source.mjs');
+    const { source } = runnerSourceContaining('await driveBeat(');
+    const decl = source.indexOf('const pressedAt = new Map()');
+    const loop = source.indexOf('for (const [i, beat] of story.beats.entries())');
+    assert.ok(decl !== -1, 'the runner must declare its own pressedAt map');
+    assert.ok(loop !== -1, 'the beat loop must still be findable');
+    assert.ok(
+      decl < loop,
+      'the map is declared INSIDE the beat loop — that is one map per beat, which is the defect with ' +
+        'extra steps: each iteration would rebind it and the anchor would still resolve nothing',
+    );
+  });
+});
