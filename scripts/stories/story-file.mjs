@@ -11,6 +11,21 @@
  * real spawn reaches the SDK.
  */
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { trackedProjectIds } from './tracked-projects.mjs';
+
+/** Re-derived here, not passed: this file sits in `scripts/stories/`, so the
+ *  expression resolves to the same repo root every other module in this
+ *  directory derives. One expression evaluated twice, not a constant with two
+ *  possible values. */
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/** The selection rules a beat may name in `expect.among`. A CLOSED set, because
+ *  an unknown rule must be refused at LOAD rather than silently selecting
+ *  nothing at run time (`forge-8vfn.26`). */
+const AMONG_RULES = ['tracked-projects'];
+
 const DOC_KINDS = ['tutorial', 'how-to'];
 
 function fail(field, why) {
@@ -362,6 +377,37 @@ function validateWait(raw, at) {
   });
 }
 
+/**
+ * `expect.among` is `{ <data-key>: <rule> }` and nothing else. Pure: the shape
+ * is checked here, the set is resolved by `loadStory` (`forge-8vfn.26`).
+ */
+function validateAmong(among, data, at) {
+  if (among === undefined) return undefined;
+  if (among === null || typeof among !== 'object' || Array.isArray(among)) {
+    fail(`${at}.expect.among`, 'expected an object of { data-key: rule }');
+  }
+  const entries = Object.entries(among);
+  if (entries.length === 0) fail(`${at}.expect.among`, 'expected at least one { data-key: rule }');
+  for (const [key, rule] of entries) {
+    if (!Object.hasOwn(data, key)) {
+      fail(
+        `${at}.expect.among.${key}`,
+        `restricts a key this beat does not expect. The restriction would apply to nothing; `
+          + `expected one of ${Object.keys(data).join(', ')}`,
+      );
+    }
+    if (typeof rule !== 'string' || !AMONG_RULES.includes(rule)) {
+      fail(
+        `${at}.expect.among.${key}`,
+        `unknown rule ${JSON.stringify(rule)} — expected one of ${AMONG_RULES.join(', ')}. `
+          + 'Refused at load: an unknown rule would select no element and the beat would red as '
+          + 'though the product had rendered nothing.',
+      );
+    }
+  }
+  return Object.freeze({ ...among });
+}
+
 export function validateStory(raw) {
   if (raw === null || typeof raw !== 'object') fail('story', 'expected an object');
 
@@ -429,13 +475,29 @@ export function validateStory(raw) {
       fail(`${at}.expect.data`, 'expected at least one data-* expectation');
     }
 
+    // `expect.among` — the beat states a RULE for WHICH element may answer a
+    // key, and `loadStory` resolves it to a set (`forge-8vfn.26`). Validated
+    // here and resolved there, because this function is pure and the rule is a
+    // question for git.
+    //
+    // REFUSED AT LOAD ON THREE COUNTS, each of which would otherwise surface as
+    // a beat failure blaming the product: a rule that is not in the closed set
+    // (a typo selects nothing and the beat reds as "no such card"), a key the
+    // beat does not actually expect (the restriction would apply to nothing),
+    // and a non-string rule.
+    const among = validateAmong(e.among, e.data, at);
+
     const wait = validateWait(b.wait, at);
     return Object.freeze({
       act: b.act,
       say: b.say,
       do: validateDoSteps(b.do, at),
       ...(wait === undefined ? {} : { wait }),
-      expect: Object.freeze({ route: e.route, data: Object.freeze({ ...e.data }) }),
+      expect: Object.freeze({
+        route: e.route,
+        data: Object.freeze({ ...e.data }),
+        ...(among === undefined ? {} : { among }),
+      }),
     });
   });
 
@@ -551,7 +613,38 @@ export async function loadStory(absPath) {
   if (mod.default === undefined) {
     fail('story', `${absPath} has no default export`);
   }
-  return validateStory(mod.default);
+  return resolveAmong(validateStory(mod.default));
+}
+
+/**
+ * Turn every `expect.among` RULE into the set it names, at LOAD (`forge-8vfn.26`).
+ *
+ * The question is asked of git ONCE, here, for the same reason every other
+ * refusal in this file happens at load: a rule that cannot be resolved must stop
+ * the run with its own name on it, not reach a beat and red as "the product
+ * rendered no such card". `validateStory` stays PURE — it checks the shape; this
+ * does the IO — and the story is rebuilt rather than mutated.
+ */
+function resolveAmong(story) {
+  const resolvers = { 'tracked-projects': () => trackedProjectIds(ROOT) };
+  const cache = {};
+  const resolve = (rule) => (cache[rule] ??= resolvers[rule]());
+  return Object.freeze({
+    ...story,
+    beats: story.beats.map((b) => {
+      const among = b.expect?.among;
+      if (among === undefined) return b;
+      return Object.freeze({
+        ...b,
+        expect: Object.freeze({
+          ...b.expect,
+          amongIds: Object.freeze(
+            Object.fromEntries(Object.entries(among).map(([k, rule]) => [k, Object.freeze(resolve(rule))])),
+          ),
+        }),
+      });
+    }),
+  });
 }
 
 /**
