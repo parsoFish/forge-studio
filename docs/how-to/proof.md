@@ -20,15 +20,15 @@ The Projects pillar lists every project forge manages. Each card carries the pro
 - `data-page-ready` is `true`
 - `data-fetch-status` is `ok`
 - `data-card-type` is `project`
-- `data-card-id` is `gitweave`
+- `data-card-id` is `mdtoc`
 
 </details>
 
-## 2. Click the first project card
+## 2. Click the card for a project this repository carries
 
-The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.
+The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance. The story names a rule for which card may answer, never the project itself.
 
-![Click the first project card](frames/02-click-the-first-project-card.png)
+![Click the card for a project this repository carries](frames/02-click-the-card-for-a-project-this-reposi.png)
 
 <details><summary>What you should see</summary>
 

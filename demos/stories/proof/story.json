@@ -22,12 +22,20 @@
             "page-ready": "true",
             "card-type": "project",
             "card-id": "<someProjectId>"
+          },
+          "among": {
+            "card-id": "tracked-projects"
+          },
+          "amongIds": {
+            "card-id": [
+              "mdtoc"
+            ]
           }
         }
       },
       {
-        "act": "Click the first project card",
-        "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.",
+        "act": "Click the card for a project this repository carries",
+        "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance. The story names a rule for which card may answer, never the project itself.",
         "do": [],
         "expect": {
           "route": "/projects/<someProjectId>",
@@ -108,20 +116,20 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "someProjectId": "gitweave"
+        "someProjectId": "mdtoc"
       },
       "data": {
         "page": "projects-index",
         "page-ready": "true",
         "fetch-status": "ok",
         "card-type": "project",
-        "card-id": "gitweave"
+        "card-id": "mdtoc"
       },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     },
     {
-      "act": "Click the first project card",
-      "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.",
+      "act": "Click the card for a project this repository carries",
+      "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance. The story names a rule for which card may answer, never the project itself.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -129,7 +137,7 @@
         "page": "projects",
         "page-ready": "true"
       },
-      "frame": "frames/02-click-the-first-project-card.png"
+      "frame": "frames/02-click-the-card-for-a-project-this-reposi.png"
     },
     {
       "act": "Go back to the Projects pillar",
@@ -176,6 +184,48 @@
   ],
   "reap": {
     "reaped": [],
-    "skipped": []
+    "skipped": [],
+    "cancelled": []
+  },
+  "sweep": {
+    "removed": [
+      "projects/story-proof",
+      "brain/projects/story-proof"
+    ],
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] trailing sweep removed projects/story-proof",
+      "[stories] trailing sweep removed brain/projects/story-proof",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
+  },
+  "fence": {
+    "restored": [],
+    "removed": [],
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
   }
 }
