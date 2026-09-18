@@ -98,7 +98,7 @@
 
 import { ACT_2 } from './S10.act2.mjs';
 import { REVIEW_LOOP } from './S10.review.mjs';
-import { IDEA, CEILING, GROUND, PLAN_AND_BUILD_BOUND } from './S10.constants.mjs';
+import { IDEA, CEILING, GROUND, CYCLE_BOUND } from './S10.constants.mjs';
 
 export default {
   id: 'S10',
@@ -415,8 +415,8 @@ export default {
         // rather than from the card: run 17 reached it at 22:46:55 while this
         // beat had already given up at 22:44:59 asserting the card alone.
         terminal: 'ready-for-review',
-        upTo: PLAN_AND_BUILD_BOUND.ms,
-        boundBasis: PLAN_AND_BUILD_BOUND.label,
+        upTo: CYCLE_BOUND.ms,
+        boundBasis: CYCLE_BOUND.label,
       },
       expect: {
         route: '/projects/gitpulse',
@@ -558,6 +558,56 @@ export default {
       say: 'The card says the work is ready for review. The operator opens it to reach the run itself — and the drawer names the cycle that produced it, which is the handle everything downstream is keyed by. The initiative is what was asked for; the cycle is what actually ran.',
     },
     {
+      // `forge-8vfn.7.6.124` — THE BEAT THAT WAS MISSING FOR EIGHTEEN RUNS.
+      //
+      // Every S10 run to date asserted the developer's output without ever
+      // starting the developer. `forge-architect` ENDS after the project-manager
+      // BY DESIGN — its `ready-for-review` means THE PLAN is ready for the
+      // operator, the first of the three human interaction points — and
+      // `forge-develop` (dev -> demo -> adversarial-review -> review) is a
+      // SEPARATE flow the operator starts. DEC-3: "Architect decomposes; Develop
+      // builds." The architect declares no `on: flow-complete` chaining, so
+      // nothing hands over on its own.
+      //
+      // RUN 18 IS WHY THIS IS HERE AND NOT A GUESS. Beat 8 passed for the first
+      // time (7.6.118), the cycle reported `ready-for-review` with ERRORS
+      // RECORDED 0 and three work items written, and the phase census read
+      // `developer 0`. The story had been asserting a station it never asked
+      // anyone to run. It was NOT the budget: run 17 stopped at the same place
+      // with 67% of a $12.00 budget untouched and no cost-warn at all.
+      //
+      // WHY BOTH FLOWS LOOK ALIKE, which is how this survived eighteen runs:
+      // they terminate in the SAME WORD. `ready-for-review` means "plan ready"
+      // here and "PR open" after develop, and report.md does not distinguish
+      // them.
+      //
+      // NO CONFIRMATION IS EXPECTED ON THIS PATH, and asserting the outcome line
+      // is how that gets checked. `enqueue-develop-run.ts` passes
+      // `DEVELOP_HANDOFF_SOURCE_FLOWS = ['forge-architect']` as
+      // `allowRepointFrom`, so architect -> develop is the designed lifecycle
+      // transition and is auto-authorised; anything else "is a repoint like any
+      // other and gets the refusal". The DOM contract makes the two mutually
+      // exclusive — a refusal renders `[data-component="repoint-confirm"]`
+      // INSTEAD, and "the control that RAISED a confirmation is not rendered
+      // beside it". So an `enqueue-outcome` carrying `develop` IS the assertion
+      // that no confirmation was required, and the day that changes this beat
+      // reds without a second assertion needed to notice.
+      act: 'Hand the plan to the build flow',
+      do: [{ press: 'start-development' }],
+      expect: {
+        route: '/projects/gitpulse',
+        data: {
+          page: 'projects', 'project-id': 'gitpulse',
+          // `EnqueueOutcomeLine.tsx`, per the DOM contract's W7-A3 entry:
+          // `[data-component="enqueue-outcome"][data-enqueue-kind="plan"|"develop"]`.
+          // The KIND is the load-bearing half — a `plan` here would mean the
+          // press landed on the wrong control of a drawer that renders both.
+          'enqueue-kind': 'develop',
+        },
+      },
+      say: 'The architect has planned and stopped, which is where it is meant to stop — the plan is the first thing a human is asked to approve. Starting development is a separate act, and this is the operator making it: the same initiative, repointed from the flow that decomposed it to the flow that builds it.',
+    },
+    {
       // SOURCE-DERIVED. `FlowRunDetail.tsx:121-127` (page/run-id/run-found/
       // run-status/flow-id/page-ready), corroborated by
       // `lib/flow-run-detail-render.test.ts:180-191`. The node id `dev` and the
@@ -586,15 +636,36 @@ export default {
       // that sat idle overstates. The five gitpulse cycles have no such gaps,
       // which is why they are the ones relied on and the betterado trace's
       // `architect=828m` is not.
-      // NO AGENT WAIT ANY MORE, and dropping it is the honest half of 718(4).
-      // Beat 8 now waits until the initiative reaches `ready-for-review`, which
-      // means the dev station has ALREADY run by the time this beat looks. A
-      // declared 30-minute agent bound here would be a bound on work that
-      // finished before the beat began — and in this campaign a declared bound
-      // is a SPEND, not a decoration (513/551). What is left is an assertion on
-      // the timeline the finished cycle wrote, under the default consequence
-      // poll, which is what beat 10 has always done and what these three now
-      // are: readers of history, not waiters on it.
+      // THE WAIT IS BACK, AND 7.6.124 IS WHY THE OLD REASONING WAS WRONG. This
+      // comment used to read "beat 8 now waits until the initiative reaches
+      // ready-for-review, which means the dev station has ALREADY run by the
+      // time this beat looks." It has not, and never had: beat 8 watches the
+      // ARCHITECT cycle, which ends after the project-manager. Run 18 proved it
+      // — beat 8 green, this beat red on `data-status: expected "complete", got
+      // "pending"`, census `developer 0`. Fourteen red beats, one cause.
+      //
+      // So this waits on the DEVELOP cycle's own terminal event, anchored on the
+      // press that started it, with 7.6.118's door rather than a wall clock —
+      // the same instrument and the same argument as beat 8, one flow over.
+      //
+      // THE STALE-TERMINAL HAZARD, named because both flows end in the same
+      // word: at the moment `start-development` is pressed the initiative is
+      // ALREADY in `_queue/ready-for-review/` from the architect cycle, and a
+      // terminal read landing there would pass instantly on the PREVIOUS cycle's
+      // verdict. It cannot, and ORDERING is what prevents it rather than luck:
+      // `makeCycleTerminalWatch` resolves its channel with
+      // `newestChannelSince(anchor)`, so it has nothing to read until a dispatch
+      // dir exists — and a dispatch dir exists only once the scheduler has
+      // CLAIMED the initiative, which requires it to have been repointed into
+      // `_queue/pending/` first. Dispatch dir implies already left
+      // ready-for-review; `beats-cycle-terminal.test.ts` states that as its own
+      // door so the ordering cannot quietly change underneath this beat.
+      wait: {
+        for: 'agent', anchor: 'start-development',
+        terminal: 'ready-for-review',
+        upTo: CYCLE_BOUND.ms,
+        boundBasis: CYCLE_BOUND.label,
+      },
       expect: {
         route: '/flows/forge-develop/run/<cycleId>',
         data: {

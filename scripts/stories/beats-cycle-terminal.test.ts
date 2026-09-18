@@ -34,7 +34,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -250,3 +250,89 @@ test('7.6.118: a watch with no wanted state is inert — no beat gains a new way
   assert.equal(makeCycleTerminalWatch(root, null), null, 'a beat that declared no terminal state is not watched at all');
   assert.equal(makeCycleTerminalWatch(root, ''), null);
 });
+
+/**
+ * THE STALE-TERMINAL ORDERING, stated as a door because S10 beat 11 now relies
+ * on it — `forge-8vfn.7.6.124`.
+ *
+ * Both forge flows terminate in the SAME queue state. When the operator presses
+ * `start-development`, the initiative is ALREADY sitting in
+ * `_queue/ready-for-review/` from the ARCHITECT cycle that just finished. A
+ * terminal read that landed there would report the develop cycle finished
+ * before it had started — passing a beat on the previous cycle's verdict, which
+ * is precisely the class of false green this campaign keeps meeting.
+ *
+ * IT CANNOT, AND ORDERING IS WHY, NOT LUCK. The watch resolves its channel with
+ * `newestChannelSince(anchor)`: with no dispatch dir born since the press there
+ * is nothing to read, so it returns null however the queue looks. A dispatch dir
+ * appears only once the scheduler has CLAIMED the initiative, and a claim
+ * requires it to have been repointed into `_queue/pending/` first — so by the
+ * time the watch has anything to read, the initiative has already LEFT
+ * ready-for-review.
+ *
+ * That chain is load-bearing and invisible in the story file, so it is pinned
+ * here. If `newestChannelSince` ever starts falling back to an older channel,
+ * this reds and beat 11 does not silently pass on the architect's verdict.
+ */
+/**
+ * AGE IS READ FROM BIRTH TIME, AND A FIXTURE CANNOT FAKE IT — learned by getting
+ * this wrong. `newestChannelSince` filters on `statSync(...).birthtimeMs ||
+ * ctimeMs`, and `utimesSync` moves only atime/mtime. So a dispatch dir "aged" an
+ * hour with `utimesSync` is NOT aged at all: it was born a millisecond ago and
+ * the scan finds it.
+ *
+ * My first draft of the stale-terminal door did exactly that, asserted null on
+ * the first call, and PASSED — for the wrong reason. The watch returns null on a
+ * first sighting BY DESIGN (it starts the page's grace), so "null" could not
+ * distinguish "read nothing" from "read the architect's leftover and began
+ * waiting on the card". Only running it past the grace showed the fixture had
+ * been reading the stale terminal all along.
+ *
+ * So age is expressed the way the production code reads it: the ANCHOR sits
+ * after the stale dispatch's birth, which is the real relation — the operator
+ * pressed `start-development` AFTER the architect's dispatch dir existed.
+ */
+test('7.6.124: a stale terminal with no dispatch since the anchor is never a verdict', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-2026-09-18-exclude-author-flag';
+  // The architect cycle's leftover: the initiative IS in ready-for-review, and
+  // its dispatch dir exists — both true at the instant the operator presses.
+  queueFile(root, 'ready-for-review', initiative);
+  liveDispatch(logs, `_architect-2026-09-18T03-45-41_${initiative}`);
+
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+  // The press happens AFTER that dir was born. Nothing has been dispatched since.
+  const pressedAt = Date.now() + 5_000;
+  assert.equal(watch(null, pressedAt, pressedAt), null, 'nothing dispatched since the press');
+  assert.equal(watch(null, pressedAt, pressedAt + TERMINAL_UI_GRACE_MS + 1), null,
+    'and still nothing PAST THE GRACE — the develop wait must never be satisfied by the '
+    + 'architect cycle sitting in ready-for-review. A null only at the first call would '
+    + 'have meant the grace had started, which is the opposite of this claim.');
+});
+
+test('7.6.124: once a dispatch IS born since the anchor, the SAME queue row does count', () => {
+  // THE CONTRAST IS THE DOOR, and my first draft of it asserted the wrong thing:
+  // it expected a non-null on the first sighting, which contradicts the watch's
+  // own design — a first sighting of the wanted state STARTS the page's grace
+  // and returns null deliberately (a finished cycle ends the WAIT, not the
+  // BEAT). Asserting at the first call could never distinguish "saw the terminal
+  // and is waiting on the card" from "saw nothing at all", which is exactly the
+  // distinction this pair exists to pin.
+  //
+  // So both cases are measured PAST the grace, where they finally differ:
+  //   stale-only  -> still null, the terminal was never read
+  //   dispatched   -> cycle-done-ui-stale, the terminal WAS read
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-2026-09-18-exclude-author-flag';
+  queueFile(root, 'ready-for-review', initiative);
+  liveDispatch(logs, `_dev-2026-09-18T04-30-00_${initiative}`);
+
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+  const t0 = Date.now();
+  assert.equal(watch(null, t0 - 60_000, t0), null, 'first sighting starts the grace, by design');
+  const after = watch(null, t0 - 60_000, t0 + TERMINAL_UI_GRACE_MS + 1);
+  assert.equal(after?.reason, 'cycle-done-ui-stale',
+    'the terminal state was READ for this cycle — which the stale-only case never reaches');
+});
+
+

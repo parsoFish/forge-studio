@@ -91,13 +91,22 @@ export const CEILING = String(GROUND.budget_usd);
  * ever completed a cycle at this station, so there was nothing to tighten
  * against.
  *
+ * RENAMED FROM `PLAN_AND_BUILD_BOUND` BY 7.6.124. That name was minted on the
+ * assumption the architect cycle also built — it does not. `forge-architect`
+ * ENDS after the project-manager by design and `forge-develop` is a separate
+ * flow the operator starts (DEC-3), so beat 8 watches the PLAN cycle only. The
+ * same derived bound now serves BOTH cycle waits, which is honest rather than
+ * lazy: the bound is a function of what the STORY funds (`ground.budget_usd`),
+ * not of which station is running, so one derivation is the correct number for
+ * any cycle this story waits on.
+ *
  * SO IT IS DERIVED FROM THE MONEY, and it is no longer what decides this beat:
  * the wait ENDS on the cycle's own terminal event (`makeCycleTerminalDoor`), and
  * this is the outer backstop for a cycle that never terminates. See
  * `scripts/stories/wait-bound.mjs` for the derivation and why the clamp is
  * printed rather than hidden.
  */
-export const PLAN_AND_BUILD_BOUND = deriveWaitBoundMs(GROUND);
+export const CYCLE_BOUND = deriveWaitBoundMs(GROUND);
 
 /**
  * The one anchored send-back. It lands on the precedence clause — the risky

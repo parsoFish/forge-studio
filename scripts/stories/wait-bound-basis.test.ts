@@ -72,11 +72,11 @@ test('7.6.118: S10 beat 8\'s `terminal` and `boundBasis` survive validateStory',
 
 test('7.6.118: the bound S10 declares is the DERIVED one, and the parser accepts it', async () => {
   const { validateStory, MAX_DECLARED_WAIT_MS } = await import('./story-file.mjs');
-  const { PLAN_AND_BUILD_BOUND } = await import('../../tests/stories/S10.constants.mjs');
+  const { CYCLE_BOUND } = await import('../../tests/stories/S10.constants.mjs');
   const story = (await import('../../tests/stories/S10.story.mjs')).default;
   const beat8 = validateStory(story).beats[7];
 
-  assert.equal(beat8.wait.upTo, PLAN_AND_BUILD_BOUND.ms, 'the story must declare what the derivation produced');
+  assert.equal(beat8.wait.upTo, CYCLE_BOUND.ms, 'the story must declare what the derivation produced');
   assert.ok(beat8.wait.upTo <= MAX_DECLARED_WAIT_MS);
   assert.notEqual(beat8.wait.upTo, 360_000, 'the literal run 17 died on must be gone');
 });
