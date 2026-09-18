@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { portableArtifact, portableFenceEscapes, portableReapEntries } from './artifact-paths.mjs';
+import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -111,6 +111,13 @@ export function writeStoryJson(result, root) {
       if (Array.isArray(reap[k])) reap[k] = portableReapEntries(reap[k], root);
     }
     portable = { ...portable, reap };
+  }
+  // 7.6.127, the third seam: `sweep.removed` is a string[] so its frame is named
+  // once for the array; `claim.claimed[].path` is an object and takes the
+  // per-element frame. Two different foreign roots cannot be said in one frame,
+  // so that case stays absolute and the refusal below catches it.
+  if (portable.sweep && typeof portable.sweep === 'object') {
+    portable = { ...portable, sweep: portableSweepPaths(portable.sweep, root) };
   }
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;

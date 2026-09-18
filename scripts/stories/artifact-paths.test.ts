@@ -8,7 +8,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { relativiseToRoot, machinePathsIn, portableArtifact, portableFenceEscapes, portableReapEntries } from './artifact-paths.mjs';
+import { readFileSync } from 'node:fs';
+import { relativiseToRoot, machinePathsIn, portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
 
 const ROOT = '/home/parso/forge-m6-c';
 
@@ -274,5 +275,91 @@ describe('7.6.125: the reap ledger serialises without a machine path', () => {
     assert.deepEqual(e, bad, 'left exactly as it was, for the backstop to refuse');
     assert.equal('dirRootKind' in e, false, 'never stamped portable when it could not be read');
     assert.equal(machinePathsIn([e]).length, 1, 'it must remain a machine path so the write still refuses');
+  });
+});
+
+/*
+ * `forge-8vfn.7.6.127` — THE THIRD SEAM. After 7.6.125, S2 is still unwritable:
+ * `portableArtifact` throws on `sweep.removed[0..1]`
+ * (`/home/parso/forge-m5-b/projects/story-s2` and its brain sibling).
+ *
+ * THE SHAPE PROBLEM IS REAL AND DIFFERENT FROM THE OTHER TWO SEAMS.
+ * `sweep.removed` is a `string[]`, not an array of objects, so there is no
+ * sibling field to hang a root on the way `fence.escapes[].root` and
+ * `reap.*[].dirRoot` have one. Naming the frame per element would mean
+ * concatenating basename and remainder into one string — the two-frames-in-one-
+ * field defect C caught in 7.6.120's first draft.
+ *
+ * So the frame is named ONCE FOR THE ARRAY (`removedRoot` /
+ * `removedRootKind`), and each element stays a single frame: a path relative to
+ * that root.
+ *
+ * AND THAT SHAPE CANNOT REPRESENT TWO DIFFERENT FOREIGN ROOTS AT ONCE. Rather
+ * than invent a per-element encoding that mixes frames, the mixed case is LEFT
+ * ABSOLUTE and refused. A schema that cannot say the true thing must not be
+ * made to say a convenient one; failing closed keeps the artifact honest and
+ * the refusal readable. Every artifact today has at most one foreign sweep root,
+ * so this refuses nothing that currently works.
+ */
+describe('7.6.127: sweep paths serialise without a machine path', () => {
+  const OWN = '/home/parso/forge-clean-m6a';
+
+  test('the S2 shape: one foreign root — elements relative, frame named once', () => {
+    const out = portableSweepPaths({
+      removed: ['/home/parso/forge-m5-b/projects/story-s2', '/home/parso/forge-m5-b/brain/projects/story-s2'],
+      failed: [],
+    }, OWN);
+    assert.deepEqual(out.removed, ['projects/story-s2', 'brain/projects/story-s2']);
+    assert.equal(out.removedRoot, 'forge-m5-b');
+    assert.equal(out.removedRootKind, 'sibling-basename');
+    assert.deepEqual(machinePathsIn(out), []);
+  });
+
+  test('own-root sweep paths stay as they are — the regression lock', () => {
+    // `relativiseToRoot` already strips the run's own root, and the six artifacts
+    // that write today depend on that exact form. No root field is added.
+    const sweep = { removed: ['projects/story-x'], failed: [] };
+    const out = portableSweepPaths(sweep, OWN);
+    assert.deepEqual(out, sweep);
+    assert.equal('removedRoot' in out, false, 'absence of a root field IS the signal for the run\'s own tree');
+  });
+
+  test('an absolute path UNDER the run root is relativised, not called foreign', () => {
+    const out = portableSweepPaths({ removed: [`${OWN}/projects/story-y`], failed: [] }, OWN);
+    assert.deepEqual(out.removed, ['projects/story-y']);
+    assert.equal('removedRoot' in out, false);
+  });
+
+  test('TWO different foreign roots are LEFT ABSOLUTE and still refuse', () => {
+    // The shape cannot say "these two came from different trees" without a
+    // per-element frame, so it does not pretend to. Fail closed.
+    const sweep = { removed: ['/home/parso/forge-m5-b/a', '/home/parso/forge-m6-d/b'], failed: [] };
+    const out = portableSweepPaths(sweep, OWN);
+    assert.deepEqual(out, sweep, 'left exactly as it was for the backstop to refuse');
+    assert.equal('removedRoot' in out, false, 'never a root field that describes only some of the elements');
+    assert.equal(machinePathsIn(out).length, 2, 'both must remain machine paths so the write refuses');
+  });
+
+  test('claim.claimed[].path is an OBJECT, so it takes the 7.6.125 per-element frame', () => {
+    const out = portableSweepPaths({
+      removed: [],
+      claim: { claimed: [{ path: '/home/parso/forge-m5-b/_queue/pending/INIT-x.md', id: 'INIT-x' }], lines: [] },
+    }, OWN);
+    const c = out.claim.claimed[0];
+    assert.equal(c.path, '_queue/pending/INIT-x.md');
+    assert.equal(c.pathRoot, 'forge-m5-b');
+    assert.equal(c.pathRootKind, 'sibling-basename');
+    assert.equal(c.id, 'INIT-x', 'the entry\'s own fields survive');
+    assert.deepEqual(machinePathsIn(out), []);
+  });
+
+  test('the committed S2 artifact becomes writable — end to end, on real data', () => {
+    const a = JSON.parse(readFileSync(new URL('../../demos/stories/S2/story.json', import.meta.url), 'utf8'));
+    for (const k of ['reaped', 'skipped', 'cancelled']) {
+      if (Array.isArray(a.reap?.[k])) a.reap[k] = portableReapEntries(a.reap[k], OWN);
+    }
+    a.sweep = portableSweepPaths(a.sweep, OWN);
+    const out = portableArtifact(a, OWN);
+    assert.deepEqual(machinePathsIn(out), [], 'S2 is the artifact this bead exists for');
   });
 });
