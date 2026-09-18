@@ -549,6 +549,14 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   const writersOf = (p) =>
     [...writesBySession].filter(([, paths]) => paths.includes(p)).map(([s]) => s).sort();
   const produced = [];
+  // THE SAME FACTS, UNRENDERED — `forge-8vfn.7.6.123`. The `produced` lines
+  // above are for an operator; a CONSUMER needs the path and the minted dir it
+  // sits in. `ground-clear.mjs` has to remove those dirs, and re-parsing
+  // `"A _architect/x/PLAN.md — inside _architect/x, a session this run minted"`
+  // to find them would be reading a log line as an API — which is the same
+  // defect this bead is about, one level down: information that exists only in
+  // rendered text is information nothing can act on.
+  const producedPaths = [];
   const undeclared = [];
   const ignored = [];
   for (const kind of ['added', 'removed', 'modified']) {
@@ -563,11 +571,13 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
       const home = homeOf(p);
       if (home !== null) {
         produced.push(`${k} — inside ${home}, a session this run minted`);
+        producedPaths.push({ kind, path: p, home, writers: [] });
         continue;
       }
       const writers = writersOf(p);
       if (writers.length > 0) {
         produced.push(`${k} — written by ${writers.join(', ')}`);
+        producedPaths.push({ kind, path: p, home: null, writers });
         continue;
       }
       // Only the UNATTRIBUTED remainder reaches the ground's ignore rules.
@@ -580,6 +590,12 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   }
   return {
     produced: produced.sort(),
+    // NOT SORTED, and deliberately so: this is walked in the loop's own order —
+    // `added`, `removed`, `modified`, each already sorted by `groundChanges` —
+    // so it is deterministic without a second sort that would order it
+    // differently from the lines beside it (`_` sorts after the capitals, so
+    // sorting by path alone puts `README.md` before `_architect/…`).
+    producedPaths,
     undeclared: undeclared.sort(),
     // ALWAYS PRESENT, EVEN EMPTY, and always carrying the rule that produced it:
     // `0 ignored` and "no ignore check ran" must never render the same line.

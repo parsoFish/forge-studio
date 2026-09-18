@@ -58,6 +58,7 @@ import {
   seedIgnoredBorn,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
+import { captureAndClearMintedSessions, describeGroundClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -360,7 +361,17 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // and does not fail the run. Failing on any drift at all would fail every
   // green run, and nine-green is this campaign's exit criterion: a gate that
   // cannot be passed is not a gate.
-  const ownGroundDrift = { produced: [], undeclared: [], ignored: [] };
+  // `clear` starts as the SHAPE the clear returns, not as `null` or absent:
+  // a story with no ground never runs the clear, and the verdict below reads
+  // `clear.unremoved` unconditionally. An absent field there would be an
+  // `undefined.length` on the no-ground path — a crash in the branch that has
+  // nothing to check, which is the worst place to put one.
+  const ownGroundDrift = {
+    produced: [],
+    undeclared: [],
+    ignored: [],
+    clear: { dest: null, captured: [], cleared: [], refused: [], unremoved: [], absent: [] },
+  };
   if (ownGroundBefore !== null) {
     const groundDir = join(ROOT, 'projects', story.ground.project);
     const minted = mintedSessionPaths(
@@ -401,6 +412,54 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       console.error(`[stories] own ground: UNDECLARED ${line}`);
     }
     for (const rel of seeded) rmSync(join(ROOT, 'projects', story.ground.project, rel), { force: true }); // 7.6.52 — next run seeds fresh
+
+    // `forge-8vfn.7.6.123` — THE PRODUCED LIST NOW REACHES SOMETHING.
+    //
+    // Everything above already knew: `groundManifest` walks the filesystem so
+    // it sees gitignored content, and `classifyOwnGroundDrift` already names
+    // each minted session. It stopped at the `PRODUCED` lines, so
+    // `projects/gitpulse/_architect/<ts>/` survived porcelain (gitignored
+    // inside the ground), `residue.sh` (git's view) and the ground fence, and
+    // the NEXT run's launcher refused on the ground hash. Five times.
+    //
+    // C's run 18 leaked TWO things and `residue.sh` caught exactly one:
+    // `_worktrees/INIT-…` (a NAMED LOCATION it counts with `ls`) and the
+    // ground's `_architect/<ts>/` (walked through git, so invisible). Same
+    // instrument, same run, opposite outcomes.
+    ownGroundDrift.clear = captureAndClearMintedSessions({
+      root: ROOT,
+      project: story.ground.project,
+      storyId: story.id,
+      runStamp,
+      producedPaths: split.producedPaths,
+    });
+    for (const line of describeGroundClear(ownGroundDrift.clear, story.ground.project)) {
+      console.log(`[stories] ${line}`);
+    }
+    // THE HASH IS RE-READ, not inferred from the removals. The digest is the
+    // number the next run's launcher will refuse on, so it is the only reading
+    // that settles whether this worked.
+    if (ownGroundDrift.clear.cleared.length > 0) {
+      const after = ownGroundManifest(ROOT, story.ground.project);
+      if (after !== null && after.digest === ownGroundBefore.digest) {
+        console.log(
+          `[stories] own ground: RESTORED ${after.digest} — projects/${story.ground.project} is byte-identical ` +
+          'to the hash it started from, so the next run starts on the ground it was pinned at',
+        );
+      } else {
+        // NOT RED on its own. A develop run that legitimately commits into its
+        // ground moves this digest, and failing here would fail every real run
+        // — ruling 594's "a gate that cannot be passed is not a gate", quoted
+        // in `ground-hash.mjs` for this same reason. What IS red is a minted
+        // dir surviving the clear, checked at the verdict below.
+        const still = groundChanges(ownGroundBefore, after);
+        console.log(
+          `[stories] own ground: STILL DIFFERS ${after?.digest ?? 'UNREADABLE'} vs ${ownGroundBefore.digest} — ` +
+          `+${still.added.length} -${still.removed.length} ~${still.modified.length} remain after the clear; ` +
+          'reported, and red only if one of them is a minted session dir',
+        );
+      }
+    }
   }
 
   // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be
@@ -469,6 +528,27 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     console.error(
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${ownGroundDrift.undeclared.length} change(s) in ` +
       `projects/${story.ground?.project} that nothing this run minted accounts for (named above). ` +
+      'The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
+  // `forge-8vfn.7.6.123`. THE NARROW GATE, and the narrowness is the point.
+  //
+  // Red when a session THIS RUN MINTED is still in the ground after the clear
+  // captured it and removed it. That is a removal that did not take — the same
+  // failure `fence.reappeared` exists for — and it is always achievable to
+  // avoid, so it is a gate that can be passed.
+  //
+  // What this deliberately does NOT do is red on "the ground hash moved". A
+  // develop run that commits into its ground moves that hash as its actual
+  // product, and failing on it would fail every real run: ruling 594, and its
+  // own words, "a gate that cannot be passed is not a gate". The drift is
+  // reported either way; only the survival of a minted dir is fatal.
+  if (ownGroundDrift.clear.unremoved.length > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${ownGroundDrift.clear.unremoved.length} session(s) this run ` +
+      `minted are STILL in projects/${story.ground?.project} after being captured and removed ` +
+      `(${ownGroundDrift.clear.unremoved.join(', ')}). The next run will refuse on the ground hash. ` +
       'The run is RED regardless of its beats.',
     );
     return 1;
