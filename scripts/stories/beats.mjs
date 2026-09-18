@@ -204,6 +204,36 @@ export function resolveBoundPresses(steps, bindings) {
   return { steps: out, unbound };
 }
 
+/**
+ * Resolve a beat's `wait.cycleOf` against the bindings, and SAY when it could
+ * not be — `forge-8vfn.7.6.147`, T1 ruling 1164.
+ *
+ * It returns the same `{value, unbound}` shape as `resolveBeatRoute` on purpose:
+ * an unresolved placeholder is a fact the CALLER must act on, never something
+ * this function papers over. The first version of the `cycleOf` wiring did paper
+ * over it — `!cycleOf.includes('<') ? cycleOf : null` — so an unbound placeholder
+ * became "no cycleOf declared" and the watch silently fell back to the
+ * born-after-the-anchor form, which for a CONTINUED cycle finds nothing. The beat
+ * then reded claiming no waiter consumed its bound, which was true and was not
+ * the reason.
+ *
+ * **UNKNOWN never resolves toward proceeding (§15.504.)** "The cycle I was told
+ * to watch was never identified" and "that cycle has not terminated" are
+ * different verdicts, and a resolver that returns null for both makes them one.
+ * Measured on S10 run 21, $4.0917: beat 8 stalled, `stuckVerdict` exported no
+ * bindings by design, and `<runId>` never resolved.
+ */
+export function resolveCycleOf(cycleOf, bindings) {
+  if (typeof cycleOf !== 'string' || cycleOf === '') return { value: null, unbound: null };
+  let unbound = null;
+  const value = cycleOf.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) => {
+    if (Object.hasOwn(bindings ?? {}, name)) return bindings[name];
+    unbound ??= name;
+    return whole;
+  });
+  return unbound === null ? { value, unbound: null } : { value: null, unbound };
+}
+
 export function resolveBeatRoute(beat, bindings) {
   let unbound = null;
   const route = beat.expect.route.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) => {
