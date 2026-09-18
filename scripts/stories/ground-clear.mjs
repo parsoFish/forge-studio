@@ -40,7 +40,7 @@
  * capture that failed leaves the directory in place, because losing the evidence
  * is worse than leaving residue a named check will now report.
  */
-import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
@@ -294,5 +294,92 @@ export function describeGroundClear(result, project) {
         'the next run will refuse on the ground hash',
     );
   }
+  return lines;
+}
+
+/** Where a run parks the `_logs` sessions it minted, before removing them. */
+export function logsClearDir(root, storyId, runStamp) {
+  return join(root, '_logs', '_story-logs-clear', storyId, runStamp);
+}
+
+/** `_<kind>-<id>`, one segment, the shape `mintedSessionDirNames` returns. */
+const MINTED_LOG_DIR_SHAPE = /^_[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9._-]+$/;
+
+/**
+ * Capture every `_logs` session THIS RUN minted, then remove it —
+ * `forge-8vfn.7.6.137`. 7.6.123 did the GROUND half; this is the `_logs` half.
+ *
+ * WHY IT EXISTS, measured rather than supposed: every costed run left its own
+ * `_agent-*` behind, so the NEXT run's §15.427 residue door refused on it. S9
+ * run 7's leavings blocked run 8; run 8's blocked S3 run 3. Each refusal was
+ * correct and cost $0 — and each was paid off by a hand capture-then-clear that
+ * nothing in the product did.
+ *
+ * DERIVED, NEVER A PATTERN. `mintedNames` comes from `mintedSessionDirNames`,
+ * which is the before/after diff plus a session marker. A `_*` sweep would take
+ * `_logs/INIT-*` fixtures and any concurrent lane's dirs with it.
+ *
+ * CAPTURE FIRST AND CONFIRM BY RE-READING, both for `captureAndClearMintedSessions`'
+ * reasons: a capture that throws leaves the directory alone, and "cleared" is a
+ * second look rather than an inference from control flow.
+ */
+export function captureAndClearMintedLogs({ root, storyId, runStamp, mintedNames }) {
+  const out = { dest: null, captured: [], cleared: [], refused: [], unremoved: [] };
+  if (!Array.isArray(mintedNames) || mintedNames.length === 0) return out;
+
+  const logsDir = resolve(join(root, '_logs'));
+  const dest = logsClearDir(root, storyId, runStamp);
+
+  for (const name of mintedNames) {
+    if (typeof name !== 'string' || !MINTED_LOG_DIR_SHAPE.test(name)) {
+      out.refused.push({ dir: String(name), reason: `is not shaped _<kind>-<id>, so nothing in this run minted it` });
+      continue;
+    }
+    const from = resolve(join(logsDir, name));
+    // The shape check already excludes `/` and `..`, but the containment check
+    // is kept because a guard that depends on another guard's regex staying
+    // exactly as it is today is a guard with a hidden premise.
+    if (from !== join(logsDir, name) || !from.startsWith(`${logsDir}/`)) {
+      out.refused.push({ dir: name, reason: `resolves outside ${logsDir}` });
+      continue;
+    }
+    if (!existsSync(from)) { out.refused.push({ dir: name, reason: 'absent by the time the clear ran' }); continue; }
+
+    try {
+      mkdirSync(dest, { recursive: true });
+      cpSync(from, join(dest, name), { recursive: true, preserveTimestamps: true });
+    } catch (error) {
+      out.refused.push({ dir: name, reason: `capture failed (${error.message}) — not removing what was not captured` });
+      continue;
+    }
+    out.dest = dest;
+    out.captured.push(name);
+
+    let failure = null;
+    try { rmSync(from, { recursive: true, force: true }); } catch (error) { failure = error.message; }
+    if (!existsSync(from)) out.cleared.push(name);
+    else {
+      out.unremoved.push(name);
+      if (failure !== null) out.refused.push({ dir: name, reason: `removal threw: ${failure}` });
+    }
+  }
+  return out;
+}
+
+/**
+ * The lines the runner prints. Zero minted and zero cleared must not render the
+ * same way — the `IGNORED-BY-GROUND` rule, because a `0` from a case that never
+ * arose once reached the ledger as a measurement.
+ */
+export function describeLogsClear(result) {
+  const lines = [];
+  if (result.captured.length === 0 && result.refused.length === 0) {
+    lines.push('own logs: this run minted no session in _logs/ — nothing to clear, which is not the same as clearing nothing');
+    return lines;
+  }
+  if (result.dest !== null) lines.push(`own logs: CAPTURED ${result.captured.length} minted session(s) to ${result.dest}`);
+  for (const n of result.cleared) lines.push(`own logs: CLEARED ${n} — removed from _logs/, re-read to confirm`);
+  for (const n of result.unremoved) lines.push(`own logs: NOT REMOVED ${n} — captured, still present after the removal`);
+  for (const r of result.refused) lines.push(`own logs: REFUSED ${r.dir} — ${r.reason}`);
   return lines;
 }
