@@ -5122,7 +5122,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   `skills-agentic-build` beat (`scripts/journeys/skills.mjs`), the hook side
   by `hooks-agentic-build` (`scripts/journeys/hooks.mjs`); the drafted bytes
   both seed are a committed, sha256-verified copy of a real captured
-  creation-agent turn (`scripts/journeys/fixtures/r4-21-live-capture/`,
+  creation-agent turn (`tests/fixtures/live-capture/r4-21-live-capture/`,
   provenance in `scripts/lib/journey-fixtures.mjs`) — see `build-skill` /
   `build-hook` in `scripts/journeys/story-registry.mjs` for the full
   mockup-beat mapping.

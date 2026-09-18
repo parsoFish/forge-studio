@@ -149,11 +149,11 @@ after(() => {
 // Read from disk via a path derived from THIS module's own location (never
 // pasted inline) so these two files stay the single source of truth and can
 // never silently drift from what actually shipped in
-// scripts/journeys/fixtures/r4-19-f2-live-capture/.
+// tests/fixtures/live-capture/r4-19-f2-live-capture/.
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT = FORGE_ROOT;
-const LIVE_CAPTURE_DIR = join(REPO_ROOT, 'scripts', 'journeys', 'fixtures', 'r4-19-f2-live-capture');
+const LIVE_CAPTURE_DIR = join(REPO_ROOT, 'tests', 'fixtures', 'live-capture', 'r4-19-f2-live-capture');
 
 /** The real 2681-byte agent-authored plan (as captured — see module header
  *  above), read once at file-load time so every test below drives the exact

@@ -72,5 +72,6 @@ matters for a demo flow — have the demo wait on it instead of sleeping.
 
 - [[brain-read-policy]] (mirror discipline: keep the source of truth singular, read from it)
 - [[windows-browser-to-wsl-via-window-location]] (`data-bridge-url` is one of these probes)
-- harness: [`scripts/e2e-journey.mjs`](../../../scripts/e2e-journey.mjs) (the consolidated UI-emulation + regression harness)
+- harness: `scripts/e2e-journey.mjs` — the consolidated UI-emulation + regression harness,
+  retired in 7.6.131; the story suite (`scripts/stories/`, `tests/stories/`) is its successor
 - pattern source: [anthropics/cwc-workshops `how-we-claude-code`](https://github.com/anthropics/cwc-workshops/tree/main/how-we-claude-code)
