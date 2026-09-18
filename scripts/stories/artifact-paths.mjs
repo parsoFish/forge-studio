@@ -137,9 +137,29 @@ export function portableFenceEscapes(escapes) {
     const cwdAbs = e.live.cwd;
     let cwdRel = '.';
     if (cwdAbs !== root) {
+      // THE `else` HERE IS UNREACHABLE TODAY, and that is worth writing down
+      // rather than leaving for someone to discover: `liveProcessRoots` only
+      // records a root when `cwd === resolved || cwd.startsWith(resolved + sep)`
+      // (`sweep.mjs`), so a cwd that is neither the root nor under it never
+      // reaches this function attributed.
+      //
+      // It falls through ABSOLUTE on purpose. That lands on `portableArtifact`
+      // and refuses the artifact — the same symptom this bead exists to remove,
+      // but in the safe direction: a refusal that can be read beats a portable
+      // record of a relation nobody can explain. NOT doored, deliberately —
+      // a door would promise "this is contractually refused" where the truth is
+      // "this cannot currently happen" (C, on review of #771).
       cwdRel = cwdAbs.startsWith(`${root}${sep}`) ? cwdAbs.slice(root.length + 1) : cwdAbs;
     }
 
+    // BASENAME COLLISION, named because the trade should live in the record and
+    // not only in the head of whoever made it (C, review of #771). Two siblings
+    // with the same basename — possible only across different parents — collapse
+    // to one string here. The pid below disambiguates them, and the run log
+    // keeps both full paths. Accepted over a `../` relative form, which encodes
+    // the assumption that both trees share a parent and becomes
+    // `../../../mnt/x/…` the first time that is false: a machine path in
+    // disguise, past a check matching only a LEADING `/home/`.
     return {
       ...e,
       root: base,
