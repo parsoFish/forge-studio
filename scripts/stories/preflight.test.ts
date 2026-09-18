@@ -419,3 +419,35 @@ describe('7.6.139: the ground-at-its-pin premise', () => {
     assert.match(v.reason, /could not be measured/);
   });
 });
+
+test('7.6.139: the no-pin refusal does NOT teach measuring-then-passing', () => {
+  // M6-C found this an hour after 7.6.139 landed, when the check refused their
+  // run 21 and they read the message. The first version said "Measure it with
+  // <cmd> and pass it as FORGE_GROUND_PIN" — **which is a tautology**: a caller
+  // who follows it literally compares the ground against ITSELF, matches by
+  // construction, and passes on residue. The refusal text taught the reader how
+  // to defeat the check it was refusing them for.
+  //
+  // C passes T1's RATIFIED pin instead (§15.524), which is why their run refused
+  // correctly rather than sailing through on a dirty ground.
+  const v = groundPinVerdict(
+    { project: 'gitpulse', realSpawn: true, budget_usd: 35 },
+    { declaredPin: undefined, measured: 'abc123' },
+  );
+  assert.equal(v.ok, false);
+  assert.match(v.reason, /RATIFIED PIN/, 'it must say WHICH pin to pass');
+  assert.match(v.reason, /NOT a fresh measurement/, 'and name the thing not to do');
+  assert.match(v.reason, /against ITSELF/, 'and say why — a reader who is only told "do X" will do Y when X is unclear');
+  assert.match(v.reason, /never at launch/, 'the derive command must be scoped to ratification, not to launch');
+});
+
+test('7.6.139: measuring-then-passing DOES pass — which is why the text matters', () => {
+  // The defect stated as a measurement rather than an argument: this is what a
+  // caller following the old text would have got on a ground carrying residue.
+  const residue = '4c843c54a2a3719e';
+  const v = groundPinVerdict(
+    { project: 'gitpulse', realSpawn: true, budget_usd: 35 },
+    { declaredPin: residue, measured: residue },
+  );
+  assert.equal(v.ok, true, 'self-comparison passes by construction — the check cannot catch this, only the text can');
+});

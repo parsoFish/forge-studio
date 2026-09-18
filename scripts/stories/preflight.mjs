@@ -349,9 +349,12 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
       reason:
         `this story spends and declares the ground "${ground.project}", but no ${GROUND_PIN_ENV} was given. ` +
         'Without it, a run that starts on an already-changed ground cannot be told from one whose product ' +
-        'stopped working. Measure it with:\n' +
-        `  ( cd projects/${ground.project} && ${METHOD_C_CMD} | sha256sum | cut -c1-16 )\n` +
-        `and pass it as ${GROUND_PIN_ENV}.`,
+        'stopped working.\n' +
+        `  PASS THE RATIFIED PIN this run was declared against — NOT a fresh measurement of the ground.\n` +
+        '  Measuring it now and passing that compares the ground against ITSELF: it matches by ' +
+        'construction, passes on residue, and produces exactly the green this check exists to withhold.\n' +
+        `  The command below derives a pin ONCE, when one is ratified for a known-good ground — never at launch:\n` +
+        `    ( cd projects/${ground.project} && ${METHOD_C_CMD} | sha256sum | cut -c1-16 )`,
     });
   }
   // AN UNMEASURABLE GROUND IS NOT A MATCHING ONE (§15.504).
