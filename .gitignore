@@ -14,12 +14,11 @@ apps/studio/.next/
 apps/studio/out/
 apps/studio/tsconfig.tsbuildinfo
 apps/studio/next-env.d.ts
-# demos/ PNG frame galleries + index.html + the short building/generating CLIPS
-# (demos/e2e/clips/*.webm, each <400K — the autoplay-loop "GIFs") are version-tracked.
+# demos/verify PNG frame galleries + index.html + summary.json are version-tracked.
 # The big full-run VIDEOS are NOT — regenerable + too large for git (a verify
 # cycle.webm hit 110MB, past GitHub's 100MB cap). Regenerate locally via
-# `npm run ui:journey` / `verify:cycle`.
-demos/e2e/video/*.webm
+# `npm run verify:cycle`. Story clips are ignored too, under their own rule and
+# their own reasoning, near the bottom of this file.
 demos/verify/**/*.webm
 
 # Runtime state — not source. Ignore contents but keep .gitkeep so structure
