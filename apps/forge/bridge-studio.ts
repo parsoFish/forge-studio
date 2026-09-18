@@ -31,6 +31,7 @@ import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows/run-model
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { eventToNodeId } from '@forge/flows/run-model-derive.ts';
 import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
+import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
 import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
@@ -452,7 +453,10 @@ export async function handleStudioRoutes(
   // precede /api/runs/<id> below (else "planned" parses as a run id).
   if (url === '/api/runs/planned') {
     try {
-      const planned = listPlannedInitiatives(join(resolve(ctx.forgeRoot), '_queue'));
+      // 7.6.132: the target flow is what decides whether a `ready-for-review`
+      // manifest is a parked sibling or the architect hand-off. This endpoint IS
+      // the forge-develop kickoff surface, so it names that flow explicitly.
+      const planned = listPlannedInitiatives(join(resolve(ctx.forgeRoot), '_queue'), DEVELOP_FLOW_ID);
       sendJson(res, 200, { planned }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -998,6 +1002,14 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       // `planned-initiatives.ts` applies daemon-side, so the two cannot disagree.
       ready: blockedBy.length === 0 && blockedClauses.length === 0,
       blockedBy,
+      // 7.6.132: derived HERE, where the manifest is already in hand, so the
+      // card reads a boolean rather than re-applying the rule client-side. A
+      // manifest parked in `ready-for-review` under a DIFFERENT flow is the
+      // architect hand-off `enqueueFlowRun` claims; the same flow is a parked
+      // sibling; an absent `flow_id` refuses (§15.504). `ready`/`planned` stay
+      // the card's own gates — this is only the server's half.
+      canStartDevelopment: isRunnableSource(status, manifest.flow_id ?? null, DEVELOP_FLOW_ID)
+        && status !== 'done' && status !== 'failed',
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),

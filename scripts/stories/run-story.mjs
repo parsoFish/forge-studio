@@ -51,6 +51,7 @@ import {
   describeGroundEscapes,
   ownGroundManifest,
   mintedSessionPaths,
+  mintedSessionDirNames,
   mintedSessionWrites,
   classifyOwnGroundDrift,
   groundChanges,
@@ -58,7 +59,7 @@ import {
   seedIgnoredBorn,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
-import { captureAndClearMintedSessions, describeGroundClear } from './ground-clear.mjs';
+import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -384,10 +385,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       minted,
       mintedSessionWrites(minted, logsDir, groundDir),
       groundIgnoreFromGit(groundDir),
+      // 7.6.136 — the ground changes this story DECLARES its product makes,
+      // read from the PINNED story file so the licence cannot widen at runtime.
+      story.ground?.expectedChanges ?? [],
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
     ownGroundDrift.ignored = split.ignored;
+    ownGroundDrift.declared = split.declared;
+    ownGroundDrift.unmatchedDeclarations = split.unmatchedDeclarations;
     if (split.produced.length === 0 && split.undeclared.length === 0 && split.ignored.length === 0) {
       console.log(`[stories] own ground: unchanged — projects/${story.ground.project} is back at the hash it started from`);
     }
@@ -407,6 +413,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     for (const line of split.ignored) {
       console.log(`[stories] own ground: ignored-born ${line}`);
+    }
+    for (const line of split.declared) {
+      console.log(`[stories] own ground: DECLARED ${line}`);
+    }
+    // A declaration that matched nothing is NAMED, never dropped — §15.539's
+    // dead glob in another costume: a licence that cannot match cannot fail,
+    // and would sit in the pinned story describing a behaviour that has changed.
+    for (const line of split.unmatchedDeclarations) {
+      console.error(`[stories] own ground: DECLARATION UNMATCHED ${line}`);
     }
     for (const line of split.undeclared) {
       console.error(`[stories] own ground: UNDECLARED ${line}`);
@@ -509,6 +524,21 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   if (spendHalt !== null) {
     console.error(`[stories] ${story.id}: RED — ${spendHalt.reason}. ${spendHalt.note}`);
   }
+  // `forge-8vfn.7.6.137` — THE `_logs` HALF, and it runs for EVERY story, not
+  // only one with a ground: a costless story mints sessions too, and its
+  // leavings refuse the next run's residue door just as surely.
+  //
+  // Measured cost of not doing this: S9 run 7's `_agent-*` blocked run 8, and
+  // run 8's blocked S3 run 3. Both refusals were correct and cost $0 — and both
+  // were paid off by a hand capture-then-clear the product never did.
+  const mintedLogNames = mintedSessionDirNames(
+    logsBefore,
+    readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
+    logsDir,
+  );
+  const logsClear = captureAndClearMintedLogs({ root: ROOT, storyId: story.id, runStamp, mintedNames: mintedLogNames });
+  for (const line of describeLogsClear(logsClear)) console.log(`[stories] ${line}`);
+
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
 
@@ -529,6 +559,29 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${ownGroundDrift.undeclared.length} change(s) in ` +
       `projects/${story.ground?.project} that nothing this run minted accounts for (named above). ` +
       'The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
+
+  // `forge-8vfn.7.6.139` — A DECLARATION THAT MATCHED NOTHING IS RED, not a note.
+  //
+  // 7.6.136 reported it and stayed green, which is §15.539's dead glob exactly:
+  // a licence that cannot match cannot fail, so it stops protecting and stops
+  // complaining in the same instant, and nothing distinguishes a live
+  // declaration from a fossil.
+  //
+  // THIS IS ONLY UNAMBIGUOUS BECAUSE THE PREMISE IS CHECKED AT THE START. Until
+  // `groundPinVerdict` moved into the runner, "unmatched because the product
+  // stopped doing what the story says" and "unmatched because the ground was
+  // already migrated" were one state — and reddening both would have failed
+  // every idempotent re-run. The start-of-run refusal makes the second
+  // unreachable, so what is left here is the first, and it deserves a red.
+  if ((ownGroundDrift.unmatchedDeclarations ?? []).length > 0) {
+    console.error(
+      `[stories] ${story.id}: DECLARATION UNMATCHED — ${ownGroundDrift.unmatchedDeclarations.length} ` +
+      `ground change(s) this story DECLARES its product makes did not happen (named above). The ground was ` +
+      'at its declared pin when this run started, so the product stopped doing what the story says — or the ' +
+      'story still describes behaviour that has since changed. The run is RED regardless of its beats.',
     );
     return 1;
   }

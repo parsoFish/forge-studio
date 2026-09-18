@@ -227,7 +227,7 @@ export function ownGroundManifest(root, project) {
  * @param {string[]} after entry names after it
  * @param {string} logsDir the `_logs` dir itself, to confirm each candidate is a session
  */
-export function mintedSessionPaths(before, after, logsDir) {
+function mintedSessions(before, after, logsDir) {
   const was = new Set(before);
   const out = [];
   for (const name of after) {
@@ -238,9 +238,29 @@ export function mintedSessionPaths(before, after, logsDir) {
     const isSession = ['events.jsonl', '.heartbeat', 'turn.pid'].some((f) => {
       try { return statSync(join(logsDir, name, f)).isFile(); } catch { return false; }
     });
-    if (isSession) out.push(`_${m[1]}/${m[2]}`);
+    if (isSession) out.push({ name, kind: m[1], id: m[2] });
   }
-  return out.sort();
+  return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+export function mintedSessionPaths(before, after, logsDir) {
+  return mintedSessions(before, after, logsDir).map((e) => `_${e.kind}/${e.id}`);
+}
+
+/**
+ * The same sessions as `mintedSessionPaths`, in the form they exist on disk:
+ * `_<kind>-<id>` directory names under `_logs/` — `forge-8vfn.7.6.137`.
+ *
+ * ONE PREDICATE, TWO SHAPES, deliberately. The ground half matches on
+ * `_<kind>/<id>` (how a minted session appears as a path inside the ground) and
+ * the `_logs` half needs the directory name. Deriving the second by rebuilding
+ * `_${kind}-${id}` from the first would be a SECOND source of truth for "what
+ * did this run mint", and the two could drift apart while both looked right.
+ * They share `mintedSessions` instead, so a change to the session predicate
+ * cannot move one without the other.
+ */
+export function mintedSessionDirNames(before, after, logsDir) {
+  return mintedSessions(before, after, logsDir).map((e) => e.name);
 }
 
 /**
@@ -535,7 +555,7 @@ export function groundIgnoreNoneForTests() {
   return { isIgnored: () => false, source: 'none (no ignore rules applied)' };
 }
 
-export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore) {
+export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore, declaredChanges = []) {
   if (groundIgnore === undefined || typeof groundIgnore.isIgnored !== 'function') {
     throw new Error(
       'classifyOwnGroundDrift: a ground-ignore classifier is REQUIRED — pass ' +
@@ -559,6 +579,8 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   const producedPaths = [];
   const undeclared = [];
   const ignored = [];
+  const declared = [];
+  const matchedDeclarations = new Set();
   for (const kind of ['added', 'removed', 'modified']) {
     for (const p of changes[kind]) {
       const k = `${kind[0].toUpperCase()} ${p}`;
@@ -580,7 +602,28 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
         producedPaths.push({ kind, path: p, home: null, writers });
         continue;
       }
-      // Only the UNATTRIBUTED remainder reaches the ground's ignore rules.
+      // DECLARED BY THE STORY — `forge-8vfn.7.6.136`. A story whose product
+      // legitimately rewrites the ground (S3's Rebuild control moves nine skill
+      // dirs) had no way to say so: the moves are inside no minted session,
+      // written by no agent, and not ignored, so they fell to UNDECLARED and
+      // red-ed a 12/12 green run.
+      //
+      // PLACED AFTER ATTRIBUTION, DELIBERATELY. The rule above is "attribution
+      // first, and it wins"; a declaration is the STORY'S CLAIM, which is
+      // weaker evidence than a writer we observed. Where both apply the
+      // attribution is the better fact and is what gets reported — so this
+      // branch can never relabel a session's own write.
+      //
+      // The KIND is matched as well as the path: a path-only licence would
+      // permit any change to it, so a story expecting a REMOVAL would silently
+      // license a MODIFICATION it never intended.
+      const declIdx = declaredChanges.findIndex((d) => d.path === p && d.change === kind);
+      if (declIdx !== -1) {
+        matchedDeclarations.add(declIdx);
+        declared.push(`${k} — declared by the story as an expected ${kind} change`);
+        continue;
+      }
+      // Only the UNATTRIBUTED, UNDECLARED remainder reaches the ignore rules.
       if (groundIgnore.isIgnored(p)) {
         ignored.push(`${k} — ignored by the ground (${groundIgnore.source})`);
         continue;
@@ -590,6 +633,18 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   }
   return {
     produced: produced.sort(),
+    declared: declared.sort(),
+    // A DECLARATION THAT MATCHED NOTHING IS NAMED, never silently dropped —
+    // §15.539's dead glob in another costume. A licence that cannot match is a
+    // licence that cannot fail: it would sit in the pinned story file
+    // describing a product behaviour that has since changed, and nothing would
+    // say so.
+    unmatchedDeclarations: declaredChanges
+      .map((d, i) => (matchedDeclarations.has(i)
+        ? null
+        : `${d.change[0].toUpperCase()} ${d.path} — the story declared this change and the product did not make it`))
+      .filter((line) => line !== null)
+      .sort(),
     // NOT SORTED, and deliberately so: this is walked in the loop's own order —
     // `added`, `removed`, `modified`, each already sorted by `groundChanges` —
     // so it is deterministic without a second sort that would order it

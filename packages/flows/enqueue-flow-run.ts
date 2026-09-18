@@ -33,7 +33,12 @@ import { WORK_ITEM_FILE_PATTERN } from './work-item.ts';
 // enqueue refuses — the exact fail-open the done/ guard must not have.
 import { isCanonicalInitiativeId } from './initiative-id.ts';
 
-export const DEVELOP_FLOW_ID = 'forge-develop';
+// 7.6.132: the predicate lives in its own PURE module so a 'use client'
+// bundle can import it — this file reaches node:fs/node:path and webpack
+// refuses those schemes in the browser graph. Re-exported here so the rule
+// still reads beside the code that implements it.
+export { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
+import { DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
 
 /** Matches studio flow-id slugs; a path-traversal guard on the flow ref.
  *  EXPORTED (W8-F5, bead forge-6gv.23): this guard used to live at ONE of the
