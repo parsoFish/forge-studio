@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { portableArtifact, portableFenceEscapes } from './artifact-paths.mjs';
+import { portableArtifact, portableFenceEscapes, portableReapEntries } from './artifact-paths.mjs';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -97,9 +97,21 @@ export function writeStoryJson(result, root) {
   // An UNATTRIBUTED escape is deliberately left absolute so it still hits the
   // throw below: that is how a containment breach is stopped from reaching a
   // committed file, and it must not be tidied into portability.
-  const portable = result.fence?.escapes
+  let portable = result.fence?.escapes
     ? { ...result, fence: { ...result.fence, escapes: portableFenceEscapes(result.fence.escapes) } }
     : result;
+  // 7.6.125, the second seam: the reap ledger names other checkouts the same way
+  // `fence.escapes` did, and S2/S3/S5 could not be regenerated because of it. Own-root
+  // entries pass through untouched — twelve committed entries are already `_logs/…`
+  // and must not churn — and a dir that cannot be decomposed stays absolute for the
+  // refusal below to catch.
+  if (portable.reap && typeof portable.reap === 'object') {
+    const reap = { ...portable.reap };
+    for (const k of ['reaped', 'skipped', 'cancelled']) {
+      if (Array.isArray(reap[k])) reap[k] = portableReapEntries(reap[k], root);
+    }
+    portable = { ...portable, reap };
+  }
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;
 }
