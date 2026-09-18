@@ -51,10 +51,14 @@
  * by `packages/library/tests/unit/community-fetch-package.test.ts`, which
  * drives the fetch with an injected stub. Two claims, kept separate.
  *
- * GROUND. `mdtoc` — the one project committed to this repo, so it is the only
- * project a CLEAN CHECKOUT has, and 1.0's exit condition is these stories
- * green on a clean checkout. Nothing in this flow needs the project: the
- * library is forge-wide. `realSpawn` is false and no `budget_usd` is declared
+ * GROUND. `story-s8`, provisioned for each run from the forge-owned fixture
+ * `node-library` (`tests/stories/grounds/node-library/`, seeded byte-for-byte
+ * from the tracked `projects/mdtoc` at `9db91ef5`) and torn down after it —
+ * so it exists on a CLEAN CHECKOUT, which is 1.0's exit condition, and no run
+ * of this story can ever write into `mdtoc` itself. RE-POINTED 2026-09-19
+ * (M7-D, bead `forge-1rk5.1`) from `mdtoc`; no beat changed, because no beat
+ * names the project. Nothing in this flow needs the project: the library is
+ * forge-wide. `realSpawn` is false and no `budget_usd` is declared
  * — not one beat reaches an agent. The "Refresh registry" button is the
  * deterministic, LLM-free `POST /api/studio/community/refresh`, real outbound
  * calls but no agent turn, so beat 4 costs no money either.
@@ -150,7 +154,7 @@ export default {
   // `budget_usd: 0` is not an omission — `validateStory` requires the field on
   // every story, and 0 is the form `smoke` and `proof` already use for a flow
   // that reaches no agent. It is the honest figure: nothing here spends.
-  ground: { project: 'mdtoc', realSpawn: false, budget_usd: 0 },
+  ground: { project: 'story-s8', fixture: 'node-library', realSpawn: false, budget_usd: 0 },
   docs: { kind: 'how-to', title: 'Install library components from the community' },
   beats: [
     {
