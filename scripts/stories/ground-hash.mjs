@@ -227,7 +227,7 @@ export function ownGroundManifest(root, project) {
  * @param {string[]} after entry names after it
  * @param {string} logsDir the `_logs` dir itself, to confirm each candidate is a session
  */
-export function mintedSessionPaths(before, after, logsDir) {
+function mintedSessions(before, after, logsDir) {
   const was = new Set(before);
   const out = [];
   for (const name of after) {
@@ -238,9 +238,29 @@ export function mintedSessionPaths(before, after, logsDir) {
     const isSession = ['events.jsonl', '.heartbeat', 'turn.pid'].some((f) => {
       try { return statSync(join(logsDir, name, f)).isFile(); } catch { return false; }
     });
-    if (isSession) out.push(`_${m[1]}/${m[2]}`);
+    if (isSession) out.push({ name, kind: m[1], id: m[2] });
   }
-  return out.sort();
+  return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+export function mintedSessionPaths(before, after, logsDir) {
+  return mintedSessions(before, after, logsDir).map((e) => `_${e.kind}/${e.id}`);
+}
+
+/**
+ * The same sessions as `mintedSessionPaths`, in the form they exist on disk:
+ * `_<kind>-<id>` directory names under `_logs/` — `forge-8vfn.7.6.137`.
+ *
+ * ONE PREDICATE, TWO SHAPES, deliberately. The ground half matches on
+ * `_<kind>/<id>` (how a minted session appears as a path inside the ground) and
+ * the `_logs` half needs the directory name. Deriving the second by rebuilding
+ * `_${kind}-${id}` from the first would be a SECOND source of truth for "what
+ * did this run mint", and the two could drift apart while both looked right.
+ * They share `mintedSessions` instead, so a change to the session predicate
+ * cannot move one without the other.
+ */
+export function mintedSessionDirNames(before, after, logsDir) {
+  return mintedSessions(before, after, logsDir).map((e) => e.name);
 }
 
 /**
