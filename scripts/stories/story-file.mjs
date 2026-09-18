@@ -579,6 +579,29 @@ export function validateStory(raw) {
     // The first beat is exempt: with no previous beat there is no declared
     // route to compare against, so the shape cannot be shown unreachable, and a
     // refusal that cannot prove its case is a guess.
+    // `forge-8vfn.7.6.147` (T1 1164) — a `cycleOf` placeholder NO EARLIER BEAT
+    // CAN BIND, which S10 run 21 paid $4.0917 to find at run time. A beat binds
+    // a `<name>` by expecting it as an `expect.data` value (`beats.mjs:86`), so
+    // "can this ever bind" is decidable here. Whether the beat that COULD bind it
+    // actually does is not — run 21's beat 8 reded on a stall first, and
+    // `stuckVerdict` exports no bindings on purpose — so that case is refused at
+    // the BEAT. Two questions, two places: "can never bind" and "did not bind".
+    if (typeof wait?.cycleOf === 'string') {
+      for (const [, name] of wait.cycleOf.matchAll(/<([A-Za-z][A-Za-z0-9_]*)>/g)) {
+        const boundEarlier = raw.beats.slice(0, i).some((b2) =>
+          Object.values(b2?.expect?.data ?? {}).some((v) => v === `<${name}>`));
+        if (!boundEarlier) {
+          fail(
+            `${at}.wait.cycleOf`,
+            `names <${name}>, which NO earlier beat binds — a beat binds a placeholder by expecting it ` +
+            `as an \`expect.data\` value, and nothing before this beat does. The watch would resolve no ` +
+            `cycle and silently fall back to the born-after-the-anchor form, which for a CONTINUED cycle ` +
+            `finds nothing (S10 run 21, $4.0917). Bind <${name}> in an earlier beat's \`expect.data\`, or ` +
+            `name the initiative literally.`,
+          );
+        }
+      }
+    }
     if (wait?.for === 'agent' && steps.length === 0 && i > 0) {
       const prev = raw.beats[i - 1]?.expect?.route;
       const here = e.route;
