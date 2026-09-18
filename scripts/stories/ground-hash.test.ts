@@ -17,14 +17,24 @@
  * not be compared with them. Parity is asserted below against the real
  * pipeline rather than assumed.
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { METHOD_C_CMD, groundManifest, groundChanges, snapshotSiblingGrounds, siblingGroundEscapes, mintedSessionPaths, classifyOwnGroundDrift, groundIgnoreFromGit, groundIgnoreNoneForTests,} from './ground-hash.mjs';
+import {
+  METHOD_C_CMD,
+  groundManifest,
+  groundChanges,
+  snapshotSiblingGrounds,
+  siblingGroundEscapes,
+  mintedSessionPaths,
+  classifyOwnGroundDrift,
+  groundIgnoreFromGit,
+  groundIgnoreNoneForTests,
+} from './ground-hash.mjs';
 
 function fixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'ground-hash-'));
@@ -551,4 +561,86 @@ test('7.6.38: no PRODUCTION story module may call groundIgnoreNoneForTests', () 
   const selfCheck = readdirSync(dir).filter((f) =>
     f.endsWith('.test.ts') && readFileSync(join(dir, f), 'utf8').includes('groundIgnoreNoneForTests'));
   assert.ok(selfCheck.length > 0, 'the scan can find the symbol when it IS present');
+});
+
+/*
+ * `forge-8vfn.7.6.136` — a story DECLARES the ground changes its product makes.
+ *
+ * RED AT BASE is S3 run 3's own log: 12/12 beats green and `rc=1`, on nine
+ * `UNDECLARED R forge/skills/<id>/SKILL.md — nothing this run minted accounts
+ * for it`. Those nine are the skill dirs S3's Rebuild control MOVES from
+ * `forge/skills/<id>` to `.forge/skills/<id>` — the product doing exactly what
+ * beat 5 presses it to do. Not inside a minted session, written by no agent,
+ * not ignored by the ground, so they fell to UNDECLARED. **A story whose
+ * purpose is to rewrite the ground's skill layout could not pass containment
+ * however correct the rewrite was.**
+ *
+ * THE DECLARATION SITS AFTER ATTRIBUTION AND NEVER BEFORE IT. This file's own
+ * rule is "ATTRIBUTION FIRST, AND IT WINS … otherwise a project's `.gitignore`
+ * could launder a real containment breach into silence". A declaration is a
+ * STORY'S CLAIM — weaker evidence than a writer we observed — so where both
+ * apply, the attribution is the better fact and is what gets reported.
+ *
+ * OBJECTS, NOT `"R path"` STRINGS: `path` and `change` are separate fields
+ * because a single string would carry two frames, which is the defect caught on
+ * review of 7.6.120 and again in 7.6.127. And declaring the KIND is not
+ * decoration — a path-only licence would permit any change to that path, so a
+ * story expecting a REMOVAL would silently license a MODIFICATION it never
+ * intended.
+ */
+describe('7.6.136: declared ground changes', () => {
+  const NINE = ['ado-api-explorer', 'ado-browser-inspector', 'ado-demo'].map((id) => `forge/skills/${id}/SKILL.md`);
+  const changesOf = (removed: string[], added: string[] = [], modified: string[] = []) =>
+    ({ added, removed, modified });
+  const noIgnore = groundIgnoreNoneForTests();
+
+  test('RED AT BASE: the nine moves are UNDECLARED with no declaration', () => {
+    const split = classifyOwnGroundDrift(changesOf(NINE), [], new Map(), noIgnore);
+    assert.equal(split.undeclared.length, 3, 'this is run 3\'s failure, reproduced');
+    assert.match(split.undeclared[0]!, /nothing this run minted accounts for it/);
+  });
+
+  test('declared changes classify DECLARED and leave nothing undeclared', () => {
+    const declared = NINE.map((path) => ({ path, change: 'removed' }));
+    const split = classifyOwnGroundDrift(changesOf(NINE), [], new Map(), noIgnore, declared);
+    assert.deepEqual(split.undeclared, [], 'a declared change must not red the run');
+    assert.equal(split.declared.length, 3);
+    assert.match(split.declared[0]!, /declared by the story/);
+  });
+
+  test('a TENTH undeclared change beside the nine is still RED', () => {
+    // The door that stops a declaration becoming an amnesty for its neighbours.
+    const declared = NINE.map((path) => ({ path, change: 'removed' }));
+    const split = classifyOwnGroundDrift(
+      changesOf([...NINE, 'forge/secrets.env']), [], new Map(), noIgnore, declared);
+    assert.equal(split.undeclared.length, 1, 'the licence covers what it names and nothing beside it');
+    assert.match(split.undeclared[0]!, /secrets\.env/);
+  });
+
+  test('a declaration matching NOTHING is NAMED — the dead-glob shape', () => {
+    // §15.539: a licence that matches nothing cannot fail, and would sit in the
+    // story file describing a product behaviour that has since changed.
+    const declared = [{ path: 'forge/skills/gone/SKILL.md', change: 'removed' }];
+    const split = classifyOwnGroundDrift(changesOf([]), [], new Map(), noIgnore, declared);
+    assert.equal(split.unmatchedDeclarations.length, 1);
+    assert.match(split.unmatchedDeclarations[0]!, /forge\/skills\/gone\/SKILL\.md/);
+    assert.match(split.unmatchedDeclarations[0]!, /the product did not make/);
+  });
+
+  test('ATTRIBUTION STILL WINS over a declaration for the same path', () => {
+    const p = 'forge/skills/ado-demo/SKILL.md';
+    const writes = new Map([['sess-1', [p]]]);
+    const split = classifyOwnGroundDrift(
+      changesOf([p]), [], writes, noIgnore, [{ path: p, change: 'removed' }]);
+    assert.equal(split.declared.length, 0, 'a path we watched a session write is attributed, not merely declared');
+    assert.match(split.produced[0]!, /written by sess-1/);
+  });
+
+  test('a KIND mismatch is not licensed — declared removed, observed modified', () => {
+    const p = 'forge/skills/ado-demo/SKILL.md';
+    const split = classifyOwnGroundDrift(
+      changesOf([], [], [p]), [], new Map(), noIgnore, [{ path: p, change: 'removed' }]);
+    assert.equal(split.undeclared.length, 1, 'the licence names a removal; a modification is a different fact');
+    assert.equal(split.unmatchedDeclarations.length, 1, 'and the removal it declared did not happen');
+  });
 });
