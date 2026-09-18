@@ -15,16 +15,13 @@
  *
  * Pinned before implementation (`_1.0/gate-manifests/M1-B.txt`).
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import {
-  memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict,
-  remoteSwitchVerdict, REMOTE_BINDING_STORIES, queueStateVerdict, declaredCommitsVerdict,
-} from './preflight.mjs';
+import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath, foreignSessionVerdict, remoteSwitchVerdict, REMOTE_BINDING_STORIES, queueStateVerdict, declaredCommitsVerdict, groundPinVerdict } from './preflight.mjs';
 
 test('ample memory passes', () => {
   const v = memoryVerdict(8000);
@@ -353,4 +350,72 @@ test('an explicit "none" is accepted and says so — a stated exception is not a
   const v = declaredCommitsVerdict(['none'], () => false);
   assert.equal(v.ok, true, v.reason);
   assert.ok(/declared that it requires no commit/i.test(v.reason), v.reason);
+});
+
+/*
+ * `forge-8vfn.7.6.139` — the ground-at-its-pin premise, checked by the PRODUCT.
+ *
+ * C's finding, and it is the reason this is not just "make unmatched red":
+ * **a precondition that lives in a launcher does not exist for anyone who
+ * starts the run another way.** Every costed run I have staged had its ground
+ * verified against the pin — by my own wrapper. The runner never checked. So
+ * "unmatched because the product stopped doing what the story says" and
+ * "unmatched because the ground was already migrated" were ONE GREEN STATE.
+ *
+ * Three states, and the third must not reach the fence at all:
+ *   matched                        -> green
+ *   unmatched, ground AT its pin   -> RED, the product stopped
+ *   unmatched, ground OFF its pin  -> refused at START, nothing spent
+ *
+ * THE PIN CANNOT LIVE IN THE STORY FILE, which is why this takes a declared
+ * value rather than a committed one: `.gitignore:68` is `projects/*` and
+ * `terraform-provider-betterado` has ZERO tracked files. A hash in a committed
+ * story would assert something the repo cannot verify. The value stays the
+ * caller's; the ENFORCEMENT moves into the product.
+ */
+describe('7.6.139: the ground-at-its-pin premise', () => {
+  const costed = { project: 'p', realSpawn: true, budget_usd: 25 };
+  const costless = { project: 'p', realSpawn: false, budget_usd: 0 };
+
+  test('a costed story with NO declared pin is refused, and told how to measure one', () => {
+    const v = groundPinVerdict(costed, { declaredPin: undefined, measured: 'abc123' });
+    assert.equal(v.ok, false);
+    assert.match(v.reason, /FORGE_GROUND_PIN/, 'name the variable');
+    assert.match(v.reason, /find \./, 'and how to measure it — a refusal that cannot be acted on is a wall');
+  });
+
+  test('a MISMATCH is refused with BOTH hashes named, before anything is spent', () => {
+    const v = groundPinVerdict(costed, { declaredPin: '2343d907ddb5703f', measured: '4c843c54a2a3719e' });
+    assert.equal(v.ok, false);
+    assert.match(v.reason, /2343d907ddb5703f/, 'the declared pin');
+    assert.match(v.reason, /4c843c54a2a3719e/, 'and what was actually measured — one without the other is unactionable');
+  });
+
+  test('a MATCH proceeds, and says what it matched', () => {
+    const v = groundPinVerdict(costed, { declaredPin: '2343d907ddb5703f', measured: '2343d907ddb5703f' });
+    assert.equal(v.ok, true);
+    assert.match(v.reason, /2343d907ddb5703f/);
+  });
+
+  test('a COSTLESS story is unaffected — no pin required, no new refusal', () => {
+    // run.mjs's own rule: "only for a run that spends, so a costless story never
+    // gains a new way to be blocked."
+    const v = groundPinVerdict(costless, { declaredPin: undefined, measured: 'anything' });
+    assert.equal(v.ok, true);
+    assert.match(v.reason, /costless/);
+  });
+
+  test('a story with NO ground is unaffected even when it spends', () => {
+    const v = groundPinVerdict({ project: null, realSpawn: true, budget_usd: 25 }, { declaredPin: undefined, measured: null });
+    assert.equal(v.ok, true);
+  });
+
+  test('an UNMEASURABLE ground is refused, never treated as matching', () => {
+    // §15.504: an unreadable input must not resolve toward proceeding. A null
+    // measurement with a declared pin is the state where the two could be
+    // silently called equal.
+    const v = groundPinVerdict(costed, { declaredPin: '2343d907ddb5703f', measured: null });
+    assert.equal(v.ok, false);
+    assert.match(v.reason, /could not be measured/);
+  });
 });
