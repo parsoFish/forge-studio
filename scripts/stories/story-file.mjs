@@ -26,6 +26,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  *  nothing at run time (`forge-8vfn.26`). */
 const AMONG_RULES = ['tracked-projects'];
 
+/** The three change kinds `groundChanges` reports; a declaration names one. */
+const GROUND_CHANGE_KINDS = ['added', 'removed', 'modified'];
+
 const DOC_KINDS = ['tutorial', 'how-to'];
 
 function fail(field, why) {
@@ -470,6 +473,32 @@ export function validateStory(raw) {
     }
   }
 
+  // 7.6.136 — the ground changes this story's PRODUCT legitimately makes.
+  // Declared in the PINNED story file so the licence cannot widen at runtime,
+  // and validated like `seedIgnoredBorn` above, which is the established shape
+  // for "paths a story declares about its own ground".
+  //
+  // `path` and `change` are SEPARATE FIELDS. A `"R forge/skills/x"` string
+  // would carry the kind and the path in one value — two frames in one field,
+  // the defect caught on review of 7.6.120 and again in 7.6.127.
+  if (g.expectedChanges !== undefined) {
+    if (!Array.isArray(g.expectedChanges) || g.expectedChanges.length === 0) {
+      fail('ground.expectedChanges', `expected a non-empty array of {path, change}, got ${JSON.stringify(g.expectedChanges)}`);
+    }
+    for (const [i, e] of g.expectedChanges.entries()) {
+      if (e === null || typeof e !== 'object' || Array.isArray(e)) {
+        fail(`ground.expectedChanges[${i}]`, `expected an object {path, change}, got ${JSON.stringify(e)}`);
+      }
+      requireNonEmptyString(e.path, `ground.expectedChanges[${i}].path`);
+      if (e.path.startsWith('/') || e.path.split('/').includes('..')) {
+        fail(`ground.expectedChanges[${i}].path`, `expected a relative path inside the ground, got ${JSON.stringify(e.path)}`);
+      }
+      if (!GROUND_CHANGE_KINDS.includes(e.change)) {
+        fail(`ground.expectedChanges[${i}].change`, `expected one of ${GROUND_CHANGE_KINDS.join(', ')}, got ${JSON.stringify(e.change)}`);
+      }
+    }
+  }
+
   const d = raw.docs;
   if (d === null || typeof d !== 'object') fail('docs', 'expected an object');
   if (!DOC_KINDS.includes(d.kind)) {
@@ -624,6 +653,14 @@ export function validateStory(raw) {
     ground: Object.freeze({
       project: g.project, realSpawn: g.realSpawn, budget_usd: g.budget_usd,
       ...(g.seedIgnoredBorn ? { seedIgnoredBorn: Object.freeze([...g.seedIgnoredBorn]) } : {}),
+      // 7.6.136. Named HERE as well as validated above, because this function
+      // rebuilds `ground` from a fixed field list: a field validated and not
+      // named here is dropped SILENTLY, which is exactly how `anchor` reached
+      // production validated-and-discarded (7.6.82). The door below deep-equals
+      // the whole ground so the next field cannot repeat it.
+      ...(g.expectedChanges
+        ? { expectedChanges: Object.freeze(g.expectedChanges.map((e) => Object.freeze({ path: e.path, change: e.change }))) }
+        : {}),
     }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),
     beats: Object.freeze(beats),
