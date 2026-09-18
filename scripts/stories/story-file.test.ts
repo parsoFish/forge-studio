@@ -696,3 +696,55 @@ test('7.6.143: wait.cycleOf without terminal is refused', () => {
       expect: { route: '/x', data: { page: 'p' } } }],
   }), /cycleOf/);
 });
+
+/**
+ * `forge-8vfn.7.6.147` (T1 ruling 1164) — A `cycleOf` PLACEHOLDER NO EARLIER
+ * BEAT CAN BIND IS REFUSED AT VALIDATION.
+ *
+ * S10 run 21 paid $4.0917 for this. Beat 10 declared `cycleOf: '<runId>'`;
+ * `runId` binds at beat 8's `expect.data` (`initiative-id: <runId>`), beat 8
+ * reded on a PM stall, and `stuckVerdict` exports NO bindings on purpose — so
+ * the placeholder never resolved, the watch silently fell back to the
+ * born-after-the-anchor form, found nothing, and the beat reded claiming no
+ * waiter consumed its bound.
+ *
+ * A story whose `cycleOf` names something NO earlier beat binds under ANY
+ * outcome is decidable from the text, and that is what this refuses. It cannot
+ * refuse the run-21 case itself — there beat 8 could have bound it and failed
+ * to — which is why the beat-level refusal exists beside this one. Two
+ * different questions: "this can never bind" and "this did not bind".
+ */
+test('7.6.147: a cycleOf placeholder no earlier beat binds is refused at validation', () => {
+  assert.throws(
+    () => validateStory({
+      id: 'T',
+      ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+      docs: { kind: 'how-to' as const, title: 't' },
+      beats: [
+        { act: 'a', say: 's', expect: { route: '/x', data: { page: 'p' } } },
+        { act: 'press', say: 's', do: [{ press: 'start-development' }],
+          wait: { for: 'agent' as const, upTo: 1000, terminal: 'ready-for-review', cycleOf: '<nobodyBinds>' },
+          expect: { route: '/x', data: { page: 'p' } } },
+      ],
+    }),
+    /nobodyBinds/,
+    'no earlier beat binds <nobodyBinds>, so the beat could never resolve it under any outcome',
+  );
+});
+
+/** And a placeholder an earlier beat DOES bind validates — the refusal is about
+ *  the unbindable, not about placeholders. */
+test('7.6.147: a cycleOf placeholder an earlier beat binds still validates', () => {
+  const v = validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [
+      { act: 'bind it', say: 's', expect: { route: '/x', data: { page: 'p', 'initiative-id': '<runId>' } } },
+      { act: 'press', say: 's', do: [{ press: 'start-development' }],
+        wait: { for: 'agent' as const, upTo: 1000, terminal: 'ready-for-review', cycleOf: '<runId>' },
+        expect: { route: '/x', data: { page: 'p' } } },
+    ],
+  }) as { beats: { wait?: { cycleOf?: string } }[] };
+  assert.equal(v.beats[1].wait?.cycleOf, '<runId>');
+});
