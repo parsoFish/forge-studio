@@ -118,6 +118,22 @@
         }
       },
       {
+        "act": "Seed the flow’s starter agents — the roster forge offers, only if the operator asks",
+        "say": "The roster forge offers is not the roster you get. Nothing lands in skills/ because you saved a canvas; it lands because you asked for it, and forge names exactly what it wrote.",
+        "do": [
+          {
+            "press": "seed-starter-agents"
+          }
+        ],
+        "expect": {
+          "route": "/flows/new",
+          "data": {
+            "seeded-starter-count": "3",
+            "seeded-starters": "dev,plan,review"
+          }
+        }
+      },
+      {
         "act": "Press \"Save Flow\"",
         "say": "Saving is where forge judges the flow rather than the operator: the stations have to resolve to real agents, the edges have to carry artifacts the next station can read, and a name already taken is refused rather than overwritten. The flow now exists as a thing with its own page.",
         "do": [
@@ -171,7 +187,7 @@
           },
           {
             "fill": "idea",
-            "with": "Add a --since flag so the report covers only commits after a given date, with the date parsing tested and a documented default."
+            "with": "Add test coverage for --compare combined with --since, so the two window filters are proven to work together rather than only apart."
           },
           {
             "fill": "cost-ceiling-usd",
@@ -205,13 +221,31 @@
         }
       },
       {
-        "act": "Open the session from Monitor and wait for the Architect to finish drafting",
+        "act": "Open the session from Monitor, answer the Architect's questions about the work, and wait for it to finish drafting",
         "say": "The session is the same shared surface every kind of agent run uses, so a flow the operator built themselves is watched exactly the way the shipped ones are. When the plan is drafted the session stops and waits for a human.",
         "do": [
           {
             "press": "open-session"
+          },
+          {
+            "repeat": [
+              {
+                "fillAll": "question-freetext",
+                "with": "Cover --compare together with --since: a test that sets both and asserts the intersection, plus one that pins the precedence when the ranges do not overlap. The gate command is `npm test`, and no existing output format changes."
+              },
+              {
+                "press": "submit-answers"
+              }
+            ],
+            "until": {
+              "session-phase": "awaiting-verdict"
+            }
           }
         ],
+        "wait": {
+          "for": "agent",
+          "upTo": 600000
+        },
         "expect": {
           "route": "/sessions/architect/<architectSessionId>",
           "data": {
@@ -317,6 +351,18 @@
       "frame": "frames/05-open-advanced-and-bind-gitpulse-s-knowle.png"
     },
     {
+      "act": "Seed the flow’s starter agents — the roster forge offers, only if the operator asks",
+      "say": "The roster forge offers is not the roster you get. Nothing lands in skills/ because you saved a canvas; it lands because you asked for it, and forge names exactly what it wrote.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "seeded-starter-count": "3",
+        "seeded-starters": "dev,plan,review"
+      },
+      "frame": "frames/06-seed-the-flow-s-starter-agents-the-roste.png"
+    },
+    {
       "act": "Press \"Save Flow\"",
       "say": "Saving is where forge judges the flow rather than the operator: the stations have to resolve to real agents, the edges have to carry artifacts the next station can read, and a name already taken is refused rather than overwritten. The flow now exists as a thing with its own page.",
       "status": "green",
@@ -327,7 +373,7 @@
         "flow-id": "story-s4",
         "page-ready": "true"
       },
-      "frame": "frames/06-press-save-flow.png"
+      "frame": "frames/07-press-save-flow.png"
     },
     {
       "act": "Check the flow came out clean and can be started",
@@ -340,7 +386,7 @@
         "flow-id": "story-s4",
         "can-start": "true"
       },
-      "frame": "frames/07-check-the-flow-came-out-clean-and-can-be.png"
+      "frame": "frames/08-check-the-flow-came-out-clean-and-can-be.png"
     },
     {
       "act": "Open the launcher",
@@ -354,7 +400,7 @@
         "section": "flow-kickoff",
         "kickoff-kind": "idea"
       },
-      "frame": "frames/08-open-the-launcher.png"
+      "frame": "frames/09-open-the-launcher.png"
     },
     {
       "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
@@ -362,15 +408,15 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-05T05-52-07-edbb779c"
+        "architectSessionId": "2026-09-18T00-09-48-37110d26"
       },
       "data": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "section": "new-idea",
-        "architect-session-id": "2026-09-05T05-52-07-edbb779c"
+        "architect-session-id": "2026-09-18T00-09-48-37110d26"
       },
-      "frame": "frames/09-point-the-flow-at-gitpulse-describe-the-.png"
+      "frame": "frames/10-point-the-flow-at-gitpulse-describe-the-.png"
     },
     {
       "act": "While it works, check Monitor",
@@ -384,58 +430,88 @@
         "monitor-live": "1",
         "fetch-status": "ok"
       },
-      "frame": "frames/10-while-it-works-check-monitor.png"
+      "frame": "frames/11-while-it-works-check-monitor.png"
     },
     {
-      "act": "Open the session from Monitor and wait for the Architect to finish drafting",
+      "act": "Open the session from Monitor, answer the Architect's questions about the work, and wait for it to finish drafting",
       "say": "The session is the same shared surface every kind of agent run uses, so a flow the operator built themselves is watched exactly the way the shipped ones are. When the plan is drafted the session stops and waits for a human.",
-      "status": "red",
-      "failures": [
-        "data-session-phase: expected \"awaiting-verdict\", got \"interviewing\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "architect",
-        "session-phase": "interviewing"
+        "session-phase": "awaiting-verdict"
       },
-      "frame": "frames/11-open-the-session-from-monitor-and-wait-f.png"
+      "frame": "frames/12-open-the-session-from-monitor-answer-the.png"
     },
     {
       "act": "Open the plan and stand at the verdict",
       "say": "This is where S4 ends: a flow the operator assembled, linted and launched has produced a plan, and forge is holding it at a gate for a decision. Nothing is approved — that decision belongs to the operator, and it is S10 that makes it. What this story proves is that a flow built in the builder runs like a flow that shipped with forge.",
-      "status": "red",
-      "failures": [
-        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. no element carries that handle."
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
-      "data": {},
-      "frame": "frames/12-open-the-plan-and-stand-at-the-verdict.png"
+      "data": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
+      "frame": "frames/13-open-the-plan-and-stand-at-the-verdict.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 2076498,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-52-07-edbb779c",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 2076491,
-        "dir": "/home/parso/forge-m5-b/_logs/_architect-2026-09-05T05-52-07-edbb779c",
+        "pid": 3800527,
+        "dir": "_logs/_architect-2026-09-18T00-09-48-37110d26",
         "signal": "SIGTERM",
         "via": "cwd"
       }
     ],
-    "skipped": []
+    "skipped": [],
+    "cancelled": [
+      {
+        "dir": "_logs/_architect-2026-09-18T00-09-48-37110d26",
+        "kind": "architect",
+        "sessionId": "2026-09-18T00-09-48-37110d26",
+        "project": "gitpulse",
+        "cancelledFrom": "awaiting-verdict",
+        "written": true,
+        "reason": null
+      }
+    ]
   },
   "sweep": {
     "removed": [
-      "/home/parso/forge-m5-b/studio/flows/story-s4"
+      "studio/flows/story-s4"
     ],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] trailing sweep removed studio/flows/story-s4",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
@@ -444,6 +520,44 @@
       "skills/plan/",
       "skills/review/"
     ],
-    "failed": []
+    "removedContents": [
+      {
+        "path": "skills/dev/",
+        "entries": [
+          {
+            "path": "SKILL.md",
+            "bytes": 1223
+          }
+        ],
+        "truncated": false,
+        "total": 1
+      },
+      {
+        "path": "skills/plan/",
+        "entries": [
+          {
+            "path": "SKILL.md",
+            "bytes": 1366
+          }
+        ],
+        "truncated": false,
+        "total": 1
+      },
+      {
+        "path": "skills/review/",
+        "entries": [
+          {
+            "path": "SKILL.md",
+            "bytes": 1314
+          }
+        ],
+        "truncated": false,
+        "total": 1
+      }
+    ],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
   }
 }
