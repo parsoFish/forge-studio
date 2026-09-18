@@ -18,6 +18,7 @@
  * not a liveness check anyway).
  */
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { METHOD_C_CMD } from './ground-hash.mjs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import lockfile from 'proper-lockfile';
@@ -307,4 +308,72 @@ export function declaredCommitsVerdict(commits, isAncestor) {
     return { ok: false, reason: `declared commit(s) ${missing.join(', ')} are NOT an ancestor of this tree's HEAD — the run would execute a tree missing what its INTENT names (§15.432).` };
   }
   return { ok: true, reason: `every declared commit is in this tree: ${commits.join(', ')}` };
+}
+
+/** The variable a caller declares a costed story's ground pin in. */
+export const GROUND_PIN_ENV = 'FORGE_GROUND_PIN';
+
+/**
+ * The ground is at the hash the caller declared — `forge-8vfn.7.6.139`.
+ *
+ * WHY THIS IS IN THE PRODUCT AND NOT IN A LAUNCHER, which is the whole finding:
+ * every costed run in this campaign had its ground verified against a pin — by
+ * the LANE'S OWN WRAPPER. The runner never checked. **A precondition that lives
+ * in a launcher does not exist for anyone who starts the run another way**
+ * (§15.383's "exporting a lock path is not taking the lock"), and the cost was
+ * that two different failures became one green state: a declaration that went
+ * unmatched because the PRODUCT stopped doing what the story says, and one that
+ * went unmatched because the GROUND WAS ALREADY MIGRATED, are indistinguishable
+ * at the fence. Refusing the second at the start makes the first unambiguous.
+ *
+ * THE VALUE STAYS THE CALLER'S, and it has to: `.gitignore`'s `projects/*` means
+ * `terraform-provider-betterado` has ZERO tracked files, so a hash committed in
+ * the story file would assert something the repo cannot verify, per-box for
+ * every ground but `mdtoc`. What moves into the product is the ENFORCEMENT — a
+ * costed story cannot run without a declared pin, whoever launches it.
+ *
+ * Scoped to costed stories on `run.mjs`'s own stated rule: "only for a run that
+ * spends, so a costless story never gains a new way to be blocked."
+ */
+export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
+  const costs = ground?.realSpawn === true || (ground?.budget_usd ?? 0) > 0;
+  if (!costs) {
+    return Object.freeze({ ok: true, reason: 'costless story — no ground pin required' });
+  }
+  if (ground?.project === null || ground?.project === undefined) {
+    return Object.freeze({ ok: true, reason: 'story declares no ground — nothing to pin' });
+  }
+  if (typeof declaredPin !== 'string' || declaredPin.length === 0) {
+    return Object.freeze({
+      ok: false,
+      reason:
+        `this story spends and declares the ground "${ground.project}", but no ${GROUND_PIN_ENV} was given. ` +
+        'Without it, a run that starts on an already-changed ground cannot be told from one whose product ' +
+        'stopped working. Measure it with:\n' +
+        `  ( cd projects/${ground.project} && ${METHOD_C_CMD} | sha256sum | cut -c1-16 )\n` +
+        `and pass it as ${GROUND_PIN_ENV}.`,
+    });
+  }
+  // AN UNMEASURABLE GROUND IS NOT A MATCHING ONE (§15.504).
+  if (typeof measured !== 'string' || measured.length === 0) {
+    return Object.freeze({
+      ok: false,
+      reason:
+        `the ground "${ground.project}" could not be measured, so it cannot be compared with the declared ` +
+        `${GROUND_PIN_ENV} ${declaredPin}. An unreadable precondition is not a satisfied one.`,
+    });
+  }
+  if (measured !== declaredPin) {
+    return Object.freeze({
+      ok: false,
+      reason:
+        `the ground "${ground.project}" is NOT at its declared pin.\n` +
+        `  declared ${GROUND_PIN_ENV}: ${declaredPin}\n` +
+        `  measured now:              ${measured}\n` +
+        'The story\'s premise is a ground in the state it describes; this one is in a different state, so ' +
+        'every verdict below would be about a different question. Re-provision the ground, or declare the ' +
+        'hash it is actually at if that is the intended starting state. Nothing has been spent.',
+    });
+  }
+  return Object.freeze({ ok: true, reason: `ground "${ground.project}" is at its declared pin ${declaredPin}` });
 }
