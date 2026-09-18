@@ -30,7 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { measurePackages } from './check-package-caps.mjs';
+import { measurePackages, CorpusUnreadable, EXIT_CANNOT_MEASURE, main } from './check-package-caps.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-package-caps.mjs');
@@ -180,4 +180,96 @@ test('an override naming a package that does not exist is rejected', () => {
   const { code, out } = run(['--cap-override', 'nosuchpkg=1']);
   assert.equal(code, 1, `an override for an unknown package must fail — got exit 0:\n${out}`);
   assert.match(out, /nosuchpkg/);
+});
+
+/** The repo root, for the injected-lister tests below: with a lister supplied,
+ *  `root` only ever reaches `join()`, so this need not be the real corpus. */
+const CAPS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/*
+ * `forge-8vfn.28` — a file that VANISHES between the listing and the read must
+ * be CANNOT-MEASURE, never a cap verdict.
+ *
+ * MEASURED: this race red-ed CI during lane A's #767 gate. `productionFiles()`
+ * lists the corpus with `git ls-files`, then `measurePackages` reads each path.
+ * Between the two, a sibling worktree's branch switch can remove a file — four
+ * lanes share this box and a checkout is a write to every path at once — and
+ * `readFileSync` throws ENOENT into `main`'s blanket catch, which prints
+ * `check-package-caps: FAIL` and returns 1. **A missing file was reported as a
+ * package over its cap.**
+ *
+ * WHY THIS GUARD CANNOT DO WHAT `check-file-size` DOES. That checker returns
+ * null for a vanished path and moves on, which is right THERE because it judges
+ * each file independently — a file that is gone is simply not checked. This one
+ * SUMS. A skipped file silently LOWERS a package's total, and under-counting is
+ * the direction that lets a breach pass: the cap would read green precisely
+ * because it measured less than the package contains. Same race, opposite
+ * remedy, and the difference is that one guard aggregates and the other does
+ * not.
+ *
+ * So: three states (§15.504). Green, red, and CANNOT-MEASURE — and an unknown
+ * corpus never resolves toward "within cap".
+ */
+test('forge-8vfn.28: a path that vanishes between listing and read is CANNOT-MEASURE, not a breach', () => {
+  // The race, injected: a lister naming a file that is not there, which is
+  // exactly what `git ls-files` returns a moment before a sibling's checkout.
+  assert.throws(
+    () => measurePackages(CAPS_ROOT, () => ['packages/flows/this-file-was-removed-mid-read.ts']),
+    (err: unknown) => err instanceof CorpusUnreadable,
+    'a vanished corpus file must raise CorpusUnreadable, which main turns into EXIT_CANNOT_MEASURE',
+  );
+});
+
+test('forge-8vfn.28: the vanished file is NOT silently skipped — that would under-count the cap', () => {
+  // The assertion that matters, stated as the consequence rather than the
+  // mechanism. If this ever starts skipping, a package could sit over its cap
+  // and read green because the file pushing it over was the one that vanished.
+  let measured: Map<string, number> | null = null;
+  try {
+    measured = measurePackages(CAPS_ROOT, () => [
+      'packages/flows/gone.ts',
+    ]);
+  } catch { /* expected */ }
+  assert.equal(measured, null,
+    'measurePackages returned a total computed over a corpus it could not fully read — ' +
+    'that total is smaller than the truth, and a cap compared against it passes on absence');
+});
+
+test('forge-8vfn.28: a REAL bug is not disguised as a refusal', () => {
+  // The other half of §15.504, and the half that is easy to lose: if every
+  // error becomes CANNOT-MEASURE, a genuine defect in this checker reports as
+  // "could not measure" forever and nobody looks. Only the corpus read is a
+  // refusal; anything else propagates.
+  assert.throws(
+    () => measurePackages(CAPS_ROOT, () => { throw new TypeError('a real bug in the lister'); }),
+    (err: unknown) => err instanceof TypeError && !(err instanceof CorpusUnreadable),
+    'a TypeError must reach the caller as a TypeError, not as a corpus refusal',
+  );
+});
+
+test('forge-8vfn.28: EXIT_CANNOT_MEASURE is 75, the campaign code gate.sh already renders REFUSED', () => {
+  // One code across the guards, for check-file-size's reason: 75 is the code
+  // the gate turns into REFUSED rather than a red. A second number here would
+  // make an unmeasurable corpus read as a cap breach in exactly the logs where
+  // the distinction matters.
+  assert.equal(EXIT_CANNOT_MEASURE, 75);
+});
+
+test('forge-8vfn.28: an unreadable corpus makes the PROCESS return 75, not 1', () => {
+  // THE DOOR AT THE BOUNDARY. Everything above tests the functions; `gate.sh`
+  // reads the exit code and nothing else, so this is the assertion that decides
+  // whether the three states actually exist outside this file. Without it the
+  // refusal could be built perfectly and still be reported as a cap breach by
+  // the one consumer that matters.
+  const argv: string[] = [];
+  const rc = main(argv, () => ['packages/flows/vanished-mid-read.ts']);
+  assert.equal(rc, EXIT_CANNOT_MEASURE,
+    'a corpus that could not be read must REFUSE (75), never return 1 — 1 means "a package is over its cap"');
+  assert.notEqual(rc, 1);
+});
+
+test('forge-8vfn.28: a healthy corpus still returns 0 through the same path', () => {
+  // The control. A refusal that fires on everything is not a refusal, and this
+  // is the assertion that would catch a guard rewritten to refuse always.
+  assert.equal(main([]), 0, 'the real corpus is readable and within every cap');
 });
