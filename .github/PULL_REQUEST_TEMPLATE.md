@@ -27,9 +27,9 @@
 - [ ] `npm test` — full suite green
 - [ ] `forge studio lint` — zero errors
 - [ ] `forge brain lint` — zero errors
-- [ ] `npm run ui:journey` — run if this PR touches `forge-ui/`,
-      `scripts/e2e-journey.mjs`, or any Studio-surfaced journey (see the
-      `journey-sync` skill for what counts as in scope)
+- [ ] `npm run stories` — run if this PR touches `apps/studio/` or any
+      Studio-surfaced behaviour a story drives (a story beat is the referent;
+      the legacy journey harness was retired in 7.6.131)
 - [ ] Commit messages are conventional commits throughout (`feat:`, `fix:`,
       `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`)
 - [ ] No AI-attribution lines (`Co-authored-by: Claude`, etc.) in any commit

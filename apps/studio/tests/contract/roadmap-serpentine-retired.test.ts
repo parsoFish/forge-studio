@@ -57,7 +57,10 @@ const REPO_ROOT = join(HERE, '..', '..', '..', '..'); // repo root
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const SERPENTINE_FILE = join(FORGE_UI_ROOT, 'components', 'studio', 'SerpentineTimeline.tsx');
-const JOURNEYS_DIR = join(REPO_ROOT, 'scripts', 'journeys');
+// The UI harness the forward guard scans. Was `scripts/journeys/` until the
+// legacy harness was retired (7.6.131); the stories ARE the harness now, so
+// the guard follows its subject rather than dying with the old location.
+const HARNESS_DIRS = [join(REPO_ROOT, 'scripts', 'stories'), join(REPO_ROOT, 'tests', 'stories')];
 
 const SKIP_DIRS = new Set(['node_modules', '.next', '.turbo', 'dist', 'out', 'coverage', '.git']);
 
@@ -82,7 +85,7 @@ function listFiles(root: string, pred: (name: string) => boolean): string[] {
 
 const isTsSource = (name: string): boolean => /\.tsx?$/.test(name);
 const isTestFile = (name: string): boolean => /\.test\.tsx?$/.test(name);
-const isJourney = (name: string): boolean => /\.mjs$/.test(name);
+const isHarnessSource = (name: string): boolean => /\.mjs$/.test(name);
 
 /** file:line hits where any line of `content` matches `re`, relative to REPO_ROOT. */
 function hits(file: string, content: string, re: RegExp): string[] {
@@ -157,9 +160,15 @@ test('AT6-SERPENTINE-RETIRED: no non-test forge-ui source references SerpentineT
 // ---------------------------------------------------------------------------
 // AT6.4 — FORWARD ROT-GUARD (green-on-arrival; documents its own expiry).
 //
-// No journey under scripts/journeys/ may select the serpentine container attr
-// `[data-roadmap-timeline]`. This is ALREADY GREEN at base bd7490bc: the
-// roadmap journey drives the tab through `[data-roadmap-node]` /
+// No source in the UI harness may select the serpentine container attr
+// `[data-roadmap-timeline]`. RETARGETED in 7.6.131: it scanned
+// `scripts/journeys/`, and when that tree was deleted the guard's own vacuity
+// check fired — "no journeys found … expected 0 to be greater than 0" — which
+// is the check working, not a failure to route around. The SUBJECT (the retired
+// attribute must never come back through the harness) is live; only the harness
+// moved, so the guard now scans `scripts/stories/` and `tests/stories/`.
+// Originally GREEN at base bd7490bc: the roadmap journey drove the tab through
+// `[data-roadmap-node]` /
 // `[data-section="project-roadmap"]` / `[data-roadmap-popover]` and never
 // referenced `data-roadmap-timeline` (that attr lives only on the serpentine's
 // own container, SerpentineTimeline.tsx:157, which F1 deletes). It is included
@@ -173,16 +182,20 @@ test('AT6-SERPENTINE-RETIRED: no non-test forge-ui source references SerpentineT
 // itself (the DAG's own selector is asserted by the DAG journey AT, not here).
 // ---------------------------------------------------------------------------
 
-test('AT6-SERPENTINE-RETIRED (forward guard): no journey selects [data-roadmap-timeline]', () => {
-  const journeys = listFiles(JOURNEYS_DIR, isJourney);
-  // Sanity: the journeys dir must actually contain journeys, else an empty
-  // result would make this "pass" vacuously (env-fakes-the-pass).
-  expect(journeys.length, `no journeys found under ${relative(REPO_ROOT, JOURNEYS_DIR)}${sep}`).toBeGreaterThan(0);
+test('AT6-SERPENTINE-RETIRED (forward guard): no harness source selects [data-roadmap-timeline]', () => {
+  const sources = HARNESS_DIRS.flatMap((d) => listFiles(d, isHarnessSource));
+  // Sanity: the harness dirs must actually contain sources, else an empty
+  // result would make this "pass" vacuously (env-fakes-the-pass). This is the
+  // check that caught the retirement rather than letting the guard go quiet.
+  expect(
+    sources.length,
+    `no harness sources found under ${HARNESS_DIRS.map((d) => relative(REPO_ROOT, d) + sep).join(' or ')}`,
+  ).toBeGreaterThan(0);
   const serpentineSelector = /data-roadmap-timeline/;
   const offenders: string[] = [];
-  for (const f of journeys) {
+  for (const f of sources) {
     offenders.push(...hits(f, readFileSync(f, 'utf8'), serpentineSelector));
   }
   const unique = [...new Set(offenders)].sort();
-  expect(unique, `journey still selects the retired serpentine container:\n${unique.join('\n')}`).toEqual([]);
+  expect(unique, `harness source still selects the retired serpentine container:\n${unique.join('\n')}`).toEqual([]);
 });

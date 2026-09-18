@@ -32,7 +32,7 @@
  * CORPUS-GROUNDED FIXTURE (committed provenance): the completed anchor cycle
  * below is a REAL archived cycle. The raw `_logs` JSONL is gitignored, so the
  * `Cycle` shape is constructed by hand (house style: scripts/lib/
- * journey-fixtures.mjs, which already references this same cycle at
+ * the retired journey harness's fixtures (deleted in 7.6.131), which referenced this same cycle at
  * `_queue/done/INIT-2026-07-11-exclude-path-filter.md`, gitpulse).
  *   cycle_id:      2026-07-11T07-29-19_INIT-2026-07-11-exclude-path-filter
  *   initiative_id: INIT-2026-07-11-exclude-path-filter

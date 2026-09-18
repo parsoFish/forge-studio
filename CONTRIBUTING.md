@@ -21,10 +21,10 @@ forge studio lint      # validate agents/flows/catalog/kb defs; exits non-zero o
 forge brain lint       # 8 structural integrity checks on brain/; exits non-zero on error
 ```
 
-Run the UI journey if you touch `apps/studio/` or any Studio surface:
+Run the story suite if you touch `apps/studio/` or any Studio surface:
 
 ```bash
-npm run ui:journey     # headless end-to-end operator journey (video + DOM assertions)
+npm run stories        # headless operator stories (video + DOM assertions + how-to docs)
 ```
 
 `npm run verify:cycle` is the real-money regression harness (ADR-022). It runs a live cycle against a managed project. This is operator-gated — do not run it in automated CI.

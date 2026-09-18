@@ -53,14 +53,5 @@
   "packages/library/tests/integration/skill-library.test.ts": 1965,
   "scripts/check-raw-fs-guarded.mjs": 1371,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
-  "scripts/journeys/agents.mjs": 2230,
-  "scripts/journeys/community.mjs": 1599,
-  "scripts/journeys/flows-author.mjs": 846,
-  "scripts/journeys/flows-run.mjs": 2275,
-  "scripts/journeys/home.mjs": 909,
-  "scripts/journeys/hooks.mjs": 843,
-  "scripts/journeys/stand-up-create.mjs": 1043,
-  "scripts/lib/journey-fixtures.mjs": 1935,
-  "scripts/ui-walkthrough/crawl.test.ts": 1038,
   "scripts/verify-cycle.mjs": 1239
 }

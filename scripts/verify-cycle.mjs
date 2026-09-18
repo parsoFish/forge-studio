@@ -468,7 +468,7 @@ async function startWatch() {
   // M7-7: spawn the canonical `forge studio` launcher; readiness via its
   // deterministic 'forge-studio-ready {json}' stdout line. W7-C3: the spawn/
   // ready/timeout-group-kill core is the shared scripts/lib/boot-studio.mjs
-  // (one implementation for verify-cycle / e2e-deadpaths / ui-walkthrough).
+  // (one implementation; sole caller since 7.6.131 retired the journeys).
   // Budget: 150s = the pre-existing 120s (bridge start + port takeover +
   // `next start` bind + first-request probe) + the ~30s cold `next build`
   // allowance (W6-P3 review finding #4, measured 18.06s + 50% margin —
