@@ -381,6 +381,23 @@ function validateWait(raw, at) {
     }
   }
 
+  // 7.6.143 (T1 1147) — `cycleOf` names the initiative whose EXISTING cycle
+  // this beat watches, for the case the anchor form cannot express: the develop
+  // station CONTINUES the cycle the architect minted (DEC-2 threads one
+  // `cycle_id` through the kickoff), so no dispatch dir is born after the press
+  // and `newestChannelSince` finds nothing. Refused off an agent wait rather
+  // than dropped, exactly as `anchor` is, and for the reason this file keeps
+  // paying for: a field silently ignored is a field the author believes works.
+  if (raw.cycleOf !== undefined) {
+    if (raw.for !== 'agent') {
+      fail(`${at}.wait.cycleOf`, `only an agent wait takes \`cycleOf\`; on for: '${raw.for}' it would be dropped silently`);
+    } else if (typeof raw.cycleOf !== 'string' || raw.cycleOf === '') {
+      fail(`${at}.wait.cycleOf`, `expected the initiative id whose existing cycle this beat watches, got ${JSON.stringify(raw.cycleOf)}`);
+    } else if (raw.terminal === undefined) {
+      fail(`${at}.wait.cycleOf`, '`cycleOf` names which cycle to watch and only a `terminal:` declaration watches one — without it the field would resolve a cycle and then be dropped');
+    }
+  }
+
   for (const stray of ['key', 'while']) {
     if (raw[stray] !== undefined) {
       fail(`${at}.wait.${stray}`, `only a settle wait takes \`${stray}\`; on for: '${raw.for}' it would be dropped silently`);
@@ -398,6 +415,7 @@ function validateWait(raw, at) {
     for: raw.for, upTo: raw.upTo,
     ...(raw.boundBasis !== undefined ? { boundBasis: raw.boundBasis } : {}),
     ...(raw.terminal !== undefined ? { terminal: raw.terminal } : {}),
+    ...(raw.cycleOf !== undefined ? { cycleOf: raw.cycleOf } : {}),
     ...(raw.anchor !== undefined ? { anchor: raw.anchor } : {}),
     ...(hasPer ? { perTransition: raw.perTransition, progressKey: raw.progressKey } : {}),
   });
@@ -540,10 +558,45 @@ export function validateStory(raw) {
     const among = validateAmong(e.among, e.data, at);
 
     const wait = validateWait(b.wait, at);
+    const steps = validateDoSteps(b.do, at);
+    // `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — AN AGENT WAIT THAT NO CODE
+    // PATH CAN CONSUME IS REFUSED HERE, before selection and before spend.
+    //
+    // S10 run 20 paid $4.3147 and twenty minutes to surface this. Its beat 11
+    // declared a 30-minute agent wait, pressed nothing, and expected a route
+    // the previous beat had not left the page on — so it asserted 0.4 s after
+    // the press, reded, and cascaded fourteen later beats.
+    //
+    // `agentWaitConsumed` is set on exactly two paths: a handle wait inside
+    // `performSteps` (`beats-drive.mjs:258`), which needs STEPS, and the
+    // consequence wait (`:357`), which needs `routeMatches(page.url(), target)`
+    // — NOT steps. So the unconsumable shape is the CONJUNCTION, and this
+    // refusal is deliberately narrower than "an agent wait with no `do`": a
+    // beat that presses nothing but expects the route it is already standing on
+    // reaches `:357` and consumes its bound perfectly well. That shape exists in
+    // other lanes' stories and refusing it would reject working beats.
+    //
+    // The first beat is exempt: with no previous beat there is no declared
+    // route to compare against, so the shape cannot be shown unreachable, and a
+    // refusal that cannot prove its case is a guess.
+    if (wait?.for === 'agent' && steps.length === 0 && i > 0) {
+      const prev = raw.beats[i - 1]?.expect?.route;
+      const here = e.route;
+      if (typeof prev === 'string' && typeof here === 'string' && prev !== here) {
+        fail(
+          `${at}.wait`,
+          `declares an agent wait this beat can never consume: it presses nothing (no \`do\`), so nothing ` +
+          `navigates, and it expects '${here}' while the previous beat leaves the page on '${prev}' — so ` +
+          `\`routeMatches\` is false and the consequence wait never runs. The bound would bound nothing and ` +
+          `every later verdict about it would be a lie (S10 run 20 beat 11, $4.3147 to learn it). Give the ` +
+          `beat a \`do\` block that reaches '${here}', or expect the route the previous beat ends on.`,
+        );
+      }
+    }
     return Object.freeze({
       act: b.act,
       say: b.say,
-      do: validateDoSteps(b.do, at),
+      do: steps,
       ...(wait === undefined ? {} : { wait }),
       expect: Object.freeze({
         route: e.route,

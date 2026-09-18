@@ -70,6 +70,14 @@ const VALID_SHAPES: Record<string, unknown>[] = [
   // That is the whole reason it derives its population from the validator's
   // source instead of trusting this array.
   { for: 'agent', upTo: 600_000, perTransition: 480_000, progressKey: 'architect-turns' },
+  // 7.6.143's shape, added because the meta-door below DEMANDED it the moment
+  // `validateWait` began inspecting `cycleOf` — the third time this list has
+  // been extended by its own door rather than by someone remembering. `cycleOf`
+  // names the initiative whose EXISTING cycle a beat watches, for the case the
+  // anchor form cannot express: the develop station CONTINUES the architect's
+  // cycle, so no dispatch dir is born after the press. It is only legal beside
+  // `terminal`, which is what watches a cycle at all.
+  { for: 'agent', upTo: 1_800_000, terminal: 'ready-for-review', cycleOf: 'INIT-x' },
   // 7.6.118's shapes, added because the meta-door below DEMANDED them the
   // moment `validateWait` began inspecting `boundBasis`/`terminal` — the same
   // way 7.6.77's arrived. Two shapes, not one: `terminal` must survive on the

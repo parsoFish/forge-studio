@@ -594,6 +594,24 @@ export default {
       // reds without a second assertion needed to notice.
       act: 'Hand the plan to the build flow',
       do: [{ press: 'start-development' }],
+      // 7.6.143 (T1 1147). `cycleOf`, NOT the anchor form, because THE DEVELOP
+      // STATION CONTINUES THE ARCHITECT'S CYCLE — DEC-2 threads one `cycle_id`
+      // through the kickoff. The anchor form asks "which dispatch dir was born
+      // since the press", right when a press MINTS a cycle and wrong here.
+      // Run 20: dir born 20:21:58.902, press anchored 20:26:22.301, nothing
+      // born since, so a THIRTY-MINUTE wait completed in 231 ms and this beat
+      // reported GREEN while the developer ran four minutes unwatched. Beat 11's
+      // old comment argued that was impossible, on the premise that the develop
+      // cycle mints its own dir. It does not. I wrote that premise; it was false.
+      // `<runId>` is the initiative bound at beat 9, and the cycle dir is
+      // `<timestamp>_<initiative>`, so identity resolves it at any birth time.
+      wait: {
+        for: 'agent', anchor: 'start-development',
+        terminal: 'ready-for-review',
+        cycleOf: '<runId>',
+        upTo: CYCLE_BOUND.ms,
+        boundBasis: CYCLE_BOUND.label,
+      },
       expect: {
         route: '/projects/gitpulse',
         data: {
@@ -660,12 +678,19 @@ export default {
       // `_queue/pending/` first. Dispatch dir implies already left
       // ready-for-review; `beats-cycle-terminal.test.ts` states that as its own
       // door so the ordering cannot quietly change underneath this beat.
-      wait: {
-        for: 'agent', anchor: 'start-development',
-        terminal: 'ready-for-review',
-        upTo: CYCLE_BOUND.ms,
-        boundBasis: CYCLE_BOUND.label,
-      },
+      // 7.6.143 (T1 1147) — THE WAIT MOVED TO THE BEAT THAT PRESSES.
+      //
+      // It used to sit here, and it could never run. This beat presses nothing,
+      // so nothing navigates; it expects a route the previous beat does not
+      // leave the page on, so `routeMatches` is false and the consequence wait
+      // never fires. Run 20 measured it: this beat asserted 0.4 s after the
+      // press, red, and fourteen later beats cascaded from it. `story-file.mjs`
+      // now REFUSES that shape at validation, before a run is ever funded.
+      //
+      // The wait now lives on beat 10 with `cycleOf`, because the develop
+      // station CONTINUES the cycle the architect minted rather than minting
+      // one — so by the time this beat looks, the cycle it describes has
+      // actually terminated.
       expect: {
         route: '/flows/forge-develop/run/<cycleId>',
         data: {

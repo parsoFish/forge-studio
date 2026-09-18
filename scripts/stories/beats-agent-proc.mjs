@@ -461,18 +461,76 @@ export function channelTerminalState(forgeRoot, dir) {
  *
  * @returns {null | {done: boolean, state: string, detail: string}}
  */
-export function makeCycleTerminalDoor(forgeRoot) {
+/**
+ * The newest dispatch dir belonging to an INITIATIVE, whatever its birth time.
+ *
+ * `forge-8vfn.7.6.143`, T1 ruling 1147. `newestChannelSince` answers "which
+ * channel was born since the anchor", which is the right question when a press
+ * MINTS a cycle. It is the wrong question for the develop station, which
+ * CONTINUES the cycle the architect minted — DEC-2 threads the same `cycle_id`
+ * through the kickoff on purpose. Measured on S10 run 20: the cycle dir was
+ * born at 20:21:58.902 and the press anchored at 20:26:22.301, so nothing was
+ * born since the anchor, the lookup returned null, and a declared 30-minute
+ * terminal wait completed in 231 ms while the beat reported green.
+ *
+ * So the harness follows the product's own identity for a run rather than
+ * inventing one from directory birth. Dispatch dirs are `<timestamp>_<id>`
+ * (`isDispatchDir`), so the initiative is an exact suffix match — never a
+ * substring, which would let `INIT-foo` claim `INIT-foo-bar`.
+ */
+export function cycleDirForInitiative(logsDir, initiativeId) {
+  if (typeof initiativeId !== 'string' || initiativeId === '') return null;
+  let entries;
+  try {
+    entries = readdirSync(logsDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  let best = null;
+  let bestAt = -1;
+  const suffix = `_${initiativeId}`;
+  for (const e of entries) {
+    if (!e.isDirectory() || !isDispatchDir(e.name)) continue;
+    if (!e.name.endsWith(suffix)) continue;
+    let born;
+    try {
+      born = statSync(join(logsDir, e.name)).birthtimeMs || statSync(join(logsDir, e.name)).ctimeMs;
+    } catch {
+      continue;
+    }
+    if (born > bestAt) { bestAt = born; best = join(logsDir, e.name); }
+  }
+  return best;
+}
+
+export function makeCycleTerminalDoor(forgeRoot, opts = null) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
-  return (runId, sinceMs, wantState) => {
+  const cycleOf = typeof opts?.cycleOf === 'string' && opts.cycleOf !== '' ? opts.cycleOf : null;
+  const door = (runId, sinceMs, wantState) => {
     if (typeof wantState !== 'string' || wantState === '') return null;
     // The SAME channel resolution the stall door uses: the page's own run id
     // when it names a live one, else the newest dispatch born since the anchor.
     // Shared deliberately — two doors reading two different directories would
     // disagree about which cycle the beat is even watching.
+    //
+    // 7.6.143 adds ONE resolution in front, and only when the beat asked for it
+    // by declaring `cycleOf`. Every story that does not is byte-for-byte
+    // unchanged: 1147 ruled the fix additive, and a fix that quietly re-answered
+    // the anchor question for everyone would be a behaviour change wearing a
+    // new name.
     const named = runLogDir(forgeRoot, runId);
-    const dir = named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs);
+    const dir = cycleOf !== null
+      ? cycleDirForInitiative(logsDir, cycleOf)
+      : (named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs));
     if (dir === null) return null;
+    // WHETHER A CYCLE WAS EVER RESOLVED, recorded for the consumption check
+    // (7.6.143 b2). Run 20's beat 10 called this door on every poll and it
+    // returned null every time because `dir` was null — yet the beat's terminal
+    // declaration counted as consumed, because a handle wait had set the one
+    // boolean that stood for both. A declaration is consumed by the waiter it
+    // declared, or by nothing.
+    door.sawCycle = true;
     const terminal = channelTerminalState(forgeRoot, dir);
     // null = still open. `unknown` = the check could not be run. Neither is a
     // finished cycle, and they are kept apart from each other only in
@@ -480,6 +538,8 @@ export function makeCycleTerminalDoor(forgeRoot) {
     if (terminal === null || terminal.unknown === true) return null;
     return Object.freeze({ done: terminal.state === wantState, state: terminal.state, detail: terminal.detail });
   };
+  door.sawCycle = false;
+  return door;
 }
 
 /**
@@ -535,13 +595,13 @@ export const TERMINAL_UI_GRACE_MS = 30_000;
  *
  * @returns {null | ((runId: string|null, sinceMs: number, now?: number) => null | {reason: string, detail: string})}
  */
-export function makeCycleTerminalWatch(forgeRoot, wantState) {
+export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   if (typeof wantState !== 'string' || wantState === '') return null;
-  const door = makeCycleTerminalDoor(forgeRoot);
+  const door = makeCycleTerminalDoor(forgeRoot, opts);
   if (door === null) return null;
   let terminalAt = null;
   let terminalState = null;
-  return (runId, sinceMs, now = Date.now()) => {
+  const watch = (runId, sinceMs, now = Date.now()) => {
     if (terminalAt === null) {
       const seen = door(runId, sinceMs, wantState);
       // null = still open, or the check could not be run (§15.504). Either way
@@ -567,6 +627,10 @@ export function makeCycleTerminalWatch(forgeRoot, wantState) {
         `The factory succeeded and the surface did not follow, so this is a finding about the page's refresh, not about the cycle.`,
     };
   };
+  // Mirrors the door's own record rather than keeping a second copy: two flags
+  // for one fact is how they drift.
+  Object.defineProperty(watch, 'sawCycle', { get: () => door.sawCycle === true });
+  return watch;
 }
 
 export function makeAgentChannelDoor(forgeRoot) {
