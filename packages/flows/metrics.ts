@@ -158,13 +158,36 @@ function emptyCycle(cycleId: string): CycleMetrics {
  * the order a cycle actually runs them — and anything unrecognised is appended
  * alphabetically rather than dropped.
  */
+/**
+ * The CYCLE SPINE in the order a cycle runs it — the same order `Phase` itself
+ * declares in `@forge/kernel`'s `logging.ts`, which is not an accident: that
+ * union is written in cycle order and this mirrors it deliberately rather than
+ * inventing a second opinion about sequence.
+ *
+ * My first version listed six, which is how the defect it fixes was made in the
+ * first place. `Phase` carries TEN spine phases; omitting `brain`, `unifier`,
+ * `closure` and `release-finalize` would have left them to the alphabetical
+ * tail — rendered, so not the original bug, but in an order that misrepresents
+ * the run. The interactive session kinds (`instructions`, `demo`,
+ * `project-brain`) are deliberately NOT here: the comment on the union says the
+ * cycle spine ignores them and their logs are per-session, so if one ever
+ * appears in a cycle's per_phase it should sort to the tail and look odd.
+ */
 export const PHASE_ORDER = [
-  'orchestrator', 'architect', 'project-manager', 'developer-loop', 'review-loop', 'reflection',
+  'orchestrator', 'brain', 'architect', 'project-manager', 'developer-loop',
+  'unifier', 'review-loop', 'closure', 'release-finalize', 'reflection',
 ] as const;
 
-export function phasesInRenderOrder(perPhase: Record<string, PhaseMetrics>): string[] {
-  const present = Object.keys(perPhase);
-  const known = PHASE_ORDER.filter((p) => present.includes(p)) as unknown as string[];
+export function phasesInRenderOrder(perPhase: Record<Phase, PhaseMetrics>): Phase[] {
+  // TYPED AS `Phase`, NOT `string`, and the build is why. `per_phase` is a
+  // `Record<Phase, …>`, so a `string[]` return makes the caller's index an
+  // implicit `any` (TS7053) — and `npm test` never saw it: node's
+  // `--experimental-strip-types` STRIPS types without checking them, so 8571
+  // green assertions say nothing about whether `tsc` accepts the file. The
+  // gate's `npm run build` is what catches this, and it is a different question
+  // from the one the suite answers.
+  const present = Object.keys(perPhase) as Phase[];
+  const known = PHASE_ORDER.filter((p) => present.includes(p));
   const rest = present.filter((p) => !(PHASE_ORDER as readonly string[]).includes(p)).sort();
   return [...known, ...rest];
 }
