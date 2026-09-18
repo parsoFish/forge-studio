@@ -4,7 +4,45 @@
     "ground": {
       "project": "terraform-provider-betterado",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "expectedChanges": [
+        {
+          "path": "forge/skills/ado-api-explorer/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/ado-browser-inspector/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/ado-demo/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/ado-release-explorer/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/breaking-change-detector/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/resource-scaffolder/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/schema-refactor/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/tf-acceptance-test-author/SKILL.md",
+          "change": "removed"
+        },
+        {
+          "path": "forge/skills/tfplugindocs-gen/SKILL.md",
+          "change": "removed"
+        }
+      ]
     },
     "docs": {
       "kind": "how-to",
@@ -77,7 +115,7 @@
           },
           {
             "fill": "rebuild-app-type",
-            "with": "typescript-cli"
+            "with": "cli"
           },
           {
             "press": "preview-contract-reset"
@@ -279,35 +317,30 @@
     {
       "act": "Press \"Rebuild contract\", and read the drift report it produces before applying it",
       "say": "Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and it shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Only then does it rewrite anything. Applying it leaves preflight MET on a project whose north star, instructions and secrets forge never had the right to touch — which is what the next four beats go and check, one at a time.",
-      "status": "red",
-      "failures": [
-        "data-section: expected \"contract-drift-applied\", got \"start-work\"",
-        "data-preflight-ok: expected \"true\", absent from the page"
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "terraform-provider-betterado",
-        "section": "start-work"
+        "section": "contract-drift-applied",
+        "preflight-ok": "true"
       },
       "frame": "frames/05-press-rebuild-contract-and-read-the-drif.png"
     },
     {
       "act": "Check the nine skills resolve now",
       "say": "The rebuild moved the skills to where the current contract expects them and rewrote the wiring that points at them. The bindings the project has carried all along now resolve, and the agents that run against this project can reach the moves that are specific to it.",
-      "status": "red",
-      "failures": [
-        "data-resolved: expected \"ok\", got \"missing\"",
-        "data-skill-source: expected \"project\", got \"missing\""
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
         "project-id": "terraform-provider-betterado",
         "kind": "skill",
         "skill-id": "ado-api-explorer",
-        "resolved": "missing",
-        "skill-source": "missing"
+        "resolved": "ok",
+        "skill-source": "project"
       },
       "frame": "frames/06-check-the-nine-skills-resolve-now.png"
     },
@@ -371,14 +404,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardSessionId": "2026-09-05T02-14-24-f40ef3dd"
+        "onboardSessionId": "2026-09-18T11-29-33-c67a6278"
       },
       "data": {
         "page": "projects",
         "project-id": "terraform-provider-betterado",
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-05T02-14-24-f40ef3dd",
+        "onboard-session-id": "2026-09-18T11-29-33-c67a6278",
         "onboard-attaching": "false"
       },
       "frame": "frames/11-run-the-onboarding-agent-to-re-derive-th.png"
@@ -401,27 +434,71 @@
   "reap": {
     "reaped": [
       {
-        "pid": 349829,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T02-14-24-082-a16l",
+        "pid": 1419637,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 349762,
-        "dir": "/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T02-14-24-082-a16l",
+        "pid": 1419631,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "signal": "SIGTERM",
+        "via": "marker"
+      },
+      {
+        "pid": 1419623,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
         "signal": "SIGTERM",
         "via": "cwd"
       }
     ],
-    "skipped": []
+    "skipped": [],
+    "cancelled": [
+      {
+        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "kind": null,
+        "sessionId": null,
+        "project": null,
+        "cancelledFrom": null,
+        "written": false,
+        "reason": "no start event names the session — nothing to terminate"
+      }
+    ]
   },
   "sweep": {
     "removed": [],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "lines": [
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [],
     "removed": [],
-    "failed": []
+    "removedContents": [],
+    "failed": [],
+    "escapes": [],
+    "groundEscapes": [],
+    "reappeared": []
   }
 }
