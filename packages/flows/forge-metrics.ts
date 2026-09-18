@@ -26,7 +26,7 @@ import { basename, join, resolve } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry } from '@forge/kernel';
-import { summariseCycle, type CycleMetrics } from './metrics.ts';
+import { summariseCycle, type CycleMetrics, phasesInRenderOrder, phaseCostRemainder } from './metrics.ts';
 import { parseManifest, type InitiativeManifest } from './manifest.ts';
 import { parseWorkItem, type WorkItem } from './work-item.ts';
 import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge/brain-paths.ts';
@@ -346,9 +346,11 @@ function renderChanges(
 function renderTrajectory(events: EventLogEntry[], metrics: CycleMetrics): string {
   const lines: string[] = ['## Trajectory (per-phase timeline)', ''];
 
-  // Per-phase summary table.
+  // Per-phase summary table. 7.6.119: EVERY phase present, never a hardcoded
+  // list — the old literal omitted `architect`, which was 64% of S10 run 17 and
+  // 77% of run 18, so the largest line item was the one row never rendered.
   const phaseRows: string[] = [];
-  for (const phase of ['project-manager', 'developer-loop', 'review-loop', 'reflection'] as const) {
+  for (const phase of phasesInRenderOrder(metrics.per_phase)) {
     const m = metrics.per_phase[phase];
     if (!m) continue;
     phaseRows.push(`| \`${phase}\` | $${m.cost_usd.toFixed(2)} | ${m.iterations} | ${formatDuration(m.duration_ms)} |`);
@@ -357,6 +359,11 @@ function renderTrajectory(events: EventLogEntry[], metrics: CycleMetrics): strin
     lines.push('| Phase | Cost | Iterations | Duration |');
     lines.push('|---|---|---|---|');
     lines.push(...phaseRows);
+    // The rows must account for the total printed above them (7.6.119).
+    const left = phaseCostRemainder(metrics);
+    if (Math.abs(left) >= 0.005) {
+      lines.push('', `_Unattributed: $${left.toFixed(2)} of $${metrics.total_cost_usd.toFixed(2)} is in no phase row above._`);
+    }
     lines.push('');
   }
 

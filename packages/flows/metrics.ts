@@ -137,3 +137,49 @@ function emptyCycle(cycleId: string): CycleMetrics {
     errors: 0,
   };
 }
+
+/**
+ * The phases to render, in reading order — `forge-8vfn.7.6.119`.
+ *
+ * `forge-metrics.ts` used to iterate a hardcoded
+ * `['project-manager', 'developer-loop', 'review-loop', 'reflection']`, so a
+ * phase outside that literal got no row however much it cost. S10 run 17 stated
+ * `Total cost $3.99` above a table showing `project-manager $1.45`; the missing
+ * $2.54 was the ARCHITECT, which the list does not contain. Run 18 the same,
+ * with the architect at 77% of the cycle. The data was never incomplete —
+ * `collect()` above sums `per_phase[e.phase].cost_usd` and `total_cost_usd` in
+ * the SAME branch from the same events, so they are equal by construction — the
+ * RENDERING was short.
+ *
+ * DERIVED FROM WHAT IS PRESENT, never from a list. A constant cannot see a phase
+ * added later and the failure mode of missing one is SILENCE, which is
+ * `queue-claim.mjs`'s argument for reading queue states from disk rather than
+ * from a constant, one layer up. Known phases keep a deliberate reading order —
+ * the order a cycle actually runs them — and anything unrecognised is appended
+ * alphabetically rather than dropped.
+ */
+export const PHASE_ORDER = [
+  'orchestrator', 'architect', 'project-manager', 'developer-loop', 'review-loop', 'reflection',
+] as const;
+
+export function phasesInRenderOrder(perPhase: Record<string, PhaseMetrics>): string[] {
+  const present = Object.keys(perPhase);
+  const known = PHASE_ORDER.filter((p) => present.includes(p)) as unknown as string[];
+  const rest = present.filter((p) => !(PHASE_ORDER as readonly string[]).includes(p)).sort();
+  return [...known, ...rest];
+}
+
+/**
+ * What the rendered rows FAIL to account for, against the cycle's stated total.
+ *
+ * Reads 0 once every phase is rendered, and that is the point: nothing in the
+ * report compared those two numbers before, so a table summing to 36% of the
+ * total it printed ten lines above shipped unnoticed. A check whose passing
+ * state is "these two agree" earns its keep exactly when nothing else is
+ * looking.
+ */
+export function phaseCostRemainder(m: CycleMetrics): number {
+  const summed = Object.values(m.per_phase).reduce((a, p) => a + p.cost_usd, 0);
+  return m.total_cost_usd - summed;
+}
+
