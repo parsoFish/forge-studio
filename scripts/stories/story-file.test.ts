@@ -539,3 +539,35 @@ test('536(ii) (positive control) a story with no placeholders at all is untouche
   const loaded = validateStory(story([beat(), beat()]));
   assert.equal(loaded.beats.length, 2);
 });
+
+/*
+ * 7.6.136, and the door is deliberately NOT a list of field names.
+ *
+ * `validateStory` rebuilds `ground` from a fixed field list, so a field it
+ * VALIDATES but does not NAME in the returned object is dropped silently —
+ * which is precisely how `wait.anchor` reached production validated and
+ * discarded (7.6.82), and how `ground.expectedChanges` behaved the first time
+ * it was written here. Asserting "expectedChanges survives" would fix this one
+ * field and leave the next exactly as reachable, so this deep-equals the WHOLE
+ * declared ground against what came back.
+ */
+test('7.6.136: every field of a valid ground survives validateStory', () => {
+  const ground = {
+    project: 'p',
+    realSpawn: false,
+    budget_usd: 0,
+    seedIgnoredBorn: ['node_modules/x'],
+    expectedChanges: [{ path: 'forge/skills/x/SKILL.md', change: 'removed' }],
+  };
+  const v = validateStory({
+    id: 'T', ground,
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [{ act: 'a', expect: { route: '/x', data: { page: 'p' } }, say: 's' }],
+  }) as { ground: unknown };
+  assert.deepEqual(
+    v.ground, ground,
+    'validateStory rebuilds ground from a fixed field list, so a field it validates but does not name ' +
+    'in the returned object is dropped SILENTLY — the 7.6.82 defect. Deep-equal rather than a per-field ' +
+    'check: a list only protects the fields someone remembered to add to it.',
+  );
+});

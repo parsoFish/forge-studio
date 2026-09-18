@@ -384,10 +384,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       minted,
       mintedSessionWrites(minted, logsDir, groundDir),
       groundIgnoreFromGit(groundDir),
+      // 7.6.136 — the ground changes this story DECLARES its product makes,
+      // read from the PINNED story file so the licence cannot widen at runtime.
+      story.ground?.expectedChanges ?? [],
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
     ownGroundDrift.ignored = split.ignored;
+    ownGroundDrift.declared = split.declared;
+    ownGroundDrift.unmatchedDeclarations = split.unmatchedDeclarations;
     if (split.produced.length === 0 && split.undeclared.length === 0 && split.ignored.length === 0) {
       console.log(`[stories] own ground: unchanged — projects/${story.ground.project} is back at the hash it started from`);
     }
@@ -407,6 +412,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     for (const line of split.ignored) {
       console.log(`[stories] own ground: ignored-born ${line}`);
+    }
+    for (const line of split.declared) {
+      console.log(`[stories] own ground: DECLARED ${line}`);
+    }
+    // A declaration that matched nothing is NAMED, never dropped — §15.539's
+    // dead glob in another costume: a licence that cannot match cannot fail,
+    // and would sit in the pinned story describing a behaviour that has changed.
+    for (const line of split.unmatchedDeclarations) {
+      console.error(`[stories] own ground: DECLARATION UNMATCHED ${line}`);
     }
     for (const line of split.undeclared) {
       console.error(`[stories] own ground: UNDECLARED ${line}`);

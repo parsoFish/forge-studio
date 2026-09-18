@@ -83,7 +83,28 @@ const CEILING = 25;
 
 export default {
   id: 'S3',
-  ground: { project: 'terraform-provider-betterado', realSpawn: true, budget_usd: CEILING },
+  ground: {
+    project: 'terraform-provider-betterado',
+    realSpawn: true,
+    budget_usd: CEILING,
+    // 7.6.136 — THE GROUND CHANGES THIS STORY'S PRODUCT MAKES, declared here so
+    // the fence can tell them from a containment breach. Beat 5 presses
+    // "Rebuild contract", which MOVES this project's nine declared skills from
+    // `forge/skills/<id>/` (where its `artifactRoot: "forge"` put them) to
+    // `.forge/skills/<id>/` (where the contract expects them). Run 3 went 12/12
+    // green and still exited 1, because those nine removals are inside no
+    // minted session, written by no agent, and not ignored — so the fence could
+    // only call them UNDECLARED.
+    //
+    // Declared as REMOVALS: the `.forge/skills/<id>/` arrivals are additions
+    // the fence already accounts for, and licensing only what actually needs a
+    // licence keeps the claim as small as the truth.
+    expectedChanges: [
+      'ado-api-explorer', 'ado-browser-inspector', 'ado-demo',
+      'ado-release-explorer', 'breaking-change-detector', 'resource-scaffolder',
+      'schema-refactor', 'tf-acceptance-test-author', 'tfplugindocs-gen',
+    ].map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed' })),
+  },
   docs: { kind: 'how-to', title: 'Reset a project contract' },
   beats: [
     {
