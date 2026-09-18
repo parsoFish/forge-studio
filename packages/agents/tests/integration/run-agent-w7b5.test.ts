@@ -279,3 +279,131 @@ test('legacy invocation path: the adapter-observed tool_use reaches the run log 
     rmSync(logsRoot, { recursive: true, force: true });
   }
 });
+
+/** A stream that yields a tool_use and then a result — the shape run 21's PM
+ *  had when it went quiet between the two. The silence is simulated by the
+ *  injected timer firing, not by waiting. */
+function stallingQueryFn(): StreamQueryFn {
+  return (() => {
+    async function* gen() {
+      yield {
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/tmp/author-filter.ts' } }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      };
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0.01, usage: { input_tokens: 10, output_tokens: 5 } };
+    }
+    return gen();
+  }) as unknown as StreamQueryFn;
+}
+
+/** `ticks` immediate fires, then nothing — so a test asserts the emitted
+ *  heartbeats without waiting fifteen real seconds per tick. `ticks: 0` is the
+ *  control: a timer that never fires, i.e. an adapter that is genuinely gone. */
+function fakeTimers(ticks: number) {
+  let now = 0;
+  return {
+    setInterval: (fn: () => void, ms: number) => {
+      for (let i = 0; i < ticks; i += 1) { now += ms; fn(); }
+      return 'handle';
+    },
+    clearInterval: (_h: unknown) => {},
+    now: () => now,
+  };
+}
+
+/*
+ * `forge-8vfn.7.6.148` — a ONE-SHOT agent emits `agent_heartbeat` too.
+ *
+ * S10 run 21's project-manager wrote a `tool.Read`, then nothing for 204 s,
+ * then resumed and ended normally. The beat-8 stall door read the silence and
+ * said "it is still running and has stopped writing" — both halves true, and
+ * together misleading: it had stopped EMITTING, not working.
+ *
+ * THE CAUSE IS STRUCTURAL, NOT A MISSED CALLBACK. `runAgent` has two dispatch
+ * paths sharing one sink. The invocation path passes the sink to
+ * `runInvocationSpawn`, which reaches `claude-agent.ts`'s `setInterval` and so
+ * emits heartbeats. The one-shot path derived `tool_use` from its own observed
+ * message stream and never received the sink — and there was nothing to wire
+ * it to, because that path had no timer at all (`setInterval` count in
+ * `runOneShotSpawn`: zero).
+ *
+ * So EVERY one-shot agent was invisible to the stall door while it thought:
+ * the project-manager, every band-guard agent (`validate-agent.ts:201` requires
+ * `one-shot` for those), and adversarial-review. The PM is simply the first one
+ * observed thinking for longer than the ceiling.
+ *
+ * The heartbeat now means the SAME thing on both paths — "the adapter is
+ * alive" — which is why the timer lives in the spawn rather than being hoisted
+ * around both branches. A hoisted timer would report "the spawn is
+ * outstanding", a different fact under the same event name.
+ */
+test('7.6.148: a one-shot turn that is SLOW emits agent_heartbeat into the run log', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const logsRoot = mkdtempSync(join(tmpdir(), 'hb-oneshot-'));
+  try {
+    const base = getFixtureDef(listAgentDefinitions(join(ROOT, 'skills')), 'project-scoped-review');
+    const def: AgentDefinition = { ...base, runtime: { ...base.runtime, loopStrategy: 'one-shot' }, budgets: {} };
+    const runId = '_agent-hb-slow';
+    await runAgent(def, {
+      runId, workdir: logsRoot, prompt: 'test', logsRoot,
+      // A stream that yields a tool_use and then STALLS — run 21's shape.
+      queryFn: stallingQueryFn(),
+      heartbeatTimers: fakeTimers(3),
+    });
+    const events = readEvents(logsRoot, runId);
+    const hb = events.filter((e) => e.event_type === 'agent_heartbeat');
+    assert.ok(hb.length > 0, `a one-shot turn longer than the ceiling must emit heartbeats — got ${JSON.stringify(events.map((e) => e.event_type))}`);
+    const meta = hb[0]!.metadata as Record<string, unknown>;
+    assert.equal(typeof meta['since_ms'], 'number', 'a heartbeat says how long the turn has been going');
+  } finally { restore(); rmSync(logsRoot, { recursive: true, force: true }); }
+});
+
+test('7.6.148 CONTROL: a channel with NO heartbeats and NO events still looks dead', async () => {
+  // The door must not make a real death invisible. With no timer ticks at all
+  // — the adapter genuinely gone — nothing is emitted, which is exactly what
+  // the stall door needs to keep catching.
+  const restore = withoutSpawnSuppressionEnv();
+  const logsRoot = mkdtempSync(join(tmpdir(), 'hb-dead-'));
+  try {
+    const base = getFixtureDef(listAgentDefinitions(join(ROOT, 'skills')), 'project-scoped-review');
+    const def: AgentDefinition = { ...base, runtime: { ...base.runtime, loopStrategy: 'one-shot' }, budgets: {} };
+    const runId = '_agent-hb-dead';
+    await runAgent(def, {
+      runId, workdir: logsRoot, prompt: 'test', logsRoot,
+      queryFn: stallingQueryFn(),
+      heartbeatTimers: fakeTimers(0),          // the timer never fires
+    });
+    const events = readEvents(logsRoot, runId);
+    assert.equal(events.filter((e) => e.event_type === 'agent_heartbeat').length, 0,
+      'no ticks means no heartbeats — silence must still read as silence');
+  } finally { restore(); rmSync(logsRoot, { recursive: true, force: true }); }
+});
+
+test('7.6.148: the heartbeat means the SAME thing on both paths — same event shape', async () => {
+  // THE DOOR AGAINST DRIFT. Two sources now emit `agent_heartbeat`; if their
+  // payloads diverge, a consumer reading one cannot trust the other, and the
+  // word stops meaning one thing. Asserted by comparing the emitted metadata
+  // keys, not by reading both implementations.
+  const restore = withoutSpawnSuppressionEnv();
+  const a = mkdtempSync(join(tmpdir(), 'hb-shape-one-'));
+  const b = mkdtempSync(join(tmpdir(), 'hb-shape-leg-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const base = getFixtureDef(defs, 'project-scoped-review');
+    const oneShot: AgentDefinition = { ...base, runtime: { ...base.runtime, loopStrategy: 'one-shot' }, budgets: {} };
+    await runAgent(oneShot, { runId: '_agent-shape-1', workdir: a, prompt: 't', logsRoot: a, queryFn: stallingQueryFn(), heartbeatTimers: fakeTimers(2) });
+    const oneKeys = Object.keys(
+      (readEvents(a, '_agent-shape-1').find((e) => e.event_type === 'agent_heartbeat')!.metadata as Record<string, unknown>),
+    ).sort();
+    assert.deepEqual(
+      oneKeys.filter((k) => ['since_ms', 'tool_use_count', 'last_tool'].includes(k)).sort(),
+      ['last_tool', 'since_ms', 'tool_use_count'],
+      'the one-shot heartbeat must carry the same three facts the adapter path\'s does — ' +
+      'two sources under one event name drift apart unless something compares them',
+    );
+  } finally { restore(); rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});

@@ -38,6 +38,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './ralph/claude-agent.ts';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
 // `FORGE_ROOT` (this install's root — `orchestrator/studio/` sits two levels
@@ -171,6 +172,16 @@ export type RunContext = {
   /** Installed verbatim at `options.canUseTool`; the reason lives in `packages/sessions/session-write-fence.ts`. */
   canUseTool?: unknown;
   streamGuard?: StreamGuard;
+  /**
+   * 7.6.148 — inject the heartbeat timer, exactly as `claude-agent.ts` lets its
+   * own be injected. A door for "a slow turn still says it is alive" cannot
+   * wait fifteen real seconds, and one that did would be a door nobody runs.
+   */
+  heartbeatTimers?: {
+    setInterval: (fn: () => void, ms: number) => unknown;
+    clearInterval: (handle: unknown) => void;
+    now: () => number;
+  };
   /**
    * Observer for every raw streamed SDK message on the one-shot path,
    * called before runAgent's own result-message handling. Telemetry
@@ -476,7 +487,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
         toolSeq += details.length;
       },
     };
-    spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker);
+    spawned = await runOneShotSpawn(def, observedCtx, spec, runMarker, turnSink);
     turnSink.flushIteration(1);
   } else {
     spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, runMarker, turnSink);
@@ -527,6 +538,7 @@ async function runOneShotSpawn(
   ctx: RunContext,
   spec: PhaseAgentSpec,
   runMarker: string,
+  turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
   const options: Record<string, unknown> = {
     cwd: ctx.cwd ?? ctx.workdir,
@@ -590,6 +602,38 @@ async function runOneShotSpawn(
   const outputRefs = new Set<string>();
   let toolSeq = 0;
 
+  // `forge-8vfn.7.6.148` — THIS PATH NOW SAYS IT IS ALIVE.
+  //
+  // S10 run 21's project-manager emitted a `tool.Read`, went quiet for 204 s
+  // while it thought, then resumed and ended normally. The stall door read the
+  // silence as death because there was nothing else to read: the invocation
+  // path reaches `claude-agent.ts`'s interval and emits `agent_heartbeat`, and
+  // this path had NO TIMER AT ALL. Every one-shot agent — the PM, every
+  // band-guard agent, adversarial-review — was invisible while it worked.
+  //
+  // The timer lives HERE, around the spawn, rather than hoisted around both
+  // branches in `runAgent`. Hoisted, it would report "the spawn is
+  // outstanding"; here it reports "the adapter is alive", which is what the
+  // other path's heartbeat already means. One event name, one fact.
+  let heartbeatHandle: unknown = null;
+  let lastTool = '';
+  if (turnSink !== undefined) {
+    const timers = ctx.heartbeatTimers ?? {
+      setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
+      clearInterval: (handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>),
+      now: () => Date.now(),
+    };
+    const startedAt = timers.now();
+    heartbeatHandle = timers.setInterval(() => {
+      try {
+        turnSink.onHeartbeat({ tool_use_count: toolSeq, last_tool: lastTool, since_ms: timers.now() - startedAt });
+      } catch {
+        /* never let a misbehaving heartbeat sink kill the spawn */
+      }
+    }, DEFAULT_HEARTBEAT_INTERVAL_MS);
+  }
+
+  try {
   for await (const msg of stream) {
     ctx.onMessage?.(msg);
     if (typeof msg !== 'object' || msg === null) continue;
@@ -605,6 +649,7 @@ async function runOneShotSpawn(
       const details = extractLiveToolDetails(m.message, toolSeq);
       for (const detail of details) {
         if (detail.filePath) outputRefs.add(detail.filePath);
+        lastTool = detail.name;
       }
       toolSeq += details.length;
     }
@@ -617,6 +662,15 @@ async function runOneShotSpawn(
     }
     resultSubtype = m.subtype ?? 'success';
     break;
+  }
+  } finally {
+    // Cleared however the stream ends — result, throw, or abort. A heartbeat
+    // outliving its spawn would assert the adapter is alive after it is gone,
+    // which is the same false reading in the opposite direction.
+    if (heartbeatHandle !== null) {
+      const timers = ctx.heartbeatTimers ?? { clearInterval: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>) };
+      timers.clearInterval(heartbeatHandle);
+    }
   }
 
   return {
