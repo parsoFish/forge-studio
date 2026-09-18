@@ -53,5 +53,5 @@
   "packages/library/tests/integration/skill-library.test.ts": 1965,
   "scripts/check-raw-fs-guarded.mjs": 1371,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
-  "scripts/verify-cycle.mjs": 1239
+  "scripts/verify-cycle.mjs": 1206
 }
