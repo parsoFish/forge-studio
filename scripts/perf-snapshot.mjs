@@ -4,7 +4,7 @@
  * studio (W6-P0). Measurement only: it records API + page timings and writes
  * them to disk. It does NOT diagnose, fix, or regress-gate anything — that is
  * a later wave's job once a baseline exists. Siblings:
- *   · scripts/e2e-journey.mjs (`npm run ui:journey`)     — the UI demo/regression harness.
+ *   · scripts/stories/run.mjs (`npm run stories`)         — the UI demo/regression harness.
  *   · scripts/verify-cycle.mjs (`npm run verify:cycle`)  — the real-capability gate.
  * perf-snapshot borrows their bridge-identity-probe + FORGE_ROOT conventions
  * but is deliberately read-only: it never starts, stops, or drives a cycle
@@ -27,7 +27,7 @@
  *      note, not a failure): a COLD Playwright context per page (/, /library,
  *      /knowledge, /projects). Two timestamps per page, per the repo's own
  *      data-* harness convention (docs/forge-ui-dom-and-harness.md,
- *      scripts/e2e-journey.mjs's `data-page-ready="true"` readySel): `mountMs`
+ *      the story runner's `data-page-ready="true"` readySel): `mountMs`
  *      (navigation → the first [data-page] element visible — DOM mount, not
  *      load) and `readyMs` (navigation → [data-page-ready="true"] — the
  *      page's first fetch actually settling, forge-ui's definition of
@@ -250,7 +250,7 @@ export async function measureApiEndpoint(bridgeUrl, path, n = API_SAMPLE_COUNT, 
 
 /** One COLD page load: a fresh Playwright context (no shared cache/session
  *  with any other page). Two timestamps, matching the repo's own DOM-as-
- *  metrics harness convention (scripts/e2e-journey.mjs's `readySel =
+ *  metrics harness convention (the story runner's `readySel =
  *  '[data-page-ready="true"]'`, docs/forge-ui-dom-and-harness.md): `mountMs`
  *  (navigation → the first visible [data-page] — DOM mount, NOT load) and
  *  `readyMs` (navigation → [data-page-ready="true"] — the page's first fetch

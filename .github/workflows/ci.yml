@@ -111,137 +111,15 @@ jobs:
       - name: Deletable example factory (ADR 048)
         run: node --experimental-strip-types scripts/factory-deletable.mjs
 
-  # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
-  # (production build; dry-bridge + no-spawn seams — nothing can spawn an
-  # agent, touch a git remote or start the daemon), crawls every reachable
-  # Studio route, and fails on any NEW never-ready page / first-party >=400 /
-  # pageerror / console.error versus scripts/ui-walkthrough/baseline.json
-  # (the wave-7 known-defect set — lanes SHRINK it, never grow it; the last
-  # step fails a PR that adds an entry). The token-spending explorer fan-out
-  # (fanout.workflow.js) stays a manual wave gate and is deliberately NOT here.
-  ui-walkthrough:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      # W8-F5: full history (fetch-depth: 0), this job only. The "Baseline may
-      # only shrink" step below accepts growth ONLY through a stamped
-      # `main@<sha>` regeneration whose sha check-baseline-shrinks.mjs now
-      # verifies for REAL — it must resolve to a commit AND be an ancestor of
-      # origin/$BASE_REF. A shallow (depth-1) checkout cannot answer that
-      # ancestry question, so it would refuse even a legitimate regeneration;
-      # full history makes the question answerable without a warn-and-continue.
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Cheap and independent of the crawl — runs FIRST so a PR that grows the
-      # baseline is caught even if the boot/crawl below fails. github.base_ref
-      # goes through the environment, never interpolated into the shell
-      # (W7-A0-8: expression-in-run is the script-injection pattern).
-      - name: Baseline may only shrink
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          # W8-F5, MEASURED: `--depth=1` here RE-SHALLOWS the full clone above
-          # (a .git/shallow graft appears and `git rev-parse
-          # --is-shallow-repository` flips to true), which would make the
-          # ancestry half of the stamp verification unanswerable in the one job
-          # that runs this gate. The checkout already has the whole history —
-          # this fetch only needs to update the remote ref.
-          git fetch --no-tags origin "$BASE_REF"
-          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF"
-
-      # W7-C3: cache the browser download; the slow half of --with-deps is an
-      # apt-get run that has hung this job before, so it is paid ONLY on a
-      # cache miss (a playwright-core version bump changes the lockfile and
-      # therefore the key). On a hit, chromium is already in
-      # ~/.cache/ms-playwright and the ubuntu-latest image carries its OS libs.
-      - name: Cache Playwright chromium
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright-core install --with-deps chromium
-
-      - name: Walkthrough crawl (assert against baseline)
-        run: npm run ui:walkthrough:gate -- --boot --out _walkthrough/ci
-        env:
-          FORGE_ARCHITECT_NO_SPAWN: "1"
-          FORGE_DRY_BRIDGE: "1"
-
-      # W7-A0-4: a removed baseline entry whose route this crawl never visited is
-      # UNPROVEN (CI's clean Studio cannot reach the host-only run/session pages)
-      # — printed as a workflow warning, not a failure; the operator-host wave
-      # gate runs the same check with --fail-unproven.
-      - name: Baseline removals were re-crawled
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF" --crawled _walkthrough/ci/crawl.json
-
-      - name: Upload crawl output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-walkthrough
-          path: |
-            _walkthrough/ci/crawl.json
-            _walkthrough/ci/crawl-summary.txt
-            _walkthrough/ci/assert.json
-            _walkthrough/ci/shots
-          if-no-files-found: ignore
-          retention-days: 7
-
-  # W7-C3 review (T1 CI-gap ruling) — the dead-path crawler as a standing gate.
-  # It was NOT in CI, which is exactly why three structural a11y assertions
-  # this PR added to it shipped broken: assertions added to an un-run harness
-  # are decoration. It boots `forge studio` the same way the ui-walkthrough
-  # job above already does (shared scripts/lib/boot-studio.mjs), sweeps every
-  # Studio route TWICE and fails on any dead path, wrong landmark, unresolved
-  # skip-link fragment, bare tab title or dead nav link.
-  #
-  # `ui:journey` deliberately stays OUT: 17 journeys, host-global ports and a
-  # full rewrite of demos/e2e/ make it a wave/manual gate, not a per-PR one
-  # (recorded in docs/forge-ui-dom-and-harness.md).
-  # The harness proof stories (1.0.md §3.1). A story is simultaneously the
-  # end-to-end test, the demo clip and the usage doc, so this job is the gate
-  # that keeps all three honest at once.
-  #
-  # WHY THIS NAMES TWO STORIES RATHER THAN SELECTING WITH `--costless-only`.
-  # That flag's whole selection rule is "declares no real spawn and no
-  # budget", and it was written when the only two stories matching it were
-  # `smoke` and `proof` — both harness fixtures, both green. From S8 onward
-  # that stopped being true: S8 dispatches no agent, so it honestly declares
-  # `realSpawn: false, budget_usd: 0`, and it is `red — 12/18` ON PURPOSE
-  # until the library work at M4 turns it green. §3.1 says CI runs the
-  # stories that cost nothing and §3 says every story is authored red; both
-  # cannot hold for a costless gate. Running one here would leave this job
-  # red for months, and a job that is always red cannot tell a NEW regression
-  # from a known gap — the presence-of-green rule, one layer up.
-  #
-  # So CI runs the two stories that exist to prove the RUNNER, and the nine
-  # pinned operator gates are read by the M1/M4/M5/M6 exit gates, where a red
-  # story is the expected verdict rather than a broken build. Operator
-  # ruling, 2026-08-30, taken while landing S8 and S9.
-  #
-  # FORGE_ARCHITECT_NO_SPAWN is deliberately NOT set — §3.1 forbids it for
-  # stories; the spend gate is the control, not an env var that would quietly
-  # neuter a story that is supposed to spawn.
+  # The story suite as the standing UI gate (forge-8vfn.7.6.131): boots
+  # `forge studio` (production build; dry-bridge + no-spawn seams — nothing can
+  # spawn an agent, touch a git remote or start the daemon) and runs the
+  # costless stories, which assert their own DOM-as-metrics invariants per beat.
+  # This REPLACES the ui-walkthrough crawl and the dead-path crawl, both deleted
+  # with their baselines in 7.6.131: a story states what an operator does and
+  # asserts the result, where the crawl could only assert that a route rendered.
+  # The token-spending explorer fan-out stays a manual wave gate and is
+  # deliberately NOT here.
   stories:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -258,10 +136,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Cache the browser download, mirroring the `ui-walkthrough` job above
-      # (`actions/cache@v4`, IDENTICAL key) so the entry that job saves HITS
-      # here: a differently-keyed cache would miss and re-enter the apt path
-      # this exists to avoid. `--with-deps` runs an `apt-get update`, which on
+      # Cache the browser download. This job now SAVES and RESTORES the entry
+      # itself — until 7.6.131 it shared a key with the ui-walkthrough job so
+      # that job's save would hit here, and that job is gone. The key is
+      # unchanged deliberately, so a cache written before the retirement is
+      # still a hit rather than a cold miss on the first run after it. Missing
+      # re-enters the apt path this exists to avoid. `--with-deps` runs an `apt-get update`, which on
       # 2026-09-02 failed for every run on this job — `packages.microsoft.com`
       # returned 403 Forbidden for the runner's azure-cli and ubuntu prod
       # repos ("no longer signed"), so the install exited 100 and the gate went
@@ -294,47 +174,3 @@ jobs:
           path: demos/stories
           if-no-files-found: warn
 
-  deadpaths:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Cache the browser download, mirroring the `ui-walkthrough` job above
-      # (`actions/cache@v4`, IDENTICAL key) so the entry that job saves HITS
-      # here: a differently-keyed cache would miss and re-enter the apt path
-      # this exists to avoid. `--with-deps` runs an `apt-get update`, which on
-      # 2026-09-02 failed for every run on this job — `packages.microsoft.com`
-      # returned 403 Forbidden for the runner's azure-cli and ubuntu prod
-      # repos ("no longer signed"), so the install exited 100 and the gate went
-      # red for a reason wholly outside this repo. On a cache hit chromium is
-      # already in ~/.cache/ms-playwright and the ubuntu-latest image carries
-      # its OS libs, which is exactly the reasoning the walkthrough job records.
-      # The crawl and the story runs themselves are unchanged; only the browser
-      # INSTALL is cached, so no gate is weakened.
-      - name: Cache Playwright chromium
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright-core install --with-deps chromium
-
-      - name: Dead-path crawl (every route, twice)
-        run: npm run ui:deadpaths
-        env:
-          FORGE_ARCHITECT_NO_SPAWN: "1"
-          FORGE_DRY_BRIDGE: "1"

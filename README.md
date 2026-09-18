@@ -14,7 +14,7 @@ Full competitive analysis and the strategic frame: [`brain/forge-dev/themes/stud
 
 ## See it run
 
-The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → the demo + review band → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
+The canonical walkthrough is the **story suite** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → the demo + review band → an *interactive* review demo → reflection — driven entirely through Forge Studio. Each story records a video + an annotated frame gallery, asserts the DOM-as-metrics invariants per beat, and emits a how-to document from the same run. Regenerate any of them with `npm run stories -- --story <id>` (output: [`demos/stories/index.html`](./demos/stories)).
 
 ## The moat
 
@@ -60,7 +60,7 @@ forge brain lint         # structural integrity checks on the brain
 forge --help             # full surface
 
 # Verification gates
-npm run ui:journey       # end-to-end operator journey (UI regression + demo video)
+npm run stories          # the story suite (UI regression + demo video + how-to docs)
 npm run verify:cycle     # real cycle against a managed project (real-money; operator-gated)
 ```
 
