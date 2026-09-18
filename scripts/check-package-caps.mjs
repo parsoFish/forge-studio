@@ -44,13 +44,70 @@ import { productionFiles } from './check-owner.mjs';
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FORMULA = "productionFiles() from scripts/check-owner.mjs (CODE extensions + skills/*/SKILL.md, minus *.test.* and test-fixtures/, over git ls-files --cached --others --exclude-standard)";
 
-/** Every `packages/<name>` production file's line count, summed by package. */
-export function measurePackages(root = FORGE_ROOT) {
+/**
+ * 75 is the campaign's REFUSED code — the one `gate.sh` already renders as
+ * REFUSED rather than as a red. One code across the guards (check-file-size
+ * exports the same), because a second number here would make an unmeasurable
+ * corpus read as a cap breach in exactly the logs where the difference decides
+ * whether anyone acts.
+ */
+export const EXIT_CANNOT_MEASURE = 75;
+
+/** The corpus could not be READ. Not a finding about the corpus's contents. */
+export class CorpusUnreadable extends Error {
+  constructor(cause) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'CorpusUnreadable';
+    this.cause = cause;
+  }
+}
+
+/**
+ * Every `packages/<name>` production file's line count, summed by package.
+ *
+ * `forge-8vfn.28`. THE LISTING AND THE READ ARE TWO MOMENTS, and four lanes
+ * share this box. `productionFiles()` asks git what exists; each `readFileSync`
+ * below happens afterwards, and in between a sibling worktree's branch switch
+ * can remove any of those paths — a checkout is a write to every file at once
+ * (§15.540). This red-ed CI during lane A's #767 gate: `readFileSync` threw
+ * ENOENT into `main`'s blanket catch, which printed `check-package-caps: FAIL`
+ * and returned 1. **A missing file was reported as a package over its cap.**
+ *
+ * WHY THIS CANNOT DO WHAT `check-file-size` DOES. That checker returns null for
+ * a vanished path and carries on, which is correct THERE because it judges each
+ * file on its own — a file that is gone is simply not checked, and no other
+ * file's verdict moves. **This one SUMS.** Skipping a vanished file lowers the
+ * package total, and under-counting is the direction that lets a breach pass:
+ * the cap would read green precisely BECAUSE it measured less than the package
+ * holds. Same race, opposite remedy, and the thing that decides which is
+ * whether the guard aggregates.
+ *
+ * So an unreadable corpus is a REFUSAL, never a measurement (§15.504): green,
+ * red and CANNOT-MEASURE are three states, and the unknown one never resolves
+ * toward "within cap".
+ *
+ * `lister` is injected for the door that proves it. The race cannot be staged
+ * against the live tree — by the time a test could delete a file, `git
+ * ls-files` has already stopped naming it — so the only way to exercise the gap
+ * is to hand this a listing that names a path which is not there, which is
+ * exactly what git returned a moment before the sibling's checkout.
+ */
+export function measurePackages(root = FORGE_ROOT, lister = productionFiles) {
   const lines = new Map();
-  for (const rel of productionFiles(root)) {
+  for (const rel of lister(root)) {
     const m = rel.match(/^packages\/([^/]+)\//);
     if (!m) continue;
-    const n = readFileSync(join(root, rel), 'utf8').split('\n').length - 1;
+    let text;
+    try {
+      text = readFileSync(join(root, rel), 'utf8');
+    } catch (err) {
+      // The corpus moved under us. NOT a cap verdict, and deliberately not a
+      // skip — see the aggregation argument above.
+      throw new CorpusUnreadable(
+        new Error(`${rel} was listed by the corpus and could not be read (${err instanceof Error ? err.message : String(err)})`),
+      );
+    }
+    const n = text.split('\n').length - 1;
     lines.set(m[1], (lines.get(m[1]) ?? 0) + n);
   }
   return lines;
@@ -92,8 +149,8 @@ function parseOverrides(argv) {
   return out;
 }
 
-export function audit(root = FORGE_ROOT, overrides = new Map()) {
-  const measuredLines = measurePackages(root);
+export function audit(root = FORGE_ROOT, overrides = new Map(), lister = productionFiles) {
+  const measuredLines = measurePackages(root, lister);
   const caps = parseCaps(readFileSync(join(root, 'QUARRY.md'), 'utf8'));
   for (const name of overrides.keys()) {
     if (!caps.has(name)) throw new Error(`--cap-override names "${name}", which has no cap row in QUARRY.md`);
@@ -115,11 +172,37 @@ export function audit(root = FORGE_ROOT, overrides = new Map()) {
   return { packages, breaches, unmeasured, uncapped, formula: FORMULA };
 }
 
-function main(argv) {
+/**
+ * EXPORTED for its exit code, which IS this guard's contract (`forge-8vfn.28`).
+ *
+ * The refusal path had no door: every test here exercised `measurePackages` and
+ * `audit`, and nothing asserted what the process actually RETURNS when the
+ * corpus cannot be read. A three-state guard whose third state is never
+ * observed at the boundary is a two-state guard with a comment. `gate.sh` reads
+ * the code and nothing else, so the code is the part that must be pinned.
+ *
+ * `scripts/check-file-size.mjs` has the same gap and is NOT fixed here — named
+ * rather than quietly carried, since it is a sibling's file and its own change.
+ */
+export function main(argv, lister = productionFiles) {
   let result;
   try {
-    result = audit(FORGE_ROOT, parseOverrides(argv));
+    result = audit(FORGE_ROOT, parseOverrides(argv), lister);
   } catch (err) {
+    // A real bug is not a refusal (§15.504's other half, and the half that is
+    // easy to lose): if every error became CANNOT-MEASURE, a genuine defect in
+    // this checker would report "could not measure" forever and nobody would
+    // look. Only the corpus read refuses; everything else is still a FAIL.
+    if (err instanceof CorpusUnreadable) {
+      console.error(
+        `check-package-caps: REFUSED — ${err.message}\n` +
+        `  The corpus changed between the listing and the read, so there is no total to compare\n` +
+        `  against a cap. Exiting ${EXIT_CANNOT_MEASURE} (REFUSED) rather than 1, which would mean\n` +
+        `  "a package is over its cap" — and a partial sum is SMALLER than the truth, so a cap\n` +
+        `  compared against it passes on absence (forge-8vfn.28).`,
+      );
+      return EXIT_CANNOT_MEASURE;
+    }
     console.error(`check-package-caps: FAIL — ${err.message}`);
     return 1;
   }
