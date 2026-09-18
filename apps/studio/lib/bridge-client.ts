@@ -423,6 +423,8 @@ export type RoadmapInitiative = {
   blockedBy: string[];
   /** 7.6.18 — see the `[data-blocked-clauses]` row in studio-dom-contract.md. */
   blockedClauses?: string[];
+  /** 7.6.132 — would `enqueueFlowRun` claim this for forge-develop? Derived server-side by `isRunnableSource`. */
+  canStartDevelopment?: boolean;
   workItems?: RoadmapWorkItem[];
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), sourced from

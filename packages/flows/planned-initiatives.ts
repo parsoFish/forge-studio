@@ -13,7 +13,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseManifest } from './manifest.ts';
-import { getPaths, listPending } from './queue.ts';
+import { isRunnableSource } from '@forge/contracts/runnable-source.ts';
+import { getPaths, listPending, listReadyForReview } from './queue.ts';
 import { checkInitiativeDeps } from './scheduler.ts';
 
 export type PlannedInitiative = {
@@ -42,11 +43,31 @@ export function manifestBlockedClauses(rawFrontmatter: string): string[] {
     .split(',').map((c) => c.trim()).filter((c) => c !== '');
 }
 
-export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[] {
+/**
+ * 7.6.132: the hand-off manifests are listed TOO, not only `_queue/pending/`.
+ *
+ * This is the forge-develop kickoff surface (`/api/runs/planned`). It listed
+ * `pending` alone, while `enqueueFlowRun` has always ALSO claimed a
+ * `ready-for-review` manifest whose `flow_id` differs from the target — its own
+ * comment names "forge-architect finalised with no review node" as exactly that
+ * case. So this surface could not offer what the server would accept, and S10
+ * run 19 walked into it.
+ *
+ * `targetFlowId` is REQUIRED rather than defaulted: which flow you are sourcing
+ * FOR is half the rule (`ready-for-review` of the SAME flow is a parked sibling
+ * and must not be offered), and a default would silently answer that question
+ * for a caller who never considered it.
+ */
+export function listPlannedInitiatives(queueRoot = '_queue', targetFlowId: string): PlannedInitiative[] {
   const paths = getPaths(queueRoot);
   const out: PlannedInitiative[] = [];
-  for (const filename of listPending(paths)) {
-    const manifestPath = join(paths.pending, filename);
+  const sources: { dir: string; state: 'pending' | 'ready-for-review'; names: string[] }[] = [
+    { dir: paths.pending, state: 'pending', names: listPending(paths) },
+    { dir: paths.readyForReview, state: 'ready-for-review', names: listReadyForReview(paths) },
+  ];
+  for (const { dir, state, names } of sources) {
+  for (const filename of names) {
+    const manifestPath = join(dir, filename);
     let initiativeId = filename.replace(/\.md$/, '');
     let project: string | null = null;
     let title = initiativeId;
@@ -62,9 +83,14 @@ export function listPlannedInitiatives(queueRoot = '_queue'): PlannedInitiative[
     } catch {
       /* malformed manifest still surfaces (with filename-derived defaults) */
     }
+    // THE ONE PREDICATE, beside the server's own rule. A parked manifest is
+    // offered only when `enqueueFlowRun` would actually claim it.
+    const flowId = rawFrontmatter.match(/^flow_id:\s*(.+)$/m)?.[1]?.trim() ?? null;
+    if (!isRunnableSource(state, flowId, targetFlowId)) continue;
     const blockedBy = checkInitiativeDeps(filename, paths);
     const blockedClauses = manifestBlockedClauses(rawFrontmatter);
     out.push({ initiativeId, project, title, ready: blockedBy.length === 0 && blockedClauses.length === 0, blockedBy, blockedClauses });
+  }
   }
   return out;
 }

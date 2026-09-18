@@ -724,10 +724,10 @@ function RoadmapDrawer({
 
   let body: React.ReactNode = null;
   if (initiative) {
-    const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
+    const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, canStartDevelopment: serverCanStart } = initiative;
     const planned = workItems !== undefined;
     const unplanned = status === 'pending' && !planned;
-    const canStartDevelopment = status === 'pending' && ready && planned;
+      const canStartDevelopment = (serverCanStart ?? false) && ready && planned; // 7.6.132
     const blocked = status === 'pending' && !ready;
     const wiLevels = workItems && workItems.length > 0 ? topoLevels(workItems, (w) => w.id, (w) => w.dependsOn) : null;
     const runCycleIds = group ? [group.activeCycleId, ...group.priorCycleIds] : [];

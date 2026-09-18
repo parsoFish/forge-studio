@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 import { serializeManifest, parseManifest, type InitiativeManifest } from '../../manifest.ts';
 import { getPaths } from '../../queue.ts';
-import { enqueueFlowRun, DEVELOP_FLOW_ID } from '../../enqueue-flow-run.ts';
+import { enqueueFlowRun, DEVELOP_FLOW_ID, isRunnableSource } from '../../enqueue-flow-run.ts';
 
 function manifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManifest {
   return {
@@ -253,4 +253,59 @@ test('enqueueFlowRun: a pending manifest wins over a stale done/ copy (the guard
     seed(queueRoot, 'pending', manifest());
     assert.equal(enqueueFlowRun('INIT-2026-06-21-toc', 'forge-develop', { queueRoot }).status, 'enqueued');
   });
+});
+
+/*
+ * `forge-8vfn.7.6.132` — ONE predicate for "is this manifest a runnable source
+ * for that flow", exported beside the rule it mirrors. T1 ruling 1124.
+ *
+ * WHAT WAS WRONG. `enqueueFlowRun` has claimed a `ready-for-review` manifest
+ * whose `flow_id` DIFFERS from the target since it was written — its own comment
+ * names the case, "a hand-off state (e.g. forge-architect finalised with no
+ * review node) and IS runnable", and `:172` lists `paths.readyForReview` among
+ * the claim sources. No UI surface offered it. Three hand-written predicates
+ * each gated on a state the architect never leaves behind:
+ *
+ *     RoadmapCanvas.tsx:730      status === 'pending' && ready && planned
+ *     kickoff-candidates.ts:58   if (r.status !== 'planned') continue
+ *     planned-initiatives.ts     lists _queue/pending/ only
+ *
+ * So the transition the server implements was unreachable from the product.
+ * MEASURED on S10 run 19: the manifest carried `flow_id: forge-architect` in
+ * `_queue/ready-for-review/`, target `forge-develop` — runnable by the server's
+ * rule, invisible to every surface, and beat 10 failed with "no element carries
+ * that handle".
+ *
+ * ONE PREDICATE, NOT THREE COPIES (the W7-FIX-A3 precedent: one predicate for
+ * one convention). Three hand copies is how they drifted from the server in the
+ * first place, and a fourth surface added later would drift again.
+ */
+test('7.6.132: a ready-for-review manifest of a DIFFERENT flow is a runnable source', () => {
+  // The hand-off the server names by example and the product never offered.
+  assert.equal(isRunnableSource('ready-for-review', 'forge-architect', 'forge-develop'), true);
+});
+
+test('7.6.132: a ready-for-review manifest of the SAME flow is NOT runnable', () => {
+  // The other half of the server's rule, and the one that stops a sibling being
+  // enqueued beside a flow parked at its own gate. Widening without this would
+  // turn a guard into a race.
+  assert.equal(isRunnableSource('ready-for-review', 'forge-develop', 'forge-develop'), false);
+});
+
+test('7.6.132: pending, done and failed stay runnable; in-flight and merged never are', () => {
+  for (const s of ['pending', 'done', 'failed'] as const) {
+    assert.equal(isRunnableSource(s, 'forge-architect', 'forge-develop'), true, `${s} must stay runnable`);
+    assert.equal(isRunnableSource(s, 'forge-develop', 'forge-develop'), true, `${s} is runnable regardless of flow`);
+  }
+  for (const s of ['in-flight', 'merged'] as const) {
+    assert.equal(isRunnableSource(s, 'forge-architect', 'forge-develop'), false, `${s} must never be a source`);
+  }
+});
+
+test('7.6.132: an ABSENT flow id on a ready-for-review manifest is not runnable', () => {
+  // §15.504 in the predicate. "I could not read which flow parked this" is not
+  // "it belongs to a different flow" — and resolving an unknown toward runnable
+  // is how a sibling gets enqueued beside a live gate.
+  assert.equal(isRunnableSource('ready-for-review', null, 'forge-develop'), false);
+  assert.equal(isRunnableSource('ready-for-review', '', 'forge-develop'), false);
 });

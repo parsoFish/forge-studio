@@ -656,7 +656,22 @@ export const journey = defineJourney({
                 const drawerSel = `[data-drawer-initiative="${INIT_DEV}"]`;
                 const startBtn = page.locator(`${drawerSel} [data-action="start-development"]`);
                 check((await startBtn.count()) > 0, `roadmap: [data-action="start-development"] present in the drawer for ${INIT_DEV}`);
-                await caption(page, 'A decomposed, dependency-satisfied initiative\'s drawer offers "Start development" — it runs the Forge Develop flow.');
+                await caption(page, 'A decomposed, dependency-satisfied initiative\'s drawer offers "Start development" — it runs the Forge Develop flow. So does an architect hand-off waiting at its plan gate.');
+                // `forge-8vfn.7.6.132`: the narration now names BOTH states the
+                // control appears in, because the surface changed under it. The
+                // card used to gate on `status === 'pending'` alone; it now asks
+                // `isRunnableSource`, the same rule `enqueueFlowRun` applies, so a
+                // manifest parked in `_queue/ready-for-review/` under a DIFFERENT
+                // flow — the architect hand-off — offers the control too.
+                //
+                // THIS BEAT STILL DRIVES ONLY THE PENDING PATH, and says so rather
+                // than implying coverage it does not have. Driving the hand-off
+                // needs a ready-for-review manifest seeded under a foreign flow,
+                // which is a new fixture rather than a new assertion. The hand-off
+                // itself is doored at the unit level — `runnable-source-single`,
+                // `planned-initiatives` and `kickoff-candidates` — and the gap here
+                // is named so the next reader does not mistake a passing journey
+                // for the case being exercised.
                 await frame(page, 'r6-1-start-development', 'W6-RV-2 — the "start development" trigger, now in the drawer');
                 await startBtn.click();
                 await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});

@@ -23,6 +23,7 @@
  * same table the monitor's launch UI dispatches on (see `flows-25`).
  */
 import type { Run } from './studio-client';
+import { isRunnableSource } from '@forge/contracts/runnable-source.ts';
 
 /**
  * `orchestrator/run-model.ts`'s `FALLBACK_FLOW_ID`, re-declared client-side by
@@ -55,7 +56,22 @@ export function deriveKickoffCandidates(runs: Run[], flowId: string): KickoffCan
   const seen = new Set<string>();
   const out: KickoffCandidate[] = [];
   for (const r of runs) {
-    if (r.status !== 'planned') continue;
+    // 7.6.132: `planned` (queued) OR the architect hand-off — a `gated` run is
+    // a manifest parked in `_queue/ready-for-review/` (`run-model.ts:93`), and
+    // one whose flow DIFFERS from the target is what `enqueueFlowRun` claims as
+    // a hand-off. Offering it here is the whole of this bead.
+    //
+    // THE SERVER'S RULE IS COMPOSED WITH THIS FILE'S OWN, NOT REPLACED BY IT.
+    // `isRunnableSource` also accepts `done` and `failed`, and this picker
+    // refuses both DELIBERATELY — see this file's header: listing every
+    // complete/failed initiative is how one click yanked a shipped manifest out
+    // of `_queue/done` and re-ran it (W7-FIX-A3, S1, data corruption). Widening
+    // to the server's full rule would re-open that. So the shared predicate is
+    // the authority on "would the server claim this", and the `planned`/`gated`
+    // restriction stays as this surface's own narrower policy on top.
+    const handOff = r.status === 'gated'
+      && isRunnableSource('ready-for-review', r.flowId ?? null, flowId);
+    if (r.status !== 'planned' && !handOff) continue;
     if (!r.initiativeId || seen.has(r.initiativeId)) continue;
     seen.add(r.initiativeId);
     const currentFlowId = r.flowId && r.flowId !== NO_FLOW_SENTINEL ? r.flowId : null;
