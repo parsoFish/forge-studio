@@ -70,6 +70,15 @@ const VALID_SHAPES: Record<string, unknown>[] = [
   // That is the whole reason it derives its population from the validator's
   // source instead of trusting this array.
   { for: 'agent', upTo: 600_000, perTransition: 480_000, progressKey: 'architect-turns' },
+  // 7.6.118's shapes, added because the meta-door below DEMANDED them the
+  // moment `validateWait` began inspecting `boundBasis`/`terminal` — the same
+  // way 7.6.77's arrived. Two shapes, not one: `terminal` must survive on the
+  // `settle` branch too, and that branch RETURNS before the checks below it,
+  // which is the exact mechanism that dropped `perTransition` (7.6.82) and
+  // `anchor` before it. A single agent-shaped entry would leave the settle
+  // return path untested while reading as coverage.
+  { for: 'agent', upTo: 1_800_000, terminal: 'ready-for-review', boundBasis: 'MAX_DECLARED_WAIT_MS binding at 1800000 ms; ground.budget_usd $35 would afford 4175439 ms' },
+  { for: 'settle', upTo: 1_000, key: 'preflight-status', while: 'pending', terminal: 'ready-for-review', boundBasis: 'derived from ground.budget_usd $5' },
 ];
 
 describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
@@ -182,13 +191,21 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
     const call = /await driveBeat\(([^;]*?)\);/s.exec(source);
     assert.ok(call, `no driveBeat call found in ${path}`);
     const args = call[1]!.split(',').map((a) => a.trim());
+    // EXACT, not `>=`, and 7.6.118 moving it from 9 to 10 is the door working
+    // rather than the door being wrong: a new trailing argument with a default
+    // is exactly how the ninth could have been dropped silently, so each one
+    // costs a deliberate edit here. Both positions are named — an arity that
+    // matches with the arguments transposed would be the same defect wearing
+    // the right number.
     assert.equal(
       args.length,
-      9,
-      `driveBeat takes nine parameters and the runner passed ${args.length} — the ninth defaults to a ` +
-        `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16). Got: ${call[1]}`,
+      10,
+      `driveBeat takes ten parameters and the runner passed ${args.length} — the ninth defaults to a ` +
+        `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16); ` +
+        `the tenth builds the per-beat cycle watch (7.6.118). Got: ${call[1]}`,
     );
     assert.equal(args[8], 'pressedAt', `the ninth argument must be the shared map, got ${args[8]}`);
+    assert.equal(args[9], 'cycleWatchFor', `the tenth must be the per-beat watch factory, got ${args[9]}`);
   });
 
   test('that map is declared OUTSIDE the loop — one per run, not one per beat', async () => {

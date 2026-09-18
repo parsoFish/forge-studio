@@ -98,13 +98,18 @@
 
 import { ACT_2 } from './S10.act2.mjs';
 import { REVIEW_LOOP } from './S10.review.mjs';
-import { IDEA, CEILING, PLAN_AND_BUILD_CEILING_MS } from './S10.constants.mjs';
+import { IDEA, CEILING, GROUND, PLAN_AND_BUILD_BOUND } from './S10.constants.mjs';
 
 export default {
   id: 'S10',
   // budget_usd is the exit row's ceiling (ruling 389). realSpawn because every
   // beat past 3 stands on a real agent.
-  ground: { project: 'gitpulse', realSpawn: true, budget_usd: 35 },
+  //
+  // 7.6.118: declared in `S10.constants.mjs` now, because beat 8's bound is
+  // DERIVED from this money and the ceiling the operator types is derived from
+  // it too. One declaration, or the story runs to one number and is judged
+  // against another.
+  ground: GROUND,
   docs: { kind: 'tutorial', title: 'Run the example factory to a merged PR' },
   beats: [
     {
@@ -368,12 +373,10 @@ export default {
       // declared keys until they hold, so `planned` is what makes this beat wait
       // out the pass rather than race it.
       //
-      // THE CEILING IS DECLARED, NOT MEASURED — the only bound in this story
-      // that is. No run has ever reached this station, so 20 minutes is chosen
-      // as headroom against the Architect's measured 8m49s–10m52s for a smaller
-      // pass. It is a 513/551-class figure and gets TIGHTENED from run 7's
-      // measurement; leaving a guess in place once a real number exists is how
-      // beat 4 cost run 3.
+      // THE CEILING WAS DECLARED, NOT MEASURED, and run 17 finally reached this
+      // station to prove what that cost: the window funded $3.02 against a
+      // cycle that spent $3.99 and finished 116 s after the beat gave up
+      // (§15.559). It is derived from the story's own funding now, not chosen.
       act: 'Watch the factory plan and build the initiative',
       // NO PRESS. The daemon beat 7 started has already claimed this
       // initiative — run 11 measured the claim at `13:21:29`, with the cycle
@@ -390,12 +393,31 @@ export default {
       // reached `cycle.end` sixty seconds before the beat gave up.
       //
       // The BOUND still runs from this wait's start; only the search window
-      // moves. CEILING: 6 minutes, DECLARED, basis = run 11's measured cycle at
-      // 2m01s (`13:21:29.805` start → `13:23:30.644` cycle.end) with 3x headroom
-      // for a decomposition that finds more work. Tightened from run 12's
-      // measurement — a declared figure that survives a real one is a guess
-      // nobody re-examined (513/551, and beat 4 cost run 3 exactly that).
-      wait: { for: 'agent', anchor: 'scheduler-start', upTo: PLAN_AND_BUILD_CEILING_MS },
+      // moves.
+      //
+      // THE BOUND IS NO LONGER WHAT DECIDES THIS BEAT (7.6.118, T1 1089(c)).
+      // The wait ENDS on the cycle's own terminal event — the product moving
+      // this initiative out of `_queue/in-flight/` — so a cycle that finishes
+      // is seen the instant it finishes, whether or not its channel has gone
+      // quiet, and a cycle that terminates into `failed` reds here immediately
+      // instead of sitting out the rest of the bound waiting for a state the
+      // product has already ruled out.
+      //
+      // WHAT THE BOUND IS NOW: the outer backstop for a cycle that never
+      // terminates at all, DERIVED from `ground.budget_usd` at run 17's
+      // measured burn and then bound by `MAX_DECLARED_WAIT_MS`. Both figures
+      // travel in `boundBasis` and the label names which one bound it — run
+      // 17's red printed `declared 360000 ms` and that bare integer is why its
+      // first readers believed the product had stalled when it had succeeded.
+      wait: {
+        for: 'agent', anchor: 'scheduler-start',
+        // The product's own word for "this cycle is done", read from the queue
+        // rather than from the card: run 17 reached it at 22:46:55 while this
+        // beat had already given up at 22:44:59 asserting the card alone.
+        terminal: 'ready-for-review',
+        upTo: PLAN_AND_BUILD_BOUND.ms,
+        boundBasis: PLAN_AND_BUILD_BOUND.label,
+      },
       expect: {
         route: '/projects/gitpulse',
         // `needs-scheduler-start` IS GONE — amend-6, and it never worked.

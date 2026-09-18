@@ -241,6 +241,19 @@ export const READY_TIMEOUT_MS = 15_000;
 export function beatBound(beat, domTimeoutMs) {
   const declared = beat.wait;
   if (declared === undefined || declared === null) return { ms: domTimeoutMs, label: null };
+  // 7.6.118 / T1 1089 — A DERIVED BOUND MUST NOT PRINT AS A BARE INTEGER.
+  // Run 17's red said `gave up at the agent wait (declared 360000 ms)`, and
+  // that sentence is why its first readers believed the product had stalled
+  // when the cycle had in fact succeeded 116 s later. A bound that was derived
+  // from the story's funding reads identically to the literal it replaced
+  // unless it carries its reason, so `boundBasis` travels into the verdict with
+  // BOTH figures and the name of whichever constraint bound it.
+  //
+  // ADDITIVE ON PURPOSE: the ~90 beats that declare a plain `upTo` keep the
+  // exact label they had, or every story's verdict text changes at once.
+  if (typeof declared.boundBasis === 'string' && declared.boundBasis !== '') {
+    return { ms: declared.upTo, label: `${declared.for} wait (bound ${declared.upTo} ms \u2014 ${declared.boundBasis})` };
+  }
   return { ms: declared.upTo, label: `${declared.for} wait (declared ${declared.upTo} ms)` };
 }
 

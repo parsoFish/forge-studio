@@ -222,7 +222,7 @@ export const PROGRESS_KEY_SHAPE = /^[A-Za-z][A-Za-z0-9-]*$/;
 /** The widest bound a beat may declare, in ms. A declared wait is a licence to
  *  sit still; an unbounded or absurd one turns a red run into a hung host,
  *  which is worse than the defect it was added to fix. */
-const MAX_DECLARED_WAIT_MS = 30 * 60 * 1000;
+export const MAX_DECLARED_WAIT_MS = 30 * 60 * 1000;
 
 /**
  * Validate a beat's optional `wait` (bead `forge-8vfn.6.11.10`, T1 ruling
@@ -249,6 +249,25 @@ function validateWait(raw, at) {
     fail(
       `${at}.wait.upTo`,
       `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
+    );
+  }
+  // 7.6.118 / T1 1089(c). The queue state this wait ends on — the product's own
+  // terminal word for the cycle the beat is watching. OPT-IN: a beat that names
+  // none is not watched at all, so no beat gains a new way to fail by standing
+  // beside one that opted in (the stall door's own scoping rule).
+  if (raw.terminal !== undefined && (typeof raw.terminal !== 'string' || raw.terminal === '')) {
+    fail(
+      `${at}.wait.terminal`,
+      `expected a non-empty queue state the cycle ends in, got ${JSON.stringify(raw.terminal)}`,
+    );
+  }
+  // 7.6.118 / T1 1089. The DERIVED bound's reason, optional and validated here
+  // — above the `settle` branch for that branch's own documented reason: it
+  // RETURNS, so anything checked below it is silently dropped for settle waits.
+  if (raw.boundBasis !== undefined && (typeof raw.boundBasis !== 'string' || raw.boundBasis === '')) {
+    fail(
+      `${at}.wait.boundBasis`,
+      `expected a non-empty string explaining how the bound was derived, got ${JSON.stringify(raw.boundBasis)}`,
     );
   }
   // PLACED ABOVE THE `settle` BRANCH DELIBERATELY, and my own door is why. The
@@ -339,7 +358,9 @@ function validateWait(raw, at) {
         `a settle wait must name the transient value it is willing to wait out, got ${JSON.stringify(raw.while)}`,
       );
     }
-    return Object.freeze({ for: raw.for, upTo: raw.upTo, key: raw.key, while: raw.while });
+    return Object.freeze({ for: raw.for, upTo: raw.upTo, key: raw.key, while: raw.while,
+      ...(raw.boundBasis !== undefined ? { boundBasis: raw.boundBasis } : {}),
+      ...(raw.terminal !== undefined ? { terminal: raw.terminal } : {}) });
   }
   // Fail-closed the other way too. This function DROPS every key it does not
   // name, and the comment above says so — so a `key`/`while` pair left on an
@@ -372,6 +393,8 @@ function validateWait(raw, at) {
   // genuinely absent rather than present-and-undefined.
   return Object.freeze({
     for: raw.for, upTo: raw.upTo,
+    ...(raw.boundBasis !== undefined ? { boundBasis: raw.boundBasis } : {}),
+    ...(raw.terminal !== undefined ? { terminal: raw.terminal } : {}),
     ...(raw.anchor !== undefined ? { anchor: raw.anchor } : {}),
     ...(hasPer ? { perTransition: raw.perTransition, progressKey: raw.progressKey } : {}),
   });

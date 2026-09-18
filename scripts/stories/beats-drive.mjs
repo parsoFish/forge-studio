@@ -102,7 +102,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map()) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null) {
   // `pressedAt` DEFAULTS BECAUSE MOST CALLERS DRIVE ONE BEAT. The door suite has
   // ~90 single-beat calls for which a fresh map is exactly right. A MULTI-BEAT
   // caller must thread ONE map across the loop, or every beat gets its own and
@@ -348,6 +348,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // here is what made S1 beat 11 report `no-progress-key (consequence)`
           // against `/artifact`, which renders the key zero times.
           beat.wait?.perTransition !== undefined ? beat.wait : null,
+          // 7.6.118 / T1 1089(c). Built PER BEAT because the watch is stateful
+          // — it remembers when the cycle terminated so the page's grace runs
+          // from that sighting — and null for every beat that declared no
+          // `terminal`, which is all of them but S10's beat 8.
+          typeof cycleWatchFor === 'function' ? cycleWatchFor(beat.wait?.terminal ?? null) : null,
         );
         agentWaitConsumed = true;
       }
