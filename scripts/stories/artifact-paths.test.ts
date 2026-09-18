@@ -6,9 +6,9 @@
  * artifact and say nothing, which is the shape the bead is about: ten dirty
  * committed files after a run whose own fences all read clean.
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { relativiseToRoot, machinePathsIn, portableArtifact, portableFenceEscapes } from './artifact-paths.mjs';
+import { relativiseToRoot, machinePathsIn, portableArtifact, portableFenceEscapes, portableReapEntries } from './artifact-paths.mjs';
 
 const ROOT = '/home/parso/forge-m6-c';
 
@@ -192,4 +192,87 @@ test('7.6.120: a MALFORMED escape is left for the backstop, never emitted as an 
       'and must NOT be stamped portable — rootKind is the claim "this was made safe", '
       + 'and claiming it over an unreadable input is the fallback this refuses to be');
   }
+});
+
+/*
+ * `forge-8vfn.7.6.125` — THE SECOND SEAM. 7.6.120 made `fence.escapes`
+ * portable; the reap ledger still names other checkouts, so S2, S3 and S5
+ * cannot be regenerated: `portableArtifact` over the COMMITTED
+ * `demos/stories/S3/story.json` throws today on `reap.reaped[].dir`.
+ *
+ * THE SPLIT IS NOT attributed/unattributed. That was the shape ruled from
+ * 7.6.120, and measuring the artifacts showed it does not map: `reaped` and
+ * `skipped` always carry a pid, `cancelled` NEVER does — and S2 and S5 carry a
+ * machine path in BOTH `reaped[].dir` and `cancelled[].dir`. A pid-based split
+ * would have left `cancelled` absolute and those two still unwritable, so the
+ * fix would not have fixed them.
+ *
+ * The real split is OWN ROOT vs FOREIGN ROOT. Of 21 `dir` fields across six
+ * committed artifacts, 12 are already `_logs/…` — the form `relativiseToRoot`
+ * leaves after stripping the run's own root — and 9 are absolute.
+ *
+ * WHY `dirRoot` IS LOAD-BEARING AND NOT DECORATION: without it a foreign
+ * `_logs/x` and an own `_logs/x` serialise IDENTICALLY, quietly asserting that
+ * another lane's reaped process was this run's own. Two facts, one
+ * representation. Its ABSENCE is the signal for "the run's own tree", which is
+ * also what keeps the twelve already-portable entries byte-identical.
+ */
+describe('7.6.125: the reap ledger serialises without a machine path', () => {
+  const OWN = '/home/parso/forge-clean-m6a';
+
+  test('a FOREIGN-root reap dir becomes root + relative, with the pid kept', () => {
+    const [e] = portableReapEntries([{
+      pid: 349829,
+      dir: '/home/parso/forge-m5-b-author/_logs/_agent-onboarding-agent-2026-09-05T02-14-24-082-a16l',
+      signal: 'SIGTERM', via: 'descendant',
+    }], OWN);
+    assert.equal(e.dirRoot, 'forge-m5-b-author');
+    assert.equal(e.dirRootKind, 'sibling-basename');
+    assert.equal(e.dir, '_logs/_agent-onboarding-agent-2026-09-05T02-14-24-082-a16l');
+    assert.equal(e.pid, 349829, 'the pid is the entry\'s identity and must survive');
+    assert.equal(e.signal, 'SIGTERM');
+    assert.deepEqual(machinePathsIn([e]), []);
+  });
+
+  test('an OWN-root entry is BYTE-IDENTICAL — no dirRoot, nothing added', () => {
+    // THE REGRESSION-LOCK. Twelve entries across six committed artifacts are
+    // already `_logs/…`; if this fix stamped them too, every one of those
+    // artifacts would churn and the "already portable" shape would change under
+    // stories nobody touched.
+    const own = { pid: 1, dir: '_logs/_agent-x', signal: 'SIGTERM', via: 'cwd' };
+    const [e] = portableReapEntries([own], OWN);
+    assert.deepEqual(e, own, 'an entry already relative to the run root must pass through untouched');
+    assert.equal('dirRoot' in e, false, 'absence of dirRoot IS the signal for "the run\'s own tree"');
+  });
+
+  test('an absolute dir UNDER the run root is relativised, not stamped foreign', () => {
+    const [e] = portableReapEntries([{ pid: 2, dir: `${OWN}/_logs/_agent-y`, signal: 'SIGTERM' }], OWN);
+    assert.equal(e.dir, '_logs/_agent-y');
+    assert.equal('dirRoot' in e, false, 'its own root is not a sibling');
+    assert.deepEqual(machinePathsIn([e]), []);
+  });
+
+  test('CANCELLED entries are transformed too, though they carry NO pid', () => {
+    // The door that T1's attributed/unattributed framing would have missed, and
+    // the one that decides whether S2 and S5 become regenerable at all.
+    const [e] = portableReapEntries([{
+      dir: '/home/parso/forge-m6-d/_logs/_agent-story-s5',
+      kind: 'agent', sessionId: null, project: 'mdtoc', written: true, reason: null,
+    }], OWN);
+    assert.equal(e.dirRoot, 'forge-m6-d');
+    assert.equal(e.dir, '_logs/_agent-story-s5');
+    assert.equal(e.pid, undefined, 'a cancelled entry never had a pid and must not gain one');
+    assert.deepEqual(machinePathsIn([e]), []);
+  });
+
+  test('a dir that cannot be decomposed is LEFT ABSOLUTE and still refuses', () => {
+    // 7.6.120's malformed case in this seam: an input we cannot parse must not
+    // be stamped portable, and a dirRoot on a path we could not decompose is
+    // exactly that false claim.
+    const bad = { pid: 3, dir: '/home/parso/somewhere-else/no-logs-segment', signal: 'SIGTERM' };
+    const [e] = portableReapEntries([bad], OWN);
+    assert.deepEqual(e, bad, 'left exactly as it was, for the backstop to refuse');
+    assert.equal('dirRootKind' in e, false, 'never stamped portable when it could not be read');
+    assert.equal(machinePathsIn([e]).length, 1, 'it must remain a machine path so the write still refuses');
+  });
 });

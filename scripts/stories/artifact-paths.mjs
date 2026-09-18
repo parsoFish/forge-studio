@@ -171,3 +171,56 @@ export function portableFenceEscapes(escapes) {
     };
   });
 }
+
+/** The `_logs/` segment every reap `dir` is built around: `<root>/_logs/<entry>`. */
+const LOGS_SEGMENT = `${sep}_logs${sep}`;
+
+/**
+ * Make the reap ledger's `dir` fields portable — `forge-8vfn.7.6.125`.
+ *
+ * THE SECOND SEAM. 7.6.120 fixed `fence.escapes`; the reap ledger still named
+ * other checkouts, so S2, S3 and S5 could not be regenerated at all —
+ * `portableArtifact` over the committed `demos/stories/S3/story.json` throws on
+ * `reap.reaped[].dir`.
+ *
+ * THE SPLIT IS OWN ROOT vs FOREIGN ROOT, not attributed vs unattributed. The
+ * 7.6.120 shape does not map: `reaped` and `skipped` always carry a pid,
+ * `cancelled` never does, and S2 and S5 carry a machine path in BOTH — so a
+ * pid-based split would leave `cancelled` absolute and those two still
+ * unwritable.
+ *
+ * AN OWN-ROOT ENTRY IS RETURNED UNTOUCHED. Twelve of the twenty-one committed
+ * `dir` fields are already `_logs/…`, the form `relativiseToRoot` leaves behind,
+ * and six artifacts depend on it. Stamping those would churn stories nobody
+ * touched.
+ *
+ * `dirRoot` IS LOAD-BEARING. Without it a foreign `_logs/x` and an own
+ * `_logs/x` serialise identically, quietly asserting another lane's reaped
+ * process was this run's own — two facts sharing one representation. Its
+ * ABSENCE is the signal for "the run's own tree".
+ */
+export function portableReapEntries(entries, root) {
+  if (!Array.isArray(entries)) return entries;
+  const rootSlash = root.endsWith(sep) ? root : `${root}${sep}`;
+  return entries.map((e) => {
+    if (!e || typeof e !== 'object' || typeof e.dir !== 'string') return e;
+    const dir = e.dir;
+    if (!dir.startsWith('/')) return e;                 // already relative: the working shape
+    if (dir.startsWith(rootSlash)) {                    // our own tree, no sibling to name
+      return { ...e, dir: dir.slice(rootSlash.length) };
+    }
+    const at = dir.indexOf(LOGS_SEGMENT);
+    // Cannot decompose it — leave it ABSOLUTE for the backstop to refuse. A
+    // `dirRoot` on a path we could not read would be a claim we cannot support,
+    // which is the one thing this must never emit (§15.504).
+    if (at === -1) return e;
+    const base = dir.slice(0, at).split(sep).filter(Boolean).pop();
+    if (!base) return e;
+    return {
+      ...e,
+      dir: dir.slice(at + 1),                           // `_logs/<entry>`, one frame
+      dirRoot: base,
+      dirRootKind: 'sibling-basename',
+    };
+  });
+}
