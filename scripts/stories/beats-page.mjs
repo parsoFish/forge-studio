@@ -617,7 +617,7 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null, cycleWatch = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -704,6 +704,28 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // door is skipped entirely when the declared bound is within twice the
     // ceiling, and the verdict says so rather than staying silent about a check
     // that did not run. One ceiling, no scaling.
+    // 7.6.118 / T1 1089(c) — THE PRODUCT'S OWN TERMINAL VERDICT, ASKED FIRST.
+    // Above the stall door for the reason this file already gives about
+    // `stopReasonFor`: a verdict the product PUBLISHED outranks a silence we
+    // measured. The stall door cannot answer this one at all — it asks only
+    // after STALL_CEILING_MS of quiet, and run 17's cycle wrote continuously
+    // until the moment it finished, so a door that waits for silence can never
+    // see a cycle that finishes while still talking.
+    //
+    // Unbounded by `doorWorthRunning`: that gate exists because the stall door
+    // fires at a fixed 180 s and would BE the verdict on a short bound. This
+    // one carries no fixed interval — it reads what is on disk — so it is never
+    // the bound, only an earlier exit.
+    if (cycleWatch !== null && sessionScope === null) {
+      const stop = cycleWatch(runId, anchorMs ?? startedAt);
+      if (stop !== null) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why: `${stop.reason}: ${stop.detail} The beat's expectations never held.`,
+          stoppedBy: 'runner',
+        });
+      }
+    }
     if (stallDoor !== null && sessionScope === null && doorWorthRunning(timeoutMs, STALL_CEILING_MS)) {
       // 718(1): the search window opens at the beat's declared ANCHOR when it
       // has one — the press whose work this beat is watching — and at this

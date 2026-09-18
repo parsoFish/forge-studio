@@ -18,14 +18,27 @@
  * because its justification is the longest prose in the file and belongs beside
  * the number it defends, not beside the beat that reads it.
  */
+import { deriveWaitBoundMs } from '../../scripts/stories/wait-bound.mjs';
+
 export const IDEA =
   'Add an --exclude-author <pattern> flag: the inverse of --author. Same *-wildcard, ' +
   'case-insensitive matching, repeatable and OR-combined. It composes with every other ' +
   'filter. State the precedence explicitly when --author and --exclude-author are both ' +
   'given, and annotate the text header and the JSON output the way --author already does.';
 
-/** The ceiling the operator types into the idea box, in dollars. */
-export const CEILING = '35';
+/**
+ * THE GROUND, and the one place this story's money is declared.
+ *
+ * `CEILING` below is what the operator TYPES into the idea box and
+ * `ground.budget_usd` is what the run is FUNDED with; they are the same money
+ * described twice, and until 7.6.118 they were two literals that happened to
+ * agree. A story whose typed ceiling and funded ground disagree would run to
+ * one number and be judged against the other, and nothing would say so.
+ */
+export const GROUND = Object.freeze({ project: 'gitpulse', realSpawn: true, budget_usd: 35 });
+
+/** The ceiling the operator types into the idea box, in dollars. DERIVED. */
+export const CEILING = String(GROUND.budget_usd);
 
 /**
  * Beat 8's ceiling — the factory planning AND building the initiative, watched.
@@ -59,11 +72,32 @@ export const CEILING = '35';
  * 12 measures 7.6.27 THROUGH this beat, so a green here will mean the page
  * updated itself.
  *
- * Tightened from run 12's measurement regardless: a declared figure that
- * survives a real one is a guess nobody re-examined (513/551; beat 4 cost run 3
- * exactly that).
+ * SUPERSEDED BY 7.6.118 / T1 1089, and by the run that finally reached this
+ * station. Everything above is why the figure was 360 s; run 17 is why it is no
+ * longer a figure at all.
+ *
+ * **THE WINDOW FUNDED 25% LESS THAN THE CYCLE IT WAS WATCHING** (§15.559). At
+ * the measured burn of $3.99 over 476 s, 360000 ms afforded $3.02 against a
+ * cycle that spent $3.99 — and that cycle reached `ready-for-review` with 0
+ * errors recorded 116 seconds AFTER this beat gave up with `expected
+ * "ready-for-review", got "in-flight"`. The product succeeded. The deadline did
+ * not. Third distinct beat-8 blocker in three runs, after the ADR 037
+ * quarantine and the unwired wait anchor — and the only one of the three that
+ * was never a product defect at all.
+ *
+ * The prose above also shows how it happened: every revision TIGHTENED the
+ * number against a measurement of something smaller (run 11's 2m01s cycle, the
+ * Architect's 8m49s pass), and tightening a guess is still a guess. No run had
+ * ever completed a cycle at this station, so there was nothing to tighten
+ * against.
+ *
+ * SO IT IS DERIVED FROM THE MONEY, and it is no longer what decides this beat:
+ * the wait ENDS on the cycle's own terminal event (`makeCycleTerminalDoor`), and
+ * this is the outer backstop for a cycle that never terminates. See
+ * `scripts/stories/wait-bound.mjs` for the derivation and why the clamp is
+ * printed rather than hidden.
  */
-export const PLAN_AND_BUILD_CEILING_MS = 360_000;
+export const PLAN_AND_BUILD_BOUND = deriveWaitBoundMs(GROUND);
 
 /**
  * The one anchored send-back. It lands on the precedence clause — the risky

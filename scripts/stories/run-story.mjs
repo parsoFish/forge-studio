@@ -26,7 +26,7 @@
  * this is one expression evaluated twice, not a constant with two possible
  * values.
  */
-import { makeAgentProcProbe, makeAgentChannelDoor } from './beats-agent-proc.mjs';
+import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -137,6 +137,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // ROOT, which is known here and nowhere else (§15.148), and it only ever ends
   // a wait EARLIER — the declared bound remains a hard maximum.
   const stallDoor = makeAgentChannelDoor(ROOT);
+  // 7.6.118 / T1 1089(c) — a FACTORY, not a door: the cycle watch is stateful
+  // per beat, so the run hands `driveBeat` the means to build one rather than a
+  // shared instance every beat would poison for the next.
+  const cycleWatchFor = (wantState) => makeCycleTerminalWatch(ROOT, wantState);
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
@@ -170,7 +174,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // doing instead of leaving it to be reconstructed afterwards by hand.
       // Built per beat from the route it is about; null for every other beat.
       const probe = makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, stallDoor, pressedAt);
+      const verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, stallDoor, pressedAt, cycleWatchFor);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
