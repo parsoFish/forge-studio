@@ -739,3 +739,59 @@ test('693(ii): an unrecognised flag is still REFUSED, not silently ignored (bead
   assert.equal(r.status, 2, 'a typo in a flag that gates a merge must not read as "no expectations declared"');
   assert.match(r.err, /--expect-pin-fale/, 'and the refusal names what it did not understand');
 });
+
+describe('gate.sh — its exit status is written into its own log, on every path (D, T1 ruling 1104)', () => {
+  // `merge-slot.sh` reads `GATE_SH_EXIT=<rc>` out of the handed gate log to
+  // tell a refusal (exit 3, zero FAIL rows — a step never RAN, §15.92) from a
+  // green gate. Nothing in gate.sh wrote that line; the only producer was one
+  // lane's private wrapper, so for every other lane the variable was empty and
+  // the refusal branch could not fire. The marker is the LAST stdout line of a
+  // gate RUN — reached verdict or refusal alike — and never appended afterwards.
+  const FAILING_CI = `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A step that fails
+        run: "false"
+`;
+
+  test('1104: a run that reached the verdict ends its stdout with GATE_SH_EXIT=<its rc>, and the rc is the red one', () => {
+    const d = tree(FAILING_CI);
+    installedInPlace(d);
+    const r = gate(d);
+    assert.notEqual(r.status, 0, `control: a failing step is a red gate. out: ${r.out}${r.err}`);
+    assert.match(r.out, /== pins ==/, `control: the run reached the verdict section: ${r.out}`);
+    const lines = r.out.trimEnd().split('\n');
+    assert.equal(lines[lines.length - 1], `GATE_SH_EXIT=${r.status}`, `last stdout line: ${JSON.stringify(lines.slice(-3))}`);
+  });
+
+  test('1104: a REFUSED run (no step ran) ends its stdout with its own non-zero rc — the refusal the slot must see', () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const r = gate(d, join(d, 'camp'), 'whatever');
+    assert.notEqual(r.status, 0, 'control: a surplus argument is refused');
+    assert.doesNotMatch(r.out, /== pins ==/, 'control: nothing ran');
+    const lines = r.out.trimEnd().split('\n');
+    assert.equal(lines[lines.length - 1], `GATE_SH_EXIT=${r.status}`, `last stdout line: ${JSON.stringify(lines.slice(-3))}`);
+  });
+
+  test('1104: the marker appears exactly once — a wrapper that also prints it would make two verdicts', () => {
+    const d = tree(FAILING_CI);
+    installedInPlace(d);
+    const r = gate(d);
+    const n = r.out.split('\n').filter((l) => /^GATE_SH_EXIT=/.test(l)).length;
+    assert.equal(n, 1, `expected one marker line, saw ${n}`);
+  });
+
+  test('1104: the QUERY verbs carry no marker — --list is a step list and --lock-state a one-word answer that callers parse', () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const list = gate('--list', d);
+    assert.equal(list.status, 0, list.err);
+    assert.doesNotMatch(list.out, /GATE_SH_EXIT=/, `--list must stay a step list: ${list.out}`);
+    const lock = gate('--lock-state', join(d, 'no-such-lock'));
+    assert.doesNotMatch(lock.out, /GATE_SH_EXIT=/, `--lock-state must stay a one-word answer: ${JSON.stringify(lock.out)}`);
+  });
+});
