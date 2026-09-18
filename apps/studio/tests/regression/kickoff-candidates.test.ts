@@ -141,3 +141,49 @@ test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', (
   expect(match, 'FALLBACK_FLOW_ID must still be declared in packages/flows/run-model-flow-graph.ts').not.toBeNull();
   expect(NO_FLOW_SENTINEL).toBe(match![1]);
 });
+
+/*
+ * `forge-8vfn.7.6.132` — TEST-WORLD AMENDMENT, and it narrows this file's own
+ * headline contract. T1 ruling 1124.
+ *
+ * The header above says "finished/failed/active/gated never are". That is now
+ * true of `gated` ONLY when the parked manifest belongs to the flow being
+ * viewed. A `gated` run is a manifest in `_queue/ready-for-review/`
+ * (`run-model.ts:93`), and one whose flow DIFFERS is the architect hand-off
+ * `enqueueFlowRun` has always claimed — its own comment names "forge-architect
+ * finalised with no review node" as exactly that case. This picker never
+ * offered it, which is half of why S10 could not start development for nineteen
+ * runs.
+ *
+ * THE DEFECT THIS FILE EXISTS TO KILL IS UNTOUCHED, and the third test is the
+ * lock. `isRunnableSource` — the shared predicate beside the server's rule —
+ * also accepts `done` and `failed`. This surface still refuses both, because
+ * offering every complete/failed initiative is how one click yanked a shipped
+ * manifest out of `_queue/done` and re-ran it. The server's rule is COMPOSED
+ * with this file's narrower policy, never substituted for it, and the lock stops
+ * a later edit from "simplifying" the composition into the server rule alone.
+ */
+test('7.6.132: a GATED run of a DIFFERENT flow is offered — the architect hand-off', () => {
+  const runs: Run[] = [
+    run({ id: 'INIT-handoff', initiativeId: 'INIT-handoff', status: 'gated', flowId: 'forge-architect', project: 'gitpulse' }),
+  ];
+  const out = deriveKickoffCandidates(runs, VIEWED);
+  expect(out.map((c) => c.initiativeId)).toEqual(['INIT-handoff']);
+  expect(out[0]!.isRepoint).toBe(true);
+  expect(out[0]!.currentFlowId).toBe('forge-architect');
+});
+
+test('7.6.132: a GATED run of the VIEWED flow is still not offered — the parked sibling', () => {
+  const runs: Run[] = [
+    run({ id: 'INIT-parked', initiativeId: 'INIT-parked', status: 'gated', flowId: VIEWED, project: 'gitpulse' }),
+  ];
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([]);
+});
+
+test('7.6.132: complete and failed are STILL never offered — the shipped-manifest lock', () => {
+  const runs: Run[] = [
+    run({ id: 'INIT-shipped', initiativeId: 'INIT-shipped', status: 'complete', flowId: 'forge-architect', project: 'gitpulse' }),
+    run({ id: 'INIT-broke', initiativeId: 'INIT-broke', status: 'failed', flowId: 'forge-architect', project: 'gitpulse' }),
+  ];
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([]);
+});

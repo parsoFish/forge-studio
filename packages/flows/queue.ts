@@ -71,6 +71,21 @@ export function listPending(paths = getPaths()): string[] {
     .sort();
 }
 
+/**
+ * 7.6.132: the hand-off manifests, enumerated HERE beside their siblings rather
+ * than with a raw `readdirSync` in the caller. `enqueueFlowRun` claims a
+ * `ready-for-review` manifest whose `flow_id` differs from the target, so the
+ * develop kickoff surface has to see this directory — and queue enumeration
+ * belongs in one module, which is also why the request-path-sinks ratchet has
+ * one place to account for it rather than a second file to classify.
+ */
+export function listReadyForReview(paths = getPaths()): string[] {
+  if (!existsSync(paths.readyForReview)) return [];
+  return readdirSync(paths.readyForReview)
+    .filter((f) => f.endsWith('.md'))
+    .sort();
+}
+
 export function listInFlight(paths = getPaths()): string[] {
   if (!existsSync(paths.inFlight)) return [];
   return readdirSync(paths.inFlight).filter((f) => f.endsWith('.md'));
