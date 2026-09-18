@@ -698,14 +698,16 @@ describe('lanes.sh render — a heading miss is an error, never a fallback', () 
     writeFileSync(
       src,
       ['## 1. T1 — campaign orchestrator', '', '```text', 'ROLE: T1 campaign orchestrator', '```', '',
-       '## 11. M4-<pkg> — package lane', '', '```text', 'ROLE: T2 lane for $PKG', '```', ''].join('\n'),
+       '## 11. M4-<pkg> — package lane', '', '```text', 'ROLE: T2 lane for $PKG', `Suites: flock ${camp}/.suite-lock npm test`, '```', '',
+       '## 12. M4-<pkg> — no lock line', '', '```text', 'ROLE: T2 lane for $PKG', 'Suites: npm test', '```', '',
+       '## 13. M4-<pkg> — another campaign\'s lock', '', '```text', 'ROLE: T2 lane for $PKG', 'Suites: flock /elsewhere/_1.0/.suite-lock npm test', '```', ''].join('\n'),
     );
   });
 
   test('a heading regex that matches nothing exits non-zero, names the regex and writes NO file', () => {
     const out = join(dir, 'render-miss.md');
 
-    const r = lanes(['render', src, '^## nope', out]);
+    const r = lanes(['render', src, '^## nope', out, '--campaign', camp]);
 
     assert.notEqual(r.status, 0, 'a miss is an error');
     assert.match(r.stderr, /\^## nope/, 'the failure names the regex that missed, so it can be fixed');
@@ -715,11 +717,54 @@ describe('lanes.sh render — a heading miss is an error, never a fallback', () 
   test('a hit prints the heading it matched, so the render can be checked before a launch', () => {
     const out = join(dir, 'render-hit.md');
 
-    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents']);
+    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents', '--campaign', camp]);
 
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /## 11\. M4-<pkg> — package lane/, 'the matched heading is printed');
-    assert.equal(readFileSync(out, 'utf8').trim(), 'ROLE: T2 lane for agents', 'the right block, with its parameters filled');
+    assert.equal(readFileSync(out, 'utf8').trim(), `ROLE: T2 lane for agents\nSuites: flock ${camp}/.suite-lock npm test`, 'the right block, with its parameters filled');
+  });
+
+  /**
+   * M7 findings row 70 (T1, 2026-09-19, ledger 1198/1201): `launch` refused a rendered prompt that
+   * lacked the literal `flock <campaign>/.suite-lock`, but `render` had written that prompt without
+   * a word — three M7 lanes bounced at launch. Render now enforces the SAME predicate, so a prompt
+   * `launch` would refuse is never written in the first place.
+   */
+  test('render with no --campaign is refused — the lock predicate is about ONE campaign — and writes nothing (row 70)', () => {
+    const out = join(dir, 'render-nocamp.md');
+
+    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents']);
+
+    assert.notEqual(r.status, 0, 'render cannot check the lock line without knowing which campaign it names');
+    assert.match(r.stderr, /--campaign/, 'the refusal names the missing flag');
+    assert.ok(!existsSync(out), 'and nothing is left on disk');
+  });
+
+  test('render of a block with no suite-lock line is refused, names the literal, and writes nothing (row 70)', () => {
+    const out = join(dir, 'render-nolock.md');
+
+    const r = lanes(['render', src, '^## 12\\. M4-', out, 'PKG=agents', '--campaign', camp]);
+
+    assert.notEqual(r.status, 0, 'a prompt launch would refuse is refused at render');
+    assert.ok(r.stderr.includes(`flock ${camp}/.suite-lock`), `the refusal quotes the literal it looked for; stderr=${r.stderr}`);
+    assert.ok(!existsSync(out), 'and nothing is left on disk to be launched');
+  });
+
+  test('another campaign\'s lock line does not satisfy this campaign — render and launch refuse the SAME prompt with the SAME words (row 70)', () => {
+    const out = join(dir, 'render-otherlock.md');
+
+    const r = lanes(['render', src, '^## 13\\. M4-', out, 'PKG=agents', '--campaign', camp]);
+
+    assert.notEqual(r.status, 0, 'the literal is per campaign, exactly as launch reads it');
+    assert.ok(!existsSync(out), 'nothing written');
+    // The same bytes, handed to launch, are refused by launch with the same predicate text: one rule, two doors.
+    const prompt = join(dir, 'otherlock-prompt.md');
+    writeFileSync(prompt, `ROLE: T2 lane for agents\nSuites: flock /elsewhere/_1.0/.suite-lock npm test\n`);
+    const l = lanes(['launch', camp, 'otherlock', prompt, '--cwd', dir, '--t1', 't1']);
+    assert.notEqual(l.status, 0);
+    const words = `does not contain the literal 'flock ${camp}/.suite-lock'`;
+    assert.ok(r.stderr.includes(words), `render says it: ${r.stderr}`);
+    assert.ok(l.stderr.includes(words), `launch says it: ${l.stderr}`);
   });
 });
 
