@@ -482,6 +482,93 @@ export function makeCycleTerminalDoor(forgeRoot) {
   };
 }
 
+/**
+ * How long the PAGE may lag the product after the cycle has finished.
+ *
+ * The beat asserts the LIVE card — S10's constants are explicit that it must
+ * not reload, navigate away and back, or press Retry, because any of those
+ * refresh the roadmap by hand and turn the beat green over a defect that is
+ * still there. So the cycle finishing does not end the BEAT; it ends the WAIT,
+ * and the page then has this long to show what the product already published.
+ *
+ * DECLARED, and small on purpose. `forge-8vfn.7.6.27` (#762) made the projects
+ * page subscribe to the bridge socket, so there is no polling cadence to absorb
+ * and delivery is a render away; before it landed, the page had no live refresh
+ * at all and no grace would have been enough. Tightenable from run 18's
+ * measurement — and unlike the bound it replaced, expiring here produces a
+ * PRODUCT finding rather than a timeout.
+ */
+export const TERMINAL_UI_GRACE_MS = 30_000;
+
+/**
+ * `makeCycleTerminalDoor` plus the one piece of state a caller would otherwise
+ * carry — `forge-8vfn.7.6.118`, T1 ruling 1089(c).
+ *
+ * WHY THE STATE IS HERE. `beats-page.mjs` stands at 768 lines against the 800
+ * cap. T1 1089: if the call site needs more than that headroom, SPLIT it at a
+ * function boundary, never squeeze. The third answer is not to put the fat
+ * there — `terminalAt` belongs beside the doors that produce it, and
+ * `waitForConsequence` gains a thin call instead of a state machine.
+ *
+ * TWO WAYS THIS ENDS A WAIT, and they are different findings:
+ *
+ *   `cycle-ended`          the product published a terminal state that is NOT
+ *                          the one the beat is waiting for. Nothing is coming;
+ *                          sitting out the rest of the bound would report a
+ *                          timeout about a decision already made.
+ *   `cycle-done-ui-stale`  the cycle reached the wanted state and the PAGE
+ *                          never caught up within the grace. The factory
+ *                          succeeded and the surface did not follow — 7.6.27's
+ *                          territory, and a sentence a reader can act on.
+ *
+ * Neither is "gave up at the agent wait", which is what run 17 printed about a
+ * cycle that had SUCCEEDED 116 seconds earlier, and which sent its first two
+ * readers looking for a stall that never happened.
+ *
+ * THE GRACE RUNS FROM THE SIGHTING, not from the wait's start: counted from the
+ * start it is merely a second deadline; counted from the moment the product
+ * published, it measures the page's lag and nothing else.
+ *
+ * INERT UNLESS THE BEAT ASKED. With no wanted state this returns null and no
+ * watch runs — the same scoping rule the stall door follows, so no beat gains a
+ * new way to fail by standing next to one that opted in.
+ *
+ * @returns {null | ((runId: string|null, sinceMs: number, now?: number) => null | {reason: string, detail: string})}
+ */
+export function makeCycleTerminalWatch(forgeRoot, wantState) {
+  if (typeof wantState !== 'string' || wantState === '') return null;
+  const door = makeCycleTerminalDoor(forgeRoot);
+  if (door === null) return null;
+  let terminalAt = null;
+  let terminalState = null;
+  return (runId, sinceMs, now = Date.now()) => {
+    if (terminalAt === null) {
+      const seen = door(runId, sinceMs, wantState);
+      // null = still open, or the check could not be run (§15.504). Either way
+      // the declared bound still governs and this says nothing.
+      if (seen === null) return null;
+      if (!seen.done) {
+        return {
+          reason: 'cycle-ended',
+          detail:
+            `the cycle ended in ${seen.state}, not ${wantState} — ${seen.detail}. ` +
+            `The product has already decided; the rest of the declared bound would be spent waiting for a state it ruled out.`,
+        };
+      }
+      terminalAt = now;
+      terminalState = seen.state;
+      return null;
+    }
+    if (now - terminalAt <= TERMINAL_UI_GRACE_MS) return null;
+    return {
+      reason: 'cycle-done-ui-stale',
+      detail:
+        `the cycle REACHED ${terminalState} ${Math.round((now - terminalAt) / 1000)}s ago and the page never showed it. ` +
+        `The factory succeeded and the surface did not follow, so this is a finding about the page's refresh, not about the cycle.`,
+    };
+  };
+}
+
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');

@@ -38,7 +38,9 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { makeCycleTerminalDoor, STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import {
+  makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
+} from './beats-agent-proc.mjs';
 
 function realDoor(): { root: string; logs: string; door: (runId: string | null, sinceMs: number, want: string) => { done: boolean; state: string; detail: string } | null } {
   const root = mkdtempSync(join(tmpdir(), 'story-cycle-terminal-'));
@@ -156,4 +158,95 @@ test('7.6.118: the door reports the state it found even when the beat wants some
   const seen = door(null, Date.now() - 60_000, 'ready-for-review');
   assert.equal(seen!.done, false);
   assert.equal(seen!.state, 'abandoned', 'the finding is the state, not merely the mismatch');
+});
+
+/**
+ * `makeCycleTerminalWatch` — the door above, plus the ONE piece of state the
+ * call site would otherwise have to carry.
+ *
+ * WHY THE STATE LIVES HERE AND NOT IN `beats-page.mjs`. That file is 768 lines
+ * against the 800 cap, and T1 1089 ruled: if the call site needs more than its
+ * headroom, SPLIT it at a function boundary — never squeeze. The third option
+ * is not to put the fat there at all. The watch keeps `terminalAt` beside the
+ * doors it belongs to and `waitForConsequence` gains a thin call.
+ *
+ * WHY A GRACE AT ALL, rather than passing the moment the cycle terminates. The
+ * beat asserts the LIVE CARD — `S10.constants.mjs` is explicit that it must not
+ * reload, navigate or press Retry, because any of those would refresh the page
+ * by hand and turn the beat green over a defect that is still there. So a
+ * finished cycle does not end the beat; it ends the WAIT, and the page then has
+ * a bounded, named window to show what the product already published. Passing
+ * on the terminal event alone would reproduce run 10's `plan-state` defect
+ * exactly — "the beat passed anyway" — one layer up.
+ *
+ * AND THE EXPIRY IS A DIFFERENT FINDING FROM A TIMEOUT. `cycle-done-ui-stale`
+ * says the cycle finished and the page never caught up, which is a PRODUCT
+ * finding about refresh (7.6.27's territory). Run 17 printed `gave up at the
+ * agent wait (declared 360000 ms)` for a cycle that had SUCCEEDED, and two
+ * readers concluded the product had stalled.
+ */
+test('7.6.118: the watch ends the wait when the cycle terminates WRONG, naming the state', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-watch-failed';
+  liveDispatch(logs, `_dev-2026-09-17T22-38-55_${initiative}`);
+  queueFile(root, 'failed', initiative);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+
+  const stop = watch(null, Date.now() - 300_000);
+  assert.notEqual(stop, null);
+  assert.equal(stop!.reason, 'cycle-ended');
+  assert.match(stop!.detail, /failed/, stop!.detail);
+});
+
+test('7.6.118: a cycle in the WANTED state does not stop the wait immediately — the card gets its grace', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-watch-ok';
+  liveDispatch(logs, `_dev-2026-09-17T22-38-55_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+
+  const t0 = Date.now();
+  assert.equal(watch(null, t0 - 476_000, t0), null, 'the loop keeps polling the page: the beat asserts the LIVE card');
+  assert.equal(watch(null, t0 - 476_000, t0 + TERMINAL_UI_GRACE_MS - 1), null, 'still inside the grace');
+});
+
+test('7.6.118: a card that never catches up is `cycle-done-ui-stale`, NOT a timeout', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-watch-stale';
+  liveDispatch(logs, `_dev-2026-09-17T22-38-55_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+
+  const t0 = Date.now();
+  watch(null, t0 - 476_000, t0);
+  const stop = watch(null, t0 - 476_000, t0 + TERMINAL_UI_GRACE_MS + 1);
+  assert.notEqual(stop, null, 'the wait must still end');
+  assert.equal(stop!.reason, 'cycle-done-ui-stale');
+  assert.match(stop!.detail, /ready-for-review/, 'and it says the cycle SUCCEEDED — the finding is the page, not the factory');
+});
+
+test('7.6.118: the grace is measured from the TERMINAL EVENT, not from the wait\'s start', () => {
+  // The distinction run 17 turned on. A grace counted from the wait's start is
+  // just a second deadline; counted from the moment the product published, it
+  // measures exactly the page's lag and nothing else.
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-watch-late';
+  liveDispatch(logs, `_dev-2026-09-17T22-38-55_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+
+  const t0 = Date.now();
+  // First sighting a long way into the wait — 20 minutes of watching an
+  // in-flight cycle costs the grace nothing.
+  assert.equal(watch(null, t0 - 1_200_000, t0 + 1_200_000), null);
+  assert.equal(watch(null, t0 - 1_200_000, t0 + 1_200_000 + TERMINAL_UI_GRACE_MS - 1), null, 'the grace starts at the sighting');
+  assert.notEqual(watch(null, t0 - 1_200_000, t0 + 1_200_000 + TERMINAL_UI_GRACE_MS + 1), null);
+});
+
+test('7.6.118: a watch with no wanted state is inert — no beat gains a new way to fail', () => {
+  const { root, logs } = realDoor();
+  liveDispatch(logs, '_dev-2026-09-17T22-38-55_INIT-no-want');
+  queueFile(root, 'failed', 'INIT-no-want');
+  assert.equal(makeCycleTerminalWatch(root, null), null, 'a beat that declared no terminal state is not watched at all');
+  assert.equal(makeCycleTerminalWatch(root, ''), null);
 });
