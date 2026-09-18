@@ -34,7 +34,7 @@ import {
 // re-exports for the modules and tests that already name it here.
 export { routeMatches };
 import {
-  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute, resolveBoundPresses } from './beats.mjs';
+  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute, resolveBoundPresses, resolveCycleOf } from './beats.mjs';
 // `performSteps` moved to `beats-steps.mjs` at the 800-line cap (ruling 492).
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
@@ -141,18 +141,38 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // Declared ONCE, read on both consumption paths, so the two cannot disagree
   // about which question this beat asked (7.6.143).
   const declaresTerminal = typeof rawBeat?.wait?.terminal === 'string' && rawBeat.wait.terminal !== '';
-  // `cycleOf` takes the same `<name>` bindings the route does — S10 binds the
-  // initiative at its open-initiative press, so the beat that watches the cycle
-  // can name it without the story hard-coding an id that only exists at run time.
-  // Unbound placeholders resolve to null rather than to the literal `<runId>`:
-  // a door asked about a cycle named `<runId>` would find nothing and report it
-  // as "no cycle", which is a true sentence about the wrong question.
-  const cycleOfRaw = rawBeat?.wait?.cycleOf ?? null;
-  const cycleOf = typeof cycleOfRaw === 'string'
-    ? cycleOfRaw.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) =>
-        (Object.hasOwn(bindings, name) ? bindings[name] : whole))
-    : null;
-  const cycleOfResolved = typeof cycleOf === 'string' && !cycleOf.includes('<') ? cycleOf : null;
+  // `cycleOf` takes the same `<name>` bindings the route does. 7.6.147, T1 1164:
+  // AN UNBOUND PLACEHOLDER REFUSES HERE, exactly as an unbound ROUTE segment does
+  // twenty lines above — and for the same reason, which the first version of this
+  // wiring missed.
+  //
+  // That version resolved an unbound placeholder to `null`, the same value it
+  // uses for "this beat declared no cycleOf", so the watch fell back to the
+  // born-after-the-anchor form. For a CONTINUED cycle that form finds nothing,
+  // and the beat then reded claiming no waiter consumed its bound — true, and
+  // not the reason. S10 run 21 paid $4.0917 for the distinction: beat 8 stalled,
+  // `stuckVerdict` exported no bindings BY DESIGN, and `<runId>` never resolved.
+  //
+  // **UNKNOWN never resolves toward proceeding (§15.504).**
+  const { value: cycleOfResolved, unbound: cycleOfUnbound } =
+    resolveCycleOf(rawBeat?.wait?.cycleOf, bindings);
+  if (cycleOfUnbound !== null) {
+    return Object.freeze({
+      act: rawBeat.act,
+      say: rawBeat.say,
+      status: 'red',
+      failures: Object.freeze([
+        `wait.cycleOf "${rawBeat.wait.cycleOf}" needs <${cycleOfUnbound}>, which no earlier beat bound — ` +
+          'so this beat cannot say WHICH cycle it is watching. A beat binds a placeholder by expecting ' +
+          '`<name>` for a data-* key the product mints, and an earlier beat that reds on a stall exports ' +
+          'no bindings on purpose. This is NOT "give the beat a `do` block": the declaration is fine and ' +
+          'its subject is missing. Resolving it to "no cycleOf" instead would fall back to watching for a ' +
+          'dispatch dir born after the press, which a CONTINUED cycle never mints (S10 run 21).',
+      ]),
+      bindings: Object.freeze({}),
+      data: {},
+    });
+  }
   const cycleWatch = typeof cycleWatchFor === 'function'
     ? cycleWatchFor(rawBeat?.wait?.terminal ?? null, cycleOfResolved)
     : null;

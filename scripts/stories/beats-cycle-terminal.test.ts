@@ -41,6 +41,7 @@ import { tmpdir } from 'node:os';
 import {
   makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
 } from './beats-agent-proc.mjs';
+import { resolveCycleOf } from './beats.mjs';
 
 function realDoor(): { root: string; logs: string; door: (runId: string | null, sinceMs: number, want: string) => { done: boolean; state: string; detail: string } | null } {
   const root = mkdtempSync(join(tmpdir(), 'story-cycle-terminal-'));
@@ -415,4 +416,55 @@ test('7.6.143: the watch reports that it never resolved a cycle (run 20 beat 10,
   const watched = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
   watched(null, Date.now() + 5_000);
   assert.equal(watched.sawCycle, true, 'resolved by identity, the same cycle IS seen');
+});
+
+/**
+ * `forge-8vfn.7.6.147` — AN UNBOUND `cycleOf` IS REPORTED, NEVER PAPERED OVER.
+ *
+ * Run 21's beat 10 declared `cycleOf: '<runId>'`. `runId` binds at beat 8's
+ * `expect.data`; beat 8 reded on a PM stall and `stuckVerdict` exports no
+ * bindings by design. The first wiring turned that into `null` — the same value
+ * it uses for "no cycleOf declared" — so the watch fell back to the
+ * born-after-the-anchor form and found nothing.
+ *
+ * The two cases MUST be distinguishable at the boundary, or the caller cannot
+ * refuse one and proceed on the other.
+ */
+test('7.6.147: an unbound cycleOf reports the placeholder rather than resolving to null', () => {
+  const { value, unbound } = resolveCycleOf('<runId>', {});
+  assert.equal(value, null, 'no value, because nothing bound it');
+  assert.equal(unbound, 'runId', 'and the caller is TOLD which placeholder — that is the whole difference');
+});
+
+test('7.6.147: a bound cycleOf resolves, and an absent one is not an error', () => {
+  assert.deepEqual(resolveCycleOf('<runId>', { runId: 'INIT-x' }), { value: 'INIT-x', unbound: null });
+  assert.deepEqual(resolveCycleOf(undefined, {}), { value: null, unbound: null },
+    'a beat that declares no cycleOf is not a beat whose cycleOf failed to bind');
+});
+
+/**
+ * 7.6.147 RED-AT-BASE ON RUN 21'S OWN BEAT (T1 ruling 1164).
+ *
+ * Not a hand-built object: S10's REAL beat 10, through the REAL validator,
+ * driven with the empty bindings a stalled beat 8 leaves behind. Run 21 reached
+ * exactly this state and reded with "NO WAITER CONSUMED IT — give the beat a
+ * `do` block", which is advice for a different failure: beat 10 has a `do`
+ * block, and what was missing was the SUBJECT of its wait.
+ *
+ * The prior wiring passed this state straight through (unbound -> null -> fall
+ * back to the anchor form), so this test fails against it.
+ */
+test('7.6.147: S10 beat 10 with no bindings REFUSES, naming the placeholder', async () => {
+  const story = await import('../../tests/stories/S10.story.mjs');
+  const { validateStory } = await import('./story-file.mjs');
+  const { driveBeat } = await import('./beats-drive.mjs');
+  const st = validateStory((story as any).story ?? (story as any).default) as any;
+
+  const v = await driveBeat(null, st.beats[9], 9, 'http://localhost:0', {});
+
+  assert.equal(v.status, 'red', 'a beat that cannot name the cycle it watches must not proceed (§15.504)');
+  assert.match(v.failures[0], /needs <runId>, which no earlier beat bound/);
+  assert.match(v.failures[0], /NOT "give the beat a `do` block"/,
+    'the remedy text must name THIS failure — run 21 was told to add a `do` block it already had');
+  assert.deepEqual(v.bindings, {}, 'a refusing beat exports no bindings, like stuckVerdict');
 });
