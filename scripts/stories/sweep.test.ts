@@ -29,7 +29,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
-import { applyFence, sweepStoryRemotes, starterAgentSlugs, describeFence, fenceBreaches, fixturePathsFor, parseGitPorcelain, productFixturePathsFor, sweepStoryResidue } from './sweep.mjs';
+import { applyFence, sweepStoryRemotes, starterAgentSlugs, describeFence, fenceBreaches, fixturePathsFor, parseGitPorcelain, productFixturePathsFor, sweepStoryResidue, sweepProductFixtures } from './sweep.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-'));
 const plant = (p) => {
@@ -656,4 +656,40 @@ test('7.6.24: an unstamped capture is REFUSED rather than defaulted', async () =
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+/**
+ * `forge-8vfn.7.6.146` — THE WIRING, not the function.
+ *
+ * `captureAndClearMintedRunArtefacts` has its own doors in `ground-clear.test.ts`.
+ * This asserts the run actually CALLS it with the ids the queue claim attributed
+ * — because a clear that exists and is never invoked clears nothing, which is
+ * §15.383's shape ("exporting a lock path is not taking the lock") applied to a
+ * sweep. Run 21 left all four of these with the mechanism absent; this proves
+ * the path from "claimed" to "cleared" is connected.
+ */
+test('7.6.146: sweepProductFixtures clears the artefacts of the initiative it claimed', () => {
+  const root = scratch();
+  const id = 'INIT-2026-09-18-exclude-author-filter';
+  const since = Date.now() - 60_000;
+
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'in-flight', `${id}.md`),
+    `---\ninitiative_id: ${id}\nproject: gitpulse\ncreated_at: '${new Date().toISOString()}'\n---\n\n# x\n`);
+  writeFileSync(join(root, '_queue', 'in-flight', `${id}.md.heartbeat`), 'beat');
+  mkdirSync(join(root, '_worktrees', id), { recursive: true });
+  mkdirSync(join(root, '_worktrees', 'wi', id), { recursive: true });
+  mkdirSync(join(root, '_logs', `2026-09-18T12-36-31_${id}`), { recursive: true });
+
+  const r = sweepProductFixtures('S10', root, {
+    sinceMs: since, groundProject: 'gitpulse', evidenceDir: join(root, '_evidence'),
+  }) as any;
+
+  assert.ok(r.claim.claimed.length >= 1, 'the manifest itself is claimed, as before');
+  assert.ok(!existsSync(join(root, '_queue', 'in-flight', `${id}.md.heartbeat`)), 'heartbeat cleared');
+  assert.ok(!existsSync(join(root, '_worktrees', id)), 'worktree cleared');
+  assert.ok(!existsSync(join(root, '_logs', `2026-09-18T12-36-31_${id}`)), 'cycle dir cleared');
+  assert.deepEqual(readdirSync(join(root, '_worktrees')), [],
+    'and the wi container is emptied — residue.sh gates on this count, so leaving it scores 1');
+  rmSync(root, { recursive: true, force: true });
 });
