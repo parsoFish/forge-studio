@@ -21,6 +21,14 @@
 # each checkout (§15.148).
 set -u
 
+# T1 ruling 1104 (D's finding). `merge-slot.sh` reads `GATE_SH_EXIT=<rc>` out of
+# the handed gate log to tell a REFUSAL (exit 3 with zero FAIL rows — a step
+# never ran, §15.92, unwaivable) from a green gate. Nothing here wrote that
+# line; one lane's private wrapper did, so for every other lane the check
+# could not fire. The verdict is written by the thing that reached it, on EVERY
+# exit path, as the LAST stdout line — never appended by a wrapper afterwards.
+trap 'echo "GATE_SH_EXIT=$?"' EXIT
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 die() { echo "gate.sh: $*" >&2; exit 2; }
 
@@ -134,6 +142,9 @@ suite_lock_state() {
 
 # `--lock-state`, answered by the ONE classifier above rather than a copy of it.
 if [ -n "$LOCK_STATE_F" ]; then
+  # A query verb answers a question on stdout that callers PARSE; it reaches no
+  # verdict, so it carries no verdict marker (1104: the marker is for gate runs).
+  trap - EXIT
   suite_lock_state "$LOCK_STATE_F"
   exit 0
 fi
@@ -216,6 +227,7 @@ if [ "$LIST" = 1 ]; then
       echo "RUN $cmd"
     fi
   done
+  trap - EXIT # --list is a query verb too: the step list is the whole answer
   exit 0
 fi
 
