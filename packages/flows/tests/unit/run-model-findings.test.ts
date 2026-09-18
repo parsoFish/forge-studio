@@ -41,7 +41,7 @@
  *     land in a numeric-typed `findings` summary.
  *
  *     Contrast: the journey fixture sugar `adversarialReviewEvent` in
- *     `scripts/journeys/lib/journey-fixtures.mjs:492-501` + its one call site
+ *     the retired journey harness's fixtures (deleted in 7.6.131) + its one call site
  *     `scripts/journeys/flows-run.mjs:816` only ever seeds the five COUNT
  *     fields (`{ total: 1, blocker: 0, major: 0, minor: 1, info: 0 }`) — the
  *     journey fixture is NOT fully faithful to the real producer (it never

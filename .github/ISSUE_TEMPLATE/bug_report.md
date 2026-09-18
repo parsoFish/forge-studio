@@ -11,7 +11,7 @@ labels: bug
 
 ## Failing gate / harness output
 
-<!-- Paste the relevant failure — `npm run build`, `npm test`, `npm run ui:journey`,
+<!-- Paste the relevant failure — `npm run build`, `npm test`, `npm run stories`,
      `npm run verify:cycle`, or a phase/cycle log excerpt. Include the command you ran. -->
 
 ```text

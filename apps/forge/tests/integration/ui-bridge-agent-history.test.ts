@@ -59,7 +59,7 @@
  *   - Session state: `<projectsRoot>/<project>/_<kind>/<sessionId>/status.json`
  *     (`{ phase, session_id, project, ... }`), cost in the SEPARATE log dir
  *     `_logs/_<kind>-<sessionId>/events.jsonl` — mirrors
- *     `scripts/lib/journey-fixtures.mjs`'s `archDir`/`writeStatus`/`archEvent`
+ *     the retired journey harness's fixtures (deleted in 7.6.131) — `archDir`/`writeStatus`/`archEvent`
  *     helpers verbatim (an already-shipped, already-used fixture shape, not
  *     invented for this file). `studio/session-kinds.yaml`'s `architect`
  *     descriptor names `legacyRoutes: [/architect/[sessionId], ...]` — the
@@ -317,7 +317,7 @@ function seedSuppressedMaterialsOnlyRun(runId: string, agentSlug: string): void 
   writeFileSync(join(dir, 'events.jsonl'), JSON.stringify(event) + '\n');
 }
 
-/** A real architect SESSION — mirrors `scripts/lib/journey-fixtures.mjs`'s
+/** A real architect SESSION — mirrors the retired journey harness's fixtures (deleted in 7.6.131),
  *  `archDir`/`writeStatus`/`archEvent` shape verbatim (an already-shipped
  *  fixture convention this repo's own journeys already use for architect
  *  interview sessions, not invented for this file). */

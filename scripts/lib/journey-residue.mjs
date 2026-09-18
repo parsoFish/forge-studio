@@ -139,8 +139,8 @@ export const DELIBERATELY_UNSWEPT_SLUGS = {
   'r4-12-ledger-nav':
     'COLLIDABLE and unnecessary. A real initiative titled "R4-12 Ledger Nav" slugifies to exactly ' +
     'this id (R4-12 is a live roadmap initiative), so sweeping it could delete real work. Leaving ' +
-    'it costs nothing: it is only ever written to _queue/done/ (scripts/journeys/stand-up-create.mjs:131), ' +
-    'and assertNoLiveDaemon only inspects pending/in-flight/flow-runs (journey-daemon-guard.mjs:54,63) — ' +
+    'it costs nothing: it was only ever written to _queue/done/ by the retired journey harness ' +
+    '(deleted in 7.6.131), and assertNoLiveDaemon only inspects pending/in-flight/flow-runs — ' +
     'so residue here can never block a later run, which is the whole failure this sweep exists to stop.',
 };
 

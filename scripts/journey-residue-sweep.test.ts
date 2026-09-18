@@ -3,11 +3,15 @@
  *
  * Two jobs, and the FIRST is the one that keeps this fix alive:
  *
- *  1. A RATCHET over the journey sources. `sweepJourneyResidue` recognises the
- *     harness's own residue by initiative-id SLUG, and an enumerated list rots
- *     the moment someone adds a fixture. This test scans every journey source
- *     for `INIT-…` fixture literals and FAILS if one is not covered — so a new
- *     fixture cannot silently reopen the leak this WI closed.
+ *  1. THE SOURCE RATCHET IS GONE (7.6.131). Three tests here scanned every
+ *     journey source for `INIT-…` fixture literals and failed if one was not
+ *     covered. The journey harness was retired and those sources no longer
+ *     exist, so the ratchet had no subject and went with them — a door that
+ *     scans a deleted tree passes vacuously, which is worse than absent.
+ *     `journey-residue.mjs` itself SURVIVES and is live: `scripts/stories/`
+ *     consumes it in `queue-claim.mjs` and `sweep.mjs`. Everything below doors
+ *     the module's OWN rules against temp-dir fixtures and is unaffected by the
+ *     retirement, which is why this file was rewritten rather than deleted.
  *
  *  2. CONTAINMENT + reach. The sweep runs before `assertNoLiveDaemon`, so if it
  *     ever removed a manifest it does not own it would be deleting an
@@ -16,7 +20,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -48,114 +52,6 @@ function makeRoot(): string {
 // ---------------------------------------------------------------------------
 
 describe('the sweep list cannot rot', () => {
-  test('every INIT-… fixture literal in the journey sources is covered by JOURNEY_INIT_SLUGS / JOURNEY_UNDATED_INITS', () => {
-    const journeysDir = join(SCRIPTS_DIR, 'journeys');
-    const sources = [
-      ...readdirSync(journeysDir).filter((f) => f.endsWith('.mjs')).map((f) => join(journeysDir, f)),
-      join(SCRIPTS_DIR, 'lib', 'journey-fixtures.mjs'),
-      // e2e-journey.mjs carries fixture literals of its own (the develop-trigger
-      // and studio-demo ids). Omitting the file that WIRES the sweep would let a
-      // literal added there escape the ratchet entirely — hostile-review finding.
-      join(SCRIPTS_DIR, 'e2e-journey.mjs'),
-    ];
-    assert.ok(sources.length > 10, `fixture precondition: expected to scan the real journey sources, found ${sources.length}`);
-
-    const missing: string[] = [];
-    let found = 0;
-    for (const file of sources) {
-      const src = readFileSync(file, 'utf8');
-      // `INIT-${SOME_DATE_CONST}-<slug>` — the dated fixture-id shape.
-      for (const m of src.matchAll(/`INIT-\$\{[A-Za-z_][A-Za-z0-9_]*\}-([a-z0-9][a-z0-9-]*)`/g)) {
-        found++;
-        if (!JOURNEY_INIT_SLUGS.includes(m[1]) && !(m[1] in DELIBERATELY_UNSWEPT_SLUGS)) {
-          missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: slug "${m[1]}"`);
-        }
-      }
-      // 'INIT-<something>' — an undated fixture id written as a plain literal.
-      for (const m of src.matchAll(/'(INIT-[a-z0-9][a-z0-9-]*)'/g)) {
-        found++;
-        if (!JOURNEY_UNDATED_INITS.includes(m[1])) missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: undated id "${m[1]}"`);
-      }
-    }
-
-    assert.ok(found >= 15, `fixture precondition: the scan must actually find fixture literals (found ${found}) — a regex that matches nothing would make this ratchet vacuously green`);
-    assert.deepEqual(
-      missing,
-      [],
-      `these journey fixture ids are neither swept nor explicitly excluded, so a killed run would leave them behind and assertNoLiveDaemon would refuse every later run — add the slug to JOURNEY_INIT_SLUGS (or, with a written reason, to DELIBERATELY_UNSWEPT_SLUGS) in scripts/lib/journey-residue.mjs:\n  ${missing.join('\n  ')}`,
-    );
-  });
-
-  test('RUNTIME ratchet: every INIT-bearing value EXPORTED by journey-fixtures.mjs is covered — catches ids built by concatenation, which no source regex can see', async () => {
-    // The source-scanning ratchet above only sees `INIT-${X}-slug` literals. It
-    // MISSED `AUTO_CYCLE_ID = `${CYCLE_ID}-automated`` (journey-fixtures.mjs:77),
-    // which is assembled at runtime — and that dir accumulated in _logs/ on
-    // every single run. Found from a real run's leftover residue, not by
-    // reading. Inspecting exported VALUES closes that whole class.
-    const fixtures = await import('./lib/journey-fixtures.mjs');
-    const uncovered: string[] = [];
-    let inspected = 0;
-    for (const [name, value] of Object.entries(fixtures)) {
-      if (typeof value !== 'string' || !value.includes('INIT-')) continue;
-      // Basename first (several exports are absolute _logs/ paths), then the
-      // `INIT-…` tail of a `<stamp>_INIT-…` cycle id.
-      const base = value.slice(value.lastIndexOf('/') + 1);
-      const id = base.slice(base.indexOf('INIT-'));
-      inspected++;
-      if (isJourneyOwnedLogDir(id) || isJourneyOwnedQueueFile(`${id}.md`)) continue;
-      const slug = id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '');
-      if (slug in DELIBERATELY_UNSWEPT_SLUGS) continue;
-      uncovered.push(`${name} = ${value}`);
-    }
-    assert.ok(inspected >= 10, `fixture precondition: the runtime scan must actually find exported ids (found ${inspected})`);
-    assert.deepEqual(uncovered, [],
-      `these ids are EXPORTED by journey-fixtures.mjs but are neither swept nor explicitly excluded — a killed run leaves them behind forever:\n  ${uncovered.join('\n  ')}`);
-  });
-
-  test('RATCHET: every `_agent-…` log-dir literal in the journey sources is swept — the INIT-shaped scans above cannot see this shape at all', () => {
-    // W8-F4, found by adversarial review. A journey fixture can seed a
-    // STANDALONE AGENT RUN, whose log dir is `_agent-<slug>-<stamp>` — the
-    // shape `collectRecentAgentRuns` reads. Neither ratchet above matches it
-    // (one scans `INIT-${X}-slug` template literals, the other inspects
-    // journey-fixtures.mjs's exported `INIT-`-bearing values), so the very
-    // first such fixture leaked one `_logs/` dir per killed run, and 16/16
-    // stayed green. Same class as the `AUTO_CYCLE_ID` concatenation bug this
-    // suite already learned from: a new SHAPE, not a new slug.
-    const journeysDir = join(SCRIPTS_DIR, 'journeys');
-    const sources = [
-      ...readdirSync(journeysDir).filter((f) => f.endsWith('.mjs')).map((f) => join(journeysDir, f)),
-      join(SCRIPTS_DIR, 'lib', 'journey-fixtures.mjs'),
-      join(SCRIPTS_DIR, 'e2e-journey.mjs'),
-    ];
-    const missing: string[] = [];
-    let found = 0;
-    for (const file of sources) {
-      const src = readFileSync(file, 'utf8');
-      // Both quoting styles, template placeholders resolved to a stand-in so a
-      // runtime-built id is judged on its SHAPE (prefix + suffix), which is
-      // exactly what ownership is declared by.
-      for (const m of src.matchAll(/[`'](_agent-[^`'\n]*)[`']/g)) {
-        const literal = m[1];
-        // Not fixture IDS: the bare glob in prose, and the `startsWith` PREFIX
-        // agents.mjs uses to sweep its own kickoff runs (it ends in `-`, so it
-        // is by construction not a complete directory name).
-        if (literal === '_agent-' || literal.includes('*') || literal.endsWith('-')) continue;
-        found++;
-        const resolved = literal
-          // the ownership token itself resolves to its real value; everything
-          // else becomes a stand-in, so the id is judged on SHAPE
-          .replaceAll('${JOURNEY_AGENT_RUN_SUFFIX}', JOURNEY_AGENT_RUN_SUFFIX)
-          .replace(/\$\{[^}]*\}/g, 'x');
-        if (!isJourneyOwnedLogDir(resolved)) {
-          missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: ${literal}`);
-        }
-      }
-    }
-    assert.ok(found >= 4, `fixture precondition: the scan must actually find _agent- fixture ids (found ${found}) — a regex that matches nothing would make this ratchet vacuously green`);
-    assert.deepEqual(missing, [],
-      `these journey-seeded standalone agent-run log dirs are not swept, so a killed run leaves them in _logs/ forever — end the id with JOURNEY_AGENT_RUN_SUFFIX, or add the exact id to JOURNEY_AGENT_RUN_IDS, in scripts/lib/journey-residue.mjs:\n  ${missing.join('\n  ')}`);
-  });
-
   test('a REAL standalone agent run is never swept — the suffix, not the `_agent-` prefix, is what declares ownership', () => {
     // The containment half. `_agent-<slug>-<ISO stamp>` is what a real
     // `forge agent dispatch` writes; sweeping one would delete an operator's
