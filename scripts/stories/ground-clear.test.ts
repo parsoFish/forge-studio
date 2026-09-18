@@ -29,19 +29,21 @@
  * list of allowed paths goes stale silently, a set derived from the run's own
  * evidence cannot.
  */
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, chmodSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, chmodSync, symlinkSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { groundManifest, classifyOwnGroundDrift, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { groundManifest, classifyOwnGroundDrift, groundIgnoreNoneForTests, mintedSessionPaths, mintedSessionDirNames } from './ground-hash.mjs';
 import { runnerSourceContaining } from './runner-source.mjs';
 import {
   groundClearDir,
   mintedSessionDirsToClear,
   captureAndClearMintedSessions,
   describeGroundClear,
+  captureAndClearMintedLogs,
+  describeLogsClear,
 } from './ground-clear.mjs';
 
 const SESSION = '2026-09-18T03-45-41-0b536f73';
@@ -479,4 +481,90 @@ test('7.6.123 WIRING: the runner actually calls the clear, with the classifier\'
     redBlock.indexOf('return 1;') < redBlock.indexOf('groundEscapes'),
     'the return must belong to THIS check and not to the next one down',
   );
+});
+
+/*
+ * `forge-8vfn.7.6.137` — the runner clears the `_logs` sessions IT minted.
+ *
+ * 7.6.123 did the GROUND half. The `_logs` half was never done, so every costed
+ * run left its own `_agent-*` behind and the NEXT run's §15.427 residue door
+ * refused on it. Measured, not supposed: S9 run 7's leavings blocked run 8, and
+ * run 8's blocked S3 run 3 — each time at $0, each time paid off by a hand
+ * capture-then-clear. The door was right every time; the cost was that nothing
+ * cleared up after itself.
+ *
+ * DERIVED FROM WHAT THIS RUN MINTED, NEVER FROM A `_*` PATTERN. A pattern would
+ * sweep `_logs/INIT-*` fixtures and any sibling's dirs; the before/after diff
+ * plus a session marker names only what appeared during this run.
+ */
+describe('7.6.137: the runner clears its own minted _logs sessions', () => {
+  test('mintedSessionDirNames names what appeared, by the SAME predicate as mintedSessionPaths', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'logs-clear-'));
+    const mk = (name: string, marker: string | null) => {
+      mkdirSync(join(dir, name), { recursive: true });
+      if (marker !== null) writeFileSync(join(dir, name, marker), '{}\n');
+    };
+    mk('_agent-onboarding-2026-09-18T01-02-03-abcd', 'events.jsonl');  // minted this run
+    mk('_authoring-2026-09-18T01-02-04-efgh', '.heartbeat');           // minted this run
+    mk('_bridge-2026-09-18T01-02-05-ijkl', null);                      // no marker: not a session
+    mk('INIT-2026-01-01-spawn-capture', 'events.jsonl');               // not `_<kind>-<id>`
+    mk('_agent-older-2026-09-01T00-00-00-zzzz', 'events.jsonl');       // present BEFORE
+
+    const before = ['_agent-older-2026-09-01T00-00-00-zzzz'];
+    const after = readdirSync(dir);
+    const names = mintedSessionDirNames(before, after, dir);
+    assert.deepEqual(names, [
+      '_agent-onboarding-2026-09-18T01-02-03-abcd',
+      '_authoring-2026-09-18T01-02-04-efgh',
+    ], 'only dirs that APPEARED and carry a session marker — never a pattern, never a pre-existing dir');
+
+    // The two forms must agree, because they are one fact in two shapes.
+    const paths = mintedSessionPaths(before, after, dir);
+    assert.equal(paths.length, names.length, 'the `_kind/id` and `_kind-id` forms must name the same set');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('capture-then-clear: captured first, removed second, confirmed by re-read', () => {
+    const root = mkdtempSync(join(tmpdir(), 'logs-clear-root-'));
+    const logsDir = join(root, '_logs');
+    mkdirSync(join(logsDir, '_agent-x-2026-09-18T01-02-03-abcd'), { recursive: true });
+    writeFileSync(join(logsDir, '_agent-x-2026-09-18T01-02-03-abcd', 'events.jsonl'), '{"a":1}\n');
+
+    const res = captureAndClearMintedLogs({
+      root, storyId: 'S3', runStamp: '2026-09-18T01-02-03Z',
+      mintedNames: ['_agent-x-2026-09-18T01-02-03-abcd'],
+    });
+    assert.deepEqual(res.captured, ['_agent-x-2026-09-18T01-02-03-abcd']);
+    assert.deepEqual(res.cleared, ['_agent-x-2026-09-18T01-02-03-abcd']);
+    assert.equal(existsSync(join(logsDir, '_agent-x-2026-09-18T01-02-03-abcd')), false, 'removed from _logs');
+    assert.equal(
+      readFileSync(join(res.dest!, '_agent-x-2026-09-18T01-02-03-abcd', 'events.jsonl'), 'utf8'), '{"a":1}\n',
+      'and its contents survive in the capture — a clear that loses the evidence is worse than no clear',
+    );
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('a name that is not shaped _<kind>-<id> is REFUSED, not removed', () => {
+    const root = mkdtempSync(join(tmpdir(), 'logs-clear-guard-'));
+    mkdirSync(join(root, '_logs'), { recursive: true });
+    mkdirSync(join(root, '_logs', 'INIT-fixture'), { recursive: true });
+    const res = captureAndClearMintedLogs({
+      root, storyId: 'S3', runStamp: 'x', mintedNames: ['INIT-fixture', '../escape', 'null'],
+    });
+    assert.deepEqual(res.cleared, [], 'nothing outside the shape is ever removed');
+    assert.equal(res.refused.length, 3);
+    assert.equal(existsSync(join(root, '_logs', 'INIT-fixture')), true, 'the fixture is still there');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test('zero minted renders as "no clear ran", never as "0 cleared"', () => {
+    // The IGNORED-BY-GROUND rule: an absent case and an empty one must not read
+    // the same way. A `0` from a directory that never existed once reached the
+    // ledger as a measurement.
+    const res = captureAndClearMintedLogs({ root: '/nonexistent', storyId: 'S3', runStamp: 'x', mintedNames: [] });
+    assert.equal(res.dest, null);
+    assert.deepEqual(res.captured, []);
+    const lines = describeLogsClear(res);
+    assert.match(lines.join('\n'), /minted no session/);
+  });
 });

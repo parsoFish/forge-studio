@@ -51,6 +51,7 @@ import {
   describeGroundEscapes,
   ownGroundManifest,
   mintedSessionPaths,
+  mintedSessionDirNames,
   mintedSessionWrites,
   classifyOwnGroundDrift,
   groundChanges,
@@ -58,7 +59,7 @@ import {
   seedIgnoredBorn,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
-import { captureAndClearMintedSessions, describeGroundClear } from './ground-clear.mjs';
+import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -523,6 +524,21 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   if (spendHalt !== null) {
     console.error(`[stories] ${story.id}: RED — ${spendHalt.reason}. ${spendHalt.note}`);
   }
+  // `forge-8vfn.7.6.137` — THE `_logs` HALF, and it runs for EVERY story, not
+  // only one with a ground: a costless story mints sessions too, and its
+  // leavings refuse the next run's residue door just as surely.
+  //
+  // Measured cost of not doing this: S9 run 7's `_agent-*` blocked run 8, and
+  // run 8's blocked S3 run 3. Both refusals were correct and cost $0 — and both
+  // were paid off by a hand capture-then-clear the product never did.
+  const mintedLogNames = mintedSessionDirNames(
+    logsBefore,
+    readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
+    logsDir,
+  );
+  const logsClear = captureAndClearMintedLogs({ root: ROOT, storyId: story.id, runStamp, mintedNames: mintedLogNames });
+  for (const line of describeLogsClear(logsClear)) console.log(`[stories] ${line}`);
+
   console.log(`[stories]   clip  ${join('demos', 'stories', story.id, 'story.webm')}`);
   console.log(`[stories]   doc   ${docPath.replace(`${ROOT}/`, '')}`);
 
