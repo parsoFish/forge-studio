@@ -451,3 +451,24 @@ test('7.6.139: measuring-then-passing DOES pass — which is why the text matter
   );
   assert.equal(v.ok, true, 'self-comparison passes by construction — the check cannot catch this, only the text can');
 });
+
+/**
+ * M7-D — a COSTED story whose ground is a FIXTURE needs no declared pin at
+ * all. The whole reason 7.6.139 requires one is that a REAL ground drifts:
+ * nothing enforces that `projects/gitpulse` is in the state a story's premise
+ * assumes, so a caller has to declare and the product has to check. A fixture
+ * ground is provisioned fresh from a tracked seed every run
+ * (`tests/stories/grounds/<fixture>/seed/`) and torn down after — it cannot
+ * drift between runs because nothing of it survives between them. Requiring
+ * `FORGE_GROUND_PIN` for one would ask an operator to pin a hash that is by
+ * construction always the seed's own, which is the tautology 7.6.139's own
+ * later test (above) already refuses to teach.
+ */
+test('M7-D: a costed FIXTURE ground needs no declared pin, and says why', () => {
+  const v = groundPinVerdict(
+    { project: 'story-s8', fixture: 'node-library', realSpawn: true, budget_usd: 25 },
+    { declaredPin: undefined, measured: 'anything' },
+  );
+  assert.equal(v.ok, true, v.reason);
+  assert.match(v.reason, /tests\/stories\/grounds\/node-library\/seed/, v.reason);
+});
