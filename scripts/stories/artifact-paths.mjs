@@ -224,3 +224,91 @@ export function portableReapEntries(entries, root) {
     };
   });
 }
+
+/**
+ * Make the sweep ledger's paths portable — `forge-8vfn.7.6.127`, the third seam.
+ *
+ * After 7.6.125 the committed S2 artifact is STILL unwritable:
+ * `portableArtifact` throws on `sweep.removed[0..1]`.
+ *
+ * THE SHAPE PROBLEM IS DIFFERENT HERE. `sweep.removed` is a `string[]`, so
+ * there is no sibling field to carry a root the way `fence.escapes[].root` and
+ * `reap.*[].dirRoot` do. Naming the frame per element would mean concatenating
+ * basename and remainder into one string — the two-frames-in-one-field defect
+ * caught on review of 7.6.120. So the frame is named ONCE FOR THE ARRAY and
+ * each element stays a single frame.
+ *
+ * THAT SHAPE CANNOT EXPRESS TWO DIFFERENT FOREIGN ROOTS, and it does not
+ * pretend to: the mixed case is left ABSOLUTE for `portableArtifact` to refuse.
+ * A schema that cannot say the true thing must not be made to say a convenient
+ * one. Every artifact today has at most one foreign sweep root, so this refuses
+ * nothing that currently writes.
+ *
+ * `claim.claimed[]` holds OBJECTS, so it takes 7.6.125's per-element frame
+ * (`pathRoot` / `pathRootKind`) unchanged.
+ *
+ * `lines` and `claim.lines` are PROSE. `relativiseToRoot` already removes the
+ * run's own root from inside them; a foreign root in prose is left alone and
+ * refuses, which is the safe direction and is why this does not touch them.
+ */
+export function portableSweepPaths(sweep, root) {
+  if (!sweep || typeof sweep !== 'object') return sweep;
+  const rootSlash = root.endsWith(sep) ? root : `${root}${sep}`;
+  // A SIBLING SHARES THE RUN ROOT'S PARENT. Deriving the foreign root that way
+  // rather than by counting path segments: segment counting encodes where this
+  // box happens to keep its checkouts, and would read `/home/parso` as the root
+  // on this machine and something else on another.
+  const parent = root.slice(0, root.lastIndexOf(sep));
+  const parentSlash = `${parent}${sep}`;
+  /** The sibling worktree root of an absolute foreign path, or null if it is
+   *  not a sibling at all — in which case it stays absolute and is refused. */
+  const siblingRootOf = (p) => {
+    if (typeof p !== 'string' || !p.startsWith(parentSlash)) return null;
+    const rest = p.slice(parentSlash.length);
+    const cut = rest.indexOf(sep);
+    return cut === -1 ? null : `${parentSlash}${rest.slice(0, cut)}`;
+  };
+  const out = { ...sweep };
+
+  if (Array.isArray(sweep.removed)) {
+    const own = sweep.removed.map((p) =>
+      (typeof p === 'string' && p.startsWith(rootSlash)) ? p.slice(rootSlash.length) : p);
+    const foreign = own.filter((p) => typeof p === 'string' && p.startsWith('/'));
+    if (foreign.length === 0) {
+      out.removed = own;
+    } else {
+      // Every foreign element must share ONE root, or the array's single frame
+      // would describe only some of them.
+      const roots = new Set(foreign.map(siblingRootOf));
+      if (roots.size === 1 && !roots.has(null)) {
+        const [r] = [...roots];
+        out.removed = own.map((p) =>
+          (typeof p === 'string' && p.startsWith(`${r}${sep}`)) ? p.slice(r.length + 1) : p);
+        out.removedRoot = r.split(sep).filter(Boolean).pop();
+        out.removedRootKind = 'sibling-basename';
+      } else {
+        out.removed = sweep.removed;   // unrepresentable in one frame: leave for the refusal
+      }
+    }
+  }
+
+  if (sweep.claim && typeof sweep.claim === 'object' && Array.isArray(sweep.claim.claimed)) {
+    out.claim = {
+      ...sweep.claim,
+      claimed: sweep.claim.claimed.map((c) => {
+        if (!c || typeof c !== 'object' || typeof c.path !== 'string') return c;
+        if (!c.path.startsWith('/')) return c;
+        if (c.path.startsWith(rootSlash)) return { ...c, path: c.path.slice(rootSlash.length) };
+        const r = siblingRootOf(c.path);
+        if (r === null) return c;                       // not a sibling: refuse, never guess
+        return {
+          ...c,
+          path: c.path.slice(r.length + 1),
+          pathRoot: r.split(sep).filter(Boolean).pop(),
+          pathRootKind: 'sibling-basename',
+        };
+      }),
+    };
+  }
+  return out;
+}

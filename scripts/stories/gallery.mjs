@@ -18,7 +18,14 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { portableArtifact, portableFenceEscapes, portableReapEntries } from './artifact-paths.mjs';
+
+/** git's `-z` record separator. NAMED, and written as a unicode escape:
+ *  a bare `\0` in this position was turned into a RAW NUL BYTE by an editing
+ *  layer above the file, which `node --check` accepted and which then made
+ *  every ignore-aware grep skip this file as binary. The name also says what
+ *  it is at the use site, which the escape never did. */
+const NUL = '\u0000';
+import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -111,6 +118,13 @@ export function writeStoryJson(result, root) {
       if (Array.isArray(reap[k])) reap[k] = portableReapEntries(reap[k], root);
     }
     portable = { ...portable, reap };
+  }
+  // 7.6.127, the third seam: `sweep.removed` is a string[] so its frame is named
+  // once for the array; `claim.claimed[].path` is an object and takes the
+  // per-element frame. Two different foreign roots cannot be said in one frame,
+  // so that case stays absolute and the refusal below catches it.
+  if (portable.sweep && typeof portable.sweep === 'object') {
+    portable = { ...portable, sweep: portableSweepPaths(portable.sweep, root) };
   }
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;
@@ -281,7 +295,32 @@ export function untrackedGalleryTargets(root, entryIds) {
  * check under `npm test` is the other half and the one that catches it after
  * the fact.
  */
-export function regenerateGallery(root, wroteThisRun = []) {
+/**
+ * The rows the index is DERIVED from: one per `demos/stories/<id>/story.json`
+ * present in the tree, through `storyRowFrom`.
+ *
+ * EXTRACTED SO A CHECK CAN USE THE GENERATOR'S OWN DERIVATION —
+ * `forge-8vfn.7.6.128`. `demos/stories/index.html` on main called S9 `red 4/14`
+ * while `demos/stories/S9/story.json` said `green 16/16`: the triple landed
+ * without the fan-in index. Nothing caught it, because the index is matched by
+ * no manifest — M6-C dropped that pin on the argument that a fan-in artifact's
+ * change rate is the SUM of its inputs', so pinning it charges a stranding for
+ * every legitimate input change forever — and amendment 56 named the residual
+ * at the time: "Nothing asserts the committed index is what the generator would
+ * produce from the CURRENT inputs. 'Regenerate and compare' does not exist as a
+ * door."
+ *
+ * It exists now, and it has to run on THIS walk rather than a second copy of
+ * it. A check that re-implemented the readdir would drift from the generator
+ * and then assert its own copy — the two-notions-of-one-thing shape `handleFor`
+ * exists to prevent, and the reason this is an extraction rather than a new
+ * function beside the old one.
+ *
+ * @param {string} root
+ * @returns {{rows: object[], ids: string[]}} rows in DISCOVERY order; the
+ *   render sorts by id itself, so callers never depend on this order.
+ */
+export function galleryRowsFrom(root) {
   const base = join(root, 'demos', 'stories');
   const rows = [];
   const ids = [];
@@ -294,6 +333,102 @@ export function regenerateGallery(root, wroteThisRun = []) {
       ids.push(entry.name);
     }
   }
+  return { rows, ids };
+}
+
+/**
+ * The rows the COMMITTED index must agree with: one per `story.json` that git
+ * tracks, read from HEAD rather than from the working tree.
+ *
+ * BOTH SIDES COME FROM GIT, and that is the whole design — `forge-8vfn.7.6.128`,
+ * after M6-C pointed out the half I had got wrong. The claim is about what is ON
+ * MAIN: the committed index contradicted its own committed input for S9. A run
+ * in progress must not be able to change the answer, and it could have done so
+ * in BOTH directions:
+ *
+ *   INPUT SIDE    a live run writes `demos/stories/S10/story.json` UNTRACKED. A
+ *                 disk walk sees it, the committed index has no S10 card, and
+ *                 the check reds on every in-flight run. A refusal that fires
+ *                 every time is one that gets routed around within the hour.
+ *   INDEX SIDE    that same run then REGENERATES `index.html` on disk, so
+ *                 filtering only the inputs would compare a fresh index against
+ *                 committed inputs and red just as falsely, the other way.
+ *
+ * Reading both sides from HEAD makes an in-flight run invisible here, which is
+ * correct: a story whose artifact is not committed is not something the
+ * committed index can be expected to list, and a story that was DISCARDED —
+ * run 18's S10 was, under T1's ruling, because a tutorial documenting a failure
+ * is not a tutorial — has no tracked artifact and no card, which is agreement
+ * rather than a fault. "Absent" and "wrong" are different findings.
+ *
+ * THE DERIVATION IS STILL SHARED with the generator: `storyRowFrom` here and
+ * `renderGalleryIndex` at the call site are the same functions
+ * `regenerateGallery` uses. Only the FILE SOURCE differs, deliberately, because
+ * the generator's question is "what should the index say now" and this one's is
+ * "does what we committed agree with itself".
+ *
+ * IT REFUSES RATHER THAN FAILING OPEN in both git calls. A failed read is not a
+ * state, and "git did not answer" resolving to "nothing is tracked" would report
+ * a repo with no committed stories as perfectly self-consistent.
+ *
+ * @param {string} root
+ * @returns {{rows: object[], ids: string[]}}
+ */
+export function committedGalleryRows(root) {
+  const ls = spawnSync('git', ['-C', root, 'ls-files', '-z', '--', 'demos/stories/*/story.json'], {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (ls.error !== undefined) {
+    throw new Error(
+      `committedGalleryRows: could not run git ls-files in ${root} — ${ls.error.message}. ` +
+      'Refusing: treating a failed read as "nothing is tracked" would report any repo as agreeing.',
+    );
+  }
+  if (ls.status !== 0) {
+    throw new Error(
+      `committedGalleryRows: git ls-files exited ${ls.status} in ${root} ` +
+      `(128 means it is not a git repository)${ls.stderr ? ` — ${String(ls.stderr).trim()}` : ''}.`,
+    );
+  }
+  const rows = [];
+  const ids = [];
+  for (const rel of ls.stdout.split(NUL)) {
+    if (rel === '') continue;
+    const show = spawnSync('git', ['-C', root, 'show', `HEAD:${rel}`], {
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    // A path git TRACKS but HEAD does not carry is a file added to the index and
+    // not yet committed. It is not part of the committed state, so it is not
+    // this check's subject — skipped, not refused.
+    if (show.error === undefined && show.status === 0) {
+      rows.push(storyRowFrom(JSON.parse(show.stdout)));
+      ids.push(rel.split('/')[2]);
+    }
+  }
+  return { rows, ids };
+}
+
+/**
+ * The COMMITTED index, read from HEAD for the same reason its inputs are.
+ * `null` when HEAD carries no index at all — which the caller must treat as a
+ * finding and never as agreement.
+ */
+export function committedGalleryIndex(root) {
+  const show = spawnSync('git', ['-C', root, 'show', 'HEAD:demos/stories/index.html'], {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (show.error !== undefined) {
+    throw new Error(`committedGalleryIndex: could not run git show in ${root} — ${show.error.message}.`);
+  }
+  return show.status === 0 ? show.stdout : null;
+}
+
+export function regenerateGallery(root, wroteThisRun = []) {
+  const base = join(root, 'demos', 'stories');
+  const { rows, ids } = galleryRowsFrom(root);
 
   const exempt = new Set(wroteThisRun);
   const stale = untrackedGalleryTargets(root, ids.filter((id) => !exempt.has(id)));
