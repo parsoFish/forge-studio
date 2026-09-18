@@ -795,3 +795,62 @@ jobs:
     assert.doesNotMatch(lock.out, /GATE_SH_EXIT=/, `--lock-state must stay a one-word answer: ${JSON.stringify(lock.out)}`);
   });
 });
+
+describe('gate.sh — a verdict is about the tree the gate STARTED on (§15.540 as an assertion, forge-8vfn.7.6.129)', () => {
+  // Two lanes voided their own gates in one day by editing under a running
+  // suite: the suite spanned the edit and reported green about a tree that
+  // exists in no commit. "Do not edit during a gate" was a rule; this makes
+  // the gate assert it. HEAD and a HASH of the porcelain are pinned after the
+  // header and re-read before the verdict — hashed, never counted, because an
+  // edit that swaps one dirty file for another keeps the count.
+  const SELF_EDITING_CI = `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A step that edits the tree it is judging
+        run: touch moved-under-the-gate.txt
+`;
+  const QUIET_CI = `name: CI
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A step that touches nothing
+        run: "true"
+`;
+  function gitTree(ci: string) {
+    const d = tree(ci);
+    installedInPlace(d);
+    spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: d });
+    spawnSync('git', ['-c', 'user.email=t@x.invalid', '-c', 'user.name=t', 'add', '-A'], { cwd: d });
+    spawnSync('git', ['-c', 'user.email=t@x.invalid', '-c', 'user.name=t', 'commit', '-qm', 'base'], { cwd: d });
+    spawnSync('git', ['update-ref', 'refs/remotes/parsoFish/main', 'HEAD'], { cwd: d });
+    return d;
+  }
+
+  test('7.6.129: a tree that moved under its own gate is refused GATE_TREE_MOVED — rc 3, not the steps\' verdict', () => {
+    const d = gitTree(SELF_EDITING_CI);
+    const r = gate(d);
+    assert.equal(r.status, 3, `rc: ${r.status}\n${r.out}${r.err}`);
+    assert.match(r.out, /GATE_TREE_MOVED/, r.out);
+    assert.match(r.out, /porcelain/, 'it names WHAT moved');
+  });
+
+  test('7.6.129: a tree that is not a git work tree is NAMED unpinned, never refused for movement (§15.92: a failed read is named, not an outage)', () => {
+    const d = tree(QUIET_CI);
+    installedInPlace(d);
+    const r = gate(d);
+    assert.match(r.out, /GATE_TREE_UNPINNED/, r.out);
+    assert.doesNotMatch(r.out, /GATE_TREE_MOVED|GATE_TREE_UNREADABLE/, r.out);
+  });
+
+  test('7.6.129 CONTROL: a tree that did not move is not refused for movement', () => {
+    const d = gitTree(QUIET_CI);
+    const r = gate(d);
+    assert.doesNotMatch(r.out, /GATE_TREE_MOVED/, r.out);
+    assert.match(r.out, /GATE_TREE_PINNED/, 'the pin is printed so a reader can see what the verdict is about');
+  });
+});
