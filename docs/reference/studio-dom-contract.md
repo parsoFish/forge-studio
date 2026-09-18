@@ -3030,6 +3030,19 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="plan-initiative"]` button plus a blocked-until-planned lock
   badge (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
+  **`forge-8vfn.7.6.132`: `planned` is no longer the only state that renders that
+  control.** A manifest parked in `_queue/ready-for-review/` under a DIFFERENT
+  flow is the architect hand-off — `enqueueFlowRun` has always claimed it
+  ("forge-architect finalised with no review node", its own words) — and the card
+  now offers **Start development** for it. The gate is `isRunnableSource` from
+  `@forge/flows/runnable-source.ts`, the ONE rule the server implements, COMPOSED
+  with this card's own `ready && planned` dependency/decomposition gates rather
+  than replaced by them. A `ready-for-review` manifest of the SAME flow is a
+  parked sibling and is still NOT offered; one carrying no `flow_id` is not
+  offered either, because an unreadable flow must never read as a different one
+  (§15.504). The verb is unchanged — pressing it IS the operator's act after the
+  plan gate. Measured on S10 run 19, where the control was absent for a
+  `flow_id: forge-architect` manifest the server would have claimed;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` — **W7-A3
   (projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
   [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start][data-run-id]` line
