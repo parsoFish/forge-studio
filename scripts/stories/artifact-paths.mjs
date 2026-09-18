@@ -28,6 +28,8 @@
  * of keys cannot cover.
  */
 
+import { sep } from 'node:path';
+
 /** Strings that name a place on the machine that ran the story. Deliberately
  *  NOT "starts with a slash": `/api/health` and `/projects/mdtoc` are routes,
  *  and a guard that refused those would be refusing the artifact's own subject.
@@ -86,4 +88,66 @@ export function portableArtifact(value, root) {
     );
   }
   return out;
+}
+
+/**
+ * Make the ATTRIBUTED sibling-worktree escapes portable — `forge-8vfn.7.6.120`,
+ * T1 ruling 1093a.
+ *
+ * `siblingWorktreeEscapes` reports growth in a tree somebody else is working in
+ * as not-red (ruling 340), then writes `root` and `live.cwd` absolute, and
+ * `MACHINE_ROOTS` refuses the artifact. So a green costed run wrote NOTHING
+ * whenever a neighbour touched one file: S9 run 7 went 16/16 for $0.4567 and
+ * produced no artifact, naming `/home/parso/forge-m6-c`.
+ *
+ * WHY HERE AND NOT IN `siblingWorktreeEscapes`. The run LOG must keep the full
+ * paths — `describeFence` prints from that structure, and it is the operator's
+ * only full-fidelity record of who was in which tree. Stripping at source would
+ * destroy the log to fix the artifact. So this runs at artifact assembly, AFTER
+ * logging, and `portableArtifact` stays untouched as the backstop: if this
+ * function ever misses a field the artifact still REFUSES rather than shipping a
+ * machine path.
+ *
+ * AN UNATTRIBUTED ESCAPE IS LEFT EXACTLY AS IT IS. `live === null` is what
+ * `unownedEscapes` filters on to end the run. Tidying those would let a real
+ * containment breach serialise portably and ship — the failure mode of this
+ * whole change, and the reason the test for it is the one that matters.
+ */
+export function portableFenceEscapes(escapes) {
+  if (!Array.isArray(escapes)) return escapes;
+  return escapes.map((e) => {
+    // Unattributed: untouched, on purpose. It must still reach the refusal.
+    if (!e || typeof e !== 'object' || e.live == null) return e;
+
+    // REFUSE TO TRANSFORM WHAT WE CANNOT READ, rather than emitting an empty
+    // string. `root: ""` would sail through `machinePathsIn` — portable-looking
+    // and naming no sibling at all: a record that reconciles perfectly because
+    // it is empty. Left untouched, a malformed escape reaches the backstop
+    // instead, which is the direction an unreadable input must always resolve
+    // (§15.504). Not reachable from `readlinkSync` today; this is about which
+    // way it fails if it ever is.
+    const root = typeof e.root === 'string' ? e.root : '';
+    const base = root.split(sep).filter(Boolean).pop() ?? '';
+    if (root === '' || base === '' || typeof e.live.cwd !== 'string') return e;
+
+    // `liveProcessRoots` matches by PREFIX, so a cwd BELOW the sibling root is
+    // the normal case. Keep the remainder: "somebody was working in
+    // scripts/stories of that tree" is a stronger finding than "in that tree",
+    // and collapsing it would be a true statement that loses information.
+    const cwdAbs = e.live.cwd;
+    let cwdRel = '.';
+    if (cwdAbs !== root) {
+      cwdRel = cwdAbs.startsWith(`${root}${sep}`) ? cwdAbs.slice(root.length + 1) : cwdAbs;
+    }
+
+    return {
+      ...e,
+      root: base,
+      // ONE FRAME PER FIELD. A bare `forge-m6-c` is otherwise indistinguishable
+      // from a path relative to the RUN root; naming the frame beats a
+      // convention someone downstream has to remember.
+      rootKind: 'sibling-basename',
+      live: { ...e.live, cwd: cwdRel, cwdKind: 'relative-to-sibling-root' },
+    };
+  });
 }
