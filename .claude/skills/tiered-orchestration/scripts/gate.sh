@@ -252,6 +252,31 @@ echo "kernel link: ${link:-<none>}"
 # dependency satisfied on `main` is not a dependency satisfied in the tree that
 # RUNS. So the tree that runs names itself, in the header, before any step.
 echo "GATE_CHECKOUT=$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
+
+# THE TREE IS PINNED HERE AND RE-READ BEFORE THE VERDICT (forge-8vfn.7.6.129,
+# T1 1118; D's `tree-pin.sh` is the reference). Two lanes voided their own gates
+# in one day by editing a file while the suite ran: the suite spanned the edit
+# and reported green about a tree that exists in no commit, and only a wrapper's
+# porcelain-0 guard on PR creation stopped it becoming a merge. §15.540 was a
+# rule; this is the assertion. HEAD plus a HASH of the porcelain — hashed, never
+# counted, because an edit that swaps one dirty file for another keeps the count.
+# `git status` runs IN the tree so the porcelain is about that tree's index.
+tree_pin() {
+  local h p
+  h=$(git -C "$R" rev-parse HEAD 2>/dev/null) || return 1
+  p=$( (cd "$R" && git status --porcelain 2>/dev/null) | sha256sum | cut -c1-16) || return 1
+  printf '%s %s' "$h" "$p"
+}
+# A FAILED OR ABSENT READ IS NAMED, NOT SILENTLY SKIPPED (§15.92, line 13): a
+# tree that is not a git work tree cannot be pinned, and the log SAYS so; a git
+# work tree whose HEAD or porcelain cannot be read is UNKNOWN and refuses.
+if git -C "$R" rev-parse --git-dir >/dev/null 2>&1; then
+  PIN0=$(tree_pin) || { echo "GATE_TREE_UNREADABLE: cannot read $R's HEAD or porcelain — an unreadable tree is not an unchanged one (§15.504)"; exit 3; }
+  echo "GATE_TREE_PINNED head=${PIN0%% *} porcelain=${PIN0##* }"
+else
+  PIN0=""
+  echo "GATE_TREE_UNPINNED: $R is not a git work tree — movement under this gate is not checked, so this log does not say whether its tree held still"
+fi
 case "$link" in
   "$R"/*) ;;
   *) echo "BORROWED node_modules — this tree is running another tree's install; verdict void (§15.13)"; exit 2 ;;
@@ -666,6 +691,18 @@ fi
 # appears only when non-zero cannot be told from one nobody took.
 if [ -n "${sibling_stale_n:-}" ]; then
   echo "PIN_SIBLING_STALE_COUNT=$sibling_stale_n"
+fi
+# THE TREE THAT REACHED THE VERDICT MUST BE THE TREE THAT STARTED (7.6.129). A
+# moved tree makes every line above a claim about something nobody has; it
+# outranks a red, because a red about the wrong tree is not even a red.
+if [ -n "$PIN0" ]; then
+  PIN1=$(tree_pin) || { echo "GATE_TREE_UNREADABLE: cannot re-read $R before the verdict — UNKNOWN, not a verdict"; exit 3; }
+else
+  PIN1="$PIN0"
+fi
+if [ "$PIN1" != "$PIN0" ]; then
+  echo "GATE_TREE_MOVED: head ${PIN0%% *} -> ${PIN1%% *}, porcelain ${PIN0##* } -> ${PIN1##* } — the tree changed while this gate ran (§15.540), so every verdict above is about a tree that no longer exists. UNKNOWN, not red: commit or revert, then re-gate."
+  exit 3
 fi
 # A real failure outranks a refusal: a gate that both lost a step AND was
 # refused another is red, not "try again later".
