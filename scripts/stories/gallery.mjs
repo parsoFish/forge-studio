@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { portableArtifact } from './artifact-paths.mjs';
+import { portableArtifact, portableFenceEscapes } from './artifact-paths.mjs';
 
 /** Derive one index row from a completed run result. */
 export function storyRowFrom(result) {
@@ -91,7 +91,16 @@ export function writeStoryJson(result, root) {
   // committed file. One seam, because this is the only place the artifact is
   // serialised; a guard on the three emitters that leak today would pass the
   // fourth silently.
-  writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(result, root), null, 2)}\n`);
+  // 7.6.120: an ATTRIBUTED sibling escape is made portable HERE — after
+  // `describeFence` has already printed the full absolute paths to the run log,
+  // which stays the operator's full-fidelity record of who was in which tree.
+  // An UNATTRIBUTED escape is deliberately left absolute so it still hits the
+  // throw below: that is how a containment breach is stopped from reaching a
+  // committed file, and it must not be tidied into portability.
+  const portable = result.fence?.escapes
+    ? { ...result, fence: { ...result.fence, escapes: portableFenceEscapes(result.fence.escapes) } }
+    : result;
+  writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;
 }
 
