@@ -336,3 +336,83 @@ test('7.6.124: once a dispatch IS born since the anchor, the SAME queue row does
 });
 
 
+
+/**
+ * `forge-8vfn.7.6.143` (a), T1 ruling 1147 — RUN 20'S SHAPE.
+ *
+ * MEASURED, not imagined. S10 run 20:
+ *   cycle dir birth            20:21:58.902   (ONE dir, shared by all phases)
+ *   beat 10 press / anchor     20:26:22.301   (3.4 min LATER)
+ *   beat 10 verdict GREEN      20:26:22.532   (231 ms for a 30-MINUTE wait)
+ *   dispatch dirs born at/after the anchor:  NONE
+ *
+ * The develop station runs INSIDE the cycle dir minted at architect time —
+ * DEC-2 threads the same `cycle_id` through the kickoff on purpose — so
+ * `newestChannelSince` (which skips every dir with `born < sinceMs`) finds
+ * nothing, the door returns null forever, and the declared terminal wait
+ * watches NOTHING while the beat reports green.
+ *
+ * S10 beat 10's own comment argued this was impossible: "a dispatch dir exists
+ * only once the scheduler has CLAIMED the initiative... Dispatch dir implies
+ * already left ready-for-review." That assumed the develop cycle MINTS a new
+ * dispatch dir. It continues the architect's. The premise was false.
+ *
+ * The fix is ADDITIVE (1147): resolution by the cycle's own identity, BESIDE
+ * the born-after-the-anchor form, so every existing story keeps its exact
+ * semantics. Both halves are asserted here — the old form must still not see
+ * it, or the new form is not additive, it is a behaviour change wearing a new
+ * name.
+ */
+test('7.6.143: a cycle born BEFORE the anchor is invisible to the anchor form and found by identity', () => {
+  const { root, logs, door } = realDoor();
+  const initiative = 'INIT-2026-09-18-exclude-author-flag';
+  liveDispatch(logs, `2026-09-18T10-21-56_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+
+  // The press anchors AFTER the dir was born — run 20's 3.4-minute gap.
+  const anchorAfterBirth = Date.now() + 5_000;
+
+  assert.equal(
+    door(null, anchorAfterBirth, 'ready-for-review'), null,
+    'the born-after-the-anchor form must STILL not see this cycle — that is run 20\'s defect preserved ' +
+    'deliberately, because every other story depends on those semantics and 1147 ruled the fix additive.',
+  );
+
+  const byIdentity = makeCycleTerminalDoor(root, { cycleOf: initiative })!;
+  const seen = byIdentity(null, anchorAfterBirth, 'ready-for-review');
+  assert.notEqual(seen, null, 'resolved by the initiative the press named, the cycle is found whatever its birth time');
+  assert.equal(seen!.done, true, `the product published the state the beat waits for: ${seen?.detail}`);
+});
+
+/** Identity resolution must not invent a cycle. An initiative with no dispatch
+ *  dir returns null — keep waiting — never a verdict about a cycle that is not
+ *  there (§15.504: UNKNOWN never resolves toward proceeding). */
+test('7.6.143: identity resolution finds no cycle for an initiative that has none', () => {
+  const { root } = realDoor();
+  const byIdentity = makeCycleTerminalDoor(root, { cycleOf: 'INIT-nothing-here' })!;
+  assert.equal(byIdentity(null, Date.now(), 'ready-for-review'), null);
+});
+
+/** THE CONSUMPTION HALF (b2). A `terminal:` declaration is consumed only when
+ *  the watch actually RESOLVED a cycle. Run 20's beat 10 ran its consequence
+ *  wait and called the watch on every poll — the watch simply never found a
+ *  cycle — and `agentWaitConsumed` was nonetheless true, because a handle wait
+ *  had set it. So the watch must report whether it ever saw one. */
+test('7.6.143: the watch reports that it never resolved a cycle (run 20 beat 10, red-at-base)', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-2026-09-18-exclude-author-flag';
+  liveDispatch(logs, `2026-09-18T10-21-56_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review')!;
+  watch(null, Date.now() + 5_000);
+  assert.equal(
+    watch.sawCycle, false,
+    'run 20 beat 10: the watch ran on every poll and resolved nothing, so its terminal declaration was ' +
+    'NOT consumed — a handle wait must never credit it.',
+  );
+
+  const watched = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  watched(null, Date.now() + 5_000);
+  assert.equal(watched.sawCycle, true, 'resolved by identity, the same cycle IS seen');
+});

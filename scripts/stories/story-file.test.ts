@@ -571,3 +571,128 @@ test('7.6.136: every field of a valid ground survives validateStory', () => {
     'check: a list only protects the fields someone remembered to add to it.',
   );
 });
+
+/**
+ * `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — A DECLARED AGENT WAIT WITH NO
+ * `do` BLOCK IS REFUSED AT VALIDATION, before selection and before spend.
+ *
+ * Measured on S10 run 20, which paid $4.3147 and twenty minutes to learn it.
+ * Beat 11 declared `{for: 'agent', upTo: 1800000, terminal: 'ready-for-review',
+ * anchor: 'start-development'}` and had NO `do` block. `agentWaitConsumed` is
+ * set on exactly two paths: `beats-drive.mjs:258`, a handle wait inside
+ * `performSteps`, which needs steps; and `:357`, the consequence wait, which
+ * needs `routeMatches(page.url(), target)` — NOT steps.
+ *
+ * THE REFUSAL IS THEREFORE NARROWER THAN "an agent wait with no `do`", and the
+ * first cut of this door got that wrong. A beat with no `do` that expects the
+ * route it is ALREADY STANDING ON reaches `:357` and consumes its bound
+ * perfectly well; refusing those would reject working beats in other lanes'
+ * stories. What is decidable from the text is the combination: no `do` (so
+ * nothing can navigate) AND an expected route that differs from where the
+ * previous beat left the page (so `routeMatches` cannot be true). That is
+ * exactly run 20 beat 11 — beat 10 ends on `/projects/gitpulse`, beat 11
+ * expects `/flows/forge-develop/run/<runId>` and presses nothing.
+ *
+ * The runner already reds this shape — at the END, having asserted 0.4 s after
+ * the press and cascaded fourteen later beats.
+ *
+ * A defect that is decidable from the story TEXT should not need a funded run
+ * to surface. This is the same argument as the spend gate's: refuse at
+ * selection, not after the browser opens.
+ */
+test('7.6.143: an agent wait on a beat with no `do` block is refused at validation', () => {
+  assert.throws(
+    () => validateStory({
+      id: 'T',
+      ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+      docs: { kind: 'how-to' as const, title: 't' },
+      beats: [
+        { act: 'press it', say: 's', do: [{ press: 'start-development' }],
+          expect: { route: '/projects/gitpulse', data: { page: 'projects' } } },
+        { act: 'watch the run build',
+          say: 's',
+          wait: { for: 'agent', upTo: 1_800_000 },
+          expect: { route: '/flows/forge-develop/run/x', data: { page: 'flow-run' } } },
+      ],
+    }),
+    /no `do`|cannot consume|never consume/i,
+    'run 20 beat 11: no `do` so nothing navigates, and a target route the previous beat did not leave the ' +
+    'page on, so routeMatches is false and the consequence wait never runs. Decidable from the story text, ' +
+    'and it must never cost a funded run again.',
+  );
+});
+
+/** The same beat WITH a `do` block still validates — the refusal is about the
+ *  unconsumable shape, not about agent waits. A refusal that also rejected the
+ *  working shape would simply move the cost. */
+test('7.6.143: an agent wait WITH a `do` block still validates', () => {
+  const v = validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [{
+      act: 'hand the plan to the build flow',
+      say: 's',
+      do: [{ press: 'start-development' }],
+      wait: { for: 'agent', upTo: 1_800_000 },
+      expect: { route: '/x', data: { page: 'p' } },
+    }],
+  }) as { beats: { wait?: unknown }[] };
+  assert.deepEqual(v.beats[0].wait, { for: 'agent', upTo: 1_800_000 });
+});
+
+/**
+ * THE OTHER HALF OF THE SAME DOOR, and the reason the refusal is a pair rather
+ * than one rule: a beat with no `do` that expects the route it is ALREADY
+ * standing on reaches the consequence wait at `beats-drive.mjs:357` and
+ * consumes its bound. That is a working shape, it exists in other lanes'
+ * stories, and an over-broad refusal would reject it. Without this test the
+ * narrow rule and the broad one both pass.
+ */
+test('7.6.143: an agent wait with no `do` but the SAME route as the previous beat still validates', () => {
+  const v = validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [
+      { act: 'press it', say: 's', do: [{ press: 'start-development' }],
+        expect: { route: '/projects/gitpulse', data: { page: 'projects' } } },
+      { act: 'watch it settle', say: 's',
+        wait: { for: 'agent', upTo: 1_800_000 },
+        expect: { route: '/projects/gitpulse', data: { page: 'projects' } } },
+    ],
+  }) as { beats: { wait?: unknown }[] };
+  assert.deepEqual(v.beats[1].wait, { for: 'agent', upTo: 1_800_000 });
+});
+
+/**
+ * 7.6.143 — `cycleOf` SURVIVES the rebuild. This validator drops every key it
+ * does not NAME in its returned object, which is how `wait.anchor` reached
+ * production validated and discarded (7.6.82) and how `ground.expectedChanges`
+ * behaved on its first write (7.6.136). A new wait field without this test is
+ * the same defect queued up for a third time.
+ */
+test('7.6.143: wait.cycleOf survives validateStory', () => {
+  const wait = { for: 'agent' as const, upTo: 1_800_000, terminal: 'ready-for-review', cycleOf: 'INIT-x' };
+  const v = validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [{ act: 'a', say: 's', do: [{ press: 'start-development' }], wait,
+      expect: { route: '/x', data: { page: 'p' } } }],
+  }) as { beats: { wait?: unknown }[] };
+  assert.deepEqual(v.beats[0].wait, wait, 'validated-then-dropped is the 7.6.82 defect; deep-equal the whole wait');
+});
+
+/** `cycleOf` without `terminal` resolves a cycle and then has nothing to watch
+ *  — refused rather than accepted as inert. */
+test('7.6.143: wait.cycleOf without terminal is refused', () => {
+  assert.throws(() => validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0 },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats: [{ act: 'a', say: 's', do: [{ press: 'p' }],
+      wait: { for: 'agent' as const, upTo: 1000, cycleOf: 'INIT-x' },
+      expect: { route: '/x', data: { page: 'p' } } }],
+  }), /cycleOf/);
+});

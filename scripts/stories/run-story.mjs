@@ -142,7 +142,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // 7.6.118 / T1 1089(c) — a FACTORY, not a door: the cycle watch is stateful
   // per beat, so the run hands `driveBeat` the means to build one rather than a
   // shared instance every beat would poison for the next.
-  const cycleWatchFor = (wantState) => makeCycleTerminalWatch(ROOT, wantState);
+  // 7.6.143: `cycleOf` names the initiative whose EXISTING cycle this beat
+  // watches — the develop station continues the architect's cycle, so there is
+  // no new dispatch dir for the anchor form to find. Null for every beat that
+  // does not declare it, which is every beat but S10's kickoff pair.
+  const cycleWatchFor = (wantState, cycleOf = null) =>
+    makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf });
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};

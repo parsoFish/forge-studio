@@ -138,6 +138,24 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // page-ready wait both consume it and neither watches an agent — which is
   // precisely how `6.11.17` hid — so neither sets this.
   let agentWaitConsumed = false;
+  // Declared ONCE, read on both consumption paths, so the two cannot disagree
+  // about which question this beat asked (7.6.143).
+  const declaresTerminal = typeof rawBeat?.wait?.terminal === 'string' && rawBeat.wait.terminal !== '';
+  // `cycleOf` takes the same `<name>` bindings the route does — S10 binds the
+  // initiative at its open-initiative press, so the beat that watches the cycle
+  // can name it without the story hard-coding an id that only exists at run time.
+  // Unbound placeholders resolve to null rather than to the literal `<runId>`:
+  // a door asked about a cycle named `<runId>` would find nothing and report it
+  // as "no cycle", which is a true sentence about the wrong question.
+  const cycleOfRaw = rawBeat?.wait?.cycleOf ?? null;
+  const cycleOf = typeof cycleOfRaw === 'string'
+    ? cycleOfRaw.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) =>
+        (Object.hasOwn(bindings, name) ? bindings[name] : whole))
+    : null;
+  const cycleOfResolved = typeof cycleOf === 'string' && !cycleOf.includes('<') ? cycleOf : null;
+  const cycleWatch = typeof cycleWatchFor === 'function'
+    ? cycleWatchFor(rawBeat?.wait?.terminal ?? null, cycleOfResolved)
+    : null;
   // WHO stopped the beat decides the clause. A stop carrying `stoppedBy:
   // 'runner'` is the RUNNER's own finding — 7.6.77's per-transition bound —
   // and appending "the product had already said so about this session" to it
@@ -255,7 +273,15 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
     declaredProgress, readProgressNow);
   const stepError = steps_.error;
-  if (steps_.waitedForHandle) agentWaitConsumed = true;
+  // 7.6.143 (b2), T1 ruling 1147 — A HANDLE WAIT NEVER CREDITS A `terminal:`
+  // DECLARATION. Run 20's beat 10 declared a 30-minute wait on the develop
+  // cycle's terminal event, pressed a control, and its handle wait set this one
+  // boolean — so the 6.11.19 guard was satisfied by a 231 ms wait for a button
+  // while the declared cycle wait watched nothing and the beat reported GREEN.
+  // The guard reded beat 11, which declared honestly, and passed beat 10, whose
+  // declared wait silently did nothing: its own fail-open shape, one
+  // declaration-type along. A declaration is consumed by the waiter it named.
+  if (steps_.waitedForHandle && !declaresTerminal) agentWaitConsumed = true;
   if (stepError !== null) {
     return withAgentProc(stuckVerdict(beat, await readObserved(page, beat), stepError), agentProcProbe);
   }
@@ -352,9 +378,15 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // — it remembers when the cycle terminated so the page's grace runs
           // from that sighting — and null for every beat that declared no
           // `terminal`, which is all of them but S10's beat 8.
-          typeof cycleWatchFor === 'function' ? cycleWatchFor(beat.wait?.terminal ?? null) : null,
+          cycleWatch,
         );
-        agentWaitConsumed = true;
+        // 7.6.143 (b2). A `terminal:` declaration counts as consumed only when
+        // the watch actually RESOLVED a cycle — not merely when it was called.
+        // Run 20's watch was called on every poll of a four-minute window and
+        // resolved nothing, because the develop station continues the cycle the
+        // architect minted and `newestChannelSince` skips anything born before
+        // the anchor.
+        agentWaitConsumed = declaresTerminal ? cycleWatch?.sawCycle === true : true;
       }
     }
   }

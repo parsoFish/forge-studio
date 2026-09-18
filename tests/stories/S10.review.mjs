@@ -113,6 +113,9 @@ export const REVIEW_LOOP = [
       // e2e harness asserted it). Every key here is source-only and must be
       // confirmed at the sitting.
       act: 'Anchor one blocking comment to the precedence criterion and send it back',
+      // 7.6.143: beat 16's agent wait lives HERE now, on the beat whose
+      // `send-back` press starts the work it waits for.
+      wait: { for: 'agent', upTo: 1_800_000 },
       do: [
         { press: 'comment-region' },
         { fill: 'comment-body', with: SEND_BACK },
@@ -130,6 +133,20 @@ export const REVIEW_LOOP = [
       // SOURCE-DERIVED. The fix lands on the same branch and the run returns to
       // the review station; keys as beat 11.
       act: 'The fix lands on the same branch and comes back for re-review',
+      // 7.6.143 (T1 1147) — THE WAIT MOVED TO THE BEAT THAT PRESSES
+      // `send-back`, found by the same door as beat 10's: this beat presses
+      // nothing and expects a route the previous beat does not leave the page
+      // on, so `routeMatches` is false and NOTHING could ever consume its
+      // bound. `story-file.mjs` now refuses that shape at validation.
+      //
+      // It moved WITHOUT gaining `cycleOf`/`terminal`, deliberately. Beat 10's
+      // wait watches a cycle whose terminal state S10 already asserts from the
+      // queue. I have no MEASURED terminal state for the re-review cycle — no
+      // run has ever reached this beat — and a guessed `terminal:` would end
+      // the wait on a state the product may never publish: a precise-looking
+      // wait that is wrong, which is worse than the vague one being fixed.
+      // Tightening it to the cycle is owed once a run reaches here and measures
+      // the state.
       // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
       // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
       //
@@ -152,7 +169,6 @@ export const REVIEW_LOOP = [
       // that sat idle overstates. The five gitpulse cycles have no such gaps,
       // which is why they are the ones relied on and the betterado trace's
       // `architect=828m` is not.
-      wait: { for: 'agent', upTo: 1_800_000 },
       expect: {
         route: '/flows/forge-develop/run/<cycleId>',
         data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'review', 'status': 'complete' /* §15.473: the row exists for an untouched node too */ },
