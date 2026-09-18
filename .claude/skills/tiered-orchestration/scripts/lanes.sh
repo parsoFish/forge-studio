@@ -272,8 +272,9 @@ render_section() {
 # `launch` refused a prompt without it while `render` wrote that prompt silently, so three M7 lanes
 # bounced at launch (findings row 70). A rule enforced at one door and not the other is a rule the
 # second door teaches everyone to trip over; `render` and `launch` now call this and nothing else.
+lockline_of() { printf 'flock %s/.suite-lock' "$1"; }
 require_lockline() {
-  local lockline="flock $1/.suite-lock"
+  local lockline; lockline="$(lockline_of "$1")"
   grep -qF "$lockline" "$2" || die "$3 does not contain the literal '$lockline' — a lane that never saw the suite-lock line runs its suite outside it"
 }
 
@@ -556,7 +557,7 @@ cmd_launch() {
   cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
   case "$cmdline" in *--strict-mcp-config*) ;; *) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline carries no --strict-mcp-config" ;; esac
   case "$cmdline" in *tokensave*) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: tokensave in /proc/$pid/cmdline (ruling 140)" ;; esac
-  echo "preflight: MemAvailable ok · prompt carries '$lockline' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
+  echo "preflight: MemAvailable ok · prompt carries '$(lockline_of "$camp")' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
   active_add "$camp" "$lane"
   printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"
   echo "launched $s  [$row]  model=$model permission-mode=$pm cwd=$cwd t1=$t1 attended=$attended"
