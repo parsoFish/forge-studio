@@ -176,6 +176,11 @@ test('7.6.120: a MALFORMED escape is left for the backstop, never emitted as an 
   // `root: ""` would pass `machinePathsIn` — portable-looking, naming no sibling
   // at all. A record that reconciles because it is empty is the species this
   // campaign keeps meeting; an unreadable input resolves toward the refusal.
+  //
+  // C's statement of why the `rootKind` assertion is the stronger half, recorded
+  // so it survives a rename: `rootKind` is a CLAIM — "this was made safe" — so a
+  // future version that sanitised `root` but still stamped the claim would pass
+  // a pass-through check and fail this one.
   for (const bad of [
     { root: null, paths: [], live: { pid: 1, cwd: '/home/parso/forge-m6-c', via: 'cwd' } },
     { root: '', paths: [], live: { pid: 1, cwd: '/home/parso/forge-m6-c', via: 'cwd' } },
