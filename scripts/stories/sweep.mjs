@@ -21,7 +21,8 @@
 import { rmSync, existsSync, readdirSync, statSync, readFileSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { claimQueueWrites } from './queue-claim.mjs';
-import { join, relative, resolve } from 'node:path';
+import { captureAndClearMintedRunArtefacts, describeRunArtefactsClear } from './ground-clear.mjs';
+import { join, relative, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 import { liveProcessRoots, liveSessionOwners } from './fence-attribution.mjs';
@@ -127,10 +128,34 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
   // initiative sat in `ready-for-review` for thirteen hours while
   // `git status --porcelain` read 0 (`.gitignore:42`).
   const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir });
+
+  // `forge-8vfn.7.6.146` — THE REST OF WHAT THIS RUN MINTED, derived from the
+  // very ids the claim above just ATTRIBUTED by `created_at`. The claim takes
+  // the `INIT-<id>.md` manifests and, by its own words, LEAVES everything else:
+  // "LEFT … not an INIT manifest (the story-id sweep owns it)". Nothing owned
+  // them. Runs 20 and 21 left a `.md.heartbeat`, two `_worktrees/` trees and a
+  // `_logs/<ts>_INIT-*` cycle dir, and the next costed run's residue door
+  // refused on each in turn at $0 — three correct refusals, three hand clears.
+  //
+  // Derived, never a pattern: a `_worktrees/*` sweep would take a concurrent
+  // lane's trees, and this box runs four lanes.
+  const claimedIds = claim.claimed
+    .map((c) => basename(String(c.path)))
+    .filter((n) => n.endsWith('.md'))
+    .map((n) => n.slice(0, -3));
+  const artefacts = captureAndClearMintedRunArtefacts({
+    root, storyId, runStamp: String(sinceMs), initiativeIds: claimedIds,
+  });
+
   return {
     ...r,
     claim,
-    lines: [...r.removed.map((p) => `[stories] trailing sweep removed ${p}`), ...claim.lines],
+    artefacts,
+    lines: [
+      ...r.removed.map((p) => `[stories] trailing sweep removed ${p}`),
+      ...claim.lines,
+      ...describeRunArtefactsClear(artefacts),
+    ],
   };
 }
 

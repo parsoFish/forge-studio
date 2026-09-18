@@ -209,8 +209,12 @@ export type ToolUseLiveDetail = {
   seq: number;
 };
 
-const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
-const DEFAULT_HEARTBEAT_IDLE_TAIL_MS = 30_000;
+// 7.6.148 — EXPORTED so the one-shot spawn path uses the SAME cadence rather
+// than a second copy of it. Two constants for "how often is alive" would be two
+// sources of truth that drift, and the heartbeat would then mean something
+// slightly different depending on which dispatch path emitted it.
+export const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
+export const DEFAULT_HEARTBEAT_IDLE_TAIL_MS = 30_000;
 /** Studio observability sub-gap #2 — cap reasoning text blocks at this length. */
 const MAX_REASONING_TEXT = 400;
 

@@ -44,6 +44,8 @@ import {
   describeGroundClear,
   captureAndClearMintedLogs,
   describeLogsClear,
+  mintedRunArtefactsToClear,
+  captureAndClearMintedRunArtefacts,
 } from './ground-clear.mjs';
 
 const SESSION = '2026-09-18T03-45-41-0b536f73';
@@ -567,4 +569,85 @@ describe('7.6.137: the runner clears its own minted _logs sessions', () => {
     const lines = describeLogsClear(res);
     assert.match(lines.join('\n'), /minted no session/);
   });
+});
+
+/**
+ * `forge-8vfn.7.6.146` (T1 1160/1164) — A RUN CLEARS EVERY ARTEFACT IT MINTED.
+ *
+ * 7.6.123 did the ground half, 7.6.137 the `_logs` sessions half. Run 20 and run
+ * 21 then showed there are THREE more, and the next costed run's residue door
+ * refused on each in turn, at $0 each:
+ *
+ *   run 21 dispatch 1  _queue/in-flight=1   the initiative's `.md.heartbeat`
+ *   run 21 dispatch 2  _worktrees=2         `<id>` and the `wi` container
+ *   (run 21 itself)    _logs/<ts>_INIT-*=1  the develop cycle dir
+ *
+ * Each refusal was correct. What was missing is that nothing in the PRODUCT
+ * cleared them, so a human did it three times.
+ *
+ * DERIVED, NEVER A PATTERN — the ids come from the queue sweep that already
+ * ATTRIBUTED those manifests to this run by `created_at`. A `_worktrees/*` sweep
+ * would take a concurrent lane's trees with it.
+ */
+test('7.6.146: the artefacts of a claimed initiative are derived from its id, and nothing else is', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-run-artefacts-'));
+  const id = 'INIT-2026-09-18-exclude-author-filter';
+  const other = 'INIT-someone-elses-run';
+
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'in-flight', `${id}.md.heartbeat`), 'x');
+  writeFileSync(join(root, '_queue', 'in-flight', `${other}.md.heartbeat`), 'x');
+  mkdirSync(join(root, '_worktrees', id), { recursive: true });
+  mkdirSync(join(root, '_worktrees', 'wi', id), { recursive: true });
+  mkdirSync(join(root, '_worktrees', other), { recursive: true });
+  mkdirSync(join(root, '_logs', `2026-09-18T12-36-31_${id}`), { recursive: true });
+  mkdirSync(join(root, '_logs', `2026-09-18T09-00-00_${other}`), { recursive: true });
+
+  const found = mintedRunArtefactsToClear({ root, initiativeIds: [id] });
+  const rel = found.map((p) => p.replace(`${root}/`, '')).sort();
+
+  assert.deepEqual(rel, [
+    `_logs/2026-09-18T12-36-31_${id}`,
+    `_queue/in-flight/${id}.md.heartbeat`,
+    `_worktrees/${id}`,
+    `_worktrees/wi/${id}`,
+  ], 'exactly this run\'s four, derived from the id the queue sweep attributed');
+
+  assert.ok(!rel.some((p) => p.includes(other)),
+    'another run\'s artefacts share every shape and differ only by id — a pattern sweep would take them');
+  rmSync(root, { recursive: true, force: true });
+});
+
+/** The `wi` CONTAINER is emptied too, or residue still counts it. `residue.sh`
+ *  gates on `ls -1 _worktrees | grep -c .`, so leaving an empty `wi/` behind
+ *  scores 1 and the next run still refuses — the fix would look done and not be. */
+test('7.6.146: clearing empties the wi container, because residue counts it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-run-artefacts-wi-'));
+  const id = 'INIT-x';
+  mkdirSync(join(root, '_worktrees', 'wi', id), { recursive: true });
+  mkdirSync(join(root, '_worktrees', id), { recursive: true });
+
+  const r = captureAndClearMintedRunArtefacts({ root, storyId: 'S10', runStamp: 'T', initiativeIds: [id] });
+  assert.equal(r.refused.length, 0, JSON.stringify(r.refused));
+
+  const left = readdirSync(join(root, '_worktrees'));
+  assert.deepEqual(left, [], 'both the id tree and the emptied wi container are gone — residue gates on this count');
+  rmSync(root, { recursive: true, force: true });
+});
+
+/** Capture is PROVEN before clear (T1 1164). A capture that fails leaves the
+ *  artefact alone and says so — the same contract as the two clears above. */
+test('7.6.146: what cannot be captured is not removed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'story-run-artefacts-cap-'));
+  const id = 'INIT-y';
+  mkdirSync(join(root, '_worktrees', id), { recursive: true });
+
+  const r = captureAndClearMintedRunArtefacts({
+    root, storyId: 'S10', runStamp: 'T', initiativeIds: [id],
+    capture: () => { throw new Error('synthetic capture failure'); },
+  });
+  assert.equal(r.cleared.length, 0);
+  assert.match(r.refused[0].reason, /not removing what was not captured/);
+  assert.ok(existsSync(join(root, '_worktrees', id)), 'still there — nothing is removed on a failed capture');
+  rmSync(root, { recursive: true, force: true });
 });

@@ -40,8 +40,8 @@
  * capture that failed leaves the directory in place, because losing the evidence
  * is worse than leaving residue a named check will now report.
  */
-import { cpSync, mkdirSync, rmSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { cpSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
 
 /**
@@ -381,5 +381,138 @@ export function describeLogsClear(result) {
   for (const n of result.cleared) lines.push(`own logs: CLEARED ${n} — removed from _logs/, re-read to confirm`);
   for (const n of result.unremoved) lines.push(`own logs: NOT REMOVED ${n} — captured, still present after the removal`);
   for (const r of result.refused) lines.push(`own logs: REFUSED ${r.dir} — ${r.reason}`);
+  return lines;
+}
+
+/** Where a run's own non-session artefacts are captured before removal. */
+export function runArtefactsClearDir(root, storyId, runStamp) {
+  return join(root, '_logs', '_story-run-artefacts-clear', storyId, runStamp);
+}
+
+/** `INIT-<something>`, ONE path segment. The queue sweep only ever attributes
+ *  manifests of this shape, and the containment checks below do not lean on it. */
+const INITIATIVE_ID_SHAPE = /^INIT-[A-Za-z0-9._-]+$/;
+
+/** The six queue states, named rather than globbed — an absent dir is skipped,
+ *  never treated as an empty one (§15.430). */
+const QUEUE_STATES = Object.freeze(['pending', 'in-flight', 'ready-for-review', 'done', 'failed', 'merged']);
+
+/**
+ * The artefacts a run minted FOR ONE INITIATIVE, derived from its id —
+ * `forge-8vfn.7.6.146`.
+ *
+ * 7.6.123 cleared the ground, 7.6.137 the `_logs` sessions. Runs 20 and 21 then
+ * showed three more, and the next costed run's residue door refused on each in
+ * turn, at $0 each:
+ *
+ *   run 21 dispatch 1   `_queue/in-flight=1`      the `.md.heartbeat`
+ *   run 21 dispatch 2   `_worktrees=2`            `<id>` and the `wi` container
+ *   run 21 itself       `_logs/<ts>_INIT-*=1`     the develop cycle dir
+ *
+ * Every refusal was correct and each was paid off by a HUMAN capture-then-clear
+ * that nothing in the product did. The queue sweep even NAMED the first one —
+ * "LEFT … not an INIT manifest (the story-id sweep owns it)" — and it was read
+ * as "therefore fine". An instrument deliberately leaving something and that
+ * thing being safe to leave are different sentences.
+ *
+ * DERIVED, NEVER A PATTERN (T1 1164). `initiativeIds` comes from the queue
+ * sweep, which ATTRIBUTED those manifests to this run by `created_at`. A
+ * `_worktrees/*` sweep would take a concurrent lane's trees, and this box runs
+ * four lanes.
+ *
+ * Returns only paths that EXIST, so a caller's count is of real work.
+ */
+export function mintedRunArtefactsToClear({ root, initiativeIds }) {
+  if (!Array.isArray(initiativeIds) || initiativeIds.length === 0) return [];
+  const out = [];
+  const add = (p) => { if (existsSync(p)) out.push(p); };
+
+  for (const id of initiativeIds) {
+    if (typeof id !== 'string' || !INITIATIVE_ID_SHAPE.test(id)) continue;
+    for (const state of QUEUE_STATES) add(join(root, '_queue', state, `${id}.md.heartbeat`));
+    add(join(root, '_worktrees', id));
+    add(join(root, '_worktrees', 'wi', id));
+
+    // The cycle dir is `<timestamp>_<id>`. Matched by SUFFIX, never substring:
+    // `INIT-foo` must not claim `INIT-foo-bar`.
+    const logsDir = join(root, '_logs');
+    let entries = [];
+    try { entries = readdirSync(logsDir, { withFileTypes: true }); } catch { entries = []; }
+    for (const e of entries) {
+      if (e.isDirectory() && e.name.endsWith(`_${id}`)) add(join(logsDir, e.name));
+    }
+  }
+  return out;
+}
+
+/**
+ * Capture each artefact, prove the capture, then remove it — the contract
+ * `captureAndClearMintedSessions` and `captureAndClearMintedLogs` already keep.
+ *
+ * AND THE `wi` CONTAINER IS EMPTIED TOO, which is not cosmetic: `residue.sh`
+ * gates on `ls -1 _worktrees | grep -c .`, so an emptied-but-present `wi/`
+ * scores 1 and the NEXT run still refuses. A fix that removed only the id trees
+ * would look complete and leave the door shut.
+ */
+export function captureAndClearMintedRunArtefacts({ root, storyId, runStamp, initiativeIds, capture = null }) {
+  const out = { dest: null, captured: [], cleared: [], refused: [], unremoved: [] };
+  const paths = mintedRunArtefactsToClear({ root, initiativeIds });
+  if (paths.length === 0) return out;
+
+  const dest = runArtefactsClearDir(root, storyId, runStamp);
+  const rootAbs = resolve(root);
+
+  for (const from of paths) {
+    const abs = resolve(from);
+    // Containment, independent of the id shape above: a guard that depends on
+    // another guard's regex staying exactly as it is today has a hidden premise.
+    if (!abs.startsWith(`${rootAbs}/`)) {
+      out.refused.push({ path: from, reason: `resolves outside ${rootAbs}` });
+      continue;
+    }
+    const rel = abs.slice(rootAbs.length + 1);
+    try {
+      mkdirSync(join(dest, dirname(rel)), { recursive: true });
+      if (typeof capture === 'function') capture(abs, join(dest, rel));
+      else cpSync(abs, join(dest, rel), { recursive: true, preserveTimestamps: true });
+    } catch (error) {
+      out.refused.push({ path: from, reason: `capture failed (${error.message}) — not removing what was not captured` });
+      continue;
+    }
+    out.dest = dest;
+    out.captured.push(rel);
+
+    try {
+      rmSync(abs, { recursive: true, force: true });
+    } catch (error) {
+      out.unremoved.push({ path: from, reason: String(error.message) });
+      continue;
+    }
+    // "Cleared" is a SECOND LOOK, never an inference from control flow.
+    if (existsSync(abs)) out.unremoved.push({ path: from, reason: 'still present after removal' });
+    else out.cleared.push(rel);
+  }
+
+  // The container, only when THIS run emptied it.
+  const wi = join(root, '_worktrees', 'wi');
+  try {
+    if (existsSync(wi) && readdirSync(wi).length === 0) {
+      rmSync(wi, { recursive: true, force: true });
+      if (!existsSync(wi)) out.cleared.push('_worktrees/wi (emptied container)');
+    }
+  } catch { /* leaving it is reported by the next run's residue door, never silently */ }
+
+  return out;
+}
+
+/** One line per outcome, in the shape the other two clears print. */
+export function describeRunArtefactsClear(result) {
+  const lines = [];
+  if (result.dest !== null) {
+    lines.push(`[stories] own artefacts: CAPTURED ${result.captured.length} path(s) to ${result.dest}`);
+  }
+  for (const p of result.cleared) lines.push(`[stories] own artefacts: CLEARED ${p} — removed, re-read to confirm`);
+  for (const r of result.refused) lines.push(`[stories] own artefacts: REFUSED ${r.path} — ${r.reason}`);
+  for (const u of result.unremoved) lines.push(`[stories] own artefacts: NOT REMOVED ${u.path} — ${u.reason}; the next run's residue door will refuse on it at $0`);
   return lines;
 }
