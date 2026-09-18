@@ -1,0 +1,298 @@
+/**
+ * Capture-then-clear the sessions a run minted inside its OWN ground —
+ * `forge-8vfn.7.6.123`, C's ruling 1100 and T1 1103/1106.
+ *
+ * WHAT WAS ACTUALLY WRONG. Nothing here is a new measurement. `groundManifest`
+ * already walks the FILESYSTEM (`find . -type f`, pruning only `node_modules`
+ * and `.git`), so it already sees gitignored content — it is the only
+ * instrument in the run that does. `classifyOwnGroundDrift` already separates
+ * the minted-session writes from everything else, each line naming the session
+ * that accounts for it. `run-story.mjs` already prints them:
+ *
+ *     own ground: PRODUCED A _architect/<ts>/PLAN.md — inside _architect/<ts>,
+ *                 a session this run minted
+ *
+ * And then nothing consumed it and nothing cleared. So
+ * `projects/gitpulse/_architect/<ts>/` survived `git status --porcelain` (0
+ * entries — gitignored inside the ground), `residue.sh` (clean), and the ground
+ * fence (clean), and the NEXT run's launcher refused on the ground hash. The
+ * pin was the only thing standing between run N's plan and run N+1's ground,
+ * and it happened five times.
+ *
+ * S10 run 18 is the same-run A/B that pins the cause precisely: that run leaked
+ * TWO things and `residue.sh` caught exactly one. `_worktrees/INIT-…` (102
+ * files) was caught, because `_worktrees` is a NAMED LOCATION counted with
+ * `ls`. The ground's `_architect/<ts>/` (6 files) was missed, because the ground
+ * is walked through git and the output is gitignored. Same instrument, same run,
+ * opposite outcomes, and the only difference is whether git can see the path.
+ *
+ * WHY THE SET IS DERIVED AND NEVER A PATTERN. `projects/gitpulse` carries
+ * exactly one `_*` directory — `_project-brain` — and it is part of the pinned
+ * ground. A clear that matched `_*` would eat it. So the set comes from
+ * `mintedSessionPaths`, i.e. this run's own `_logs` entries, which is the
+ * reasoning `ground-hash.mjs` already states for the classifier: a list of
+ * allowed paths goes stale silently, a set derived from the run's own evidence
+ * cannot.
+ *
+ * CAPTURE BEFORE CLEAR, AND NEVER CLEAR WHAT WAS NOT CAPTURED. §15.241 in its
+ * general form — the bytes are the only record of what a costed run produced,
+ * and the plan an architect wrote is the most interesting thing a run makes. A
+ * capture that failed leaves the directory in place, because losing the evidence
+ * is worse than leaving residue a named check will now report.
+ */
+import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+
+/**
+ * One row of `classifyOwnGroundDrift`'s structured output. `writers` is the
+ * sessions whose own event logs claim the path; `home` is the minted session
+ * directory it sits inside, or `null`. Both are needed here: only `home`
+ * licenses a removal, and `writers` is what distinguishes the run's product
+ * inside the ground from the run's own session output.
+ *
+ * @typedef {{kind: string, path: string, home: string|null, writers: string[]}} ProducedPath
+ * @typedef {{dest: string|null, captured: string[], cleared: string[],
+ *            refused: {dir: string, reason: string}[], unremoved: string[],
+ *            absent: string[]}} GroundClearResult
+ */
+
+/**
+ * Where a run's cleared sessions are read to — under `_logs/`, never under the
+ * ground, and under THIS RUN's own stamp.
+ *
+ * The stamp is required rather than defaulted, for the reason `redEvidenceDir`
+ * gives (ruling 368): without it every run of a story writes into one directory
+ * and run 9's captured session sits beside run 10's, distinguishable only by
+ * reading a session id out of the JSON. Evidence that quietly mixes two runs is
+ * worse than no evidence, because it reads as one run.
+ *
+ * `_story-ground-clear` parses as kind `story`, id `ground-clear`, so
+ * `mintedSessionPaths` would see it as a candidate — and rejects it, because it
+ * carries no `events.jsonl`, `.heartbeat` or `turn.pid`. That door already
+ * exists and is why this name is safe to use.
+ */
+export function groundClearDir(root, storyId, runStamp) {
+  return join(root, '_logs', '_story-ground-clear', storyId, runStamp);
+}
+
+/**
+ * The directories to clear, from the classifier's STRUCTURED output.
+ *
+ * Three narrowings, each of which is a way to corrupt a ground if it is missed:
+ *
+ *   `added` only      a MODIFIED path inside a minted dir means the run changed
+ *                     something that was already there, and a REMOVED one is
+ *                     already gone. Neither licenses removing a directory.
+ *   `home` only       an entry attributed by a session's `writers` but with no
+ *                     minted `home` is that session writing into the ground
+ *                     PROPER — the `CLAUDE.md` it edited, the `CONSTRAINTS.md`
+ *                     it authored. That is the run's real product and deleting
+ *                     it would destroy the thing the run was for.
+ *   distinct          two files in one session dir are ONE directory to remove.
+ *
+ * @param {ReadonlyArray<ProducedPath>} producedPaths
+ * @returns {string[]} ground-relative directories, sorted and deduped
+ */
+export function mintedSessionDirsToClear(producedPaths) {
+  const dirs = new Set();
+  for (const entry of producedPaths) {
+    if (entry.kind !== 'added') continue;
+    if (entry.home === null || entry.home === undefined) continue;
+    dirs.add(entry.home);
+  }
+  return [...dirs].sort();
+}
+
+/**
+ * A minted session directory is `_<kind>/<id>`: the kind cannot contain `-` or
+ * `/` (`mintedSessionPaths`' own regex), and the id is a session stamp such as
+ * `2026-09-18T03-45-41-0b536f73`.
+ *
+ * THE CAP AND THE ALLOWLIST ARE NOT DECORATION. `mintedSessionPaths` derives the
+ * id from `/^_([A-Za-z][A-Za-z0-9]*)-(.+)$/` against DIRECTORY NAMES READ OFF
+ * DISK in `_logs/`, and `.+` is unbounded in both length and charset — it admits
+ * `/` and `..`. Those names are written by the product, but an agent with a
+ * shell inside the run can create one, so the value that reaches a recursive
+ * delete is attacker-influenced in principle. `forge-8vfn.7.6.55a` found four
+ * destructive `rmSync` calls that had skipped exactly this, one of them for a
+ * missing length cap; this is the same sink class and gets the same guard shape
+ * as `assertSafeSessionId` (`scripts/lib/journey-assertions.mjs`): allowlist,
+ * length cap, and an explicit refusal of stringified nullish.
+ */
+const MAX_MINTED_DIR_CHARS = 128;
+const MINTED_DIR_SHAPE = /^_[A-Za-z][A-Za-z0-9]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/** `${undefined}` and friends resolve to a real, plausible directory name. */
+const NULLISH_SEGMENTS = new Set(['null', 'undefined', 'NaN', 'false', '[object Object]']);
+
+/**
+ * May we remove this directory, and where does it actually live?
+ *
+ * Returns `{path}` for a target that exists and is safe, `{absent: true}` when
+ * there is nothing there, or `{reason}` to refuse.
+ *
+ * CONTAINMENT IS `resolveGuardedPath`, NOT A PREFIX TEST. The first version of
+ * this function did `resolve(groundDir, dir).startsWith(groundDir + sep)`, and
+ * that is a LEXICAL claim about a path string standing in for a PHYSICAL claim
+ * about a filesystem: `resolve` never touches the disk, so a symlinked
+ * `projects/<ground>/_architect` pointing anywhere at all passes it, and the
+ * `rmSync` below would then have run outside the ground with the guard
+ * reporting success. `packages/kernel/path-guard.ts` exists for this and says so
+ * in its own header — "never a lexical prefix check on the unresolved,
+ * `join()`-constructed string" — realpathing the root, then asserting
+ * per-segment IDENTITY against the expected location, and closing the hardlink
+ * case realpath is blind to. Shipping the prefix test would have made this the
+ * fifth `7.6.55a` bypass.
+ *
+ * The destructive calls use the path the GUARD returned, never a path this
+ * function resolved itself — one notion of where the target is, not two.
+ */
+function checkTarget(dir, groundDir) {
+  if (typeof dir !== 'string' || dir.length === 0) {
+    return { reason: `is not a non-empty string (${typeof dir})` };
+  }
+  if (dir.length > MAX_MINTED_DIR_CHARS) {
+    return { reason: `is ${dir.length} characters, over the ${MAX_MINTED_DIR_CHARS}-character cap` };
+  }
+  const segments = dir.split('/');
+  const nullish = segments.find((seg) => NULLISH_SEGMENTS.has(seg));
+  if (nullish !== undefined) {
+    return { reason: `carries the stringified-nullish segment "${nullish}" — a real directory name, never a session` };
+  }
+  // `.forge/` is the ground's own forge configuration and part of what the pin
+  // measures; the acceptance criterion names `.forge/skills` by name, so the
+  // refusal is named too rather than arriving as "wrong shape".
+  if (dir === '.forge' || dir.startsWith('.forge/')) {
+    return { reason: `names ${dir}, and .forge/ is part of the pinned ground, never a session this run minted` };
+  }
+  if (!MINTED_DIR_SHAPE.test(dir)) {
+    return { reason: `${dir} is not shaped _<kind>/<id>, so nothing in this run minted it` };
+  }
+  const guard = resolveGuardedPath(groundDir, segments);
+  if (!guard.ok) {
+    return { reason: `${dir} is outside the ground ${groundDir} (path guard: ${guard.reason})` };
+  }
+  if (!guard.exists) return { absent: true };
+  return { path: guard.realPath };
+}
+
+/**
+ * Capture every minted session out of the ground, then remove it.
+ *
+ * Returns what happened at each step rather than a verdict, because the caller
+ * has to REPORT both halves — a clear that says only "done" cannot be checked
+ * against the ground hash afterwards.
+ *
+ *   dest       the capture directory, or `null` when there was nothing to do.
+ *              Never an empty directory: one of those reads as a capture that
+ *              failed, and it would itself be residue created by the residue
+ *              check.
+ *   captured   dirs whose bytes are now under `dest`
+ *   cleared    dirs verifiably GONE from the ground afterwards
+ *   refused    dirs we declined to touch, each with its reason
+ *   unremoved  dirs we captured and tried to remove that are STILL THERE. This
+ *              is the one the caller must go red on: it means the removal did
+ *              not take, and `rmSync` with `force` does not throw on much.
+ *   absent     dirs already gone before we got to them — benign, but reported,
+ *              because "nothing to remove" and "removed it" are different
+ *              findings and a reader must not have to guess which happened.
+ *
+ * @param {{root: string, project: string, storyId: string, runStamp: string,
+ *          producedPaths: ReadonlyArray<ProducedPath>}} input
+ */
+export function captureAndClearMintedSessions({ root, project, storyId, runStamp, producedPaths }) {
+  /** @type {GroundClearResult} */
+  const out = { dest: null, captured: [], cleared: [], refused: [], unremoved: [], absent: [] };
+  const dirs = mintedSessionDirsToClear(producedPaths);
+  if (dirs.length === 0) return out;
+
+  const groundDir = resolve(join(root, 'projects', project));
+  const dest = groundClearDir(root, storyId, runStamp);
+
+  for (const dir of dirs) {
+    const checked = checkTarget(dir, groundDir);
+    if (checked.reason !== undefined) {
+      out.refused.push({ dir, reason: checked.reason });
+      continue;
+    }
+    if (checked.absent === true) {
+      out.absent.push(dir);
+      continue;
+    }
+    const from = checked.path;
+    // CAPTURE FIRST, and a capture that throws leaves the directory alone.
+    try {
+      mkdirSync(dest, { recursive: true });
+      cpSync(from, join(dest, dir), { recursive: true, preserveTimestamps: true });
+    } catch (error) {
+      out.refused.push({ dir, reason: `capture failed (${error.message}) — not removing what was not captured` });
+      continue;
+    }
+    out.dest = dest;
+    out.captured.push(dir);
+
+    // `force: true` ignores a MISSING path and nothing else — an unwritable
+    // parent directory still throws EACCES. Uncaught, that would abort the run
+    // AFTER the capture succeeded, losing the whole end-of-run report to a
+    // permissions problem in a directory nobody was going to read again. So the
+    // throw is caught and becomes a finding.
+    let failure = null;
+    try {
+      rmSync(from, { recursive: true, force: true });
+    } catch (error) {
+      failure = error.message;
+    }
+    // RE-READ RATHER THAN TRUST THE CALL, in both directions: a throw does not
+    // prove the directory is still there (a partial removal may have finished
+    // the job) and the absence of one does not prove it is gone. The runner has
+    // already been bitten by a removal that did not stick — `fence.reappeared`
+    // exists for exactly that — so "cleared" is a second look, never an
+    // inference from control flow.
+    // The re-read goes back through the SAME guard, so "is it still there" is
+    // answered by the thing that decided where "there" was. A second notion of
+    // the path here is how a removal gets confirmed against the wrong object.
+    const after = checkTarget(dir, groundDir);
+    if (after.absent === true) {
+      out.cleared.push(dir);
+    } else {
+      out.unremoved.push(dir);
+      if (failure !== null) out.refused.push({ dir, reason: `removal threw: ${failure}` });
+    }
+  }
+  return out;
+}
+
+/**
+ * The lines the runner prints. Here rather than at the call site so the zero
+ * case cannot be dropped by an edit that only thinks about the non-zero one:
+ * `0 cleared` and "no clear ran" must never render the same way. That is the
+ * `IGNORED-BY-GROUND` rule, and it was written down because a `0` from a
+ * directory that had never existed once reached the ledger as a measurement.
+ *
+ * @param {ReturnType<typeof captureAndClearMintedSessions>} result
+ * @param {string} project
+ */
+export function describeGroundClear(result, project) {
+  const lines = [];
+  if (result.dest === null && result.refused.length === 0 && result.absent.length === 0) {
+    lines.push(
+      `own ground: MINTED-SESSION CLEAR 0 dir(s) — this run minted no session inside projects/${project}, ` +
+        'so there was nothing to capture and nothing to remove',
+    );
+    return lines;
+  }
+  if (result.dest !== null) {
+    lines.push(`own ground: CAPTURED ${result.captured.length} minted session(s) to ${result.dest}`);
+    for (const dir of result.captured) lines.push(`own ground: CAPTURED ${dir}`);
+  }
+  for (const dir of result.cleared) lines.push(`own ground: CLEARED ${dir} — removed from projects/${project}, re-read to confirm`);
+  for (const dir of result.absent) lines.push(`own ground: ALREADY-GONE ${dir} — nothing to remove, which is not the same finding as having removed it`);
+  for (const { dir, reason } of result.refused) lines.push(`own ground: REFUSED-TO-CLEAR ${dir} — ${reason}`);
+  for (const dir of result.unremoved) {
+    lines.push(
+      `own ground: CLEAR-DID-NOT-TAKE ${dir} — captured and removed, and still present when re-read; ` +
+        'the next run will refuse on the ground hash',
+    );
+  }
+  return lines;
+}
