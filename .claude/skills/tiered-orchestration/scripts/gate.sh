@@ -599,6 +599,26 @@ else
     [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
   }
 
+  # 7.6.144 (D, T1 1146): the OWN-lane twin of sibling_stale — same two byte
+  # conditions, owner == this lane. Such a row is this lane's manifest running
+  # BEHIND main (a merge landed on a path it pins), not a change this PR made.
+  # gate.sh had no word for it and called it UNDECLARED, printing the
+  # --expect-pin-fail remedy — a claim about the PR's diff that the diff
+  # contradicts; obeying it wrote false 925 declarations. It stays RED (the
+  # manifest is behind; the slot's precheck would refuse anyway) but the remedy
+  # is reconcile, never declare.
+  own_stale() {
+    local man="$1" p="$2" owner main_blob here_blob
+    [ -n "${FORGE_LANE:-}" ] || return 1
+    [ "$pr_diff_ok" -eq 1 ] || return 1
+    owner="$(manifest_owner "$man")" || return 1
+    [ "$owner" = "$FORGE_LANE" ] || return 1
+    case "$pr_diff_paths" in *"|$p|"*) return 1 ;; esac
+    main_blob="$(git -C "$R" rev-parse --verify --quiet "parsoFish/main:$p" 2>/dev/null)" || return 1
+    here_blob="$(cd "$R" && git hash-object -- "$p" 2>/dev/null)" || return 1
+    [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
+  }
+
   pin_fail() {
     local man="$1" manifest="$2" undeclared=0 p
     case " $EXPECTED_PIN_FAILS " in *" $man "*) echo "  declared: every failure in $man is accounted for by this PR"; return 0 ;; esac
@@ -610,6 +630,8 @@ else
       if sibling_stale "$man" "$p"; then
         echo "  PIN_SIBLING_STALE $man:$p — matches main ${gate_main:-unknown}; owner $(manifest_owner "$man") owes a reconcile"
         sibling_stale_n=$((sibling_stale_n + 1))
+      elif own_stale "$man" "$p"; then
+        echo "  PIN_OWN_STALE $man:$p — matches main ${gate_main:-unknown} and this PR does not touch it: your manifest is BEHIND main — reconcile $man to main (pin-reconcile FROM=head), do not declare (7.6.144)"; undeclared=1
       else
         # 7.6.110 (A, T1 1036): the line carries its REMEDY, as PIN_SIBLING_STALE carries its
         # owner — A spent a full twenty-step gate learning that a declaration is owner-independent.

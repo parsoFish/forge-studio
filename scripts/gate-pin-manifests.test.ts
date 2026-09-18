@@ -395,6 +395,42 @@ jobs:
     }
   });
 
+  test('7.6.144: an OWN-lane row, not in the diff, whose bytes equal main is PIN_OWN_STALE — reconcile, never declare', () => {
+    // D's PR 2 (T1 1146): gate.sh called three of D's own unreconciled rows
+    // UNDECLARED and printed the --expect-pin-fail remedy — a claim about the
+    // PR's diff the gate had no diff to check. pin-precheck, handed the diff,
+    // said "owner owes a reconcile … DO NOT declare". The row stays RED for the
+    // lane's own gate (its manifest is behind main) but is never worded as a
+    // diff fact, and the remedy is the true one.
+    const d = repoWithMain();
+    const camp = campaignPinning('M6-C');
+    try {
+      const r = gateAs('M6-C', d, camp);
+      assert.match(r.out, /PIN_OWN_STALE M6-OTHER:OWNED\.md — matches main .*reconcile/, r.out);
+      assert.doesNotMatch(r.out, /UNDECLARED: M6-OTHER:OWNED\.md/, 'not a diff claim');
+      assert.doesNotMatch(r.out, /expect-pin-fail M6-OTHER:OWNED\.md/, 'the declare remedy is a false 925 claim here');
+      assert.match(r.out, /^PIN_SIBLING_STALE_COUNT=0$/m, 'own rows are not siblings');
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+
+  test('7.6.144 CONTROL: an own-lane row this tree CHANGED stays UNDECLARED with the declare remedy', () => {
+    const d = repoWithMain();
+    const camp = campaignPinning('M6-C');
+    try {
+      writeFileSync(join(d, 'OWNED.md'), 'bytes that exist nowhere but here\n');
+      const r = gateAs('M6-C', d, camp);
+      assert.match(r.out, /UNDECLARED: M6-OTHER:OWNED\.md/, r.out);
+      assert.match(r.out, /expect-pin-fail M6-OTHER:OWNED\.md/, 'a changed own row IS a diff fact — declare it');
+      assert.doesNotMatch(r.out, /PIN_OWN_STALE M6-OTHER/, 'changed bytes are not a stale pin');
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+      rmSync(camp, { recursive: true, force: true });
+    }
+  });
+
   test('7.6.97: a sibling-owned row whose bytes DIFFER from main stays RED — tampering here is not a merge there', () => {
     const d = repoWithMain();
     const camp = campaignPinning('M6-OTHER');
@@ -417,7 +453,9 @@ jobs:
     const camp = campaignPinning('M6-C');
     try {
       const r = gateAs('M6-C', d, camp);
-      assert.match(r.out, /UNDECLARED: M6-OTHER:OWNED\.md/, r.out);
+      // 7.6.144: still RED, but WORDED as what it is — the lane's own manifest behind
+      // main, remedy reconcile — never as a claim about this PR's diff.
+      assert.match(r.out, /PIN_OWN_STALE M6-OTHER:OWNED\.md/, r.out);
       assert.doesNotMatch(r.out, /PIN_SIBLING_STALE M6-OTHER/);
       assert.match(r.out, /^PIN_SIBLING_STALE_COUNT=0$/m);
     } finally {
