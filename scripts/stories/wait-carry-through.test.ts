@@ -150,9 +150,9 @@ describe('7.6.82 — a declared wait arrives at the waiter intact', () => {
   // 7.6.77's `perTransition`/`progressKey` — and it refuses rather than passes
   // if it cannot find the function to read.
   test('the shape list covers every field validateWait inspects', () => {
-    const src = readFileSync(new URL('./story-file.mjs', import.meta.url), 'utf8');
+    const src = readFileSync(new URL('./story-wait-schema.mjs', import.meta.url), 'utf8');
     const body = /^function validateWait\([\s\S]*?^}/m.exec(src)?.[0];
-    assert.ok(body, 'could not locate validateWait in story-file.mjs — refusing rather than reporting a vacuous pass');
+    assert.ok(body, 'could not locate validateWait in story-wait-schema.mjs — refusing rather than reporting a vacuous pass');
 
     const inspected = new Set([...body.matchAll(/raw\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]!));
     const covered = new Set(VALID_SHAPES.flatMap((w) => Object.keys(w)));
