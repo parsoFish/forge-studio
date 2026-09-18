@@ -98,6 +98,29 @@ before(async () => {
   // `apps/studio/tests/contract/roadmap-canvas-render.test.ts`.
   writeFileSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-E.md'), makeManifest('INIT-E'));
 
+  // `forge-8vfn.7.6.142` — THE ARCHITECT HAND-OFF, both polarities.
+  //
+  // `enqueueFlowRun` has always claimed a `ready-for-review` manifest whose
+  // `flow_id` differs from the target — 7.6.132 made the surfaces read that same
+  // rule, and `buildProjectRoadmap` derives `canStartDevelopment` from it. Nothing
+  // asserted the DERIVATION: the predicate had doors, the import shape had a door,
+  // and the server wiring the card actually reads had none.
+  //
+  // Found by running the §15.554 free control before S10 run 20's $35, and the
+  // control's own near-miss is why both polarities are here: my first probe read
+  // `initiatives` off the response ENVELOPE (`{roadmap: {...}}`) and reported the
+  // hand-off as absent. It threw rather than defaulting to `[]`, so the wrong
+  // subject surfaced as "answering about nothing" instead of as a confident,
+  // plausible, $35-justifying false finding about code that works.
+  writeFileSync(
+    join(forgeRoot, '_queue', 'ready-for-review', 'INIT-HANDOFF.md'),
+    makeManifest('INIT-HANDOFF', { flowId: 'forge-architect' }),
+  );
+  writeFileSync(
+    join(forgeRoot, '_queue', 'ready-for-review', 'INIT-SIBLING.md'),
+    makeManifest('INIT-SIBLING', { flowId: 'forge-develop' }),
+  );
+
   // `forge-8vfn.7.6.23` — a manifest the parser REFUSES. `class` is required
   // (ADR-051, packages/flows/manifest.ts:117, "There is no default"), and this
   // one omits it. Written by hand rather than through makeManifest so the
@@ -152,6 +175,12 @@ type RoadmapBody = {
       status: string;
       ready: boolean;
       blockedBy: string[];
+      // 7.6.142. This local shape is hand-written, so a field the route really
+      // returns is invisible here until someone adds it — and `npm test` would
+      // never say so: it STRIPS types without checking them (§15.567). The
+      // assertions below passed under `node --test` and `tsc` reded on exactly
+      // these two lines. Three different questions, and only the third had it.
+      canStartDevelopment: boolean;
       workItems?: Array<{ id: string }>;
       completedAt?: string;
       blockedClauses?: string[];
@@ -446,5 +475,42 @@ test('roadmap: an initiative with no refusal carries no clauses and stays ready'
   assert.ok(
     a!.blockedClauses === undefined || a!.blockedClauses.length === 0,
     'and it carries no clause names',
+  );
+});
+
+/**
+ * `forge-8vfn.7.6.142` (T1 ruling 1145) — the roadmap card reads a SERVER
+ * boolean, and this is the only place that asserts the server computes it.
+ *
+ * S10 run 19 failed at the kickoff beat with `no element carries that handle`:
+ * the architect parks an initiative in `_queue/ready-for-review/`, and every UI
+ * surface gated on `pending`/`planned`. Run 20 pressed the control for the
+ * first time in twenty runs and the developer station ran.
+ *
+ * BOTH POLARITIES, because only the pair is a rule. A door asserting the
+ * hand-off alone passes for a server that returns `true` unconditionally, which
+ * would re-enqueue a sibling beside a live gate — the case `enqueueFlowRun`
+ * refuses at `:160` and the reason the predicate is not simply `status ===
+ * 'ready-for-review'`.
+ */
+test('roadmap: ready-for-review under a FOREIGN flow is startable; the same flow is not', async () => {
+  const roadmap = await fetchRoadmap();
+  const handoff = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-HANDOFF');
+  const sibling = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-SIBLING');
+
+  // Present-first, so a renamed or dropped fixture reds as "absent" rather than
+  // passing vacuously through an undefined that never had the field.
+  assert.ok(handoff, 'INIT-HANDOFF present in roadmap');
+  assert.ok(sibling, 'INIT-SIBLING present in roadmap');
+
+  assert.equal(
+    handoff!.canStartDevelopment, true,
+    'an initiative parked in ready-for-review by the ARCHITECT is the hand-off enqueueFlowRun claims — ' +
+    'the card must offer it, or the develop station is unreachable from the product (S10 runs 1-19)',
+  );
+  assert.equal(
+    sibling!.canStartDevelopment, false,
+    'the SAME flow parked in ready-for-review is a parked sibling, not a hand-off — offering it would ' +
+    'enqueue a second develop run beside a live one',
   );
 });
