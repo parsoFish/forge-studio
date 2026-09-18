@@ -567,6 +567,29 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     return 1;
   }
+
+  // `forge-8vfn.7.6.139` — A DECLARATION THAT MATCHED NOTHING IS RED, not a note.
+  //
+  // 7.6.136 reported it and stayed green, which is §15.539's dead glob exactly:
+  // a licence that cannot match cannot fail, so it stops protecting and stops
+  // complaining in the same instant, and nothing distinguishes a live
+  // declaration from a fossil.
+  //
+  // THIS IS ONLY UNAMBIGUOUS BECAUSE THE PREMISE IS CHECKED AT THE START. Until
+  // `groundPinVerdict` moved into the runner, "unmatched because the product
+  // stopped doing what the story says" and "unmatched because the ground was
+  // already migrated" were one state — and reddening both would have failed
+  // every idempotent re-run. The start-of-run refusal makes the second
+  // unreachable, so what is left here is the first, and it deserves a red.
+  if ((ownGroundDrift.unmatchedDeclarations ?? []).length > 0) {
+    console.error(
+      `[stories] ${story.id}: DECLARATION UNMATCHED — ${ownGroundDrift.unmatchedDeclarations.length} ` +
+      `ground change(s) this story DECLARES its product makes did not happen (named above). The ground was ` +
+      'at its declared pin when this run started, so the product stopped doing what the story says — or the ' +
+      'story still describes behaviour that has since changed. The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
   // `forge-8vfn.7.6.123`. THE NARROW GATE, and the narrowness is the point.
   //
   // Red when a session THIS RUN MINTED is still in the ground after the clear

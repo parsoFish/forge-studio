@@ -40,7 +40,10 @@ import {
   remoteSwitchVerdict,
   queueStateVerdict,
   declaredCommitsVerdict,
+  groundPinVerdict,
+  GROUND_PIN_ENV,
 } from './preflight.mjs';
+import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
@@ -179,6 +182,28 @@ async function main() {
     console.log(`[stories] queue ok — ${q.reason}`);
     break;
   }
+  // 1b-iii. THE GROUND IS AT THE HASH THE CALLER DECLARED — `forge-8vfn.7.6.139`.
+  //
+  //     Here, beside the other costed-run preconditions, because the point is to
+  //     refuse BEFORE the money and before the browser opens. Until this moved
+  //     into the runner it lived only in each lane's own launcher — and a
+  //     precondition that lives in a launcher does not exist for anyone who
+  //     starts the run another way. The cost was that a declaration going
+  //     unmatched because the PRODUCT stopped and one going unmatched because
+  //     the GROUND WAS ALREADY MIGRATED were a single green state.
+  for (const s of stories) {
+    const measured = ownGroundManifest(ROOT, s.ground.project ?? null);
+    const v = groundPinVerdict(s.ground, {
+      declaredPin: process.env[GROUND_PIN_ENV],
+      measured: measured === null ? null : measured.digest,
+    });
+    if (!v.ok) {
+      console.error(`[stories] REFUSING ${s.id}: ${v.reason}`);
+      return 1;
+    }
+    console.log(`[stories] ground pin ok — ${v.reason}`);
+  }
+
   if (stories.some((s) => s.ground.realSpawn || s.ground.budget_usd > 0)) {
     const declared = (process.env.FORGE_STORY_REQUIRES ?? '').split(',').map((c) => c.trim()).filter(Boolean);
     const req = declaredCommitsVerdict(declared, (sha) => {
