@@ -21,6 +21,12 @@ import { join, relative, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { AuthoringLauncher } from '../../components/AuthoringLauncher';
+// The page under test is imported ONCE, at module scope (vi.mock is hoisted above it, so the
+// mocks still apply). Imported inside a test body, its transform + import was charged to that
+// test's 5 s budget — the first test in the file timed out on a CPU-starved host while every
+// later one (module cached) passed, and the timed-out body kept mounting into the next test.
+// Flake register F5/F6, reproduced by lane m7-c pinning vitest to one CPU beside four burners.
+import TemplateBuilderPage from '@/app/templates/new/page';
 
 type Props = {
   knownProjects?: string[];
@@ -94,14 +100,12 @@ vi.mock('next/navigation', () => ({
 }));
 
 test('app/templates/new/page.tsx: the connected page mounts the AuthoringLauncher (pin 1 — an authoring session, not just the hand-authoring form)', async () => {
-  const { default: TemplateBuilderPage } = await import('@/app/templates/new/page');
   const html = renderToStaticMarkup(React.createElement(TemplateBuilderPage));
   expect(html).toContain('data-section="authoring-launcher"');
   expect(html).toContain('data-action="start-authoring"');
 });
 
 test('app/templates/new/page.tsx: the pre-existing hand-authoring controls still render, disabled under the SAME initial condition as before (pin 2 — this is an additional door, not "replace the builder")', async () => {
-  const { default: TemplateBuilderPage } = await import('@/app/templates/new/page');
   const html = renderToStaticMarkup(React.createElement(TemplateBuilderPage));
   expect(html).toContain('data-field="template-category"');
   expect(html).toContain('data-field="template-id"');
