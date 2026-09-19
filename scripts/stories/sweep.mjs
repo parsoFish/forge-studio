@@ -123,10 +123,9 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
   // M7-D — a FIXTURE GROUND is the run's OWN ground, not its debris: `run.mjs`
   // provisions `projects/story-<id>` before the beats run, and it is judged —
   // by the fence and by the verdict this trailing sweep runs inside — before
-  // `teardownFixtureGround` removes it. Ruling 308 already carries the
-  // identical shape for the ground's Brain 3 sub-wiki ("held, not kept";
-  // `applyFence`'s `defer`); this is that same hold applied to the project
-  // directory. An OPT-IN list, so a story that has never heard of a fixture
+  // `teardownFixtureGround` removes it. `applyFence`'s `defer` already holds
+  // the ground's Brain 3 sub-wiki the same way ("held, not kept"); this is
+  // that same hold applied to the project directory. An OPT-IN list, so a story that has never heard of a fixture
   // keeps today's unconditional removal exactly.
   const keepPaths = new Set((keepProjects ?? []).map((name) => join(root, 'projects', name)));
   const keptLines = [];

@@ -1,5 +1,5 @@
 /**
- * fixture-ground.mjs — forge-owned FIXTURE grounds (M7-D, D1).
+ * fixture-ground.mjs — forge-owned FIXTURE grounds (M7-D, bead `forge-1rk5.1`).
  *
  * A REAL ground under `projects/` is a moving target: the launcher pins a
  * method-C hash and refuses a run whose ground has drifted, so a story that
@@ -19,15 +19,18 @@
  *   - a provision that fails writes NOTHING. A half-provisioned ground would
  *     look like a good pin to whatever runs next.
  *
- * DETERMINISM is the other half: two provisions of the same seed commit to
+ * DETERMINISM is the other half: every provision of the same seed commits to
  * the IDENTICAL sha, because a story's beats may assert against that commit.
- * `FIXTURE_COMMIT_ENV` freezes author/committer identity and timestamp so the
- * commit is a pure function of the seed's tree, never of when or by whom it
- * was made.
+ * The sha is a function of exactly three things — the seed's tree as checked
+ * out (every path, its bytes and its executable bit), the fixture name in the
+ * commit message, and `FIXTURE_COMMIT_ENV` — so two stories that provision
+ * the same seed get the same sha, whenever and by whomever it is run. The
+ * host's git config that would otherwise take part is overridden on every
+ * call (`FIXTURE_GIT_CONFIG`), and `git init` copies no template.
  */
 import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { groundManifest } from './ground-hash.mjs';
 import { storyFixtureNames, assertSafeStoryId } from './sweep.mjs';
 
@@ -37,8 +40,7 @@ export const FIXTURE_ROOT = 'tests/stories/grounds';
  *  filesystem path with no separators or traversal possible. */
 export const FIXTURE_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
-/** Frozen so a provision can never drift with who ran it or when — the sha
- *  this produces is a pure function of the seed's tree and this object. */
+/** Frozen so a provision can never drift with who ran it or when. */
 export const FIXTURE_COMMIT_ENV = Object.freeze({
   GIT_AUTHOR_NAME: 'forge stories',
   GIT_AUTHOR_EMAIL: 'stories@forge.invalid',
@@ -48,37 +50,69 @@ export const FIXTURE_COMMIT_ENV = Object.freeze({
   GIT_COMMITTER_DATE: '2026-01-01T00:00:00Z',
 });
 
+/**
+ * Host git config that would otherwise change the commit, overridden on every
+ * provisioning call: blobs are the seed's own bytes (no line-ending
+ * conversion); hooks come only from the repository's own `.git/hooks`, which
+ * `--template=` leaves empty, so a host-wide `core.hooksPath` hook cannot
+ * rewrite the message; no signature; no re-encoded message.
+ */
+const FIXTURE_GIT_CONFIG = Object.freeze([
+  '-c', 'core.autocrlf=false',
+  '-c', 'core.hooksPath=.git/hooks',
+  '-c', 'commit.gpgsign=false',
+  '-c', 'i18n.commitEncoding=UTF-8',
+]);
+
 export function fixtureSeedDir(root, fixture) {
   return join(root, FIXTURE_ROOT, fixture, 'seed');
 }
 
+/** What a non-regular directory entry is, in words for a refusal. */
+function entryKind(d) {
+  if (d.isSymbolicLink()) return 'a symbolic link';
+  if (d.isFIFO()) return 'a FIFO';
+  if (d.isSocket()) return 'a socket';
+  if (d.isBlockDevice() || d.isCharacterDevice()) return 'a device';
+  return 'not a regular file or directory';
+}
+
 /**
- * Every file under `dir`, as sorted paths relative to it.
+ * Every file under `dir`, as sorted paths relative to it. THROWS, naming the
+ * path, on anything it cannot vouch for — before any write, because
+ * `provisionFixtureGround` calls this ahead of `cpSync`:
  *
- * D1 review, M5 — THROWS, naming the unreadable path, rather than swallowing.
- * `readdirSync(dir, { recursive: true })` fails the WHOLE walk the moment it
- * meets one unreadable subdirectory, not just that subtree, and a caller that
- * swallowed the failure would go on to `cpSync` the (unfiltered) seed anyway.
- * Measured on this host: `cpSync` walking into that same permission-denied
- * directory does not raise a catchable JS exception at all — it aborts the
- * whole process. So this has to throw BEFORE `cpSync` ever runs, and it is
- * called outside `provisionFixtureGround`'s try block for exactly that reason
- * — nothing has been written yet when it does, so there is nothing to clean
- * up. `d.parentPath` is used unconditionally: Node 22 always sets it, and a
- * `?? d.path` fallback is a backwards-compat path this codebase's own rule
- * against fallbacks does not allow.
+ *   - a directory it cannot read. `cpSync` walking into a permission-denied
+ *     directory does not raise a catchable exception on this Node version;
+ *     it aborts the whole process.
+ *   - an entry that is neither a regular file nor a directory (a symlink, a
+ *     FIFO, a socket, a device). `cpSync` would copy a symlink as a symlink
+ *     into a ground the run then treats as a trusted worktree. The walk reads
+ *     each entry's own type and never follows one.
  */
 function listFiles(dir) {
-  let entries;
-  try {
-    entries = readdirSync(dir, { recursive: true, withFileTypes: true });
-  } catch (e) {
-    throw new Error(`provisionFixtureGround: could not list ${dir} — ${e?.message ?? e}`);
-  }
-  return entries
-    .filter((d) => d.isFile())
-    .map((d) => relative(dir, join(d.parentPath, d.name)))
-    .sort();
+  const files = [];
+  const walk = (abs) => {
+    let entries;
+    try {
+      entries = readdirSync(abs, { withFileTypes: true });
+    } catch (e) {
+      throw new Error(`provisionFixtureGround: could not list ${abs} — ${e?.message ?? e}`);
+    }
+    for (const d of entries) {
+      const path = join(abs, d.name);
+      if (d.isDirectory()) walk(path);
+      else if (d.isFile()) files.push(relative(dir, path));
+      else {
+        throw new Error(
+          `provisionFixtureGround: seed entry ${path} is ${entryKind(d)} — a seed holds only regular files and ` +
+          'directories; refusing before anything is written',
+        );
+      }
+    }
+  };
+  walk(dir);
+  return files.sort();
 }
 
 /** `spawnSync` with an explicit argv, never a shell — named so every call
@@ -102,15 +136,13 @@ function runGit(args, what, opts = {}) {
  * guard the residue sweep already trusts. Shared by provision and teardown
  * so neither can ever be pointed at a real ground.
  *
- * D1 review, I1 — `assertSafeStoryId(storyId)` FIRST, unconditionally.
+ * `assertSafeStoryId(storyId)` runs FIRST, unconditionally.
  * `storyFixtureNames` does no validation of the id it is given, so a
  * traversal-shaped `storyId` (`'/../mdtoc'`) paired with a `project` built to
- * match it (`'story-/../mdtoc'`) passed the membership check while
+ * match it (`'story-/../mdtoc'`) would pass the membership check while
  * `join(root, 'projects', project)` resolved to `projects/mdtoc` — a REAL
- * ground's own path. Every caller today passes an id `validateStory` already
- * constrained, which is why this was latent rather than live; the module's
- * own header calls this guard the thing that "carries all the weight", so it
- * has to hold even for a caller that skipped that upstream check.
+ * ground's own path. This guard has to hold even for a caller that skipped
+ * `validateStory`.
  */
 function assertOwnNamespace(fn, storyId, project) {
   assertSafeStoryId(storyId);
@@ -127,7 +159,10 @@ function assertOwnNamespace(fn, storyId, project) {
 /**
  * Provision `projects/<project>` from `tests/stories/grounds/<fixture>/seed/`.
  * Refuses (writing nothing) before any write for every shape violation; a
- * failure once the copy has started removes what it wrote and rethrows.
+ * failure once the copy has started removes what it wrote and rethrows the
+ * ORIGINAL error. If that removal fails too, both are thrown together as an
+ * `AggregateError` whose message leads with the original and names the
+ * ground left on disk — a cleanup failure never hides why provisioning failed.
  *
  * @returns {{dir: string, digest: string, commit: string, files: string[]}} frozen
  */
@@ -159,13 +194,17 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
   const files = listFiles(seedDir);
   try {
     cpSync(seedDir, dest, { recursive: true });
-    runGit(['-C', dest, 'init', '-q', '-b', 'main'], 'git init');
-    // EXACTLY the seed file list, fed on stdin — never `add -A`/`.`, which
-    // would also add whatever this run's own beats later write into the
-    // ground before anyone asks it to.
-    runGit(['-C', dest, 'add', '--pathspec-from-file=-'], 'git add', { input: `${files.join('\n')}\n` });
+    runGit(['-C', dest, ...FIXTURE_GIT_CONFIG, 'init', '-q', '-b', 'main', '--template=', '--object-format=sha1'], 'git init');
+    // EXACTLY the seed file list, NUL-separated and literal (no glob, no
+    // pathspec magic), fed on stdin — never `add -A`/`.`, which would also add
+    // whatever this run's own beats later write into the ground.
     runGit(
-      ['-C', dest, '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', `fixture: ${fixture} (seed of ${storyId})`],
+      ['-C', dest, '--literal-pathspecs', ...FIXTURE_GIT_CONFIG, 'add', '--pathspec-from-file=-', '--pathspec-file-nul'],
+      'git add',
+      { input: `${files.join('\0')}\0` },
+    );
+    runGit(
+      ['-C', dest, ...FIXTURE_GIT_CONFIG, 'commit', '-q', '--no-verify', '-m', `fixture: ${fixture}`],
       'git commit',
       { env: { ...process.env, ...FIXTURE_COMMIT_ENV } },
     );
@@ -183,8 +222,17 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
   } catch (e) {
     // A half-provisioned ground would look like a good pin to whatever runs
     // next, so any failure past this point removes everything it wrote.
-    rmSync(dest, { recursive: true, force: true });
-    throw e instanceof Error ? e : new Error(String(e));
+    const original = e instanceof Error ? e : new Error(String(e));
+    try {
+      rmSync(dest, { recursive: true, force: true });
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [original, cleanupError],
+        `${original.message} — and removing the half-provisioned ${dest} failed too, so it is still on disk: ` +
+        `${cleanupError?.message ?? cleanupError}`,
+      );
+    }
+    throw original;
   }
 }
 
@@ -205,22 +253,43 @@ export function teardownFixtureGround(root, { storyId, project }) {
 }
 
 /**
- * Every REAL ground this run does not own: `<tree>/projects/<name>` for each
- * tree in `[root, ...worktrees]`, excluding a `story-`/`.`-prefixed name (a
- * fixture or a KB scaffold, never a real project) and, in `root` only, the
- * project this run's own ground IS.
+ * Every REAL ground in `root` and in each of `worktrees`: `<tree>/projects/<name>`
+ * for every directory entry except a `story-`/`.`-prefixed name (a fixture or
+ * a KB scaffold, never a real project) and, in `root` only, `ownProject` when
+ * one is given (a fixture run's own ground is `story-` namespaced and already
+ * left out, so the runner gives none).
  *
+ * `worktrees` is REQUIRED: a default of none would fence the root alone and
+ * say nothing about every sibling it skipped. A tree with no `projects/` at
+ * all contributes nothing; any OTHER failure to list one THROWS, naming it —
+ * a fence that skipped a tree it could not read would call its grounds
+ * unmoved without having looked. A symlinked entry is not a ground:
+ * `discoverProjects` (`packages/kernel/project-layout.ts`) lists directories
+ * only, so the product never treats one as a project.
+ *
+ * @param {string} root
+ * @param {{ownProject?: string|null, worktrees: string[]}} opts
  * @returns {string[]} sorted absolute directories
  */
-export function realGroundDirs(root, { ownProject = null, worktrees = [] } = {}) {
+export function realGroundDirs(root, { ownProject = null, worktrees } = {}) {
+  if (!Array.isArray(worktrees)) {
+    throw new TypeError(
+      'realGroundDirs: `worktrees` is required — every sibling worktree to fence, or [] for none; a default ' +
+      'would fence the root alone and say nothing about the trees it skipped',
+    );
+  }
   const out = [];
   for (const tree of [root, ...worktrees]) {
     const projectsDir = join(tree, 'projects');
     let entries;
     try {
       entries = readdirSync(projectsDir, { withFileTypes: true });
-    } catch {
-      continue; // no projects/ dir in this tree — nothing to see
+    } catch (e) {
+      if (e?.code === 'ENOENT') continue; // this tree has no projects/ dir at all
+      throw new Error(
+        `realGroundDirs: could not list ${projectsDir} (tree ${tree}) — ${e?.message ?? e}; refusing to fence ` +
+        'the real grounds without the ones it cannot see',
+      );
     }
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('story-') || entry.name.startsWith('.')) continue;
@@ -231,7 +300,7 @@ export function realGroundDirs(root, { ownProject = null, worktrees = [] } = {})
   return out.sort();
 }
 
-/** Method-C digest of every dir in `dirs`, or `null` where absent. */
+/** Method-C digest of every dir in `dirs`, or `null` where absent or unreadable. */
 export function snapshotRealGrounds(dirs) {
   const snap = new Map();
   for (const dir of dirs) snap.set(dir, groundManifest(dir)?.digest ?? null);
@@ -254,64 +323,93 @@ export function realGroundEscapes(before, after) {
   return lines;
 }
 
+/** The `<tree>` a snapshot key `<tree>/projects/<name>` belongs to. */
+const treeOf = (dir) => resolve(dirname(dirname(dir)));
+
 /**
- * The real-ground fence as a PURE, tested verdict — D1 review, I3.
+ * The real-ground fence's verdict, as one pure function so the decision that
+ * reds a run is testable on its own.
  *
- * The D1 fence was hand-rolled inline in `run-story.mjs`: `realGroundMoved`
- * computed from `realGroundEscapes`, an unconditional summary line, and a
- * `.length > 0` check reaching `return 1`. Deleting any one of those three
- * kept every pinned test green, because nothing exercised the REQUIREMENT —
- * only the two primitives it was built from. This is the seam a test can
- * hold: one function, one frozen record, one door.
+ * A ground is judged only inside a tree BOTH `treeListings` contain. A
+ * worktree added or removed while the run was in progress (a lane starting or
+ * finishing a work unit) brings or takes its `projects/*` with it; that is
+ * not this run moving a ground, so such a tree is named in `treeLines` and
+ * never judged. With no listings, every ground is judged.
  *
- * `hashed` counts only dirs `before` produced a digest FOR — a dir
- * `groundManifest` could not read (an unreadable file, or output past its 64
- * MiB bound) returns `null` and was never actually hashed, whatever a count
- * of listed dirs would have claimed (the sibling of review finding M2).
- * `trees` counts DISTINCT `<tree>` roots among the keys, not the number of
- * dirs — a key is always `<tree>/projects/<name>`, so the tree is its
- * grandparent.
+ * Inside a judged tree, a ground either snapshot LISTED but could not hash
+ * (`null`: an unreadable file, output past `groundManifest`'s 64 MiB bound)
+ * is `unreadable` — never compared, because `null` against `null` says
+ * nothing about its contents. Every other ground that appeared, vanished or
+ * changed is `moved`. Either list makes `ok` false.
+ *
+ * `hashed` counts the dirs `before` produced a digest for; `trees` counts the
+ * distinct `<tree>` roots among `before`'s keys.
  *
  * @param {Map<string, string|null>} before
  * @param {Map<string, string|null>} after
- * @returns {{ok: boolean, moved: string[], hashed: number, trees: number, summary: string}} frozen
+ * @param {{before: string[], after: string[]}|null} [treeListings] the trees each snapshot listed
+ * @returns {{ok: boolean, moved: string[], unreadable: string[], hashed: number, trees: number, treeLines: string[], summary: string}} frozen
  */
-export function realGroundFenceVerdict(before, after) {
-  const moved = realGroundEscapes(before, after);
+export function realGroundFenceVerdict(before, after, treeListings = null) {
+  let persisted = null;
+  const treeLines = [];
+  if (treeListings !== null) {
+    if (!Array.isArray(treeListings?.before) || !Array.isArray(treeListings?.after)) {
+      throw new TypeError('realGroundFenceVerdict: treeListings must be { before: string[], after: string[] }');
+    }
+    const was = new Set(treeListings.before.map((t) => resolve(t)));
+    const now = new Set(treeListings.after.map((t) => resolve(t)));
+    persisted = new Set([...was].filter((t) => now.has(t)));
+    for (const t of [...now].filter((x) => !was.has(x)).sort()) {
+      treeLines.push(`real grounds: tree ${t} APPEARED during the run — not this run's ground, not red`);
+    }
+    for (const t of [...was].filter((x) => !now.has(x)).sort()) {
+      treeLines.push(`real grounds: tree ${t} VANISHED during the run — not this run's ground, not red`);
+    }
+  }
+  const judged = (snap) => new Map([...snap].filter(([dir]) => persisted === null || persisted.has(treeOf(dir))));
+  const judgedBefore = judged(before);
+  const judgedAfter = judged(after);
+  const unreadableSet = new Set(
+    [...judgedBefore, ...judgedAfter].filter(([, digest]) => digest === null).map(([dir]) => dir),
+  );
+  const readable = (snap) => new Map([...snap].filter(([dir]) => !unreadableSet.has(dir)));
+  const moved = realGroundEscapes(readable(judgedBefore), readable(judgedAfter));
+  const unreadable = [...unreadableSet].sort();
+
   let hashed = 0;
   const trees = new Set();
   for (const [dir, digest] of before) {
     if (digest !== null) hashed += 1;
-    trees.add(dirname(dirname(dir))); // `<tree>/projects/<name>` -> `<tree>`
+    trees.add(treeOf(dir));
   }
   return Object.freeze({
-    ok: moved.length === 0,
-    moved,
+    ok: moved.length === 0 && unreadable.length === 0,
+    moved: Object.freeze(moved),
+    unreadable: Object.freeze(unreadable),
     hashed,
     trees: trees.size,
-    summary: `real grounds: ${hashed} hashed in ${trees.size} tree(s), ${moved.length} moved`,
+    treeLines: Object.freeze(treeLines),
+    summary:
+      `real grounds: ${hashed} hashed in ${trees.size} tree(s), ${moved.length} moved, ${unreadable.length} unreadable`,
   });
 }
 
 /**
  * Provision every fixture-ground story in `stories`, IN ORDER, stopping at
- * the first refusal — D1 review, M1. "A provision that fails writes nothing"
- * held for one story and not for a batch: `run.mjs`'s original loop kept
- * provisioning after a refusal, and nothing tore down what an earlier story
- * in the same call had already written. This restates that promise at the
- * batch's own level: on a refusal, every ground THIS CALL already
- * provisioned is torn down before the refusal is returned, so "writes
- * nothing" is true of the whole batch, not just the story that failed.
+ * the first refusal. "A provision that fails writes nothing" is restated at
+ * the batch's own level: on a refusal, every ground THIS CALL already
+ * provisioned is torn down before the refusal is returned, so it holds for
+ * the whole batch, not just the story that failed.
  *
  * A story with no `ground.fixture` is skipped, not provisioned — the caller
  * hands over its full story list rather than pre-filtering.
  *
- * D1 re-review, N2 — a rollback that could not undo its own write is NAMED,
- * not swallowed: `rollbackFailures` carries `{ project, error }` for every
- * already-provisioned ground the rollback loop failed to remove (empty on a
- * clean rollback, and always `[]` when nothing refused). A caller that
- * discarded this would have a ground neither it nor `run.mjs`'s abort
- * backstop knows about, printed nowhere.
+ * A rollback that could not undo its own write is NAMED, not swallowed:
+ * `rollbackFailures` carries `{ project, error }` for every
+ * already-provisioned ground the rollback failed to remove (empty on a clean
+ * rollback, and always `[]` when nothing refused). A caller that discarded
+ * this would leave a ground nothing knows about, printed nowhere.
  *
  * @param {string} root
  * @param {Array<{id: string, ground?: {project?: string, fixture?: string}}>} stories
@@ -326,10 +424,8 @@ export function provisionFixtureGrounds(root, stories) {
       r = provisionFixtureGround(root, { storyId: s.id, project: s.ground.project, fixture: s.ground.fixture });
     } catch (e) {
       // Undo everything THIS CALL already wrote before reporting the
-      // refusal. Each id here was already validated by a provision that just
-      // succeeded, so a rollback failure is unusual — READ, not swallowed:
-      // a `teardownFixtureGround` that returns `{removed: false, error}` or
-      // itself throws is named in `rollbackFailures` rather than discarded.
+      // refusal. A `teardownFixtureGround` that returns `{removed: false,
+      // error}` or itself throws is named in `rollbackFailures`.
       const rollbackFailures = [];
       for (const p of provisioned) {
         let t;

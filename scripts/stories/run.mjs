@@ -283,15 +283,15 @@ async function main() {
   // What the leading sweep removed, so the teardown can put back anything the
   // run never regenerated (T1 ruling 594, half 2).
   const sweptPaths = [];
-  // D1 review, M1 — grounds `provisionFixtureGrounds` provisioned in THIS
-  // call. `runStory` tears down its own ground on every path it reaches, but
-  // a bridge refusal or throw before a later story's turn — or a throw
-  // inside an EARLIER story's own run — would otherwise leave an
-  // already-provisioned ground standing forever; declared outside the `try`
-  // so the abort backstop in `finally` can always see it.
+  // The grounds `provisionFixtureGrounds` provisioned in THIS call.
+  // `runStory` tears down its own ground on every path it reaches, but a
+  // bridge refusal or throw before a later story's turn — or a throw inside
+  // an EARLIER story's own run — would otherwise leave an already-provisioned
+  // ground standing; declared outside the `try` so the abort backstop in
+  // `finally` can always see it.
   let provisionedGrounds = [];
-  // Fix round 2, T2 ruling 4 (re-review N4) — which of `provisionedGrounds`'
-  // stories actually STARTED. A story that started and then crashed
+  // Which of `provisionedGrounds`' stories actually STARTED. A story that
+  // started and then crashed
   // mid-beats keeps its ground for evidence; only a ground whose story was
   // NEVER ENTERED is the backstop's to remove. Written immediately before
   // `runStory` is awaited (see the loop below) so there is no gap between
@@ -326,7 +326,7 @@ async function main() {
     //     ground only once it exists, and provisioning after the bridge is up
     //     would race a driven browser against a `git init` still in flight).
     //     A refusal here writes nothing FOR THE WHOLE BATCH
-    //     (`provisionFixtureGrounds`'s own contract — D1 review, M1) and must
+    //     (`provisionFixtureGrounds`'s own contract) and must
     //     cost nothing either: it stops the run before any story's beats,
     //     same as every other preflight refusal above. ONE call for every
     //     story, not a loop over the singular: a loop has no batch-level
@@ -344,10 +344,13 @@ async function main() {
     if (provisionResult.refused !== null) {
       console.error(`[stories] REFUSING ${provisionResult.refused.storyId}: ${provisionResult.refused.message}`);
       exitCode = 1;
-      // D1 re-review, N2 — a rollback `provisionFixtureGrounds` could not
-      // finish is named, not left for someone to notice by its absence.
+      // A rollback `provisionFixtureGrounds` could not finish is named, not
+      // left for someone to notice by its absence.
       for (const f of provisionResult.rollbackFailures) {
-        console.warn(`[stories] fixture ground: could not roll back projects/${f.project}: ${f.error} — the next leading sweep removes it`);
+        console.warn(
+          `[stories] fixture ground: could not roll back projects/${f.project}: ${f.error} — ` +
+          'the leading sweep of the next run that includes its story removes it',
+        );
       }
     }
 
@@ -384,7 +387,7 @@ async function main() {
       for (const story of stories) {
         // Marked IMMEDIATELY before the await — no code runs between this and
         // `runStory` actually starting, so a crash inside it can never leave
-        // a gap where the story still reads as unstarted (T2 ruling 4).
+        // a gap where the story still reads as unstarted.
         startedStoryIds.add(story.id);
         exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
       }
@@ -445,8 +448,7 @@ async function main() {
       // A teardown that throws loses the verdict the run just produced.
       console.warn(`[stories] run-end reap failed: ${err?.message ?? err}`);
     }
-    // D1 review, M1 (re-review N3/N4, fix round 2 T2 ruling 4) — the
-    // fixture-ground abort backstop. `runStory` already tears down its OWN
+    // The fixture-ground abort backstop. `runStory` already tears down its OWN
     // ground on every path it reaches ONCE STARTED (a green run, a red one, a
     // spend halt) — so this only ever has work to do for a story whose ground
     // was provisioned in THIS batch but whose own `runStory` was NEVER
@@ -454,7 +456,7 @@ async function main() {
     // earlier story's `runStory` throwing before a later story's turn. A
     // story that DID start and then crashed mid-beats keeps its ground —
     // deleting it here would destroy evidence (`_architect/<sid>/…` and
-    // friends) before anything reads it, ruling 356b's class one level up.
+    // friends) before anything reads it.
     // After the agent reap above, so nothing is still writing into a ground
     // this might remove. Wrapped in its own try/catch, same as the reap
     // block above and for the same reason: a throw here must not be able to
@@ -462,24 +464,26 @@ async function main() {
     try {
       for (const p of provisionedGrounds) {
         if (startedStoryIds.has(p.storyId)) {
-          // D1 re-review (fix round 2), B1 — a started story's OWN `runStory`
-          // already tears its ground down on every path it reaches, so
-          // "started" alone does not mean the ground is still there. Printing
-          // "LEFT for evidence" unconditionally was a FALSE residue line on
-          // every ordinary green or red run (the `forge-e8dn` class: a report
-          // that speaks whether or not the thing it names is true). Only the
-          // filesystem answers this, and only a ground still ON DISK gets the
-          // line; one that is already gone is exactly what a completed run's
-          // own teardown looks like, and nothing more needs saying here.
+          // A started story's own `runStory` tears its ground down on every
+          // path it reaches, so "started" alone does not mean the ground is
+          // still there. Only a ground still ON DISK gets the line — a report
+          // that speaks whether or not the thing it names is true is the
+          // `forge-e8dn` class.
           if (existsSync(join(ROOT, 'projects', p.project))) {
-            console.log(`[stories] fixture ground: projects/${p.project} LEFT for evidence — the next leading sweep removes it`);
+            console.log(
+              `[stories] fixture ground: projects/${p.project} LEFT for evidence — ` +
+              `the leading sweep of the next run that includes ${p.storyId} removes it`,
+            );
           }
           continue;
         }
         const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
         if (t.removed) console.log(`[stories] fixture ground: torn down projects/${p.project}`);
         else if (t.error !== undefined) {
-          console.warn(`[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — the next leading sweep removes it`);
+          console.warn(
+            `[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — ` +
+            `the leading sweep of the next run that includes ${p.storyId} removes it`,
+          );
         } else console.log(`[stories] fixture ground: projects/${p.project} already absent`);
       }
     } catch (err) {

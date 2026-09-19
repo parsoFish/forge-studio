@@ -113,20 +113,26 @@ export function groundChanges(before, after) {
  * Every worktree of this repo EXCEPT the run's own — the same set the path
  * fence judges.
  *
- * D1 review, I2 — EXPORTED so `realGroundDirs`' caller (`run-story.mjs`) uses
- * THIS lister rather than `sweep.mjs`'s `snapshotSiblingWorktrees`, which
- * additionally runs `git status --porcelain -z -uall` per sibling and
- * SILENTLY DROPS one whose status read throws (a >1 MiB `-uall` output, a
- * broken gitdir, a `safe.directory` refusal) — so a tree could vanish from
- * the real-ground fence with nothing naming which one. This function does no
- * per-sibling read at all: it only asks git which worktrees are registered.
+ * Exported for the real-ground fence (`run-story.mjs`), which needs a lister
+ * that cannot drop a tree unnamed. `sweep.mjs`'s `snapshotSiblingWorktrees`
+ * also runs `git status --porcelain -z -uall` per sibling and skips one whose
+ * status read throws (a >1 MiB `-uall` output, a broken gitdir, a
+ * `safe.directory` refusal). This function does no per-sibling read at all —
+ * it only asks git which worktrees are registered — and THROWS, naming the
+ * tree and git's own words, when git cannot answer: an empty list would read
+ * as "no siblings" and leave every sibling's ground unfenced with nothing said.
  */
 export function siblingDirs(root) {
   let listing = '';
   try {
-    listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
-  } catch {
-    return [];
+    listing = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    const said = String(e?.stderr ?? '').trim() || (e?.message ?? String(e));
+    throw new Error(`siblingDirs: \`git worktree list\` failed in ${root} — ${said}; refusing to fence without the sibling list`);
   }
   const out = [];
   for (const line of listing.split('\n')) {
