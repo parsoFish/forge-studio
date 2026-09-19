@@ -368,8 +368,21 @@ export function pendingRows(rows: readonly KbDrainRoundRow[]): KbDrainPerFinding
   return rows.map((row) => ({ ...row, outcome: 'pending' as const }));
 }
 
+/**
+ * A stable per-finding identity — `kind::file::message` (forge-1ep). Folding
+ * in `message` is what makes this unique: two findings of the SAME kind on
+ * the SAME file (two dangling `related_themes` entries in one theme, two
+ * broken links) previously shared a `kind::file` key, so `draftedKeys` /
+ * `refusedKeys` (keyed the same way in `bridge-studio-kb-drain.ts`) treated
+ * drafting or refusing ONE sibling as covering every sibling — including
+ * ones never dispatched at all. `message` already carries the distinguishing
+ * detail (the specific slug, the specific broken path), so no separate hash
+ * or index is needed. `progressKeySet`'s no-progress/oscillation semantics
+ * only ever compare SETS of these keys for equality/subset — widening what a
+ * key contains changes nothing about how those sets are compared.
+ */
 export function findingKey(f: Finding): string {
-  return `${f.kind ?? f.check ?? ''}::${f.file}`;
+  return `${f.kind ?? f.check ?? ''}::${f.file}::${f.message}`;
 }
 
 export function progressKeySet(findings: readonly Finding[]): Set<string> {
