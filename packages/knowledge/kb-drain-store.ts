@@ -12,8 +12,8 @@
  */
 import { requireSessionStatusIo } from './kb-drain-model.ts';
 import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
@@ -301,21 +301,11 @@ export function isKbDrainCancelRequested(forgeRoot: string, runId: string): bool
 // Structural-only gate helpers (W7-B2, orch-01)
 // ---------------------------------------------------------------------------
 
-/** Restore every gated change to its pre-turn content — a created file is
- *  removed, an edited/deleted file is written back byte-for-byte. Paths are
- *  snapshot-derived (our OWN walk of the trusted `brainDir`), never
- *  request/agent text. */
-export function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
-  for (const c of changes) {
-    const abs = join(brainDir, c.relPath);
-    if (c.before === null) {
-      rmSync(abs, { force: true });
-      continue;
-    }
-    mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, c.before, 'utf8');
-  }
-}
+// `revertProseChanges` — the ONE implementation lives in
+// kb-drain-edit-soundness.ts (this file already imports from it, above);
+// re-exported here because bridge-studio-kb-drain.ts's own import of it
+// keeps this module path.
+export { revertProseChanges } from './kb-drain-edit-soundness.ts';
 
 export function newDraftSessionId(): string {
   const iso = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
