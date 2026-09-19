@@ -10,22 +10,21 @@ import { FINALIZERS, resolveFinalizer, copyStagingToLibrary } from '../../intera
 // Registry structure — FINALIZERS + resolveFinalizer.
 // ---------------------------------------------------------------------------
 
-test('FINALIZERS is seeded with EXACTLY the one real turnSpec finalizer: copyStagingToLibrary', () => {
+test('FINALIZERS is seeded with the real turnSpec-dispatchable finalizers: copyStagingToLibrary, writeToRepoRoot (bead 8vfn.6.6 items 2+4) — and no more', () => {
   // ADR-043 §5 seeds the registry incrementally. R4-22 WI-2 pinned "exactly
-  // one" as a ratchet against a PRE-population of the other ADR-043-named
-  // finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain,
-  // demo's snapshot-restore lock) before their own WIs build them.
-  // `commitRegistryDraft` (W6-CR-3) briefly widened this ratchet as the
-  // `community-refresh` kind's `committing` finalizer; that kind — and this
-  // finalizer with it — was retired in W8-B5b, so the ratchet narrows back
-  // to its original single row.
+  // one" as a ratchet against a PRE-population of the remaining ADR-043-named
+  // finalizers before their own WIs build them; 8vfn.6.6 built writeToRepoRoot
+  // (a real, generalized form of instructions' own runFinalizeStep). The
+  // ratchet still kills promoteToQueue/commitToCentralBrain/demo's
+  // snapshot-restore lock — none of those three has ANY descriptor row
+  // (panel or turnSpec) naming it, so wiring them in would be dead surface
+  // (see the 8vfn.6.6 plan's re-derivation for why each stays out).
   const ids = FINALIZERS.map((row) => row.id).sort();
   assert.deepEqual(
     ids,
-    ['copyStagingToLibrary'],
-    `Got ${JSON.stringify(ids)}. This ratchet kills a pre-population of the remaining ADR-043-named ` +
-      `finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain, demo's snapshot-restore lock) before ` +
-      `their own WIs build them.`,
+    ['copyStagingToLibrary', 'writeToRepoRoot'],
+    `Got ${JSON.stringify(ids)}. This ratchet kills a pre-population of promoteToQueue/commitToCentralBrain/demo's ` +
+      `snapshot-restore lock before a real descriptor row ever names one.`,
   );
 });
 

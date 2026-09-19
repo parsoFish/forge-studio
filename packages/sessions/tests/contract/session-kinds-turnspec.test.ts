@@ -92,8 +92,10 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     // DESCRIPTIVE finalizer id (real in FINALIZER_IDS, but NOT implemented
     // by FINALIZERS) must NOT be lint-approved for turnSpec — see
     // W6-B3-11 below for the direct "this id passes on panel, fails on
-    // turnSpec" pairing.
-    for (const descriptiveOnlyId of ['writeToRepoRoot', 'recordLockedDemo']) {
+    // turnSpec" pairing. writeToRepoRoot moved to the DISPATCHABLE set
+    // (bead 8vfn.6.6 item 2); recordLockedDemo did not (see that bead's
+    // plan for why — demo's lock step stays panel-only).
+    for (const descriptiveOnlyId of ['recordLockedDemo']) {
       assert.ok(
         !FINALIZERS.some((row) => row.id === descriptiveOnlyId),
         `arrange: "${descriptiveOnlyId}" must be absent from the REAL FINALIZERS registry (a precondition of this test, not the assertion under test)`,

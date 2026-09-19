@@ -121,10 +121,13 @@ import {
   writeSync,
   closeSync,
   constants as fsConstants,
+  readFileSync,
+  writeFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
+import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an
@@ -148,7 +151,8 @@ export class InteractiveFinalizerError extends Error {
 // Registry types
 // ---------------------------------------------------------------------------
 
-export type FinalizerId = 'copyStagingToLibrary';
+// bead 8vfn.6.6 item 2 — widened from 'copyStagingToLibrary' alone.
+export type FinalizerId = 'copyStagingToLibrary' | 'writeToRepoRoot';
 
 export type FinalizerContext = {
   /** Trusted — the caller already SEC-04-guarded this. */
@@ -157,8 +161,16 @@ export type FinalizerContext = {
   forgeRoot: string;
   /** Trusted, config-derived containment root. */
   libraryRoot: string;
-  /** UNTRUSTED, request-derived. */
-  packageId: string;
+  /** UNTRUSTED, request-derived. Only finalizers whose row declares
+   *  needsPackageId use it (item 3) — absent otherwise. */
+  packageId?: string;
+  /** bead 8vfn.6.6 item 4 — the session's own status record + two common
+   *  projections off it, so a finalizer that (unlike copyStagingToLibrary)
+   *  needs session-scoped context can reach it without a new per-kind port. */
+  status?: Record<string, unknown>;
+  /** Trusted — the project the session's own status names. */
+  project_repo_path?: string;
+  project?: string;
 };
 
 export type FinalizerFn = (ctx: FinalizerContext) => string[] | Promise<string[]>;
@@ -166,6 +178,9 @@ export type FinalizerFn = (ctx: FinalizerContext) => string[] | Promise<string[]
 export type FinalizerRow = {
   readonly id: FinalizerId;
   readonly run: FinalizerFn;
+  /** bead 8vfn.6.6 item 3 — whether THIS finalizer's own contract needs a
+   *  packageId; runFinalizeStep's SLUG_RE gate runs only when it does. */
+  readonly needsPackageId: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -357,6 +372,12 @@ function writeValidatedLibraryFile(destPath: string, buf: Buffer, relLabel: stri
  */
 export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
   const { sessionDir, libraryRoot, packageId } = ctx;
+  // bead 8vfn.6.6 item 3 — packageId is now optional on the shared context
+  // type (a finalizer that doesn't need one, e.g. writeToRepoRoot, gets
+  // none); this one always did, so it asserts its own precondition.
+  if (typeof packageId !== 'string') {
+    throw new InteractiveFinalizerError('copyStagingToLibrary: FinalizerContext.packageId is required.');
+  }
 
   // ---- Phase 1: resolve and validate EVERY entry, zero side effects ----
 
@@ -398,6 +419,41 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// writeToRepoRoot — bead 8vfn.6.6 items 2+4: generalizes the REAL finalize
+// step instructions' own kinds/instructions.ts runFinalizeStep performs
+// today (write the approved draft under the project's repo root, committed
+// on the studio branch), onto the shared staging-tree walk above. Unlike
+// copyStagingToLibrary, `project_repo_path` is a SINGLE trusted project root
+// being updated in place (the same trust level instructions' own real
+// finalize step already assumes — a plain writeFileSync, no fd hardening),
+// not a shared/multi-tenant library root, so this reuses the plain
+// containment-checked copy shape rather than the fd-based TOCTOU dance.
+// ---------------------------------------------------------------------------
+
+export function writeToRepoRoot(ctx: FinalizerContext): string[] {
+  const { sessionDir, project_repo_path: repoPath, project } = ctx;
+  if (repoPath === undefined) {
+    throw new InteractiveFinalizerError('writeToRepoRoot: FinalizerContext.project_repo_path is required.');
+  }
+  const staged = discoverStagingEntries(sessionDir);
+  return withStudioWrite(repoPath, `forge-studio: commit ${project ?? 'session'} output`, () => {
+    const wrote: string[] = [];
+    for (const entry of staged) {
+      const destGuard = resolveGuardedPath(repoPath, entry.relParts);
+      if (!destGuard.ok) {
+        throw new InteractiveFinalizerError(
+          `writeToRepoRoot: destination for "${entry.relParts.join('/')}" failed containment (${destGuard.reason}).`,
+        );
+      }
+      mkdirSync(dirname(destGuard.realPath), { recursive: true });
+      writeFileSync(destGuard.realPath, readFileSync(entry.srcRealPath));
+      wrote.push(destGuard.realPath);
+    }
+    return wrote;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // FINALIZERS registry — deep-frozen (each row individually, BEFORE the outer
 // array — Object.freeze is SHALLOW, so freezing only the outer container
 // would leave each row object mutable). Copied verbatim from
@@ -409,8 +465,17 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 // ---------------------------------------------------------------------------
 
 export const FINALIZERS: readonly FinalizerRow[] = Object.freeze([
-  Object.freeze({ id: 'copyStagingToLibrary', run: copyStagingToLibrary }),
+  Object.freeze({ id: 'copyStagingToLibrary', run: copyStagingToLibrary, needsPackageId: true }),
+  Object.freeze({ id: 'writeToRepoRoot', run: writeToRepoRoot, needsPackageId: false }),
 ] as const);
+
+/** bead 8vfn.6.6 item 3 — total lookup over FINALIZERS' own needsPackageId,
+ *  never a hand-kept second list. `false` for an unresolvable id: unreachable
+ *  in practice (resolveFinalizer already refuses an unknown id first), and
+ *  the safer default for a caller that ignores that ordering. */
+export function finalizerNeedsPackageId(id: string): boolean {
+  return FINALIZERS.find((row) => row.id === id)?.needsPackageId ?? false;
+}
 
 /** Total lookup: an array + `.find()`, never a plain `{}` id-keyed map — a
  *  map lookup falls through the Object prototype chain for ids like
