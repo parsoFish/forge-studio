@@ -54,10 +54,10 @@ import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/ty
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
-import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
 import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
+import { agentsUsing } from './studio/agent-usage.ts';
 import { skillsDir as toSkillsDir } from './skill-path.ts';
 import { MAX_MATERIALS_LENGTH } from './studio/materials.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
@@ -252,9 +252,12 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
         return true;
       }
       // Defence in depth: even for a real agent, never delete one that
-      // something still composes. Same `usedBy` derivation the library
-      // listing renders — one source of truth, no second scan.
-      const composedBy = listSkillLibrary(ctx.forgeRoot, deps.agentFacts).find((e) => e.id === slug)?.usedBy ?? [];
+      // something still composes. forge-8vfn.19: `listSkillLibrary`
+      // deliberately EXCLUDES studio agents (AT-5), so deriving `composedBy`
+      // from its listing made this `.find(...)` always undefined for a real
+      // agent slug — the 409 below could never fire. Agents own the
+      // agent-roster reverse index (ruling 13); ask it directly.
+      const composedBy = agentsUsing('skill', slug, ctx.forgeRoot);
       if (composedBy.length > 0) {
         sendJson(res, 409, {
           error: `agent "${slug}" is still composed by ${composedBy.length} agent(s): ${composedBy.join(', ')} — unbind it from their builders first`,
