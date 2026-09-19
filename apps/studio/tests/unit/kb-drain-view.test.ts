@@ -69,6 +69,11 @@ test('drainStateCopy: "round-cap" names the real max-rounds constant', () => {
   expect(drainStateCopy('round-cap', 0).detail).toContain(String(KB_DRAIN_MAX_ROUNDS_DISPLAY));
 });
 
+test('KB_DRAIN_MAX_ROUNDS_DISPLAY is the SAME binding as @forge/contracts\' KB_DRAIN_MAX_ROUNDS, not a hand-kept mirror (forge-8vfn.5.25.2 — the old test compared the copy to itself and could never catch drift)', async () => {
+  const { KB_DRAIN_MAX_ROUNDS } = await import('@forge/contracts');
+  expect(KB_DRAIN_MAX_ROUNDS_DISPLAY).toBe(KB_DRAIN_MAX_ROUNDS);
+});
+
 test('drainStateCopy: "timed-out" explicitly says the run keeps going server-side — never implies it stopped', () => {
   const detail = drainStateCopy('timed-out', 0).detail.toLowerCase();
   expect(detail).toContain('server');
