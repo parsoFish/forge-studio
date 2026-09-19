@@ -70,7 +70,7 @@ import { checkDeps } from './preflight-deps.ts';
 // Re-export every symbol the pre-split file exported from these siblings, so
 // `from '@forge/projects/preflight.ts'` / `from './preflight.ts'` keeps
 // resolving unchanged for every external + same-package importer.
-export { SCRATCH_PATHS, TRACKED_CONFIG_PATHS } from './preflight-repo.ts';
+export { SCRATCH_PATHS, TRACKED_CONFIG_PATHS, isGitRepoDir, trackedConfigProbe, giTextCovers } from './preflight-repo.ts';
 export { BUILD_ARTIFACT_HINTS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight-build.ts';
 export { checkDemo } from './preflight-demo.ts';
 

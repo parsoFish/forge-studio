@@ -12,16 +12,38 @@ import { join } from 'node:path';
 
 import type { ClauseResult } from '@forge/kernel';
 
-// C2 policy (ruling 92, bead forge-8vfn.8.1.2): SCRATCH_PATHS (else every
-// cycle commits orchestration state into the PR) MUST be untracked+ignored —
-// `.forge/work-items/` and `.forge/.create-complete`, NOT `.forge/` wholesale.
-// TRACKED_CONFIG_PATHS is the inverse and the ONE single source of what under
+// C2 policy (ruling 92, bead forge-8vfn.8.1.2): SCRATCH_PATHS MUST be
+// untracked+ignored — `.forge/work-items/`, `.forge/.create-complete`, NOT
+// `.forge/` wholesale. TRACKED_CONFIG_PATHS is the inverse, the ONE single
+// source (also read by `pr-branch-sync.ts` + `reset.ts`) of what under
 // `.forge/` is tracked: `.forge/project.json`, `.forge/quality_gate_cmd`,
-// `.forge/skills/` — a blanket `.forge/` ignore drops them, violating BOTH
-// lists. `pr-branch-sync.ts`'s `stripForgeScratchFromBranch` reads this SAME
-// constant so scratch-strip and scratch-ignore can never disagree.
+// `.forge/skills/` — a blanket `.forge/` ignore violates BOTH lists.
 export const SCRATCH_PATHS = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
 export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate_cmd', '.forge/skills/'];
+
+/** `git -C dir rev-parse --git-dir` — shared so `reset.ts`'s gitignore drift
+ *  branches on the SAME git-vs-text-scan decision C2 does. */
+export function isGitRepoDir(dir: string): boolean {
+  return spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
+}
+
+/** Sentinel-child probe for a `TRACKED_CONFIG_PATHS` dir entry (judges the
+ *  FUTURE ignore truth; a file entry is probed directly) — reused by
+ *  `reset.ts` so the two can never disagree on which probe to use. */
+export function trackedConfigProbe(p: string): string {
+  return p.endsWith('/') ? `${p.replace(/\/$/, '')}/.forge-c2-tracked-probe` : p;
+}
+
+/** True iff one of `lines` (pre-trimmed, comments/blanks dropped) covers
+ *  `target`, itself or an ancestor dir — the non-git text-scan fallback,
+ *  reused (not re-implemented) by `reset.ts`. */
+export function giTextCovers(lines: readonly string[], target: string): boolean {
+  const stripped = target.replace(/^\//, '').replace(/\/$/, '');
+  return lines.some((l) => {
+    const ln = l.replace(/^\//, '').replace(/\/$/, '');
+    return ln === stripped || stripped.startsWith(`${ln}/`);
+  });
+}
 
 // --- C2: scratch hygiene (HARD) ---
 
@@ -43,12 +65,7 @@ export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate
 function checkC2(dir: string): ClauseResult {
   const base = { clause: 'C2' as const, title: 'Scratch hygiene (forge scratch ignored; contract config trackable)', hard: true };
 
-  // Determine whether this is a git repo at all.
-  const isRepo = spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], {
-    stdio: 'ignore',
-  }).status === 0;
-
-  if (!isRepo) {
+  if (!isGitRepoDir(dir)) {
     // No git repo — fall back to .gitignore text-scan (best-effort).
     const giPath = join(dir, '.gitignore');
     if (!existsSync(giPath)) {
@@ -65,15 +82,8 @@ function checkC2(dir: string): ClauseResult {
       .filter((l) => l && !l.startsWith('#'));
     // A scratch path is covered if .gitignore lists it OR an ancestor dir of it
     // (e.g. `.forge/work-items/` covers `.forge/work-items/wi-1.md`).
-    const isCovered = (p: string): boolean => {
-      const stripped = p.replace(/^\//, '').replace(/\/$/, '');
-      return lines.some((l) => {
-        const ln = l.replace(/^\//, '').replace(/\/$/, '');
-        return ln === stripped || stripped.startsWith(`${ln}/`);
-      });
-    };
-    const missing = SCRATCH_PATHS.filter((p) => !isCovered(p));
-    const wronglyIgnored = TRACKED_CONFIG_PATHS.filter((p) => isCovered(p)); // inverse (ruling 92)
+    const missing = SCRATCH_PATHS.filter((p) => !giTextCovers(lines, p));
+    const wronglyIgnored = TRACKED_CONFIG_PATHS.filter((p) => giTextCovers(lines, p)); // inverse (ruling 92)
     if (missing.length > 0 || wronglyIgnored.length > 0) {
       const bad = [
         missing.length > 0 ? `does not exclude ${missing.join(', ')}` : null,
@@ -148,9 +158,7 @@ function checkC2(dir: string): ClauseResult {
   // Inverse (ruling 92): same sentinel-child probe, but a VIOLATION if ignored.
   const configViolations: string[] = [];
   for (const p of TRACKED_CONFIG_PATHS) {
-    const isDir = p.endsWith('/');
-    const probe = isDir ? `${p.replace(/\/$/, '')}/.forge-c2-tracked-probe` : p;
-    if (spawnSync('git', ['-C', dir, 'check-ignore', '-q', probe], { stdio: 'ignore' }).status === 0) {
+    if (spawnSync('git', ['-C', dir, 'check-ignore', '-q', trackedConfigProbe(p)], { stdio: 'ignore' }).status === 0) {
       configViolations.push(`${p} (ignored — tracked contract config must stay trackable)`);
     }
   }

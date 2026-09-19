@@ -40,6 +40,7 @@
  */
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { basename, resolve } from 'node:path';
 
 import {
@@ -62,7 +63,15 @@ import {
   type ProjectConfig,
 } from './project-config.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
-import { runPreflight, SCRATCH_PATHS, TRACKED_CONFIG_PATHS, type PreflightReport } from './preflight.ts';
+import {
+  runPreflight,
+  SCRATCH_PATHS,
+  TRACKED_CONFIG_PATHS,
+  isGitRepoDir,
+  trackedConfigProbe,
+  giTextCovers,
+  type PreflightReport,
+} from './preflight.ts';
 
 // ---------------------------------------------------------------------------
 // Types (Q5's proposal, refined — see the deviations noted per field below)
@@ -124,16 +133,18 @@ export type SkillMove = {
   to: string;
 };
 
-/** The `.gitignore` fix (ruling 92 follow-up, bead forge-8vfn.8.1.2): a blanket
- *  `.forge/` line silently drops tracked contract config, and no `.gitignore`
- *  change was ever part of what reset regenerates. A SEPARATE field, not a
- *  `ContractSection` row — raw text, not JSON; `before`/`after` are the WHOLE
- *  file. `undefined` only when no `.gitignore` exists — a different, out-of-
- *  scope C2 failure. */
+/** The `.gitignore` fix (ruling 92 follow-up, bead forge-8vfn.8.1.2): a
+ *  SEPARATE field, not a `ContractSection` row (raw text, not JSON) —
+ *  `before`/`after` are the WHOLE file; `undefined` only when no `.gitignore`
+ *  exists. A rejected (e.g. symlinked) `.gitignore` throws
+ *  `PathGuardContainmentError` instead of reaching this type. */
 export type GitignoreDrift = {
   before: string | undefined;
   after: string | undefined;
   action: 'regenerate' | 'unchanged';
+  /** Entries ignored by a source OTHER than the root `.gitignore` — named
+   *  (C2 still fails), never rewritten: this owns exactly one file. */
+  otherSourceViolations: string[];
 };
 
 export type DriftReport = {
@@ -452,40 +463,50 @@ function computeSkillsDrift(
   return { row: { section: 'skills', before: skills, after: skills, action }, skillMoves: moves };
 }
 
-/** True iff ignore-pattern `line` covers `target` — the SAME ancestor-prefix
- *  match `preflight-repo.ts`'s `checkC2` text-scan uses, so reset and C2 can
- *  never disagree about which line is the violation. */
-function giLineCovers(line: string, target: string): boolean {
-  const pattern = line.trim().replace(/^\//, '').replace(/\/$/, '');
-  if (!pattern || pattern.startsWith('#')) return false;
-  const t = target.replace(/\/$/, '');
-  return pattern === t || t.startsWith(`${pattern}/`);
+/** Git-truth offending-line detection (SEC review): a text scan misses
+ *  glob/negation forms (`.forge/*`, `!re-include`) C2's git-truth already
+ *  catches. `check-ignore -v`'s `<source>:<lineNum>:<pattern>\t<path>` names
+ *  the winning pattern; a hit from the OWN root `.gitignore` is REWRITABLE,
+ *  any other source is named but never rewritten. */
+function gitTruthOffenders(dir: string): { rewritableLines: Set<number>; other: string[] } {
+  const rewritableLines = new Set<number>();
+  const other: string[] = [];
+  for (const p of TRACKED_CONFIG_PATHS) {
+    const run = spawnSync('git', ['-C', dir, 'check-ignore', '-v', '--no-index', trackedConfigProbe(p)], { encoding: 'utf8' });
+    if (run.status !== 0) continue; // not ignored
+    const tab = run.stdout.indexOf('\t');
+    const m = tab === -1 ? null : /^(.*):(\d+):/.exec(run.stdout.slice(0, tab));
+    if (!m) continue;
+    if (m[1] === '.gitignore') rewritableLines.add(Number(m[2]) - 1); // 1-indexed -> 0-indexed
+    else other.push(`${p} (ignored by ${m[1]}:${m[2]}, not this project's own .gitignore — fix it by hand)`);
+  }
+  return { rewritableLines, other };
 }
 
-/** Ruling 92 follow-up: a line covering any `TRACKED_CONFIG_PATHS` entry
- *  (typically a blanket `.forge/`) fails C2. Proposes replacing ONLY the
- *  first such line with whichever `SCRATCH_PATHS` entries aren't already
- *  present elsewhere — every other line, comments included, stays
- *  byte-for-byte. Absent `.gitignore` is out of scope (a different failure). */
+/** Ruling 92 (SEC review): replaces ONLY the first offending line with
+ *  missing `SCRATCH_PATHS` entries, byte-for-byte otherwise. Reads through
+ *  `resolveGuardedPath` — a rejected (symlinked) `.gitignore` THROWS
+ *  `PathGuardContainmentError`; absent is the only `ok` case reporting
+ *  `unchanged` — any other read failure propagates. */
 function computeGitignoreDrift(projectDir: string): GitignoreDrift {
-  let raw: string;
-  try {
-    raw = readFileSync(resolve(projectDir, '.gitignore'), 'utf8');
-  } catch {
-    return { before: undefined, after: undefined, action: 'unchanged' };
-  }
+  const guarded = resolveGuardedPath(projectDir, ['.gitignore']);
+  if (!guarded.ok) throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${guarded.reason}`);
+  if (!guarded.exists) return { before: undefined, after: undefined, action: 'unchanged', otherSourceViolations: [] };
+
+  const raw = readFileSync(guarded.realPath, 'utf8'); // any failure here propagates — never silently "unchanged"
   const lines = raw.split('\n');
-  const offending = lines
-    .map((l, i) => (TRACKED_CONFIG_PATHS.some((p) => giLineCovers(l, p)) ? i : -1))
-    .filter((i) => i !== -1);
-  if (offending.length === 0) return { before: raw, after: raw, action: 'unchanged' };
+
+  const { rewritableLines, other } = isGitRepoDir(projectDir)
+    ? gitTruthOffenders(projectDir)
+    : { rewritableLines: new Set(lines.map((l, i) => (TRACKED_CONFIG_PATHS.some((p) => giTextCovers([l.trim()], p)) ? i : -1)).filter((i) => i !== -1)), other: [] as string[] };
+  if (rewritableLines.size === 0) return { before: raw, after: raw, action: 'unchanged', otherSourceViolations: other };
 
   const present = new Set(lines.map((l) => l.trim()));
   const missing = SCRATCH_PATHS.filter((p) => !present.has(p));
-  const [firstOffender] = offending;
-  const rewritten = lines.flatMap((l, i) => (!offending.includes(i) ? [l] : i === firstOffender ? missing : []));
+  const firstOffender = Math.min(...rewritableLines);
+  const rewritten = lines.flatMap((l, i) => (!rewritableLines.has(i) ? [l] : i === firstOffender ? missing : []));
   const after = rewritten.join('\n');
-  return { before: raw, after, action: after === raw ? 'unchanged' : 'regenerate' };
+  return { before: raw, after, action: after === raw ? 'unchanged' : 'regenerate', otherSourceViolations: other };
 }
 
 /**
@@ -726,14 +747,11 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     withStudioWrite(dir, 'forge-studio: reset project skill layout', () => undefined, movePaths);
   }
 
-  // .gitignore fix (ruling 92 follow-up) — independent of the two branches
-  // above, so its own scoped commit rather than folded into either.
+  // .gitignore fix — its own scoped commit, independent of the two above.
   const gitignoreFixed = drift.gitignoreDrift.action === 'regenerate';
   if (gitignoreFixed) {
     const giGuard = resolveGuardedPath(dir, ['.gitignore']);
-    if (!giGuard.ok) {
-      throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${giGuard.reason}`);
-    }
+    if (!giGuard.ok) throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${giGuard.reason}`);
     withStudioWrite(
       dir,
       'forge-studio: reset .gitignore (untrap tracked contract config)',
