@@ -455,7 +455,18 @@ async function main() {
     try {
       for (const p of provisionedGrounds) {
         if (startedStoryIds.has(p.storyId)) {
-          console.log(`[stories] fixture ground: projects/${p.project} LEFT for evidence — the next leading sweep removes it`);
+          // D1 re-review (fix round 2), B1 — a started story's OWN `runStory`
+          // already tears its ground down on every path it reaches, so
+          // "started" alone does not mean the ground is still there. Printing
+          // "LEFT for evidence" unconditionally was a FALSE residue line on
+          // every ordinary green or red run (the `forge-e8dn` class: a report
+          // that speaks whether or not the thing it names is true). Only the
+          // filesystem answers this, and only a ground still ON DISK gets the
+          // line; one that is already gone is exactly what a completed run's
+          // own teardown looks like, and nothing more needs saying here.
+          if (existsSync(join(ROOT, 'projects', p.project))) {
+            console.log(`[stories] fixture ground: projects/${p.project} LEFT for evidence — the next leading sweep removes it`);
+          }
           continue;
         }
         const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
