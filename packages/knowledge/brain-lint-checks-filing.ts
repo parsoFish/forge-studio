@@ -96,18 +96,22 @@ export function checkFrontmatter(forgeRoot: string): Finding[] {
 
 // ---------- checkIndexSync ----------
 
-export function readIndexEntries(indexFile: string): string[] {
-  if (!existsSync(indexFile)) return [];
-  const body = readFileSync(indexFile, 'utf8');
-  // Match links of shape ./themes/<slug>.md or themes/<slug>.md
+/** Slugs linked in an index body (one per `./themes/<slug>.md` occurrence).
+ *  Exported: `brain-fix-auto.ts`'s `ensureLinkedAt` used to carry its own
+ *  copy of this exact scan — one implementation, both callers. */
+export function slugsInIndexBody(body: string): string[] {
   const slugs: string[] = [];
   const re = /\(\.?\.?\/?(?:themes\/)([a-zA-Z0-9._-]+?)(?:\.md)?\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     slugs.push(m[1]);
   }
-  // Also accept bare-style: [`<slug>`](./themes/<slug>.md) — captured by re above already.
   return slugs;
+}
+
+export function readIndexEntries(indexFile: string): string[] {
+  if (!existsSync(indexFile)) return [];
+  return slugsInIndexBody(readFileSync(indexFile, 'utf8'));
 }
 
 export function checkIndexSync(forgeRoot: string): Finding[] {
