@@ -61,3 +61,6 @@ export * from './dry-bridge.ts';
 /** `_logs/` cycle discovery and the run-id charset gate — moved down from
  *  `flows` and `agents` so a rank-2 package can reach them (ruling 57). */
 export * from './log-cycles.ts';
+/** Package-owned discovery roots (SEAM F1) — `flowRoots`/`skillRoots`, plus
+ *  the generic multi-root id resolvers every per-kind resolver is built on. */
+export * from './discovery-roots.ts';

@@ -50,7 +50,7 @@ import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 // §15.6: FORGE_ROOT via `@forge/agents/skill-path.ts` is a re-export detour —
 // it type-checks and it is the wrong owner. Kernel is the owner.
 import { FORGE_ROOT } from '@forge/kernel';
-import { skillsDir } from '@forge/agents/skill-path.ts';
+import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -482,7 +482,7 @@ export async function runFlow({
   // of skill dirs). Node-kind resolution reads `AgentDefinition.executor` off
   // this map instead of a hardcoded slug table.
   const agents = new Map<string, AgentDefinition>(
-    listAgentDefinitions(skillsDir(FORGE_ROOT)).map((a) => [a.slug, a]),
+    listAgentDefinitions(skillRoots(FORGE_ROOT)).map((a) => [a.slug, a]),
   );
 
   for (const nodeId of order) {
@@ -657,15 +657,17 @@ export async function runFlow({
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to a flow's `flow.yaml` by id, relative to the forge
- * root (two levels above this file's directory). The scheduler routes a cycle to
- * the flow named by the initiative manifest's `flow_id`. S8/DEC-3 retired the
- * forge-cycle default — there is no fallback; an unknown id resolves to a
- * non-existent path and runCycle throws (see orchestrator/cycle.ts).
+ * Resolve a flow's `flow.yaml` path by id, searching every flow root (SEAM
+ * F1) — `studio/flows/` first, then every `packages/<pkg>/flows/`. S8/DEC-3:
+ * still no FLOW fallback — an id absent everywhere resolves to the
+ * conventional `studio/flows/<id>/flow.yaml` (a clear downstream ENOENT).
+ * THROWS, naming both paths, if the id resolves under more than one root.
  */
-export function flowPathForId(flowId: string): string {
+export function flowPathForId(flowId: string, forgeRoot: string = FORGE_ROOT): string {
+  const roots = flowRoots(forgeRoot);
   // Bead 5.53's class, in production: a hand-counted `'..'` chain is correct
   // only at the depth the file happens to sit at, and this file just moved.
-  // Anchored on kernel's FORGE_ROOT so the next move cannot break it.
-  return resolve(FORGE_ROOT, 'studio', 'flows', flowId, 'flow.yaml');
+  // Anchored on kernel's FORGE_ROOT (via flowRoots[0]) so the next move
+  // cannot break it.
+  return resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? resolve(roots[0], flowId, 'flow.yaml');
 }

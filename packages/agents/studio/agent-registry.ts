@@ -251,11 +251,22 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
 // it remains the ONE canonical serializer (ADR-027).
 export { serializeAgentDefinition } from '@forge/agents/studio/skill-md-fidelity.ts';
 
-export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
+/** Loads every studio agent under `skillsDirs` (one dir, or several — SEAM
+ *  F1's `skillRoots`). THROWS, naming both, on a slug real under two dirs —
+ *  never "first wins". */
+export function listAgentDefinitions(skillsDirs: string | readonly string[]): AgentDefinition[] {
+  const dirs = Array.isArray(skillsDirs) ? skillsDirs : [skillsDirs as string];
   const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(skillsDir)) {
+  const dirBySlug = new Map<string, string>();
+  for (const dir of dirs.flatMap(listSkillMdDirs)) {
     const skillMdPath = join(dir, 'SKILL.md');
     if (!isStudioAgent(skillMdPath)) continue;
+    const slug = basename(dir);
+    const prior = dirBySlug.get(slug);
+    if (prior !== undefined) {
+      throw new Error(`agent slug "${slug}" is defined in more than one discovery root: ${prior} AND ${dir}`);
+    }
+    dirBySlug.set(slug, dir);
     defs.push(loadAgentDefinition(skillMdPath));
   }
 

@@ -50,6 +50,7 @@ import {
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
@@ -81,6 +82,9 @@ import { validateAgent } from './studio/validate-agent.ts';
 export type AgentStudioRouteDeps = {
   listFlowIds(forgeRoot: string): string[];
   loadFlowDefinition(flowYamlPath: string): FlowDefinition;
+  /** SEAM F1: `@forge/flows`' `flowPathForId` — every flow root, bound at
+   *  `apps/forge` (agents rank 3, flows rank 5). */
+  flowPathForId(flowId: string, forgeRoot: string): string;
   /** Library's `AgentFacts` port, bound at `apps/forge`. This module calls
    *  into `@forge/library` (rank 3 → 2, legal) and library's readers now take
    *  the facts by injection, so the binding travels with the deps rather than
@@ -159,8 +163,7 @@ function sessionKindAgentRefs(forgeRoot: string): Map<string, string[]> {
 export const handleStudioAgentsList = (): Handler => async (req, res, ctx) => {
   const origin = allowedOrigin(req);
   try {
-    const skillsDir = toSkillsDir(resolve(ctx.forgeRoot));
-    const agents = listAgentDefinitions(skillsDir);
+    const agents = listAgentDefinitions(skillRoots(resolve(ctx.forgeRoot)));
     // R2-02-F1: thread the server-computed capability descriptor onto each
     // agent's wire payload — no capability fact may exist only in UI code.
     // R6-04 (WI-2): `defaultCostCeilingUsd` is RUN-LEVEL policy (read from
@@ -264,10 +267,10 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       }
       const referencingFlows: string[] = [];
       for (const flowId of deps.listFlowIds(ctx.forgeRoot)) {
-        const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [flowId, 'flow.yaml']);
-        if (!guarded.ok || !guarded.exists) continue;
+        const flowPath = deps.flowPathForId(flowId, ctx.forgeRoot);
+        if (!existsSync(flowPath)) continue;
         try {
-          const def = deps.loadFlowDefinition(guarded.realPath);
+          const def = deps.loadFlowDefinition(flowPath);
           if (def.nodes.some((n) => n.agent === slug)) referencingFlows.push(flowId);
         } catch {
           // a malformed sibling flow is studio-lint's finding, not a

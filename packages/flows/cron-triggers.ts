@@ -36,11 +36,12 @@
  * check belongs to the drain sweep (flow-run-requests.ts), which has visibility
  * into what's actually claimed/in-flight.
  */
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { Cron } from 'croner';
 
 import { normalizeProjectId } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 
@@ -104,7 +105,7 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
   for (const flowId of listFlowIds(root)) {
     let flowDef;
     try {
-      const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
+      const flowYamlPath = flowPathForId(flowId, root);
       flowDef = loadFlowDefinition(flowYamlPath);
     } catch (err) {
       notify(

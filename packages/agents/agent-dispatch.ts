@@ -27,6 +27,7 @@ import { normalizeProjectId } from '@forge/kernel';
 // The Flow kind stays in `orchestrator/studio/registry.ts` until wave 4 —
 // handed, listed in the share report, not closed here.
 import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
@@ -45,8 +46,8 @@ export type MaterialReference = { path: string; kind: string };
 
 export type DispatchAgentRunOpts = {
   slug: string;
-  /** Roster dir — `skillsDir(forgeRoot)` at the call site. */
-  skillsDir: string;
+  /** Roster dir(s) — `skillRoots(forgeRoot)` at the call site (SEAM F1). */
+  skillsDir: string | readonly string[];
   /** Used verbatim as the `_logs/` run directory name (guarded). */
   runId: string;
   /** Log root; default `<FORGE_ROOT>/_logs` (absolute — never cwd-relative). */
@@ -60,7 +61,7 @@ export type DispatchAgentRunOpts = {
   /** Test-injection only (see `RunContext.queryFn`); one-shot path only. */
   queryFn?: StreamQueryFn;
   /** Injectable roster loader (tests); default `listAgentDefinitions`. */
-  loadDefs?: (skillsDir: string) => AgentDefinition[];
+  loadDefs?: (skillsDir: string | readonly string[]) => AgentDefinition[];
   /**
    * R6-04 (WI-2): an explicit per-run operator cost ceiling, threaded
    * unchanged to `runAgent`'s `ctx.kickoffCeilingUsd` (which itself wins
@@ -261,10 +262,15 @@ const NO_PROJECT_BOUND_MESSAGE = 'agent-dispatch.no-project-bound';
  */
 function loadFlowRosterBestEffort(forgeRoot: string): Array<Pick<FlowDefinition, 'id' | 'triggers'>> {
   const root = resolve(forgeRoot);
+  const roots = flowRoots(root);
   const out: Array<Pick<FlowDefinition, 'id' | 'triggers'>> = [];
   for (const flowId of listFlowIds(root)) {
+    // SEAM F1: search every flow root directly via kernel (not `@forge/
+    // flows`' `flowPathForId` — this file's boundary edge to `flow-runner.ts`
+    // is not baselined, unlike its existing edge to `flow-registry.ts`).
+    const path = resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? join(roots[0], flowId, 'flow.yaml');
     try {
-      out.push(loadFlowDefinition(join(root, 'studio', 'flows', flowId, 'flow.yaml')));
+      out.push(loadFlowDefinition(path));
     } catch {
       /* skip a broken flow.yaml — it must not block other flows' watchers */
     }

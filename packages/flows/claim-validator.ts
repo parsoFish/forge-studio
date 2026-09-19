@@ -30,7 +30,7 @@ import { runPreflight } from '@forge/projects/preflight.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { validateFlow } from './studio/validate-flow.ts';
-import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -80,15 +80,15 @@ export function clearAllPendingRefusalLogs(): void {
 
 /**
  * Best-effort agent map for validateFlow.
- * Loads from `skills/` relative to forgeRoot. If the directory is missing or
- * any agent fails to load, returns whatever we managed to collect — validateFlow
- * will flag unresolved agent refs as errors, which is the correct signal.
+ * Loads from every skill root (SEAM F1) — `skills/` relative to forgeRoot,
+ * plus every `packages/<pkg>/skills/`. If every root is missing/unreadable or
+ * any agent fails to load, returns whatever we managed to collect —
+ * validateFlow will flag unresolved agent refs as errors, which is the
+ * correct signal.
  */
 function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
-  const skillsDir = toSkillsDir(forgeRoot);
-  if (!existsSync(skillsDir)) return new Map();
   try {
-    const defs = listAgentDefinitions(skillsDir);
+    const defs = listAgentDefinitions(skillRoots(forgeRoot));
     return new Map(defs.map((d) => [d.slug, d]));
   } catch {
     return new Map();

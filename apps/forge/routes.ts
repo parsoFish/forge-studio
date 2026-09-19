@@ -70,6 +70,7 @@ import { agentsRoutes } from '@forge/agents/routes.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
 import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
+import { flowPathForId as flowPathForIdForAgents } from '@forge/flows/flow-runner.ts';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
@@ -174,6 +175,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       buildAgentSlugToNodeId,
       loadFlowDefinition,
       listFlowIds: listFlowIdsForAgents,
+      flowPathForId: flowPathForIdForAgents,
       // Bridge-instance state, from the host's own closures.
       projectsRoot: deps.projectsRoot,
       safeInputKeyRe: deps.safeInputKeyRe,

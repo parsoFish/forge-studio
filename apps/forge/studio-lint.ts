@@ -5,7 +5,9 @@
  *
  * Validates:
  *   1. Agent definitions  — every studio SKILL.md in skills/
- *   2. Flow definitions   — every studio/flows/<id>/flow.yaml
+ *   2. Flow definitions   — every studio/flows/<id>/flow.yaml (the required
+ *                           seed root) plus every packages/<pkg>/flows/<id>/
+ *                           flow.yaml (SEAM F1, operator ruling item 81)
  *   3. Catalog            — studio/catalog.yaml
  *   3b. Community registry — studio/community/registry.yaml (W6-CR-1; MISSING
  *                           IS an error — this content was previously
@@ -37,7 +39,8 @@ import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
 import { isStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
+import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
@@ -255,21 +258,27 @@ export function runStudioLint(root: string): StudioLintResult {
       });
     }
 
-    flowDirs.forEach((d) => flowIds.add(d));
+    // SEAM F1 (operator ruling item 81): every flow root now feeds
+    // validation below — `studio/flows` (checked as the required seed root
+    // above) AND every `packages/<pkg>/flows`. `listFlowIds` unions them
+    // (THROWING, naming both paths, on a cross-root duplicate id — never
+    // "first root wins").
+    const allFlowIds = listFlowIds(root);
+    allFlowIds.forEach((d) => flowIds.add(d));
 
     // Resolve a flow's project on demand (R2-04): the external-trigger project
     // requirement is checked on the TARGET flow the mint uses, not the
     // declaring flow. Lazy load — only cron/webhook targets consult it.
     const flowProjectOf = (id: string): string | null | undefined => {
       try {
-        return loadFlowDefinition(join(flowsDir, id, 'flow.yaml')).project;
+        return loadFlowDefinition(flowPathForId(id, root)).project;
       } catch {
         return undefined;
       }
     };
 
-    for (const dir of flowDirs) {
-      const flowPath = join(flowsDir, dir, 'flow.yaml');
+    for (const dir of allFlowIds) {
+      const flowPath = flowPathForId(dir, root);
       try {
         const flow = loadFlowDefinition(flowPath);
         if (flow.id !== dir) {
@@ -429,7 +438,7 @@ export function runStudioLint(root: string): StudioLintResult {
           level: 'error',
           object: `kb:${kb.id}`,
           check: 'binding-ref',
-          message: `KB "${kb.id}" binding.ref "${kb.binding.ref}" is not a registered flow id (studio/flows/${kb.binding.ref}/flow.yaml not found)`,
+          message: `KB "${kb.id}" binding.ref "${kb.binding.ref}" is not a registered flow id (${kb.binding.ref}/flow.yaml not found under studio/flows/ or any packages/*/flows/)`,
         });
       } else if (kb.binding.kind === 'flow' && kb.binding.band !== undefined) {
         // R1-06 — a declared band must be one the bound flow's own nodes

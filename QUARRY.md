@@ -236,6 +236,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/provenance.ts | kernel | rewritten | 54 |
 | packages/kernel/dry-bridge.ts | kernel | rewritten | 86 |
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
+| packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 84 |
