@@ -46,7 +46,7 @@ import {
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
-import { provisionFixtureGround } from './fixture-ground.mjs';
+import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './sweep-teardown.mjs';
 import {
@@ -272,6 +272,13 @@ async function main() {
   // What the leading sweep removed, so the teardown can put back anything the
   // run never regenerated (T1 ruling 594, half 2).
   const sweptPaths = [];
+  // D1 review, M1 — grounds `provisionFixtureGrounds` provisioned in THIS
+  // call. `runStory` tears down its own ground on every path it reaches, but
+  // a bridge refusal or throw before a later story's turn — or a throw
+  // inside an EARLIER story's own run — would otherwise leave an
+  // already-provisioned ground standing forever; declared outside the `try`
+  // so the abort backstop in `finally` can always see it.
+  let provisionedGrounds = [];
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -300,26 +307,28 @@ async function main() {
     //     bridge identity probe (a beat can drive the browser to a fixture
     //     ground only once it exists, and provisioning after the bridge is up
     //     would race a driven browser against a `git init` still in flight).
-    //     A refusal here writes nothing (`fixture-ground.mjs`'s own contract)
-    //     and must cost nothing either: it stops the run before any story's
-    //     beats, same as every other preflight refusal above.
-    let fixtureRefused = false;
-    for (const s of stories) {
-      if (typeof s.ground?.fixture !== 'string') continue;
-      try {
-        const prov = provisionFixtureGround(ROOT, { storyId: s.id, project: s.ground.project, fixture: s.ground.fixture });
-        console.log(
-          `[stories] fixture ground: provisioned projects/${s.ground.project} from ` +
-          `tests/stories/grounds/${s.ground.fixture}/seed — digest ${prov.digest}, commit ${prov.commit}`,
-        );
-      } catch (e) {
-        console.error(`[stories] REFUSING ${s.id}: ${e?.message ?? e}`);
-        exitCode = 1;
-        fixtureRefused = true;
-      }
+    //     A refusal here writes nothing FOR THE WHOLE BATCH
+    //     (`provisionFixtureGrounds`'s own contract — D1 review, M1) and must
+    //     cost nothing either: it stops the run before any story's beats,
+    //     same as every other preflight refusal above. ONE call for every
+    //     story, not a loop over the singular: a loop has no batch-level
+    //     rollback, so a LATER story's refusal left every EARLIER story's
+    //     ground standing.
+    const provisionResult = provisionFixtureGrounds(ROOT, stories);
+    provisionedGrounds = provisionResult.provisioned;
+    for (const p of provisionResult.provisioned) {
+      const fixture = stories.find((s) => s.id === p.storyId)?.ground?.fixture;
+      console.log(
+        `[stories] fixture ground: provisioned projects/${p.project} from ` +
+        `tests/stories/grounds/${fixture}/seed — digest ${p.digest}, commit ${p.commit}`,
+      );
+    }
+    if (provisionResult.refused !== null) {
+      console.error(`[stories] REFUSING ${provisionResult.refused.storyId}: ${provisionResult.refused.message}`);
+      exitCode = 1;
     }
 
-    if (!fixtureRefused) {
+    if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
       const { probeBridgeIdentity } = await import(
         pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
@@ -412,6 +421,21 @@ async function main() {
     } catch (err) {
       // A teardown that throws loses the verdict the run just produced.
       console.warn(`[stories] run-end reap failed: ${err?.message ?? err}`);
+    }
+    // D1 review, M1 — the fixture-ground abort backstop. `runStory` already
+    // tears down its OWN ground on every path it reaches (a green run, a red
+    // one, a spend halt), so this is almost always a no-op reporting "already
+    // absent"; it exists for the story whose ground was provisioned in THIS
+    // batch but whose own `runStory` never ran — the bridge `refuse` throw, a
+    // `bootOwnBridge` failure, or an earlier story's `runStory` throwing.
+    // After the agent reap above, so nothing is still writing into a ground
+    // this is about to remove.
+    for (const p of provisionedGrounds) {
+      const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
+      if (t.removed) console.log(`[stories] fixture ground: torn down projects/${p.project}`);
+      else if (t.error !== undefined) {
+        console.warn(`[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — the next leading sweep removes it`);
+      } else console.log(`[stories] fixture ground: projects/${p.project} already absent`);
     }
     if (bridgeProc !== null) {
       try {

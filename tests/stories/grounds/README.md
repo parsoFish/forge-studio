@@ -1,9 +1,10 @@
 # Fixture grounds
 
 A fixture ground is a project the story harness provisions for one story run and removes afterwards. Stories
-S1 and S3–S10 run on fixtures; S2 creates its own project through the product. Real projects (gitpulse,
-GitWeave, terraform-provider-betterado, trafficGame) are reserved for the real-ground gates, the capstones and
-the stranger run.
+move to fixtures one PR at a time, not all at once — each story's own `ground` declaration says which it uses
+TODAY: `ground.fixture` for a fixture, its absence for a real project. S2 creates its own project through the
+product rather than starting from either. Real projects (gitpulse, GitWeave, terraform-provider-betterado,
+trafficGame) are reserved for the real-ground gates, the capstones and the stranger run.
 
 ## Lifecycle of one run
 

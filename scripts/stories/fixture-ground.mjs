@@ -27,9 +27,9 @@
  */
 import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { groundManifest } from './ground-hash.mjs';
-import { storyFixtureNames } from './sweep.mjs';
+import { storyFixtureNames, assertSafeStoryId } from './sweep.mjs';
 
 export const FIXTURE_ROOT = 'tests/stories/grounds';
 
@@ -52,17 +52,32 @@ export function fixtureSeedDir(root, fixture) {
   return join(root, FIXTURE_ROOT, fixture, 'seed');
 }
 
-/** Every file under `dir`, as sorted paths relative to it. */
+/**
+ * Every file under `dir`, as sorted paths relative to it.
+ *
+ * D1 review, M5 — THROWS, naming the unreadable path, rather than swallowing.
+ * `readdirSync(dir, { recursive: true })` fails the WHOLE walk the moment it
+ * meets one unreadable subdirectory, not just that subtree, and a caller that
+ * swallowed the failure would go on to `cpSync` the (unfiltered) seed anyway.
+ * Measured on this host: `cpSync` walking into that same permission-denied
+ * directory does not raise a catchable JS exception at all — it aborts the
+ * whole process. So this has to throw BEFORE `cpSync` ever runs, and it is
+ * called outside `provisionFixtureGround`'s try block for exactly that reason
+ * — nothing has been written yet when it does, so there is nothing to clean
+ * up. `d.parentPath` is used unconditionally: Node 22 always sets it, and a
+ * `?? d.path` fallback is a backwards-compat path this codebase's own rule
+ * against fallbacks does not allow.
+ */
 function listFiles(dir) {
   let entries;
   try {
     entries = readdirSync(dir, { recursive: true, withFileTypes: true });
-  } catch {
-    return [];
+  } catch (e) {
+    throw new Error(`provisionFixtureGround: could not list ${dir} — ${e?.message ?? e}`);
   }
   return entries
     .filter((d) => d.isFile())
-    .map((d) => relative(dir, join(d.parentPath ?? d.path, d.name)))
+    .map((d) => relative(dir, join(d.parentPath, d.name)))
     .sort();
 }
 
@@ -82,10 +97,23 @@ function runGit(args, what, opts = {}) {
   return res.stdout;
 }
 
-/** Refuse a project outside this story's own reserved namespace — the same
- *  guard the residue sweep already trusts. Shared by provision and teardown
- *  so neither can ever be pointed at a real ground. */
+/**
+ * Refuse a project outside this story's own reserved namespace — the same
+ * guard the residue sweep already trusts. Shared by provision and teardown
+ * so neither can ever be pointed at a real ground.
+ *
+ * D1 review, I1 — `assertSafeStoryId(storyId)` FIRST, unconditionally.
+ * `storyFixtureNames` does no validation of the id it is given, so a
+ * traversal-shaped `storyId` (`'/../mdtoc'`) paired with a `project` built to
+ * match it (`'story-/../mdtoc'`) passed the membership check while
+ * `join(root, 'projects', project)` resolved to `projects/mdtoc` — a REAL
+ * ground's own path. Every caller today passes an id `validateStory` already
+ * constrained, which is why this was latent rather than live; the module's
+ * own header calls this guard the thing that "carries all the weight", so it
+ * has to hold even for a caller that skipped that upstream check.
+ */
 function assertOwnNamespace(fn, storyId, project) {
+  assertSafeStoryId(storyId);
   const names = storyFixtureNames(storyId);
   if (!names.includes(project)) {
     throw new Error(
@@ -224,4 +252,90 @@ export function realGroundEscapes(before, after) {
     else lines.push(`MODIFIED ${dir}: ${b} -> ${a}`);
   }
   return lines;
+}
+
+/**
+ * The real-ground fence as a PURE, tested verdict — D1 review, I3.
+ *
+ * The D1 fence was hand-rolled inline in `run-story.mjs`: `realGroundMoved`
+ * computed from `realGroundEscapes`, an unconditional summary line, and a
+ * `.length > 0` check reaching `return 1`. Deleting any one of those three
+ * kept every pinned test green, because nothing exercised the REQUIREMENT —
+ * only the two primitives it was built from. This is the seam a test can
+ * hold: one function, one frozen record, one door.
+ *
+ * `hashed` counts only dirs `before` produced a digest FOR — a dir
+ * `groundManifest` could not read (an unreadable file, or output past its 64
+ * MiB bound) returns `null` and was never actually hashed, whatever a count
+ * of listed dirs would have claimed (the sibling of review finding M2).
+ * `trees` counts DISTINCT `<tree>` roots among the keys, not the number of
+ * dirs — a key is always `<tree>/projects/<name>`, so the tree is its
+ * grandparent.
+ *
+ * @param {Map<string, string|null>} before
+ * @param {Map<string, string|null>} after
+ * @returns {{ok: boolean, moved: string[], hashed: number, trees: number, summary: string}} frozen
+ */
+export function realGroundFenceVerdict(before, after) {
+  const moved = realGroundEscapes(before, after);
+  let hashed = 0;
+  const trees = new Set();
+  for (const [dir, digest] of before) {
+    if (digest !== null) hashed += 1;
+    trees.add(dirname(dirname(dir))); // `<tree>/projects/<name>` -> `<tree>`
+  }
+  return Object.freeze({
+    ok: moved.length === 0,
+    moved,
+    hashed,
+    trees: trees.size,
+    summary: `real grounds: ${hashed} hashed in ${trees.size} tree(s), ${moved.length} moved`,
+  });
+}
+
+/**
+ * Provision every fixture-ground story in `stories`, IN ORDER, stopping at
+ * the first refusal — D1 review, M1. "A provision that fails writes nothing"
+ * held for one story and not for a batch: `run.mjs`'s original loop kept
+ * provisioning after a refusal, and nothing tore down what an earlier story
+ * in the same call had already written. This restates that promise at the
+ * batch's own level: on a refusal, every ground THIS CALL already
+ * provisioned is torn down before the refusal is returned, so "writes
+ * nothing" is true of the whole batch, not just the story that failed.
+ *
+ * A story with no `ground.fixture` is skipped, not provisioned — the caller
+ * hands over its full story list rather than pre-filtering.
+ *
+ * @param {string} root
+ * @param {Array<{id: string, ground?: {project?: string, fixture?: string}}>} stories
+ * @returns {{provisioned: Array<{storyId: string, project: string, digest: string, commit: string}>, refused: {storyId: string, message: string}|null}} frozen
+ */
+export function provisionFixtureGrounds(root, stories) {
+  const provisioned = [];
+  for (const s of stories) {
+    if (typeof s.ground?.fixture !== 'string') continue;
+    let r;
+    try {
+      r = provisionFixtureGround(root, { storyId: s.id, project: s.ground.project, fixture: s.ground.fixture });
+    } catch (e) {
+      // Undo everything THIS CALL already wrote before reporting the refusal.
+      // Each id here was already validated by a provision that just
+      // succeeded, so a rollback failure is not expected — best-effort
+      // regardless, because losing the refusal that caused it would be worse
+      // than a ground left behind for the next leading sweep to remove.
+      for (const p of provisioned) {
+        try {
+          teardownFixtureGround(root, { storyId: p.storyId, project: p.project });
+        } catch {
+          /* see above — the refusal below is the fact that must survive */
+        }
+      }
+      return Object.freeze({
+        provisioned: Object.freeze([]),
+        refused: Object.freeze({ storyId: s.id, message: e?.message ?? String(e) }),
+      });
+    }
+    provisioned.push(Object.freeze({ storyId: s.id, project: s.ground.project, digest: r.digest, commit: r.commit }));
+  }
+  return Object.freeze({ provisioned: Object.freeze(provisioned), refused: null });
 }
