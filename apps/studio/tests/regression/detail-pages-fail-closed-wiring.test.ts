@@ -396,6 +396,20 @@ const EXEMPT_PAGES: Record<string, string> = {
     'not-found ordering, the bespoke Retry, and the single NotFound render site are ' +
     'all pinned there; the underlying status-mapping is pinned at the pure-logic level ' +
     'in tests/regression/flow-run-detail-client.test.ts.',
+  // forge-5rr (projects-45): the scan's own note already verified this at
+  // source ("a real, distinguishable failure state, not a swallow") and
+  // left it PENDING only because no test pinned that banner to a thrown
+  // read yet. `kickoffSpecFor(kind)` — a pure, static registry lookup with
+  // NO bridge read in its path — decides the NotFound branch BEFORE the
+  // mount-load effect can even fire, so the not-found claim here is
+  // STRUCTURALLY incapable of the crosscut-08 shape; a real mount-load
+  // failure (for a REGISTERED kind) surfaces via the existing
+  // `data-kickoff-error` banner with the thrown message. No production
+  // change — both proven by mounting the real page, with a mutation check.
+  'app/sessions/[kind]/new/page.tsx':
+    'tests/regression/session-kickoff-fail-closed-wiring.test.ts — both the zero-' +
+    'network-calls not-found claim and the real mount-load failure banner are ' +
+    'proven by mounting the real page.',
 };
 
 /**
@@ -408,15 +422,6 @@ const EXEMPT_PAGES: Record<string, string> = {
  * what was NOT done here, per the brief's "report, don't fix" instruction.
  */
 const PENDING_PAGES: Record<string, string> = {
-  'app/sessions/[kind]/new/page.tsx':
-    'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
-    'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +
-    'read failure, so the derivation now picks it up. Verified at source, not scanned: ' +
-    'its mount load is a single Promise.all with ONE top-level .catch that sets `error` ' +
-    'and renders it at :512 as `data-kickoff-error` — a real, distinguishable failure ' +
-    'state, not a swallow. It is PENDING rather than EXEMPT only because no test pins ' +
-    'that banner to a thrown bridge read yet, and EXEMPT here requires naming a test ' +
-    'file that actually covers the page.',
   'app/templates/[id]/page.tsx':
     'Renders NotFound; no FetchErrorState/PageLoadError/catch visible near the read ' +
     'in a quick scan — unverified, possibly a genuine gap.',
