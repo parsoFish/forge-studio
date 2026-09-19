@@ -30,7 +30,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -144,4 +144,108 @@ test('provisionFixtureGrounds stops at the first refusal and tears down everythi
     "the FIRST story's ground — already provisioned before the second refused — must be torn down too",
   );
   assert.ok(Object.isFrozen(result), 'the batch result is frozen');
+});
+
+test('provisionFixtureGrounds: rollbackFailures is empty on a clean rollback', () => {
+  // The SAME two-story refusal as above, unmodified — the default, common
+  // case, pinned so the new field's ABSENCE of failures is as much a
+  // contract as its presence (re-review N2: today this case is not even
+  // representable, since the field does not exist).
+  const root = scratch();
+  const goodSeedDir = join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'seed');
+  mkdirSync(goodSeedDir, { recursive: true });
+  writeFileSync(join(goodSeedDir, 'README.md'), '# demo seed\n');
+  writeFileSync(join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'PROVENANCE.md'), '# provenance\n');
+  const badSeedDir = join(root, 'tests', 'stories', 'grounds', 'no-provenance', 'seed');
+  mkdirSync(badSeedDir, { recursive: true });
+  writeFileSync(join(badSeedDir, 'README.md'), '# x\n');
+
+  const stories = [
+    { id: 'S8', ground: { project: 'story-s8', fixture: 'demo-seed' } },
+    { id: 'S9', ground: { project: 'story-s9', fixture: 'no-provenance' } },
+  ];
+  const result = provisionFixtureGrounds(root, stories) as any;
+  assert.deepEqual(result.rollbackFailures, []);
+});
+
+/**
+ * T2 ruling 3 (re-review N2) — a rollback that could not undo its own write
+ * must NAME it, not swallow it. `provisionFixtureGrounds`'s rollback loop
+ * today calls `teardownFixtureGround` for each already-provisioned entry and
+ * discards the result entirely — a `try { teardownFixtureGround(...) } catch
+ * {}` that never even reads the return value, so a failed removal leaves a
+ * ground neither the caller nor `run.mjs`'s abort backstop knows about, and
+ * nothing is printed.
+ *
+ * FORCING A REAL REMOVAL FAILURE, DETERMINISTICALLY, WITH NO TIMING WINDOW.
+ * `provisionFixtureGrounds` is fully synchronous (`spawnSync` throughout, no
+ * `await` anywhere in it) — there is no point at which a test running
+ * alongside it can act BETWEEN the first story succeeding and the second
+ * failing, so `chmod`ing `projects/` from OUTSIDE the call cannot land in
+ * that narrow window without a race. Instead, the FIRST story's OWN SEED
+ * carries a hand-written `.git/hooks/post-commit` hook (`chmod 555
+ * "$(dirname "$(pwd)")"`). `cpSync` copies it into the fresh git repo before
+ * `git init` reinitialises that same `.git` in place (preserving, not
+ * replacing, an existing `hooks/`), and `--no-verify` does not suppress
+ * `post-commit` (only `pre-commit`/`commit-msg`). So the chmod runs
+ * SYNCHRONOUSLY, inside the SAME `git commit` child process the real
+ * `provisionFixtureGround` already spawns for the first story — deterministic
+ * by construction, not by timing luck. Verified directly against the real
+ * `provisionFixtureGround`/`teardownFixtureGround` before writing this test:
+ * provisioning still succeeds (the digest check excludes `.git/*`, so the
+ * hook is invisible to it), and a subsequent teardown then fails with
+ * `EACCES: permission denied, rmdir '.../projects/story-s8'`.
+ */
+test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not undo, rather than swallowing it (N2)', (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('running as root — permission bits are not enforced, so the forced EACCES never occurs');
+    return;
+  }
+  const root = scratch();
+
+  // The FIRST story's seed: valid, PLUS the post-commit hook that locks
+  // `projects/` the instant its own provisioning finishes.
+  const goodSeedDir = join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'seed');
+  mkdirSync(join(goodSeedDir, '.git', 'hooks'), { recursive: true });
+  writeFileSync(
+    join(goodSeedDir, '.git', 'hooks', 'post-commit'),
+    '#!/bin/sh\nchmod 555 "$(dirname "$(pwd)")"\n',
+    { mode: 0o755 },
+  );
+  writeFileSync(join(goodSeedDir, 'README.md'), '# demo seed\n');
+  writeFileSync(join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'PROVENANCE.md'), '# provenance\n');
+
+  // The SECOND story's seed: deliberately missing PROVENANCE.md, so it
+  // refuses AFTER the first has already succeeded and locked projects/.
+  const badSeedDir = join(root, 'tests', 'stories', 'grounds', 'no-provenance', 'seed');
+  mkdirSync(badSeedDir, { recursive: true });
+  writeFileSync(join(badSeedDir, 'README.md'), '# x\n');
+
+  const stories = [
+    { id: 'S8', ground: { project: 'story-s8', fixture: 'demo-seed' } },
+    { id: 'S9', ground: { project: 'story-s9', fixture: 'no-provenance' } },
+  ];
+
+  try {
+    const result = provisionFixtureGrounds(root, stories) as any;
+
+    assert.ok(result.refused !== null, 'S9 must still refuse — this test is about the RESULTING rollback, not S9 itself');
+    assert.equal(
+      existsSync(join(root, 'projects', 'story-s8')),
+      true,
+      'the rollback of story-s8 must have FAILED (projects/ is locked) — if this is false, the hook did not ' +
+        'fire before the rollback attempt and the test is not exercising what it claims to',
+    );
+    assert.ok(Array.isArray(result.rollbackFailures), 'provisionFixtureGrounds never returns a rollbackFailures array — N2\'s swallow is still silent');
+    assert.equal(result.rollbackFailures.length, 1, `expected exactly one rollback failure. Got: ${JSON.stringify(result.rollbackFailures)}`);
+    assert.equal(result.rollbackFailures[0].project, 'story-s8', JSON.stringify(result.rollbackFailures[0]));
+    assert.match(
+      String(result.rollbackFailures[0].error),
+      /EACCES|permission denied/i,
+      `expected a named permission error, got: ${JSON.stringify(result.rollbackFailures[0])}`,
+    );
+  } finally {
+    // Unlock before the harness's own temp-dir cleanup runs.
+    chmodSync(join(root, 'projects'), 0o755);
+  }
 });
