@@ -217,7 +217,7 @@ export function emitSyntheticArchitectEvents(
 }
 
 export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<CycleResult> {
-  const started = Date.now();
+  const started = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
   // ADR 026: keep one initiative on ONE cycleId for its whole life. Prefer an
   // explicitly threaded id (the review→unifier drain + the merge finalizer pass
   // it), then a previously-persisted id (a crash-recovery resume reuses the
@@ -338,7 +338,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
       status: 'failed',
       reflection_status: reflectionStatus,
       lint_status: lintStatus,
-      duration_ms: Date.now() - started,
+      duration_ms: Math.round(performance.now() - started),
       log_path: logger.logFilePath,
     };
     // Snapshot artefacts + write report even on failure — failed cycles
@@ -361,7 +361,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
     status: cycleOutcome,
     reflection_status: reflectionStatus,
     lint_status: lintStatus,
-    duration_ms: Date.now() - started,
+    duration_ms: Math.round(performance.now() - started),
     log_path: logger.logFilePath,
   };
 

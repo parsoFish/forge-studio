@@ -210,7 +210,7 @@ export function runOrchestratorCommand(
   argv: readonly string[],
   opts: { cwd: string; timeoutMs: number; env?: NodeJS.ProcessEnv },
 ): OrchestratorCommandResult {
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
   const command = argv.join(' ');
   const [head, ...rest] = argv;
   if (!head) {
@@ -233,7 +233,7 @@ export function runOrchestratorCommand(
       errored: false,
       stdoutTail: tail(stdout),
       stderrTail: '',
-      durationMs: Date.now() - startedAt,
+      durationMs: Math.round(performance.now() - startedAt),
       command,
     };
   } catch (err) {
@@ -241,7 +241,7 @@ export function runOrchestratorCommand(
     if (e.stdout) stdout = typeof e.stdout === 'string' ? e.stdout : e.stdout.toString('utf8');
     if (e.stderr) stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr.toString('utf8');
     const killedBySignal = !!e.signal && (e.status === null || e.status === undefined);
-    const deadlineElapsed = Date.now() - startedAt >= opts.timeoutMs;
+    const deadlineElapsed = performance.now() - startedAt >= opts.timeoutMs;
     const timedOut = e.code === 'ETIMEDOUT' || (killedBySignal && deadlineElapsed);
     const errored = !timedOut && (e.code === 'ENOENT' || e.code === 'EACCES' || killedBySignal);
     return {
@@ -251,7 +251,7 @@ export function runOrchestratorCommand(
       errored,
       stdoutTail: tail(stdout),
       stderrTail: tail(stderr || (e.message ?? '')),
-      durationMs: Date.now() - startedAt,
+      durationMs: Math.round(performance.now() - startedAt),
       command,
     };
   }

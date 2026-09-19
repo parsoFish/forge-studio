@@ -375,7 +375,14 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       if (/created_at > updated_at/.test(msg)) return { kind: 'frontmatter.date-order', resolution: 'auto' };
       return { kind: 'frontmatter.other', resolution: 'user' };
     case 'checkIndexSync':
-      if (/category index missing/.test(msg)) return { kind: 'index.missing', resolution: 'agent', fixHint: 'Create the missing category index file with a heading and a link to each theme of this category.' };
+      // forge-8vfn.5.1: a missing category index is DERIVED data (a heading
+      // plus a link per theme of that category) — brain-fix-auto.ts's
+      // `ensureLinked` already creates one on demand for the `orphan`
+      // (no-index-at-all) case, so this classifies auto-tier too rather
+      // than agent-tier. skills/brain-fix/SKILL.md tells brain-fix "do not
+      // create new files"; auto-tier means this kind is never dispatched
+      // to that agent at all, so the two no longer contradict each other.
+      if (/category index missing/.test(msg)) return { kind: 'index.missing', resolution: 'auto' };
       if (/not listed/.test(msg)) return { kind: 'index.not-listed', resolution: 'auto' };
       if (/listed \d+ times/.test(msg)) return { kind: 'index.duplicate', resolution: 'auto' };
       return { kind: 'index.other', resolution: 'auto' };
