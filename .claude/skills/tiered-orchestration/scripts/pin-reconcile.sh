@@ -113,28 +113,25 @@ may_write() {
     return 1
   fi
   if [ -n "$tree" ] && [ "$tree" != "$R" ]; then
-    # 7.6.57 (ruling 806) — THE OWNER MAY REPAIR ITS OWN STALE `tree=`.
+    # 7.6.57 (ruling 806) used to let the OWNER repair its own stale `tree=`
+    # here, silently, on the theory that a rewrite from the owner's own rehash
+    # is safe because "the owner is not asserting a verification someone
+    # else's checkout did, it is recording the one it just did." 7.6.141
+    # measured that theory wrong: the SAME owner reconciles from TWO different
+    # worktrees in the ordinary course of a lane's work — this script's own
+    # invocation from a shared checkout, and the lane's post-merge `§762` stamp
+    # from its own `$TREE` — and each one's "safe repair" is the other's
+    # oscillation. `M6-A.counts` measured `tree=` flip forge-m6-a →
+    # forge-m6-a-main → forge-m6-a in one reconcile cycle, both writes
+    # "owner=M6-A", neither wrong by this rule's own lights.
     #
-    # 793's refusal is right about a stranger's tree and wrong about your own.
-    # Dogfooding 7.6.49 a minute after it went live: `M6-A.counts` still carried
-    # `tree=/home/parso/forge` from the wrapper era (730), so A's own reconcile
-    # from A's own worktree was blocked and the ONLY route left was a hand edit
-    # of the field the tool exists to own — which is the class of fix this whole
-    # instrument removes. Every `.counts` written in that era carries the same
-    # latent block.
-    #
-    # Rewriting is safe HERE and nowhere else, because the rehash this run
-    # performed happened in `$R`: the owner is not asserting a verification
-    # someone else's checkout did, it is recording the one it just did. A
-    # non-owner reaching here is the 793 case untouched — including T1's
-    # `--sweep`, where `owner != LANE` by construction and the tree genuinely is
-    # not the owner's.
-    if [ "$owner" = "$LANE" ]; then
-      echo "  $n: tree= REPAIRED — $tree -> $R (owner=$LANE rehashing in its own repo, 7.6.57)"
-    else
-      echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed (793). Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
-      return 1
-    fi
+    # So the 793 refusal WIDENS rather than staying owner-conditional: ANY
+    # `tree=` naming a different repo than the one this run rehashes refuses,
+    # owner included. A repair is no longer a rewrite this tool performs for
+    # you — it is an amendment the operator writes by hand, deliberately,
+    # naming which checkout is the true one (7.6.141).
+    echo "  $n: REFUSED — tree=$tree is not the repo this run rehashes ($R); writing head= here would assert a verification that checkout never performed. A field two writers disagree about is not repaired by whichever one runs next (7.6.141) — move tree= deliberately, by hand, with an amendment. Would have written head=${TO:0:8} manifest=$(sha256sum "$f" | cut -c1-16)" >&2
+    return 1
   fi
   return 0
 }
