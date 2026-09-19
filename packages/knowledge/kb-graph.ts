@@ -22,7 +22,7 @@ import { execSync } from 'node:child_process';
 import matter from 'gray-matter';
 
 import { requireKbBrainDir } from './brain-paths.ts';
-import { collectThemeSlugTargets } from './brain-lint.ts';
+import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
@@ -242,18 +242,6 @@ function parseMd(raw: string): { data: Record<string, unknown>; content: string 
   }
 }
 
-/** Extract [[slug]] links from markdown body. */
-function extractWikiLinks(body: string): string[] {
-  const slugs: string[] = [];
-  const re = /\[\[([^\]]+)\]\]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    const slug = m[1].trim();
-    if (slug) slugs.push(slug);
-  }
-  return slugs;
-}
-
 /** Get the git last-author for a file. Returns undefined on failure. */
 function gitLastAuthor(filePath: string): string | undefined {
   try {
@@ -443,8 +431,12 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
       }
     }
 
-    // [[wiki-link]] edges
-    for (const linkSlug of extractWikiLinks(data.body)) {
+    // [[wiki-link]] edges. extractLinks (brain-lint.ts, the ONE wikilink scan
+    // — kb-graph.ts used to carry its own copy of the identical regex) can
+    // hand back an empty slug for a bare `[[]]`; skip it, same as the local
+    // copy this replaces did.
+    for (const linkSlug of extractLinks(data.body).wikilinks) {
+      if (!linkSlug) continue;
       if (nodeIds.has(linkSlug) && linkSlug !== fromId) {
         // Avoid duplicate edges
         const exists = edges.some((e) => e.from === fromId && e.to === linkSlug);
