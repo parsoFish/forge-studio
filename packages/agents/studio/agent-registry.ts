@@ -200,6 +200,8 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
 
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
+  // forge-6gv.20 escape hatch — see AgentDefinition.toolFenceExempt.
+  const toolFenceExempt = optBool(d, 'tool-fence-exempt');
   const library = optBool(d, 'library');
 
   // R2-09 D1 — lenient on VALUES (an unknown material string survives; lint's
@@ -233,6 +235,7 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
     budgets,
     allowedTools,
     disallowedTools,
+    ...(toolFenceExempt !== undefined ? { toolFenceExempt } : {}),
     body: content,
     path: skillMdPath,
   };
