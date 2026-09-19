@@ -437,6 +437,11 @@ LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mkt
 echo "logs: $LOGS"
 fail=0
 refused=0
+# forge-8vfn.7.6.89 — a COUNT and the one command, never re-derived from `fail`
+# (a bare flag) — the ALONE-RERUN proof below needs to know it was EXACTLY one
+# FAIL (never a REFUSAL) and which command that was.
+FAIL_COUNT=0
+FAIL_CMD=""
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -494,9 +499,18 @@ while IFS= read -r cmd; do
     else
       echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
       fail=1
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      FAIL_CMD="$cmd"
     fi
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')
+
+# forge-8vfn.7.6.89 — THE REPLAY IS THIS TOOL'S TO PERFORM, NOT THE LANE'S (a
+# hand-typed ALONE-RERUN proves nothing). Called only here, after the loop's
+# own final count, so the two can never disagree about what ran.
+if [ -n "${GATE_RERUN_ALONE:-}" ]; then
+  ( cd "$R" && "$HERE/gate-rerun-alone.sh" "$GATE_RERUN_ALONE" "$FAIL_COUNT" "$FAIL_CMD" )
+fi
 
 echo "== steps this gate did NOT run (named, never silent) =="
 "$0" --list "$R" | grep -vE '^RUN ' || true
