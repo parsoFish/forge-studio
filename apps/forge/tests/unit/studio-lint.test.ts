@@ -927,6 +927,89 @@ Internal only.
 });
 
 // ---------------------------------------------------------------------------
+// forge-e3v — a `library: false` agent that DOES declare a `runtime:` block
+// (brain-fix, creation-agent, instructions-creator, onboarding-agent shape)
+// is `isStudioAgent() === false` (the roster gate) but IS a real, loadable
+// agent def — `validateAgent` must still run against it. Distinct from the
+// test above, whose fixture has NO `runtime:` block at all (so it is out of
+// scope for a different reason: not a loadable agent def, period).
+// ---------------------------------------------------------------------------
+
+test('a "library: false" agent WITH a runtime block still runs validateAgent — an error-level defect is not lint-clean', () => {
+  const root = buildValidRoot({ agentSlug: 'has-library' });
+
+  const internalSlug = 'internal-agent-with-defect';
+  const internalDir = join(root, 'skills', internalSlug);
+  mkdirSync(internalDir, { recursive: true });
+  writeFileSync(
+    join(internalDir, 'SKILL.md'),
+    `---
+name: ${internalSlug}
+description: An internal/system agent, dispatched directly, never composed into a flow.
+library: false
+purpose: Does internal things.
+brainAccess: none
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: []
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+budgets: {}
+allowed-tools: []
+disallowed-tools: [Task, Agent]
+surface: not-a-real-surface
+---
+## Process
+
+Internal only.
+`,
+  );
+
+  const result = runStudioLint(root);
+
+  const surfaceError = result.findings.find(
+    (f) => f.level === 'error' && f.object === `agent:${internalSlug}` && f.check === 'surface/enum',
+  );
+  assert.ok(
+    surfaceError !== undefined,
+    `Expected a surface/enum error for agent:${internalSlug} (validateAgent must run for library:false agents too) — got: ${JSON.stringify(result.findings.filter((f) => f.object === `agent:${internalSlug}`))}`,
+  );
+
+  cleanup(root);
+});
+
+test('a "library: false" agent WITH a runtime block is NOT added to the flow-composable agent map (roster stays library:true-only)', () => {
+  const root = buildValidRoot({ agentSlug: 'has-library' });
+
+  const internalSlug = 'internal-agent-not-composable';
+  const internalDir = join(root, 'skills', internalSlug);
+  mkdirSync(internalDir, { recursive: true });
+  writeFileSync(join(internalDir, 'SKILL.md'), validSkillMd(internalSlug).replace('library: true', 'library: false'));
+
+  // A flow node that references the library:false agent — must fail the
+  // SAME "unknown agent" check a flow referencing a nonexistent slug would,
+  // because that agent was never added to the roster agentMap.
+  const flowDir = join(root, 'studio', 'flows', 'bad-flow');
+  mkdirSync(flowDir, { recursive: true });
+  writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('bad-flow', internalSlug));
+
+  const result = runStudioLint(root);
+
+  const flowError = result.findings.find((f) => f.object === 'flow:bad-flow' && f.level === 'error');
+  assert.ok(
+    flowError !== undefined,
+    `Expected a flow error referencing the non-roster agent "${internalSlug}" — got: ${JSON.stringify(result.findings.filter((f) => f.object === 'flow:bad-flow'))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
 // materials (R2-09): the materials/enum check must be wired into the FULL
 // runStudioLint pipeline, not just directly unit-tested against validateAgent
 // in isolation (see orchestrator/studio/validate.test.ts for the direct
