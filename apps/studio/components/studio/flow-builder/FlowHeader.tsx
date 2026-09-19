@@ -29,7 +29,7 @@ import {
 import type { Flow, Kb, FlowTrigger, ShippedTriggerKind, WebhookEventName } from '@/lib/studio-client';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
-import { FlowSaveFindings, type FlowSaveFinding } from './FlowSaveFindings';
+import { FlowSaveFindings, type FlowSaveFinding, type FlowSaveLintState } from './FlowSaveFindings';
 import { FlowStarterSeed } from './FlowStarterSeed';
 import { KICKOFF_SURFACES, kickoffSurfaceIdOfKind } from '@/lib/kickoff-surface';
 
@@ -89,9 +89,26 @@ export function FlowHeader({
    * it is not `null` — `null` is a real answer (no kickoff ⇒ generic).
    */
   const [savedKickoffKind, setSavedKickoffKind] = useState<string | null | undefined>(undefined);
+  /**
+   * forge-8vfn.5.12 — the flow's PERSISTED kb binding, mirrored the same way
+   * `savedKickoffKind` mirrors the derived launch surface: `undefined`
+   * ("this mount has not saved yet") falls back to the ALREADY-FETCHED
+   * roster's own entry for this flow (`flows` — a persisted read, unlike
+   * `state.kb`, which is the select's local, possibly-unsaved edit); a save
+   * in this mount then reports the value it just wrote — the server never
+   * echoes kb back (unlike kickoff, which it derives), so what was SENT is
+   * what is now on disk.
+   */
+  const [savedKb, setSavedKb] = useState<string | undefined>(undefined);
   // W7-B4 (flows-10): the last failed save's validation findings — cleared
   // by any subsequent successful save.
   const [saveFindings, setSaveFindings] = useState<FlowSaveFinding[]>([]);
+  // forge-8vfn.5.12: the outcome of the LAST save that reported a real lint
+  // verdict — 'unsaved' until one does. A save that fails WITHOUT findings
+  // (locked/network/name-required — see the wrapper below) reports no lint
+  // verdict at all, so it leaves this standing rather than overwriting it
+  // with a fact that response never carried.
+  const [lintState, setLintState] = useState<FlowSaveLintState>('unsaved');
   // W7-B4 (flows-11): two-step delete confirm.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -114,11 +131,27 @@ export function FlowHeader({
   const { saving, save: handleSave, ...saveFb } = useSaveState(async () => {
     const r = await onSave();
     const failedFindings = !r.ok && Array.isArray(r.findings) ? (r.findings as FlowSaveFinding[]) : [];
-    setSaveFindings(failedFindings.filter((f) => typeof f?.message === 'string'));
-    // A save is the ONLY moment the derived launch surface can change, and the
-    // server is the only thing that knows it — so the badge follows the
-    // response rather than waiting for a reload of the flow list.
-    if (r.ok) setSavedKickoffKind(r.kickoff ?? null);
+    const cleanedFindings = failedFindings.filter((f) => typeof f?.message === 'string');
+    if (r.ok) {
+      // The bridge only 200s a flow that passed validation — unambiguously
+      // clean, and (forge-8vfn.5.12) the kb this response persisted.
+      setSaveFindings([]);
+      setLintState('clean');
+      setSavedKb(state.kb);
+      // A save is the ONLY moment the derived launch surface can change, and
+      // the server is the only thing that knows it — so the badge follows
+      // the response rather than waiting for a reload of the flow list.
+      setSavedKickoffKind(r.kickoff ?? null);
+    } else if (cleanedFindings.length > 0) {
+      // A rejected save WITH findings is a real lint verdict.
+      setSaveFindings(cleanedFindings);
+      setLintState('findings');
+    }
+    // A rejected save with NO findings (423 locked, a network failure, "Name
+    // your flow before saving.") reports no lint verdict at all — SaveStatus
+    // already surfaces that failure; `lintState`/`saveFindings` stand as
+    // they were rather than being overwritten with a fact this response
+    // never carried.
     return r;
   });
 
@@ -191,6 +224,9 @@ export function FlowHeader({
 
   const flowName = (id: string) => flows.find((f) => f.id === id)?.name ?? id;
 
+  // forge-8vfn.5.12: the PERSISTED kb — see `savedKb`'s declaration above.
+  const persistedKb = savedKb === undefined ? (flows.find((f) => f.id === flowId)?.kb ?? '') : savedKb;
+
   // Chip label's kind phrase, e.g. "on merged →", "cron 0 3 * * * →",
   // "webhook myproj-push →" — the target-flow name is rendered separately.
   // `pr-merged`/`issue-raised`/`agent-complete` each get their own honest
@@ -210,6 +246,7 @@ export function FlowHeader({
     <div
       data-component="flow-header"
       data-goal-set={goalSet ? 'true' : 'false'}
+      data-flow-kb={persistedKb}
       style={{
         background: 'var(--panel)',
             borderBottom: '1px solid var(--line)',
@@ -403,12 +440,12 @@ export function FlowHeader({
         )}
       </div>
 
-      {/* W7-B4 (flows-10): the last failed save's per-node findings. */}
-      {saveFindings.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <FlowSaveFindings findings={saveFindings} />
-        </div>
-      )}
+      {/* W7-B4 (flows-10) + forge-8vfn.5.12: the outcome of the LAST save —
+          always rendered (never absent), so a clean save is as observable
+          as a rejected one. */}
+      <div style={{ marginBottom: 10 }}>
+        <FlowSaveFindings findings={saveFindings} lintState={lintState} />
+      </div>
 
       {/* Goal row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
