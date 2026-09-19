@@ -1,8 +1,11 @@
 /**
  * SEAM F1 (operator ruling, item 81) — "a second discovery root:
- * package-owned flows". A factory ships as a package:
+ * package-owned flows [and skills]". A factory ships as a package:
  * `packages/<pkg>/flows/<id>/flow.yaml` and `packages/<pkg>/skills/<slug>/
- * SKILL.md`, discovered by the platform with NO registration code. Drives
+ * SKILL.md`, discovered by the platform with NO registration code — LISTED
+ * (roster), READABLE (detail/capability routes) and LINTED (studio-lint.ts
+ * §1, see `apps/forge/tests/unit/studio-lint.test.ts` for the lint-side
+ * doors) exactly like a `studio/flows/`- or `skills/`-owned one. Drives
  * the REAL bridge (`startBridge`), mirroring the fixture idiom of
  * `apps/forge/tests/integration/bridge-studio-flows.test.ts` and
  * `apps/forge/tests/contract/bridge-studio-sibling-containment.test.ts`.
@@ -202,6 +205,32 @@ test('GET /api/studio/agents: the package-owned skill "x" appears in the agent r
   assert.ok(slugs.includes('x'), `expected "x" in the roster: ${JSON.stringify(slugs)}`);
 });
 
+test('GET /api/studio/agents/x/capability: the package-owned skill\'s detail/read route returns its SKILL.md', async () => {
+  const res = await fetch(`${url}/api/studio/agents/x/capability`);
+  const body = (await res.json()) as { slug?: string; capability?: unknown; error?: string };
+  assert.equal(res.status, 200, JSON.stringify(body));
+  assert.equal(body.slug, 'x');
+  assert.ok(body.capability, `expected a real capability derived from the read SKILL.md: ${JSON.stringify(body)}`);
+});
+
+test('PUT /api/studio/agents/x: a save to a package-owned skill slug is refused (read-only), naming the package', async () => {
+  const res = await fetch(`${url}/api/studio/agents/x`, {
+    method: 'PUT',
+    headers: CSRF,
+    body: JSON.stringify({}),
+  });
+  const body = (await res.json()) as { error?: string };
+  assert.equal(res.status, 409, JSON.stringify(body));
+  assert.match(body.error ?? '', /package-owned skill "x" is read-only — it ships with packages\/demo-pkg/);
+});
+
+test('DELETE /api/studio/agents/x: a delete of a package-owned skill slug is refused (read-only), same as the save', async () => {
+  const res = await fetch(`${url}/api/studio/agents/x`, { method: 'DELETE', headers: CSRF });
+  const body = (await res.json()) as { error?: string };
+  assert.equal(res.status, 409, JSON.stringify(body));
+  assert.match(body.error ?? '', /package-owned skill "x" is read-only/);
+});
+
 test('PUT /api/studio/flows/b: a save to a package-owned flow id is refused (read-only)', async () => {
   const res = await fetch(`${url}/api/studio/flows/b`, {
     method: 'PUT',
@@ -218,6 +247,44 @@ test('DELETE /api/studio/flows/b: a delete of a package-owned flow id is refused
   const body = (await res.json()) as { error?: string };
   assert.equal(res.status, 409, JSON.stringify(body));
   assert.match(body.error ?? '', /package-owned flow "b" is read-only/);
+});
+
+test('POST /api/flows/dup/run: a flow id real under two roots is a named, non-swallowed error — never 404 "not found"', async () => {
+  // Isolated fixture (its own bridge): a duplicate anywhere in the tree
+  // makes GET /api/studio/flows itself throw (loud, by design), so this
+  // must not share the suite's main fixture/bridge.
+  const dupRoot = mkdtempSync(join(tmpdir(), 'bridge-seam-f1-dup-'));
+  let dupClose: (() => Promise<void>) | undefined;
+  try {
+    for (const state of ['in-flight', 'done', 'failed', 'pending', 'ready-for-review']) {
+      mkdirSync(join(dupRoot, '_queue', state), { recursive: true });
+    }
+    mkdirSync(join(dupRoot, '_logs'), { recursive: true });
+    mkdirSync(join(dupRoot, 'studio', 'flows', 'dup'), { recursive: true });
+    writeFileSync(join(dupRoot, 'studio', 'flows', 'dup', 'flow.yaml'), makeFlowYaml('dup'), 'utf8');
+    mkdirSync(join(dupRoot, 'packages', 'demo-pkg', 'flows', 'dup'), { recursive: true });
+    writeFileSync(join(dupRoot, 'packages', 'demo-pkg', 'flows', 'dup', 'flow.yaml'), makeFlowYaml('dup'), 'utf8');
+
+    const dup = await startBridge({ forgeRoot: dupRoot, port: 0 });
+    dupClose = dup.close;
+
+    const res = await fetch(`${dup.url}/api/flows/dup/run`, {
+      method: 'POST',
+      headers: CSRF,
+      body: JSON.stringify({ initiativeId: 'INIT-2026-09-19-does-not-matter' }),
+    });
+    const body = (await res.json()) as { error?: string; flowId?: string };
+    // Never a 404 "not found" — a duplicate is a checkout defect, not an
+    // absent flow — and never swallowed into a generic/empty response.
+    assert.notEqual(res.status, 404, `must not read as "not found": ${JSON.stringify(body)}`);
+    assert.notEqual(body.error, 'flow not found', `must not read as "not found": ${JSON.stringify(body)}`);
+    assert.ok(body.error, `must carry a named error, got: ${JSON.stringify(body)}`);
+    assert.match(body.error, /dup/, `the error must name the flow id: ${JSON.stringify(body)}`);
+    assert.match(body.error, /more than one discovery root/, `the error must name the defect class: ${JSON.stringify(body)}`);
+  } finally {
+    if (dupClose) await dupClose();
+    rmSync(dupRoot, { recursive: true, force: true });
+  }
 });
 
 test('deleting packages/demo-pkg removes flow "b" and skill "x" — and nothing else', async () => {

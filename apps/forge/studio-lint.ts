@@ -4,7 +4,9 @@
  * CLI: `forge studio lint`
  *
  * Validates:
- *   1. Agent definitions  — every studio SKILL.md in skills/
+ *   1. Agent definitions  — every studio SKILL.md in skills/ (the required
+ *                           seed root) plus every packages/<pkg>/skills/
+ *                           (SEAM F1, operator ruling item 81)
  *   2. Flow definitions   — every studio/flows/<id>/flow.yaml (the required
  *                           seed root) plus every packages/<pkg>/flows/<id>/
  *                           flow.yaml (SEAM F1, operator ruling item 81)
@@ -62,7 +64,7 @@ import { validateDiscoveredProjects } from '@forge/projects/studio/validate-proj
 import { validateLibraryFlag } from '@forge/library/studio/library-validate.ts';
 import type { Finding } from '@forge/kernel/findings.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { listSkillMdDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';
 import type { AgentDefinition, KbDescriptor } from '@forge/contracts/studio/types.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
@@ -94,6 +96,20 @@ function kbDirNameFindings(kbId: string, kbPath: string): Finding[] {
   const reason = unroutableKbReason(kbId, dir);
   if (reason === null) return [];
   return [{ level: 'error', object: `kb:${kbId}`, check: 'dir-name', message: reason }];
+}
+
+/** SEAM F1: several library skill-lint passes are built on `listSkillDirs`
+ *  (`@forge/library/skill-path.ts`), which THROWS, naming both paths, on a
+ *  cross-root duplicate slug — never "first root wins". `runStudioLint`
+ *  promises no unhandled throws (module header), so every such pass runs
+ *  through here: a thrown duplicate becomes its own error Finding instead of
+ *  crashing the whole lint. */
+function runSkillLintPass(run: () => Finding[]): Finding[] {
+  try {
+    return run();
+  } catch (err) {
+    return [{ level: 'error', object: 'studio:agents', check: 'load', message: (err as Error).message }];
+  }
 }
 
 export function runStudioLint(root: string): StudioLintResult {
@@ -156,7 +172,27 @@ export function runStudioLint(root: string): StudioLintResult {
       message: `Required directory "${skillsDir}" is missing — skills/ must exist in a forge repo`,
     });
   } else {
-    for (const dir of listSkillMdDirs(skillsDir)) {
+    // SEAM F1 (operator ruling item 81): every skill root now feeds
+    // validation below — `skills/` (checked as the required seed root above)
+    // AND every `packages/<pkg>/skills/`. `listSkillDirs` unions them,
+    // THROWING (naming both paths) on a cross-root duplicate slug — never
+    // "first root wins" — but this function promises no unhandled throws
+    // (module header), so that throw becomes its own error Finding here,
+    // falling back to the single-root walk so the rest of the pass still
+    // runs against what IS unambiguous.
+    let skillDirs: string[];
+    try {
+      skillDirs = listSkillDirs(root);
+    } catch (err) {
+      skillDirs = listSkillMdDirs(skillsDir);
+      findings.push({
+        level: 'error',
+        object: 'studio:agents',
+        check: 'load',
+        message: (err as Error).message,
+      });
+    }
+    for (const dir of skillDirs) {
       const entryName = basename(dir);
       const skillMdPath = join(dir, 'SKILL.md');
 
@@ -260,10 +296,24 @@ export function runStudioLint(root: string): StudioLintResult {
 
     // SEAM F1 (operator ruling item 81): every flow root now feeds
     // validation below — `studio/flows` (checked as the required seed root
-    // above) AND every `packages/<pkg>/flows`. `listFlowIds` unions them
-    // (THROWING, naming both paths, on a cross-root duplicate id — never
-    // "first root wins").
-    const allFlowIds = listFlowIds(root);
+    // above) AND every `packages/<pkg>/flows`. `listFlowIds` unions them,
+    // THROWING (naming both paths) on a cross-root duplicate id — never
+    // "first root wins" — but `runStudioLint` promises no unhandled throws
+    // (module header), so that throw becomes its own error Finding here,
+    // falling back to the single-root `flowDirs` so the rest of the pass
+    // still runs against what IS unambiguous.
+    let allFlowIds: string[];
+    try {
+      allFlowIds = listFlowIds(root);
+    } catch (err) {
+      allFlowIds = flowDirs;
+      findings.push({
+        level: 'error',
+        object: 'studio:flows',
+        check: 'seed-present',
+        message: (err as Error).message,
+      });
+    }
     allFlowIds.forEach((d) => flowIds.add(d));
 
     // Resolve a flow's project on demand (R2-04): the external-trigger project
@@ -542,8 +592,8 @@ export function runStudioLint(root: string): StudioLintResult {
   //    entry. See orchestrator/studio/skill-library.ts (single source).
   // ------------------------------------------------------------------
 
-  findings.push(...lintSkillTrust(root, libraryAgentFacts));
-  findings.push(...lintSkillRefs(root, libraryAgentFacts));
+  findings.push(...runSkillLintPass(() => lintSkillTrust(root, libraryAgentFacts)));
+  findings.push(...runSkillLintPass(() => lintSkillRefs(root, libraryAgentFacts)));
 
   // ------------------------------------------------------------------
   // 6b. Tool-fence sweep — a roster SKILL.md that declares tool frontmatter
@@ -559,7 +609,7 @@ export function runStudioLint(root: string): StudioLintResult {
   //     because only the roster half was ever scanned.
   // ------------------------------------------------------------------
 
-  findings.push(...lintSkillToolFence(root));
+  findings.push(...runSkillLintPass(() => lintSkillToolFence(root)));
   findings.push(...lintStarterAgentToolFence(root));
 
   // ------------------------------------------------------------------

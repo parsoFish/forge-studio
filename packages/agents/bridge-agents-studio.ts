@@ -40,7 +40,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import yaml from 'js-yaml';
@@ -50,7 +50,7 @@ import {
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
@@ -213,6 +213,15 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     // an agent — refuse it here so it can never be minted or shadowed.
     if (isReservedId(slug)) {
       sendJson(res, 400, { error: `agent slug "${slug}" is reserved (the /agents/new builder lives at that path) — choose another slug` }, origin);
+      return true;
+    }
+    // SEAM F1: writes stay in `skills/` ONLY — a slug already resolving
+    // under a PACKAGE root ships with that package and is read-only, same
+    // rule flows' write route enforces.
+    const skillPackageOwner = resolveIdAcrossRoots(skillRoots(ctx.forgeRoot).slice(1), slug, ['SKILL.md']);
+    if (skillPackageOwner !== null) {
+      const pkg = basename(dirname(skillPackageOwner.root));
+      sendJson(res, 409, { error: `package-owned skill "${slug}" is read-only — it ships with packages/${pkg}` }, origin);
       return true;
     }
 
