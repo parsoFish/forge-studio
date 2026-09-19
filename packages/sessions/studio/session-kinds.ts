@@ -211,15 +211,14 @@ export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
 
-/** EXPIRY CONDITION (deliberately empty for R4-22 WI-1): the ADR's only
- *  worked example (style: agent) never exercises `schema` at all, and no
- *  `structured`-style turnSpec consumer exists anywhere in the repo yet.
- *  Seed this the moment the first one lands. Until then, this is a
- *  deliberately-green gap-pin, not an oversight: `turnSpec.schema` has no
- *  valid value today, and validateSessionKinds says so honestly (naming the
- *  empty allowed set) rather than skipping the check or pretending
- *  membership that doesn't exist. Typed `readonly`, as TURN_STYLES. */
-export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([] as SchemaIdRow[]);
+/** bead 8vfn.6.6 item 1 — seeded with the first real schema id: the exact
+ *  `INTERVIEW_SCHEMA` `kinds/instructions.ts` already relies on for a real
+ *  interview turn (reused, not duplicated — see that file's export). No
+ *  `turnSpec` row names it yet (instructions itself never gains one — barred
+ *  permanently, ADR-043 2026-08-14 amendment §1); this proves the resolver
+ *  against real content instead of an invented placeholder. Typed
+ *  `readonly`, as TURN_STYLES. */
+export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([Object.freeze({ id: 'interview-qa' })]);
 export type SchemaId = (typeof SCHEMA_IDS)[number]['id'];
 
 export type AwaitsKindRow = { readonly id: string };

@@ -249,7 +249,9 @@ export async function runInstructionsTurn(
 
 type InterviewDecision = { done: boolean; questions: InterviewQuestion[] };
 
-const INTERVIEW_SCHEMA = {
+// bead 8vfn.6.6 item 1 — exported so the turnSpec schema resolver
+// (interactive-agent-step.ts) can seed a real schema id, not an invented one.
+export const INTERVIEW_SCHEMA = {
   type: 'object',
   properties: {
     done: { type: 'boolean' },

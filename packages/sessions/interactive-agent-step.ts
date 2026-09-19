@@ -15,7 +15,7 @@
  * work rather than staying behind, because everything that constructs or
  * returns them is here.
  */
-import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
 import { type EventLogger, type Phase, resolveGuardedPath } from '@forge/kernel';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
@@ -25,8 +25,18 @@ import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
-import { runAgentTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
+import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
+import { INTERVIEW_SCHEMA } from './kinds/instructions.ts';
+
+/** bead 8vfn.6.6 item 1 — the turnSpec.schema resolver. A Map, not the
+ *  frozen-array-+-.find() idiom other registries here use: a Map has no
+ *  prototype chain to fall through for an id like "constructor", the same
+ *  property those registries buy with `.find()`, at a third of the lines. */
+const TURN_SCHEMAS: ReadonlyMap<string, unknown> = new Map([['interview-qa', INTERVIEW_SCHEMA]]);
+function resolveTurnSchema(id: string): unknown | undefined {
+  return TURN_SCHEMAS.get(id);
+}
 import type { BashFenceMode } from './session-write-fence.ts';
 import { guardedWriteSessionStatus, statusWriteRefusalReason, CANCELLED_PHASE } from './session-status-io.ts';
 
@@ -286,14 +296,42 @@ export async function runAgentStyleStep(args: {
     // prompt — a turn that threw leaves the note in place for the retry.
     if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else if (turnSpec.style === 'structured') {
-    // No schema registry exists yet — SCHEMA_IDS ships empty (R4-22 WI-1's
-    // own deliberately-green gap-pin, packages/sessions/studio/session-kinds.ts).
-    // Fail LOUD rather than fabricate a schema or silently fall back to the
-    // agent primitive — the declared-data-fails-open shape this campaign
-    // guards against.
-    throw new Error(
-      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style is "structured", but no schema registry is wired yet (turnSpec.schema="${turnSpec.schema ?? '(none)'}"). No structured-style turnSpec consumer exists; wire a schema resolver before shipping one.`,
-    );
+    // bead 8vfn.6.6 item 1 — resolve against TURN_SCHEMAS; fail LOUD (never
+    // fabricate/fall back) on an undeclared or unresolvable schema id, the
+    // same declared-data-fails-open discipline the agent branch's own throws
+    // already carry.
+    if (turnSpec.schema === undefined) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style is "structured" but declares no turnSpec.schema — a structured turnSpec requires one.`,
+      );
+    }
+    const schema = resolveTurnSchema(turnSpec.schema);
+    if (schema === undefined) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.schema "${turnSpec.schema}" is not registered in TURN_SCHEMAS.`,
+      );
+    }
+    const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
+    const operatorFeedback = readOperatorFeedback(sessionDir);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback);
+    const { output, costUsd } = await runStructuredTurn({
+      queryFn, prompt, schema, model,
+      allowedTools: agentSpec.allowedTools, disallowedTools: agentSpec.disallowedTools,
+      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
+      cwd: sessionDir, onToolUse, onHeartbeat, onText, onThinking,
+      label: `interactive-${descriptor.id}-${ctx.sessionId}`,
+      ...(args.onTurnEndedUnpriced ? { onTurnEndedUnpriced: args.onTurnEndedUnpriced } : {}),
+    });
+    if (costUsd !== null) args.onTurnCost?.(costUsd, modelTier, model);
+    if (writeRoots.length > 0) {
+      if (output === null) {
+        throw new InteractiveRunnerError(
+          `runInteractiveTurn: session kind "${descriptor.id}" phase "${phaseRow.phase}" structured turn produced no output to persist under its declared writes dir.`,
+        );
+      }
+      writeFileSync(`${writeRoots[0]}/output.json`, JSON.stringify(output, null, 2));
+    }
+    if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else {
     throw new Error(
       `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style "${turnSpec.style}" is unrecognised — expected "agent" or "structured".`,

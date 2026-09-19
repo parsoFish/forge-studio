@@ -618,22 +618,17 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           );
         }
 
-        // structured-unsupported (AT-R422-18): "structured" IS a member of
-        // TURN_STYLES (the unknown-style check above stays silent for it),
-        // but SCHEMA_IDS ships deliberately EMPTY for R4-22 WI-1 — no schema
-        // id can ever validate, so a structured turnSpec can NEVER be made
-        // valid. Saying nothing would be a silent pass on a value that is
-        // honestly unusable; this fires unconditionally on style:
-        // "structured" while SCHEMA_IDS.length === 0, and self-expires
-        // (mirrors the SCHEMA_IDS EXPIRY CONDITION comment above) the moment
-        // a first schema id is seeded — at that point this becomes a real
-        // membership check instead of a blanket one.
-        if (ts.style === 'structured' && SCHEMA_IDS.length === 0) {
+        // structured-unsupported (bead 8vfn.6.6 item 1, supersedes AT-R422-18's
+        // blanket form now that SCHEMA_IDS is seeded): a structured turnSpec
+        // needs its OWN schema field — the unknown-schema check just below
+        // only fires when `ts.schema` IS present, so an absent one used to
+        // validate clean with nothing to resolve at runtime.
+        if (ts.style === 'structured' && ts.schema === undefined) {
           findings.push(
             err(
               obj,
               CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED,
-              `Session kind "${d.id}" declares turnSpec.style "structured" but no schema is registered yet (SCHEMA_IDS is empty) — a structured turnSpec cannot be made valid until a schema id is seeded`,
+              `Session kind "${d.id}" declares turnSpec.style "structured" but no turnSpec.schema is declared — a structured turnSpec requires a schema id (one of ${allowedIdsSummary(SCHEMA_IDS)})`,
             ),
           );
         }

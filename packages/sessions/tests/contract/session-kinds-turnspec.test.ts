@@ -260,15 +260,14 @@ describe('loadSessionKinds — turnSpec is STRUCTURAL ONLY (AT-R422-6, mirrors A
 });
 
 describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (AT-R422-7, AT-R422-8)', () => {
-  it('AT-R422-7: TURN_STYLES, TURN_STEPS, FINALIZER_IDS are each seeded (length > 0) and DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here). SCHEMA_IDS is DELIBERATELY EMPTY for R4-22 WI-1 (no `structured`-style turnSpec consumer exists anywhere in the repo yet — seeding a placeholder id would make a schema id lint-valid with no implementation behind it, which this codebase explicitly refuses to pretend) but is still frozen — an empty array can and must still be frozen. The `length === 0` assertion below IS this gap-pin\'s own expiry condition (immutable-gates discipline): it goes RED the moment anyone seeds the first real schema id, forcing whoever does that to consciously widen it to `length > 0` plus the allowed-set coverage AT-R422-1..3 already give the other three registries — a stronger pin than a blanket `length > 0` could ever be, because a blanket check cannot hold for a genuinely, deliberately empty vocabulary.', async () => {
+  it('AT-R422-7 (widened by bead 8vfn.6.6 item 1 — the gap-pin\'s own disclosed expiry): TURN_STYLES, TURN_STEPS, FINALIZER_IDS, SCHEMA_IDS are each seeded (length > 0) and DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here). SCHEMA_IDS moved from the deliberately-empty R4-22 WI-1 state into this SAME shared-coverage loop the instant its first real schema id (interview-qa, reusing kinds/instructions.ts\'s own INTERVIEW_SCHEMA) was seeded — exactly the widening this test\'s own prior text said it must consciously get.', async () => {
     const mod = await import('../../studio/session-kinds.ts');
 
-    // The three genuinely seeded turnSpec vocabularies — length > 0 is a real
-    // invariant for these three (unlike SCHEMA_IDS, see below).
     const seededRegistries: Record<string, readonly { readonly id: string }[]> = {
       TURN_STYLES: mod.TURN_STYLES,
       TURN_STEPS: mod.TURN_STEPS,
       FINALIZER_IDS: mod.FINALIZER_IDS,
+      SCHEMA_IDS: mod.SCHEMA_IDS,
     };
     for (const [name, registry] of Object.entries(seededRegistries)) {
       assert.ok(Array.isArray(registry) && registry.length > 0, `${name} must exist and be seeded with at least one row`);
@@ -297,19 +296,6 @@ describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (A
       }
       assert.equal(rows[0].id, before, `${name}[0].id must be unchanged after a direct mutation attempt, whether it silently no-op'd or threw`);
     }
-
-    // SCHEMA_IDS: deliberately empty — still frozen (there is no row to
-    // freeze-check, but the OUTER array itself must be, same as the three
-    // above), and `length === 0` is the assertion that expires this gap-pin
-    // the instant it stops being true.
-    const schemaIds: readonly { readonly id: string }[] = mod.SCHEMA_IDS;
-    assert.ok(Array.isArray(schemaIds), 'SCHEMA_IDS must exist and be an array');
-    assert.ok(Object.isFrozen(schemaIds), "SCHEMA_IDS's outer array must be frozen even though it is empty");
-    assert.equal(
-      schemaIds.length,
-      0,
-      'SCHEMA_IDS must be deliberately EMPTY for R4-22 WI-1 (no structured-style turnSpec consumer exists yet) — this assertion is a self-expiring gap-pin: the moment the first real schema id is seeded, THIS line must be consciously updated to length > 0 plus the allowed-set coverage AT-R422-1..3 already give TURN_STYLES/TURN_STEPS/FINALIZER_IDS',
-    );
   });
 
   it('AT-R422-8: turnStyleState/turnStepState/finalizerIdState/schemaIdState are TOTAL — undefined for an unrecognised id, NEVER throw (kills an implementation using a non-total lookup like array indexing or a bang-asserted .find()! that throws or returns null instead of undefined for an unknown id)', async () => {
