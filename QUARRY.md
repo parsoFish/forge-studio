@@ -119,7 +119,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 315 |
 | packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
 | packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 484 |
-| packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 226 |
+| packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 212 |
 | packages/knowledge/brain-lint-theme-paths.ts | knowledge | verbatim | 145 |
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
 | packages/knowledge/brain-lint.ts | knowledge | verbatim | 658 |

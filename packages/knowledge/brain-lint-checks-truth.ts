@@ -1,18 +1,13 @@
 /**
- * Brain-lint truthfulness axis (forge-mfv5.3.4).
- *
- * Fix round 1 (d14-review.md) excludes forge-provenance citations (C1),
- * normalises the self-citation prefix (C2), blocks `../` escapes (M1), and
- * judges `antipattern` themes on declared `evidence:` only (M3) — an
- * antipattern's claim IS an absence. Root cause: checking every inline-code
- * span against the project checkout drove betterado's stale rate to 99%.
- *
- * Fix round 2 (d14-fix1-rereview.md, T2 ruling): most REMAINING "stale"
- * verdicts cited something that was never a tracked file (a token string, a
- * Go idiom, a module pin, a generated artifact). "Stale" now means "cited a
- * file the project once had, and no longer has": a currently-absent
- * reference only counts when `git log --all` finds it on some ref; a
- * never-tracked absence is dropped from `references` outright, not judged.
+ * Brain-lint truthfulness axis (forge-mfv5.3.4). Round 1 (d14-review.md)
+ * excludes forge-provenance citations (C1), normalises the self-citation
+ * prefix (C2), blocks `../` escapes (M1), and judges `antipattern` themes on
+ * declared `evidence:` only (M3) — checking every span against the checkout
+ * had driven betterado's stale rate to 99%. Round 2 (d14-fix1-rereview.md,
+ * T2 ruling): most remaining verdicts cited something never tracked (a
+ * token string, a Go idiom, a module pin, a generated artifact) — "stale"
+ * now means "once had, now gone": an absent reference counts only when
+ * `git log --all` finds it; a never-tracked absence is dropped, not judged.
  */
 
 import { existsSync, readdirSync } from 'node:fs';
@@ -89,10 +84,9 @@ function isGitWorkTree(checkoutRoot: string): boolean {
   return r.status === 0 && r.stdout.trim() === 'true';
 }
 
-/** Was `ref` ever committed to ANY ref (`--all`) in `checkoutRoot`'s history —
- *  tracked at some point, even on an unmerged branch? Only called for a ref
- *  already confirmed absent from the working tree. Empty output (exit 0) is
- *  the normal "never tracked" case; anything else is a real failure. */
+/** Was `ref` ever committed to ANY ref (`--all`) in `checkoutRoot`'s history
+ *  — only called for a ref already absent from the tree. Empty output (exit
+ *  0) means never tracked; anything else is a real failure, never swallowed. */
 function wasEverTracked(checkoutRoot: string, ref: string): boolean {
   const r = spawnSync('git', ['-C', checkoutRoot, 'log', '--all', '--format=%H', '-1', '--', ref], { encoding: 'utf8' });
   if (r.status !== 0) {
@@ -101,15 +95,12 @@ function wasEverTracked(checkoutRoot: string, ref: string): boolean {
   return r.stdout.trim().length > 0;
 }
 
-/**
- * Every theme under `brain/projects/<project>/themes/`, and which cited
- * paths are absent from its checkout (C2: a `projects/<project>/`-prefixed
- * self-citation strips first; a foreign prefix does not). A candidate is
- * PRESENT if it exists in the working tree, MISSING if absent but once
- * tracked (`git log --all` finds it), or DROPPED if absent and never
- * tracked (or no git history at all) — never evidence of staleness.
- * `hasHistoryOverride` lets `projectTruthRows` skip a redundant `rev-parse`.
- */
+/** Every theme under `brain/projects/<project>/themes/` (C2: a theme's own
+ *  `projects/<project>/` self-citation strips first; a foreign prefix does
+ *  not). Each candidate resolves PRESENT (in the tree), MISSING (absent but
+ *  `git log --all` finds it — once tracked, now gone), or DROPPED (absent
+ *  and never tracked, or no git history — never evidence of staleness).
+ *  `hasHistoryOverride` lets `projectTruthRows` skip a redundant `rev-parse`. */
 export function themeTruth(cwd: string, project: string, hasHistoryOverride?: boolean): ThemeTruth[] {
   const themesDir = join(cwd, 'brain', 'projects', project, 'themes');
   const checkoutRoot = join(cwd, 'projects', project);
@@ -131,7 +122,6 @@ export function themeTruth(cwd: string, project: string, hasHistoryOverride?: bo
         references.push(ref);
         missing.push(ref);
       }
-      // else: never tracked (or no git history available) — dropped.
     }
     return { file, status, references, missing };
   });
@@ -139,23 +129,19 @@ export function themeTruth(cwd: string, project: string, hasHistoryOverride?: bo
 
 type ProjectTruthRow = Pick<BrainTruthRate, 'project' | 'checkout' | 'history'> & { themes: ThemeTruth[] };
 
-/** Process-lifetime memo, keyed by `cwd` — see `projectTruthRows` below for
- *  why. Never invalidated: nothing in this module writes to `brain/projects/`
- *  or a managed project's checkout, so within one process the rows for a
- *  given `cwd` cannot change after the first walk. */
+/** Memo for `projectTruthRows`, keyed by `cwd`. Never invalidated — nothing
+ *  in this module writes to `brain/projects/` or a project checkout, so a
+ *  walk can't go stale within one process. `forge brain lint` calls
+ *  `projectTruthRows` TWICE per run (once via `checkThemeTruth`'s registry
+ *  entry, once via the CLI's own `brainTruthRates` call for the
+ *  `truthfulness:` lines) over the SAME git-backed rows; this halves the
+ *  `git log --all` spawns (`wasEverTracked`, the expensive part) without
+ *  changing what either caller sees. */
 const projectTruthRowsCache = new Map<string, ProjectTruthRow[]>();
 
-/** Every project's checkout + history status and per-theme truth, walked
- *  ONCE — the shared basis `brainTruthRates`/`checkThemeTruth` build on, so
- *  each is defined in one place and `isGitWorkTree` runs once per project.
- *
- *  Memoised per `cwd` (module-level Map): `forge brain lint` calls this
- *  TWICE in one process today — once via the `checkThemeTruth` registry
- *  entry (`FULL_SCOPE_CHECKS`), once via the CLI's own unconditional
- *  `truthfulness:` rate lines (`brainTruthRates`, called after `runBrainLint`
- *  returns) — both walking the SAME git-backed rows for the SAME `cwd`. The
- *  `git log --all` spawn inside `wasEverTracked` is the expensive part; this
- *  cache halves it per invocation without changing what either caller sees. */
+/** Every project's checkout + history status and per-theme truth — the
+ *  shared basis `brainTruthRates`/`checkThemeTruth` build on (each defined
+ *  once; `isGitWorkTree` runs once per project). */
 function projectTruthRows(cwd: string): ProjectTruthRow[] {
   const cached = projectTruthRowsCache.get(cwd);
   if (cached) return cached;
