@@ -324,6 +324,28 @@ const EXEMPT_PAGES: Record<string, string> = {
     'tests/regression/community-surface-wiring.test.ts — the not-404-vs-transport ' +
     'split AND the PageLoadError/useBridgeRecoveryWhenFailed retry wiring are both ' +
     'pinned there, adapted for this page\'s non-throwing read shape.',
+  // forge-5rr (projects-45): the pending scan's OTHER strongest candidate.
+  // The page's own NotFound (`viewState.status === 'no-session'`) was
+  // ALREADY correctly gated — it is driven entirely by `fetchSessionShell`/
+  // `deriveSessionShellViewState`, pinned at the pure-logic level
+  // (tests/contract/session-shell-view.test.ts AT-63/AT-65) to be reachable
+  // ONLY off a genuine `errorKind === 'not-found'`, never a transport
+  // failure. The REAL defect was one level down: the per-kind SUMMARY
+  // read's four `.catch(() => {})` sites silently discarded a fail-closed
+  // (bridgeReadOrThrow) failure — for architect/project-brain (no generic-
+  // panel fallback) that blanked the whole left column while the page still
+  // reported "ready". Fixed to capture it into `summaryError` and render a
+  // retryable FetchErrorState instead. EXEMPT here rather than COMPLIANT
+  // because the page renders via `StudioArchitectShell` + an inline
+  // `FetchErrorState`, never the standalone `PageLoadError` component, so
+  // `expectFailClosedPrimitives`'s regexes cannot match it textually.
+  // DISCLOSED, not fixed: `fetchStagedThemes`'s own `.catch(() => {})` has
+  // the same shape but self-heals within one ~3s poll and is materially
+  // less severe (see the wiring test's own header for the full reasoning).
+  'app/sessions/[kind]/[sessionId]/page.tsx':
+    'tests/regression/session-shell-summary-fail-closed-wiring.test.ts — the summary-' +
+    'read swallow fix is pinned there; the not-found-vs-transport-failure split is ' +
+    'pinned at the pure-logic level in tests/contract/session-shell-view.test.ts.',
 };
 
 /**
@@ -349,10 +371,6 @@ const PENDING_PAGES: Record<string, string> = {
   'app/hooks/[id]/page.tsx':
     'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
     'state — not the shared kit; unverified whether a transport failure reaches it.',
-  'app/sessions/[kind]/[sessionId]/page.tsx':
-    'Renders NotFound AND FetchErrorState; several `.catch(() => {})` sites nearby ' +
-    'that look like the SAME swallow-to-nothing shape crosscut-08 is about — the ' +
-    'strongest OTHER candidate for a real defect, unverified.',
   'app/sessions/[kind]/new/page.tsx':
     'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
     'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +

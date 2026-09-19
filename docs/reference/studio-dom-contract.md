@@ -372,7 +372,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   failure) and the body is this component. `/sessions/<kind>/<sid>` renders
   it inside `[data-section="session-error"]` (framed by the shell route's
   `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
-  the bridge answered) with Retry (crosscut-09); the project page's contract
+  the bridge answered) with Retry (crosscut-09). `forge-5rr`: the SAME
+  page's per-kind SUMMARY read (a SEPARATE fetch from the shell read above —
+  architect/instructions/project-brain/demo's own list endpoint) renders it
+  inside `[data-section="session-summary-error"]`, with Retry
+  (`onRetry={refreshSummary}`) — reachable only for the two kinds
+  (architect, project-brain) with no generic-panel fallback, and only while
+  the summary itself never resolved; the project page's contract
   panel renders it inside `[data-section="contract-checklist-error"]` in the
   checklist's place — never a `data-checklist-row-count="0"` list on a
   404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NotFound } from '@/components/NotFound';
-import { FetchErrorState } from '@/components/FetchErrorState';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
@@ -107,6 +107,16 @@ export default function SessionShellPage({
 
   const [summary, setSummary] = useState<KindSummary | null>(null);
   const [themes, setThemes] = useState<Array<{ name: string; content: string }>>([]);
+  // forge-5rr (projects-45): the four per-kind summary reads below all
+  // `bridgeReadOrThrow` (fail-closed — they THROW), and used to be caught
+  // into `.catch(() => {})` and discarded outright. For architect/
+  // project-brain (the two kinds below with no generic-panel fallback) a
+  // swallowed failure silently blanked the whole left column while the page
+  // still reported `viewState.status === 'ready'` — a confidently-wrong
+  // "nothing here", the same crosscut-08 shape this whole contract exists to
+  // close. `summaryError` makes that failure a fact the render can act on
+  // instead of a fact nothing observes.
+  const [summaryError, setSummaryError] = useState<{ error: string; status?: number } | null>(null);
 
   // W7-C3 (home-sessions-27): every caller below (WS list-changed burst,
   // poll, cancel/finalize handlers, the panel's onChanged) funnels through
@@ -115,19 +125,21 @@ export default function SessionShellPage({
   const refreshSummaryNow = useCallback(() => {
     const settle = (next: KindSummary | null) => {
       setSummary(next);
+      setSummaryError(null);
     };
+    const fail = (err: unknown) => setSummaryError(fetchErrorPropsFrom(err));
     if (kind === 'architect') {
       return fetchArchitectSessions()
         .then((list) => settle(toArchitectSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => {});
+        .catch(fail);
     } else if (kind === 'instructions') {
       return listInstructionsSessions()
         .then((list) => settle(toInstructionsSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => {});
+        .catch(fail);
     } else if (kind === 'project-brain') {
       return fetchProjectBrainSessions()
         .then((list) => settle(toProjectBrainSummary(list.find((s) => s.session_id === sessionId) ?? null)))
-        .catch(() => {});
+        .catch(fail);
     } else if (kind === 'demo') {
       // W6-B6 fix (the demo "Session not found" bug) — `demo` had NO branch
       // here at all, unlike architect/instructions/project-brain: it fell
@@ -144,7 +156,7 @@ export default function SessionShellPage({
       // above.
       return listDemoSessions()
         .then((list) => settle(toDemoSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => {});
+        .catch(fail);
     }
     // Every other kind (kb-cleanup / authoring / onboarding) has no per-kind
     // list route — the shell route alone carries the page, resolving the
@@ -168,6 +180,16 @@ export default function SessionShellPage({
       return;
     }
     let cancelled = false;
+    // forge-5rr: DISCLOSED, not fixed here (see this bead's own wiring test
+    // header, session-shell-summary-fail-closed-wiring.test.ts) — a failed
+    // read leaves `themes` at its last value (never fabricates a wrong
+    // list), but a FIRST-load failure understates the panel's "N draft
+    // theme(s)" count as 0 rather than showing an error. Honestly fixing
+    // that means threading a themes-specific error through
+    // SessionProjectBrainPanel's props; left alone because this effect
+    // re-runs on every `summary` poll (~3s) regardless of the prior
+    // outcome, so the window is brief and self-healing, unlike the summary
+    // swallow above which blanked the whole panel indefinitely.
     fetchStagedThemes(summary.data.project, sessionId)
       .then((t) => {
         if (!cancelled) setThemes(t);
@@ -327,6 +349,21 @@ export default function SessionShellPage({
           modelTier={viewState.modelTier}
           terminal={viewState.terminal}
         />
+      )
+    // forge-5rr: architect/project-brain have no generic-panel fallback
+    // below, so a failed per-kind summary read used to leave `kindPanel`
+    // `null` outright — a blank column with the page still claiming
+    // `viewState.status === 'ready'`. Reachable ONLY while `summary` itself
+    // never resolved (never overrides a summary that DID load).
+    : summaryError !== null && (kind === 'architect' || kind === 'project-brain') ? (
+        <div data-section="session-summary-error">
+          <FetchErrorState
+            what={`this ${kind} session's summary`}
+            error={summaryError.error}
+            status={summaryError.status}
+            onRetry={refreshSummary}
+          />
+        </div>
       )
     : GENERIC_PANEL_KINDS.has(kind) ? (
         <SessionInteractivePanel
