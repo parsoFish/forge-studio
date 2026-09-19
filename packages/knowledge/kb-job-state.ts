@@ -191,6 +191,20 @@ function consolidateRunning(forgeRoot: string, runId: string, nowMs: number): bo
   return nowMs - firstTs <= KB_CONSOLIDATE_STALE_MS;
 }
 
+/** Consolidate run ids matching `_brainfix-<kbId>-consolidate-*`
+ *  (`__<i>` sub-runs excluded). Shared by `deriveKbActiveJob` below and
+ *  `kb-drain-store.ts`'s `listKbRuns` — one filter, not two copies. */
+export function consolidateRunIdsFor(forgeRoot: string, kbId: string): string[] {
+  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
+  const ids: string[] = [];
+  for (const name of listLogDirs(forgeRoot)) {
+    if (!name.startsWith(consolidatePrefix)) continue;
+    const runId = name.slice('_brainfix-'.length);
+    if (!runId.includes('__')) ids.push(runId);
+  }
+  return ids;
+}
+
 /**
  * The one KB-mutating job currently running for `kbId`, or null. Drain wins
  * ties (both can only coexist as queue neighbours; the drain's status file
@@ -200,11 +214,7 @@ export function deriveKbActiveJob(forgeRoot: string, kbId: string, nowMs: number
   const drain = findLiveDrain(forgeRoot, kbId, nowMs);
   if (drain?.live) return { kind: 'drain', runId: drain.runId };
 
-  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
-  for (const name of listLogDirs(forgeRoot)) {
-    if (!name.startsWith(consolidatePrefix)) continue;
-    const runId = name.slice('_brainfix-'.length);
-    if (runId.includes('__')) continue;
+  for (const runId of consolidateRunIdsFor(forgeRoot, kbId)) {
     if (consolidateRunning(forgeRoot, runId, nowMs)) return { kind: 'consolidate', runId };
   }
   return null;

@@ -21,7 +21,7 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx } from './kb-drain-edit-soundness.ts';
-import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs, kbDrainRunIdsFor } from './kb-job-state.ts';
+import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs, kbDrainRunIdsFor, consolidateRunIdsFor } from './kb-job-state.ts';
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_MAX_ROUNDS,
@@ -188,18 +188,7 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
   // Consolidate runs — `_brainfix-<kbId>-consolidate-*` top-level dirs
   // (per-finding `__<i>` sub-runs excluded, mirroring the consolidate/active
   // route's own exclusion in packages/knowledge/bridge-studio-kbs.ts).
-  const logsRoot = join(forgeRoot, '_logs');
-  let entries: string[] = [];
-  try {
-    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
-  } catch {
-    entries = [];
-  }
-  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
-  for (const name of entries) {
-    if (!name.startsWith(consolidatePrefix)) continue;
-    const runId = name.slice('_brainfix-'.length);
-    if (runId.includes('__')) continue;
+  for (const runId of consolidateRunIdsFor(forgeRoot, kbId)) {
     const r = readConsolidateRunRow(forgeRoot, runId);
     rows.push({ kind: 'consolidate', id: runId, when: r.when, status: r.status, costUsd: r.costUsd, detail: r.detail });
   }
