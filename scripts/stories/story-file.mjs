@@ -308,15 +308,18 @@ export function validateStory(raw) {
     // declares is refused at LOAD, not discovered at run time. An unresolved
     // bind would press a half-built handle, match nothing, and red as "no such
     // control" — which reads as a product defect and is why the shape was
-    // parked rather than built.
+    // parked rather than built. `forge-8vfn.6.11.51` adds `pressWithin`'s
+    // `scope.bind` to the same duty: an unresolved scope would press against
+    // every element sharing the action, not the one instance-id names.
     const pressBindsIn = (steps) => (steps ?? []).flatMap((st) =>
-      Object.hasOwn(st, 'pressBound') ? [st.pressBound.bind]
-        : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
-    for (const bind of pressBindsIn(b.do)) {
+      Object.hasOwn(st, 'pressBound') ? [{ form: 'pressBound', bind: st.pressBound.bind }]
+        : Object.hasOwn(st, 'pressWithin') ? [{ form: 'pressWithin', bind: st.pressWithin.scope.bind }]
+          : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
+    for (const { form, bind } of pressBindsIn(b.do)) {
       if (!boundNames.has(bind)) {
         fail(
           `beats[${i}]`,
-          `pressBound names <${bind}>, which no EARLIER beat binds. The handle is built at run time from ` +
+          `${form} names <${bind}>, which no EARLIER beat binds. The handle is built at run time from ` +
             'that binding, so a beat cannot press one its own expectations would publish.',
         );
       }
