@@ -39,7 +39,7 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { kbSites, subDirs, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
+import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
 
@@ -750,7 +750,7 @@ export function mintProjectBrainSeedingSession(
  * flow/unique-bound KB has no natural project home, so anchoring it under the
  * bare KB id created a top-level `projects/<kbId>/` dir that `discoverProjects`
  * (orchestrator/studio/registry.ts) surfaced as a PHANTOM project. Both
- * `discoverProjects` and `subDirs` (this file) already skip dot-prefixed dirs —
+ * `discoverProjects` and `subDirs` (kb-sites.ts) already skip dot-prefixed dirs —
  * a real project/kb id is slug-validated (no leading dot) — so a dot-prefixed
  * anchor keeps the seeding session on disk + runner-reachable while filtering it
  * out of project discovery. The anchor is a pure filesystem-nesting device: the
