@@ -85,8 +85,38 @@ type Fixture = {
   cycleWorktreePath: string;
   logger: ReturnType<typeof createLogger>;
   readEvents: () => EventLogEntry[];
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 };
+
+/**
+ * `rmSync(root, {recursive:true,force:true})`'s `force` suppresses ENOENT
+ * (already gone) — never ENOTEMPTY. A git subprocess this fixture's own
+ * `push` may have left running against `origin.git` (a receive-pack-
+ * triggered auto-gc deciding to detach — `gc.autoDetach`'s own default,
+ * disabled below as the primary fix) can still be writing into it a beat
+ * after our `git` calls already returned, racing this walk — reproduced
+ * deterministically (15/15 in isolation, and red above without this retry)
+ * with a controlled concurrent writer (bd forge-8vfn.5.55, known-flakes #9).
+ *
+ * The retry is scoped to this ONE error code, never a blind "retry until it
+ * works": by the time a test reaches teardown its own assertions have
+ * already run, so a straggler that finishes within a few hundred ms should
+ * not flip an already-passing test to failed (COMMON §15.74's second
+ * remedy shape) — but anything OTHER than ENOTEMPTY, or a straggler that
+ * has not finished after the budget, still throws.
+ */
+async function cleanupFixtureRoot(root: string, attempts = 5, delayMs = 100): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOTEMPTY' || attempt === attempts) throw err;
+      await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
+    }
+  }
+}
 
 function setup(initiativeId: string): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'forge-devloop-requeue-'));
@@ -122,6 +152,14 @@ function setup(initiativeId: string): Fixture {
   // fixture.
   const origin = join(root, 'origin.git');
   sh(root, ['init', '-q', '--bare', origin]);
+  // bd forge-8vfn.5.55: never let a receive-pack-triggered auto-gc detach
+  // into the background against this ephemeral repo — force any
+  // housekeeping git decides it needs to run INLINE, so our own synchronous
+  // `git push` calls actually wait for it instead of racing this fixture's
+  // teardown. Defense-in-depth alongside `cleanupFixtureRoot`'s scoped
+  // retry, not a substitute for it (this closes the most plausible SOURCE
+  // of a straggler; the retry covers whatever else might still write here).
+  sh(origin, ['config', 'gc.autoDetach', 'false']);
   sh(cycleHandle.path, ['remote', 'add', 'origin', origin]);
   sh(cycleHandle.path, ['push', '-q', '-u', 'origin', `forge/${initiativeId}`]);
 
@@ -140,7 +178,7 @@ function setup(initiativeId: string): Fixture {
         .split('\n')
         .filter(Boolean)
         .map((l) => JSON.parse(l) as EventLogEntry),
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    cleanup: () => cleanupFixtureRoot(root),
   };
 }
 
@@ -425,7 +463,7 @@ test('merge-conflict requeue: a first fan-in conflict requeues, a clean second m
     assert.equal(deliveredForWi1.length, 1, 'WI-1 delivers exactly once — the requeued attempt never fires its own delivery event');
     assert.equal(events.some((e) => e.message === 'dev-loop.discarded' && e.metadata?.work_item_id === 'WI-1'), false);
   } finally {
-    f.cleanup();
+    await f.cleanup();
   }
 });
 
@@ -505,7 +543,7 @@ test('merge-conflict requeue: two consecutive conflicts exhaust the retry — te
     assert.equal(discardedForWi1.length, 1, 'the terminal attempt reports exactly one discarded event, not one per attempt');
     assert.equal(discardedForWi1[0]?.metadata?.outcome, 'failed');
   } finally {
-    f.cleanup();
+    await f.cleanup();
   }
 });
 
@@ -639,7 +677,7 @@ test('merge-conflict requeue through the REAL gate wiring: the iter-0 sharp-gate
 
     assert.equal(seen.length, 3, 'attempt 1 = one turn; attempt 2 = two turns');
   } finally {
-    f.cleanup();
+    await f.cleanup();
   }
 });
 
