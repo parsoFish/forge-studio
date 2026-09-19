@@ -320,6 +320,23 @@ export function isSafeSubPath(relPath: string): boolean {
  * non-existent path cannot be a symlink). If the whole chain exists, the
  * leaf gets one more check: `nlink === 1` when it is a regular file, closing
  * the hardlink bypass realpath is structurally blind to.
+ *
+ * "CALLER-BUILT ROOT" (forge-8vfn.5.33, P1) — the escape shape this function
+ * cannot see. `root` is trusted with NO identity check (deliberately — see
+ * the module docstring's CONTRACT section above), so every guarantee this
+ * function makes is void the moment a caller BUILDS `root` from
+ * request-influenced data instead of passing a fixed/config-derived
+ * constant: `resolve(projectsDir, id)` handed in as `root` realpaths and
+ * trusts whatever `id` pointed to before the per-segment walk ever starts.
+ * Confirmed live (the #289 incident): `cmdProjectReset` did exactly that with
+ * `projects/` planted as a symlink, and every inner check reported `ok`. The
+ * fix for that one caller was to pass `id` as a SEGMENT instead
+ * (`resolveGuardedPath(projectsDir, [id])`); the class remains open for every
+ * OTHER caller of this function (and of `guardedFile`/`guardedRename`/their
+ * wrappers below, which share the same first-argument contract), which is
+ * why it is enforced by a ratchet over the call sites themselves
+ * (`packages/kernel/tests/regression/path-guard-caller-built-root-ratchet.test.ts`)
+ * rather than by anything this function could check about its own argument.
  */
 export function resolveGuardedPath(root: string, segments: readonly string[]): PathGuardResult {
   // Same runtime-boundary reasoning as the per-segment `typeof` gate below, for
