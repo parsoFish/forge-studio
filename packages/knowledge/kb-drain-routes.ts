@@ -25,6 +25,7 @@ import {
   findActiveKbDrainRun,
   latestKbDrainRun,
   initialKbDrainStatus,
+  kbDrainEventFields,
   listKbRuns,
   requestKbDrainCancel,
   runKbDrain,
@@ -363,11 +364,8 @@ export async function handleKbDrainStart(
       // backlog. Without this the fetch 404s and never retries.
       createLogger(`_kb-drain-${runId}`, join(ctx.forgeRoot, '_logs')).emit({
         initiative_id: `_kb-drain-${runId}`,
-        phase: 'reflection',
-        skill: 'kb-drain',
+        ...kbDrainEventFields(),
         event_type: 'log',
-        input_refs: [],
-        output_refs: [],
         message: 'kb-drain.queued',
         metadata: { kind: 'progress', kbId, runId },
       });
