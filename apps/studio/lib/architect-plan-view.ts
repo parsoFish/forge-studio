@@ -75,8 +75,17 @@ export function architectSessionHref(session: Pick<ArchitectSessionSummary, 'ses
   return `/sessions/architect/${encodeURIComponent(session.sessionId)}?project=${encodeURIComponent(session.project)}`;
 }
 
-export function architectPlanArtifactHref(sessionId: string, mode: 'gate' | 'view'): string {
-  return `/artifact?run=${ARCHITECT_RUN_PREFIX}${encodeURIComponent(sessionId)}&type=plan&mode=${mode}`;
+/**
+ * The PLAN artifact for an architect session. With no `mode` the artifact page
+ * arms the gate from the session's LIVE phase (`resolveArtifactMode`), which is
+ * what a link rendered from one poll's phase must ask for — freezing the mode
+ * into the href let a link rendered a poll early open read-only after the
+ * session armed (`forge-8vfn.6.11.48`). An explicit mode is for a link whose
+ * intent is fixed: the gate's own "decide" link, or a deliberate read-only view.
+ */
+export function architectPlanArtifactHref(sessionId: string, mode?: 'gate' | 'view'): string {
+  const base = `/artifact?run=${ARCHITECT_RUN_PREFIX}${encodeURIComponent(sessionId)}&type=plan`;
+  return mode === undefined ? base : `${base}&mode=${mode}`;
 }
 
 // ---- session → initiative → run linkage ------------------------------------

@@ -141,6 +141,9 @@ export type CycleInput = {
    * stop check).
    */
   shouldStopBeforeWorkItem?: (workItemId: string) => string | null;
+  /** M7-A: the SAME tracker's live remaining budget (`Infinity` while
+   *  unenforced), read every Ralph iteration by `dev-cost-bound.ts`. */
+  remainingCostBudgetUsd?: () => number;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

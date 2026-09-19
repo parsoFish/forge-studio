@@ -12,10 +12,13 @@
 # The operator may still attach (`tmux attach -t forge-<lane>`, detach C-b d).
 #
 # Usage (help = run with no args):
-#   lanes.sh render <kickoffs.md> <heading-regex> <out-file> [PARAM=VALUE ...]
+#   lanes.sh render <kickoffs.md> <heading-regex> <out-file> --campaign DIR [PARAM=VALUE ...]
 #                   [--outcome FILE] [--ledger FILE] [--section REGEX ...] [--max-bytes N]
 #       Extract the first ```text block under the heading matching <heading-regex> into
 #       <out-file>; fill each PARAM ("PARAMETER — set before pasting" line + every "$PARAM").
+#       --campaign DIR     required: the rendered prompt must carry `flock DIR/.suite-lock`,
+#                          the predicate `launch` enforces — a prompt launch would refuse is
+#                          never written (M7 findings row 70: three lanes bounced at launch).
 #       --outcome FILE     append a predecessor lane's OUTCOME file to the rendered prompt.
 #       --ledger FILE      the ledger --section reads from; required by --section.
 #       --section REGEX    append the ledger section whose heading matches REGEX; repeatable.
@@ -265,20 +268,34 @@ render_section() {
   ' "$1"
 }
 
+# require_lockline <campaign-dir> <file> <what> — THE suite-lock predicate, one copy for both doors.
+# `launch` refused a prompt without it while `render` wrote that prompt silently, so three M7 lanes
+# bounced at launch (findings row 70). A rule enforced at one door and not the other is a rule the
+# second door teaches everyone to trip over; `render` and `launch` now call this and nothing else.
+lockline_of() { printf 'flock %s/.suite-lock' "$1"; }
+require_lockline() {
+  local lockline; lockline="$(lockline_of "$1")"
+  grep -qF "$lockline" "$2" || die "$3 does not contain the literal '$lockline' — a lane that never saw the suite-lock line runs its suite outside it"
+}
+
 cmd_render() {
   local src="$1" re="$2" out="$3"; shift 3
   [ -f "$src" ] || die "no such file: $src"
-  local outcome="" ledger="" max="${LANES_RENDER_MAX_BYTES:-$RENDER_MAX_BYTES_DEFAULT}"
+  local outcome="" ledger="" camp="" max="${LANES_RENDER_MAX_BYTES:-$RENDER_MAX_BYTES_DEFAULT}"
   local sections=() params=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --outcome)   outcome="$2"; shift 2 ;;
+      --campaign)  camp="$2"; shift 2 ;;
       --ledger)    ledger="$2"; shift 2 ;;
       --section)   sections+=("$2"); shift 2 ;;
       --max-bytes) max="$2"; shift 2 ;;
       *)           params+=("$1"); shift ;;
     esac
   done
+  [ -n "$camp" ] || die "render needs --campaign <dir>: the prompt must carry that campaign's suite-lock line, and render checks it before writing (row 70)"
+  [ -d "$camp" ] || die "no campaign dir: $camp"
+  camp="$(cd "$camp" && pwd)"
   [ -z "$outcome" ] || [ -f "$outcome" ] || die "no such OUTCOME file: $outcome"
   [ ${#sections[@]} -eq 0 ] || [ -n "$ledger" ] || die "--section needs --ledger <file>"
   [ -z "$ledger" ] || [ -f "$ledger" ] || die "no such ledger: $ledger"
@@ -317,6 +334,9 @@ cmd_render() {
     { echo; echo "## LEDGER SECTION — $ledger /$sec/"; echo; printf '%s\n' "$body"; } >> "$tmp"
   done
 
+  # Checked on the assembled bytes — the block, its filled parameters, OUTCOME and sections — which
+  # are exactly the bytes `launch` will read; a refusal leaves nothing on disk.
+  ( require_lockline "$camp" "$tmp" "the prompt rendered for $out (nothing written)" ) || { rm -f "$tmp"; exit 2; }
   local bytes; bytes="$(wc -c < "$tmp")"
   if [ "$bytes" -gt "$max" ]; then
     rm -f "$tmp"
@@ -449,8 +469,7 @@ cmd_launch() {
 
   # (c) the rendered prompt must carry the campaign's suite lock. A lane that never saw the line
   # runs its suite outside the lock (COMMON §1), and nothing downstream can tell.
-  local lockline="flock $camp/.suite-lock"
-  grep -qF "$lockline" "$prompt" || die "the rendered prompt $prompt does not contain the literal '$lockline' — a lane that never saw the suite-lock line runs its suite outside it"
+  require_lockline "$camp" "$prompt" "the rendered prompt $prompt"
 
   # (d) MCP: ruling 140 removed tokensave for a systemic RSS leak and cache-busting tool defs, and
   # holds today only because ~/.claude.json happens to be clean. --strict-mcp-config plus a file
@@ -538,7 +557,7 @@ cmd_launch() {
   cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
   case "$cmdline" in *--strict-mcp-config*) ;; *) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: /proc/$pid/cmdline carries no --strict-mcp-config" ;; esac
   case "$cmdline" in *tokensave*) die_launch "$camp" "$lane" "$s" "$cwd" "$t0" "launch NOT CONFIRMED for $lane: tokensave in /proc/$pid/cmdline (ruling 140)" ;; esac
-  echo "preflight: MemAvailable ok · prompt carries '$lockline' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
+  echo "preflight: MemAvailable ok · prompt carries '$(lockline_of "$camp")' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
   active_add "$camp" "$lane"
   printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"
   echo "launched $s  [$row]  model=$model permission-mode=$pm cwd=$cwd t1=$t1 attended=$attended"
