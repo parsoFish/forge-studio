@@ -96,10 +96,14 @@ function RegistryItemFormInner(): JSX.Element {
   const editing = editId !== null && editId !== '';
 
   // M6-D / ruling 616 — a PROPOSAL arrives prefilled. `/community` renders the
-  // rows a declared hub publishes that this registry lacks, and each links here
-  // with its id and upstream already filled in. The operator still reviews and
-  // still submits: this seeds a form, it does not write a row, so the add-row
-  // door stays the only write path (D10) and a discovery stays a suggestion.
+  // rows a declared hub publishes, with each linking here with its id and
+  // upstream already filled in. STALE SINCE OPERATOR ITEM 87 (T1 ledger 1216,
+  // ruling 566 superseded): the refresh that surfaced this row on `/community`
+  // has ALREADY written it as a real registry item by the time an operator
+  // reaches this form — reopening this door for an id that already exists is
+  // a product question for whoever owns that panel next (`/community`'s own
+  // comment names it), not decided here. This form remains the ONLY door for
+  // a genuinely hand-typed new row, and edit still reviews before it submits.
   // Only for a NEW row — an `?edit=` load fetches the real record and must not
   // be second-guessed by a query string.
   const [form, setForm] = useState<FormState>(() =>

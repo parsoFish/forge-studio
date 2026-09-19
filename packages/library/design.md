@@ -238,11 +238,15 @@ chip already says. That is operator item 20 and it is M7 work; S8 beat 5 names `
 specifically and therefore stays red, with its citation narrowed from *"no path in forge indexes
 a declared hub"* to *"this hub is not a source forge reaches"*.
 
-**It proposes; it never writes.** Nothing here touches `registry.yaml`. A row an operator
-accepts is written by the CRUD path they already use, so D10 survives intact: **forge does not
-crawl on its own, and a discovery is a suggestion rather than a change.** That is also why the
-retired `commitRegistryDraft` did not need rebuilding — the approval surface that already exists
-is the one the operator knows.
+**Operator item 87 (T1 ledger 1216) — ruling 566's "proposes, never writes" is superseded.**
+`community-hub-index.ts` itself still only proposes; nothing in that module touches
+`registry.yaml`. But its caller, `community-refresh-run.ts`'s critical-section write, now
+APPENDS every discovered row as a real registry item — re-deduped against the document as
+freshly re-loaded under the lock, so a curated row is never overwritten — because a hub chip
+that only ever says "this exists to add" while never adding it does not count real rows. D10
+still survives intact in the form that matters: **forge does not crawl on its own** — only
+`hubs.yaml`'s OPERATOR-DECLARED hubs are ever read, and a hub's own kinds/layout still bound what
+can ever be proposed in the first place.
 
 **The convention is the one install-by-URL already reads, and that is the point.** A skill is a
 directory containing `SKILL.md`; its id is that directory's name. A discovered row carries

@@ -4,13 +4,21 @@
  * A refresh re-verifies rows that already exist and never discovers one, so
  * four of the nine declared hubs contribute nothing and stay that way. The
  * design record is `packages/library/design.md` §"A hub is asked what it
- * publishes, and only a hub forge can reach": why GitHub-shaped hubs only, why
- * this proposes rather than writes, and why the layout convention is the one
- * install-by-URL already reads.
+ * publishes, and only a hub forge can reach": why GitHub-shaped hubs only, and
+ * why the layout convention is the one install-by-URL already reads.
+ *
+ * Operator item 87 (T1 ledger 1216): ruling 566's "proposes, never writes" is
+ * superseded — `community-refresh-run.ts`'s critical section now APPENDS a
+ * discovered row as a real registry item. This module's own job is unchanged
+ * BY that: it still only PROPOSES (returns `DiscoveredItem[]`) and still
+ * touches no file itself — `discoverFromHubs`'s caller is what writes, and it
+ * writes only after re-deduping against the document as freshly re-loaded
+ * under the lock, so a curated row is never overwritten.
  *
  * Three rules belong beside the code:
  *
- *   - **It proposes; it never writes.** Nothing here touches `registry.yaml`.
+ *   - **This reader never writes.** Nothing here touches `registry.yaml` — it
+ *     only proposes; its caller decides whether and how to persist that.
  *   - **A discovered row is installable by construction** — same convention as
  *     `community-fetch-package.ts`, pinned against it by test rather than by
  *     agreement.
