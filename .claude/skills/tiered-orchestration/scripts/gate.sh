@@ -21,13 +21,19 @@
 # each checkout (§15.148).
 set -u
 
+# forge-8vfn.7.6.79 — whether THIS gate is the one holding the suite-lock right
+# now, so the trap below removes only a sidecar it wrote itself and never a
+# sibling's (an ANCESTOR that declines to re-take the lock must not clean up
+# the outer holder's sidecar out from under it).
+SUITE_LOCK_HELD=0
+
 # T1 ruling 1104 (D's finding). `merge-slot.sh` reads `GATE_SH_EXIT=<rc>` out of
 # the handed gate log to tell a REFUSAL (exit 3 with zero FAIL rows — a step
 # never ran, §15.92, unwaivable) from a green gate. Nothing here wrote that
 # line; one lane's private wrapper did, so for every other lane the check
 # could not fire. The verdict is written by the thing that reached it, on EVERY
 # exit path, as the LAST stdout line — never appended by a wrapper afterwards.
-trap 'echo "GATE_SH_EXIT=$?"' EXIT
+trap 'ec=$?; [ "$SUITE_LOCK_HELD" = 1 ] && rm -f "${FORGE_SUITE_LOCK:-}.holder" 2>/dev/null; echo "GATE_SH_EXIT=$ec"' EXIT
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 die() { echo "gate.sh: $*" >&2; exit 2; }
@@ -251,7 +257,8 @@ echo "kernel link: ${link:-<none>}"
 # and #667 WAS on main; the run executed a worktree forked before it. A
 # dependency satisfied on `main` is not a dependency satisfied in the tree that
 # RUNS. So the tree that runs names itself, in the header, before any step.
-echo "GATE_CHECKOUT=$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
+GATE_CHECKOUT_SHA="$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
+echo "GATE_CHECKOUT=$GATE_CHECKOUT_SHA"
 
 # THE TREE IS PINNED HERE AND RE-READ BEFORE THE VERDICT (forge-8vfn.7.6.129,
 # T1 1118; D's `tree-pin.sh` is the reference). Two lanes voided their own gates
@@ -325,9 +332,51 @@ if [ -n "$CAMP" ]; then
   export FORGE_RUN_LOCK="$CAMP/.run-lock"
 fi
 
+# forge-8vfn.7.6.79 — the sidecar `gate-vs-gate` reads when a collision cannot
+# be named from `/proc/locks` at all (the inherited-fd take below writes no row
+# there). One line, read back BY NAME never by position, same discipline as
+# every other marker in this file: pid, the checkout this gate is running
+# ($R, already resolved), the commit it measured, and when it took the lock.
+# Called only from the two branches that actually hold fd 9 themselves — never
+# from the ANCESTOR branch, which explicitly does not re-take it.
+write_suite_lock_holder() {
+  printf 'pid=%s cwd=%s head=%s since=%s\n' "$$" "$R" "$GATE_CHECKOUT_SHA" "$(date -u +%FT%TZ)" \
+    > "$FORGE_SUITE_LOCK.holder" 2>/dev/null || true
+  SUITE_LOCK_HELD=1
+}
+
+# The UNNAMEABLE branch's COURTESY, never its guarantee (§15.488: the wait
+# below is the guarantee regardless of what this prints). Returns 1 with
+# nothing printed when there is no sidecar to read, so the caller falls back to
+# the original generic line rather than inventing one. PID REUSE is an accepted
+# risk here, the same shape as `is_ancestor`'s pid walk above: a bare `kill -0`
+# cannot tell a live holder from a dead pid some unrelated process has since
+# reclaimed.
+read_suite_lock_holder() {
+  local f="$FORGE_SUITE_LOCK.holder" line pid cwd head since
+  [ -f "$f" ] || return 1
+  line="$(cat "$f" 2>/dev/null)" || return 1
+  pid="$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9]*\).*/\1/p')"
+  [ -n "$pid" ] || return 1
+  cwd="$(printf '%s\n' "$line" | sed -n 's/.*cwd=\([^ ]*\).*/\1/p')"
+  head="$(printf '%s\n' "$line" | sed -n 's/.*head=\([^ ]*\).*/\1/p')"
+  since="$(printf '%s\n' "$line" | sed -n 's/.*since=\([^ ]*\).*/\1/p')"
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "suite-lock: HELD BY gate pid=$pid cwd=$cwd head=$head since $since"
+  else
+    # THE FLOCK ITSELF IS THE TRUTH; THE SIDECAR NEVER GATES. A dead pid does
+    # not mean the lock is free — falls through to the same wait as any other
+    # unclassified hold, unchanged.
+    echo "suite-lock: STALE-SIDECAR (pid $pid gone) — removed"
+    rm -f "$f"
+  fi
+  return 0
+}
+
 wait_for_suite_lock() {
   if flock -w "$SUITE_LOCK_WAIT" 9; then
     echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+    write_suite_lock_holder
   else
     echo "suite-lock: NOT TAKEN after ${SUITE_LOCK_WAIT}s — refusing rather than running a suite beside another one (the 3.2x case, ruling 778)"
     exit 75
@@ -359,6 +408,7 @@ else
   exec 9>"$FORGE_SUITE_LOCK"
   if flock -n 9; then
     echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+    write_suite_lock_holder
   else
     SUITE_LOCK_STATE="$(suite_lock_state "$FORGE_SUITE_LOCK")"
     case "$SUITE_LOCK_STATE" in
@@ -371,10 +421,12 @@ else
         ;;
       *)
         # HELD, BY SOMEONE THE LISTING CANNOT NAME — the inherited-fd shape
-        # above. Named rather than guessed: if this is an ancestor we will sit
-        # out the bound and refuse, which is a bounded, explained failure
-        # instead of a hang.
-        echo "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the lock is taken but /proc/locks has no row for it, which is the inherited-fd shape; waiting, and refusing at the bound rather than guessing whether it is our own caller"
+        # above. forge-8vfn.7.6.79: read the sidecar first — the common case on
+        # this box is that the holder is another gate.sh — and fall back to the
+        # original generic line only when there is nothing to read. Either way
+        # the wait below is unchanged: a bounded, explained failure instead of
+        # a hang, never a guess about whether it is our own caller.
+        read_suite_lock_holder || echo "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the lock is taken but /proc/locks has no row for it, which is the inherited-fd shape; waiting, and refusing at the bound rather than guessing whether it is our own caller"
         wait_for_suite_lock
         ;;
     esac
