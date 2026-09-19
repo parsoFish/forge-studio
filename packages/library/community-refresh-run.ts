@@ -147,13 +147,18 @@ export type CommunityRefreshRunResult =
       errors: readonly CommunityRefreshFailure[];
       /** M6-D / ruling 478, WRITE side added by operator item 87 (T1 ledger
        *  1216 — ruling 566's "proposes, never writes" is superseded): rows the
-       *  DECLARED hubs publish that this registry does not carry. Every id here
-       *  was ALSO just appended to `items` as a real registry row (unless this
-       *  was a dry run) — this array reports what changed, it does not merely
-       *  suggest a change. D10's "forge does not crawl on its own" still
-       *  survives: only OPERATOR-DECLARED hubs (`hubs.yaml`) are ever read, and
-       *  a curated row is never overwritten. Empty when every hub is already
-       *  fully indexed, unreachable, or not GitHub-shaped. */
+       *  DECLARED hubs publish that this registry does not carry. A `'skill'`
+       *  id here was ALSO just appended to `items` as a real registry row
+       *  (unless this was a dry run) — for THAT kind, this array reports what
+       *  changed, it does not merely suggest a change. An `'mcp'` (or future
+       *  `'tool'`) id is reported here but never written to `items`
+       *  (`WritableDiscoveredItem`'s own comment, `community-refresh-run.ts`):
+       *  registry.yaml is functionally skill-only, and mcp/tool connections
+       *  belong in `studio/catalog.yaml`, untouched by this write path. D10's
+       *  "forge does not crawl on its own" still survives: only
+       *  OPERATOR-DECLARED hubs (`hubs.yaml`) are ever read, and a curated row
+       *  is never overwritten. Empty when every hub is already fully indexed,
+       *  unreachable, or not GitHub-shaped. */
       discovered: readonly DiscoveredItem[];
       /** What each declared hub did, so a chip can say WHY it is empty rather
        *  than only that it is. A hub contributing nothing and a hub forge
@@ -343,24 +348,39 @@ function verifiedSourcesOf(
 const DISCOVERED_ITEM_CATEGORY = 'uncategorized';
 
 /**
+ * A discovered row this write path may actually persist. ONLY `'skill'`:
+ * `communitySkillsFromRegistry` (`community-registry.ts`) filters
+ * `registry.yaml`'s `items` to `kind === 'skill'`, and the CRUD route
+ * (`bridge-studio-community-crud.ts`'s `COMMUNITY_REGISTRY_ITEM_KINDS`)
+ * refuses any other kind outright — an `'mcp'` row written to `items` would
+ * be silently inert, never resolved by a later refresh and never surfaced by
+ * the one reader that turns a registry row into a browsable item. That is
+ * worse than not writing it: it would look like progress while being dead
+ * weight. mcp/tool connections live in `studio/catalog.yaml`
+ * (`community-install.ts`'s own "the catalog IS the only source" rule), a
+ * file this write path does not touch — writing THOSE kinds there is exactly
+ * the "grows kinds" decision queue item 52 reserves for an operator, not
+ * decided here.
+ */
+type WritableDiscoveredItem = DiscoveredItem & { kind: 'skill' };
+
+/**
  * Operator item 87 — the ONE place a `DiscoveredItem` becomes a real
- * `CommunityRegistryItem`. `kind` is always `'skill'`: every reader this repo
- * declares in `hubs.yaml` today (`indexGithubHub`) proposes SKILL.md shapes
- * only, per its own doc comment, and the registry's CRUD route already
- * refuses any other kind — a future non-skill hub reader is exactly the
- * "grows kinds" decision queue item 52 reserves for an operator, not this
- * function. `provenance` is DERIVED, not invented: the upstream identity
- * `sourceUrl` already names, reformatted to match every hand-curated row's
- * own "owner/repo" convention; falls back to the raw URL for a shape
+ * `CommunityRegistryItem`. Takes only the `WritableDiscoveredItem` narrowing
+ * above, so a future kind added to `DiscoveredItem` cannot reach this
+ * function without a compile error naming the decision it needs first.
+ * `provenance` is DERIVED, not invented: the upstream identity `sourceUrl`
+ * already names, reformatted to match every hand-curated row's own
+ * "owner/repo" convention; falls back to the raw URL for a shape
  * `parseCommunityUpstream` does not recognise (never reachable through a
  * GitHub-hub discovery today, kept honest rather than assumed unreachable).
  */
-function discoveredItemToRegistryItem(d: DiscoveredItem): CommunityRegistryItem {
+function discoveredItemToRegistryItem(d: WritableDiscoveredItem): CommunityRegistryItem {
   const upstream = parseCommunityUpstream(d.sourceUrl);
   const provenance = upstream !== null && upstream.kind === 'github' ? `${upstream.owner}/${upstream.repo}` : d.sourceUrl;
   return {
     id: d.id,
-    kind: 'skill',
+    kind: d.kind,
     name: d.id,
     category: DISCOVERED_ITEM_CATEGORY,
     sourceUrl: d.sourceUrl,
@@ -586,8 +606,15 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
       // refresh that won the race), and a curated row is NEVER overwritten by
       // a discovery. Order preserved (existing rows first) so an append never
       // reshuffles what a diff of this file shows for everything already there.
+      //
+      // ONLY `kind: 'skill'` — see `WritableDiscoveredItem`'s own comment. An
+      // `mcp` (or future `tool`) discovery is still reported in `discovered`
+      // below (the caller's UI/chip still counts it as found), it is just
+      // never appended to `items`, which this registry's own read side would
+      // silently ignore anyway.
       const currentIds = new Set(current.items.map((i) => i.id));
-      const newItems = discovered.filter((d) => !currentIds.has(d.id)).map(discoveredItemToRegistryItem);
+      const isWritable = (d: DiscoveredItem): d is WritableDiscoveredItem => d.kind === 'skill' && !currentIds.has(d.id);
+      const newItems = discovered.filter(isWritable).map(discoveredItemToRegistryItem);
       writeRegistryAtomically(
         path,
         serializeCommunityRegistry({

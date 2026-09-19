@@ -46,6 +46,19 @@ export interface DiscoveredItem {
   /** What was matched, so a reviewer can see why the row was proposed: a
    *  `SKILL.md` path, or the registry's own server name. */
   path: string;
+  /** Which registry KIND this would become — set by the reader that found
+   *  it, since only the reader knows which shape it read. Only `'skill'` is
+   *  ever written to `registry.yaml`'s `items` by
+   *  `community-refresh-run.ts`: `communitySkillsFromRegistry`
+   *  (`community-registry.ts`) filters that array to `kind === 'skill'`, so
+   *  an `'mcp'`/`'tool'` row written there would be silently inert — never
+   *  resolved by a later refresh, never surfaced by the one reader that turns
+   *  a registry row into a browsable item. mcp/tool connections live in
+   *  `studio/catalog.yaml` instead (`community-install.ts`'s own "the catalog
+   *  IS the only source" rule) — a file this discovery path does not touch.
+   *  Carried on every row regardless of kind so a caller can decide, not so
+   *  this module decides for them. */
+  kind: 'skill' | 'mcp';
 }
 
 export type HubIndexOutcome =
@@ -150,7 +163,7 @@ export async function indexMcpRegistryHub(
         const id = idForMcpServerName(name);
         if (id === null || seen.has(id) || knownIds.has(id)) continue;
         seen.add(id);
-        discovered.push({ id, sourceUrl: hub.url, path: name });
+        discovered.push({ id, sourceUrl: hub.url, path: name, kind: 'mcp' });
       }
       const metadata = body['metadata'];
       const nextCursor =
@@ -227,7 +240,7 @@ export async function indexGithubHub(
         continue;
       }
       seen.add(id);
-      discovered.push({ id, sourceUrl: hub.url, path: entry.path });
+      discovered.push({ id, sourceUrl: hub.url, path: entry.path, kind: 'skill' });
     }
     const sorted = discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // Only when the read SUCCEEDED and found nothing: a hub that contributed
