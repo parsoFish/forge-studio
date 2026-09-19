@@ -172,6 +172,15 @@ export type RunArchitectTurnResult = {
   planPath?: string;
   /** Present when the turn finalized (manifests promoted to the queue). */
   promotedManifestPaths?: string[];
+  /**
+   * forge-8vfn.5.58 — present (and `true`) ONLY when a `rejected`-phase turn's
+   * `archiveSessionDir` call refused on a genuine `PathGuardContainmentError`
+   * (a poisoned archive root/target) rather than the ordinary
+   * already-archived-or-gone no-op. Absent on every other outcome, including
+   * the quiet already-archived success — this is a DISTINCT signal, not a
+   * generalized error flag.
+   */
+  archiveRefused?: boolean;
 };
 export type DraftInitiative = {
   slug: string;
