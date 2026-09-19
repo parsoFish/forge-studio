@@ -470,8 +470,8 @@ test('control (f) [meta]: join(forgeRoot, slug) — a non-root-like leaf folded 
  *     explicitly: swapping in `resolveGuardedPath`'s stricter per-segment
  *     IDENTITY check would reject AT-28's case outright. Replacing the
  *     guard, as this row's shape suggests, breaks a deliberately-designed,
- *     tested acceptance; T2 must rule on AT-28 (retire it, or accept the
- *     row) before this one moves. Two rows fixed since the six-row baseline
+ *     tested acceptance. RULED (lane m7-c T2, 2026-09-19): the row stays —
+ *     a cross-object alias inside projectsRoot is tolerated by design (AT-28). Two rows fixed since the six-row baseline
  *     (bridge-studio-project-onboard.ts's `projectRoot`, now routed through
  *     `resolveGuardedPath(ctx.forgeRoot, repoSegments)`; the two
  *     `WRITABLE_CATEGORY_DIRS`-as-root rows in `packages/library`, now
