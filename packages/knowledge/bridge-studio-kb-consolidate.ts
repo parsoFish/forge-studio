@@ -230,6 +230,37 @@ export function enqueueConsolidate(kbId: string, run: () => Promise<void>): Prom
 }
 
 /**
+ * W6-B14 fix (forge-6esp): the runId this PROCESS most recently minted for a
+ * consolidate dispatch against `kbId`. `GET .../consolidate/active`'s reattach
+ * discovery used to derive "most recent" by sorting the `_brainfix-<kbId>-
+ * consolidate-*` directory NAMES — each embedding `Date.now().toString(36)` —
+ * and picking the lexicographically greatest. That assumes `Date.now()` is
+ * monotonic; it is not on this host, which steps its wall clock BACKWARD by
+ * ~2.9s roughly every 30s (measured, `_1.0/reports/m7-c-clockprobe-1.log`).
+ * A run minted just after such a
+ * step embeds a SMALLER timestamp than an already-terminal run minted before
+ * it, so the string sort picked the STALE run as "newest".
+ *
+ * Recorded synchronously by the SAME call that mints a runId, before
+ * `enqueueConsolidate` defers the real work — so a reattach GET immediately
+ * after dispatch always reads this process's own last word for that kbId,
+ * never a derived guess. `undefined` means this process has never dispatched
+ * a consolidate for `kbId` (a fresh process, or a kb that has never
+ * consolidated); the caller falls back to the directory scan, which still
+ * answers that case correctly — this pointer only replaces the scan's
+ * ORDERING, not its "never consolidated" fallback.
+ */
+const lastConsolidateRunId = new Map<string, string>();
+
+export function recordConsolidateDispatch(kbId: string, runId: string): void {
+  lastConsolidateRunId.set(kbId, runId);
+}
+
+export function lastConsolidateDispatchFor(kbId: string): string | undefined {
+  return lastConsolidateRunId.get(kbId);
+}
+
+/**
  * True for the ONE `checkProjectBrainIndexes` message shape with a fully
  * deterministic repair — "not listed in project category index" — where
  * `consolidateTargetFile` resolves the finding's own message to the EXACT

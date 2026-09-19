@@ -13,7 +13,7 @@
  * table row to both of them.
  */
 import { type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
@@ -36,6 +36,8 @@ import {
   applyDeterministicConsolidateFixes,
   enqueueConsolidate,
   isDeterministicNotListedFinding,
+  lastConsolidateDispatchFor,
+  recordConsolidateDispatch,
   runBrainConsolidateNow,
   type AgentFinding,
 } from './bridge-studio-kb-consolidate.ts';
@@ -179,30 +181,42 @@ export async function handleKbConsolidateActive(
   // reload) — `lib/kb-consolidate.ts`'s old `runConsolidateToTerminal` used
   // to `await` its own bounded poll loop inside the SAME click handler that
   // dispatched it, so a nav-away lost the result outright even though the
-  // consolidate run itself kept going server-side. This is that tiny GET:
-  // scan `_logs/` for this kb's own `_brainfix-<kbId>-consolidate-*` dirs and
-  // report the MOST RECENT one's state — the base36 timestamp embedded right
-  // after the fixed `-consolidate-` token sorts chronologically as a plain
-  // string for a long time yet (Date.now().toString(36) stays the same
-  // length until year ~2059), so `.sort().reverse()` picks the latest.
-  // `runId: null` means this kb has never consolidated — never a guess.
-  // Excludes `<runId>__<i>` — `runBrainConsolidateNow`'s own PER-FINDING
-  // sub-runIds (never the exposed one; see that function's own header) —
-  // which would otherwise sort AFTER their parent runId (a longer string
-  // that has the shorter one as a prefix sorts greater) and be picked
-  // instead of the real top-level run.
+  // consolidate run itself kept going server-side. `runId: null` means this
+  // kb has never consolidated — never a guess.
+  //
+  // forge-6esp fix: PREFER `lastConsolidateDispatchFor(kbId)` — the runId
+  // this process itself last minted for this kb (recorded synchronously at
+  // dispatch, see that function's own header) — over deriving "most recent"
+  // by sorting directory names. The directory scan used to be the ONLY
+  // source: it assumed `Date.now().toString(36)` is monotonic, which broke
+  // on a host whose wall clock steps backward (a stale, already-terminal
+  // run minted before the step can embed a LARGER timestamp than a genuinely
+  // newer one minted after it, so the string sort picked the stale run).
+  // The scan survives only as the fallback for a kb this PROCESS has never
+  // dispatched a consolidate for (a fresh process, or a truly untouched kb)
+  // — the one case the in-memory pointer cannot answer — and the recorded
+  // pointer is re-verified against disk (its directory must still exist)
+  // before being trusted, so a dangling pointer falls through to the scan
+  // rather than being served blind.
   const consolidateActiveMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/consolidate\/active$/);
   if (consolidateActiveMatch && method === 'GET') {
     const kbId = decodeURIComponent(consolidateActiveMatch[1]);
     if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
-    const prefix = `_brainfix-${kbId}-consolidate-`;
-    const runIds = subDirs(join(ctx.forgeRoot, '_logs'))
-      .filter((d) => d.startsWith(prefix))
-      .map((d) => d.slice('_brainfix-'.length))
-      .filter((id) => !id.includes('__'))
-      .sort()
-      .reverse();
-    const runId = runIds[0] ?? null;
+    const recorded = lastConsolidateDispatchFor(kbId);
+    const recordedDir = recorded ? join(ctx.forgeRoot, '_logs', `_brainfix-${recorded}`) : null;
+    // Excludes `<runId>__<i>` — `runBrainConsolidateNow`'s own PER-FINDING
+    // sub-runIds (never the exposed one; see that function's own header) —
+    // which would otherwise sort AFTER their parent runId (a longer string
+    // that has the shorter one as a prefix sorts greater) and be picked
+    // instead of the real top-level run.
+    const runId = recordedDir && recorded && existsSync(recordedDir)
+      ? recorded
+      : subDirs(join(ctx.forgeRoot, '_logs'))
+          .filter((d) => d.startsWith(`_brainfix-${kbId}-consolidate-`))
+          .map((d) => d.slice('_brainfix-'.length))
+          .filter((id) => !id.includes('__'))
+          .sort()
+          .reverse()[0] ?? null;
     if (!runId) { sendJson(res, 200, { ok: true, runId: null, state: null, cleared: false }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
     return true;
@@ -529,6 +543,10 @@ export async function handleKbMaintenance(
         // than a raw `mkdirSync` on a hand-joined path.
         const brainfixLogGuard = resolveGuardedPath(ctx.forgeRoot, ['_logs', `_brainfix-${runId}`]);
         if (brainfixLogGuard.ok) mkdirSync(brainfixLogGuard.realPath, { recursive: true });
+        // forge-6esp: record this process's own dispatch BEFORE enqueueing —
+        // see `lastConsolidateDispatchFor`'s header for why the reattach GET
+        // must prefer this pointer over sorting directory names.
+        recordConsolidateDispatch(kbId, runId);
         // Fire-and-forget: dispatched async like fix-agent, pollable via the
         // existing GET .../fix-agent/:runId route. Queued per-kbId (not run
         // directly) so an overlapping dispatch against the same KB never

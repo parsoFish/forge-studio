@@ -53,7 +53,7 @@ import {
 } from './kb-lint-summary.ts';
 import { sanitizeError } from '@forge/kernel';
 
-import { enqueueConsolidate, runBrainConsolidateNow } from './bridge-studio-kb-consolidate.ts';
+import { enqueueConsolidate, recordConsolidateDispatch, runBrainConsolidateNow } from './bridge-studio-kb-consolidate.ts';
 
 // ---------------------------------------------------------------------------
 // KBs with layer counts
@@ -361,6 +361,11 @@ export async function approveKbCleanup(
   // whole compound directory name is still built from request-derived text.
   const consolidateLogGuard = resolveGuardedPath(forgeRoot, ['_logs', `_brainfix-${runId}`]);
   if (consolidateLogGuard.ok) mkdirSync(consolidateLogGuard.realPath, { recursive: true });
+  // forge-6esp: record this process's own dispatch, exactly as the sibling
+  // maintenance op=consolidate route does — see `lastConsolidateDispatchFor`'s
+  // header (bridge-studio-kb-consolidate.ts) for why `.../consolidate/active`
+  // must prefer this pointer over sorting `_brainfix-*` directory names.
+  recordConsolidateDispatch(kbId, runId);
   // `enqueueConsolidate` — the SAME per-kbId serialization queue the sibling
   // maintenance op=consolidate route uses (see its own doc comment: "Always
   // invoked via enqueueConsolidate, never directly"). Awaited so this
