@@ -141,13 +141,8 @@ export type CycleInput = {
    * stop check).
    */
   shouldStopBeforeWorkItem?: (workItemId: string) => string | null;
-  /**
-   * M7-A: from the SAME `CostTracker` as `shouldStopBeforeWorkItem` (`get
-   * remainingUsd`), read LIVE by `runRalph`'s per-iteration
-   * `costCeilingCheck` (`dev-cost-bound.ts`), so a SIBLING WI's concurrent
-   * spend can still stop this one at its next iteration boundary. `Infinity`
-   * while unenforced. Absent ⇒ today's behaviour (unbounded per-WI spend).
-   */
+  /** M7-A: the SAME tracker's live remaining budget (`Infinity` while
+   *  unenforced), read every Ralph iteration by `dev-cost-bound.ts`. */
   remainingCostBudgetUsd?: () => number;
 };
 
