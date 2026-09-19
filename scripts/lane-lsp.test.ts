@@ -136,9 +136,12 @@ describe('lane-lsp.sh — only its own session, only by PID (forge-8vfn.7.6.58)'
     // work from an interactive shell and not from a test.
     const outFile = join(tmpdir(), `lane-lsp-orphan-${process.pid}.log`);
     spawnSync('bash', ['-c', `setsid bash ${TOOL} status > ${outFile} 2>&1 < /dev/null & exit 0`]);
-    const deadline = Date.now() + 5000;
+    // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is
+    // not monotonic on this host, so a deadline built from its difference
+    // can move mid-wait.
+    const deadline = performance.now() + 5000;
     let out = '';
-    while (Date.now() < deadline) {
+    while (performance.now() < deadline) {
       try { out = readFileSync(outFile, 'utf8'); } catch { out = ''; }
       if (out.includes('REFUSING') || out.includes('session=')) break;
       spawnSync('sleep', ['0.2']);

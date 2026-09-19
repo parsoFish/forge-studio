@@ -153,8 +153,8 @@ sleep 120
 /** The pid of the grandchild `laneBin(..., {detach})` spawned, once it exists. */
 function detachedPid(name: string) {
   const f = join(dir, `${name}.detachedpid`);
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
+  const deadline = performance.now() + 8000; // monotonic — forge-8vfn.7.6.50
+  while (performance.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
   assert.ok(existsSync(f), `precondition: ${name} never spawned its detached process`);
   const pid = Number(readFileSync(f, 'utf8').trim());
   planted.add(pid);
@@ -176,8 +176,8 @@ function alive(pid: number) {
   return existsSync(`/proc/${pid}`);
 }
 function waitGone(pid: number, ms = 12000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
+  const deadline = performance.now() + ms; // monotonic — forge-8vfn.7.6.50
+  while (performance.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
   return !alive(pid);
 }
 /**
@@ -702,8 +702,8 @@ describe('lanes.sh events — one line per lane state, read from the roster and 
       assert.equal(tmux('new-session', '-d', '-s', s, cmd).status, 0, `precondition: ${s} did not exist yet`);
       // the shell that tmux starts has not exec'd yet when new-session returns — wait for the pane to show its real command
       const want = cmd.startsWith('exec ') ? 'claude' : cmd;
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim() !== want) spawnSync('sleep', ['0.1']);
+      const deadline = performance.now() + 5000; // monotonic — forge-8vfn.7.6.50
+      while (performance.now() < deadline && tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim() !== want) spawnSync('sleep', ['0.1']);
       assert.equal(tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim(), want, `precondition: ${s} runs ${want}`);
       return s;
     };

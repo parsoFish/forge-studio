@@ -39,8 +39,11 @@ const planted = new Set<number>();
 
 const alive = (pid: number) => existsSync(`/proc/${pid}`);
 function waitGone(pid: number, ms = 12000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline built from its difference can move
+  // mid-wait.
+  const deadline = performance.now() + ms;
+  while (performance.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
   return !alive(pid);
 }
 function writeExec(name: string, body: string) {
@@ -77,8 +80,11 @@ sleep 120
 }
 function pidFrom(file: string, waitMs: number) {
   const f = join(dir, file);
-  const deadline = Date.now() + waitMs;
-  while (Date.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline built from its difference can move
+  // mid-wait.
+  const deadline = performance.now() + waitMs;
+  while (performance.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
   assert.ok(existsSync(f), `precondition: ${file} never appeared`);
   const pid = Number(readFileSync(f, 'utf8').trim());
   planted.add(pid);
