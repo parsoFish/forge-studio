@@ -390,8 +390,11 @@ function run(scriptRoot: string, calls: number[][], fn = 'cmd_stop'): { status: 
 
 /** Wait for a decoy to actually leave /proc (SIGTERM delivery is not instant). */
 function waitGone(pid: number): boolean {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline built from its difference can move
+  // mid-wait.
+  const deadline = performance.now() + 5_000;
+  while (performance.now() < deadline) {
     if (!alive(pid)) return true;
     execFileSync('sleep', ['0.05']);
   }

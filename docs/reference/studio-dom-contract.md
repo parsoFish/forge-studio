@@ -3652,9 +3652,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   (POSTs `/api/architect/rerun`, no answers/round mutation);
   `[data-action="open-plan"]` — **W7-A3 (artifact-plan-22): rendered EXACTLY
   ONCE in every phase where the session has a PLAN.html** — into
-  `/artifact?run=_architect-<sid>&type=plan&mode=gate` at awaiting-verdict
-  ("Review the plan →"; the PLAN gate is still just another gate — M7-4,
-  ADR-031) and `…&mode=view` otherwise ("View the plan →"); the committed
+  `/artifact?run=_architect-<sid>&type=plan` with **no `mode`**: the artifact
+  page arms the gate from the session's live phase, so a link rendered one
+  summary poll before `awaiting-verdict` still opens the gate (6.11.48). Its
+  label is "Review the plan →" at awaiting-verdict (the PLAN gate is still
+  just another gate — M7-4, ADR-031) and "View the plan →" otherwise; the committed
   phase renders the shared **ArchitectCommittedView** inside
   `[data-section="architect-status"]`: `[data-section="architect-committed"]
   [data-commit-tone="building|claimed-stopped|claimed-stopping|claimed-unknown|
