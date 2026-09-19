@@ -54,6 +54,7 @@ import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/ty
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
+import { lintSkillToolFence } from '@forge/library/studio-lint-tool-fence.ts';
 import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
@@ -609,6 +610,24 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       mkdirSync(skillDirPath, { recursive: true });
     }
     writeFileSync(skillMdPath, serialized, 'utf8');
+
+    // forge-q4sz — the Task/Agent subagent-spawn fence had no save-time
+    // enforcement: only `forge studio lint`'s CLI verb ever called
+    // `lintSkillToolFence`. Reuse that SAME production lint (never
+    // re-implement its rule) against the file just written, and treat its
+    // finding for THIS slug exactly like any other error-level finding — a
+    // 400 whose file is restored to its pre-request state, mirroring every
+    // other check above which never wrote at all.
+    const fenceFindings = lintSkillToolFence(ctx.forgeRoot).filter((f) => f.object === `skill:${slug}`);
+    if (fenceFindings.some((f) => f.level === 'error')) {
+      if (pathGuard.exists) {
+        writeFileSync(skillMdPath, originalRaw as string, 'utf8');
+      } else {
+        rmSync(skillDirPath, { recursive: true, force: true });
+      }
+      sendJson(res, 400, { error: 'validation failed', findings: [...findings, ...fenceFindings] }, origin);
+      return true;
+    }
 
     const flagFindings = findings.filter((f) => f.level === 'flag');
     sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
