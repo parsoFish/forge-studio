@@ -196,13 +196,43 @@ function probeExistence(path: string): ExistenceProbe {
  *  (SEC-05 q80 GAP 2). */
 const CONTROL_CHAR_RE = /[\u0000-\u001f]/;
 
+/** DEL (0x7f) is not in the C0 range `CONTROL_CHAR_RE` covers, and is no more
+ *  a legitimate filename character than the rest of them. Part of the ONE
+ *  shared per-segment predicate (see `isSafeSegment` below) — forge-8vfn.5.59. */
+const DEL_RE = /\u007f/;
+
+/** Percent-encoded separators and traversal. These are NOT escapes on their
+ *  own — a route that has already decoded once hands us a LITERAL `%2f`,
+ *  which `join()` treats as an ordinary character and `realpath` resolves to
+ *  a file that will not exist (the observed behaviour is a 404, not a
+ *  disclosure). They are denied because a second decode ANYWHERE downstream
+ *  — a client, a log replayer, a future caller that re-decodes defensively —
+ *  turns them into the separator they spell. Part of the ONE shared
+ *  per-segment predicate (see `isSafeSegment` below) — forge-8vfn.5.59. */
+const ENCODED_TRAVERSAL_RE = /%(?:2f|5c|00|2e%2e)/i;
+
 /** A path segment is safe to `join()` literally only if it is a single,
  *  non-empty directory-entry NAME — no separators, no `.`/`..`, no control
- *  characters. Every caller's id/slug is already SLUG_RE-validated before it
+ *  characters (C0 or DEL), no percent-encoded separator/traversal sequence.
+ *  Every caller's id/slug is already SLUG_RE-validated before it
  *  reaches here (defense in depth, not a replacement — see each call site's own
  *  guard); the fixed literal segments this module also receives ('SKILL.md',
  *  '.forge', 'flow.yaml', 'project.json') trivially satisfy this too. This is
  *  the belt for whichever suspenders a future caller forgets.
+ *
+ * forge-8vfn.5.59 (fixed) — THIS is the ONE per-segment predicate every walk
+ * in this module uses, with no parallel copy anywhere else: `resolveGuardedPath`
+ * walks segments through this function directly, and `isSafeSubPath` (further
+ * below) is nothing more than this function applied once per `/`-split segment.
+ * DEL and the percent-encoded checks used to live ONLY inside `isSafeSubPath`'s
+ * own body — a segment carrying a DEL byte or a literal `%2e%2e` was ACCEPTED
+ * by `resolveGuardedPath`'s per-segment walk (which calls `isSafeSegment`,
+ * never `isSafeSubPath`) while the identical value was REJECTED by a route's
+ * cheap `isSafeSubPath` pre-check. That was exactly the drift this module's own
+ * docstring claimed was structurally impossible ("so the cheap 400 layer and
+ * the containment 404 layer cannot drift") — it was possible, because the two
+ * checks were not actually one predicate. Fixed by moving both checks into
+ * this shared function instead of leaving them bolted onto one caller only.
  *
  * LOAD-BEARING structural gate (forge-01u): `seg: string` is only a
  * compile-time claim. Every segment on the request path ultimately
@@ -235,30 +265,20 @@ export function isSafeSegment(seg: string): boolean {
     !seg.includes('/') &&
     !seg.includes('\\') &&
     !seg.includes(sep) &&
-    !CONTROL_CHAR_RE.test(seg)
+    !CONTROL_CHAR_RE.test(seg) &&
+    !DEL_RE.test(seg) &&
+    !ENCODED_TRAVERSAL_RE.test(seg)
   );
 }
-
-/** DEL (0x7f) is not in the C0 range `CONTROL_CHAR_RE` covers, and is no more
- *  a legitimate filename character than the rest of them. */
-const DEL_RE = /\u007f/;
-
-/** Percent-encoded separators and traversal. These are NOT escapes on their
- *  own — a route that has already decoded once hands us a LITERAL `%2f`,
- *  which `join()` treats as an ordinary character and `realpath` resolves to
- *  a file that will not exist (the observed behaviour is a 404, not a
- *  disclosure). They are denied because a second decode ANYWHERE downstream
- *  — a client, a log replayer, a future caller that re-decodes defensively —
- *  turns them into the separator they spell. */
-const ENCODED_TRAVERSAL_RE = /%(?:2f|5c|00|2e%2e)/i;
 
 /**
  * Is `relPath` a safe `<a>/<b>/<leaf>` tail to append beneath a trusted root?
  *
- * A DENY-list, deliberately, and a shared one: it is `isSafeSegment` applied
- * per segment (the SAME predicate `resolveGuardedPath` walks with, so the
- * cheap 400 layer and the containment 404 layer cannot drift) plus DEL and
- * percent-encoded separators.
+ * A DENY-list, deliberately, and LITERALLY `isSafeSegment` applied per
+ * `/`-split segment — no separate checks live here (forge-8vfn.5.59: DEL and
+ * the percent-encoded checks used to be bolted onto this function alone,
+ * which is exactly how they drifted out of sync with `resolveGuardedPath`'s
+ * own walk; see `isSafeSegment`'s docstring above for the incident).
  *
  * W7-C3 review (A-M6) — the first cut of the artifact-filename gate was an
  * ALLOW-list, `/^[A-Za-z0-9._-]+$/` per segment plus `.includes('..')`. A
@@ -282,7 +302,6 @@ const ENCODED_TRAVERSAL_RE = /%(?:2f|5c|00|2e%2e)/i;
 export function isSafeSubPath(relPath: string): boolean {
   if (typeof relPath !== 'string') return false;
   if (relPath.length === 0) return false;
-  if (DEL_RE.test(relPath) || ENCODED_TRAVERSAL_RE.test(relPath)) return false;
   return relPath.split('/').every((seg) => isSafeSegment(seg));
 }
 
