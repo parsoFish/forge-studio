@@ -33,10 +33,11 @@
  */
 
 import { requireSessionStatusIo } from './kb-drain-model.ts';
+import { type ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, KB_ID_RE, sendJson, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
@@ -76,6 +77,15 @@ export type KbWithCounts = {
    *  recomputed on every call. */
   provenance: Provenance;
 };
+
+/** KB_ID_RE-validate `kbId`; 400s and returns false on a miss. Nine route
+ *  handlers (bridge-studio-kb-routes-{read,lifecycle}.ts, kb-drain-routes.ts)
+ *  had their own copy of this exact 4-line guard. */
+export function requireValidKbId(kbId: string, res: ServerResponse, origin: string): boolean {
+  if (KB_ID_RE.test(kbId)) return true;
+  sendJson(res, 400, { error: 'invalid kb id' }, origin);
+  return false;
+}
 
 function countLayerFiles(dir: string): number {
   if (!existsSync(dir)) return 0;
