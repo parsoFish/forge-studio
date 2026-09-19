@@ -20,9 +20,9 @@ import type { EventLogEntry } from '@forge/kernel';
 
 function orchestratorError(message: string): EventLogEntry {
   return {
-    event_id: 'e1', initiative_id: 'INIT-x', started_at: '2026-09-19T00:00:00.000Z',
+    event_id: 'e1', cycle_id: 'CYCLE-x', initiative_id: 'INIT-x', started_at: '2026-09-19T00:00:00.000Z',
     phase: 'orchestrator', skill: 'cycle', event_type: 'error', message, input_refs: [], output_refs: [],
-  } as EventLogEntry;
+  };
 }
 
 test('the integrate delivery-gate throw classifies as the integrate band failing, terminal', () => {
