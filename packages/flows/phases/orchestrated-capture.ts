@@ -210,11 +210,7 @@ export function runOrchestratorCommand(
   argv: readonly string[],
   opts: { cwd: string; timeoutMs: number; env?: NodeJS.ProcessEnv },
 ): OrchestratorCommandResult {
-  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
-  // monotonic on this host, so both the reported duration and the
-  // timeout-vs-kill-signal classification below would be wrong independent
-  // of how long the child actually ran.
-  const startedAt = performance.now();
+  const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
   const command = argv.join(' ');
   const [head, ...rest] = argv;
   if (!head) {

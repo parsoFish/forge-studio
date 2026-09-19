@@ -48,14 +48,7 @@ export class WedgeKillError extends Error {
   readonly lastProgressAt: number;
   readonly wedgeKillMs: number;
   constructor(nodeId: string, lastProgressAt: number, wedgeKillMs: number, nowMs: number) {
-    // nowMs, not a fresh Date.now() (forge-8vfn.7.6.50): buildKillError()
-    // below already receives the caller's injected "now" — recomputing it
-    // here with Date.now() silently discarded that value, so this always
-    // measured against the REAL current wall clock regardless of what nowMs
-    // the caller passed (a test injecting nowMs=6000 got a message reporting
-    // the live epoch in seconds, not "6s ago"), and a real run was one
-    // non-monotonic wall-clock step away from a wrong number.
-    const sinceMs = nowMs - lastProgressAt;
+    const sinceMs = nowMs - lastProgressAt; // the injected now — a fresh Date.now() here discarded it (forge-8vfn.7.6.50)
     super(
       `wedge-kill: node "${nodeId}" received agent_heartbeat events but no tool ` +
         `progress for ${wedgeKillMs}ms (last progress ${Math.round(sinceMs / 1000)}s ago) — ` +
@@ -475,12 +468,7 @@ export class WedgeDetector {
   }
 
   buildKillError(nowMs: number): WedgeKillError {
-    return new WedgeKillError(
-      this.nodeId,
-      this.lastProgressAt ?? nowMs,
-      this.wedgeKillMs ?? 0,
-      nowMs,
-    );
+    return new WedgeKillError(this.nodeId, this.lastProgressAt ?? nowMs, this.wedgeKillMs ?? 0, nowMs);
   }
 }
 

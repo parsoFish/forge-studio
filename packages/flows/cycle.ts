@@ -217,10 +217,7 @@ export function emitSyntheticArchitectEvents(
 }
 
 export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<CycleResult> {
-  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
-  // monotonic on this host, so a cycle duration built from its difference
-  // would not be an honest history of how long the cycle actually ran.
-  const started = performance.now();
+  const started = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
   // ADR 026: keep one initiative on ONE cycleId for its whole life. Prefer an
   // explicitly threaded id (the review→unifier drain + the merge finalizer pass
   // it), then a previously-persisted id (a crash-recovery resume reuses the

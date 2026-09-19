@@ -423,12 +423,7 @@ function runGateCapturing(
       return false;
     }
   }
-  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
-  // monotonic on this host, so the timeout-vs-kill-signal classification
-  // below and the reported durationMs would be wrong independent of how long
-  // the gate command actually ran. No clock is injectable here (unlike
-  // RateLimitGate above) — plain substitution, no seam invented.
-  const startedAt = performance.now();
+  const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
   let passed = false;
   let exitCode = 0;
   let stdout = '';
