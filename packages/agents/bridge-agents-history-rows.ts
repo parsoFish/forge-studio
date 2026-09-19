@@ -66,12 +66,37 @@ export type AgentHistoryDeps = AgentRunStateDeps & {
   }[];
 };
 
+/**
+ * forge-dgj — resolves per (flowId, nodeId), NEVER a bare nodeId. Node ids
+ * are only unique WITHIN a flow (review round 1's finding on
+ * `buildFlowNodeToSlug` below applies equally here): `deps.
+ * buildAgentSlugToNodeId` is a single FLAT map, first-write-wins across
+ * every live flow, so two flows sharing a literal node id (`dev`, `review`,
+ * `demo` are all ordinary once an operator authors a flow) silently
+ * attributed a run of the SECOND flow to whichever agent won that node id in
+ * the FIRST — a global slug->node lookup that never checked which flow a
+ * candidate run actually belongs to. `buildFlowNodeToSlug` already exists in
+ * this file, already scoped correctly, and was already proven correct
+ * (Control 3, W7-B5) for the sibling aggregate route — reused here instead
+ * of the flat map, never re-derived.
+ */
 export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, slug: string): AgentHistoryRow[] {
-  const nodeId = deps.buildAgentSlugToNodeId(forgeRoot).get(slug);
-  if (!nodeId) return [];
+  const flowNodeToSlug = buildFlowNodeToSlug(deps, forgeRoot);
+  // Every LIVE flow that declares a node for THIS slug, keyed by flow id —
+  // a slug can legitimately appear in more than one flow (both seed flows
+  // sharing canonical node ids for one agent is the ordinary case).
+  const nodeIdByFlow = new Map<string, string>();
+  for (const [flowId, nodes] of flowNodeToSlug) {
+    for (const [nodeId, declaredSlug] of nodes) {
+      if (declaredSlug === slug) nodeIdByFlow.set(flowId, nodeId);
+    }
+  }
+  if (nodeIdByFlow.size === 0) return [];
   const rows: AgentHistoryRow[] = [];
   // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
   for (const run of deps.cachedListRuns(forgeRoot, Date.now())) {
+    const nodeId = nodeIdByFlow.get(run.flowId);
+    if (nodeId === undefined) continue; // this run's OWN flow never declared the slug — never inherited from another flow's node
     const status = run.phases[nodeId];
     if (status === undefined) continue; // this run's flow never reached the node — no row, never fabricated
     rows.push({
