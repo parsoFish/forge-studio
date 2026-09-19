@@ -40,8 +40,8 @@ const FAILED_CONTROLS: RunControl[] = [
     id: 'resume',
     action: 'resume-run',
     label: 'Resume',
-    // `POST /api/runs/:id/resume` → runRequeue(..., { resumeFromDemo: true }).
-    detail: 'Re-enters at the demo node against the preserved worktree and branch — completed work items are not rebuilt.',
+    // `POST /api/runs/:id/resume` → runRequeue(..., { resumeFromIntegrate: true }).
+    detail: 'Re-enters at the integrate node against the preserved worktree and branch — completed work items are not rebuilt.',
     destructive: false,
   },
   {

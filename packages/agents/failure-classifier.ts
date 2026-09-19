@@ -378,7 +378,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'orchestrator' && e.event_type === 'error') {
       if (msg.includes('developer-loop') && msg.includes('total failure')) { devLoopTotalFailure = true; ev(e); }
       // R4-10-F1: the successor nodes' delivery-gate throws (flow-runner.ts
-      // execDemo/execAdversarialReview) carry these exact prefixes. Match them
+      // execIntegrate/execAdversarialReview) carry these exact prefixes. Match them
       // FIRST — both contain 'review'+'failed' (from "review-ready" / "review
       // pipeline failed") and would otherwise mis-trip the reviewer-Ralph /
       // unifier-no-demo branches for a node that isn't the unifier or reviewer.

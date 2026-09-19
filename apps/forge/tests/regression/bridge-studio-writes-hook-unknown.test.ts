@@ -91,7 +91,7 @@ guards:
   - { id: scratch-strip, name: Scratch strip }
   - { id: wi-contract, name: WI contract band }
   - { id: reflection-close, name: Reflection close band }
-  - { id: demo-band, name: Demo band }
+  - { id: integrate-band, name: Demo band }
   - { id: review-band, name: Review band }
 `;
 }

@@ -1067,7 +1067,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   routes match `INIT_ID_RE`, so a harness driving the API keys on this one) —
   each beside
   `[data-component="run-control-detail"][data-control=<id>]` saying what it does
-  (Resume re-enters at the demo node against the preserved branch; Requeue
+  (Resume re-enters at the integrate node against the preserved branch; Requeue
   re-runs from the start on a fresh worktree; Abandon deletes worktree and
   branch). Before this the monitor carried Resume alone, with no disclosure and
   no else branch — a refused POST was invisible. Abandon confirms in the DOM
