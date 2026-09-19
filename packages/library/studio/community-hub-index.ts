@@ -7,18 +7,12 @@
  * publishes, and only a hub forge can reach": why GitHub-shaped hubs only, and
  * why the layout convention is the one install-by-URL already reads.
  *
- * Operator item 87 (T1 ledger 1216): ruling 566's "proposes, never writes" is
- * superseded — `community-refresh-run.ts`'s critical section now APPENDS a
- * discovered row as a real registry item. This module's own job is unchanged
- * BY that: it still only PROPOSES (returns `DiscoveredItem[]`) and still
- * touches no file itself — `discoverFromHubs`'s caller is what writes, and it
- * writes only after re-deduping against the document as freshly re-loaded
- * under the lock, so a curated row is never overwritten.
+ * Operator item 87 supersedes ruling 566: the refresh's critical section now
+ * APPENDS discovered skill rows. This module still only reads and returns.
  *
  * Three rules belong beside the code:
  *
- *   - **This reader never writes.** Nothing here touches `registry.yaml` — it
- *     only proposes; its caller decides whether and how to persist that.
+ *   - **This reader never writes.** Its caller decides what to persist.
  *   - **A discovered row is installable by construction** — same convention as
  *     `community-fetch-package.ts`, pinned against it by test rather than by
  *     agreement.
@@ -46,18 +40,8 @@ export interface DiscoveredItem {
   /** What was matched, so a reviewer can see why the row was proposed: a
    *  `SKILL.md` path, or the registry's own server name. */
   path: string;
-  /** Which registry KIND this would become — set by the reader that found
-   *  it, since only the reader knows which shape it read. Only `'skill'` is
-   *  ever written to `registry.yaml`'s `items` by
-   *  `community-refresh-run.ts`: `communitySkillsFromRegistry`
-   *  (`community-registry.ts`) filters that array to `kind === 'skill'`, so
-   *  an `'mcp'`/`'tool'` row written there would be silently inert — never
-   *  resolved by a later refresh, never surfaced by the one reader that turns
-   *  a registry row into a browsable item. mcp/tool connections live in
-   *  `studio/catalog.yaml` instead (`community-install.ts`'s own "the catalog
-   *  IS the only source" rule) — a file this discovery path does not touch.
-   *  Carried on every row regardless of kind so a caller can decide, not so
-   *  this module decides for them. */
+  /** The kind the reader found — only it knows which shape it read. The
+   *  caller decides what to write (skills only, `community-refresh-run.ts`). */
   kind: 'skill' | 'mcp';
 }
 

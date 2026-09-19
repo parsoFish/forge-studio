@@ -145,20 +145,11 @@ export type CommunityRefreshRunResult =
        *  are carried forward byte-for-byte) and reports the failures. Callers
        *  must treat a non-empty `errors` as a failed run — the CLI exits 1. */
       errors: readonly CommunityRefreshFailure[];
-      /** M6-D / ruling 478, WRITE side added by operator item 87 (T1 ledger
-       *  1216 — ruling 566's "proposes, never writes" is superseded): rows the
-       *  DECLARED hubs publish that this registry does not carry. A `'skill'`
-       *  id here was ALSO just appended to `items` as a real registry row
-       *  (unless this was a dry run) — for THAT kind, this array reports what
-       *  changed, it does not merely suggest a change. An `'mcp'` (or future
-       *  `'tool'`) id is reported here but never written to `items`
-       *  (`WritableDiscoveredItem`'s own comment, `community-refresh-run.ts`):
-       *  registry.yaml is functionally skill-only, and mcp/tool connections
-       *  belong in `studio/catalog.yaml`, untouched by this write path. D10's
-       *  "forge does not crawl on its own" still survives: only
-       *  OPERATOR-DECLARED hubs (`hubs.yaml`) are ever read, and a curated row
-       *  is never overwritten. Empty when every hub is already fully indexed,
-       *  unreachable, or not GitHub-shaped. */
+      /** Ruling 478 + operator item 87 (566 superseded): rows the DECLARED
+       *  hubs publish that this registry lacks. A `'skill'` row was also
+       *  appended to `items` (unless dry run); an `'mcp'` row is reported only
+       *  (see `WritableDiscoveredItem`). Only operator-declared hubs are read,
+       *  and a curated row is never overwritten (D10 holds). */
       discovered: readonly DiscoveredItem[];
       /** What each declared hub did, so a chip can say WHY it is empty rather
        *  than only that it is. A hub contributing nothing and a hub forge
@@ -340,41 +331,21 @@ function verifiedSourcesOf(
   return out;
 }
 
-/** No CRUD form fills these in for a discovered row any more — this IS the
- *  write. `category`/`name` have no fact to derive them from (a `DiscoveredItem`
- *  carries only `id`/`sourceUrl`/`path`), so they are an honest, declared
- *  placeholder an operator can edit afterwards through the same CRUD door a
- *  hand-added row uses — never a fabricated one. */
+/** A discovered row carries no category fact: a declared placeholder the
+ *  operator edits through the CRUD door, never an invented one (item 87). */
 const DISCOVERED_ITEM_CATEGORY = 'uncategorized';
 
 /**
- * A discovered row this write path may actually persist. ONLY `'skill'`:
- * `communitySkillsFromRegistry` (`community-registry.ts`) filters
- * `registry.yaml`'s `items` to `kind === 'skill'`, and the CRUD route
- * (`bridge-studio-community-crud.ts`'s `COMMUNITY_REGISTRY_ITEM_KINDS`)
- * refuses any other kind outright — an `'mcp'` row written to `items` would
- * be silently inert, never resolved by a later refresh and never surfaced by
- * the one reader that turns a registry row into a browsable item. That is
- * worse than not writing it: it would look like progress while being dead
- * weight. mcp/tool connections live in `studio/catalog.yaml`
- * (`community-install.ts`'s own "the catalog IS the only source" rule), a
- * file this write path does not touch — writing THOSE kinds there is exactly
- * the "grows kinds" decision queue item 52 reserves for an operator, not
- * decided here.
+ * ONLY `'skill'` is written: `registry.yaml`'s one reader
+ * (`communitySkillsFromRegistry`) and its CRUD route take skills only, so an
+ * `'mcp'` row there would be inert dead weight. mcp/tool rows belong in
+ * `studio/catalog.yaml` — queue item 52's decision, not this path's.
  */
 type WritableDiscoveredItem = DiscoveredItem & { kind: 'skill' };
 
-/**
- * Operator item 87 — the ONE place a `DiscoveredItem` becomes a real
- * `CommunityRegistryItem`. Takes only the `WritableDiscoveredItem` narrowing
- * above, so a future kind added to `DiscoveredItem` cannot reach this
- * function without a compile error naming the decision it needs first.
- * `provenance` is DERIVED, not invented: the upstream identity `sourceUrl`
- * already names, reformatted to match every hand-curated row's own
- * "owner/repo" convention; falls back to the raw URL for a shape
- * `parseCommunityUpstream` does not recognise (never reachable through a
- * GitHub-hub discovery today, kept honest rather than assumed unreachable).
- */
+/** Item 87 — the ONE DiscoveredItem → CommunityRegistryItem conversion. The
+ *  narrowed input makes a new kind a compile error; `provenance` is derived
+ *  ("owner/repo", as curated rows write it), never invented. */
 function discoveredItemToRegistryItem(d: WritableDiscoveredItem): CommunityRegistryItem {
   const upstream = parseCommunityUpstream(d.sourceUrl);
   const provenance = upstream !== null && upstream.kind === 'github' ? `${upstream.owner}/${upstream.repo}` : d.sourceUrl;
@@ -550,12 +521,8 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   // it behind a second control is the shape S8 beat 5 exists to refuse.
   const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);
 
-  // `verified === 0` with no discovered rows and no errors means the registry
-  // simply has nothing queryable AND nothing new (every row a blog post, or no
-  // rows at all) — not a failure, but there is nothing to stamp, so the file
-  // is left alone. Operator item 87 (T1 ledger 1216): a discovered row is now
-  // ITSELF a reason to write, even when nothing needed re-verifying — a
-  // hub-only refresh of a fresh registry must still land its first rows.
+  // Nothing verified and nothing discovered: nothing to stamp, file left
+  // alone. A discovered row is itself a reason to write (item 87).
   const shouldWrite = (verified > 0 || discovered.length > 0) && !dryRun;
 
   // MOVED ABOVE THE CRITICAL SECTION (7.6.84, T1 929). It used to run after the
@@ -600,28 +567,17 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
         };
       }
       const current = reloaded.registry;
-      // Operator item 87 — re-dedupe against the RE-LOADED document, not the
-      // pre-fetch snapshot: a curation edit landing while the hubs were being
-      // read may already have added this exact id (by hand, or by a sibling
-      // refresh that won the race), and a curated row is NEVER overwritten by
-      // a discovery. Order preserved (existing rows first) so an append never
-      // reshuffles what a diff of this file shows for everything already there.
-      //
-      // ONLY `kind: 'skill'` — see `WritableDiscoveredItem`'s own comment. An
-      // `mcp` (or future `tool`) discovery is still reported in `discovered`
-      // below (the caller's UI/chip still counts it as found), it is just
-      // never appended to `items`, which this registry's own read side would
-      // silently ignore anyway.
+      // Item 87: de-dupe against the RE-LOADED document (a curation edit may
+      // have landed mid-fetch; a curated row is never overwritten), skills
+      // only, appended after the existing rows.
       const currentIds = new Set(current.items.map((i) => i.id));
       const isWritable = (d: DiscoveredItem): d is WritableDiscoveredItem => d.kind === 'skill' && !currentIds.has(d.id);
       const newItems = discovered.filter(isWritable).map(discoveredItemToRegistryItem);
       writeRegistryAtomically(
         path,
         serializeCommunityRegistry({
-          // schemaVersion / leadingComments are the RE-LOADED document's own:
-          // a refresh is not a curation edit and owns neither. `items` is the
-          // RE-LOADED list PLUS this pass's newly discovered rows; `sources`
-          // and `lastRefresh` are this pass's own.
+          // schemaVersion / leadingComments are the RE-LOADED document's own;
+          // `items` is that list plus this pass's discoveries.
           schemaVersion: current.schemaVersion,
           lastRefresh: result.nextRegistry.lastRefresh,
           // What each hub did on THIS pass, so the chip that renders it
