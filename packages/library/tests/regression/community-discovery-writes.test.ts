@@ -148,3 +148,76 @@ test('dryRun writes NOTHING — discovered rows are still reported, the file on 
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// An MCP-shaped hub discovers MCP SERVERS, not skills. registry.yaml's
+// `items` is functionally skill-only (`communitySkillsFromRegistry` filters
+// to `kind === 'skill'`; the CRUD route refuses any other kind) — an `mcp`
+// row written there would be silently inert, never resolved by a later
+// refresh and never surfaced by the one reader that turns a row into a
+// browsable item. It must still be REPORTED (the chip still counts it as
+// found); it must never be WRITTEN to registry.yaml.
+// ---------------------------------------------------------------------------
+
+const MCP_HUB_URL = 'https://registry.modelcontextprotocol.io';
+
+function setupWithMcpHub(): { forgeRoot: string; registryPath: string } {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'community-discovery-writes-mcp-'));
+  mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
+  const registryPath = communityRegistryPath(forgeRoot);
+  writeFileSync(registryPath, registryYaml(), 'utf8');
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'hubs.yaml'),
+    `hubs:\n  - id: a-hub\n    name: a hub\n    url: ${HUB_URL}\n    kinds: skills\n` +
+      `  - id: mcp-hub\n    name: mcp hub\n    url: ${MCP_HUB_URL}\n    kinds: MCPs\n`,
+    'utf8',
+  );
+  return { forgeRoot, registryPath };
+}
+
+function hubAndMcpFetchImpl(): FetchLike {
+  return async (url) => {
+    const u = String(url);
+    if (u.startsWith(MCP_HUB_URL)) {
+      return new Response(
+        JSON.stringify({ servers: [{ server: { name: 'acme/mcp-thing', version: '1.0.0' }, _meta: {} }], metadata: {} }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (/\/git\/trees\//.test(u)) {
+      return new Response(
+        JSON.stringify({
+          sha: 'treesha',
+          truncated: false,
+          tree: [{ path: 'skills/new-thing/SKILL.md', type: 'blob', mode: '100644', sha: 'sha-new', size: 10 }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+}
+
+test('an MCP-discovered id is REPORTED but never WRITTEN — registry.yaml items are functionally skill-only', async () => {
+  const { forgeRoot, registryPath } = setupWithMcpHub();
+  try {
+    const r = await runCommunityRefresh({ forgeRoot, fetchImpl: hubAndMcpFetchImpl(), token: FAKE_TOKEN });
+    if (!r.ok) assert.fail(`expected an ok refresh, got: ${JSON.stringify(r)}`);
+
+    assert.deepEqual(
+      r.discovered.map((d) => d.id).sort(),
+      ['mcp-thing', 'new-thing'],
+      'both the skill row and the mcp row must be DISCOVERED (reported)',
+    );
+
+    const fresh = loadCommunityRegistry(registryPath);
+    assert.ok(fresh.items.some((i) => i.id === 'new-thing'), 'the skill row must still be written');
+    assert.equal(
+      fresh.items.some((i) => i.id === 'mcp-thing'),
+      false,
+      'an mcp row must NEVER be written to registry.yaml — the read side would silently ignore it, which is worse than not writing it',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
