@@ -30,7 +30,7 @@ import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
 import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
-  ensureLayout, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
+  ensureLayout, resolveGuardedPath, writeProjectGroundFile, describeProjectStarters, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
@@ -260,6 +260,19 @@ function cmdBrain(rest: string[]): void | Promise<void> {
   process.exit(2);
 }
 
+// `--<name> value` lookup, shared by every `cmd*`/`runCreate` flag parser below
+// (four identical local closures, deduplicated — bead 6.11.33's cap offset).
+function flagValue(rest: string[], name: string): string | undefined {
+  const i = rest.indexOf(`--${name}`);
+  return i >= 0 ? rest[i + 1] : undefined;
+}
+// As `flagValue`, but never hands back the NEXT flag's own name as this
+// flag's value — for commands where flags can sit adjacent with none given.
+function flagValueStrict(rest: string[], name: string): string | undefined {
+  const v = flagValue(rest, name);
+  return v !== undefined && !v.startsWith('--') ? v : undefined;
+}
+
 /**
  * `forge brain fix --kb <id> --file <abs> --check <c> --kind <k> [--hint <h>] [--message <m>] [--run-id <id>]`
  * Runs ONE agent-tier brain-fix turn (the detached child the bridge spawns
@@ -269,10 +282,7 @@ function cmdBrain(rest: string[]): void | Promise<void> {
  * _logs/_brainfix-<runId>/.
  */
 async function cmdBrainFix(rest: string[]): Promise<void> {
-  const flag = (name: string): string | undefined => {
-    const i = rest.indexOf(`--${name}`);
-    return i >= 0 ? rest[i + 1] : undefined;
-  };
+  const flag = (name: string): string | undefined => flagValue(rest, name);
   const kb = flag('kb');
   const file = flag('file');
   const check = flag('check');
@@ -516,11 +526,7 @@ export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): Cr
   if (rest[0] === 'list' || rest.includes('--list')) {
     return { ok: true, kind: 'list', appTypes: listProjectStarters(forgeRoot) };
   }
-  const flag = (name: string): string | undefined => {
-    const i = rest.indexOf(`--${name}`);
-    const v = i >= 0 ? rest[i + 1] : undefined;
-    return v !== undefined && !v.startsWith('--') ? v : undefined;
-  };
+  const flag = (name: string): string | undefined => flagValueStrict(rest, name);
   const name = flag('name');
   const appType = flag('app-type');
   const northStar = flag('north-star');
@@ -528,11 +534,14 @@ export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): Cr
     return { ok: false, kind: 'invalid-args', exitCode: 2, appTypes: listProjectStarters(forgeRoot) };
   }
   try {
+    const explicitLanguage = flag('language');
+    const starter = explicitLanguage ? undefined : describeProjectStarters(forgeRoot).find((s) => s.id === appType); // 6.11.33: the starter's own declared language (6.11.4); explicit input wins
+    if (starter && starter.language === null) throw new Error(`starter "${appType}" declares no language — add one to starters.json before creating from it`);
     const out = scaffoldGreenfieldProject({
       manifest: {
         name,
         appType,
-        language: flag('language') ?? 'typescript',
+        language: explicitLanguage ?? starter?.language ?? 'typescript',
         northStar,
         ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
       },
@@ -837,10 +846,7 @@ function resolvePreflightProjectDir(target: string | undefined): string {
  * _logs/_preflight-fix-<runId>/.
  */
 async function cmdPreflightFix(rest: string[]): Promise<void> {
-  const flag = (name: string): string | undefined => {
-    const i = rest.indexOf(`--${name}`);
-    return i >= 0 ? rest[i + 1] : undefined;
-  };
+  const flag = (name: string): string | undefined => flagValue(rest, name);
   const project = flag('project');
   const clause = flag('clause');
   if (!project || !clause) {
@@ -873,13 +879,7 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
  *  `<project>/.forge/contract-compliance-report.json`; exits 0 iff hard-green.
  */
 function cmdPreflightConverge(rest: string[]): void {
-  // A valued flag's argument is never mistaken for another flag: return the
-  // next token only when it isn't itself a `--flag`.
-  const flag = (name: string): string | undefined => {
-    const i = rest.indexOf(`--${name}`);
-    const v = i >= 0 ? rest[i + 1] : undefined;
-    return v !== undefined && !v.startsWith('--') ? v : undefined;
-  };
+  const flag = (name: string): string | undefined => flagValueStrict(rest, name);
   // A positional project is accepted ONLY as the first token (so it can never
   // be a preceding flag's value, e.g. `--max-iterations 3 foo` → not '3').
   const project = flag('project') ?? (rest[0] && !rest[0].startsWith('--') ? rest[0] : undefined);
