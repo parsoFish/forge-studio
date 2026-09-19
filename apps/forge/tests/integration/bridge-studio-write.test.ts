@@ -378,6 +378,19 @@ test('POST /api/studio/projects/create: unknown appType → 400', async () => {
   assert.match((await res.json() as { error: string }).error, /unknown appType/);
 });
 
+test('6.11.33 (RED) POST /api/studio/projects/create: a REAL starter that declares no language refuses (400, names the starter)', async () => {
+  // A real, listed starter directory with no sibling starters.json entry —
+  // describeProjectStarters reports it with `language: null`.
+  const tplDir = join(forgeRoot, 'studio', 'starters', 'projects', 'bare-lang-http');
+  mkdirSync(tplDir, { recursive: true });
+  writeFileSync(join(tplDir, 'README.md'), '# {{TITLE}}\n\n{{NORTH_STAR}}\n', 'utf8');
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, { name: 'x', appType: 'bare-lang-http', northStar: 'y' });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /"bare-lang-http"/);
+  assert.match(body.error, /declares no language/);
+});
+
 test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a template → ready', async () => {
   // Give the test forge root the real curated templates.
   cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
