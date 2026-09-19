@@ -1916,7 +1916,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-item-id][data-page-ready]` plus, **present ONLY once the item
   resolves** (`[data-item-kind][data-install-state]` are ABSENT while
   loading, on a fetch error, and for an unknown kind/id — an unvalidated
-  route param is never asserted as fact before the server confirms it):
+  route param is never asserted as fact before the server confirms it).
+  `forge-5rr` (projects-45): a non-404 read failure (bridge down, or
+  reachable-and-refused) renders the SHARED `PageLoadError` kit instead of
+  the page's own chrome — `main[data-page="community-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-item-id]`, with `[data-action="retry-fetch"]` (Retry re-runs the
+  read) and a bridge-recovery resubscribe that refills automatically once
+  the bridge is back — replacing the old dead-end banner with no retry path
+  short of a manual reload. The not-found claim itself stays reachable ONLY
+  off a real, bridge-answered HTTP 404 (`fetchCommunityItemDetail`'s own
+  `status`) — never off this transport-failure branch.
   `[data-section="hub-signals"]` (`[data-hub-id]` present only for a matched
   hub, a signal-attribution attribute present only when the source record
   actually carries signals — D4/D5, no invented hub name or signal figure

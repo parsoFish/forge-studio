@@ -310,6 +310,20 @@ const EXEMPT_PAGES: Record<string, string> = {
     'transport-failure split (this file\'s defect class) is pinned there over every ' +
     'status shape. NOT the shared PageLoadError kit: no bridge-recovery resubscribe ' +
     'and no Retry control — disclosed gap, out of W8-B5/WI-6\'s scope.',
+  // forge-5rr (projects-45): the pending scan flagged this as the strongest
+  // GENUINE gap of the eight — a closer look found the not-found branch
+  // ALREADY correctly gated on a real bridge-answered 404 (never a transport
+  // failure), but the failure branch had no Retry and no bridge-recovery
+  // resubscribe (a dead-end banner, crosscut-22). Fixed to use the shared
+  // PageLoadError + useBridgeRecoveryWhenFailed kit — EXEMPT here rather than
+  // COMPLIANT only because `fetchCommunityItemDetail` is a status-shaped
+  // `{ok,status?,error?}` read that never throws, so `expectFailClosedPrimitives`'s
+  // `catch (err)` regex cannot match it textually; the same contract is
+  // pinned, adapted for that shape, in the tests below.
+  'app/community/[kind]/[id]/page.tsx':
+    'tests/regression/community-surface-wiring.test.ts — the not-404-vs-transport ' +
+    'split AND the PageLoadError/useBridgeRecoveryWhenFailed retry wiring are both ' +
+    'pinned there, adapted for this page\'s non-throwing read shape.',
 };
 
 /**
@@ -326,9 +340,6 @@ const PENDING_PAGES: Record<string, string> = {
     'Renders NotFound for "no such run" AND an inline FetchErrorState for "unresolved" ' +
     '— NOT the shared PageLoadError kit. Unverified whether the FetchErrorState branch ' +
     'is reachable for a THROWN read or only a resolved-but-refused one.',
-  'app/community/[kind]/[id]/page.tsx':
-    'Renders NotFound for an unknown kind/id; no FetchErrorState/PageLoadError/catch ' +
-    'visible near the read — the most likely GENUINE gap of the eight.',
   'app/connections/[id]/page.tsx':
     'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
     'state — not the shared kit; unverified whether a transport failure reaches it.',
