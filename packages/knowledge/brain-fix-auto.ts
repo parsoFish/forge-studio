@@ -10,7 +10,7 @@
  * (`category.mis-routed`) are gated on a clean git worktree.
  *
  * Handled kinds: frontmatter.date-order, frontmatter.missing-date,
- * index.not-listed, index.duplicate, orphan, category.mis-routed.
+ * index.missing, index.not-listed, index.duplicate, orphan, category.mis-routed.
  */
 
 import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
@@ -267,6 +267,7 @@ export function applyAutoFixes(forgeRoot: string, findings: Finding[]): AutoFixR
     const kind = f.kind ?? 'unknown';
     let r: { ok: boolean; detail: string };
     switch (kind) {
+      case 'index.missing':
       case 'index.not-listed':
       case 'orphan':
         r = ensureLinked(forgeRoot, f.file); break;

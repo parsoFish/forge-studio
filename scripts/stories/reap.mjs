@@ -509,14 +509,25 @@ export async function reapAgentRuns(runs, opts = {}) {
   //     that FAILS is recorded against its leader: it is the only signal that
   //     can reach a process which joined the group after the snapshot, so a
   //     silent failure there is exactly the blind spot 5.45 was about.
+  const order = [...descendantOrder].reverse().concat([...strayOrder].reverse(), rootOrder);
+  // Read at the instant before any signal (m7-c, T1 ruling 1204). The group
+  // signal below KILLS its members; one that init reaps before its own SIGTERM
+  // lands reads ESRCH there, and was filed as skipped ("already gone") — the
+  // reaper disowning a kill it made, which 7.6.94 hunted as a foreign killer.
+  // Alive here + in a group we signalled + gone at its own signal = ours.
+  const aliveBeforeSignals = new Set(order.filter((target) => isAlive(target)));
+  const signalledGroups = new Set();
   for (const leader of groupLeaders) {
     const failure = signal(-leader, 'SIGTERM');
     if (failure !== null) failures.set(leader, `process group ${leader}: ${failure}`);
+    else signalledGroups.add(leader);
   }
-  const order = [...descendantOrder].reverse().concat([...strayOrder].reverse(), rootOrder);
   for (const target of order) {
     const failure = signal(target, 'SIGTERM');
-    if (failure !== null) failures.set(target, failure);
+    if (failure === null) continue;
+    const killedByOurGroupSignal =
+      aliveBeforeSignals.has(target) && signalledGroups.has(table.get(target)?.pgrp) && !isAlive(target);
+    if (!killedByOurGroupSignal) failures.set(target, failure);
   }
 
   // (5) one bounded wait covering every claimed pid. The wait counts poll

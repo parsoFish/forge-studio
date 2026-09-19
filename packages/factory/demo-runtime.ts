@@ -121,9 +121,12 @@ async function ambientUrls(): Promise<Set<string>> {
  * otherwise capture screenshots of the wrong app silently).
  */
 async function waitForServer(timeoutMs: number, exclude: Set<string>): Promise<string | null> {
-  const start = Date.now();
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline built from its difference can move
+  // mid-wait.
+  const start = performance.now();
   const targets = CANDIDATE_URLS.filter((u) => !exclude.has(u));
-  while (Date.now() - start < timeoutMs) {
+  while (performance.now() - start < timeoutMs) {
     for (const url of targets) {
       if (await probe(url, 2000)) return url;
     }
