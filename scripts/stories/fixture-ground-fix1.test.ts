@@ -23,6 +23,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -177,30 +178,23 @@ test('provisionFixtureGrounds: rollbackFailures is empty on a clean rollback', (
 });
 
 /**
- * A rollback that could not undo its own write must NAME it, not swallow it. `provisionFixtureGrounds`'s rollback loop
- * today calls `teardownFixtureGround` for each already-provisioned entry and
- * discards the result entirely — a `try { teardownFixtureGround(...) } catch
- * {}` that never even reads the return value, so a failed removal leaves a
- * ground neither the caller nor `run.mjs`'s abort backstop knows about, and
- * nothing is printed.
+ * A rollback that could not undo its own write must NAME it, not swallow it.
+ * A rollback loop that discarded `teardownFixtureGround`'s result would leave
+ * a ground neither the caller nor `run.mjs`'s abort backstop knows about, and
+ * nothing would be printed.
  *
  * FORCING A REAL REMOVAL FAILURE, DETERMINISTICALLY, WITH NO TIMING WINDOW.
  * `provisionFixtureGrounds` is fully synchronous (`spawnSync` throughout, no
  * `await` anywhere in it) — there is no point at which a test running
  * alongside it can act BETWEEN the first story succeeding and the second
  * failing, so `chmod`ing `projects/` from OUTSIDE the call cannot land in
- * that narrow window without a race. Instead, the FIRST story's OWN SEED
- * carries a hand-written `.git/hooks/post-commit` hook (`chmod 555
- * "$(dirname "$(pwd)")"`). `cpSync` copies it into the fresh git repo before
- * `git init` reinitialises that same `.git` in place (preserving, not
- * replacing, an existing `hooks/`), and `--no-verify` does not suppress
- * `post-commit` (only `pre-commit`/`commit-msg`). So the chmod runs
- * SYNCHRONOUSLY, inside the SAME `git commit` child process the real
- * `provisionFixtureGround` already spawns for the first story — deterministic
- * by construction, not by timing luck. Verified directly against the real
- * `provisionFixtureGround`/`teardownFixtureGround` before writing this test:
- * provisioning still succeeds (the digest check excludes `.git/*`, so the
- * hook is invisible to it), and a subsequent teardown then fails with
+ * that window without a race. Instead a stand-in `git`, first on `PATH`,
+ * runs the real git for every call and, right after a `commit`, locks the
+ * ground's parent `projects/` (`chmod 555`). So the lock happens inside the
+ * FIRST story's own provisioning, synchronously — deterministic by
+ * construction, not by timing luck. Provisioning still succeeds (every step
+ * after the commit only reads), the second story refuses, and the rollback's
+ * removal of the first ground fails with
  * `EACCES: permission denied, rmdir '.../projects/story-s8'`.
  */
 test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not undo, rather than swallowing it', (t) => {
@@ -210,15 +204,9 @@ test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not un
   }
   const root = scratch();
 
-  // The FIRST story's seed: valid, PLUS the post-commit hook that locks
-  // `projects/` the instant its own provisioning finishes.
+  // The FIRST story's seed: entirely valid.
   const goodSeedDir = join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'seed');
-  mkdirSync(join(goodSeedDir, '.git', 'hooks'), { recursive: true });
-  writeFileSync(
-    join(goodSeedDir, '.git', 'hooks', 'post-commit'),
-    '#!/bin/sh\nchmod 555 "$(dirname "$(pwd)")"\n',
-    { mode: 0o755 },
-  );
+  mkdirSync(goodSeedDir, { recursive: true });
   writeFileSync(join(goodSeedDir, 'README.md'), '# demo seed\n');
   writeFileSync(join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'PROVENANCE.md'), '# provenance\n');
 
@@ -233,6 +221,20 @@ test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not un
     { id: 'S9', ground: { project: 'story-s9', fixture: 'no-provenance' } },
   ];
 
+  // The stand-in: every call reaches the real git; after a `commit`, `$2`
+  // (the `-C <dest>` argument) names the ground whose parent it locks.
+  const realGit = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  assert.ok(realGit.startsWith('/'), `this test needs git on PATH — found ${JSON.stringify(realGit)}`);
+  const bin = join(scratch(), 'bin');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    join(bin, 'git'),
+    `#!/bin/sh\n'${realGit}' "$@"; rc=$?\nfor a in "$@"; do [ "$a" = commit ] && chmod 555 "$(dirname "$2")"; done\nexit $rc\n`,
+    { mode: 0o755 },
+  );
+  const savedPath = process.env.PATH;
+  process.env.PATH = `${bin}:${savedPath}`;
+
   try {
     const result = provisionFixtureGrounds(root, stories) as any;
 
@@ -240,8 +242,8 @@ test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not un
     assert.equal(
       existsSync(join(root, 'projects', 'story-s8')),
       true,
-      'the rollback of story-s8 must have FAILED (projects/ is locked) — if this is false, the hook did not ' +
-        'fire before the rollback attempt and the test is not exercising what it claims to',
+      'the rollback of story-s8 must have FAILED (projects/ is locked) — if this is false, the stand-in git did ' +
+        'not lock projects/ before the rollback attempt and the test is not exercising what it claims to',
     );
     assert.ok(Array.isArray(result.rollbackFailures), 'provisionFixtureGrounds never returns a rollbackFailures array — a failed rollback is still swallowed silently');
     assert.equal(result.rollbackFailures.length, 1, `expected exactly one rollback failure. Got: ${JSON.stringify(result.rollbackFailures)}`);
@@ -252,6 +254,7 @@ test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not un
       `expected a named permission error, got: ${JSON.stringify(result.rollbackFailures[0])}`,
     );
   } finally {
+    process.env.PATH = savedPath;
     // Unlock before the harness's own temp-dir cleanup runs.
     chmodSync(join(root, 'projects'), 0o755);
   }
