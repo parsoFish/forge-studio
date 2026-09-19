@@ -37,7 +37,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
 import { startBridge } from '../../ui-bridge.ts';
-
+import { bridgeFetch as fetch } from '../test-fixtures/bridge-fetch.ts'; // F8 (known-flakes.md) — see that file's header
 // Real repo SKILL.md, located relative to THIS test file (not a hardcoded
 // absolute path) — the golden file for the byte-faithful round-trip ATs.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');

@@ -120,8 +120,8 @@ import {
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-
 import { startBridge } from '../../ui-bridge.ts';
+import { bridgeFetch as fetch } from '../test-fixtures/bridge-fetch.ts'; // F8 (known-flakes.md) — see that file's header
 import { runStudioLint } from '../../studio-lint.ts';
 import { runBrainLint } from '@forge/knowledge/brain-lint.ts';
 import { serializeKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
