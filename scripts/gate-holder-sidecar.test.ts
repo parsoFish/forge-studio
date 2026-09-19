@@ -67,8 +67,14 @@ function env(extra: Record<string, string> = {}) {
  *  fail to acquire? That is true the moment ANYTHING holds the lock, whether
  *  or not this bead's sidecar exists yet — so the poll works identically
  *  before and after the fix, and the test is red for the gate's own message,
- *  never for a fixture race. */
-function waitUntilHeld(lock: string, maxMs = 5000): boolean {
+ *  never for a fixture race.
+ *
+ *  15s, not 5s: measured flaky under real host contention (many concurrent
+ *  suite-lock jobs on the box) — `spawn` returning is not the fixture holder
+ *  actually running yet, and process scheduling alone can eat seconds when
+ *  the box is this loaded. The fixture holder's own hold (below) outlasts
+ *  this budget on both ends. */
+function waitUntilHeld(lock: string, maxMs = 15000): boolean {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     const r = spawnSync('flock', ['-n', lock, 'true']);
@@ -134,8 +140,10 @@ describe('forge-8vfn.7.6.79 — the sidecar names gate.sh\'s own unnameable hold
 
     // The lock IS held, through the same invisible inherited-fd shape gate.sh
     // itself uses — but NOT by a gate.sh, so no sidecar exists until this test
-    // plants a stale one. `lock-state.test.ts` names this exact idiom.
-    const holder = spawn('bash', ['-c', `exec 9>"${lock}"; flock -n 9 || exit 7; sleep 5`], { stdio: 'ignore' });
+    // plants a stale one. `lock-state.test.ts` names this exact idiom. 20s, to
+    // outlast `waitUntilHeld`'s own budget under host contention (measured
+    // flaky at 5s — see that function's comment).
+    const holder = spawn('bash', ['-c', `exec 9>"${lock}"; flock -n 9 || exit 7; sleep 20`], { stdio: 'ignore' });
     try {
       assert.ok(waitUntilHeld(lock), 'the fixture holder must actually hold the lock before the gate under test runs');
 
