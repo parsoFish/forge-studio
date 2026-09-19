@@ -612,7 +612,7 @@ const NEW_AGENT_BODY = {
   interactivity: 'autonomous',
   brainAccess: 'none',
   composition: { skills: [], tools: [], mcps: [], guards: ['event-log'], hooks: [] },
-  runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+  runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' }, disallowedTools: ['Task', 'Agent'],
 };
 
 test('PUT /api/studio/agents/:slug with create:true mints a NEW agent WITH a synthesised phase (agents-18)', async () => {
