@@ -252,12 +252,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
         }, origin);
         return true;
       }
-      // Defence in depth: even for a real agent, never delete one that
-      // something still composes. forge-8vfn.19: `listSkillLibrary`
-      // deliberately EXCLUDES studio agents (AT-5), so deriving `composedBy`
-      // from its listing made this `.find(...)` always undefined for a real
-      // agent slug — the 409 below could never fire. Agents own the
-      // agent-roster reverse index (ruling 13); ask it directly.
+      // forge-8vfn.19: listSkillLibrary excludes studio agents (AT-5), so this always found undefined; ask agents' own reverse index (ruling 13) directly.
       const composedBy = agentsUsing('skill', slug, ctx.forgeRoot);
       if (composedBy.length > 0) {
         sendJson(res, 409, {
@@ -611,13 +606,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     }
     writeFileSync(skillMdPath, serialized, 'utf8');
 
-    // forge-q4sz — the Task/Agent subagent-spawn fence had no save-time
-    // enforcement: only `forge studio lint`'s CLI verb ever called
-    // `lintSkillToolFence`. Reuse that SAME production lint (never
-    // re-implement its rule) against the file just written, and treat its
-    // finding for THIS slug exactly like any other error-level finding — a
-    // 400 whose file is restored to its pre-request state, mirroring every
-    // other check above which never wrote at all.
+    // forge-q4sz: reuse the SAME lint (never re-implement it) against the file just written; 400 + restore, like every other check above that never wrote at all.
     const fenceFindings = lintSkillToolFence(ctx.forgeRoot).filter((f) => f.object === `skill:${slug}`);
     if (fenceFindings.some((f) => f.level === 'error')) {
       if (pathGuard.exists) {

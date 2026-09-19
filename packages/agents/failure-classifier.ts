@@ -124,27 +124,7 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
 const PARALLEL_LINT_CONTENTION_SIGNATURE =
   /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
-/**
- * forge-f88z: the SAME blob-scan class W8-F3 fixed for the rate-limit and
- * parallel-lint rules above, applied to the two remaining bare `.includes`
- * checks over `gate_stdout_tail`/`gate_stderr_tail`. Both phrases are
- * ordinary English a project's own test suite can legitimately print — a
- * test NAME describing error-handling behaviour, a snapshot fixture — with
- * no relation to whether THIS gate run actually failed at module resolution
- * or a missing script. Terminal-to-terminal (both branches already return
- * 'terminal'), so misclassifying buys no extra retries; the harm is a wrong
- * `reason` misdirecting operator triage.
- *
- * Anchored to the runner's OWN error-line shape, never a bare substring
- * anywhere in captured output:
- *   - npm's own line always carries an `npm err(or)?` prefix before the
- *     phrase, on the same line ("npm ERR! missing script: build", "npm
- *     error Missing script: …", the pre-existing pinned "npm error: missing
- *     script: …").
- *   - Node's own module-loader exception is always `Error: Cannot find
- *     module …`; a bundler's classic error is `Module not found: Error: …`
- *     — either order, always paired with an explicit `error` marker.
- */
+// forge-f88z: same blob-scan class W8-F3 fixed above — a project's own test NAME can legitimately print either phrase, so both are anchored to the runner's OWN error-line marker (npm err(or)? before the phrase; Error:/Module not found: Error: before "cannot find module"), never a bare substring. Terminal-to-terminal, so this buys no retries; the harm was a wrong `reason` misdirecting triage.
 const GATE_MISSING_SCRIPT_RE = /\bnpm (?:err!?|error)\b[^\n]*missing script\b/i;
 const GATE_MODULE_NOT_FOUND_RE = /\berror:?\s*cannot find module\b|\bmodule not found:?\s*error\b/i;
 

@@ -77,13 +77,7 @@ export type DispatchAgentRunResult = {
   result: RunAgentResult;
 };
 
-/**
- * forge-zlu — a band-guard def (its SKILL.md declares one of `BAND_GUARD_IDS`
- * in `composition.guards`, per `resolveBandGuard`) refused standalone dispatch.
- * Named and exported so a caller that needs to tell this refusal apart from
- * the unknown-slug/interactive ones (both still plain `Error`) can do so with
- * `instanceof`, without parsing the message.
- */
+/** forge-zlu: a band-guard def refused standalone dispatch — named/exported so a caller can `instanceof` it apart from the plain-Error unknown-slug/interactive refusals below. */
 export class BandGuardDispatchRefusedError extends Error {}
 
 /**
@@ -95,19 +89,7 @@ export class BandGuardDispatchRefusedError extends Error {}
  * hand-crafted request can't drive an interactive agent through the generic
  * host. Both the CLI and the bridge route surface this same message.
  *
- * BAND-GUARD REFUSAL (forge-zlu). `STANDALONE_BAND_SLUGS` (`band-agent-run.ts`)
- * names the ONE band-guard agent with an INTENDED standalone path today
- * (adversarial-review, via the SEPARATE `/api/agents/band-run` gate) — that
- * path never calls this resolver, so refusing every band-guard def HERE
- * cannot touch it. Every OTHER band-guard def (contract-check/project-manager/
- * reflector/demo-agent today) has no such intended standalone path: its band
- * pipeline (WI validation, decompose checkpointing, retention/lint/recap) is
- * exactly what a bare `runAgent` spawn skips, so this generic host must
- * refuse it rather than silently bare-spawning the def outside its band —
- * INCLUDING adversarial-review itself, through THIS generic path: its
- * standalone path is the separate band-run gate, not here, so this resolver
- * refuses it uniformly with the others rather than carving out an exception
- * that would just re-derive `STANDALONE_BAND_SLUGS` a second time.
+ * BAND-GUARD REFUSAL (forge-zlu): refuses EVERY band-guard def uniformly, including adversarial-review — its own intended standalone path is the separate `/api/agents/band-run` gate (`STANDALONE_BAND_SLUGS`, band-agent-run.ts), which never calls this resolver, so refusing it here too cannot touch that path and avoids re-deriving the same exception list.
  */
 export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]): AgentDefinition {
   const def = defs.find((d) => d.slug === slug);
