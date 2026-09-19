@@ -378,6 +378,24 @@ const EXEMPT_PAGES: Record<string, string> = {
     'unresolved split, the Retry wiring and the poll\'s transient-failure tolerance ' +
     'are all pinned there; the underlying status-mapping is pinned at the pure-logic ' +
     'level in tests/unit/run-view-client.test.ts.',
+  // forge-5rr (projects-45): the D9/forge-irn SIBLING of the row above —
+  // ALREADY fully closed before this scan ran. `fetchFlowRunDetail`'s
+  // transport-throw path resolves 'unresolved' via the sentinel-0
+  // convention (never 'not-found'); `resolveRunPageState` additionally
+  // downgrades a FOUND run to 'unresolved' when the flows-list read failed.
+  // All of that was already exhaustively pinned at the pure-logic level
+  // (tests/regression/flow-run-detail-client.test.ts's own "KILL 1a/1b/2a/
+  // 2b/3" tests). What was missing was the PAGE-level wiring pin — the scan's
+  // "unverified" note fired because the page uses a bespoke inline retry
+  // body, not the shared FetchErrorState/PageLoadError a grep would catch,
+  // but the CONTRACT (never NotFound off a transport failure, checked
+  // BEFORE not-found, with a working Retry) was already honoured. No
+  // production change — verified with a mutation check.
+  'app/flows/[id]/run/[runId]/page.tsx':
+    'tests/regression/flow-run-page-fail-closed-wiring.test.ts — the unresolved-before-' +
+    'not-found ordering, the bespoke Retry, and the single NotFound render site are ' +
+    'all pinned there; the underlying status-mapping is pinned at the pure-logic level ' +
+    'in tests/regression/flow-run-detail-client.test.ts.',
 };
 
 /**
@@ -390,9 +408,6 @@ const EXEMPT_PAGES: Record<string, string> = {
  * what was NOT done here, per the brief's "report, don't fix" instruction.
  */
 const PENDING_PAGES: Record<string, string> = {
-  'app/flows/[id]/run/[runId]/page.tsx':
-    'Renders NotFound for an unknown run; no FetchErrorState/PageLoadError visible ' +
-    'near the read in a quick scan — unverified.',
   'app/sessions/[kind]/new/page.tsx':
     'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
     'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +
