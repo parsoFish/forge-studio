@@ -346,6 +346,23 @@ const EXEMPT_PAGES: Record<string, string> = {
     'tests/regression/session-shell-summary-fail-closed-wiring.test.ts — the summary-' +
     'read swallow fix is pinned there; the not-found-vs-transport-failure split is ' +
     'pinned at the pure-logic level in tests/contract/session-shell-view.test.ts.',
+  // forge-5rr (projects-45): the pending scan's three "unverified" siblings
+  // (connections/hooks/skills). On inspection all three already had the
+  // crosscut-08 defect class closed: a status-shaped, never-throwing read
+  // (same shape as `/community/[kind]/[id]`'s) with `not-found` reachable
+  // ONLY off a real HTTP 404, and a Retry ALREADY wired to the inline
+  // FetchErrorState. The one gap, uniform across all three: no bridge-
+  // recovery resubscribe (crosscut-22) — fixed identically on each.
+  'app/connections/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — the 404-only-not-found ' +
+    'guard, the pre-existing Retry, and the new bridge-recovery resubscribe are all ' +
+    'pinned there for this page\'s non-throwing read shape.',
+  'app/hooks/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — same contract as ' +
+    '/connections/[id], pinned for this page\'s non-throwing read shape.',
+  'app/skills/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — same contract as ' +
+    '/connections/[id], pinned for this page\'s non-throwing read shape.',
 };
 
 /**
@@ -362,15 +379,9 @@ const PENDING_PAGES: Record<string, string> = {
     'Renders NotFound for "no such run" AND an inline FetchErrorState for "unresolved" ' +
     '— NOT the shared PageLoadError kit. Unverified whether the FetchErrorState branch ' +
     'is reachable for a THROWN read or only a resolved-but-refused one.',
-  'app/connections/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
   'app/flows/[id]/run/[runId]/page.tsx':
     'Renders NotFound for an unknown run; no FetchErrorState/PageLoadError visible ' +
     'near the read in a quick scan — unverified.',
-  'app/hooks/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
   'app/sessions/[kind]/new/page.tsx':
     'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
     'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +
@@ -380,9 +391,6 @@ const PENDING_PAGES: Record<string, string> = {
     'state, not a swallow. It is PENDING rather than EXEMPT only because no test pins ' +
     'that banner to a thrown bridge read yet, and EXEMPT here requires naming a test ' +
     'file that actually covers the page.',
-  'app/skills/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
   'app/templates/[id]/page.tsx':
     'Renders NotFound; no FetchErrorState/PageLoadError/catch visible near the read ' +
     'in a quick scan — unverified, possibly a genuine gap.',
