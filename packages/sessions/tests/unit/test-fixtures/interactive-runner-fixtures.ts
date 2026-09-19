@@ -209,6 +209,18 @@ const FIXTURE_SESSION_KINDS_YAML = `
     schema: totally-not-a-real-schema-id
     phases:
       - { phase: analyzing, step: agent, next: awaiting-review }
+- id: test-kind-writetorepo
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 3 - writeToRepoRoot, no packageId needed)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-writetorepo
+    style: agent
+    phases:
+      - { phase: committing, step: finalize, finalizer: writeToRepoRoot, next: committed }
+      - { phase: committed, step: terminal }
 `;
 // NOTE (Finding 1 fixtures): both "-ghost-next-*" rows above declare a
 // `next` naming a phase absent from their OWN `phases` list. This is
