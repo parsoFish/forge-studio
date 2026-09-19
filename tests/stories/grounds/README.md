@@ -16,7 +16,7 @@ move to fixtures one PR at a time (bead `forge-1rk5.1`).
    makes it its own git repository with one commit, and refuses unless the copy's method-C digest equals the
    seed's. The commit's sha depends only on the seed's files, the fixture name and a frozen author, committer and
    date, so every story that provisions the same seed gets the same sha. The seed is the pin; no
-   `FORGE_GROUND_PIN` is needed. A seed may hold only regular files and directories.
+   `FORGE_GROUND_PIN` is needed. A seed may hold only regular files and directories, and no `.git` entry.
 3. Every real ground (`projects/*` outside the `story-` namespace, in this tree and every other worktree of the
    repository) is hashed before the beats and again after them. A ground that changed, appeared or vanished reds
    the run, and so does one that could not be hashed. A worktree added or removed while the run was in progress is
