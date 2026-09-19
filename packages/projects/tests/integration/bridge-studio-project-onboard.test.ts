@@ -29,7 +29,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync, symlinkSync, lstatSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -243,6 +243,46 @@ test('onboard: repoPath outside the projects root is refused 400 (isContainedPro
     assert.match(JSON.parse(captured.body).error, /forge projects directory/);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('forge-8vfn.5.33 follow-up [REGRESSION LOCK]: a symlinked repoPath is refused by the ROUTE-OWNED resolveGuardedPath call ALONE — even when the injected isContainedProjectRepoPath pre-check is stubbed to (wrongly) accept it', async () => {
+  // Before forge-8vfn.5.33's follow-up, `projectRoot` was computed by a bare
+  // `resolve(ctx.forgeRoot, repoPathRel)` and handed to `deps.isContainedProjectRepoPath`
+  // as the ONLY containment layer — this file's header explains why the REAL
+  // escape-shape coverage for that dependency cannot live here (packages/projects
+  // cannot import @forge/flows; it stays with that package's own tests, and the
+  // wire-level round-trip in
+  // apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts).
+  // The fix adds a SECOND, IN-PACKAGE layer — `resolveGuardedPath(ctx.forgeRoot,
+  // repoSegments)` — that packages/projects CAN exercise directly, for the first
+  // time, independent of the injected dependency. This test proves that layer is
+  // load-bearing ON ITS OWN: the injected `isContainedProjectRepoPath` is stubbed
+  // to return `true` unconditionally (simulating a pre-check that would have
+  // wrongly let the symlink through), and the route must still refuse.
+  const forgeRoot = baseForgeRoot();
+  const outsideDir = mkdtempSync(join(tmpdir(), 'onboard-escape-OUTSIDE-'));
+  try {
+    const evilLink = join(forgeRoot, 'projects', 'evil-escape-link');
+    symlinkSync(outsideDir, evilLink);
+    assert.ok(lstatSync(evilLink).isSymbolicLink(), 'arrange: the planted path must genuinely be a symlink, or this test is vacuous');
+
+    const deps = fakeDeps({ isContainedProjectRepoPath: () => true }); // wrongly permissive, on purpose
+    const { handleProjectsOnboard } = makeOnboardHandlers(deps);
+    const { res, captured } = mockRes();
+    const answered = await handleProjectsOnboard(
+      mockReq(), res, ctx(forgeRoot, { name: 'escapee2', qualityGateCmd: 'echo ok', repoPath: 'projects/evil-escape-link' }),
+      '/api/studio/projects', 'POST',
+    );
+    assert.equal(answered, true);
+    assert.equal(
+      captured.status, 400,
+      `expected the route's OWN resolveGuardedPath call to refuse a symlinked repoPath even with an unconditionally-permissive isContainedProjectRepoPath stub — got ${captured.status} body=${captured.body}`,
+    );
+    assert.equal(existsSync(join(outsideDir, '.forge')), false, 'nothing must have been written through the symlink target');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
   }
 });
 

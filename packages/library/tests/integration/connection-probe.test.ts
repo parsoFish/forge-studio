@@ -302,9 +302,12 @@ describe('probeConnection — kind:"command": REAL runner against real commands 
         args: ['-e', 'setTimeout(() => {}, 60000)'],
       },
     });
-    const startedAt = Date.now();
+    // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is
+    // not monotonic on this host, so a locally-measured duration built from
+    // its difference can be wrong independent of how long the probe took.
+    const startedAt = performance.now();
     const result = probeConnection(process.cwd(), conn, { timeoutMs: 200 } as Parameters<typeof probeConnection>[2]);
-    const elapsedMs = Date.now() - startedAt;
+    const elapsedMs = performance.now() - startedAt;
 
     assert.equal(result.state, 'misconfigured', `expected misconfigured (timed out), got ${result.state}`);
     assert.equal(result.timedOut, true, 'the REAL spawnSync timeout path must set timedOut:true — this is what would ship unproven without this AT');

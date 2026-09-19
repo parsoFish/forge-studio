@@ -224,7 +224,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // second signal force-exits — recovers the operator's intent if the drain
   // hangs (e.g., a wedged SDK call). Heartbeat + queue state is recoverable
   // either way thanks to the recovery sweep, but a clean drain is cheaper.
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic — forge-8vfn.7.6.50
   let signalCount = 0;
   const onSignal = (sig: NodeJS.Signals): void => {
     signalCount += 1;
@@ -252,7 +252,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
         if (stop) return;
         if (inFlight.size > 0) return; // not idle if work is in flight
         const c = counts(getPaths(cfg.queueRoot));
-        const upMins = Math.floor((Date.now() - startedAt) / 60_000);
+        const upMins = Math.floor((performance.now() - startedAt) / 60_000);
         console.log(
           `[idle] ${inFlight.size} in-flight · ${c.pending} pending · uptime ${upMins}m`,
         );

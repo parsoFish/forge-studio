@@ -20,16 +20,12 @@
 /** The Studio object model (ADR 027) — pure types, moved here with history. */
 export * from './studio-types.ts';
 
-// ---------------------------------------------------------------------------
-// Work items — SSOT for `orchestrator/work-item.ts`
-// ---------------------------------------------------------------------------
+// ── Work items ──
 
 export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';
 export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
 
-// ---------------------------------------------------------------------------
-// Trigger kinds (ADR 041) — SSOT for `orchestrator/flow-trigger.ts`
-// ---------------------------------------------------------------------------
+// ── Trigger kinds (ADR 041) ──
 
 /**
  * The trigger-kind registry. `status: 'reserved'` rows are vocabulary-reserved:
@@ -54,9 +50,7 @@ export const SHIPPED_TRIGGER_KIND_IDS: readonly TriggerKindId[] = TRIGGER_KINDS.
   (k) => k.status === 'shipped',
 ).map((k) => k.id);
 
-// ---------------------------------------------------------------------------
-// Agent bands (ADR 039) — SSOT for `orchestrator/agent-bands.ts`
-// ---------------------------------------------------------------------------
+// ── Agent bands (ADR 039) ──
 
 /**
  * A band key selects an orchestrator-implemented pre/post band around the
@@ -99,18 +93,14 @@ export const TOGGLE_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'm
  */
 export const PLATFORM_GUARD_IDS: readonly string[] = [...TOGGLE_GUARD_IDS, ...BAND_GUARD_IDS];
 
-// ---------------------------------------------------------------------------
-// Spend ceilings — SSOT for `orchestrator/config.ts`
-// ---------------------------------------------------------------------------
+// ── Spend ceilings ──
 
 /** The default per-kickoff cost ceiling, in USD, when the operator names none. */
 export const DEFAULT_KICKOFF_COST_CEILING_USD = 10;
 /** The hard cap the bridge refuses to exceed, in USD. */
 export const MAX_KICKOFF_COST_CEILING_USD = 500;
 
-// ---------------------------------------------------------------------------
-// Bridge — SSOT for `apps/forge/forge-watch.ts`
-// ---------------------------------------------------------------------------
+// ── Bridge — SSOT for `apps/forge/forge-watch.ts` ──
 
 /**
  * The fixed bridge port, so one browser tab stays pinned across re-runs
@@ -120,9 +110,11 @@ export const MAX_KICKOFF_COST_CEILING_USD = 500;
  */
 export const DEFAULT_BRIDGE_PORT = 4123;
 
-// ---------------------------------------------------------------------------
-// Cycle outcome — SSOT for `orchestrator/cycle-context.ts`
-// ---------------------------------------------------------------------------
+// ── KB drain ──
+/** Max drain rounds (fresh lint → auto → agent turns → fresh lint): the ONE definition knowledge and studio import (forge-8vfn.5.25.2). */
+export const KB_DRAIN_MAX_ROUNDS = 5;
+
+// ── Cycle outcome ──
 
 /**
  * Final cycle outcome after the closure step folds in the operator-merge
