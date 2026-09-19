@@ -671,9 +671,12 @@ test('cancel: a session with a LIVE tracked turn (turn.pid alive, argv carries t
   const body = await expectJson<{ killed: boolean }>(res, 200);
   assert.equal(body.killed, true, 'the tracked turn pid must be signalled');
   // The child must actually die (SIGTERM on a plain node -e loop is fatal).
-  const deadline = Date.now() + 5_000;
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline built from its difference can move
+  // mid-wait.
+  const deadline = performance.now() + 5_000;
   let alive = true;
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     try { process.kill(killChildPid!, 0); } catch { alive = false; break; }
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -693,9 +696,11 @@ test('W7-FIX-A2 cancel: an ONBOARDING session (spawnAgentDispatch child, `--sess
   const body = await expectJson<{ killed: boolean; phase: string; previousPhase: string }>(res, 200);
   assert.equal(body.killed, true, 'the onboarding dispatch child must be signalled (was: killTrackedTurn found no turn.pid, unconditionally false)');
   assert.equal(body.previousPhase, 'running');
-  const deadline = Date.now() + 5_000;
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): see the KILL_SID
+  // cancel test above.
+  const deadline = performance.now() + 5_000;
   let alive = true;
-  while (Date.now() < deadline) {
+  while (performance.now() < deadline) {
     try { process.kill(onboardingChildPid!, 0); } catch { alive = false; break; }
     await new Promise((r) => setTimeout(r, 100));
   }
