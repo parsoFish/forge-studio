@@ -30,7 +30,7 @@ import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
 import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
-  ensureLayout, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
+  ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
@@ -351,9 +351,13 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
   // Preflight (J1): surface a missing API key (the SDK-verbs warning didn't
   // cover `studio`) and ensure the queue/log layout exists so the bridge's
   // architect-start has somewhere to write — idempotent, never throws.
+  // forge-8vfn.6.11.46: this also writes forge.config.json into a tree that
+  // lacks one — named explicitly rather than folded into an "ensure layout"
+  // call, so that fact is no longer hidden from the reader.
   assertEnv('warn');
   try {
-    ensureLayout(FORGE_ROOT);
+    ensureLayoutDirs(FORGE_ROOT);
+    ensureDefaultConfig(FORGE_ROOT);
   } catch (err) {
     console.warn(`${logLabel} preflight layout check skipped: ${(err as Error).message}`);
   }

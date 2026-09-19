@@ -8,7 +8,10 @@
  * them), validates the environment, and surfaces friendly next-step hints.
  *
  * Logic is split so the decisions are unit-testable: `layoutDirs` and
- * `defaultConfigJson` are pure; `runInit` does the I/O and returns a report.
+ * `defaultConfigJson` are pure; `ensureLayoutDirs` and `ensureDefaultConfig`
+ * (forge-8vfn.6.11.46) do the I/O for each half separately, so a caller can
+ * ask for scaffolding without ever writing operator config as a side effect;
+ * `runInit` composes both and returns a report.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -67,6 +70,20 @@ export function ghAuthed(): boolean {
   }
 }
 
+export type LayoutDirsResult = {
+  /** Dirs newly created this run. */
+  created: string[];
+  /** Dirs already present (skipped). */
+  skipped: string[];
+};
+
+export type ConfigResult = {
+  /** Absolute path to forge.config.json. */
+  path: string;
+  /** True when this call wrote the file (it was absent). */
+  written: boolean;
+};
+
 export type LayoutResult = {
   /** Dirs + config files newly created this run. */
   created: string[];
@@ -84,11 +101,13 @@ export type InitReport = LayoutResult & {
 };
 
 /**
- * Materialise the layout + config only — no environment probing, no `gh`
- * subprocess. Idempotent (existing dir/config → `skipped`, never overwritten).
- * Cheap enough to run on every `forge studio` launch as a preflight.
+ * Materialise the queue/log/worktrees/projects directories only — never
+ * touches forge.config.json (forge-8vfn.6.11.46: a caller that only needs
+ * scaffolding must not be able to write operator config as a side effect).
+ * Idempotent. Cheap enough to run on every `forge studio` launch as a
+ * preflight.
  */
-export function ensureLayout(forgeRoot: string): LayoutResult {
+export function ensureLayoutDirs(forgeRoot: string): LayoutDirsResult {
   const created: string[] = [];
   const skipped: string[] = [];
 
@@ -101,17 +120,21 @@ export function ensureLayout(forgeRoot: string): LayoutResult {
     }
   }
 
-  const configPath = join(resolve(forgeRoot), 'forge.config.json');
-  let configWritten = false;
-  if (existsSync(configPath)) {
-    skipped.push(configPath);
-  } else {
-    writeFileSync(configPath, defaultConfigJson(), 'utf8');
-    created.push(configPath);
-    configWritten = true;
-  }
+  return { created, skipped };
+}
 
-  return { created, skipped, configWritten };
+/**
+ * Write the default forge.config.json when the tree has none. Idempotent —
+ * an existing config is never overwritten (forge-8vfn.6.11.46: named for
+ * what it does, so a caller that writes operator config says so).
+ */
+export function ensureDefaultConfig(forgeRoot: string): ConfigResult {
+  const path = join(resolve(forgeRoot), 'forge.config.json');
+  if (existsSync(path)) {
+    return { path, written: false };
+  }
+  writeFileSync(path, defaultConfigJson(), 'utf8');
+  return { path, written: true };
 }
 
 /**
@@ -123,7 +146,11 @@ export function runInit(
   deps: { isGhAuthed?: () => boolean } = {},
 ): InitReport {
   const isGhAuthed = deps.isGhAuthed ?? ghAuthed;
-  const { created, skipped, configWritten } = ensureLayout(forgeRoot);
+  const dirs = ensureLayoutDirs(forgeRoot);
+  const config = ensureDefaultConfig(forgeRoot);
+  const created = config.written ? [...dirs.created, config.path] : dirs.created;
+  const skipped = config.written ? dirs.skipped : [...dirs.skipped, config.path];
+  const configWritten = config.written;
 
   // Environment issues (no stderr side effect — runInit returns a report and
   // the CLI renders it; collectEnvIssues is the single source of which vars matter).
