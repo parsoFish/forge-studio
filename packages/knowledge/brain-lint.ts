@@ -67,11 +67,7 @@ import {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
-import {
-  brainTruthRates,
-  checkThemeTruth,
-  formatTruthfulnessLines,
-} from './brain-lint-checks-truth.ts';
+import { brainTruthRates, checkThemeTruth, formatTruthfulnessLines } from './brain-lint-checks-truth.ts';
 
 // THE SPLIT KEPT THIS PATH (M4 step 4). 27 files across packages/, cli/, apps/
 // and scripts/ import `brain-lint.ts` directly — `packages/knowledge/index.ts`
@@ -131,13 +127,9 @@ export {
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
 export {
-  brainTruthRates,
-  checkThemeTruth,
-  extractThemeReferences,
-  formatTruthfulnessLines,
-  themeTruth,
+  brainTruthRates, checkThemeTruth, extractThemeReferences, formatTruthfulnessLines,
+  themeTruth, FORGE_PROVENANCE_ROOTS, type ThemeTruth, type BrainTruthRate,
 } from './brain-lint-checks-truth.ts';
-export type { ThemeTruth, BrainTruthRate } from './brain-lint-checks-truth.ts';
 
 /**
  * R6-08 4on (F3 hardening) — the single source of truth for the 12 full-scope
@@ -218,11 +210,7 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
   checkReflectorLoss: 'global',
   checkDanglingEdges: 'themes',
   checkDuplicateThemes: 'themes',
-  // D14 (forge-mfv5.3.4) — checkThemeTruth walks brain/projects/<name>/themes
-  // exactly like checkProjectBrainIndexes (never the forge sub-wikis), so it
-  // shares that check's 'project-indexes' domain rather than the broader
-  // 'themes' one.
-  checkThemeTruth: 'project-indexes',
+  checkThemeTruth: 'project-indexes', // D14 — shares checkProjectBrainIndexes's domain (brain/projects/*)
 };
 
 // ---------- lintThemeFiles (explicit file list, project-aware) ----------
@@ -667,11 +655,10 @@ if (isCli) {
     const opts = parseArgs(process.argv.slice(2));
     const result = runBrainLint(opts);
     process.stdout.write(formatFindings(result.findings, opts.cwd) + '\n');
-    // D14 (forge-mfv5.3.4) — unconditional per-project truthfulness lines,
-    // printed after the findings; never gated on findings existing.
-    for (const line of formatTruthfulnessLines(brainTruthRates(opts.cwd))) {
-      process.stdout.write(line + '\n');
-    }
+    // D14 — unconditional truthfulness lines; M2 — --project scopes them.
+    const rates = brainTruthRates(opts.cwd);
+    const scoped = opts.project ? rates.filter((r) => r.project === opts.project) : rates;
+    for (const line of formatTruthfulnessLines(scoped)) process.stdout.write(line + '\n');
     process.exit(result.exitCode);
   } catch (err) {
     process.stderr.write(`brain-lint: ${err instanceof Error ? err.message : String(err)}\n`);

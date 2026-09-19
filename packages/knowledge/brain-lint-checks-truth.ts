@@ -1,66 +1,54 @@
 /**
- * Brain-lint truthfulness axis (bead forge-mfv5.3.4) — does a CURRENT project
- * (Brain 3) theme's cited code still exist in its ground clone
- * (`<forgeRoot>/projects/<name>/`)? `forge brain lint` verifies STRUCTURE
- * only today; this module measures whether the brain's own assertions are
- * still TRUE. Extraction rules and the `truthfulness:` line format follow
- * `.superpowers/d14-tests-brief.md` verbatim.
- *
- * Reuses the shared theme parse (`parseTheme`, `brain-lint-theme-paths.ts` →
- * `theme-frontmatter.ts`) — never a second frontmatter parser or theme walker.
+ * Brain-lint truthfulness axis (forge-mfv5.3.4, fix round 1 — d14-review.md).
+ * Round 1 checked every inline-code span against the project checkout,
+ * including forge-provenance citations and forge-root-relative
+ * self-citations — driving betterado's stale rate to 99%. This round
+ * excludes provenance (C1), normalises the self-citation prefix (C2),
+ * blocks `../` escapes (M1), and judges `antipattern` themes on declared
+ * `evidence:` only (M3) — an antipattern's claim IS an absence.
  */
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseTheme } from './brain-lint-theme-paths.ts';
+import { parseTheme, readThemeDirFiles } from './brain-lint-theme-paths.ts';
 import type { Finding } from './brain-lint-types.ts';
 
-export type ThemeTruth = {
-  file: string;
-  status: 'current' | 'historical';
-  references: string[];
-  missing: string[];
-};
+export type ThemeTruth = { file: string; status: 'current' | 'historical'; references: string[]; missing: string[] };
 
 export type BrainTruthRate = {
-  project: string;
-  checkout: 'present' | 'absent';
-  themes: number;
-  historical: number;
-  verifiable: number;
-  unverifiable: number;
-  stale: number;
-  rate: number | null;
+  project: string; checkout: 'present' | 'absent'; themes: number; historical: number;
+  verifiable: number; unverifiable: number; stale: number; rate: number | null;
 };
+
+/** First path segment naming one of these is forge provenance, not a project claim. */
+export const FORGE_PROVENANCE_ROOTS = ['_logs', '_queue', '_worktrees', 'brain'] as const;
 
 const FENCE_RE = /```[\s\S]*?```/g;
 const SPAN_RE = /`([^`\n]+)`/g;
 const FORBIDDEN_CHARS = /[*<>{$:]/;
 
-/** One inline-code span → a repo-relative reference, or null if it isn't one. */
+/** One inline-code span → a repo-relative project-code reference, or null. */
 function normalizeCandidate(raw: string): string | null {
   if (raw === '' || /\s/.test(raw)) return null;
   let candidate = raw;
-  if (candidate.startsWith('./')) {
-    candidate = candidate.slice(2);
-  } else if (candidate.startsWith('/') || candidate.startsWith('~') || candidate.startsWith('http')) {
-    return null;
-  }
+  if (candidate.startsWith('./')) candidate = candidate.slice(2);
+  else if (candidate.startsWith('/') || candidate.startsWith('~') || candidate.startsWith('http')) return null;
+  if (candidate.startsWith('../') || candidate.includes('/../')) return null; // M1
   if (!candidate.includes('/') || FORBIDDEN_CHARS.test(candidate)) return null;
-  const lastSegment = candidate.slice(candidate.lastIndexOf('/') + 1);
-  if (!candidate.endsWith('/') && !lastSegment.includes('.')) return null;
+  if ((FORGE_PROVENANCE_ROOTS as readonly string[]).includes(candidate.split('/')[0])) return null; // C1
+  const last = candidate.slice(candidate.lastIndexOf('/') + 1);
+  if (!candidate.endsWith('/') && !last.includes('.')) return null;
   return candidate;
 }
 
-/**
- * A non-empty `evidence:` frontmatter list is the COMPLETE reference set (the
- * body is ignored). Otherwise every inline-code span outside a fenced block
- * that looks like a repo-relative path, deduplicated in first-seen order.
- */
+/** Non-empty `evidence:` is the complete reference set. `antipattern` (M3) is
+ *  judged on `evidence:` alone, even empty/absent — its claim IS an absence. */
 export function extractThemeReferences(body: string, frontmatter: Record<string, unknown>): string[] {
   const evidence = frontmatter.evidence;
-  if (Array.isArray(evidence) && evidence.length > 0) return [...evidence] as string[];
+  const hasEvidence = Array.isArray(evidence);
+  if (frontmatter.category === 'antipattern') return hasEvidence ? [...(evidence as string[])] : [];
+  if (hasEvidence && (evidence as string[]).length > 0) return [...(evidence as string[])];
 
   const seen = new Set<string>();
   const refs: string[] = [];
@@ -74,100 +62,70 @@ export function extractThemeReferences(body: string, frontmatter: Record<string,
   return refs;
 }
 
-/**
- * Every theme under `brain/projects/<project>/themes/` (README excluded, same
- * as every other project-brain check): its status and which of its cited
- * paths are absent from the project's ground clone (`<cwd>/projects/<project>/`).
- */
+/** Every theme under `brain/projects/<project>/themes/`, and which cited
+ *  paths are absent from its checkout. C2: a reference prefixed with the
+ *  theme's OWN `projects/<project>/` strips first; a foreign prefix does not. */
 export function themeTruth(cwd: string, project: string): ThemeTruth[] {
   const themesDir = join(cwd, 'brain', 'projects', project, 'themes');
-  if (!existsSync(themesDir)) return [];
   const checkoutRoot = join(cwd, 'projects', project);
-  const entries = readdirSync(themesDir).filter((e) => e.endsWith('.md') && e !== 'README.md');
-  return entries.map((entry) => {
-    const file = join(themesDir, entry);
+  const ownPrefix = `projects/${project}/`;
+  return readThemeDirFiles(themesDir).map((file) => {
     const parsed = parseTheme(file);
     const data = parsed?.data ?? {};
     const status: ThemeTruth['status'] = data.status === 'historical' ? 'historical' : 'current';
-    const references = extractThemeReferences(parsed?.content ?? '', data);
+    const references = extractThemeReferences(parsed?.content ?? '', data).map((ref) =>
+      ref.startsWith(ownPrefix) ? ref.slice(ownPrefix.length) : ref,
+    );
     const missing = references.filter((ref) => !existsSync(join(checkoutRoot, ref)));
     return { file, status, references, missing };
   });
 }
 
-/**
- * One row per `brain/projects/<p>/`, sorted by project name. A checkout-absent
- * brain is never judged — `verifiable`/`unverifiable`/`stale` stay 0 and
- * `rate` is `null` rather than guessed at from a ground clone that isn't there.
- */
-export function brainTruthRates(cwd: string): BrainTruthRate[] {
+/** Every project's checkout status + per-theme truth, walked ONCE — shared by
+ *  `brainTruthRates`/`checkThemeTruth` so "checkout present" is defined once. */
+function projectTruthRows(cwd: string): Array<{ project: string; checkout: BrainTruthRate['checkout']; themes: ThemeTruth[] }> {
   const projectsRoot = join(cwd, 'brain', 'projects');
   if (!existsSync(projectsRoot)) return [];
-  const projects = readdirSync(projectsRoot).filter((n) => !n.startsWith('.'));
-
-  const rows = projects.map((project): BrainTruthRate => {
-    const checkout: BrainTruthRate['checkout'] = existsSync(join(cwd, 'projects', project)) ? 'present' : 'absent';
-    const themes = themeTruth(cwd, project);
-    const historical = themes.filter((t) => t.status === 'historical').length;
-    let verifiable = 0;
-    let unverifiable = 0;
-    let stale = 0;
-    if (checkout === 'present') {
-      for (const t of themes) {
-        if (t.status !== 'current') continue;
-        if (t.references.length === 0) unverifiable += 1;
-        else {
-          verifiable += 1;
-          if (t.missing.length > 0) stale += 1;
-        }
-      }
-    }
-    return {
+  return readdirSync(projectsRoot)
+    .filter((n) => !n.startsWith('.'))
+    .map((project) => ({
       project,
-      checkout,
-      themes: themes.length,
-      historical,
-      verifiable,
-      unverifiable,
-      stale,
-      rate: checkout === 'present' && verifiable > 0 ? stale / verifiable : null,
+      checkout: (existsSync(join(cwd, 'projects', project)) ? 'present' : 'absent') as BrainTruthRate['checkout'],
+      themes: themeTruth(cwd, project),
+    }));
+}
+
+/** One row per project, sorted by name. Checkout-absent → never judged. */
+export function brainTruthRates(cwd: string): BrainTruthRate[] {
+  const rows = projectTruthRows(cwd).map(({ project, checkout, themes }): BrainTruthRate => {
+    const historical = themes.filter((t) => t.status === 'historical').length;
+    const current = checkout === 'present' ? themes.filter((t) => t.status === 'current') : [];
+    const verifiable = current.filter((t) => t.references.length > 0);
+    const stale = verifiable.filter((t) => t.missing.length > 0).length;
+    return {
+      project, checkout, themes: themes.length, historical,
+      verifiable: verifiable.length, unverifiable: current.length - verifiable.length, stale,
+      rate: checkout === 'present' && verifiable.length > 0 ? stale / verifiable.length : null,
     };
   });
-
   return rows.sort((a, b) => (a.project < b.project ? -1 : a.project > b.project ? 1 : 0));
 }
 
-/**
- * One `flag` finding per stale CURRENT theme in a checkout-present project
- * brain — never `error` (this must never gate `forge brain lint`). Historical
- * themes and checkout-absent brains never yield a finding: a missing ground
- * clone is reported by `brainTruthRates`'s `checkout:'absent'` row, never
- * guessed at here.
- */
+/** One `flag` finding per stale CURRENT theme in a checkout-present brain. */
 export function checkThemeTruth(cwd: string): Finding[] {
-  const projectsRoot = join(cwd, 'brain', 'projects');
-  if (!existsSync(projectsRoot)) return [];
-  const findings: Finding[] = [];
-  for (const project of readdirSync(projectsRoot)) {
-    if (project.startsWith('.') || !existsSync(join(cwd, 'projects', project))) continue;
-    for (const t of themeTruth(cwd, project)) {
-      if (t.status !== 'current' || t.missing.length === 0) continue;
-      findings.push({
-        category: 'flag',
-        file: t.file,
-        check: 'checkThemeTruth',
-        message: `cites missing path(s): ${t.missing.join(', ')} — the theme may describe code that no longer exists`,
-      });
-    }
-  }
-  return findings;
+  return projectTruthRows(cwd)
+    .filter((row) => row.checkout === 'present')
+    .flatMap((row) => row.themes)
+    .filter((t) => t.status === 'current' && t.missing.length > 0)
+    .map((t): Finding => ({
+      category: 'flag',
+      file: t.file,
+      check: 'checkThemeTruth',
+      message: `cites missing path(s): ${t.missing.join(', ')} — the theme may describe code that no longer exists`,
+    }));
 }
 
-/**
- * The `truthfulness:` summary lines — one per `brainTruthRates` row, printed
- * UNCONDITIONALLY (a 0% rate is a measurement; an absent line is not) by both
- * CLI entries (`brain-lint.ts`'s own CLI and `forge brain lint`).
- */
+/** `truthfulness:` lines, one per row, printed unconditionally (M2: pre-filter rows to scope by project). */
 export function formatTruthfulnessLines(rows: readonly BrainTruthRate[]): string[] {
   return rows.map((r) => {
     if (r.checkout === 'absent') return `truthfulness: ${r.project} — checkout absent, not judged`;

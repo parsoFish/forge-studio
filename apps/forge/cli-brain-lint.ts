@@ -82,8 +82,11 @@ export function cmdBrainLint(rest: string[]): void {
     `Summary: ${errors.length} error(s), ${flags.length} flag(s), ${fixes.length} auto-fix(es).`,
   );
   // D14 (forge-mfv5.3.4) — unconditional per-project truthfulness lines,
-  // printed after the findings; never gated on findings existing.
-  for (const line of formatTruthfulnessLines(brainTruthRates(FORGE_ROOT))) {
+  // printed after the findings; never gated on findings existing. M2 (fix
+  // round 1): --project scopes the lines to that one project's row.
+  const rates = brainTruthRates(FORGE_ROOT);
+  const scopedRates = project ? rates.filter((r) => r.project === project) : rates;
+  for (const line of formatTruthfulnessLines(scopedRates)) {
     console.log(line);
   }
   process.exit(result.exitCode);
