@@ -53,6 +53,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
 import type { Flow, Project, Run } from '@/lib/studio-client';
+// The page under test is imported ONCE, at module scope (vi.mock is hoisted above it, so the
+// mocks still apply). Imported inside a test body, its transform + import was charged to that
+// test's 5 s budget — the first test in the file timed out on a CPU-starved host while every
+// later one (module cached) passed, and the timed-out body kept mounting into the next test.
+// Flake register F5/F6, reproduced by lane m7-c pinning vitest to one CPU beside four burners.
+import FlowsIndexPage from '@/app/flows/page';
 
 // ---- fixtures ---------------------------------------------------------------
 
@@ -138,7 +144,6 @@ vi.mock('next/navigation', () => ({
 }));
 
 test('app/flows/page.tsx: the connected shell renders data-page="flows-index" on <main>, and mounts StudioNav', async () => {
-  const { default: FlowsIndexPage } = await import('@/app/flows/page');
   const html = renderToStaticMarkup(React.createElement(FlowsIndexPage));
   expect(html).toContain('data-page="flows-index"');
   // useEffect never runs under renderToStaticMarkup — this is the honest

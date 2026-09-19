@@ -450,6 +450,8 @@ export async function runFlow({
   const input: CycleInput = {
     ...rawInput,
     shouldStopBeforeWorkItem: (workItemId: string) => costTracker.stopReasonBeforeNextWorkItem(workItemId),
+    // M7-A: the SAME tracker's live remaining-budget reading (field doc above).
+    remainingCostBudgetUsd: () => costTracker.remainingUsd,
   };
 
   const order = topoSort(flow);
