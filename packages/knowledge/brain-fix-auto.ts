@@ -20,21 +20,10 @@ import { execFileSync } from 'node:child_process';
 import matter from 'gray-matter';
 import type { Finding } from './brain-lint.ts';
 import { parseThemeFile } from './theme-frontmatter.ts';
+// The ONE category tables (ADR 018 routing) — this file used to carry its
+// own copy, byte-identical to these; no second copy of a routing table.
+import { CATEGORY_TO_INDEX_FILE, CATEGORY_TO_BRAIN_SUBDIR } from './brain-lint-checks-filing.ts';
 
-const CATEGORY_TO_INDEX_FILE: Record<string, string> = {
-  pattern: 'patterns.md',
-  antipattern: 'antipatterns.md',
-  decision: 'decisions.md',
-  operation: 'operations.md',
-  reference: 'reference.md',
-};
-const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
-  pattern: 'cycles',
-  antipattern: 'cycles',
-  operation: 'cycles',
-  decision: 'forge-dev',
-  reference: 'forge-dev',
-};
 const AUTO_LINK_HEADING = '### Auto-linked (re-file under a curated heading when convenient)';
 
 export type AutoFixResult = {
