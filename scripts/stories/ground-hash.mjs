@@ -109,8 +109,19 @@ export function groundChanges(before, after) {
   return { added, removed, modified };
 }
 
-/** Every worktree of this repo EXCEPT the run's own — the same set the path fence judges. */
-function siblingDirs(root) {
+/**
+ * Every worktree of this repo EXCEPT the run's own — the same set the path
+ * fence judges.
+ *
+ * D1 review, I2 — EXPORTED so `realGroundDirs`' caller (`run-story.mjs`) uses
+ * THIS lister rather than `sweep.mjs`'s `snapshotSiblingWorktrees`, which
+ * additionally runs `git status --porcelain -z -uall` per sibling and
+ * SILENTLY DROPS one whose status read throws (a >1 MiB `-uall` output, a
+ * broken gitdir, a `safe.directory` refusal) — so a tree could vanish from
+ * the real-ground fence with nothing naming which one. This function does no
+ * per-sibling read at all: it only asks git which worktrees are registered.
+ */
+export function siblingDirs(root) {
   let listing = '';
   try {
     listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });

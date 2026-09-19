@@ -58,12 +58,13 @@ import {
   groundIgnoreFromGit,
   seedIgnoredBorn,
   beatWindowChangesFrom,
+  siblingDirs,
 } from './ground-hash.mjs';
 import {
   teardownFixtureGround,
   realGroundDirs,
   snapshotRealGrounds,
-  realGroundEscapes,
+  realGroundFenceVerdict,
 } from './fixture-ground.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
@@ -115,8 +116,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // a real-ground run's own ground IS one of these dirs, so the check would
   // either double-count it or need to special-case its own ground out, and
   // `groundsBefore`/`ownGroundBefore` above already cover a real ground.
+  //
+  // D1 review, I2 — `siblingDirs` (`ground-hash.mjs`), NOT
+  // `snapshotSiblingWorktrees(...).keys()`: the latter silently drops a
+  // sibling whose `git status -uall` read throws, which would drop that
+  // tree's `projects/*` from the fence with nothing naming it.
   const realBefore = story.ground?.fixture
-    ? snapshotRealGrounds(realGroundDirs(ROOT, { ownProject: story.ground.project, worktrees: [...siblingsBefore.keys()] }))
+    ? snapshotRealGrounds(realGroundDirs(ROOT, { ownProject: story.ground.project, worktrees: siblingDirs(ROOT) }))
     : null;
   // T1 ruling 594 — the fence above proves the ground is unchanged in every
   // OTHER worktree; nobody checked the one this run is using. Three lanes each
@@ -186,9 +192,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // block it is declared in would not exist by then. One Map for the whole
   // run either way — never a module-level Map (this box runs four lanes).
   const unmeasuredSnapshots = new Map();
-  // M7-D — lines from `realGroundEscapes`, set only for a fixture run (see
-  // `realBefore` above); read at the CONTAINMENT FAILURE checks below.
+  // M7-D — set only for a fixture run (see `realBefore` above): `realGroundMoved`
+  // gates the CONTAINMENT FAILURE check below; `realGrounds` is the same
+  // fence verdict's evidence, carried into `result` so a run that reds on it
+  // records WHY in its own `story.json`, not only on the console (D1 review
+  // I3/M3, brief item 7).
   let realGroundMoved = [];
+  let realGrounds = null;
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
   // whose funded and declared ceilings differ must say so up front rather than
@@ -574,19 +584,33 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
 
   // M7-D — THE REAL-GROUND FENCE, and THE TEARDOWN. Both only for a fixture
   // run (`realBefore` is null otherwise), and both AFTER the own-ground block
-  // above, because that block still needs `projects/<project>` — the fixture
-  // ground — on disk to read its own drift.
+  // above (the LAST `ownGroundManifest(` call in this file), because that
+  // block still needs `projects/<project>` — the fixture ground — on disk to
+  // read its own drift; tearing it down first would make that re-read see an
+  // empty directory and report a false-clean run.
+  //
+  // D1 review, I3 — the verdict is a REAL call to `realGroundFenceVerdict(`,
+  // not hand-rolled inline logic: deleting the D1 version's summary line, or
+  // its `.length > 0 -> return 1`, or the `keepProjects` spread above, all
+  // kept every pinned test green, because nothing exercised the requirement
+  // itself. `.ok` is read here — the actual gate `realGroundMoved.length > 0`
+  // below is exactly `!fenceVerdict.ok` restated, so the return the CONTAINMENT
+  // FAILURE section reaches really is driven by this verdict, not by an
+  // array length nobody connected to it.
   if (realBefore !== null) {
-    const dirs = realGroundDirs(ROOT, { ownProject: story.ground.project, worktrees: [...siblingsBefore.keys()] });
+    const dirs = realGroundDirs(ROOT, { ownProject: story.ground.project, worktrees: siblingDirs(ROOT) });
     const realAfter = snapshotRealGrounds(dirs);
-    realGroundMoved = realGroundEscapes(realBefore, realAfter);
-    for (const line of realGroundMoved) console.error(`[stories] REAL GROUND MOVED ${line}`);
+    const fenceVerdict = realGroundFenceVerdict(realBefore, realAfter);
+    for (const line of fenceVerdict.moved) console.error(`[stories] REAL GROUND MOVED ${line}`);
     // ALWAYS printed, even at zero — `forge-e8dn`'s own rule: a count that
     // prints only when it is bad is indistinguishable from a check that never
     // ran, and this is the one line that proves the fence looked at all.
-    console.log(
-      `[stories] real grounds: ${dirs.length} hashed in ${1 + siblingsBefore.size} tree(s), ${realGroundMoved.length} moved`,
-    );
+    console.log(`[stories] ${fenceVerdict.summary}`);
+    if (!fenceVerdict.ok) realGroundMoved = fenceVerdict.moved;
+    // D1 review, M3/brief item 7 — the evidence rides into `story.json`, not
+    // only the console; set unconditionally (not just when red) so a CLEAN
+    // fixture run's artifact also states what it checked.
+    realGrounds = { hashed: fenceVerdict.hashed, trees: fenceVerdict.trees, moved: fenceVerdict.moved };
 
     // LAST: the fixture ground itself. `sweepProductFixtures` above kept it
     // (`keepProjects`) so the own-ground drift and this fence could both read
@@ -599,6 +623,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
         `[stories] fixture ground: could not tear down projects/${story.ground.project}: ${teardown.error} — ` +
         'the next leading sweep removes it',
       );
+    } else {
+      // D1 review, M11 — the house rule is to print even at zero; a silent
+      // no-op here reads identically to a teardown nobody wired in.
+      console.log(`[stories] fixture ground: projects/${story.ground.project} already absent`);
     }
   }
 
@@ -618,7 +646,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
   }
 
-  const result = { story, beats, reap, sweep, fence };
+  // D1 review, M3/brief item 7 — `realGrounds` rides into the artifact only
+  // for a fixture run (`realGrounds` stays `null` otherwise), so a non-fixture
+  // story's `story.json` is byte-for-byte unchanged by this feature.
+  const result = { story, beats, reap, sweep, fence, ...(realGrounds !== null ? { realGrounds } : {}) };
   const wroteThisRun = [writeStoryJson(result, ROOT)];
 
   // Ruling 308's second half — the ground's Brain 3 was HELD through the fence
