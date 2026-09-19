@@ -94,10 +94,15 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
 export const STANDALONE_HISTORY_MAX_ROWS = 50; // M7-C page size — no query param on either standalone route
 
 /** `_agent-*` entries, NEWEST FIRST by directory mtime (M7-C) — metadata
- *  only; a slug's unknown length rules out slicing a stamp from the name. */
+ *  only; a slug's unknown length rules out slicing a stamp from the name.
+ *  `entry` is an untrusted `readdirSync` NAME, so the stat goes through the
+ *  SAME `resolveGuardedPath` choke point `readStandaloneLivenessFacts` uses
+ *  for its own mtimes — never a raw `join(logsRoot, entry)`. */
 function standaloneEntriesNewestFirst(logsRoot: string, entries: readonly string[]): string[] {
   const mtimeOf = (entry: string): number => {
-    try { return statSync(join(logsRoot, entry)).mtimeMs; } catch { return -Infinity; } // unreadable sorts last
+    const guarded = resolveGuardedPath(logsRoot, [entry]);
+    if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
+    try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; }
   };
   return entries.filter((e) => e.startsWith(STANDALONE_RUN_DIR_PREFIX)).sort((a, b) => mtimeOf(b) - mtimeOf(a));
 }
